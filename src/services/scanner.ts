@@ -1330,21 +1330,24 @@ export async function repairFrontmatter(config: FlashQueryConfig): Promise<void>
         const status = (row.status as string) || 'active';
 
         try {
-          // Read file to extract existing content (preserve body, update frontmatter only)
+          // Read file to extract existing content and frontmatter
           let fileContent = '';
+          let existingFrontmatter: Record<string, unknown> = {};
           try {
             const raw = await readFile(`${vaultRoot}/${filePath}`, 'utf-8');
             const parsed = matter(raw);
-            fileContent = parsed.content; // preserve body
+            fileContent = parsed.content;
+            existingFrontmatter = parsed.data as Record<string, unknown>;
           } catch {
             // If file is unreadable, write empty body with frontmatter
             fileContent = '';
           }
 
-          // Write frontmatter with required fields: fqc_id, title (derived from filename), created, status, fqc_instance
+          // Merge FQC identity fields into existing frontmatter — user-defined fields survive
           const frontmatter = {
+            ...existingFrontmatter,
             fqc_id: fqcId,
-            title: titleFromFilename(filePath),
+            title: (existingFrontmatter.title as string | undefined) ?? titleFromFilename(filePath),
             created: createdAt,
             status,
             fqc_instance: instanceId,

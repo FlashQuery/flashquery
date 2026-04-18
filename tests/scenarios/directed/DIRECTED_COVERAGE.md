@@ -193,7 +193,7 @@ Vault scanning, file listing, and directory management.
 | F-15 | Path traversal protection (escape attempt blocked) | test_directory_operations | 2026-04-14 | 2026-04-16 |
 | F-16 | discover_document in flagged mode | test_discover_document | 2026-04-14 | 2026-04-16 |
 | F-17 | discover_document in paths mode | test_discover_document | 2026-04-14 | 2026-04-16 |
-| F-18 | force_file_scan preserves user-defined frontmatter fields in newly discovered documents (scan merges FQC identity fields into existing frontmatter rather than replacing it) | test_frontmatter_preservation* | 2026-04-18 | FAIL (2026-04-18) |
+| F-18 | force_file_scan preserves user-defined frontmatter fields in newly discovered documents (scan merges FQC identity fields into existing frontmatter rather than replacing it) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
 
 ## 10. Briefing and Aggregation
 
@@ -387,4 +387,3 @@ Covers: SC-07
 
 ### test_frontmatter_preservation
 Covers: D-25, D-26, C-18, C-19, C-20, F-18
-Note: D-25, D-26, C-18, C-19, C-20 passing. F-18 FAILING — FQC wipes user-defined frontmatter fields when writing identity fields during scan (defect in frontmatter-repair path).
