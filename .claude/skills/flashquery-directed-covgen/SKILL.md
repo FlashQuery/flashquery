@@ -41,7 +41,7 @@ If the input is ambiguous or thin, ask the user to clarify what changed and wher
 The coverage matrix lives at `tests/scenarios/directed/DIRECTED_COVERAGE.md` relative to the FlashQuery repo root. The full path on this machine is typically:
 
 ```
-/sessions/admiring-beautiful-mccarthy/mnt/FlashQuery/flashquery-core/tests/scenarios/directed/DIRECTED_COVERAGE.md
+flashquery/tests/scenarios/directed/DIRECTED_COVERAGE.md
 ```
 
 If you can't find it there, ask the user where it is before continuing — do not guess and do not write a new one.

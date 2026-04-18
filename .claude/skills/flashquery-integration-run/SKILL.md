@@ -84,7 +84,7 @@ same test can pass on one and fail on another.
 
 ### Phase 3 — Execute
 
-From the flashquery-core project root:
+From the flashquery project root:
 
 ```bash
 python3 tests/scenarios/integration/run_integration.py --managed [patterns...]

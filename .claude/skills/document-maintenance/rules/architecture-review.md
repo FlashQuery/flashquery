@@ -133,7 +133,7 @@
 
 - [ ] `.claude/skills/` directory pattern explained
 - [ ] Plugin structure (schema.yaml, skills/) shown
-- [ ] flashquery-core/src/ structure documented:
+- [ ] flashquery/src/ structure documented:
   - [ ] /cli — CLI commands
   - [ ] /config — Config validation
   - [ ] /mcp — MCP server and tools

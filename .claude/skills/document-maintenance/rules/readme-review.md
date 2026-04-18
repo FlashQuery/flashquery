@@ -104,7 +104,7 @@ If you find an issue:
 ---
 
 **How to use this skill:**
-1. Open FlashQuery-Core README.md
+1. Open FlashQuery README.md
 2. Go through checklist items one by one
 3. Test quickstart steps if code changed significantly
 4. Record findings in phase SUMMARY.md

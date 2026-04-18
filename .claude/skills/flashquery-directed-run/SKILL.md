@@ -104,7 +104,7 @@ Keep this environment snapshot alive for the rest of the run — it goes into ev
 
 ### Phase 3 — Execute
 
-Invoke `run_suite.py` from the flashquery-core project root:
+Invoke `run_suite.py` from the flashquery project root:
 
 ```bash
 python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup [patterns...]

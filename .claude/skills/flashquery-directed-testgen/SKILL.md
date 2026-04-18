@@ -54,8 +54,8 @@ or framework features ship, update both in the same session.
 
 ## Project Layout
 
-All paths are relative to the flashquery-core project root. Find the project root by looking for
-`tests/scenarios/directed/` — it's typically at something like `~/Work/fqc-workspace/flashquery-core/` but
+All paths are relative to the flashquery project root. Find the project root by looking for
+`tests/scenarios/directed/` — it's typically at something like `~/Work/fqc-workspace/flashquery/` but
 discover it dynamically.
 
 ```
@@ -702,7 +702,7 @@ Fix issues before proceeding.
 
 ### Run the test
 
-Execute the test via the suite runner (from the flashquery-core project root):
+Execute the test via the suite runner (from the flashquery project root):
 
 ```bash
 python3 tests/scenarios/directed/run_suite.py --managed <test_name_without_test_prefix>
@@ -731,7 +731,7 @@ If the environment cannot run the test (no network access to Supabase, missing b
 explain the blocker clearly and give the user the exact command to run themselves:
 
 ```
-Run this in your terminal from the flashquery-core directory:
+Run this in your terminal from the flashquery directory:
     python3 tests/scenarios/directed/run_suite.py --managed <test_name>
 
 If it fails, paste the report from tests/scenarios/directed/reports/scenario-report-*.md
