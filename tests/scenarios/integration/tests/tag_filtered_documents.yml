@@ -1,0 +1,61 @@
+name: tag_filtered_documents
+description: >
+  A document tagged with a specific tag appears in search_documents results
+  when filtered by that tag. A second document tagged with a different tag
+  does not appear in those results. Verifies that tag-based filtering in
+  search_documents is precise — it returns only documents matching the given
+  tag, not all documents in the system. No embedding configuration required;
+  tag filtering operates on frontmatter in filesystem mode.
+coverage: [IS-06]
+
+steps:
+  - label: "Write a document about volcanoes, tagged with tfd-alpha"
+    action: vault.write
+    name: volcano_doc
+    path: "geology/volcanoes.md"
+    title: "Volcanic Eruptions and Lava Flows"
+    content: "Volcanoes release magma through vents in the Earth's crust."
+    tags: [geology, volcanoes, tfd-alpha]
+
+  - label: "Write a document about glaciers, tagged with tfd-beta"
+    action: vault.write
+    name: glacier_doc
+    path: "geology/glaciers.md"
+    title: "Glaciers and Ice Sheets"
+    content: "Glaciers are large masses of ice that move slowly over land."
+    tags: [geology, glaciers, tfd-beta]
+
+  - label: "search_documents with tfd-alpha returns the volcano document"
+    assert:
+      op: search_documents
+      args:
+        tags: [tfd-alpha]
+      expect_contains: "Volcanic Eruptions and Lava Flows"
+
+  - label: "search_documents with tfd-alpha does not return the glacier document"
+    assert:
+      op: search_documents
+      args:
+        tags: [tfd-alpha]
+      expect_not_contains: "Glaciers and Ice Sheets"
+
+  - label: "search_documents with tfd-beta returns the glacier document"
+    assert:
+      op: search_documents
+      args:
+        tags: [tfd-beta]
+      expect_contains: "Glaciers and Ice Sheets"
+
+  - label: "search_documents with tfd-beta does not return the volcano document"
+    assert:
+      op: search_documents
+      args:
+        tags: [tfd-beta]
+      expect_not_contains: "Volcanic Eruptions and Lava Flows"
+
+  - label: "search_documents with both tags returns both documents"
+    assert:
+      op: search_documents
+      args:
+        tags: [tfd-alpha, tfd-beta]
+      expect_contains: "Volcanic Eruptions and Lava Flows"

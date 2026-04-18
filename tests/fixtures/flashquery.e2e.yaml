@@ -1,0 +1,38 @@
+# Test configuration for E2E shutdown tests
+# Spawned as a subprocess to test real shutdown sequence
+
+instance:
+  id: 'e2e-shutdown-test'
+  name: 'E2E Shutdown Test'
+  vault:
+    path: vault-e2e
+    markdownExtensions:
+      - .md
+
+mcp:
+  transport: stdio
+  port: 3111
+
+supabase:
+  url: ${SUPABASE_URL}
+  service_role_key: ${SUPABASE_SERVICE_ROLE_KEY}
+  database_url: ${DATABASE_URL}
+
+git:
+  autoCommit: false
+  autoPush: false
+  remote: origin
+  branch: main
+
+embedding:
+  provider: none
+  apiKey: ''
+  model: ''
+  dimensions: 1536
+
+logging:
+  level: info
+
+locking:
+  enabled: false
+  ttlSeconds: 30

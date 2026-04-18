@@ -1,0 +1,88 @@
+name: concurrent_updates
+description: >
+  Multiple documents can be created, individually updated, and then retrieved
+  to verify each has its own updated state without bleeding across documents.
+  Tests document isolation during concurrent mutations and correct state
+  management across multiple document updates.
+coverage: [IX-08]
+
+steps:
+  - label: "Write document A"
+    action: vault.write
+    name: doc_a
+    path: "batch/doc_a.md"
+    title: "Document A"
+    content: "Original content for A"
+    tags: [batch, cu-tag]
+
+  - label: "Write document B"
+    action: vault.write
+    name: doc_b
+    path: "batch/doc_b.md"
+    title: "Document B"
+    content: "Original content for B"
+    tags: [batch, cu-tag]
+
+  - label: "Write document C"
+    action: vault.write
+    name: doc_c
+    path: "batch/doc_c.md"
+    title: "Document C"
+    content: "Original content for C"
+    tags: [batch, cu-tag]
+
+  - label: "Update document A"
+    action: update_document
+    args:
+      identifier: "${doc_a.fqc_id}"
+      content: "Updated content for A"
+
+  - label: "Update document B"
+    action: update_document
+    args:
+      identifier: "${doc_b.fqc_id}"
+      content: "Updated content for B"
+
+  - label: "Update document C"
+    action: update_document
+    args:
+      identifier: "${doc_c.fqc_id}"
+      content: "Updated content for C"
+
+  - label: "Retrieve A and verify updated state"
+    assert:
+      op: get_document
+      args:
+        identifier: "${doc_a.fqc_id}"
+      expect_contains: "Updated content for A"
+      expect_not_contains: "Original content for A"
+
+  - label: "Retrieve B and verify updated state"
+    assert:
+      op: get_document
+      args:
+        identifier: "${doc_b.fqc_id}"
+      expect_contains: "Updated content for B"
+      expect_not_contains: "Original content for B"
+
+  - label: "Retrieve C and verify updated state"
+    assert:
+      op: get_document
+      args:
+        identifier: "${doc_c.fqc_id}"
+      expect_contains: "Updated content for C"
+      expect_not_contains: "Original content for C"
+
+  - label: "Verify A does not contain B's updated content"
+    assert:
+      op: get_document
+      args:
+        identifier: "${doc_a.fqc_id}"
+      expect_not_contains: "Updated content for B"
+
+  - label: "Verify B does not contain C's updated content"
+    assert:
+      op: get_document
+      args:
+        identifier: "${doc_b.fqc_id}"
+      expect_not_contains: "Updated content for C"

@@ -1,0 +1,42 @@
+name: archive_nested_path
+description: >
+  A document created in a deeply nested vault directory can be correctly
+  archived and remains retrievable in its archived state. Verifies that
+  path normalization and nesting don't interfere with archive operations
+  or post-archive retrieval.
+coverage: [IA-08]
+
+steps:
+  - label: "Write a document in nested directory structure"
+    action: vault.write
+    name: nested_doc
+    path: "projects/clients/acme/archive/2026/notes.md"
+    title: "Nested Path Document"
+    content: "This document is stored in a deeply nested directory structure."
+    tags: [nested, anp-tag]
+
+  - label: "Verify document is retrievable before archive"
+    assert:
+      op: get_document
+      args:
+        identifier: "${nested_doc.fqc_id}"
+      expect_contains: "deeply nested directory"
+
+  - label: "Archive the nested document"
+    action: archive_document
+    args:
+      identifiers: ["${nested_doc.fqc_id}"]
+
+  - label: "Retrieve archived nested document by fqc_id"
+    assert:
+      op: get_document
+      args:
+        identifier: "${nested_doc.fqc_id}"
+      expect_contains: "deeply nested directory structure"
+
+  - label: "Confirm archived nested document is absent from search"
+    assert:
+      op: search_documents
+      args:
+        tags: [anp-tag]
+      expect_empty: true

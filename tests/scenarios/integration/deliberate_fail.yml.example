@@ -1,0 +1,52 @@
+name: deliberate_fail
+description: >
+  Intentional assertion failures to validate report output. This test is expected to fail.
+  It verifies that the report correctly captures: failed expect_contains, failed
+  expect_not_contains, and a failed expect_count_eq — giving a clear picture of
+  what AI-assisted debugging sees when an integration test goes wrong.
+coverage: []
+
+steps:
+  - label: "Write a test document"
+    action: vault.write
+    name: fail_doc
+    path: "deliberate/failure_demo.md"
+    title: "Failure Demo Document"
+    content: "This document contains the word apple."
+    tags: [fail-tag]
+
+  - label: "EXPECT FAIL: search result should contain 'mango' (it won't)"
+    assert:
+      op: search_all
+      args:
+        query: "Failure Demo Document"
+      expect_contains: "mango"
+
+  - label: "EXPECT FAIL: search result should NOT contain 'apple' (it will)"
+    assert:
+      op: search_all
+      args:
+        query: "Failure Demo Document"
+      expect_not_contains: "apple"
+
+  - label: "Write a second document"
+    action: vault.write
+    path: "deliberate/second_doc.md"
+    title: "Second Document"
+    content: "Another document for the count test."
+    tags: [fail-tag]
+
+  - label: "EXPECT FAIL: count should equal 99 (it will be 2)"
+    assert:
+      op: search_all
+      args:
+        query: "deliberate"
+        entity_types: [documents]
+      expect_count_eq: 99
+
+  - label: "PASS: first document still findable"
+    assert:
+      op: search_all
+      args:
+        query: "Failure Demo Document"
+      expect_path: "deliberate/failure_demo.md"

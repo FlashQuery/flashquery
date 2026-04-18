@@ -1,0 +1,58 @@
+name: multitag_filter
+description: >
+  When search_documents is called with multiple tags, it returns documents tagged
+  with ALL the specified tags. This tests that multi-tag filtering works correctly
+  across multiple documents with different tag combinations.
+coverage: [IS-08]
+
+steps:
+  - label: "Write a document tagged with [mtf-alpha, mtf-beta]"
+    action: vault.write
+    name: doc_ab
+    path: "categories/both.md"
+    title: "Document With Both Tags"
+    content: "This document is tagged with both alpha and beta."
+    tags: [mtf-alpha, mtf-beta, mtf-tag]
+
+  - label: "Write a document tagged with [mtf-alpha, mtf-gamma]"
+    action: vault.write
+    name: doc_ag
+    path: "categories/alpha-gamma.md"
+    title: "Document With Alpha and Gamma"
+    content: "This document is tagged with alpha and gamma, but not beta."
+    tags: [mtf-alpha, mtf-gamma, mtf-tag]
+
+  - label: "Write a document tagged with [mtf-beta, mtf-gamma]"
+    action: vault.write
+    name: doc_bg
+    path: "categories/beta-gamma.md"
+    title: "Document With Beta and Gamma"
+    content: "This document is tagged with beta and gamma, but not alpha."
+    tags: [mtf-beta, mtf-gamma, mtf-tag]
+
+  - label: "Filter by single tag [mtf-alpha] returns documents with that tag"
+    assert:
+      op: search_documents
+      args:
+        tags: [mtf-alpha]
+      expect_contains: "Document With Both Tags"
+      expect_contains: "Document With Alpha and Gamma"
+      expect_not_contains: "Document With Beta and Gamma"
+
+  - label: "Filter by single tag [mtf-beta] returns documents with that tag"
+    assert:
+      op: search_documents
+      args:
+        tags: [mtf-beta]
+      expect_contains: "Document With Both Tags"
+      expect_contains: "Document With Beta and Gamma"
+      expect_not_contains: "Document With Alpha and Gamma"
+
+  - label: "Filter by single tag [mtf-gamma] returns all three documents"
+    assert:
+      op: search_documents
+      args:
+        tags: [mtf-gamma]
+      expect_contains: "Document With Alpha and Gamma"
+      expect_contains: "Document With Beta and Gamma"
+      expect_count_gte: 2

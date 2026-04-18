@@ -1,0 +1,58 @@
+name: apply_tags_composition
+description: >
+  A document created with initial tags can be updated with apply_tags to add
+  additional tags. After applying tags, the document is discoverable by all tags
+  (both original and newly applied). Verifies that apply_tags composes correctly
+  with document creation and tag-based search.
+coverage: [IX-05]
+
+steps:
+  - label: "Write a document with initial tags [atc-science, atc-physics]"
+    action: vault.write
+    name: physics_doc
+    path: "learning/quantum.md"
+    title: "Quantum Mechanics Fundamentals"
+    content: "Quantum mechanics describes the behavior of matter and energy at atomic scales."
+    tags: [atc-science, atc-physics, atc-tag]
+
+  - label: "Document is searchable by initial tag atc-physics"
+    assert:
+      op: search_documents
+      args:
+        tags: [atc-physics]
+      expect_contains: "Quantum Mechanics Fundamentals"
+
+  - label: "Apply additional tags [atc-math, atc-advanced] to the document"
+    action: apply_tags
+    args:
+      identifiers: ["${physics_doc.fqc_id}"]
+      add_tags: [atc-math, atc-advanced]
+
+  - label: "Document is now searchable by new tag atc-math"
+    assert:
+      op: search_documents
+      args:
+        tags: [atc-math]
+      expect_contains: "Quantum Mechanics Fundamentals"
+
+  - label: "Document is still searchable by original tag atc-physics"
+    assert:
+      op: search_documents
+      args:
+        tags: [atc-physics]
+      expect_contains: "Quantum Mechanics Fundamentals"
+
+  - label: "Document is searchable by newly applied tag atc-advanced"
+    assert:
+      op: search_documents
+      args:
+        tags: [atc-advanced]
+      expect_contains: "Quantum Mechanics Fundamentals"
+
+  - label: "Document matches filter combining original and new tags"
+    assert:
+      op: search_documents
+      args:
+        tags: [atc-physics, atc-advanced]
+      expect_contains: "Quantum Mechanics Fundamentals"
+      expect_count_eq: 1

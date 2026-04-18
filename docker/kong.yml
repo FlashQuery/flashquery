@@ -1,0 +1,53 @@
+_format_version: "3.0"
+
+# FlashQuery — Kong API Gateway Configuration
+# Routes requests from port 8000 to internal Supabase services.
+# This declarative config is loaded at Kong startup (KONG_DATABASE=off).
+
+services:
+
+  # PostgREST — REST API for Postgres
+  - name: postgrest
+    url: http://postgrest:3000
+    routes:
+      - name: postgrest-v1
+        strip_path: true
+        paths:
+          - /rest/v1/
+
+  # GoTrue — Auth service
+  - name: gotrue
+    url: http://gotrue:9999
+    routes:
+      - name: gotrue-v1
+        strip_path: true
+        paths:
+          - /auth/v1/
+
+plugins:
+  # CORS — allow browser clients (Studio, local dev tools)
+  - name: cors
+    config:
+      origins:
+        - "*"
+      methods:
+        - GET
+        - POST
+        - PUT
+        - PATCH
+        - DELETE
+        - OPTIONS
+      headers:
+        - Accept
+        - Accept-Version
+        - Content-Length
+        - Content-MD5
+        - Content-Type
+        - Date
+        - X-Auth-Token
+        - Authorization
+        - apikey
+      exposed_headers:
+        - X-Auth-Token
+      credentials: true
+      max_age: 3600

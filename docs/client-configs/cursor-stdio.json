@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "flashquery-core": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/flashquery-core/dist/index.js",
+        "start",
+        "--config",
+        "/absolute/path/to/flashquery.yaml"
+      ]
+    }
+  }
+}

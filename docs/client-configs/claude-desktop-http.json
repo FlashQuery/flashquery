@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "flashquery-core": {
+      "command": "sh",
+      "args": [
+        "-c",
+        "cd /absolute/path/to/flashquery-core && npm start -- --transport http --config /absolute/path/to/flashquery.yaml"
+      ]
+    }
+  }
+}

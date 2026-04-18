@@ -1,0 +1,3 @@
+# Ignore all generated content — report files and findings packets.
+*.md
+findings/

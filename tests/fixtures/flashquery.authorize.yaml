@@ -1,0 +1,43 @@
+# Test configuration for E2E authorization flow tests
+# Spawned as a subprocess to test the complete OAuth 2.0 Authorization Code flow
+# Designed for testing /authorize → /token → authenticated /mcp request chain
+
+instance:
+  id: 'e2e-authorize-test'
+  name: 'E2E Authorize Test'
+  vault:
+    path: ./tests/fixtures/vault-authorize-e2e
+    markdownExtensions:
+      - .md
+
+mcp:
+  transport: streamable-http
+  port: 3189  # Fixed port for E2E testing (range 3100-3199 reserved for tests)
+  auth_secret: ${TEST_AUTH_SECRET}  # From environment variable
+  token_lifetime: 24  # 24 hours
+
+supabase:
+  url: ${SUPABASE_URL}
+  service_role_key: ${SUPABASE_SERVICE_ROLE_KEY}
+  database_url: ${DATABASE_URL}
+
+git:
+  autoCommit: false
+  autoPush: false
+  remote: origin
+  branch: main
+
+embedding:
+  provider: none
+  apiKey: ''
+  model: ''
+  dimensions: 1536
+
+logging:
+  level: info
+  output: file
+  filePath: ./test-logs/authorize-e2e.log
+
+locking:
+  enabled: false
+  ttlSeconds: 30

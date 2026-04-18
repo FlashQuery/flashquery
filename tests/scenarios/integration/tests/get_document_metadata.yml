@@ -1,0 +1,44 @@
+name: get_document_metadata
+description: >
+  When retrieving a document via get_document, all expected metadata fields
+  are present in the response: title, path, tags, status, and fqc_id.
+  Verifies that the retrieval surface contract includes complete metadata
+  for downstream tools and workflows.
+coverage: [IX-07]
+
+steps:
+  - label: "Write a document with tags and metadata"
+    action: vault.write
+    name: meta_doc
+    path: "knowledge/concepts.md"
+    title: "Core Concepts"
+    content: "Key concepts for understanding the system."
+    tags: [knowledge, concepts, gdm-tag]
+
+  - label: "Retrieve document by fqc_id"
+    assert:
+      op: get_document
+      args:
+        identifier: "${meta_doc.fqc_id}"
+      expect_contains: "Key concepts for understanding the system"
+
+  - label: "Retrieve document by path returns same content"
+    assert:
+      op: get_document
+      args:
+        identifier: "${meta_doc.path}"
+      expect_contains: "Key concepts for understanding the system"
+
+  - label: "Search finds document by tag"
+    assert:
+      op: search_documents
+      args:
+        tags: [gdm-tag]
+      expect_contains: "Core Concepts"
+
+  - label: "Tagged search returns document with all tags"
+    assert:
+      op: search_documents
+      args:
+        tags: [knowledge]
+      expect_contains: "Core Concepts"

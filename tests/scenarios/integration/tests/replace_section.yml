@@ -1,0 +1,61 @@
+name: replace_section
+description: >
+  A document can be updated to replace its content section entirely. After replacement,
+  the new content is discoverable via search while the old content is absent from results.
+  Verifies that content mutation via update_document is reflected in search results,
+  including the absence of replaced text.
+coverage: [IC-03]
+
+steps:
+  - label: "Write a document with initial content"
+    action: vault.write
+    name: draft_doc
+    path: "drafts/proposal.md"
+    title: "Project Proposal"
+    content: "This proposal outlines the old approach to solving the infrastructure challenge."
+    tags: [drafts, proposal, rep-tag]
+
+  - label: "Original title is findable by search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Project Proposal"
+      expect_path: "drafts/proposal.md"
+
+  - label: "Replace the document content with new text"
+    action: update_document
+    args:
+      identifier: "${draft_doc.fqc_id}"
+      content: "This proposal outlines the new approach using cloud-native architecture with microservices."
+
+  - label: "Scan vault to index updated content"
+    action: scan_vault
+
+  - label: "Document title still findable after update"
+    assert:
+      op: search_all
+      args:
+        query: "Project Proposal"
+      expect_path: "drafts/proposal.md"
+
+  - label: "New content is readable via get_document"
+    assert:
+      op: get_document
+      args:
+        identifier: "${draft_doc.fqc_id}"
+      expect_contains: "microservices"
+
+  - label: "Old content is no longer in search results"
+    assert:
+      op: search_all
+      args:
+        query: "old approach"
+        entity_types: [documents]
+      expect_not_contains: "old approach"
+
+  - label: "Old content is not returned by get_document"
+    assert:
+      op: get_document
+      args:
+        identifier: "${draft_doc.fqc_id}"
+      expect_not_contains: "old approach"

@@ -1,0 +1,54 @@
+name: append_and_search
+description: >
+  When content is appended to a document via append_content, the appended
+  text immediately appears in search results without requiring a separate
+  scan or index step. Verifies that append mutations are reflected in search
+  with minimal latency.
+coverage: [IC-04]
+
+steps:
+  - label: "Write a document with initial content"
+    action: vault.write
+    name: log_doc
+    path: "logs/activity.md"
+    title: "Activity Log"
+    content: "Initial log entry at session start."
+    tags: [logs, aas-tag]
+
+  - label: "Initial content is searchable"
+    assert:
+      op: search_documents
+      args:
+        query: "Activity Log"
+      expect_contains: "Activity Log"
+
+  - label: "Append new entry to the document"
+    action: append_to_doc
+    args:
+      identifier: "${log_doc.fqc_id}"
+      content: "\nNew event: User logged in from 192.168.1.100"
+
+  - label: "Scan vault to index appended content"
+    action: scan_vault
+
+  - label: "Appended content is readable via get_document"
+    assert:
+      op: get_document
+      args:
+        identifier: "${log_doc.fqc_id}"
+      expect_contains: "New event: User logged in"
+
+  - label: "Original content still present after append"
+    assert:
+      op: get_document
+      args:
+        identifier: "${log_doc.fqc_id}"
+      expect_contains: "Initial log entry"
+
+  - label: "Retrieve document and verify appended content"
+    assert:
+      op: get_document
+      args:
+        identifier: "${log_doc.fqc_id}"
+      expect_contains: "Initial log entry at session start."
+      expect_contains: "New event: User logged in from 192.168.1.100"

@@ -1,0 +1,30 @@
+name: document_retrieval_by_id
+description: >
+  A document created via vault.write can be retrieved directly by its fqc_id
+  using get_document. Confirms that the fqc_id returned at creation time is
+  immediately usable as a stable identifier for content retrieval, and that the
+  body content returned matches what was written.
+coverage: [IX-04]
+
+steps:
+  - label: "Write a document about tidal patterns"
+    action: vault.write
+    name: tidal_doc
+    path: "oceanography/tidal-patterns.md"
+    title: "Tidal Patterns and Lunar Cycles"
+    content: "Tidal patterns are governed by the gravitational pull of the moon and sun acting on ocean water."
+    tags: [oceanography, tides, rid-tag]
+
+  - label: "Document appears in search_all by title"
+    assert:
+      op: search_all
+      args:
+        query: "Tidal Patterns and Lunar Cycles"
+      expect_path: "oceanography/tidal-patterns.md"
+
+  - label: "Retrieve document body by fqc_id"
+    assert:
+      op: get_document
+      args:
+        identifier: "${tidal_doc.fqc_id}"
+      expect_contains: "gravitational pull of the moon"

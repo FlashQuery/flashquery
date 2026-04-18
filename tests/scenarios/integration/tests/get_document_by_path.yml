@@ -1,0 +1,36 @@
+name: get_document_by_path
+description: >
+  A document can be retrieved using its vault-relative path (not just fqc_id).
+  Retrieving by path returns the same content as retrieving by fqc_id.
+  Verifies that both identifier types work correctly and produce equivalent results.
+coverage: [IX-06]
+
+steps:
+  - label: "Write a document with known path"
+    action: vault.write
+    name: path_doc
+    path: "reference/guides/tutorial.md"
+    title: "Tutorial Guide"
+    content: "This guide explains the fundamentals of the system."
+    tags: [guides, gdp-tag]
+
+  - label: "Retrieve document by fqc_id"
+    assert:
+      op: get_document
+      args:
+        identifier: "${path_doc.fqc_id}"
+      expect_contains: "explains the fundamentals"
+
+  - label: "Retrieve document by vault-relative path"
+    assert:
+      op: get_document
+      args:
+        identifier: "${path_doc.path}"
+      expect_contains: "explains the fundamentals"
+
+  - label: "Both retrieval methods return the same content"
+    assert:
+      op: get_document
+      args:
+        identifier: "${path_doc.path}"
+      expect_contains: "fundamentals of the system"

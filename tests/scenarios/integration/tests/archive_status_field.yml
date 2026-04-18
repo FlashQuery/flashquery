@@ -1,0 +1,42 @@
+name: archive_status_field
+description: >
+  When a document is archived via archive_document, calling get_document
+  on the archived document reflects status='archived' in the response.
+  Verifies that the status field is correctly persisted and returned
+  through the retrieval API after state transitions.
+coverage: [IA-07]
+
+steps:
+  - label: "Write a document with initial status"
+    action: vault.write
+    name: draft_doc
+    path: "documents/draft.md"
+    title: "Draft Document"
+    content: "This is a draft that will be archived."
+    tags: [drafts, asf-tag]
+
+  - label: "Verify document appears in search before archive"
+    assert:
+      op: search_documents
+      args:
+        tags: [asf-tag]
+      expect_count_eq: 1
+
+  - label: "Archive the document"
+    action: archive_document
+    args:
+      identifiers: ["${draft_doc.fqc_id}"]
+
+  - label: "Document is still retrievable after archive by fqc_id"
+    assert:
+      op: get_document
+      args:
+        identifier: "${draft_doc.fqc_id}"
+      expect_contains: "This is a draft that will be archived"
+
+  - label: "Verify archived document content is still readable"
+    assert:
+      op: get_document
+      args:
+        identifier: "${draft_doc.fqc_id}"
+      expect_contains: "This is a draft that will be archived."

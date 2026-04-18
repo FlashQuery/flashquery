@@ -1,0 +1,62 @@
+name: archive_memory
+description: >
+  Archiving a memory removes it from list_memories results while a document
+  created around the same topic remains fully accessible. Verifies that
+  archive_memory is scoped correctly to the memory domain and does not
+  affect document discoverability.
+coverage: [IA-04, IA-05]
+
+steps:
+  - label: "Write a memory about deep-sea bioluminescence"
+    action: memory.write
+    name: deepsea_mem
+    content: "Anglerfish use bioluminescent lures to attract prey in the deep ocean."
+    tags: [marine-biology, deep-sea, amem-tag]
+
+  - label: "Write a document on the same topic"
+    action: vault.write
+    name: deepsea_doc
+    path: "biology/deep-sea-creatures.md"
+    title: "Deep Sea Creatures"
+    content: "The deep sea is home to many extraordinary organisms adapted to extreme pressure and darkness."
+    tags: [marine-biology, deep-sea, amem-tag]
+
+  - label: "Before archive: memory is listable by tag"
+    assert:
+      op: list_memories
+      args:
+        tags: [amem-tag]
+      expect_contains: "Anglerfish"
+
+  - label: "Before archive: document is findable in search_all by title"
+    assert:
+      op: search_all
+      args:
+        query: "Deep Sea Creatures"
+      expect_path: "biology/deep-sea-creatures.md"
+
+  - label: "Archive the memory by memory_id"
+    action: archive_memory
+    args:
+      memory_id: "${deepsea_mem.memory_id}"
+
+  - label: "After archive: memory no longer appears in list_memories"
+    assert:
+      op: list_memories
+      args:
+        tags: [amem-tag]
+      expect_not_contains: "Anglerfish"
+
+  - label: "After archive: document is still findable in search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Deep Sea Creatures"
+      expect_path: "biology/deep-sea-creatures.md"
+
+  - label: "After archive: document content remains accessible by fqc_id"
+    assert:
+      op: get_document
+      args:
+        identifier: "${deepsea_doc.fqc_id}"
+      expect_contains: "extreme pressure and darkness"

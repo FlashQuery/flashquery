@@ -1,0 +1,55 @@
+name: tag_filtered_memories
+description: >
+  Memories tagged with a specific tag appear in list_memories when filtered by
+  that tag, and do not appear when filtered by a different tag. Verifies that
+  tag-based filtering in list_memories is precise — it returns only memories
+  matching the given tag, not all memories in the system.
+coverage: [IS-07]
+
+steps:
+  - label: "Write a memory about thermodynamics, tagged with tmf-alpha"
+    action: memory.write
+    name: thermo_mem
+    content: "Entropy always increases in an isolated thermodynamic system over time."
+    tags: [physics, thermodynamics, tmf-alpha]
+
+  - label: "Write a memory about electromagnetism, tagged with tmf-beta"
+    action: memory.write
+    name: em_mem
+    content: "Maxwell's equations unify electricity and magnetism into a single framework."
+    tags: [physics, electromagnetism, tmf-beta]
+
+  - label: "list_memories with tmf-alpha returns the thermodynamics memory"
+    assert:
+      op: list_memories
+      args:
+        tags: [tmf-alpha]
+      expect_contains: "Entropy"
+
+  - label: "list_memories with tmf-alpha does not return the electromagnetism memory"
+    assert:
+      op: list_memories
+      args:
+        tags: [tmf-alpha]
+      expect_not_contains: "Maxwell"
+
+  - label: "list_memories with tmf-beta returns the electromagnetism memory"
+    assert:
+      op: list_memories
+      args:
+        tags: [tmf-beta]
+      expect_contains: "Maxwell"
+
+  - label: "list_memories with tmf-beta does not return the thermodynamics memory"
+    assert:
+      op: list_memories
+      args:
+        tags: [tmf-beta]
+      expect_not_contains: "Entropy"
+
+  - label: "list_memories with both tags returns both memories"
+    assert:
+      op: list_memories
+      args:
+        tags: [tmf-alpha, tmf-beta]
+      expect_contains: "Entropy"

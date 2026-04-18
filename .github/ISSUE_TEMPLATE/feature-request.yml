@@ -1,0 +1,57 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[FEATURE] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for suggesting a feature! Please help us understand what you'd like to build.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem are you trying to solve? What's the pain point?
+      placeholder: |
+        I often need to search across all my documents but the current search is limited to exact keyword matches.
+        When I want to find "related concepts", I can't easily discover them.
+    validations:
+      required: true
+
+  - type: textarea
+    id: who
+    attributes:
+      label: Who Benefits?
+      description: Who would use this feature? Who does it help?
+      placeholder: |
+        - AI workflows that need semantic search across knowledge bases
+        - Researchers managing large document collections
+        - Teams sharing a central vault
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution (Optional)
+      description: How would you solve this? Any specific approach or technology?
+      placeholder: |
+        Implement semantic search using vector embeddings:
+        - Store document embeddings in pgvector
+        - Add a `search_semantic` tool that accepts a query and returns similar documents
+        - Support multiple embedding providers (OpenAI, local Ollama)
+
+  - type: textarea
+    id: use_cases
+    attributes:
+      label: Use Cases
+      description: Concrete examples of how this feature would be used
+      placeholder: |
+        Use Case 1: Finding related notes
+        - I run `/semantic-search "machine learning best practices"`
+        - The tool returns notes on neural networks, optimization, and training strategies
+
+        Use Case 2: Knowledge graph exploration
+        - I ask Claude "what do we know about scaling?"
+        - Claude uses the semantic search tool to find all related documentation

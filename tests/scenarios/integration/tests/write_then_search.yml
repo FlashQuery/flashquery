@@ -1,0 +1,47 @@
+name: write_then_search
+description: >
+  A document written via vault.write is immediately discoverable through search_all.
+  A memory written via memory.write is immediately listable via list_memories by tag.
+  Tests write-then-find coherence without requiring embedding configuration.
+
+  Note: Full semantic content search (search_documents by body text, memory search
+  via search_all) requires embedding configuration and is covered separately.
+coverage: [IS-01, IS-02]
+
+steps:
+  - label: "Write a document about the ocean"
+    action: vault.write
+    name: ocean_doc
+    path: "nature/ocean.md"
+    title: "The Ocean at Dawn"
+    content: "The bioluminescent waves crash against the shore at dawn."
+    tags: [nature, ocean, wts-tag]
+
+  - label: "Write a memory about mountains"
+    action: memory.write
+    name: mountain_mem
+    content: "The mountain peaks are dusted with snow in early autumn."
+    tags: [nature, mountains, wts-tag]
+
+  - label: "Document appears in search_all by title"
+    assert:
+      op: search_all
+      args:
+        query: "Ocean at Dawn"
+      expect_path: "nature/ocean.md"
+
+  - label: "Document not returned when searching only memories"
+    assert:
+      op: search_all
+      args:
+        query: "Ocean at Dawn"
+        entity_types: [documents]
+      expect_path: "nature/ocean.md"
+      expect_not_contains: "mountain peaks"
+
+  - label: "Memory listable by unique tag"
+    assert:
+      op: list_memories
+      args:
+        tags: [wts-tag]
+      expect_contains: "mountain peaks"

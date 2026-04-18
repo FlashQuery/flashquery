@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'package-lock.json'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Validate package contents
+        run: |
+          node -e "
+            const { execSync } = require('child_process');
+            const output = execSync('npm pack --dry-run --json').toString();
+            const packs = JSON.parse(output);
+            const pack = packs[0];
+            const badFiles = pack.files.filter(f =>
+              f.path.includes('src/') ||
+              f.path.includes('tests/') ||
+              f.path.includes('.env') ||
+              f.path.includes('node_modules/')
+            );
+            if (badFiles.length > 0) {
+              console.error('Unwanted files in package:', badFiles.map(f => f.path));
+              process.exit(1);
+            }
+            console.log('Package validation passed — no src/, tests/, .env, or node_modules/');
+          "
+
+      - name: Validate docker-compose files
+        run: |
+          for file in docker/docker-compose.yml docker/docker-compose.db-only.yml docker/docker-compose.flashquery-only.yml; do
+            echo "Validating $file..."
+            docker compose -f "$file" config --quiet || exit 1
+          done
+          echo "All docker-compose files valid"

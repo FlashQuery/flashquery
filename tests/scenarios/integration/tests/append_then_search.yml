@@ -1,0 +1,54 @@
+name: append_then_search
+description: >
+  A document created via vault.write is then extended with new content via
+  append_to_doc. Verifies that the appended content is durably stored and
+  readable via get_document, and that the document remains discoverable
+  through search_all after the append. Covers IC-01: append content to a
+  document and confirm the appended content appears in search.
+coverage: [IC-01]
+
+steps:
+  - label: "Write a document with initial content"
+    action: vault.write
+    name: fieldnotes_doc
+    path: "fieldwork/coastal-survey.md"
+    title: "Coastal Survey Field Notes"
+    content: "Initial observations recorded during the morning low-tide window."
+    tags: [fieldwork, coastal, apd-tag]
+
+  - label: "Document is findable by title before append"
+    assert:
+      op: search_all
+      args:
+        query: "Coastal Survey Field Notes"
+      expect_path: "fieldwork/coastal-survey.md"
+
+  - label: "Append new content to the document"
+    action: append_to_doc
+    args:
+      identifier: "${fieldnotes_doc.fqc_id}"
+      content: "## Afternoon Follow-Up\n\nSecondary readings confirmed unusual bioluminescence patterns near the tidal pools."
+
+  - label: "Scan vault to ensure index reflects the appended content"
+    action: scan_vault
+
+  - label: "Appended content is stored and readable via get_document"
+    assert:
+      op: get_document
+      args:
+        identifier: "${fieldnotes_doc.fqc_id}"
+      expect_contains: "bioluminescence patterns near the tidal pools"
+
+  - label: "Document is still discoverable by title after append"
+    assert:
+      op: search_all
+      args:
+        query: "Coastal Survey Field Notes"
+      expect_path: "fieldwork/coastal-survey.md"
+
+  - label: "Original content is preserved after append"
+    assert:
+      op: get_document
+      args:
+        identifier: "${fieldnotes_doc.fqc_id}"
+      expect_contains: "morning low-tide window"

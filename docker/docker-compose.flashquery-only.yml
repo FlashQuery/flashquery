@@ -1,0 +1,60 @@
+name: flashquery
+
+# FlashQuery — FlashQuery-Only Docker Compose
+# Starts ONLY the FlashQuery service (HTTP transport on port 3100).
+# Use this when you have an external Supabase instance (cloud or self-hosted)
+# and only need FlashQuery running in Docker.
+#
+# Architecture:
+# - Container runs as non-root 'fqc' user for security
+# - Vault data: mounted via VAULT_PATH environment variable
+# - Log files: mounted via LOG_PATH environment variable
+# - Both vault and logs directories are on host filesystem, accessible by host user
+# - Config: copied to image from flashquery.example.yaml, customized via environment variables
+#
+# Usage:
+#   docker compose -f docker/docker-compose.flashquery-only.yml up -d
+#
+# Prerequisites:
+#   - .env must contain:
+#       DATABASE_URL    — your external Postgres connection string
+#       SUPABASE_URL    — your external Supabase project URL
+#       SUPABASE_ANON_KEY
+#       SUPABASE_SERVICE_ROLE_KEY
+#   - No local Postgres, PostgREST, GoTrue, Kong, or Studio are started.
+#
+# After startup:
+#   - FlashQuery HTTP MCP endpoint: http://localhost:3100/mcp
+#   - Vault files: ./vault/ (or custom VAULT_PATH from .env)
+#   - Log files: ./logs/ (or custom LOG_PATH from .env)
+
+services:
+
+  # =========================================================================
+  # FlashQuery — MCP server with HTTP transport on port 3100
+  # No depends_on: connects directly to external Supabase Postgres via DATABASE_URL
+  # =========================================================================
+  flashquery:
+    container_name: flashquery
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "10001:10001"
+    # network_mode: host — makes the container share the host's network stack.
+    # On Linux this means localhost inside the container == localhost on the host,
+    # so DATABASE_URL and SUPABASE_URL in .env work without any changes.
+    # Port 3100 is directly reachable on the host (no port mapping needed).
+    # Note: not portable to macOS/Windows Docker Desktop (use extra_hosts there).
+    network_mode: host
+    env_file:
+      - ../.env
+    environment:
+      # Docker-specific overrides only (these are NOT in .env)
+      NODE_ENV: production
+      VAULT_PATH: /app/vault
+      LOG_PATH: /app/logs
+    command: start --transport http --config ./flashquery.yaml
+    volumes:
+      - ${VAULT_PATH:-./vault}:/app/vault
+      - ${LOG_PATH:-./logs}:/app/logs

@@ -1,0 +1,56 @@
+name: cross_domain_search
+description: >
+  A document and a memory that share a tag are each discoverable through their
+  respective access paths. The search_all entity_types filter correctly restricts
+  results to documents only. Memory retrieval is tested via list_memories (tag-based).
+
+  Note: Verifying that memories appear alongside documents in a single search_all
+  result set requires embedding configuration (memory semantic search). That behavior
+  is covered by a separate embedding-enabled test.
+coverage: [IS-03, IS-04, IX-01]
+
+steps:
+  - label: "Write a document tagged with the shared topic"
+    action: vault.write
+    name: galaxy_doc
+    path: "cosmos/galaxies.md"
+    title: "Spiral Galaxies"
+    content: "Spiral galaxies rotate and form new stars along their arms."
+    tags: [cosmos, astronomy, cds-tag]
+
+  - label: "Write a memory tagged with the same shared topic"
+    action: memory.write
+    name: nebula_mem
+    content: "Nebulae are nurseries where new stars are born from gas and dust."
+    tags: [cosmos, astronomy, cds-tag]
+
+  - label: "search_all finds the document by title"
+    assert:
+      op: search_all
+      args:
+        query: "Spiral Galaxies"
+      expect_path: "cosmos/galaxies.md"
+
+  - label: "Memory is listable via shared tag"
+    assert:
+      op: list_memories
+      args:
+        tags: [cds-tag]
+      expect_contains: "Nebulae"
+
+  - label: "search_all with entity_types=documents returns document only"
+    assert:
+      op: search_all
+      args:
+        query: "Spiral Galaxies"
+        entity_types: [documents]
+      expect_path: "cosmos/galaxies.md"
+      expect_not_contains: "Nebulae are nurseries"
+
+  - label: "search_all scoped to documents does not find unrelated titles"
+    assert:
+      op: search_all
+      args:
+        query: "Spiral Galaxies"
+        entity_types: [documents]
+      expect_count_eq: 1

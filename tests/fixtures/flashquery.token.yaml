@@ -1,0 +1,43 @@
+# Test configuration for E2E token endpoint tests
+# Spawned as a subprocess to test real token issuance and HTTP transport
+# Designed for testing token roundtrip flows and backward compatibility
+
+instance:
+  id: 'e2e-token-test'
+  name: 'E2E Token Test'
+  vault:
+    path: ./tests/fixtures/vault-token-e2e
+    markdownExtensions:
+      - .md
+
+mcp:
+  transport: streamable-http
+  port: 3199  # Fixed port for E2E testing (range 3100-3199 reserved for tests)
+  auth_secret: e2e-token-test-secret  # Fixed secret for E2E tests
+  token_lifetime: 24  # 24 hours (configurable for testing different lifetimes)
+
+supabase:
+  url: ${SUPABASE_URL}
+  service_role_key: ${SUPABASE_SERVICE_ROLE_KEY}
+  database_url: ${DATABASE_URL}
+
+git:
+  autoCommit: false
+  autoPush: false
+  remote: origin
+  branch: main
+
+embedding:
+  provider: none
+  apiKey: ''
+  model: ''
+  dimensions: 1536
+
+logging:
+  level: info
+  output: file
+  filePath: ./test-logs/token-e2e.log
+
+locking:
+  enabled: false
+  ttlSeconds: 30

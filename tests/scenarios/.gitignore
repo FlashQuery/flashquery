@@ -1,0 +1,8 @@
+# Python bytecode caches
+__pycache__/
+*.pyc
+
+# Temp files from test runs (vault test files, managed server configs)
+_test/
+fqc-vault-*/
+fqc-test-config-*.yml

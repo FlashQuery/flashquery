@@ -1,0 +1,162 @@
+name: flashquery
+
+# FlashQuery — Full Stack Docker Compose
+# Starts FlashQuery (HTTP transport) + Postgres/pgvector + PostgREST + GoTrue + Kong + Studio
+#
+# Usage:
+#   docker compose -f docker/docker-compose.yml up -d
+#
+# Prerequisites:
+#   - Copy .env.example to .env and fill in values
+#   - POSTGRES_PASSWORD must be set in .env (no default — fail loudly)
+#   - VAULT_PATH defaults to ./vault (relative to repo root)
+#
+# After startup:
+#   - FlashQuery HTTP MCP endpoint: http://localhost:3100/mcp  ← only port exposed to host
+#
+# Supabase services (postgres, postgrest, gotrue, kong, studio) are internal to
+# the Compose network — they communicate by service name and are NOT bound to host
+# ports. This prevents conflicts with any external Supabase instance running on
+# the host. If you need direct host access to a service (e.g. Supabase Studio at
+# :3001 or Postgres at :5432 for a SQL client), uncomment its ports: block below.
+
+services:
+
+  # =========================================================================
+  # Postgres 15 with pgvector (pre-built in supabase/postgres image)
+  # =========================================================================
+  postgres:
+    env_file:
+      - ../.env
+    image: supabase/postgres:15.8.1.085
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: flashquery
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init:/docker-entrypoint-initdb.d
+    # ports:
+    #   - "5432:5432"  # uncomment for direct host SQL access
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d flashquery"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  # =========================================================================
+  # PostgREST — auto-generates REST API from Postgres schema
+  # =========================================================================
+  postgrest:
+    image: postgrest/postgrest:v14.6
+    restart: unless-stopped
+    environment:
+      PGRST_DB_URI: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/flashquery
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+    # ports:
+    #   - "3000:3000"  # uncomment for direct host PostgREST access
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # =========================================================================
+  # GoTrue — Supabase auth service (JWT issuance, user management)
+  # =========================================================================
+  gotrue:
+    image: supabase/gotrue:v2.186.0
+    restart: unless-stopped
+    environment:
+      GOTRUE_API_HOST: "0.0.0.0"
+      GOTRUE_API_PORT: 9999
+      GOTRUE_DB_DRIVER: postgres
+      GOTRUE_DB_DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/flashquery?search_path=auth
+      GOTRUE_SITE_URL: http://localhost:3001
+      GOTRUE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters}
+      GOTRUE_JWT_EXP: 3600
+      GOTRUE_DISABLE_SIGNUP: "false"
+      API_EXTERNAL_URL: http://localhost:8000
+    # ports:
+    #   - "9999:9999"  # uncomment for direct host GoTrue access
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # =========================================================================
+  # Kong — API gateway (routes /rest/v1 → postgrest, /auth/v1 → gotrue)
+  # =========================================================================
+  kong:
+    image: kong/kong:3.9.1
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: "off"
+      KONG_DECLARATIVE_CONFIG: /var/lib/kong/kong.yml
+      KONG_DNS_ORDER: LAST,A,CNAME
+      KONG_PLUGINS: bundled,request-transformer,cors
+      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
+      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
+    volumes:
+      - ./kong.yml:/var/lib/kong/kong.yml:ro
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgrest
+      - gotrue
+
+  # =========================================================================
+  # Supabase Studio — web-based DB and project management UI
+  # =========================================================================
+  studio:
+    image: supabase/studio:2026.03.16-sha-5528817
+    restart: unless-stopped
+    environment:
+      STUDIO_PG_META_URL: http://postgrest:3000
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DEFAULT_ORGANIZATION_NAME: FlashQuery
+      DEFAULT_PROJECT_NAME: FlashQuery
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_PUBLIC_URL: http://localhost:8000
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+    # ports:
+    #   - "3001:3000"  # uncomment for Supabase Studio at http://localhost:3001
+    depends_on:
+      - postgrest
+      - gotrue
+
+  # =========================================================================
+  # FlashQuery — MCP server with HTTP transport on port 3100
+  # =========================================================================
+  flashquery:
+    container_name: flashquery
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    env_file:
+      - ../.env
+    environment:
+      # Docker-specific overrides (these differ from .env values)
+      NODE_ENV: production
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/flashquery
+      SUPABASE_URL: http://kong:8000
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      VAULT_PATH: /app/vault
+      LOG_PATH: /app/logs
+    command: start --transport http --config ./flashquery.yaml
+    volumes:
+      - ${VAULT_PATH:-./vault}:/app/vault
+      - ${LOG_PATH:-./logs}:/app/logs
+    ports:
+      - "3100:3100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

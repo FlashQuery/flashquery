@@ -1,0 +1,89 @@
+{
+  "name": "flashquery-core",
+  "version": "0.1.0",
+  "description": "Open source, local-first data management layer for AI workflows",
+  "type": "module",
+  "bin": {
+    "flashquery": "./dist/index.js",
+    "fqc": "./dist/index.js"
+  },
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md",
+    "NOTICE",
+    "ARCHITECTURE.md",
+    "docs/client-configs/"
+  ],
+  "scripts": {
+    "setup": "bash setup/setup.sh",
+    "mcp:claude": "bash setup/setup-claude-mcp.sh",
+
+    "dev": "tsx src/index.ts start --config ./flashquery.yml",
+    "devtest": "DOTENV_CONFIG_PATH=./.env.test tsx src/index.ts start --config ./flashquery.yml",
+    "// devtest": "To use a separate test YAML (requires flashquery.test.yml to exist): DOTENV_CONFIG_PATH=./.env.test tsx src/index.ts start --config ./flashquery.test.yml",
+    "build": "tsup src/index.ts --format esm --dts",
+    "start": "node dist/index.js",
+
+    "docker:up": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d",
+    "docker:down": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml down",
+    "docker:logs": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml logs -f",
+    "docker:status": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml ps",
+    "docker:restart": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml restart",
+
+    "docker:fq:up": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml up -d",
+    "docker:fq:watch": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml up",
+    "docker:fq:down": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml down",
+    "docker:fq:logs": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml logs -f",
+    "docker:fq:status": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml ps",
+    "docker:fq:build": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml build",
+
+    "db:up": "docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml up -d",
+    "db:down": "docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml down",
+    "db:logs": "docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml logs -f",
+    "db:status": "docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml ps",
+
+    "test": "vitest run --config tests/config/vitest.unit.config.ts",
+    "test:watch": "vitest --config tests/config/vitest.unit.config.ts",
+    "test:integration": "vitest run --config tests/config/vitest.integration.config.ts",
+    "test:e2e": "vitest run --config tests/config/vitest.e2e.config.ts",
+    "test:http": "vitest run --config tests/config/vitest.http.config.ts",
+    "test:benchmark": "vitest run --config tests/config/vitest.benchmark.config.ts",
+    "lint": "eslint src/ --max-warnings 0",
+    "format": "prettier --write src/",
+    "format:check": "prettier --check src/"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@supabase/supabase-js": "^2.100.0",
+    "async-mutex": "^0.5.0",
+    "commander": "^14.0.3",
+    "dotenv": "^17.3.1",
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^4.1.1",
+    "pg": "^8.20.0",
+    "simple-git": "^3.33.0",
+    "uuid": "^13.0.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.5.0",
+    "@types/pg": "^8.20.0",
+    "@types/uuid": "^10.0.0",
+    "eslint": "^10.1.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2",
+    "typescript-eslint": "^8.57.3-alpha.3",
+    "vitest": "^4.1.1"
+  }
+}

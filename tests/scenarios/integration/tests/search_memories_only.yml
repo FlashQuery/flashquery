@@ -1,0 +1,44 @@
+name: search_memories_only
+description: >
+  Memory retrieval uses list_memories with tag filtering rather than search_all.
+  Verifies that memories created with tags are discoverable via list_memories
+  with the correct tag scope, isolating them from documents. This test covers
+  the memory access path to distinguish it from document search.
+coverage: [IS-05]
+
+steps:
+  - label: "Write a document with specific tag"
+    action: vault.write
+    name: forest_doc
+    path: "nature/forests.md"
+    title: "Ancient Forests and Ecosystems"
+    content: "Forests are complex ecosystems with interconnected species."
+    tags: [nature, forests, smo-tag]
+
+  - label: "Write a memory with the same tag"
+    action: memory.write
+    name: hiking_mem
+    content: "Hiking through the redwood forests was a transcendent experience."
+    tags: [smo-tag]
+
+  - label: "Document is searchable via search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Ancient Forests"
+      expect_path: "nature/forests.md"
+
+  - label: "Memory is listable via list_memories with same tag"
+    assert:
+      op: list_memories
+      args:
+        tags: [smo-tag]
+      expect_contains: "redwood forests"
+      expect_contains: "transcendent experience"
+
+  - label: "Memory content appears when listing by tag"
+    assert:
+      op: list_memories
+      args:
+        tags: [smo-tag]
+      expect_not_contains: "Ancient Forests and Ecosystems"

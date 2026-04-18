@@ -1,0 +1,37 @@
+# Docker build context is repo root.
+# Only flashquery-core/ contents are needed for the build.
+
+# Exclude everything at repo root that isn't flashquery-core/
+Background docs/
+Definition/
+Notes/
+docs/
+docker/
+memory/
+.claude/
+.claude-plugin/
+.github/
+.planning/
+.git/
+.gitignore
+.nvmrc
+.env
+.env.example
+*.md
+*.yaml.example
+
+# Within flashquery-core/, exclude dev artifacts
+flashquery-core/node_modules/
+flashquery-core/dist/
+flashquery-core/tests/
+flashquery-core/test-vault/
+flashquery-core/coverage/
+flashquery-core/.env
+flashquery-core/.env.local
+flashquery-core/*.env
+flashquery-core/flashquery.yaml
+flashquery-core/vitest.*.config.ts
+flashquery-core/.DS_Store
+flashquery-core/.gitignore
+flashquery-core/.planning/
+flashquery-core/.claude/

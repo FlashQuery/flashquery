@@ -1,0 +1,52 @@
+name: update_document_then_search
+description: >
+  A document created via vault.write and then modified via update_document is
+  discoverable through search using its new title and body content. Verifies
+  that update_document propagates changes to the search index so that the
+  updated state is what search returns.
+coverage: [IX-03, IC-02]
+
+steps:
+  - label: "Write a document with original title and content"
+    action: vault.write
+    name: report_doc
+    path: "reports/expedition-notes.md"
+    title: "Expedition Notes Draft"
+    content: "Preliminary field observations from the northern survey team collected in early spring."
+    tags: [reports, expedition, upd-tag]
+
+  - label: "Original title is findable in search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Expedition Notes Draft"
+      expect_path: "reports/expedition-notes.md"
+
+  - label: "Update the document with a new title and revised content"
+    action: update_document
+    args:
+      identifier: "${report_doc.fqc_id}"
+      title: "Expedition Notes Final"
+      content: "Final field observations compiled from the northern and southern survey teams after full review."
+
+  - label: "Updated title is now findable in search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Expedition Notes Final"
+      expect_path: "reports/expedition-notes.md"
+
+  - label: "Updated body content is readable via get_document"
+    assert:
+      op: get_document
+      args:
+        identifier: "${report_doc.fqc_id}"
+      expect_contains: "northern and southern survey teams"
+
+  - label: "Original draft title no longer appears in search results"
+    assert:
+      op: search_all
+      args:
+        query: "Expedition Notes Draft"
+        entity_types: [documents]
+      expect_not_contains: "Expedition Notes Draft"

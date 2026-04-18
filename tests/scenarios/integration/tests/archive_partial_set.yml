@@ -1,0 +1,75 @@
+name: archive_partial_set
+description: >
+  When one document from a group of similarly-tagged documents is archived,
+  the remaining documents in that group are still discoverable. Verifies that
+  archive_document is scoped to the targeted document only and does not affect
+  sibling documents sharing the same tags or topic.
+coverage: [IA-06]
+
+steps:
+  - label: "Write first glacier document"
+    action: vault.write
+    name: glacier_a
+    path: "climate/glacier-retreat-a.md"
+    title: "Arctic Glacier Retreat 2020"
+    content: "Arctic glaciers retreated significantly during the 2020 observation period."
+    tags: [climate, glaciers, aps-tag]
+
+  - label: "Write second glacier document"
+    action: vault.write
+    name: glacier_b
+    path: "climate/glacier-retreat-b.md"
+    title: "Arctic Glacier Retreat 2021"
+    content: "The 2021 season showed continued acceleration of glacier retreat in the Arctic."
+    tags: [climate, glaciers, aps-tag]
+
+  - label: "Write third glacier document"
+    action: vault.write
+    name: glacier_c
+    path: "climate/glacier-retreat-c.md"
+    title: "Arctic Glacier Retreat 2022"
+    content: "Glacier mass loss in 2022 exceeded all prior recorded measurements."
+    tags: [climate, glaciers, aps-tag]
+
+  - label: "Before archive: all three documents are discoverable"
+    assert:
+      op: search_all
+      args:
+        query: "Arctic Glacier Retreat"
+        entity_types: [documents]
+      expect_count_gte: 3
+
+  - label: "Archive one document (glacier_b)"
+    action: archive_document
+    args:
+      identifiers: "${glacier_b.fqc_id}"
+
+  - label: "After archive: archived document is gone from search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Arctic Glacier Retreat 2021"
+        entity_types: [documents]
+      expect_not_contains: "glacier-retreat-b.md"
+
+  - label: "After archive: remaining documents are still discoverable"
+    assert:
+      op: search_all
+      args:
+        query: "Arctic Glacier Retreat"
+        entity_types: [documents]
+      expect_count_gte: 2
+
+  - label: "After archive: first document (glacier_a) still individually findable"
+    assert:
+      op: search_all
+      args:
+        query: "Arctic Glacier Retreat 2020"
+      expect_path: "climate/glacier-retreat-a.md"
+
+  - label: "After archive: third document (glacier_c) still individually findable"
+    assert:
+      op: search_all
+      args:
+        query: "Arctic Glacier Retreat 2022"
+      expect_path: "climate/glacier-retreat-c.md"

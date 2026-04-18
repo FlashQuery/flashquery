@@ -1,0 +1,29 @@
+name: Docker Smoke Test
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'docker/**'
+      - 'scripts/smoke-test.sh'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+      - 'docker/**'
+      - 'scripts/smoke-test.sh'
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -f Dockerfile -t flashquery-core:test .
+
+      - name: Run smoke tests
+        run: ./scripts/smoke-test.sh

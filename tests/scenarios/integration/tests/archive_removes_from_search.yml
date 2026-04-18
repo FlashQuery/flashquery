@@ -1,0 +1,78 @@
+name: archive_removes_from_search
+description: >
+  Archiving a document removes it from search_all and search_documents, while a memory
+  created around the same topic remains fully accessible. Demonstrates that archive is
+  scoped correctly and does not affect the memory domain.
+coverage: [IA-01, IA-02, IA-03, IX-02]
+
+steps:
+  - label: "Write a document about sunsets"
+    action: vault.write
+    name: sunset_doc
+    path: "journal/sunsets.md"
+    title: "Watching the Sunset"
+    content: "The crimson horizon fades as the sun dips below the treeline."
+    tags: [nature, sunset, arc-tag]
+
+  - label: "Write a memory about sunsets"
+    action: memory.write
+    name: sunset_mem
+    content: "Sunsets over the ocean are the most vivid I have ever seen."
+    tags: [nature, sunset, arc-tag]
+
+  - label: "Before archive: document is findable in search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Watching the Sunset"
+      expect_path: "journal/sunsets.md"
+
+  - label: "Before archive: memory is listable by tag"
+    assert:
+      op: list_memories
+      args:
+        tags: [arc-tag]
+      expect_contains: "Sunsets over the ocean"
+
+  - label: "Before archive: document appears in search_all document section"
+    assert:
+      op: search_all
+      args:
+        query: "Watching the Sunset"
+        entity_types: [documents]
+      expect_path: "journal/sunsets.md"
+
+  - label: "Archive the document by fqc_id"
+    action: archive_document
+    args:
+      identifiers: "${sunset_doc.fqc_id}"
+
+  - label: "After archive: document is gone from search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Watching the Sunset"
+      expect_not_contains: "journal/sunsets.md"
+
+  - label: "After archive: document absent from entity-filtered search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Watching the Sunset"
+        entity_types: [documents]
+      expect_not_contains: "journal/sunsets.md"
+
+  - label: "After archive: memory is still listable by tag"
+    assert:
+      op: list_memories
+      args:
+        tags: [arc-tag]
+      expect_contains: "Sunsets over the ocean"
+
+  - label: "After archive: memory content does not appear as a document"
+    assert:
+      op: search_all
+      args:
+        query: "Watching the Sunset"
+        entity_types: [documents]
+      expect_not_contains: "Sunsets over the ocean"

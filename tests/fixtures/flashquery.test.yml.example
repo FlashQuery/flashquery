@@ -1,0 +1,43 @@
+instance:
+  name: "Test FQC"
+  id: "test-fqc"
+  vault:
+    path: "/tmp/fqc-vault-test"
+    markdown_extensions: [".md"]
+
+server:
+  host: "localhost"
+  port: 3100
+  url: "http://localhost:3100"
+
+supabase:
+  url: "${SUPABASE_URL}"
+  service_role_key: "${SUPABASE_SERVICE_ROLE_KEY}"
+  database_url: "${DATABASE_URL}"
+  skip_ddl: true
+
+git:
+  auto_commit: false
+  auto_push: false
+  remote: "origin"
+  branch: "main"
+
+mcp:
+  transport: "streamable-http"
+  port: 3100
+  auth_secret: "test-secret-key-12345"
+
+llm:
+  provider: "anthropic"
+  model: "claude-sonnet-4-20250514"
+  api_key: "sk-test"
+
+embedding:
+  provider: "none"
+  model: "text-embedding-3-small"
+  api_key: ""
+  dimensions: 1536
+
+logging:
+  level: "debug"
+  output: "stdout"
