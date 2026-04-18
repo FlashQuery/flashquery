@@ -41,6 +41,8 @@ Core CRUD operations on vault documents via MCP.
 | D-22 | Reserved frontmatter fields cannot be overridden via update | test_document_update_partial | 2026-04-14 | 2026-04-16 |
 | D-23 | get_document returns clear error when file manually deleted from vault (DB row present, no scan run) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-04-16 |
 | D-24 | search_documents does not surface stale hits for manually-deleted files before reconcile (or marks them clearly) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-04-16 |
+| D-25 | User-defined custom frontmatter fields survive update_document (updating title, body, or tags leaves unmentioned custom fields intact) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
+| D-26 | User-defined custom frontmatter fields survive archive_document (archiving only changes status; all other fields preserved) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
 
 ## 2. Document Content Operations
 
@@ -65,6 +67,9 @@ Surgical editing tools for modifying document content at specific locations.
 | C-15 | Get document with sections filter returns only requested sections | test_content_section_extraction | 2026-04-14 | 2026-04-16 |
 | C-16 | Get document sections with include_subheadings=true | test_content_section_extraction | 2026-04-14 | 2026-04-16 |
 | C-17 | Get document sections with include_subheadings=false | test_content_section_extraction | 2026-04-14 | 2026-04-16 |
+| C-18 | User-defined custom frontmatter fields survive content-editing operations (append_to_doc, insert_in_doc, replace_doc_section leave unmentioned custom fields intact) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
+| C-19 | update_doc_header can explicitly modify user-defined frontmatter fields when named in the update map (MCP-directed override is permitted) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
+| C-20 | update_doc_header targeting only FQC-managed fields (e.g. title) does not modify user-defined custom frontmatter fields | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
 
 ## 3. Document Outline and Structure
 
@@ -188,6 +193,7 @@ Vault scanning, file listing, and directory management.
 | F-15 | Path traversal protection (escape attempt blocked) | test_directory_operations | 2026-04-14 | 2026-04-16 |
 | F-16 | discover_document in flagged mode | test_discover_document | 2026-04-14 | 2026-04-16 |
 | F-17 | discover_document in paths mode | test_discover_document | 2026-04-14 | 2026-04-16 |
+| F-18 | force_file_scan preserves user-defined frontmatter fields in newly discovered documents (scan merges FQC identity fields into existing frontmatter rather than replacing it) | test_frontmatter_preservation* | 2026-04-18 | FAIL (2026-04-18) |
 
 ## 10. Briefing and Aggregation
 
@@ -255,20 +261,20 @@ Behaviors verifying that FlashQuery auto-commits to the vault's git repository w
 
 | Category | Total | Covered | Uncovered |
 |----------|-------|---------|-----------|
-| Document Lifecycle | 24 | 24 | 0 |
-| Document Content Operations | 17 | 17 | 0 |
+| Document Lifecycle | 26 | 26 | 0 |
+| Document Content Operations | 20 | 20 | 0 |
 | Document Outline | 6 | 6 | 0 |
 | Search — Documents | 9 | 9 | 0 |
 | Search — Cross-type | 5 | 5 | 0 |
 | Memory Lifecycle | 15 | 15 | 0 |
 | Plugin Lifecycle | 15 | 15 | 0 |
 | Tag Operations | 7 | 7 | 0 |
-| File System Operations | 17 | 17 | 0 |
+| File System Operations | 18 | 18 | 0 |
 | Briefing | 3 | 3 | 0 |
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| **Total** | **140** | **136** | **4** |
+| **Total** | **146** | **142** | **4** |
 
 ---
 
@@ -378,3 +384,7 @@ Covers: SC-03
 
 ### test_memory_version_history
 Covers: SC-07
+
+### test_frontmatter_preservation
+Covers: D-25, D-26, C-18, C-19, C-20, F-18
+Note: D-25, D-26, C-18, C-19, C-20 passing. F-18 FAILING — FQC wipes user-defined frontmatter fields when writing identity fields during scan (defect in frontmatter-repair path).
