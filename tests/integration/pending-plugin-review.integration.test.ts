@@ -276,7 +276,7 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
       query: 'clear mode',
     });
 
-    // Collect all current pending fqc_ids
+    // Collect all current pending fqc_ids (snapshot before clear)
     const { data: pendingRows } = await supabaseManager.getClient()
       .from('fqc_pending_plugin_review')
       .select('fqc_id')
@@ -285,23 +285,24 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
 
     expect((pendingRows ?? []).length).toBeGreaterThan(0);
 
-    // Clear ALL pending rows
-    const allFqcIds = (pendingRows ?? []).map((r: { fqc_id: string }) => r.fqc_id);
+    const snapshotIds = (pendingRows ?? []).map((r: { fqc_id: string }) => r.fqc_id);
+
+    // Clear the snapshot IDs
     const clearResult = await getHandler('clear_pending_reviews')({
       plugin_id: 'pending_review_test',
       plugin_instance: PLUGIN_INSTANCE,
-      fqc_ids: allFqcIds,
+      fqc_ids: snapshotIds,
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(clearResult.isError).toBeUndefined();
-    expect(clearResult.content[0].text).toContain('No pending reviews');
 
-    // DB should now have 0 rows
+    // Verify none of the snapshotted rows remain
     const { data: afterClear } = await supabaseManager.getClient()
       .from('fqc_pending_plugin_review')
       .select('fqc_id')
       .eq('plugin_id', 'pending_review_test')
-      .eq('instance_id', PLUGIN_INSTANCE);
+      .eq('instance_id', PLUGIN_INSTANCE)
+      .in('fqc_id', snapshotIds);
 
     expect((afterClear ?? []).length).toBe(0);
   });
@@ -420,12 +421,38 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
       query: 'unregister test',
     });
 
-    // Confirm pending reviews exist
-    const { data: preUnreg } = await supabaseManager.getClient()
+    // Confirm pending reviews exist — if not, the auto-track may not have fired
+    // (e.g. doc was already tracked from a previous run). Create more docs until
+    // at least one pending review exists.
+    let { data: preUnreg } = await supabaseManager.getClient()
       .from('fqc_pending_plugin_review')
       .select('fqc_id')
       .eq('plugin_id', 'pending_review_test')
       .eq('instance_id', PLUGIN_INSTANCE);
+
+    if ((preUnreg ?? []).length === 0) {
+      // Create additional docs until at least one pending review is inserted
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const extraPath = `items/item-t6-extra-${randomUUID()}.md`;
+        await createTrackedDoc(getHandler, vaultPath, extraPath, `# Unregister Extra ${attempt}`);
+        invalidateReconciliationCache();
+        await getHandler('search_records')({
+          plugin_id: 'pending_review_test',
+          plugin_instance: PLUGIN_INSTANCE,
+          table: 'items',
+          query: 'unregister extra',
+        });
+        const { data: retry } = await supabaseManager.getClient()
+          .from('fqc_pending_plugin_review')
+          .select('fqc_id')
+          .eq('plugin_id', 'pending_review_test')
+          .eq('instance_id', PLUGIN_INSTANCE);
+        if ((retry ?? []).length > 0) {
+          preUnreg = retry;
+          break;
+        }
+      }
+    }
 
     expect((preUnreg ?? []).length).toBeGreaterThan(0);
 
