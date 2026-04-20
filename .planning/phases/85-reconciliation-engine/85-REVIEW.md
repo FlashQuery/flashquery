@@ -1,68 +1,69 @@
 ---
 phase: 85-reconciliation-engine
-reviewed: 2026-04-20T00:00:00Z
+reviewed: 2026-04-20T12:00:00Z
 depth: standard
-files_reviewed: 4
+files_reviewed: 6
 files_reviewed_list:
+  - src/mcp/tools/scan.ts
   - src/services/plugin-reconciliation.ts
   - tests/unit/field-map-null.test.ts
   - tests/unit/plugin-reconciliation.test.ts
   - tests/unit/reconciliation-staleness.test.ts
+  - tests/unit/staleness-invalidation.test.ts
 findings:
   critical: 0
   warning: 4
-  info: 3
-  total: 7
+  info: 4
+  total: 8
 status: issues_found
 ---
 
 # Phase 85: Code Review Report
 
-**Reviewed:** 2026-04-20T00:00:00Z
+**Reviewed:** 2026-04-20T12:00:00Z
 **Depth:** standard
-**Files Reviewed:** 4
+**Files Reviewed:** 6
 **Status:** issues_found
 
 ## Summary
 
-Reviewed the reconciliation engine implementation (`plugin-reconciliation.ts`) and its three unit test suites. The core classification logic is sound and clearly structured. The seven-state decision tree in `classifyDocument` correctly implements the mutual-exclusivity requirement. `applyFieldMap` correctly uses `??` instead of `||` and the tests validate that precisely.
+Reviewed the reconciliation engine implementation (`plugin-reconciliation.ts`), the `force_file_scan` MCP tool (`scan.ts`), and all four unit test suites. The core classification logic is sound and well-structured. The seven-state decision tree in `classifyDocument` correctly implements mutual-exclusivity. `applyFieldMap` correctly uses `??` over `||` and its tests validate that precisely. The staleness cache design is correct and the `force_file_scan` integration is clean.
 
-Four warnings were found — two are logic correctness concerns in the source file, two are test reliability concerns. Three informational items note dead-code patterns and a minor semantic inconsistency.
+Four warnings were found — two are logic/correctness concerns in the source file, two are test reliability concerns. Four informational items note dead-code patterns, a test isolation risk, a minor semantic inconsistency, and duplicated test helper code across two files.
 
 ---
 
 ## Warnings
 
-### WR-01: `staleCacheKey` computes incorrect key when `instanceId` is passed as `undefined`
+### WR-01: `executeReconciliationActions` uses a different `instanceId` default than `reconcilePluginDocuments`, breaking staleness key alignment
 
-**File:** `src/services/plugin-reconciliation.ts:116`
+**File:** `src/services/plugin-reconciliation.ts:299`
 
-**Issue:** The function signature declares `instanceId: string` but the `??` guard inside uses `instanceId ?? ''`. This is dead code — if `instanceId` were always a `string` the guard is unreachable, but `reconcilePluginDocuments` itself also accepts `instanceId: string` with no optional marker, meaning callers are already required to pass a value. The real concern is the public `executeReconciliationActions` (line 299), which declares `instanceId?: string` (optional) and then passes `instanceId ?? ''` to `markReconciled` (line 126) — but `markReconciled` in turn calls `staleCacheKey(pluginId, instanceId ?? '')`. The staleness cache key for an absent `instanceId` will always be `"pluginId:"`, while `reconcilePluginDocuments` records the key as `"pluginId:default"`. These will never match, so calling `executeReconciliationActions` without an `instanceId` will never benefit from the staleness guard that was intended to prevent double-reconciliation.
+**Issue:** `executeReconciliationActions` declares `instanceId?: string` (optional) and passes `instanceId ?? ''` to `markReconciled`. `reconcilePluginDocuments` declares `instanceId: string` (required) and records the staleness key as `"pluginId:default"` when called with `'default'`. If a caller invokes `executeReconciliationActions` without an `instanceId`, it records the key as `"pluginId:"`, which will never match the key set by `reconcilePluginDocuments`. The staleness guard is silently bypassed for callers that omit `instanceId`, allowing duplicate full reconciliation runs within the 30-second window.
 
-**Fix:** Either enforce `instanceId` as required in `executeReconciliationActions`, or align the defaulting so both sides use the same sentinel:
+**Fix:** Make `instanceId` required in `executeReconciliationActions` to match `reconcilePluginDocuments`:
 
 ```typescript
-// In executeReconciliationActions — line 299
 export async function executeReconciliationActions(
   result: ReconciliationResult,
   policies: Map<string, DocumentTypePolicy>,
   pluginId: string,
-  instanceId: string,  // make required, not optional
+  instanceId: string,  // required, not optional
 ): Promise<void> {
 ```
 
 ---
 
-### WR-02: Classification order — `disassociated` check fires before `moved`, masking a legitimate `moved` scenario
+### WR-02: Classification order places `disassociated` before `moved`, and null `ownership_plugin_id` triggers disassociation
 
-**File:** `src/services/plugin-reconciliation.ts:200-205`
+**File:** `src/services/plugin-reconciliation.ts:201-205`
 
-**Issue:** The decision tree (lines 201-205) places the `disassociated` check (ownership mismatch) before the `moved` check (path outside watched folders). When a document is both owned by another plugin AND has moved outside the watched folder, it is classified as `disassociated`. This is probably intentional, but the comment block (D-04 reference) does not make the priority explicit. More importantly, the `disassociated` branch checks `ownership_plugin_id === null` as a disassociation trigger (line 202): `fqcDoc.ownership_plugin_id === null || fqcDoc.ownership_plugin_id !== pluginId`. A document that has never had an owner (`ownership_plugin_id = null`) but has an active plugin row is classified as `disassociated`. This is counterintuitive — a null owner could just as easily mean the document was just created and the frontmatter write hasn't propagated yet. If that's intended as a design decision it should be documented; if not, the null-ownership case should be its own guard or treated as `added` at a higher priority.
+**Issue:** The `disassociated` check at line 201 fires before the `moved` check at line 204. The disassociated condition includes `fqcDoc.ownership_plugin_id === null`, so a document whose frontmatter write has not yet propagated (null owner, active plugin row, path outside watched folder) is classified as `disassociated` rather than `moved`. This is not necessarily wrong, but the specification reference (D-04) does not make the null-owner priority explicit, and the behaviour is surprising. No test covers this edge case.
 
-**Fix:** Add explicit comment at line 201 clarifying that null ownership is intentionally treated as disassociation. If null ownership should not trigger disassociation, restrict the guard:
+**Fix:** Add an explicit comment at line 201 documenting that null ownership is intentionally treated as disassociation. If null ownership should not trigger disassociation, restrict the guard:
 
 ```typescript
-// Line 201-202: only fire disassociated if another plugin owns it, not if null
+// Only fire disassociated if a different plugin owns it; null owner falls through to moved/added
 if (pluginRow?.status === 'active' && fqcDoc?.status === 'active' &&
     fqcDoc.ownership_plugin_id !== null &&
     fqcDoc.ownership_plugin_id !== pluginId) return 'disassociated';
@@ -70,13 +71,13 @@ if (pluginRow?.status === 'active' && fqcDoc?.status === 'active' &&
 
 ---
 
-### WR-03: `setupFqcDocuments` mock in `plugin-reconciliation.test.ts` is shared across both Supabase call paths, but the mock `from()` only creates one chain — both `.or()` (Path 1) and `.in()` (Path 2) resolve to the same data, meaning Path 2 queries cannot return different rows from Path 1
+### WR-03: `setupFqcDocuments` mock in `plugin-reconciliation.test.ts` cannot return different data for Path 1 vs Path 2 — the deduplication test passes vacuously
 
 **File:** `tests/unit/plugin-reconciliation.test.ts:135-155`
 
-**Issue:** `setupFqcDocuments` wraps all Supabase queries in a single `makeChain()` call per `from()` call. Both the Path 1 query (`.or(folderFilter)`) and the Path 2 query (`.in('ownership_type', ...)`) resolve to the same `rows` array because `chain.then` is hardcoded to `resolve({ data: rows, error: null })`. This means the deduplication test at line 361 ("merges deduplicated") only tests that `Map.set()` deduplicates on the same key — it never actually exercises the scenario where Path 1 and Path 2 return the same row from *distinct* database queries. The test passes vacuously and would not catch a regression where the candidateMap merge is broken.
+**Issue:** `setupFqcDocuments` wraps all Supabase queries in a single `makeChain()` per `from()` call. Both the Path 1 query (`.or(folderFilter)`) and the Path 2 query (`.in('ownership_type', ...)`) resolve to the same `rows` array because `chain.then` is hardcoded to `resolve({ data: rows, error: null })`. The deduplication test at line 361 ("merges deduplicated when same doc returned by both Path 1 and Path 2") only tests that `Map.set()` deduplicates on the same key from a single query chain — it never exercises distinct queries returning the same row independently. The test would continue to pass even if the `candidateMap` merge were broken.
 
-**Fix:** For deduplication tests, create two separate chain instances and return the duplicate row from both paths independently:
+**Fix:** Add a helper that returns different data per call index for deduplication-specific tests:
 
 ```typescript
 function setupFqcDocumentsPath1Path2(path1Rows: FqcDocRow[], path2Rows: FqcDocRow[]) {
@@ -88,7 +89,6 @@ function setupFqcDocumentsPath1Path2(path1Rows: FqcDocRow[], path2Rows: FqcDocRo
       chain.select = vi.fn().mockReturnValue(chain);
       chain.or = vi.fn().mockReturnValue(chain);
       chain.in = vi.fn().mockReturnValue(chain);
-      // ...
       chain.then = (resolve: (val: { data: FqcDocRow[]; error: null }) => void) =>
         resolve({ data: rows, error: null });
       return chain;
@@ -99,20 +99,16 @@ function setupFqcDocumentsPath1Path2(path1Rows: FqcDocRow[], path2Rows: FqcDocRo
 
 ---
 
-### WR-04: `executeReconciliationActions` has no test coverage — the `pgClient.end()` in the `finally` block is the only guaranteed cleanup, but there is no test verifying the pg connection is closed when an action throws mid-loop
+### WR-04: `executeReconciliationActions` has no test verifying the `finally` block closes the pg connection when an action loop throws
 
 **File:** `src/services/plugin-reconciliation.ts:306-472`
 
-**Issue:** The `finally { await pgClient.end() }` pattern at line 469 is correct, but the unit test suites (`plugin-reconciliation.test.ts`, `field-map-null.test.ts`) do not test `executeReconciliationActions` at all. If any action loop throws (e.g., a malformed SQL from a bad `fieldMap` column name), the finally block runs, but there is no verification of this. More critically, the function constructs raw `SET` clauses from `Object.keys(fieldMapCols)` with `pg.escapeIdentifier` — if a plugin's `field_map` value maps to an empty string, `pg.escapeIdentifier('')` will produce `""`, which is a valid but semantically empty column name and will cause a runtime SQL error that propagates through the try/catch only up to the caller. This is untested.
+**Issue:** The `finally { await pgClient.end() }` pattern at line 469 is the only connection-cleanup guarantee. The unit test suites include only a no-op smoke test for `executeReconciliationActions` (empty result, no throw). There is no test that verifies `pgClient.end()` is called when a query inside an action loop throws. Additionally, the function constructs raw `SET` clauses from `Object.keys(fieldMapCols)` with `pg.escapeIdentifier` — if a plugin's `field_map` maps to an empty string column name, `pg.escapeIdentifier('')` produces `""`, which is a valid SQL token but semantically empty and will cause a runtime error that only surfaces at query time.
 
-**Fix:** Add at least one unit test for `executeReconciliationActions` covering:
-1. The `resurrected` branch applies field_map and calls `pgClient.query` with the expected SQL shape.
-2. The `finally` block calls `pgClient.end()` even when a query throws.
-
-Additionally, add a guard in `applyFieldMap` (or at call sites) rejecting empty-string column names:
+**Fix:** Add a test verifying cleanup on throw, and add a guard in `applyFieldMap` or at call sites:
 
 ```typescript
-// In applyFieldMap, after computing result[columnName]:
+// In applyFieldMap — before assigning result[columnName]
 if (!columnName || columnName.trim() === '') {
   logger.warn(`[RECON] applyFieldMap: field_map maps '${frontmatterKey}' to empty column name — skipping`);
   continue;
@@ -127,7 +123,7 @@ if (!columnName || columnName.trim() === '') {
 
 **File:** `src/services/plugin-reconciliation.ts:116`
 
-**Issue:** `staleCacheKey` is typed `(pluginId: string, instanceId: string): string`. The `instanceId ?? ''` expression (line 116) can never be reached with `undefined` because TypeScript will reject `undefined` at the call site at compile time. The guard is harmless but misleading — it implies `undefined` is possible. The caller at line 678 passes `instanceId` directly (which is `string`, not optional).
+**Issue:** `staleCacheKey` is typed `(pluginId: string, instanceId: string): string`. The `instanceId ?? ''` expression can never be `undefined` because TypeScript rejects it at the call site. The guard is harmless but implies `undefined` is possible, which is misleading.
 
 **Fix:** Remove the redundant nullish coalescing:
 
@@ -139,30 +135,30 @@ function staleCacheKey(pluginId: string, instanceId: string): string {
 
 ---
 
-### IN-02: `verifiedTables` module-level `Set` is never cleared between test runs — potential cross-test contamination in integration/test environments
+### IN-02: `verifiedTables` module-level `Set` is never cleared — potential cross-test contamination
 
 **File:** `src/services/plugin-reconciliation.ts:105`
 
-**Issue:** `reconciliationTimestamps` has a public `invalidateReconciliationCache()` export (line 107) that clears it between tests. `verifiedTables` has no equivalent. If a test adds a table name to `verifiedTables`, subsequent tests in the same Vitest worker will skip the `information_schema` check for that table name. The current tests call `vi.clearAllMocks()` but that does not reset module-level `Set` state. In practice this is benign for the current test suite, but it's a latent isolation risk.
+**Issue:** `reconciliationTimestamps` is cleared by the exported `invalidateReconciliationCache()`, which tests call in `beforeEach`. `verifiedTables` has no equivalent reset. A table name added to the `Set` in one test persists across all subsequent tests in the same Vitest worker, causing the `information_schema` check to be silently skipped. This is currently benign but is a latent test isolation risk.
 
-**Fix:** Export a `resetVerifiedTablesCache()` (or merge it into `invalidateReconciliationCache`) and call it in `beforeEach`:
+**Fix:** Clear `verifiedTables` inside `invalidateReconciliationCache`:
 
 ```typescript
 export function invalidateReconciliationCache(): void {
   reconciliationTimestamps.clear();
-  verifiedTables.clear(); // add this line
+  verifiedTables.clear(); // add this
 }
 ```
 
 ---
 
-### IN-03: `inferDocTypeForAdded` falls back to a new single-element `Set` for folder matching, making each call allocate a new `Set` per docType iteration
+### IN-03: `inferDocTypeForAdded` allocates a new `Set` per docType iteration for a single-element folder check
 
 **File:** `src/services/plugin-reconciliation.ts:223`
 
-**Issue:** `inferDocTypeForAdded` calls `isPathInWatchedFolders(fqcDoc.path, new Set([d.policy.folder]))` for each `docType` in the `find` callback. This creates one `Set` per iteration and is semantically equivalent to a simple string prefix check. The allocation is small but the intent is obscured — it reads as if `d.policy.folder` could be a collection, when it's a single string.
+**Issue:** `inferDocTypeForAdded` calls `isPathInWatchedFolders(fqcDoc.path, new Set([d.policy.folder]))` in a `.find()` callback. This creates a one-element `Set` per iteration and delegates to a function that iterates over it — semantically equivalent to a single string prefix test. The intent is obscured.
 
-**Fix:** Replace with a direct prefix check to make the intent clear and avoid unnecessary allocations:
+**Fix:** Replace with a direct prefix check:
 
 ```typescript
 return docTypes.find((d) =>
@@ -172,6 +168,24 @@ return docTypes.find((d) =>
 
 ---
 
-_Reviewed: 2026-04-20T00:00:00Z_
+### IN-04: `makeEntry`, `setupPluginEntry`, `setupFqcDocuments`, and `setupPgClient` are duplicated verbatim across `reconciliation-staleness.test.ts` and `staleness-invalidation.test.ts`
+
+**File:** `tests/unit/reconciliation-staleness.test.ts:55-125` and `tests/unit/staleness-invalidation.test.ts:55-125`
+
+**Issue:** Both staleness test files contain identical helper implementations (approximately 70 lines each). Any change to the mock shape — e.g., adding a new Supabase chain method — must be made in two places. This is a maintenance burden and a source of future divergence.
+
+**Fix:** Extract the shared helpers into a test utility file (e.g., `tests/unit/helpers/staleness-helpers.ts`) and import from both test files:
+
+```typescript
+// tests/unit/helpers/staleness-helpers.ts
+export function makeEntry(pluginId: string) { ... }
+export function setupPluginEntry(pluginId?: string) { ... }
+export function setupFqcDocuments() { ... }
+export function setupPgClient() { ... }
+```
+
+---
+
+_Reviewed: 2026-04-20T12:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
