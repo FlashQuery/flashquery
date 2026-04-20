@@ -92,14 +92,15 @@ function formatReconciliationSummary(summary: ReconciliationActionSummary): stri
 
 async function queryPendingReview(
   pluginId: string,
-  instanceName: string
+  _instanceName: string,
+  fqcInstanceId: string
 ): Promise<Array<{ fqc_id: string; table_name: string; review_type: string; context: unknown }>> {
   const supabase = supabaseManager.getClient();
   const { data } = await supabase
     .from('fqc_pending_plugin_review')
     .select('fqc_id, table_name, review_type, context')
     .eq('plugin_id', pluginId)
-    .eq('instance_id', instanceName);
+    .eq('instance_id', fqcInstanceId);
   return data ?? [];
 }
 
@@ -156,7 +157,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationWarning = '';
         try {
           const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -195,7 +196,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         logger.info(`create_record: created ${data.id} in ${fullTableName}`);
-        const pendingItems = await queryPendingReview(plugin_id, instanceName);
+        const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
         const pendingNote = pendingItems.length > 0
           ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
           : '';
@@ -250,7 +251,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationWarning = '';
         try {
           const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -276,7 +277,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         logger.info(`get_record: retrieved ${id} from ${fullTableName}`);
-        const pendingItems = await queryPendingReview(plugin_id, instanceName);
+        const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
         const pendingNote = pendingItems.length > 0
           ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
           : '';
@@ -340,7 +341,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationWarning = '';
         try {
           const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -382,7 +383,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         logger.info(`update_record: updated ${id} in ${fullTableName}`);
-        const pendingItems = await queryPendingReview(plugin_id, instanceName);
+        const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
         const pendingNote = pendingItems.length > 0
           ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
           : '';
@@ -449,7 +450,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationWarning = '';
         try {
           const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -473,7 +474,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         logger.info(`archive_record: archived ${id} in ${fullTableName}`);
-        const pendingItems = await queryPendingReview(plugin_id, instanceName);
+        const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
         const pendingNote = pendingItems.length > 0
           ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
           : '';
@@ -535,7 +536,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationWarning = '';
         try {
           const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -581,7 +582,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           logger.info(
             `search_records: filters-only found ${rows.length} record(s) in ${fullTableName}`
           );
-          const pendingItems = await queryPendingReview(plugin_id, instanceName);
+          const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
           const pendingNote = pendingItems.length > 0
             ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
             : '';
@@ -634,7 +635,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             logger.info(
               `search_records: semantic found ${rows.length} record(s) in ${fullTableName}`
             );
-            const pendingItems = await queryPendingReview(plugin_id, instanceName);
+            const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
             const pendingNote = pendingItems.length > 0
               ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
               : '';
@@ -675,7 +676,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             };
           }
           const rows = data ?? [];
-          const pendingItems = await queryPendingReview(plugin_id, instanceName);
+          const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
           const pendingNote = pendingItems.length > 0
             ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
             : '';
@@ -720,7 +721,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           const result = await pgClient.query(sql, params);
           const rows = result.rows ?? [];
           logger.info(`search_records: ILIKE found ${rows.length} record(s) in ${fullTableName}`);
-          const pendingItems = await queryPendingReview(plugin_id, instanceName);
+          const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
           const pendingNote = pendingItems.length > 0
             ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
             : '';

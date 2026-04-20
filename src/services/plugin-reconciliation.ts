@@ -13,6 +13,7 @@ import { logger } from '../logging/logger.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
 import { atomicWriteFrontmatter, vaultManager } from '../storage/vault.js';
 import { pluginManager, getTypeRegistryMap } from '../plugins/manager.js';
+import { updateDocumentOwnership } from './document-ownership.js';
 import type { DocumentTypePolicy, TypeRegistryEntry, RegistryEntry } from '../plugins/manager.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -294,6 +295,7 @@ export async function executeReconciliationActions(
   result: ReconciliationResult,
   pluginId: string,
   instanceId: string,
+  fqcInstanceId?: string,
 ): Promise<ReconciliationActionSummary> {
   const dbUrl = process.env.DATABASE_URL;
   if (!dbUrl) {
@@ -338,7 +340,7 @@ export async function executeReconciliationActions(
       await supabase.from('fqc_pending_plugin_review').insert({
         fqc_id: ref.fqcId,
         plugin_id: pluginId,
-        instance_id: instanceId ?? 'default',
+        instance_id: fqcInstanceId ?? instanceId ?? 'default',
         table_name: ref.tableName,
         review_type: 'resurrected',
         context: {},
@@ -381,9 +383,11 @@ export async function executeReconciliationActions(
         .single();
       const postWriteUpdatedAt = postWriteRow?.updated_at ?? null;
 
-      // INSERT plugin row — always include last_seen_updated_at and instance_id
-      const baseCols = ['fqc_id', 'instance_id', 'status', 'path', 'last_seen_updated_at'];
-      const baseVals: unknown[] = [doc.fqcId, instanceId ?? 'default', 'active', doc.path, postWriteUpdatedAt];
+      // INSERT plugin row — always include instance_id (NOT NULL) and last_seen_updated_at
+      // fqcInstanceId is the FQC server identity (config.instance.id); instanceId is the plugin instance name.
+      const rowInstanceId = fqcInstanceId ?? instanceId ?? 'default';
+      const baseCols = ['instance_id', 'fqc_id', 'status', 'path', 'last_seen_updated_at'];
+      const baseVals: unknown[] = [rowInstanceId, doc.fqcId, 'active', doc.path, postWriteUpdatedAt];
       const extraCols = Object.keys(fieldMapCols);
       const allCols = [...baseCols, ...extraCols];
       const allVals = [...baseVals, ...extraCols.map((c) => fieldMapCols[c])];
@@ -395,12 +399,19 @@ export async function executeReconciliationActions(
       await pgClient.query(sql, finalVals);
       autoTracked++;
 
+      // Update fqc_documents ownership so subsequent reconciliations classify correctly (not disassociated)
+      await updateDocumentOwnership(doc.fqcId, {
+        plugin_id: pluginId,
+        type: doc.typeId,
+        needs_discovery: false,
+      });
+
       // Conditional pending review — only when template declared
       if (policy.template) {
         await supabase.from('fqc_pending_plugin_review').insert({
           fqc_id: doc.fqcId,
           plugin_id: pluginId,
-          instance_id: instanceId ?? 'default',
+          instance_id: rowInstanceId,
           table_name: doc.tableName,
           review_type: 'template_available',
           context: { template: policy.template },

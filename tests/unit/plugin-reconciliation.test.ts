@@ -634,6 +634,7 @@ describe('executeReconciliationActions — RECON-05 added path (post-write updat
       error: null,
     });
     singleChain.insert = vi.fn().mockResolvedValue({ data: null, error: null });
+    singleChain.update = vi.fn().mockReturnValue(singleChain);
     singleChain.delete = vi.fn().mockReturnValue(singleChain);
     singleChain.or = vi.fn().mockReturnValue(singleChain);
     singleChain.in = vi.fn().mockReturnValue(singleChain);
