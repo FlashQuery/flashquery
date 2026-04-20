@@ -25,7 +25,8 @@ RED='\033[0;31m'
 RESET='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$PROJECT_ROOT"
 
 # ─── Prompt helpers ──────────────────────────────────────────────────────────
 
@@ -415,7 +416,7 @@ fi
 
 # ─── Step 8: Render .env from the template ───────────────────────────────────
 if [ ! -f ".env.example" ]; then
-  printf "%bError: .env.example not found in %s — cannot generate .env.%b\n" "$RED" "$SCRIPT_DIR" "$RESET" >&2
+  printf "%bError: .env.example not found in %s — cannot generate .env.%b\n" "$RED" "$PROJECT_ROOT" "$RESET" >&2
   exit 1
 fi
 render_env_template ".env.example" ".env"
