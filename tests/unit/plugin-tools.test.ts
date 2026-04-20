@@ -44,6 +44,7 @@ vi.mock('../../src/plugins/manager.js', () => ({
   resolveTableName: vi.fn((pluginId: string, instanceName: string, tableName: string) => `fqcp_${pluginId}_${instanceName}_${tableName}`),
   validateInstanceName: vi.fn(),
   validatePluginId: vi.fn(),
+  buildGlobalTypeRegistry: vi.fn(),
 }));
 
 vi.mock('pg', () => ({
