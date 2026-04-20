@@ -224,19 +224,251 @@ function inferDocTypeForAdded(fqcDoc: FqcDocRow, docTypes: DocTypeEntry[]): DocT
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Module-private: applyFieldMap helper (used by Plan 02 executeReconciliationActions)
+// applyFieldMap — exported pure helper (RECON-06 / D-12 / Pattern 5)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Map frontmatter fields to plugin table columns.
+ * RECON-06 / D-12: absent frontmatter field → column explicitly set to null.
+ * Column keys are the mapped target (fieldMap values). Never omit a column.
+ */
 export function applyFieldMap(
-  fieldMap: Record<string, string>,
+  fieldMap: Record<string, string> | undefined,
   frontmatter: Record<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
+  if (!fieldMap) return result;
   for (const [frontmatterKey, columnName] of Object.entries(fieldMap)) {
     // RECON-06 / D-12: absent field → NULL (never omit the column)
+    // Use ?? null (not || null) to preserve falsy values like 0, false, ""
     result[columnName] = frontmatter[frontmatterKey] ?? null;
   }
   return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// executeReconciliationActions helpers (module-private)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toAbsolutePath(relativePath: string): string {
+  // VaultManagerImpl.rootPath is private on the interface — access via cast.
+  // vaultManager is always the concrete VaultManagerImpl at runtime.
+  const mgr = vaultManager as unknown as { rootPath: string };
+  return join(mgr.rootPath, relativePath);
+}
+
+async function readFrontmatterFromDisk(relativePath: string): Promise<Record<string, unknown>> {
+  try {
+    const absPath = toAbsolutePath(relativePath);
+    const raw = await readFile(absPath, 'utf-8');
+    const parsed = matter(raw);
+    return (parsed.data ?? {}) as Record<string, unknown>;
+  } catch (err) {
+    logger.debug(`[RECON] Failed to read frontmatter for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`);
+    return {};
+  }
+}
+
+async function withPendingReviewGuard(op: () => PromiseLike<unknown>, opLabel: string): Promise<void> {
+  try {
+    await op();
+  } catch (err: unknown) {
+    const pgErr = err as { code?: string };
+    if (pgErr?.code === '42P01') {
+      logger.debug(`[RECON] fqc_pending_plugin_review ${opLabel} skipped — table not yet created (Phase 86)`);
+      return;
+    }
+    throw err;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// executeReconciliationActions — mechanical policy executor (D-06)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Apply all configured policies to a reconciliation result.
+ * Mechanical — no skill callbacks. All 7 branches per CONTEXT.md D-06.
+ * @param result - output of reconcilePluginDocuments()
+ * @param policies - typeId → DocumentTypePolicy for the plugin (derived from getTypeRegistryMap or entry.schema)
+ */
+export async function executeReconciliationActions(
+  result: ReconciliationResult,
+  policies: Map<string, DocumentTypePolicy>,
+  pluginId: string,
+  instanceId?: string,
+): Promise<void> {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    logger.warn('[RECON] DATABASE_URL not set — skipping policy execution');
+    return;
+  }
+  const pgClient = createPgClientIPv4(dbUrl);
+  await pgClient.connect();
+  try {
+    const supabase = supabaseManager.getClient();
+
+    // ── (1) resurrected — un-archive plugin row, re-apply field_map, insert pending review ──
+    for (const ref of result.resurrected) {
+      const policy = policies.get(ref.typeId);
+      const frontmatter = await readFrontmatterFromDisk(ref.path);
+      const fieldMapCols = applyFieldMap(policy?.field_map, frontmatter);
+
+      const extraCols = Object.keys(fieldMapCols);
+      const setClauses = [
+        "status = 'active'",
+        'path = $2',
+        'last_seen_updated_at = NOW()',
+        ...extraCols.map((col, i) => `${pg.escapeIdentifier(col)} = $${3 + i}`),
+      ];
+      const params: unknown[] = [ref.pluginRowId, ref.path, ...extraCols.map((c) => fieldMapCols[c])];
+      const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET ${setClauses.join(', ')} WHERE id = $1`;
+      await pgClient.query(sql, params);
+
+      await withPendingReviewGuard(
+        () => supabase.from('fqc_pending_plugin_review').insert({
+          fqc_id: ref.fqcId,
+          plugin_id: pluginId,
+          instance_id: instanceId ?? '',
+          table_name: ref.tableName,
+          review_type: 'resurrected',
+          context: {},
+        }),
+        'INSERT resurrected',
+      );
+    }
+
+    // ── (2) added — OQ-3 ownership check, write frontmatter, INSERT plugin row, conditionally insert pending review ──
+    for (const doc of result.added) {
+      const policy = policies.get(doc.typeId);
+      if (!policy || policy.on_added !== 'auto-track') continue;
+      if (!doc.tableName) {
+        logger.debug(`[RECON] added doc ${doc.fqcId} has no track_as — skipping auto-track`);
+        continue;
+      }
+
+      // OQ-3: Check existing frontmatter ownership BEFORE writing
+      const existingFm = await readFrontmatterFromDisk(doc.path);
+      const existingOwner = existingFm.fqc_owner;
+      const shouldWriteFrontmatter = !existingOwner || existingOwner === pluginId;
+
+      if (shouldWriteFrontmatter) {
+        await atomicWriteFrontmatter(toAbsolutePath(doc.path), {
+          fqc_owner: pluginId,
+          fqc_type: doc.typeId,
+        });
+      } else {
+        logger.debug(`[RECON] Document ${doc.path} already owned by ${String(existingOwner)}, skipping frontmatter write for ${pluginId}`);
+      }
+
+      // Re-read frontmatter for field_map application
+      const postWriteFm = shouldWriteFrontmatter ? await readFrontmatterFromDisk(doc.path) : existingFm;
+      const fieldMapCols = applyFieldMap(policy.field_map, postWriteFm);
+
+      // RECON-05 / D-13: re-query fqc_documents.updated_at for post-write value
+      const { data: postWriteRow } = await supabase
+        .from('fqc_documents')
+        .select('updated_at, content_hash')
+        .eq('id', doc.fqcId)
+        .single();
+      const postWriteUpdatedAt = postWriteRow?.updated_at ?? null;
+
+      // INSERT plugin row — always include last_seen_updated_at
+      const baseCols = ['fqc_id', 'status', 'path', 'last_seen_updated_at'];
+      const baseVals: unknown[] = [doc.fqcId, 'active', doc.path, postWriteUpdatedAt];
+      const extraCols = Object.keys(fieldMapCols);
+      const allCols = [...baseCols, ...extraCols];
+      const allVals = [...baseVals, ...extraCols.map((c) => fieldMapCols[c])];
+      const placeholders = allVals.map((_, i) => `$${i + 1}`).join(', ');
+      const colList = allCols.map((c) => pg.escapeIdentifier(c)).join(', ');
+      const sql = `INSERT INTO ${pg.escapeIdentifier(doc.tableName)} (${colList}) VALUES (${placeholders})`;
+      // Fallback to JS-computed NOW if post-write re-query returned null
+      const finalVals = allVals.map((v, i) => (i === 3 && v === null ? new Date().toISOString() : v));
+      await pgClient.query(sql, finalVals);
+
+      // Conditional pending review — only when template declared
+      if (policy.template) {
+        await withPendingReviewGuard(
+          () => supabase.from('fqc_pending_plugin_review').insert({
+            fqc_id: doc.fqcId,
+            plugin_id: pluginId,
+            instance_id: instanceId ?? '',
+            table_name: doc.tableName,
+            review_type: 'template_available',
+            context: { template: policy.template },
+          }),
+          'INSERT template_available',
+        );
+      }
+    }
+
+    // ── (3) deleted — archive plugin row, delete pending review rows ──
+    for (const ref of result.deleted) {
+      const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET status = 'archived' WHERE id = $1`;
+      await pgClient.query(sql, [ref.pluginRowId]);
+      await withPendingReviewGuard(
+        () => supabase.from('fqc_pending_plugin_review')
+          .delete()
+          .eq('fqc_id', ref.fqcId)
+          .eq('plugin_id', pluginId),
+        'DELETE pending for deleted',
+      );
+    }
+
+    // ── (4) disassociated — archive plugin row, delete pending review rows ──
+    for (const ref of result.disassociated) {
+      const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET status = 'archived' WHERE id = $1`;
+      await pgClient.query(sql, [ref.pluginRowId]);
+      await withPendingReviewGuard(
+        () => supabase.from('fqc_pending_plugin_review')
+          .delete()
+          .eq('fqc_id', ref.fqcId)
+          .eq('plugin_id', pluginId),
+        'DELETE pending for disassociated',
+      );
+    }
+
+    // ── (5) moved — keep-tracking: update path; stop-tracking: archive ──
+    for (const ref of result.moved) {
+      const policy = policies.get(ref.typeId);
+      if (policy?.on_moved === 'keep-tracking') {
+        const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET path = $1, last_seen_updated_at = NOW() WHERE id = $2`;
+        await pgClient.query(sql, [ref.newPath, ref.pluginRowId]);
+      } else if (policy?.on_moved === 'stop-tracking') {
+        const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET status = 'archived' WHERE id = $1`;
+        await pgClient.query(sql, [ref.pluginRowId]);
+        // Do NOT touch frontmatter (D-06)
+      } else {
+        // 'ignore' or missing policy → no-op
+        logger.debug(`[RECON] moved doc ${ref.fqcId}: on_moved='${policy?.on_moved ?? 'undefined'}' — no action`);
+      }
+    }
+
+    // ── (6) modified — sync-fields: re-read frontmatter, re-apply field_map; ignore: update timestamp only ──
+    for (const ref of result.modified) {
+      const policy = policies.get(ref.typeId);
+      if (policy?.on_modified === 'sync-fields') {
+        const fm = await readFrontmatterFromDisk(ref.path);
+        const fieldMapCols = applyFieldMap(policy.field_map, fm);
+        const extraCols = Object.keys(fieldMapCols);
+        const setClauses = [
+          'last_seen_updated_at = $2',
+          ...extraCols.map((c, i) => `${pg.escapeIdentifier(c)} = $${3 + i}`),
+        ];
+        const params: unknown[] = [ref.pluginRowId, ref.updatedAt, ...extraCols.map((c) => fieldMapCols[c])];
+        const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET ${setClauses.join(', ')} WHERE id = $1`;
+        await pgClient.query(sql, params);
+      } else {
+        // 'ignore' → update last_seen_updated_at only
+        const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET last_seen_updated_at = $1 WHERE id = $2`;
+        await pgClient.query(sql, [ref.updatedAt, ref.pluginRowId]);
+      }
+    }
+
+    logger.debug(`[RECON] executeReconciliationActions ${pluginId}:${instanceId ?? ''} — actions applied`);
+  } finally {
+    await pgClient.end();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
