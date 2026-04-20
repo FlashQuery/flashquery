@@ -15,8 +15,39 @@ const { mockPgClient } = vi.hoisted(() => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Hoisted reconciliation mocks
+// ─────────────────────────────────────────────────────────────────────────────
+
+const { mockReconcilePluginDocuments, mockExecuteReconciliationActions } = vi.hoisted(() => {
+  const emptyResult = {
+    pluginId: '',
+    instanceId: '',
+    classified: { autoTrack: [], archive: [], resurrect: [], updatePath: [], syncFields: [], createPendingReview: [], clearPendingReview: [] },
+    stale: false,
+    cacheHit: false,
+  };
+  const emptyActionSummary = {
+    autoTracked: 0,
+    archived: 0,
+    resurrected: 0,
+    pathsUpdated: 0,
+    fieldsSynced: 0,
+    pendingReviewsCreated: 0,
+    pendingReviewsCleared: 0,
+  };
+  const mockReconcilePluginDocuments = vi.fn().mockResolvedValue(emptyResult);
+  const mockExecuteReconciliationActions = vi.fn().mockResolvedValue(emptyActionSummary);
+  return { mockReconcilePluginDocuments, mockExecuteReconciliationActions, emptyResult, emptyActionSummary };
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Module mocks
 // ─────────────────────────────────────────────────────────────────────────────
+
+vi.mock('../../src/services/plugin-reconciliation.js', () => ({
+  reconcilePluginDocuments: mockReconcilePluginDocuments,
+  executeReconciliationActions: mockExecuteReconciliationActions,
+}));
 
 vi.mock('../../src/storage/supabase.js', () => ({
   supabaseManager: {
@@ -82,6 +113,7 @@ import { pluginManager } from '../../src/plugins/manager.js';
 import { embeddingProvider } from '../../src/embedding/provider.js';
 import pg from 'pg';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { reconcilePluginDocuments, executeReconciliationActions } from '../../src/services/plugin-reconciliation.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -911,5 +943,153 @@ describe('search_records', () => {
     expect(sqlCall).toBeDefined();
     // The params array should include the filter value
     expect(sqlCall![1]).toContain('active');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests: D-07 reconciliation preamble (RECTOOLS-01, RECTOOLS-04)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('record tools — reconciliation preamble (D-07)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPgClient.connect.mockResolvedValue(undefined);
+    mockPgClient.query.mockResolvedValue({ rows: [] });
+    mockPgClient.end.mockResolvedValue(undefined);
+  });
+
+  it('create_record calls reconcilePluginDocuments before core op', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+    makeSupabaseMock({ insertData: { id: 'new-id' } });
+
+    const handler = getHandler('create_record');
+    await handler({ plugin_id: 'crm', table: 'tasks', fields: {} });
+
+    expect(reconcilePluginDocuments).toHaveBeenCalledWith('crm', 'default');
+    expect(executeReconciliationActions).toHaveBeenCalled();
+  });
+
+  it('create_record response contains reconciliation summary when autoTracked > 0', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+    mockExecuteReconciliationActions.mockResolvedValueOnce({
+      autoTracked: 1,
+      archived: 0,
+      resurrected: 0,
+      pathsUpdated: 0,
+      fieldsSynced: 0,
+      pendingReviewsCreated: 0,
+      pendingReviewsCleared: 0,
+    });
+    makeSupabaseMock({ insertData: { id: 'new-id' } });
+
+    const handler = getHandler('create_record');
+    const result = await handler({ plugin_id: 'crm', table: 'tasks', fields: {} }) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain('Auto-tracked 1 new document(s)');
+  });
+
+  it('reconciliation failure is non-fatal — tool returns success with warning text', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+    mockReconcilePluginDocuments.mockRejectedValueOnce(new Error('DB connection lost'));
+    makeSupabaseMock({ insertData: { id: 'new-id' } });
+
+    const handler = getHandler('create_record');
+    const result = await handler({ plugin_id: 'crm', table: 'tasks', fields: {} }) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+
+    // Tool must still succeed (no isError)
+    expect(result.isError).toBeUndefined();
+    // Warning text must appear in response
+    expect(result.content[0].text).toContain('Reconciliation warning');
+    expect(result.content[0].text).toContain('DB connection lost');
+  });
+
+  it('pending items note is appended when fqc_pending_plugin_review has rows', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+
+    // Set up supabase to return pending rows for fqc_pending_plugin_review
+    const mockSelect = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockResolvedValue({
+          data: [
+            { fqc_id: 'pr-1', table_name: 'contacts', review_type: 'type_changed', context: {} },
+          ],
+          error: null,
+        }),
+      }),
+    });
+    const mockInsertSelectSingle = vi.fn().mockResolvedValue({ data: { id: 'new-id' }, error: null });
+    const mockInsertSelect = vi.fn().mockReturnValue({ single: mockInsertSelectSingle });
+    const mockInsert = vi.fn().mockReturnValue({ select: mockInsertSelect });
+    const mockUpdateEq2Single = vi.fn().mockResolvedValue({ data: null, error: null });
+    const mockUpdateEq2 = vi.fn().mockReturnValue({ select: vi.fn().mockReturnValue({ single: mockUpdateEq2Single }), single: mockUpdateEq2Single });
+    const mockUpdateEq1 = vi.fn().mockReturnValue({ eq: mockUpdateEq2 });
+    const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq1 });
+    const mockFrom = vi.fn().mockImplementation((table: string) => {
+      if (table === 'fqc_pending_plugin_review') {
+        return { select: mockSelect };
+      }
+      return { insert: mockInsert, select: mockSelect, update: mockUpdate };
+    });
+    vi.mocked(supabaseManager.getClient).mockReturnValue({ from: mockFrom } as unknown as ReturnType<typeof supabaseManager.getClient>);
+
+    const handler = getHandler('create_record');
+    const result = await handler({ plugin_id: 'crm', table: 'tasks', fields: {} }) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.content[0].text).toContain('pending review item');
+    expect(result.content[0].text).toContain('clear_pending_reviews');
+  });
+
+  it('all five record tools call reconcilePluginDocuments', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+    makeSupabaseMock({ insertData: { id: 'new-id' }, selectData: { id: 'r1', title: 'T' } });
+
+    // create_record
+    await getHandler('create_record')({ plugin_id: 'crm', table: 'tasks', fields: {} });
+    // get_record
+    await getHandler('get_record')({ plugin_id: 'crm', table: 'tasks', id: 'r1' });
+    // update_record
+    await getHandler('update_record')({ plugin_id: 'crm', table: 'tasks', id: 'r1', fields: {} });
+    // archive_record
+    await getHandler('archive_record')({ plugin_id: 'crm', table: 'tasks', id: 'r1' });
+    // search_records (filters-only path)
+    const mockLimit = vi.fn().mockResolvedValue({ data: [], error: null });
+    const mockEqChain = vi.fn().mockReturnValue({ limit: mockLimit, eq: vi.fn().mockReturnValue({ limit: mockLimit }) });
+    const mockSelectChain = vi.fn().mockReturnValue({ eq: vi.fn().mockReturnValue({ eq: mockEqChain }) });
+    const mockFrom = vi.fn().mockReturnValue({ select: mockSelectChain, insert: vi.fn(), update: vi.fn() });
+    vi.mocked(supabaseManager.getClient).mockReturnValue({ from: mockFrom } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    await getHandler('search_records')({ plugin_id: 'crm', table: 'tasks' });
+
+    // reconcilePluginDocuments should have been called 5 times (once per tool)
+    expect(reconcilePluginDocuments).toHaveBeenCalledTimes(5);
   });
 });
