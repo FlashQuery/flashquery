@@ -49,7 +49,7 @@ Phases 72–80 complete. Phases 81–82 deferred to v2.7.
 
 ### Phases
 
-- [ ] **Phase 84: Schema Parsing & Policy Infrastructure** — Parse and validate all 7 policy fields on document type entries; build global type registry; add `last_seen_updated_at` to plugin table DDL
+- [x] **Phase 84: Schema Parsing & Policy Infrastructure** — Parse and validate all 7 policy fields on document type entries; build global type registry; add `last_seen_updated_at` to plugin table DDL (completed 2026-04-20)
 - [ ] **Phase 85: Reconciliation Engine** — Six-state document classification engine with mechanical policy executor, staleness cache, and self-healing ALTER TABLE
 - [ ] **Phase 86: Record Tool Integration & Pending Review** — Wire reconciliation into all 5 record tools; create `fqc_pending_plugin_review` table and `clear_pending_reviews` MCP tool
 - [ ] **Phase 87: Scanner Modifications & Frontmatter Sync** — Sync `fqc_owner`/`fqc_type` frontmatter fields to DB columns; remove all notification code paths from scanner
@@ -60,8 +60,8 @@ Phases 72–80 complete. Phases 81–82 deferred to v2.7.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 84. Schema Parsing & Policy Infrastructure | 0/3 | Not started | — |
-| 85. Reconciliation Engine | 0/TBD | Not started | — |
+| 84. Schema Parsing & Policy Infrastructure | 3/3 | Complete    | 2026-04-20 |
+| 85. Reconciliation Engine | 0/5 | Planned (gap closure) | — |
 | 86. Record Tool Integration & Pending Review | 0/TBD | Not started | — |
 | 87. Scanner Modifications & Frontmatter Sync | 0/TBD | Not started | — |
 | 88. Legacy Infrastructure Removal | 0/TBD | Not started | — |
@@ -84,9 +84,9 @@ Phases 72–80 complete. Phases 81–82 deferred to v2.7.
   6. `tests/unit/declarative-policies.test.ts` and `tests/unit/global-type-registry.test.ts` exist and pass with 0 failures (TEST-01, TEST-02)
 **Plans**: 3 plans
 Plans:
-- [ ] 84-01-PLAN.md — Extend manager.ts: DocumentTypePolicy/TypeRegistryEntry interfaces, parser policy fields, DDL column, globalTypeRegistry singleton
-- [ ] 84-02-PLAN.md — Wire buildGlobalTypeRegistry() into plugins.ts call sites; update plugin-manager.test.ts implicit columns assertion
-- [ ] 84-03-PLAN.md — Create declarative-policies.test.ts (6 tests) and global-type-registry.test.ts (4 tests)
+- [x] 84-01-PLAN.md — Extend manager.ts: DocumentTypePolicy/TypeRegistryEntry interfaces, parser policy fields, DDL column, globalTypeRegistry singleton
+- [x] 84-02-PLAN.md — Wire buildGlobalTypeRegistry() into plugins.ts call sites; update plugin-manager.test.ts implicit columns assertion
+- [x] 84-03-PLAN.md — Create declarative-policies.test.ts (6 tests) and global-type-registry.test.ts (4 tests)
 **UI hint**: no
 
 ### Phase 85: Reconciliation Engine
@@ -101,7 +101,13 @@ Plans:
   5. Calling `reconcilePluginDocuments()` twice within 30 seconds (same plugin/instance, no `force_file_scan`) skips reconciliation on the second call; calling `invalidateReconciliationCache()` (as `force_file_scan` does) causes the next call to run in full
   6. First reconciliation pass on a pre-existing plugin table that lacks `last_seen_updated_at` issues `ALTER TABLE ADD COLUMN IF NOT EXISTS` and succeeds; subsequent calls use the cached result without re-checking
   7. `tests/unit/plugin-reconciliation.test.ts`, `tests/unit/reconciliation-staleness.test.ts`, and `tests/unit/field-map-null.test.ts` all pass with 0 failures (TEST-03, TEST-04, TEST-05)
-**Plans**: TBD
+**Plans**: 5 plans (3 original + 2 gap closure)
+Plans:
+- [ ] 85-01-PLAN.md — Create src/services/plugin-reconciliation.ts with interfaces, staleness cache, self-healing ALTER TABLE, two-path discovery, and 7-branch classification engine (RECON-01, 02, 03, 07, 08)
+- [ ] 85-02-PLAN.md — Extend plugin-reconciliation.ts with executeReconciliationActions() all 7 branches (resurrected, added+auto-track, deleted, disassociated, moved, modified) plus applyFieldMap NULL-preserving helper; 42P01-guarded pending review ops (RECON-04, 05, 06)
+- [ ] 85-03-PLAN.md — Create plugin-reconciliation.test.ts (9+ classification tests incl. OQ-7), reconciliation-staleness.test.ts (3+ tests, fake timers), field-map-null.test.ts (4+ tests) (TEST-03, 04, 05)
+- [ ] 85-04-PLAN.md — GAP CLOSURE: Wire invalidateReconciliationCache() into force_file_scan (both branches); create staleness-invalidation.test.ts (3+ tests) (RECON-07, TEST-04)
+- [ ] 85-05-PLAN.md — GAP CLOSURE: Add 6 it() cases to plugin-reconciliation.test.ts reaching 20+ total (TEST-03)
 **UI hint**: no
 
 ### Phase 86: Record Tool Integration & Pending Review
@@ -171,4 +177,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-04-20 — Phase 84 planned (3 plans, 2 waves)*
+*Last updated: 2026-04-20 — Phase 85 gap closure: 2 plans added (85-04, 85-05), total 5 plans*
