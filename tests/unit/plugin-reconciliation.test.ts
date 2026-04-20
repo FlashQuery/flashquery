@@ -43,6 +43,7 @@ vi.mock('node:fs/promises', () => ({
 import {
   reconcilePluginDocuments,
   invalidateReconciliationCache,
+  executeReconciliationActions,
 } from '../../src/services/plugin-reconciliation.js';
 import { supabaseManager } from '../../src/storage/supabase.js';
 import { createPgClientIPv4 } from '../../src/utils/pg-client.js';
@@ -465,5 +466,111 @@ describe('reconcilePluginDocuments — cross-table added', () => {
 
     expect(contactAdded?.tableName?.includes('contacts')).toBe(true);
     expect(dealAdded?.tableName?.includes('deals')).toBe(true);
+  });
+});
+
+describe('executeReconciliationActions — smoke test (empty result, no throw)', () => {
+  it('does not throw when called with an empty ReconciliationResult', async () => {
+    setupPluginEntry();
+    setupFqcDocuments([]);
+    setupPgClient([]);
+
+    const emptyResult = {
+      added: [],
+      resurrected: [],
+      deleted: [],
+      disassociated: [],
+      moved: [],
+      modified: [],
+      unchanged: 0,
+    };
+
+    const policies = new Map<string, any>();
+
+    await expect(
+      executeReconciliationActions(emptyResult, policies, 'crm', 'default')
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe('reconcilePluginDocuments — modified with on_modified: ignore', () => {
+  it("modified + on_modified: 'ignore' classifies the document as modified (policy applied at executeReconciliationActions level)", async () => {
+    setupPluginEntry([makeDocType({ on_modified: 'ignore' })]);
+    setupFqcDocuments([validFqcDoc({ updated_at: '2026-04-20T11:00:00Z' })]);
+    setupPgClient([validPluginRow({ last_seen_updated_at: '2026-04-20T10:00:00Z' })]);
+
+    const result = await reconcilePluginDocuments('crm', 'default');
+
+    // Classification happens here — modified because timestamps differ
+    expect(result.modified.length).toBe(1);
+    expect(result.modified[0].fqcId).toBe('doc-1');
+    // The on_modified: 'ignore' policy is applied in executeReconciliationActions, not here
+    expect(result.modified[0].updatedAt).toBe('2026-04-20T11:00:00Z');
+  });
+});
+
+describe('reconcilePluginDocuments — deleted archives reference', () => {
+  it('deleted classification carries the pluginRowId and tableName needed to archive the plugin row', async () => {
+    setupPluginEntry();
+    setupFqcDocuments([]);
+    setupPgClient([validPluginRow({ id: 'row-arch', fqc_id: 'doc-arch', status: 'active' })]);
+
+    const result = await reconcilePluginDocuments('crm', 'default');
+
+    expect(result.deleted.length).toBe(1);
+    const ref = result.deleted[0];
+    expect(ref.fqcId).toBe('doc-arch');
+    expect(ref.pluginRowId).toBe('row-arch');
+    expect(typeof ref.tableName).toBe('string');
+    expect(ref.tableName.length).toBeGreaterThan(0);
+  });
+});
+
+describe('reconcilePluginDocuments — disassociated carries archive reference', () => {
+  it('disassociated classification carries pluginRowId and tableName for archiving', async () => {
+    setupPluginEntry();
+    // fqc_documents row shows ownership by a different plugin
+    setupFqcDocuments([validFqcDoc({ ownership_plugin_id: 'other-plugin' })]);
+    setupPgClient([validPluginRow({ id: 'row-dis', fqc_id: 'doc-1' })]);
+
+    const result = await reconcilePluginDocuments('crm', 'default');
+
+    expect(result.disassociated.length).toBe(1);
+    const ref = result.disassociated[0];
+    expect(ref.fqcId).toBe('doc-1');
+    expect(ref.pluginRowId).toBe('row-dis');
+    expect(typeof ref.tableName).toBe('string');
+    expect(ref.tableName.length).toBeGreaterThan(0);
+  });
+});
+
+describe('reconcilePluginDocuments — moved keep-tracking carries new path', () => {
+  it("moved + on_moved: 'keep-tracking' (default) carries the new path in the MovedRef", async () => {
+    setupPluginEntry([makeDocType({ on_moved: 'keep-tracking' })]);
+    setupFqcDocuments([validFqcDoc({ path: 'Archive/relocated.md' })]);
+    setupPgClient([validPluginRow({ path: 'CRM/Contacts/alice.md', id: 'row-mv' })]);
+
+    const result = await reconcilePluginDocuments('crm', 'default');
+
+    expect(result.moved.length).toBe(1);
+    const ref = result.moved[0];
+    expect(ref.newPath).toBe('Archive/relocated.md');
+    expect(ref.oldPath).toBe('CRM/Contacts/alice.md');
+    expect(ref.pluginRowId).toBe('row-mv');
+  });
+});
+
+describe('reconcilePluginDocuments — missing plugin entry returns empty result', () => {
+  it('returns an empty result without throwing when pluginManager.getEntry returns undefined', async () => {
+    // Override: getEntry returns undefined (plugin not registered)
+    vi.mocked(pluginManager.getEntry).mockReturnValue(undefined as any);
+    setupFqcDocuments([]);
+    setupPgClient([]);
+
+    const result = await reconcilePluginDocuments('crm', 'default');
+
+    expect(result.added.length).toBe(0);
+    expect(result.deleted.length).toBe(0);
+    expect(result.unchanged).toBe(0);
   });
 });
