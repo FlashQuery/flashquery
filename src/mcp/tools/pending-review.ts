@@ -37,7 +37,7 @@ export function registerPendingReviewTools(server: McpServer, config: FlashQuery
       try {
         void plugin_instance; // plugin_instance is accepted for API compatibility but not used for DB filtering
         // Use the FQC server instance ID (config.instance.id) for DB scoping, not the plugin instance name
-        const fqcInstanceId = config.instance.id;
+        const fqcInstanceId = config.instance?.id ?? 'default';
         const supabase = supabaseManager.getClient();
 
         if (fqc_ids.length > 0) {
