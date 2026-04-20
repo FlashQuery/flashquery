@@ -318,6 +318,24 @@ CREATE TABLE IF NOT EXISTS fqc_plugin_registry (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Phase 86: Pending plugin review queue (RECTOOLS-01)
+CREATE TABLE IF NOT EXISTS fqc_pending_plugin_review (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    fqc_id UUID NOT NULL REFERENCES fqc_documents(id) ON DELETE CASCADE,
+    plugin_id TEXT NOT NULL,
+    instance_id TEXT NOT NULL DEFAULT 'default',
+    table_name TEXT NOT NULL,
+    review_type TEXT NOT NULL,
+    context JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_pending_review_plugin
+  ON fqc_pending_plugin_review(plugin_id, instance_id);
+
+CREATE INDEX IF NOT EXISTS idx_pending_review_fqc_id
+  ON fqc_pending_plugin_review(fqc_id);
+
 -- Phase 31: plugin_instance rename (PLUGIN-02)
 DO $$
 BEGIN
