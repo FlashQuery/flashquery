@@ -23,15 +23,30 @@ export interface PluginTableSpec {
   columns: PluginColumnSpec[];
 }
 
+export interface DocumentTypePolicy {
+  id: string;
+  folder: string;
+  description?: string;
+  access: 'read-write' | 'read-only';
+  on_added: 'auto-track' | 'ignore';
+  on_moved: 'keep-tracking' | 'stop-tracking' | 'ignore';
+  on_modified: 'sync-fields' | 'ignore';
+  track_as?: string;
+  template?: string;
+  field_map?: Record<string, string>;
+}
+
+export interface TypeRegistryEntry {
+  pluginId: string;
+  instanceId: string;
+  policy: DocumentTypePolicy;
+}
+
 export interface ParsedPluginSchema {
   plugin: { id: string; name: string; version: string; description?: string };
   tables: PluginTableSpec[];
   documents?: {
-    types: Array<{
-      id: string;
-      folder: string;
-      description?: string;
-    }>;
+    types: DocumentTypePolicy[];
   };
 }
 
@@ -198,6 +213,7 @@ export function parsePluginSchema(yamlString: string): ParsedPluginSchema {
   // Extract documents section (Phase 54 plugin folder claims)
   const rawDocuments = (tablesSource.documents ?? {}) as Record<string, unknown>;
   const rawTypes = (rawDocuments.types ?? []) as Array<Record<string, unknown>>;
+  const tableNames = new Set(tables.map((t) => t.name));
   const documentTypes = rawTypes.map((t) => {
     const typeId = typeof t.id === 'string' ? t.id : '';
     const folder = typeof t.folder === 'string' ? t.folder : '';
@@ -207,7 +223,58 @@ export function parsePluginSchema(yamlString: string): ParsedPluginSchema {
         `Plugin ${pluginId}: documents.types entry missing id or folder (id='${typeId}', folder='${folder}') — skipping`
       );
     }
-    return { id: typeId, folder, description: desc };
+
+    // Extract 7 policy fields with conservative defaults (D-08)
+    const access = (typeof t.access === 'string' ? t.access : undefined) ?? 'read-write';
+    const on_added = (typeof t.on_added === 'string' ? t.on_added : undefined) ?? 'ignore';
+    const on_moved = (typeof t.on_moved === 'string' ? t.on_moved : undefined) ?? 'keep-tracking';
+    const on_modified = (typeof t.on_modified === 'string' ? t.on_modified : undefined) ?? 'ignore';
+    const track_as = typeof t.track_as === 'string' && t.track_as ? t.track_as : undefined;
+    const template = typeof t.template === 'string' && t.template ? t.template : undefined;
+    const field_map =
+      t.field_map && typeof t.field_map === 'object'
+        ? (t.field_map as Record<string, string>)
+        : undefined;
+
+    // D-05: on_added: auto-track requires track_as (check first)
+    if (on_added === 'auto-track' && !track_as) {
+      throw new Error(
+        `Plugin ${pluginId}: document type '${typeId}' has on_added: auto-track but no track_as — add track_as pointing to a table in this schema`
+      );
+    }
+    // D-06: track_as must match a table name in this schema (check second)
+    if (track_as && !tableNames.has(track_as)) {
+      throw new Error(
+        `Plugin ${pluginId}: document type '${typeId}' has track_as: '${track_as}' but no table with that name exists in this schema`
+      );
+    }
+    // D-07: field_map column targets that don't exist log warning only — deferred to runtime
+    if (field_map && track_as) {
+      const trackAsSpec = tables.find((tbl) => tbl.name === track_as);
+      if (trackAsSpec) {
+        const colNames = new Set(trackAsSpec.columns.map((c) => c.name));
+        for (const [, colName] of Object.entries(field_map)) {
+          if (!colNames.has(colName)) {
+            logger.warn(
+              `Plugin ${pluginId}: document type '${typeId}' field_map target column '${colName}' not found in table '${track_as}' — will be skipped at runtime`
+            );
+          }
+        }
+      }
+    }
+
+    return {
+      id: typeId,
+      folder,
+      description: desc,
+      access: access as DocumentTypePolicy['access'],
+      on_added: on_added as DocumentTypePolicy['on_added'],
+      on_moved: on_moved as DocumentTypePolicy['on_moved'],
+      on_modified: on_modified as DocumentTypePolicy['on_modified'],
+      track_as,
+      template,
+      field_map,
+    };
   });
 
   const documents = documentTypes.length > 0 ? { types: documentTypes } : undefined;
@@ -263,6 +330,7 @@ export function buildPluginTableDDL(
     `status TEXT DEFAULT 'active'`,
     `created_at TIMESTAMPTZ DEFAULT now()`,
     `updated_at TIMESTAMPTZ DEFAULT now()`,
+    `last_seen_updated_at TIMESTAMPTZ`,
   ];
 
   // User-defined columns
@@ -367,6 +435,43 @@ export class PluginManager {
 
 export let pluginManager: PluginManager;
 
+export let globalTypeRegistry: Map<string, TypeRegistryEntry> = new Map();
+
+/**
+ * Returns the live global type registry map.
+ * Callers should invoke this at the time of use — do not cache the reference
+ * across buildGlobalTypeRegistry() calls, as the map reference is replaced on rebuild.
+ */
+export function getTypeRegistryMap(): Map<string, TypeRegistryEntry> {
+  return globalTypeRegistry;
+}
+
+/**
+ * Rebuilds the global type registry from all currently loaded plugin entries.
+ * Full rebuild on every call (not incremental). Collision on same type ID: first
+ * registration wins; subsequent registrations log a warning and are skipped.
+ */
+export function buildGlobalTypeRegistry(): void {
+  const newMap = new Map<string, TypeRegistryEntry>();
+  for (const entry of pluginManager.getAllEntries()) {
+    if (!entry.schema.documents?.types) continue;
+    for (const policy of entry.schema.documents.types) {
+      if (newMap.has(policy.id)) {
+        logger.warn(
+          `Plugin ${entry.plugin_id}: document type '${policy.id}' already registered by another plugin — first registration wins, skipping`
+        );
+        continue;
+      }
+      newMap.set(policy.id, {
+        pluginId: entry.plugin_id,
+        instanceId: entry.plugin_instance,
+        policy,
+      });
+    }
+  }
+  globalTypeRegistry = newMap;
+}
+
 export async function initPlugins(config: FlashQueryConfig): Promise<void> {
   const manager = new PluginManager();
   const supabase = supabaseManager.getClient();
@@ -391,6 +496,7 @@ export async function initPlugins(config: FlashQueryConfig): Promise<void> {
       `initPlugins: registry load failed (${error.message}) — starting with empty registry`
     );
     pluginManager = manager;
+    buildGlobalTypeRegistry();
     return;
   }
 
@@ -405,5 +511,6 @@ export async function initPlugins(config: FlashQueryConfig): Promise<void> {
   }
 
   pluginManager = manager;
+  buildGlobalTypeRegistry();
   logger.info(`Plugins: loaded ${data?.length ?? 0} active plugin instance(s)`);
 }
