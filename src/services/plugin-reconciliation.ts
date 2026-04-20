@@ -224,19 +224,100 @@ function inferDocTypeForAdded(fqcDoc: FqcDocRow, docTypes: DocTypeEntry[]): DocT
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Module-private: applyFieldMap helper (used by Plan 02 executeReconciliationActions)
+// applyFieldMap — exported pure helper (RECON-06 / D-12 / Pattern 5)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Map frontmatter fields to plugin table columns.
+ * RECON-06 / D-12: absent frontmatter field → column explicitly set to null.
+ * Column keys are the mapped target (fieldMap values). Never omit a column.
+ */
 export function applyFieldMap(
-  fieldMap: Record<string, string>,
+  fieldMap: Record<string, string> | undefined,
   frontmatter: Record<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
+  if (!fieldMap) return result;
   for (const [frontmatterKey, columnName] of Object.entries(fieldMap)) {
     // RECON-06 / D-12: absent field → NULL (never omit the column)
+    // Use ?? null (not || null) to preserve falsy values like 0, false, ""
     result[columnName] = frontmatter[frontmatterKey] ?? null;
   }
   return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// executeReconciliationActions helpers (module-private)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toAbsolutePath(relativePath: string): string {
+  // VaultManagerImpl.rootPath is private on the interface — access via cast.
+  // vaultManager is always the concrete VaultManagerImpl at runtime.
+  const mgr = vaultManager as unknown as { rootPath: string };
+  return join(mgr.rootPath, relativePath);
+}
+
+async function readFrontmatterFromDisk(relativePath: string): Promise<Record<string, unknown>> {
+  try {
+    const absPath = toAbsolutePath(relativePath);
+    const raw = await readFile(absPath, 'utf-8');
+    const parsed = matter(raw);
+    return (parsed.data ?? {}) as Record<string, unknown>;
+  } catch (err) {
+    logger.debug(`[RECON] Failed to read frontmatter for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`);
+    return {};
+  }
+}
+
+async function withPendingReviewGuard(op: () => Promise<unknown>, opLabel: string): Promise<void> {
+  try {
+    await op();
+  } catch (err: unknown) {
+    const pgErr = err as { code?: string };
+    if (pgErr?.code === '42P01') {
+      logger.debug(`[RECON] fqc_pending_plugin_review ${opLabel} skipped — table not yet created (Phase 86)`);
+      return;
+    }
+    throw err;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// executeReconciliationActions — mechanical policy executor (D-06)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Apply all configured policies to a reconciliation result.
+ * Mechanical — no skill callbacks. All 7 branches per CONTEXT.md D-06.
+ * @param result - output of reconcilePluginDocuments()
+ * @param policies - typeId → DocumentTypePolicy for the plugin (derived from getTypeRegistryMap or entry.schema)
+ */
+export async function executeReconciliationActions(
+  result: ReconciliationResult,
+  policies: Map<string, DocumentTypePolicy>,
+  pluginId: string,
+  instanceId?: string,
+): Promise<void> {
+  const dbUrl = process.env.DATABASE_URL;
+  if (!dbUrl) {
+    logger.warn('[RECON] DATABASE_URL not set — skipping policy execution');
+    return;
+  }
+  const pgClient = createPgClientIPv4(dbUrl);
+  await pgClient.connect();
+  try {
+    // Branches added in Task 2:
+    //   - resurrected
+    //   - added (auto-track / ignore)
+    //   - deleted
+    //   - disassociated
+    //   - moved (keep-tracking / stop-tracking / ignore)
+    //   - modified (sync-fields / ignore)
+    // For now: no-op. Plan 02 Task 2 fills in the bodies.
+    void result; void policies; void pluginId; void instanceId;
+  } finally {
+    await pgClient.end();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
