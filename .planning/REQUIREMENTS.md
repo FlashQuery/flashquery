@@ -38,12 +38,16 @@ These documents contain line-level implementation guidance, resolved open questi
 
 ### RECTOOLS — Record Tool Integration & Pending Review
 
-- [ ] **RECTOOLS-01:** All five record tools (`create_record`, `get_record`, `update_record`, `archive_record`, `search_records`) call `reconcilePluginDocuments()` + `executeReconciliationActions()` before executing their operation (with staleness check)
+- [x] **RECTOOLS-01
+:** All five record tools (`create_record`, `get_record`, `update_record`, `archive_record`, `search_records`) call `reconcilePluginDocuments()` + `executeReconciliationActions()` before executing their operation (with staleness check)
 - [ ] **RECTOOLS-02:** `fqc_pending_plugin_review` table created in schema: `id`, `fqc_id` (FK → fqc_documents ON DELETE CASCADE), `plugin_id`, `instance_id`, `table_name`, `review_type`, `context JSONB`, `created_at`; with indexes on `(plugin_id, instance_id)` and `fqc_id`
 - [ ] **RECTOOLS-03:** `clear_pending_reviews` MCP tool supports query mode (`fqc_ids: []` → return all pending) and clear mode (`fqc_ids: [...]` → delete specified + return remaining); idempotent for non-existent IDs
-- [ ] **RECTOOLS-04:** Record tool responses include count-based reconciliation summary (e.g., "Auto-tracked 2 new document(s)") and pending review note when items exist; no item-name enumeration in summary
-- [ ] **RECTOOLS-05:** Auto-track with `template` declared creates a `fqc_pending_plugin_review` row with `review_type: 'template_available'`; auto-track without template creates no pending review row
-- [ ] **RECTOOLS-06:** Resurrected documents create a `fqc_pending_plugin_review` row with `review_type: 'resurrected'`; no template pending review on resurrection
+- [x] **RECTOOLS-04
+:** Record tool responses include count-based reconciliation summary (e.g., "Auto-tracked 2 new document(s)") and pending review note when items exist; no item-name enumeration in summary
+- [x] **RECTOOLS-05
+:** Auto-track with `template` declared creates a `fqc_pending_plugin_review` row with `review_type: 'template_available'`; auto-track without template creates no pending review row
+- [x] **RECTOOLS-06
+:** Resurrected documents create a `fqc_pending_plugin_review` row with `review_type: 'resurrected'`; no template pending review on resurrection
 - [ ] **RECTOOLS-07:** `deleted` and `disassociated` documents cause the plugin table row to be archived AND any existing `fqc_pending_plugin_review` rows for that `fqc_id`/plugin to be explicitly deleted
 - [ ] **RECTOOLS-08:** `unregister_plugin` deletes all `fqc_pending_plugin_review` rows for the plugin before removing the registry entry; calls `buildGlobalTypeRegistry()` after removal
 - [ ] **RECTOOLS-09:** `access: read-only` plugin folder declaration causes document-writing MCP tools (`create_document`, `update_document`) to emit a warning in the response when the target file is in that folder; write still proceeds (guardrail, not hard block); FQC's own mechanical frontmatter writes bypass this guardrail entirely
@@ -73,7 +77,8 @@ These documents contain line-level implementation guidance, resolved open questi
 - [ ] **TEST-04:** `tests/unit/reconciliation-staleness.test.ts` + `staleness-invalidation.test.ts` — staleness skip, expiry after threshold, cache invalidation by force_file_scan
 - [ ] **TEST-05:** `tests/unit/field-map-null.test.ts` — NULL on auto-track, sync-fields, and resurrection for missing frontmatter fields
 - [ ] **TEST-06:** `tests/unit/pending-plugin-review.test.ts` — pending review insert, query mode, clear mode, idempotency, CASCADE delete, unregister cleanup
-- [ ] **TEST-07:** `tests/integration/plugin-reconciliation.integration.test.ts` — record tool triggers reconciliation, auto-track creates row + frontmatter, archival/disassociation behavior, pending review lifecycle
+- [x] **TEST-07
+:** `tests/integration/plugin-reconciliation.integration.test.ts` — record tool triggers reconciliation, auto-track creates row + frontmatter, archival/disassociation behavior, pending review lifecycle
 - [ ] **TEST-08:** `tests/integration/frontmatter-sync.integration.test.ts` — fqc_owner/fqc_type synced to columns, NULL on removal, no change_queue writes after scan
 - [ ] **TEST-09:** `tests/integration/bulk-reconciliation.integration.test.ts` — 50-doc auto-track, count-based response format, no spurious modified after auto-track, incremental pending review processing
 - [ ] **TEST-10:** Existing `tests/integration/scan-command.integration.test.ts` updated — remove change_queue/notification assertions, add frontmatter-sync assertions
@@ -81,8 +86,10 @@ These documents contain line-level implementation guidance, resolved open questi
 - [ ] **TEST-12:** `tests/helpers/discovery-fixtures.ts` updated — replace `fqc_change_queue` with `fqc_pending_plugin_review` in FK cleanup order
 - [ ] **TEST-13:** 4 obsolete test files deleted: `tests/unit/change-notifications.test.ts`, `tests/integration/change-notifications.test.ts`, `tests/unit/plugin-skill-invoker.test.ts`, `tests/integration/scanner-change-notifications.test.ts`
 - [ ] **TEST-14:** Discovery-related test files reviewed and updated: `discovery-orchestrator.integration.test.ts` deleted; `discovery-scenarios.test.ts`, `discovery-errors.test.ts`, `discovery-multi-plugin.test.ts` reviewed for notification/watcher_claims dependencies and updated or deleted; `plugin-records.integration.test.ts` updated to handle reconciliation running internally (mock or fixture isolation); `plugin-registration.integration.test.ts` updated to cover policy validation (SCHEMA-03)
-- [ ] **TEST-15:** New `tests/integration/pending-plugin-review.integration.test.ts` — full pending review lifecycle with real Supabase: register plugin, create doc, scan, call record tool, verify auto-track + pending review in response, call clear_pending_reviews in query mode, process doc, call clear in clear mode, verify empty
-- [ ] **TEST-16:** New integration tests for resurrection lifecycle: full resurrection with FK preservation, move-out untrack + move-back = resurrection, resurrection into another plugin's folder
+- [x] **TEST-15
+:** New `tests/integration/pending-plugin-review.integration.test.ts` — full pending review lifecycle with real Supabase: register plugin, create doc, scan, call record tool, verify auto-track + pending review in response, call clear_pending_reviews in query mode, process doc, call clear in clear mode, verify empty
+- [x] **TEST-16
+:** New integration tests for resurrection lifecycle: full resurrection with FK preservation, move-out untrack + move-back = resurrection, resurrection into another plugin's folder
 - [ ] **TEST-17:** Scenario tests reviewed: `test_discover_document.py` and `test_file_scan_lifecycle.py` updated to remove assertions about `fqc_change_queue`, `needs_discovery`, `discovery_status`, `watcher_claims`; `tests/benchmark/discovery-performance.bench.ts` rewritten to benchmark reconciliation query cost
 
 ---
