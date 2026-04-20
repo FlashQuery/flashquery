@@ -6,9 +6,6 @@ import type { FlashQueryConfig } from '../../config/loader.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 
 export function registerPendingReviewTools(server: McpServer, config: FlashQueryConfig): void {
-  // config reserved for future instance-scoped filtering
-  void config;
-
   server.registerTool(
     'clear_pending_reviews',
     {
@@ -38,7 +35,9 @@ export function registerPendingReviewTools(server: McpServer, config: FlashQuery
         };
       }
       try {
-        const instanceName = plugin_instance ?? 'default';
+        void plugin_instance; // plugin_instance is accepted for API compatibility but not used for DB filtering
+        // Use the FQC server instance ID (config.instance.id) for DB scoping, not the plugin instance name
+        const fqcInstanceId = config.instance.id;
         const supabase = supabaseManager.getClient();
 
         if (fqc_ids.length > 0) {
@@ -47,7 +46,7 @@ export function registerPendingReviewTools(server: McpServer, config: FlashQuery
             .from('fqc_pending_plugin_review')
             .delete()
             .eq('plugin_id', plugin_id)
-            .eq('instance_id', instanceName)
+            .eq('instance_id', fqcInstanceId)
             .in('fqc_id', fqc_ids);
           if (delError) {
             logger.error(`clear_pending_reviews delete failed: ${delError.message}`);
@@ -63,7 +62,7 @@ export function registerPendingReviewTools(server: McpServer, config: FlashQuery
           .from('fqc_pending_plugin_review')
           .select('fqc_id, table_name, review_type, context')
           .eq('plugin_id', plugin_id)
-          .eq('instance_id', instanceName);
+          .eq('instance_id', fqcInstanceId);
 
         if (error) {
           logger.error(`clear_pending_reviews query failed: ${error.message}`);

@@ -324,9 +324,14 @@ export function buildPluginTableDDL(
   const escapedTable = pg.escapeIdentifier(tableName);
 
   // Implicit columns (D-04)
+  // fqc_id and path are required by the reconciliation engine (plugin-reconciliation.ts).
+  // Reconciliation INSERTs (fqc_id, status, path, last_seen_updated_at) into plugin tables
+  // when auto-tracking documents, and SELECTs these same columns when reading plugin rows.
   const implicitCols = [
     `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`,
     `instance_id TEXT NOT NULL`,
+    `fqc_id TEXT`,
+    `path TEXT`,
     `status TEXT DEFAULT 'active'`,
     `created_at TIMESTAMPTZ DEFAULT now()`,
     `updated_at TIMESTAMPTZ DEFAULT now()`,
