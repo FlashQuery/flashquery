@@ -381,9 +381,9 @@ export async function executeReconciliationActions(
         .single();
       const postWriteUpdatedAt = postWriteRow?.updated_at ?? null;
 
-      // INSERT plugin row — always include last_seen_updated_at
-      const baseCols = ['fqc_id', 'status', 'path', 'last_seen_updated_at'];
-      const baseVals: unknown[] = [doc.fqcId, 'active', doc.path, postWriteUpdatedAt];
+      // INSERT plugin row — always include last_seen_updated_at and instance_id
+      const baseCols = ['fqc_id', 'instance_id', 'status', 'path', 'last_seen_updated_at'];
+      const baseVals: unknown[] = [doc.fqcId, instanceId ?? 'default', 'active', doc.path, postWriteUpdatedAt];
       const extraCols = Object.keys(fieldMapCols);
       const allCols = [...baseCols, ...extraCols];
       const allVals = [...baseVals, ...extraCols.map((c) => fieldMapCols[c])];
@@ -391,7 +391,7 @@ export async function executeReconciliationActions(
       const colList = allCols.map((c) => pg.escapeIdentifier(c)).join(', ');
       const sql = `INSERT INTO ${pg.escapeIdentifier(doc.tableName)} (${colList}) VALUES (${placeholders})`;
       // Fallback to JS-computed NOW if post-write re-query returned null
-      const finalVals = allVals.map((v, i) => (i === 3 && v === null ? new Date().toISOString() : v));
+      const finalVals = allVals.map((v, i) => (i === 4 && v === null ? new Date().toISOString() : v));
       await pgClient.query(sql, finalVals);
       autoTracked++;
 

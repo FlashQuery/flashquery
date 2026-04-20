@@ -326,8 +326,10 @@ export function buildPluginTableDDL(
   // Implicit columns (D-04)
   const implicitCols = [
     `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`,
+    `fqc_id UUID REFERENCES fqc_documents(id)`,
     `instance_id TEXT NOT NULL`,
     `status TEXT DEFAULT 'active'`,
+    `path TEXT`,
     `created_at TIMESTAMPTZ DEFAULT now()`,
     `updated_at TIMESTAMPTZ DEFAULT now()`,
     `last_seen_updated_at TIMESTAMPTZ`,
