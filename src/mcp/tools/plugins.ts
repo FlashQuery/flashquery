@@ -684,6 +684,17 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           logger.error(`Failed to delete plugin-scoped memories: ${err instanceof Error ? err.message : String(err)}`);
         }
 
+        // Delete pending plugin reviews before removing registry entry (D-10, RECTOOLS-08)
+        try {
+          await supabase
+            .from('fqc_pending_plugin_review')
+            .delete()
+            .eq('plugin_id', plugin_id)
+            .eq('instance_id', instanceName);
+        } catch (err) {
+          logger.error(`Failed to delete pending plugin reviews: ${err instanceof Error ? err.message : String(err)}`);
+        }
+
         // Delete registry entry
         try {
           await supabase

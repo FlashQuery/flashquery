@@ -27,6 +27,7 @@ import {
   progressMessage,
 } from '../utils/response-formats.js';
 import { extractSection, buildSectionResponse } from '../utils/markdown-sections.js';
+import { pluginManager, getFolderClaimsMap } from '../../plugins/manager.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal types
@@ -381,6 +382,21 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           relativePath = `${sanitizeFilename(title)}.md`;
         }
 
+        // D-12: read-only guardrail (warning only — write still proceeds per RO-60, OQ-2)
+        const folderClaimsMap = getFolderClaimsMap(config);
+        let readOnlyWarning = '';
+        for (const [folder, claim] of folderClaimsMap.entries()) {
+          const normalizedTarget = relativePath.toLowerCase();
+          if (normalizedTarget === folder || normalizedTarget.startsWith(folder + '/')) {
+            const claimEntry = pluginManager.getEntry(claim.pluginId, 'default');
+            const docType = claimEntry?.schema.documents?.types.find((t) => t.id === claim.typeId);
+            if (docType?.access === 'read-only') {
+              readOnlyWarning = `\nWarning: Plugin ${claim.pluginId} declared read-only access for folder ${folder}. Write proceeding but may be unintended.`;
+              break;
+            }
+          }
+        }
+
         // Tag validation: normalize and validate before building frontmatter (D-01, D-03, TAGS-02)
         // Note: TAGS-03 status mutual exclusivity removed (D-06); #status/* tags treated like any other tag
         const validation = validateAllTags(tags ?? []);
@@ -491,7 +507,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           content: [
             {
               type: 'text' as const,
-              text: responseLines.join('\n'),
+              text: `${responseLines.join('\n')}${readOnlyWarning}`,
             },
           ],
         };
@@ -775,6 +791,21 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const relativePath = resolved.relativePath;
         const absPath = resolved.absPath;
 
+        // D-12: read-only guardrail (warning only — write still proceeds per RO-60, OQ-2)
+        const folderClaimsMapUpdate = getFolderClaimsMap(config);
+        let readOnlyWarning = '';
+        for (const [folder, claim] of folderClaimsMapUpdate.entries()) {
+          const normalizedTarget = relativePath.toLowerCase();
+          if (normalizedTarget === folder || normalizedTarget.startsWith(folder + '/')) {
+            const claimEntry = pluginManager.getEntry(claim.pluginId, 'default');
+            const docType = claimEntry?.schema.documents?.types.find((t) => t.id === claim.typeId);
+            if (docType?.access === 'read-only') {
+              readOnlyWarning = `\nWarning: Plugin ${claim.pluginId} declared read-only access for folder ${folder}. Write proceeding but may be unintended.`;
+              break;
+            }
+          }
+        }
+
         // Read existing file — extract current frontmatter and body
         const rawContent = await readFile(absPath, 'utf-8');
         const parsed = matter(rawContent);
@@ -873,7 +904,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           content: [
             {
               type: 'text' as const,
-              text: responseLines.join('\n'),
+              text: `${responseLines.join('\n')}${readOnlyWarning}`,
             },
           ],
         };
