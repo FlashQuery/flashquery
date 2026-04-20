@@ -10,6 +10,11 @@ import type { FlashQueryConfig } from '../../config/loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { createPgClientIPv4 } from '../../utils/pg-client.js';
+import {
+  reconcilePluginDocuments,
+  executeReconciliationActions,
+} from '../../services/plugin-reconciliation.js';
+import type { ReconciliationActionSummary } from '../../services/plugin-reconciliation.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared helpers
@@ -75,6 +80,29 @@ function fireAndForgetEmbed(
     );
 }
 
+function formatReconciliationSummary(summary: ReconciliationActionSummary): string {
+  const parts: string[] = [];
+  if (summary.autoTracked > 0) parts.push(`Auto-tracked ${summary.autoTracked} new document(s)`);
+  if (summary.archived > 0) parts.push(`Archived ${summary.archived} record(s) (documents missing or disassociated)`);
+  if (summary.resurrected > 0) parts.push(`Resurrected ${summary.resurrected} record(s)`);
+  if (summary.pathsUpdated > 0) parts.push(`Updated paths for ${summary.pathsUpdated} moved document(s)`);
+  if (summary.fieldsSynced > 0) parts.push(`Synced fields on ${summary.fieldsSynced} modified document(s)`);
+  return parts.length > 0 ? `\nReconciliation: ${parts.join('. ')}.` : '';
+}
+
+async function queryPendingReview(
+  pluginId: string,
+  instanceName: string
+): Promise<Array<{ fqc_id: string; table_name: string; review_type: string; context: unknown }>> {
+  const supabase = supabaseManager.getClient();
+  const { data } = await supabase
+    .from('fqc_pending_plugin_review')
+    .select('fqc_id, table_name, review_type, context')
+    .eq('plugin_id', pluginId)
+    .eq('instance_id', instanceName);
+  return data ?? [];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // registerRecordTools — registers all 5 record CRUD MCP tools
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,7 +150,20 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
       }
       try {
+        // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
+        let reconciliationSummary = '';
+        let reconciliationWarning = '';
+        try {
+          const result = await reconcilePluginDocuments(plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          reconciliationSummary = formatReconciliationSummary(actionSummary);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn(`[record tool] reconciliation warning: ${msg}`);
+          reconciliationWarning = `\nReconciliation warning: ${msg}`;
+        }
+
         const { fullTableName, tableSpec } = resolveAndValidateTable(
           plugin_id,
           instanceName,
@@ -154,9 +195,13 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         logger.info(`create_record: created ${data.id} in ${fullTableName}`);
+        const pendingItems = await queryPendingReview(plugin_id, instanceName);
+        const pendingNote = pendingItems.length > 0
+          ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
+          : '';
         return {
           content: [
-            { type: 'text' as const, text: `Created record ${data.id} in ${fullTableName}` },
+            { type: 'text' as const, text: `Created record ${data.id} in ${fullTableName}${reconciliationSummary}${reconciliationWarning}${pendingNote}` },
           ],
         };
       } catch (err) {
@@ -199,7 +244,20 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
       }
 
       try {
+        // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
+        let reconciliationSummary = '';
+        let reconciliationWarning = '';
+        try {
+          const result = await reconcilePluginDocuments(plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          reconciliationSummary = formatReconciliationSummary(actionSummary);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn(`[record tool] reconciliation warning: ${msg}`);
+          reconciliationWarning = `\nReconciliation warning: ${msg}`;
+        }
+
         const { fullTableName } = resolveAndValidateTable(plugin_id, instanceName, table);
 
         const supabase = supabaseManager.getClient();
@@ -218,8 +276,12 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         logger.info(`get_record: retrieved ${id} from ${fullTableName}`);
+        const pendingItems = await queryPendingReview(plugin_id, instanceName);
+        const pendingNote = pendingItems.length > 0
+          ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
+          : '';
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+          content: [{ type: 'text' as const, text: `${JSON.stringify(data, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}` }],
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -272,7 +334,20 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
       }
       try {
+        // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
+        let reconciliationSummary = '';
+        let reconciliationWarning = '';
+        try {
+          const result = await reconcilePluginDocuments(plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          reconciliationSummary = formatReconciliationSummary(actionSummary);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn(`[record tool] reconciliation warning: ${msg}`);
+          reconciliationWarning = `\nReconciliation warning: ${msg}`;
+        }
+
         const { fullTableName, tableSpec } = resolveAndValidateTable(
           plugin_id,
           instanceName,
@@ -307,8 +382,12 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         logger.info(`update_record: updated ${id} in ${fullTableName}`);
+        const pendingItems = await queryPendingReview(plugin_id, instanceName);
+        const pendingNote = pendingItems.length > 0
+          ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
+          : '';
         return {
-          content: [{ type: 'text' as const, text: `Updated record ${id} in ${fullTableName}` }],
+          content: [{ type: 'text' as const, text: `Updated record ${id} in ${fullTableName}${reconciliationSummary}${reconciliationWarning}${pendingNote}` }],
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -364,7 +443,20 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
       }
       try {
+        // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
+        let reconciliationSummary = '';
+        let reconciliationWarning = '';
+        try {
+          const result = await reconcilePluginDocuments(plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          reconciliationSummary = formatReconciliationSummary(actionSummary);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn(`[record tool] reconciliation warning: ${msg}`);
+          reconciliationWarning = `\nReconciliation warning: ${msg}`;
+        }
+
         const { fullTableName } = resolveAndValidateTable(plugin_id, instanceName, table);
 
         const supabase = supabaseManager.getClient();
@@ -381,8 +473,12 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         logger.info(`archive_record: archived ${id} in ${fullTableName}`);
+        const pendingItems = await queryPendingReview(plugin_id, instanceName);
+        const pendingNote = pendingItems.length > 0
+          ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
+          : '';
         return {
-          content: [{ type: 'text' as const, text: `Archived record ${id} in ${fullTableName}` }],
+          content: [{ type: 'text' as const, text: `Archived record ${id} in ${fullTableName}${reconciliationSummary}${reconciliationWarning}${pendingNote}` }],
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -433,7 +529,20 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
       }
 
       try {
+        // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
+        let reconciliationSummary = '';
+        let reconciliationWarning = '';
+        try {
+          const result = await reconcilePluginDocuments(plugin_id, instanceName);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName);
+          reconciliationSummary = formatReconciliationSummary(actionSummary);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.warn(`[record tool] reconciliation warning: ${msg}`);
+          reconciliationWarning = `\nReconciliation warning: ${msg}`;
+        }
+
         const { fullTableName, tableSpec } = resolveAndValidateTable(
           plugin_id,
           instanceName,
@@ -472,11 +581,15 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           logger.info(
             `search_records: filters-only found ${rows.length} record(s) in ${fullTableName}`
           );
+          const pendingItems = await queryPendingReview(plugin_id, instanceName);
+          const pendingNote = pendingItems.length > 0
+            ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
+            : '';
           return {
             content: [
               {
                 type: 'text' as const,
-                text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}`,
+                text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}`,
               },
             ],
           };
@@ -521,11 +634,15 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             logger.info(
               `search_records: semantic found ${rows.length} record(s) in ${fullTableName}`
             );
+            const pendingItems = await queryPendingReview(plugin_id, instanceName);
+            const pendingNote = pendingItems.length > 0
+              ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
+              : '';
             return {
               content: [
                 {
                   type: 'text' as const,
-                  text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}`,
+                  text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}`,
                 },
               ],
             };
@@ -558,11 +675,15 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             };
           }
           const rows = data ?? [];
+          const pendingItems = await queryPendingReview(plugin_id, instanceName);
+          const pendingNote = pendingItems.length > 0
+            ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
+            : '';
           return {
             content: [
               {
                 type: 'text' as const,
-                text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}`,
+                text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}`,
               },
             ],
           };
@@ -599,11 +720,15 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           const result = await pgClient.query(sql, params);
           const rows = result.rows ?? [];
           logger.info(`search_records: ILIKE found ${rows.length} record(s) in ${fullTableName}`);
+          const pendingItems = await queryPendingReview(plugin_id, instanceName);
+          const pendingNote = pendingItems.length > 0
+            ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
+            : '';
           return {
             content: [
               {
                 type: 'text' as const,
-                text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}`,
+                text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}`,
               },
             ],
           };
