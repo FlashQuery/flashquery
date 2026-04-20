@@ -109,6 +109,13 @@ Tests TEST-15 with a real Supabase instance. Covers:
 - **Files modified:** `tests/integration/pending-plugin-review.integration.test.ts`
 - **Commit:** fe73b25
 
+**7. [Rule 1 - Bug] pending-plugin-review tests 3 and 6 failed due to cross-test state leakage**
+- **Found during:** Second execution run — reconciliation inserted a `resurrected` row during Test 3's search_records, after the snapshot was taken but before the count assertion; Test 6's preUnreg assertion failed because Test 3 cleared all pending rows
+- **Issue:** Test 3 asserted "0 rows total" after clearing but a concurrent reconciliation action added a new row; Test 6 expected pending rows to already exist
+- **Fix:** Test 3 now uses snapshot-based `.in('fqc_id', snapshotIds)` filter to verify only the captured rows are gone (not the entire table); Test 6 now retries doc creation in a loop until at least one pending review exists
+- **Files modified:** `tests/integration/pending-plugin-review.integration.test.ts`
+- **Commit:** 04dc698
+
 ## Known Stubs
 
 None — all tests exercise real database operations.
@@ -128,6 +135,7 @@ None — test files only. No new network endpoints or auth paths introduced.
 
 - [x] f5a59dc — Task 1: plugin-reconciliation integration tests
 - [x] fe73b25 — Task 2: pending-plugin-review integration tests
+- [x] 04dc698 — fix: harden pending-plugin-review tests against cross-test state leakage
 
 ### Test results
 
