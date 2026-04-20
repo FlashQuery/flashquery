@@ -433,7 +433,7 @@ export class PluginManager {
 // Module singleton
 // ─────────────────────────────────────────────────────────────────────────────
 
-export let pluginManager: PluginManager;
+export let pluginManager: PluginManager = new PluginManager();
 
 export let globalTypeRegistry: Map<string, TypeRegistryEntry> = new Map();
 
