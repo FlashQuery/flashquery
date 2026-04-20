@@ -4,6 +4,7 @@ import { runScanOnce } from '../../services/scanner.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
+import { invalidateReconciliationCache } from '../../services/plugin-reconciliation.js';
 
 export function registerScanTools(server: McpServer, config: FlashQueryConfig): void {
   server.registerTool(
@@ -38,6 +39,7 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
 
       try {
         if (background) {
+          invalidateReconciliationCache();
           void runScanOnce(config).catch((err: unknown) => {
             logger.warn(
               `force_file_scan background error: ${err instanceof Error ? err.message : String(err)}`
@@ -56,6 +58,7 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
           };
         }
 
+        invalidateReconciliationCache();
         const result = await runScanOnce(config);
         return {
           content: [
