@@ -9,6 +9,7 @@ import {
   buildPluginTableDDL,
   resolveTableName,
   validateInstanceName,
+  buildGlobalTypeRegistry,
 } from '../../plugins/manager.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
@@ -246,6 +247,9 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             schema,
           });
 
+          // Phase 84: Rebuild global type registry after re-registration
+          buildGlobalTypeRegistry();
+
           return {
             content: [
               {
@@ -308,6 +312,9 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           table_prefix: tablePrefix,
           schema,
         });
+
+        // Phase 84: Rebuild global type registry after registration
+        buildGlobalTypeRegistry();
 
         // Phase 55: Rebuild manifest mappings after registration
         try {
@@ -691,6 +698,9 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
 
         // Unload from PluginManager
         pluginManager.removeEntry(plugin_id, instanceName);
+
+        // Phase 84: Rebuild global type registry after unregistration
+        buildGlobalTypeRegistry();
 
         // Reload manifests
         try {

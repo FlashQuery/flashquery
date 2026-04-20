@@ -175,7 +175,7 @@ tables: []
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('buildPluginTableDDL', () => {
-  it('includes implicit columns (id, instance_id, status, created_at, updated_at)', () => {
+  it('includes implicit columns (id, instance_id, status, created_at, updated_at, last_seen_updated_at)', () => {
     const schema = parsePluginSchema(SCHEMA_NO_EMBED);
     const ddl = buildPluginTableDDL('fqcp_crm_default_businesses', schema.tables[0], 1536);
 
@@ -184,6 +184,7 @@ describe('buildPluginTableDDL', () => {
     expect(ddl).toContain("status TEXT DEFAULT 'active'");
     expect(ddl).toContain('created_at TIMESTAMPTZ DEFAULT now()');
     expect(ddl).toContain('updated_at TIMESTAMPTZ DEFAULT now()');
+    expect(ddl).toContain('last_seen_updated_at TIMESTAMPTZ');
   });
 
   it('escapes table name with pg.escapeIdentifier', () => {
