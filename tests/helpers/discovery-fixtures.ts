@@ -181,7 +181,7 @@ export function makeConfig(
 /**
  * Clean up all test artifacts: database records (respecting foreign keys) and vault files.
  *
- * Foreign key order: fqc_change_queue → fqc_documents → fqc_vault
+ * Foreign key order: fqc_pending_plugin_review → fqc_documents → fqc_vault
  *
  * @param vaultPath - Vault directory to remove
  * @param client - Supabase client for database cleanup
@@ -194,7 +194,7 @@ export async function cleanupTest(
 ): Promise<void> {
   // Delete in foreign key order
   try {
-    await client.from('fqc_change_queue').delete().eq('instance_id', instanceId);
+    await client.from('fqc_pending_plugin_review').delete().eq('instance_id', instanceId);
   } catch (_) {
     // Table may not exist in all test environments
   }
