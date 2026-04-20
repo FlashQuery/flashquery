@@ -486,11 +486,9 @@ describe('executeReconciliationActions — smoke test (empty result, no throw)',
       unchanged: 0,
     };
 
-    const policies = new Map<string, any>();
-
     await expect(
-      executeReconciliationActions(emptyResult, policies, 'crm', 'default')
-    ).resolves.toBeUndefined();
+      executeReconciliationActions(emptyResult, 'crm', 'default')
+    ).resolves.toBeDefined();
   });
 });
 
@@ -602,21 +600,29 @@ describe('executeReconciliationActions — RECON-05 added path (post-write updat
       unchanged: 0,
     };
 
-    // Policy for 'contact' typeId — on_added: 'auto-track', no template (avoids fqc_pending_plugin_review path)
-    const policies = new Map<string, any>([
-      [
-        'contact',
-        {
-          id: 'contact',
-          folder: 'CRM/Contacts',
-          access: 'read-write',
-          on_added: 'auto-track',
-          on_moved: 'keep-tracking',
-          on_modified: 'ignore',
-          track_as: 'contacts',
+    // pluginManager.getEntry mock — returns entry with 'contact' policy (on_added: 'auto-track', no template)
+    vi.mocked(pluginManager.getEntry).mockReturnValue({
+      plugin_id: 'crm',
+      plugin_instance: 'default',
+      table_prefix: 'fqcp_crm_default_',
+      schema: {
+        plugin: { id: 'crm', name: 'CRM', version: '1.0' },
+        tables: [],
+        documents: {
+          types: [
+            {
+              id: 'contact',
+              folder: 'CRM/Contacts',
+              access: 'read-write',
+              on_added: 'auto-track',
+              on_moved: 'keep-tracking',
+              on_modified: 'ignore',
+              track_as: 'contacts',
+            },
+          ],
         },
-      ],
-    ]);
+      },
+    } as any);
 
     // Supabase mock — .single() on fqc_documents returns the post-write updated_at (RECON-05)
     const postWriteUpdatedAt = '2026-04-20T10:01:00Z';
@@ -648,8 +654,8 @@ describe('executeReconciliationActions — RECON-05 added path (post-write updat
 
     // Act
     await expect(
-      executeReconciliationActions(reconciliationResult, policies, 'crm', 'default')
-    ).resolves.toBeUndefined();
+      executeReconciliationActions(reconciliationResult, 'crm', 'default')
+    ).resolves.toBeDefined();
 
     // Assert 1 — atomicWriteFrontmatter was called once (fqc_owner written)
     expect(vi.mocked(atomicWriteFrontmatter)).toHaveBeenCalledTimes(1);
