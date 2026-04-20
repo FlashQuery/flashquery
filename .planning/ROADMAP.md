@@ -62,7 +62,7 @@ Phases 72–80 complete. Phases 81–82 deferred to v2.7.
 |-------|----------------|--------|-----------|
 | 84. Schema Parsing & Policy Infrastructure | 3/3 | Complete    | 2026-04-20 |
 | 85. Reconciliation Engine | 5/5 | Complete    | 2026-04-20 |
-| 86. Record Tool Integration & Pending Review | 0/TBD | Not started | — |
+| 86. Record Tool Integration & Pending Review | 0/5 | Planned | — |
 | 87. Scanner Modifications & Frontmatter Sync | 0/TBD | Not started | — |
 | 88. Legacy Infrastructure Removal | 0/TBD | Not started | — |
 | 89. Test Helper & Existing Test Updates | 0/TBD | Not started | — |
@@ -121,7 +121,13 @@ Plans:
   4. Calling `unregister_plugin` deletes all `fqc_pending_plugin_review` rows for that plugin before removing the registry entry
   5. A document write tool targeting a folder declared `access: read-only` by a plugin includes a warning in the response — the write still proceeds
   6. `tests/unit/pending-plugin-review.test.ts` passes (TEST-06); `plugin-reconciliation.integration.test.ts` and `bulk-reconciliation.integration.test.ts` pass (TEST-07, TEST-09); full pending review lifecycle integration test passes with real Supabase (TEST-15); resurrection lifecycle tests pass (TEST-16)
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 86-01-PLAN.md — DDL + executeReconciliationActions signature update + pending-review.ts tool + server.ts wiring (Wave 1)
+- [ ] 86-02-PLAN.md — Unit tests for pending review (TEST-06) + discovery-fixtures FK order fix (Wave 1)
+- [ ] 86-03-PLAN.md — Reconciliation preamble in all 5 record tools + unregister cleanup + read-only guardrail (Wave 2)
+- [ ] 86-04-PLAN.md — Integration tests: plugin-reconciliation (TEST-07, TEST-16) + pending-plugin-review lifecycle (TEST-15) (Wave 3)
+- [ ] 86-05-PLAN.md — Integration tests: bulk-reconciliation (TEST-09) + multi-table-reconciliation (Wave 3)
 **UI hint**: no
 
 ### Phase 87: Scanner Modifications & Frontmatter Sync
@@ -177,4 +183,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-04-20 — Phase 85 gap closure: 2 plans added (85-04, 85-05), total 5 plans*
+*Last updated: 2026-04-20 — Phase 86 planned: 5 plans in 3 waves*
