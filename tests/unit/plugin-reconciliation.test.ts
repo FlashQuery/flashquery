@@ -48,6 +48,7 @@ import {
 import { supabaseManager } from '../../src/storage/supabase.js';
 import { createPgClientIPv4 } from '../../src/utils/pg-client.js';
 import { pluginManager } from '../../src/plugins/manager.js';
+import { atomicWriteFrontmatter } from '../../src/storage/vault.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test helpers
@@ -572,5 +573,104 @@ describe('reconcilePluginDocuments — missing plugin entry returns empty result
     expect(result.added.length).toBe(0);
     expect(result.deleted.length).toBe(0);
     expect(result.unchanged).toBe(0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECON-05 / D-13: executeReconciliationActions "added" path
+// Verifies the post-write fqc_documents.updated_at re-query and the subsequent
+// UPDATE last_seen_updated_at on the plugin row.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('executeReconciliationActions — RECON-05 added path (post-write updated_at re-query)', () => {
+  it('RECON-05: writes frontmatter, INSERTs plugin row with post-write updated_at from fqc_documents re-query', async () => {
+    // Arrange — build a ReconciliationResult with one added DocumentInfo
+    const addedDoc = {
+      fqcId: 'doc-recon05',
+      path: 'CRM/Contacts/recon05.md',
+      typeId: 'contact',
+      tableName: 'fqcp_crm_default_contacts',
+    };
+
+    const reconciliationResult = {
+      added: [addedDoc],
+      resurrected: [],
+      deleted: [],
+      disassociated: [],
+      moved: [],
+      modified: [],
+      unchanged: 0,
+    };
+
+    // Policy for 'contact' typeId — on_added: 'auto-track', no template (avoids fqc_pending_plugin_review path)
+    const policies = new Map<string, any>([
+      [
+        'contact',
+        {
+          id: 'contact',
+          folder: 'CRM/Contacts',
+          access: 'read-write',
+          on_added: 'auto-track',
+          on_moved: 'keep-tracking',
+          on_modified: 'ignore',
+          track_as: 'contacts',
+        },
+      ],
+    ]);
+
+    // Supabase mock — .single() on fqc_documents returns the post-write updated_at (RECON-05)
+    const postWriteUpdatedAt = '2026-04-20T10:01:00Z';
+    const singleChain: Record<string, unknown> = {};
+    singleChain.select = vi.fn().mockReturnValue(singleChain);
+    singleChain.eq = vi.fn().mockReturnValue(singleChain);
+    singleChain.single = vi.fn().mockResolvedValue({
+      data: { updated_at: postWriteUpdatedAt, content_hash: 'hash-post' },
+      error: null,
+    });
+    singleChain.insert = vi.fn().mockResolvedValue({ data: null, error: null });
+    singleChain.delete = vi.fn().mockReturnValue(singleChain);
+    singleChain.or = vi.fn().mockReturnValue(singleChain);
+    singleChain.in = vi.fn().mockReturnValue(singleChain);
+    singleChain.then = (resolve: (val: { data: unknown[]; error: null }) => void) =>
+      resolve({ data: [], error: null });
+
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(singleChain),
+    } as any);
+
+    // pg mock — tracks all query calls; returns success for INSERT
+    const pgQueryMock = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+    vi.mocked(createPgClientIPv4).mockReturnValue({
+      connect: vi.fn().mockResolvedValue(undefined),
+      query: pgQueryMock,
+      end: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    // Act
+    await expect(
+      executeReconciliationActions(reconciliationResult, policies, 'crm', 'default')
+    ).resolves.toBeUndefined();
+
+    // Assert 1 — atomicWriteFrontmatter was called once (fqc_owner written)
+    expect(vi.mocked(atomicWriteFrontmatter)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(atomicWriteFrontmatter)).toHaveBeenCalledWith(
+      expect.stringContaining('recon05.md'),
+      expect.objectContaining({ fqc_owner: 'crm', fqc_type: 'contact' }),
+    );
+
+    // Assert 2 — pg.query called at least once for the INSERT into the plugin table
+    expect(pgQueryMock).toHaveBeenCalled();
+    const insertCall = pgQueryMock.mock.calls.find(
+      (args: unknown[]) => typeof args[0] === 'string' && /INSERT INTO/i.test(args[0])
+    );
+    expect(insertCall).toBeDefined();
+
+    // Assert 3 — the INSERT params contain the post-write updated_at from the RECON-05 re-query
+    // (index 3 of the base values: fqc_id, status, path, last_seen_updated_at)
+    const insertParams = insertCall![1] as unknown[];
+    expect(insertParams).toContain(postWriteUpdatedAt);
+
+    // Assert 4 — supabase .single() was invoked (the RECON-05 re-query itself)
+    expect(singleChain.single).toHaveBeenCalled();
   });
 });
