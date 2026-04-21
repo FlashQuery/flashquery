@@ -296,10 +296,11 @@ export async function executeReconciliationActions(
   pluginId: string,
   instanceId: string,
   fqcInstanceId?: string,
+  databaseUrl?: string,
 ): Promise<ReconciliationActionSummary> {
-  const dbUrl = process.env.DATABASE_URL;
+  const dbUrl = databaseUrl || process.env.DATABASE_URL;
   if (!dbUrl) {
-    logger.warn('[RECON] DATABASE_URL not set — skipping policy execution');
+    logger.warn('[RECON] DATABASE_URL not set and no databaseUrl in config — skipping policy execution');
     return { autoTracked: 0, archived: 0, resurrected: 0, pathsUpdated: 0, fieldsSynced: 0, pendingReviewsCreated: 0, pendingReviewsCleared: 0 };
   }
   const pgClient = createPgClientIPv4(dbUrl);
@@ -500,6 +501,7 @@ export async function executeReconciliationActions(
 export async function reconcilePluginDocuments(
   pluginId: string,
   instanceId: string,
+  databaseUrl?: string,
 ): Promise<ReconciliationResult> {
   // Step A — Staleness check FIRST, before any DB or registry access (RECON-07 / RESEARCH.md pitfall)
   if (isWithinStaleness(pluginId, instanceId)) {
@@ -526,9 +528,9 @@ export async function reconcilePluginDocuments(
   }
 
   // Step D — Open ONE pg client for the whole function (PATTERNS.md / pitfall 3)
-  const dbUrl = process.env.DATABASE_URL;
+  const dbUrl = databaseUrl || process.env.DATABASE_URL;
   if (!dbUrl) {
-    logger.warn('[RECON] DATABASE_URL not set — skipping reconciliation');
+    logger.warn('[RECON] DATABASE_URL not set and no databaseUrl in config — skipping reconciliation');
     return emptyResult();
   }
   const pgClient = createPgClientIPv4(dbUrl);

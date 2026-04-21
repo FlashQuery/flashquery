@@ -156,8 +156,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationSummary = '';
         let reconciliationWarning = '';
         try {
-          const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
+          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -250,8 +250,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationSummary = '';
         let reconciliationWarning = '';
         try {
-          const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
+          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -340,8 +340,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationSummary = '';
         let reconciliationWarning = '';
         try {
-          const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
+          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -449,8 +449,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationSummary = '';
         let reconciliationWarning = '';
         try {
-          const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
+          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -535,8 +535,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         let reconciliationSummary = '';
         let reconciliationWarning = '';
         try {
-          const result = await reconcilePluginDocuments(plugin_id, instanceName);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id);
+          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
           reconciliationSummary = formatReconciliationSummary(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
