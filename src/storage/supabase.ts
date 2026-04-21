@@ -318,6 +318,36 @@ CREATE TABLE IF NOT EXISTS fqc_plugin_registry (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- fqc_documents must exist before fqc_pending_plugin_review (FK dependency)
+CREATE TABLE IF NOT EXISTS fqc_documents (
+  id UUID PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  path TEXT NOT NULL,
+  title TEXT NOT NULL,
+  tags TEXT[] DEFAULT '{}',
+  content_hash TEXT,
+  status TEXT DEFAULT 'active',
+  embedding vector(${dimensions}),
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Phase 32: description column for batch outline metadata (MOD-03 §3c, OUTLINE-05)
+ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS description TEXT DEFAULT NULL;
+
+-- Phase 39: needs_frontmatter_repair flag for TSA-01 (read-only background scan)
+ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS needs_frontmatter_repair BOOLEAN DEFAULT FALSE;
+
+-- Phase 88: Remove push-notification infrastructure (LEGACY-07)
+DROP TABLE IF EXISTS fqc_change_queue;
+ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS watcher_claims;
+ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS needs_discovery;
+ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS discovery_status;
+
+-- Phase 54 (Scanner Enhancement): Plugin ownership tracking (per DISC-04, PERF-02)
+ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS ownership_plugin_id TEXT DEFAULT NULL;
+ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS ownership_type TEXT DEFAULT NULL;
+
 -- Phase 86: Pending plugin review queue (RECTOOLS-01)
 CREATE TABLE IF NOT EXISTS fqc_pending_plugin_review (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -369,35 +399,6 @@ END$$;
 -- These tables were unused in v1.5/v1.6. If upgrading, run:
 --   flashquery doctor (warns about old tables)
 -- Or drop them manually: DROP TABLE IF EXISTS fqc_event_log, fqc_routing_rules;
-
-CREATE TABLE IF NOT EXISTS fqc_documents (
-  id UUID PRIMARY KEY,
-  instance_id TEXT NOT NULL,
-  path TEXT NOT NULL,
-  title TEXT NOT NULL,
-  tags TEXT[] DEFAULT '{}',
-  content_hash TEXT,
-  status TEXT DEFAULT 'active',
-  embedding vector(${dimensions}),
-  created_at TIMESTAMPTZ DEFAULT now(),
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Phase 32: description column for batch outline metadata (MOD-03 §3c, OUTLINE-05)
-ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS description TEXT DEFAULT NULL;
-
--- Phase 39: needs_frontmatter_repair flag for TSA-01 (read-only background scan)
-ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS needs_frontmatter_repair BOOLEAN DEFAULT FALSE;
-
--- Phase 88: Remove push-notification infrastructure (LEGACY-07)
-DROP TABLE IF EXISTS fqc_change_queue;
-ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS watcher_claims;
-ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS needs_discovery;
-ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS discovery_status;
-
--- Phase 54 (Scanner Enhancement): Plugin ownership tracking (per DISC-04, PERF-02)
-ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS ownership_plugin_id TEXT DEFAULT NULL;
-ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS ownership_type TEXT DEFAULT NULL;
 
 -- Phase 24: Distributed write locks (LOCK-02)
 CREATE TABLE IF NOT EXISTS fqc_write_locks (
