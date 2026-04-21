@@ -53,7 +53,7 @@ Phases 72–80 complete. Phases 81–82 deferred to v2.7.
 - [x] **Phase 85: Reconciliation Engine** — Six-state document classification engine with mechanical policy executor, staleness cache, and self-healing ALTER TABLE (completed 2026-04-20)
 - [x] **Phase 86: Record Tool Integration & Pending Review** — Wire reconciliation into all 5 record tools; create `fqc_pending_plugin_review` table and `clear_pending_reviews` MCP tool (completed 2026-04-21)
 - [x] **Phase 87: Scanner Modifications & Frontmatter Sync** — Sync `fqc_owner`/`fqc_type` frontmatter fields to DB columns; remove all notification code paths from scanner (completed 2026-04-21)
-- [ ] **Phase 88: Legacy Infrastructure Removal** — Delete 5 source files, remove `flashquery discover` CLI command, drop `fqc_change_queue` table and obsolete columns
+- [x] **Phase 88: Legacy Infrastructure Removal** — Delete 5 source files, remove `flashquery discover` CLI command, drop `fqc_change_queue` table and obsolete columns (completed 2026-04-21)
 - [ ] **Phase 89: Test Helper Cleanup & Final Integration** — MockPluginBuilder updated, discovery-fixtures updated, full suite passes end-to-end
 
 ### Progress Table
@@ -64,8 +64,8 @@ Phases 72–80 complete. Phases 81–82 deferred to v2.7.
 | 85. Reconciliation Engine | 5/5 | Complete    | 2026-04-20 |
 | 86. Record Tool Integration & Pending Review | 5/5 | Complete    | 2026-04-21 |
 | 87. Scanner Modifications & Frontmatter Sync | 3/3 | Complete    | 2026-04-21 |
-| 88. Legacy Infrastructure Removal | 0/6 | Not started | — |
-| 89. Test Helper & Existing Test Updates | 0/TBD | Not started | — |
+| 88. Legacy Infrastructure Removal | 6/6 | Complete    | 2026-04-21 |
+| 89. Test Helper & Existing Test Updates | 0/4 | Not started | — |
 
 ---
 
@@ -159,12 +159,12 @@ Plans:
   6. Scenario tests `test_discover_document.py` and `test_file_scan_lifecycle.py` updated to remove `fqc_change_queue`/`needs_discovery`/`watcher_claims` assertions; benchmark rewritten for reconciliation query cost (TEST-17)
 **Plans**: 6 plans
 Plans:
-- [ ] 88-01-PLAN.md — Dependency resolution: create src/utils/frontmatter.ts, update vault.ts/plugin-reconciliation.ts imports, remove scanner.ts discoveryQueue block
-- [ ] 88-02-PLAN.md — Delete 6 legacy source files; clean index.ts, server.ts, plugins.ts, frontmatter-sanitizer.ts
-- [ ] 88-03-PLAN.md — Schema migration: DROP TABLE fqc_change_queue and DROP COLUMN for watcher_claims/needs_discovery/discovery_status
-- [ ] 88-04-PLAN.md — Delete 8 obsolete test files; update mcp-server-tools.test.ts tool count to 34
-- [ ] 88-05-PLAN.md — Delete 3 discovery integration test files (discovery-scenarios/errors/multi-plugin)
-- [ ] 88-06-PLAN.md — Delete test_discover_document.py; rewrite discovery-performance.bench.ts for reconciliation
+- [x] 88-01-PLAN.md — Dependency resolution: create src/utils/frontmatter.ts, update vault.ts/plugin-reconciliation.ts imports, remove scanner.ts discoveryQueue block
+- [x] 88-02-PLAN.md — Delete 6 legacy source files; clean index.ts, server.ts, plugins.ts, frontmatter-sanitizer.ts
+- [x] 88-03-PLAN.md — Schema migration: DROP TABLE fqc_change_queue and DROP COLUMN for watcher_claims/needs_discovery/discovery_status
+- [x] 88-04-PLAN.md — Delete 8 obsolete test files; update mcp-server-tools.test.ts tool count to 34
+- [x] 88-05-PLAN.md — Delete 3 discovery integration test files (discovery-scenarios/errors/multi-plugin)
+- [x] 88-06-PLAN.md — Delete test_discover_document.py; rewrite discovery-performance.bench.ts for reconciliation
 **UI hint**: no
 
 ### Phase 89: Test Helper Cleanup & Final Integration
@@ -177,7 +177,12 @@ Plans:
   3. `npm test` (unit suite) passes with 0 failures
   4. `npm run test:integration` passes all tests that have Supabase credentials (0 failures attributable to v2.8 changes)
   5. `npm run test:e2e` passes with 0 failures (no regressions from legacy removal)
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 89-01-PLAN.md — Fix two v2.8 unit test regressions (record-tools + pending-plugin-review)
+- [ ] 89-02-PLAN.md — Refactor mock-plugins.ts: remove callback API, add withAutoTrack/withOnMoved/withOnModified (TEST-11)
+- [ ] 89-03-PLAN.md — Integration test fixes: plugin-records reconciliation mock + plugin-registration policy tests
+- [ ] 89-04-PLAN.md — Extend pending-plugin-review integration test (RO-45/46) + full suite verification
 **UI hint**: no
 
 ---
