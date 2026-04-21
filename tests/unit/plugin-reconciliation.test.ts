@@ -25,8 +25,10 @@ vi.mock('../../src/utils/pg-client.js', () => ({
   })),
 }));
 vi.mock('../../src/storage/vault.js', () => ({
-  atomicWriteFrontmatter: vi.fn().mockResolvedValue(undefined),
   vaultManager: { rootPath: '/vault' },
+}));
+vi.mock('../../src/utils/frontmatter.js', () => ({
+  atomicWriteFrontmatter: vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock('../../src/plugins/manager.js', () => ({
   pluginManager: { getEntry: vi.fn(), getAllEntries: vi.fn() },
@@ -48,7 +50,7 @@ import {
 import { supabaseManager } from '../../src/storage/supabase.js';
 import { createPgClientIPv4 } from '../../src/utils/pg-client.js';
 import { pluginManager } from '../../src/plugins/manager.js';
-import { atomicWriteFrontmatter } from '../../src/storage/vault.js';
+import { atomicWriteFrontmatter } from '../../src/utils/frontmatter.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Test helpers
