@@ -269,7 +269,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Query the plugin table to confirm a row was inserted
     const rows = await pgClient.query(
       `SELECT id, instance_id FROM ${pg.escapeIdentifier(contactsTable)} WHERE instance_id = $1 ORDER BY created_at DESC LIMIT 5`,
-      [PLUGIN_INSTANCE]
+      [INSTANCE_ID]
     );
     expect(rows.rows.length).toBeGreaterThan(0);
 
@@ -334,7 +334,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Verify auto-track created a row
     const rowsBefore = await pgClient.query(
       `SELECT id FROM ${pg.escapeIdentifier(contactsTable)} WHERE instance_id = $1 AND status = 'active'`,
-      [PLUGIN_INSTANCE]
+      [INSTANCE_ID]
     );
     expect(rowsBefore.rows.length).toBeGreaterThan(0);
 
@@ -370,7 +370,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Query plugin table for status — at least one row should be archived
     const rows = await pgClient.query(
       `SELECT status FROM ${pg.escapeIdentifier(contactsTable)} WHERE instance_id = $1`,
-      [PLUGIN_INSTANCE]
+      [INSTANCE_ID]
     );
     const hasArchived = rows.rows.some((r: { status: string }) => r.status === 'archived');
     expect(hasArchived).toBe(true);
@@ -424,7 +424,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
 
     const rows = await pgClient.query(
       `SELECT status FROM ${pg.escapeIdentifier(contactsTable)} WHERE instance_id = $1`,
-      [PLUGIN_INSTANCE]
+      [INSTANCE_ID]
     );
     const hasArchived = rows.rows.some((r: { status: string }) => r.status === 'archived');
     expect(hasArchived).toBe(true);
@@ -504,7 +504,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
       .from('fqc_pending_plugin_review')
       .select('fqc_id')
       .eq('plugin_id', 'rec_int_test')
-      .eq('instance_id', 'default');
+      .eq('instance_id', INSTANCE_ID);
 
     if (pendingRows && pendingRows.length > 0) {
       // Verify query mode didn't delete
@@ -512,7 +512,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
         .from('fqc_pending_plugin_review')
         .select('fqc_id', { count: 'exact' })
         .eq('plugin_id', 'rec_int_test')
-        .eq('instance_id', 'default');
+        .eq('instance_id', INSTANCE_ID);
       expect((afterQueryCount.count ?? 0)).toBeGreaterThan(0);
 
       // Clear mode: delete ALL pending rows for this plugin (not just one)
@@ -623,7 +623,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Verify a plugin row was created
     const rowsAfterTrack = await pgClient.query(
       `SELECT id, status FROM ${pg.escapeIdentifier(contactsTable)} WHERE instance_id = $1`,
-      [PLUGIN_INSTANCE]
+      [INSTANCE_ID]
     );
     expect(rowsAfterTrack.rows.length).toBeGreaterThan(0);
 
@@ -649,7 +649,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Confirm at least one row is archived
     const archivedRows = await pgClient.query(
       `SELECT id, status FROM ${pg.escapeIdentifier(contactsTable)} WHERE instance_id = $1 AND status = 'archived'`,
-      [PLUGIN_INSTANCE]
+      [INSTANCE_ID]
     );
     expect(archivedRows.rows.length).toBeGreaterThan(0);
 
@@ -674,7 +674,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Assert plugin row is now active (resurrected)
     const activeRows = await pgClient.query(
       `SELECT id, status FROM ${pg.escapeIdentifier(contactsTable)} WHERE instance_id = $1 AND status = 'active'`,
-      [PLUGIN_INSTANCE]
+      [INSTANCE_ID]
     );
     expect(activeRows.rows.length).toBeGreaterThan(0);
 
@@ -683,7 +683,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
       .from('fqc_pending_plugin_review')
       .select('review_type')
       .eq('plugin_id', 'rec_int_test')
-      .eq('instance_id', 'default')
+      .eq('instance_id', INSTANCE_ID)
       .eq('review_type', 'resurrected');
 
     expect(pendingRows).not.toBeNull();

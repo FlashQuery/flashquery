@@ -198,7 +198,7 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
       .from('fqc_pending_plugin_review')
       .select('fqc_id, review_type')
       .eq('plugin_id', 'pending_review_test')
-      .eq('instance_id', PLUGIN_INSTANCE);
+      .eq('instance_id', INSTANCE_ID);
 
     expect(error).toBeNull();
     expect(data).not.toBeNull();
@@ -248,7 +248,7 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
       .from('fqc_pending_plugin_review')
       .select('fqc_id')
       .eq('plugin_id', 'pending_review_test')
-      .eq('instance_id', PLUGIN_INSTANCE);
+      .eq('instance_id', INSTANCE_ID);
 
     expect((data ?? []).length).toBeGreaterThan(0);
   });
@@ -281,7 +281,7 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
       .from('fqc_pending_plugin_review')
       .select('fqc_id')
       .eq('plugin_id', 'pending_review_test')
-      .eq('instance_id', PLUGIN_INSTANCE);
+      .eq('instance_id', INSTANCE_ID);
 
     expect((pendingRows ?? []).length).toBeGreaterThan(0);
 
@@ -301,7 +301,7 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
       .from('fqc_pending_plugin_review')
       .select('fqc_id')
       .eq('plugin_id', 'pending_review_test')
-      .eq('instance_id', PLUGIN_INSTANCE)
+      .eq('instance_id', INSTANCE_ID)
       .in('fqc_id', snapshotIds);
 
     expect((afterClear ?? []).length).toBe(0);
@@ -428,7 +428,7 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
       .from('fqc_pending_plugin_review')
       .select('fqc_id')
       .eq('plugin_id', 'pending_review_test')
-      .eq('instance_id', PLUGIN_INSTANCE);
+      .eq('instance_id', INSTANCE_ID);
 
     if ((preUnreg ?? []).length === 0) {
       // Create additional docs until at least one pending review is inserted
@@ -446,7 +446,7 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
           .from('fqc_pending_plugin_review')
           .select('fqc_id')
           .eq('plugin_id', 'pending_review_test')
-          .eq('instance_id', PLUGIN_INSTANCE);
+          .eq('instance_id', INSTANCE_ID);
         if ((retry ?? []).length > 0) {
           preUnreg = retry;
           break;
@@ -470,7 +470,7 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
       .from('fqc_pending_plugin_review')
       .select('fqc_id')
       .eq('plugin_id', 'pending_review_test')
-      .eq('instance_id', PLUGIN_INSTANCE);
+      .eq('instance_id', INSTANCE_ID);
 
     expect((afterUnreg ?? []).length).toBe(0);
 
