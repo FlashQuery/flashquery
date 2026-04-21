@@ -37,7 +37,7 @@ describe('MCP Tool Descriptions (SPEC-17)', () => {
     expect(server).toBeDefined();
   });
 
-  it('Should register 35 tools across all tool modules (37 minus 2 deprecated)', () => {
+  it('Should register 34 tools across all tool modules (36 minus 2 deprecated)', () => {
     server = new McpServer({ name: 'test', version: '0.1.0' });
 
     // Register all tool groups - if any fail or have registration issues, this will throw
