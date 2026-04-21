@@ -59,7 +59,7 @@ function setupTool(chain: ReturnType<typeof makeSupabaseChain>) {
     },
   } as unknown as McpServer;
 
-  registerPendingReviewTools(mockServer, {} as FlashQueryConfig);
+  registerPendingReviewTools(mockServer, { instance: { id: 'test-instance' } } as unknown as FlashQueryConfig);
 
   const callTool = (args: unknown) => handlers['clear_pending_reviews'](args);
   return { callTool, chain };
@@ -140,13 +140,13 @@ describe('clear_pending_reviews', () => {
     const result = await callTool({
       plugin_id: 'crm',
       plugin_instance: 'default',
-      fqc_ids: ['some-uuid-1', 'some-uuid-2'],
+      fqc_ids: ['aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000002'],
     }) as { content: Array<{ type: string; text: string }> };
 
     // delete() must have been called
     expect(chain.delete).toHaveBeenCalled();
     // in() must have been called with 'fqc_id' and the two UUIDs
-    expect(chain.in).toHaveBeenCalledWith('fqc_id', ['some-uuid-1', 'some-uuid-2']);
+    expect(chain.in).toHaveBeenCalledWith('fqc_id', ['aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000002']);
     // select() must have been called to return remaining items
     expect(chain.select).toHaveBeenCalled();
     // Empty remainder = 'No pending reviews'
