@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import pg from 'pg';
 import type { Logger } from '../logging/logger.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
+import { ensureLastSeenColumn } from './plugin-reconciliation.js';
 
 /**
  * DbRow shape — matches the schema of fqc_documents table rows
@@ -81,67 +82,64 @@ export async function propagateFqcIdChange(
 
   // ── Step 2: Discover plugin tables via information_schema ────────────────
   let discoveredTables: string[] = [];
+  let updateCount = 0;
 
+  const dbUrl = databaseUrl ?? process.env.DATABASE_URL;
+
+  if (!dbUrl) {
+    logger_inst.warn('Failed to discover plugin tables: DATABASE_URL not set');
+    return;
+  }
+
+  const pgClient = createPgClientIPv4(dbUrl);
+  await pgClient.connect();
   try {
-    // Secure parameter injection: prefer passed databaseUrl, fall back to process.env
-    const dbUrl = databaseUrl ?? process.env.DATABASE_URL;
+    const result = await pgClient.query<{ table_name: string }>(`
+      SELECT DISTINCT table_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name LIKE 'fqcp_%'
+        AND column_name = 'fqc_id'
+      ORDER BY table_name
+    `);
+    discoveredTables = result.rows.map((row) => row.table_name);
 
-    if (!dbUrl) {
-      logger_inst.warn('Failed to discover plugin tables: DATABASE_URL not set');
-      return; // Fail-safe per RESEARCH.md
+    if (discoveredTables.length === 0) {
+      logger_inst.info(
+        `Successfully propagated fqc_id from ${resolvedOldFqcId} to ${newFqcId} in 0 tables`
+      );
+      return;
     }
 
-    const pgClient = createPgClientIPv4(dbUrl);
-    await pgClient.connect();
-    try {
-      const result = await pgClient.query<{ table_name: string }>(`
-        SELECT DISTINCT table_name
-        FROM information_schema.columns
-        WHERE table_schema = 'public'
-          AND table_name LIKE 'fqcp_%'
-          AND column_name = 'fqc_id'
-        ORDER BY table_name
-      `);
-      discoveredTables = result.rows.map((row) => row.table_name);
-    } finally {
-      await pgClient.end();
+    // ── Step 3: Execute UPDATE for each discovered table ─────────────────────
+    for (const tableName of discoveredTables) {
+      try {
+        // Defensive: update last_seen_updated_at so the reconciler doesn't
+        // flag this row as 'modified' due to the fqc_id change. In practice,
+        // fqc_id reassignment on plugin-tracked documents is unlikely — it
+        // requires scanner duplicate resolution to touch a document that a
+        // plugin is actively tracking. But if it does happen, a stale
+        // last_seen_updated_at would cause a false 'modified' classification
+        // on the next reconciliation pass.
+        await ensureLastSeenColumn(tableName, pgClient);
+        await pgClient.query(
+          `UPDATE ${pg.escapeIdentifier(tableName)} SET fqc_id = $1, last_seen_updated_at = NOW() WHERE fqc_id = $2`,
+          [newFqcId, resolvedOldFqcId]
+        );
+        updateCount++;
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err);
+        logger_inst.warn(
+          `Failed to propagate fqc_id change from ${resolvedOldFqcId} to ${newFqcId} in table ${tableName}: ${errMsg}`
+        );
+      }
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     logger_inst.warn(`Failed to discover plugin tables: ${errMsg}`);
-    return; // Fail-safe per RESEARCH.md
-  }
-
-  if (discoveredTables.length === 0) {
-    logger_inst.info(
-      `Successfully propagated fqc_id from ${resolvedOldFqcId} to ${newFqcId} in 0 tables`
-    );
     return;
-  }
-
-  // ── Step 3: Execute UPDATE for each discovered table ─────────────────────
-  let updateCount = 0;
-
-  for (const tableName of discoveredTables) {
-    try {
-      const { error } = await supabase
-        .from(tableName)
-        .update({ fqc_id: newFqcId })
-        .eq('fqc_id', resolvedOldFqcId);
-
-      if (error) {
-        logger_inst.warn(
-          `Failed to propagate fqc_id change from ${resolvedOldFqcId} to ${newFqcId} in table ${tableName}: ${error.message}`
-        );
-      } else {
-        updateCount++;
-      }
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
-      logger_inst.warn(
-        `Failed to propagate fqc_id change from ${resolvedOldFqcId} to ${newFqcId} in table ${tableName}: ${errMsg}`
-      );
-    }
+  } finally {
+    await pgClient.end();
   }
 
   // ── Step 4: Log results (D-04 tiered approach) ──────────────────────────
