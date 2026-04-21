@@ -131,7 +131,6 @@ def _most_recent_activity(
         "fqc_memory": "updated_at",
         "fqc_vault": "created_at",
         "fqc_plugin_registry": "updated_at",
-        "fqc_change_queue": "detected_at",
         "fqc_write_locks": "locked_at",
     }
     most_recent: datetime | None = None

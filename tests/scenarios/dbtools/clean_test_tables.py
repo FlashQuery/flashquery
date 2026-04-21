@@ -27,7 +27,6 @@ from pathlib import Path
 
 # Tables to clean (in dependency order - foreign keys last)
 TABLES_TO_CLEAN = [
-    'fqc_change_queue',      # No FK dependencies
     'fqc_write_locks',        # No FK dependencies
     'fqc_documents',          # May reference plugins
     'fqc_memory',             # May reference plugins

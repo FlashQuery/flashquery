@@ -133,7 +133,6 @@ TABLES: tuple[TableSpec, ...] = (
     TableSpec("fqc_vault"),
     TableSpec("fqc_plugin_registry", status_col="status"),
     TableSpec("fqc_write_locks", id_col=""),  # composite PK (instance_id, resource_type)
-    TableSpec("fqc_change_queue"),
 )
 
 

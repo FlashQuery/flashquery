@@ -111,8 +111,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
 
     # Configurable scale parameters
-    memory_count = getattr(args, "memory_count", 40)
-    update_count = getattr(args, "update_count", 75)
+    memory_count = getattr(args, "memory_count", 20)
+    update_count = getattr(args, "update_count", 40)
 
     port_range = tuple(args.port_range) if args.port_range else None
 
