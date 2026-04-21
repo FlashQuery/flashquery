@@ -6,7 +6,34 @@
  * Embedding tests (scenario 3) also require: OPENAI_API_KEY
  * Run: npm run test:integration
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+
+// Mock reconcilePluginDocuments and executeReconciliationActions so that
+// plugin-record CRUD tests do not trigger real reconciliation side effects
+// (vault file-system scans, plugin table writes) that would interfere with
+// test fixtures.  Approach (b) from D-11: backward-compatible empty result.
+vi.mock('../../src/services/plugin-reconciliation.js', () => ({
+  reconcilePluginDocuments: vi.fn().mockResolvedValue({
+    added: [],
+    resurrected: [],
+    deleted: [],
+    disassociated: [],
+    moved: [],
+    modified: [],
+    unchanged: [],
+  }),
+  executeReconciliationActions: vi.fn().mockResolvedValue({
+    autoTracked: 0,
+    archived: 0,
+    resurrected: 0,
+    pathsUpdated: 0,
+    fieldsSynced: 0,
+    pendingReviewsCreated: 0,
+    pendingReviewsCleared: 0,
+  }),
+  invalidateReconciliationCache: vi.fn(),
+}));
+
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
