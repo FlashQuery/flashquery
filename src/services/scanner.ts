@@ -12,8 +12,6 @@ import { listMarkdownFiles, computeHash } from '../mcp/tools/documents.js';
 import { isValidUuid } from '../utils/uuid.js';
 import { propagateFqcIdChange } from './plugin-propagation.js';
 import { getFolderClaimsMap } from '../plugins/manager.js';
-import { getWatcherMap, invokeChangeNotifications } from './discovery-orchestrator.js';
-import type { ChangePayload } from './plugin-skill-invoker.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
 
@@ -481,6 +479,9 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
         (typeof frontmatter.title === 'string' && frontmatter.title) ||
         titleFromFilename(relativePath);
 
+      const fqcOwner = typeof frontmatter.fqc_owner === 'string' ? frontmatter.fqc_owner : null;
+      const fqcType = typeof frontmatter.fqc_type === 'string' ? frontmatter.fqc_type : null;
+
       const dbRowByHash = hashToRow.get(H);
 
       if (dbRowByHash) {
@@ -527,6 +528,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             created_at: (frontmatter.created as string) || now,
             updated_at: now,
             needs_frontmatter_repair: true,
+            ownership_plugin_id: fqcOwner,
+            ownership_type: fqcType,
           });
           seenFqcIds.add(newFqcId);
           newFiles++;
@@ -629,20 +632,11 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
 
         if (dbRowById) {
           // CONTENT CHANGED: known file (by fqc_id), new content
-          // NOTIF-01 PREREQUISITE: Compute change payload for notification
-          // This must happen BEFORE we invoke callbacks, so we have the full change details
-          const detectionResult = detectChanges(dbRowById, rawContent);
-          const changePayload: ChangePayload | null = detectionResult.changes ? {
-            content: detectionResult.changes.content,
-            frontmatter: detectionResult.changes.frontmatter,
-            modified_at: detectionResult.changes.modified_at,
-            size_bytes: detectionResult.changes.size_bytes,
-            content_hash: detectionResult.changes.content_hash,
-          } : null;
-
-          const updates: Record<string, string> = {
+          const updates: Record<string, unknown> = {
             content_hash: H,
             updated_at: now,
+            ownership_plugin_id: fqcOwner,
+            ownership_type: fqcType,
           };
           if (dbRowById.path !== relativePath) {
             const originalAbsPath = `${vaultRoot}/${dbRowById.path}`;
@@ -663,6 +657,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
                 created_at: (frontmatter.created as string) || now,
                 updated_at: now,
                 needs_frontmatter_repair: true,
+                ownership_plugin_id: fqcOwner,
+                ownership_type: fqcType,
               });
               seenFqcIds.add(newFqcId);
               newFiles++;
@@ -701,89 +697,6 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
           logger.info(
             `[SCAN-02] content changed: "${relativePath}" (fqc_id=${Y}) — hash updated`
           );
-
-          // NOTIF-01: Wire change notification callbacks (Phase 58.1)
-          // After content-hash mismatch is detected and updated, invoke callbacks to notify plugins
-          try {
-            // Query document ownership and watcher information
-            const { data: docData, error: queryErr } = await supabase
-              .from('fqc_documents')
-              .select('ownership_plugin_id, watcher_claims')
-              .eq('id', Y as string)
-              .single();
-
-            if (queryErr) {
-              logger.warn(`[NOTIF-01] Failed to query ownership for ${Y}: ${queryErr.message}`);
-              // Insert failed queue row for observability when query fails
-              const changeQueueId = uuidv4();
-              const now = new Date().toISOString();
-              await supabase.from('fqc_change_queue').insert({
-                id: changeQueueId,
-                instance_id: instanceId,
-                fqc_id: Y as string,
-                change_type: 'modified',
-                detected_at: now,
-                changes: changePayload,
-                delivery_status: 'failed',
-                created_at: now,
-                updated_at: now,
-              });
-            } else if (docData && docData.ownership_plugin_id) {
-              // Insert pending notification into queue before invoking callbacks
-              const changeQueueId = uuidv4();
-              await supabase.from('fqc_change_queue').insert({
-                id: changeQueueId,
-                instance_id: instanceId,
-                fqc_id: Y as string,
-                change_type: 'modified',
-                detected_at: new Date().toISOString(),
-                changes: changePayload,
-                delivery_status: 'pending',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-              });
-
-              // Fetch watcher map for this document
-              const watcherMap = await getWatcherMap(Y as string);
-
-              // Invoke change callbacks (owner first, then watchers)
-              const notificationResult = await invokeChangeNotifications(
-                relativePath,
-                Y as string,
-                changePayload,
-                docData.ownership_plugin_id ?? null,
-                watcherMap,
-                'on_document_changed'
-              );
-
-              // Update queue row with delivery status
-              const deliveryStatus = notificationResult.errors.length > 0 ? 'failed' : 'delivered';
-              const pluginDeliveryRecord: Record<string, string> = {};
-              for (const [pluginId, result] of notificationResult.pluginResults.entries()) {
-                pluginDeliveryRecord[pluginId] = result.error ? 'failed' : 'acknowledged';
-              }
-
-              await supabase
-                .from('fqc_change_queue')
-                .update({
-                  delivery_status: deliveryStatus,
-                  plugin_delivery: pluginDeliveryRecord,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', changeQueueId);
-
-              logger.info(
-                `[NOTIF-01] change notification delivered: "${relativePath}" (${notificationResult.pluginResults.size} plugins, ${notificationResult.errors.length} errors)`
-              );
-            }
-          } catch (notifErr) {
-            logger.warn(
-              `[NOTIF-01] notification invocation failed: ${
-                notifErr instanceof Error ? notifErr.message : String(notifErr)
-              }`
-            );
-            // Don't halt scanning on notification errors — log and continue
-          }
 
           // PLG-03: Propagate fqc_id change if needed (CONTENT CHANGED branch)
           // In CONTENT CHANGED, oldFqcId === newFqcId (content changed but identity same)
@@ -848,6 +761,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               content_hash: H,
               created_at: (frontmatter.created as string) || now,
               updated_at: now,
+              ownership_plugin_id: fqcOwner,
+              ownership_type: fqcType,
             });
             seenFqcIds.add(Y);
             newFiles++;
@@ -888,6 +803,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
                 updated_at: now,
                 status: (frontmatter.status as string) || dbRowByPath.status,
                 needs_frontmatter_repair: true,
+                ownership_plugin_id: fqcOwner,
+                ownership_type: fqcType,
               })
               .eq('id', reconnectedId);
             seenFqcIds.add(reconnectedId);
@@ -930,6 +847,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             created_at: (frontmatter.created as string) || now,
             updated_at: now,
             needs_frontmatter_repair: true,
+            ownership_plugin_id: fqcOwner,
+            ownership_type: fqcType,
           });
           seenFqcIds.add(newFqcId);
           newFiles++;
@@ -1040,91 +959,6 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             `[SCAN-04] file missing from vault: "${rowPath}" (fqc_id=${fqcId}) — marking as missing`
           );
 
-          // NOTIF-02: Wire deletion notification callbacks (Phase 58.1)
-          // After document is marked missing, invoke on_document_deleted callbacks
-          try {
-            // Query document ownership and watcher information
-            const { data: docData, error: queryErr } = await supabase
-              .from('fqc_documents')
-              .select('ownership_plugin_id, watcher_claims')
-              .eq('id', fqcId)
-              .single();
-
-            if (queryErr) {
-              logger.warn(`[NOTIF-02] Failed to query ownership for deleted doc ${fqcId}: ${queryErr.message}`);
-              // Insert failed queue row for observability when query fails
-              const changeQueueId = uuidv4();
-              const deletedAt = new Date().toISOString();
-              await supabase.from('fqc_change_queue').insert({
-                id: changeQueueId,
-                instance_id: instanceId,
-                fqc_id: fqcId,
-                change_type: 'deleted',
-                detected_at: deletedAt,
-                changes: null,
-                delivery_status: 'failed',
-                created_at: deletedAt,
-                updated_at: deletedAt,
-              });
-            } else if (docData && docData.ownership_plugin_id) {
-              // Insert deletion notification into queue before invoking callbacks
-              const changeQueueId = uuidv4();
-              const deletedAt = new Date().toISOString();
-
-              await supabase.from('fqc_change_queue').insert({
-                id: changeQueueId,
-                instance_id: instanceId,
-                fqc_id: fqcId,
-                change_type: 'deleted',
-                detected_at: deletedAt,
-                changes: null,
-                delivery_status: 'pending',
-                created_at: deletedAt,
-                updated_at: deletedAt,
-              });
-
-              // Fetch watcher map for this document
-              const watcherMap = await getWatcherMap(fqcId);
-
-              // Invoke deletion callbacks (owner first, then watchers)
-              // Note: changePayload is null for deletions, only path and fqcId passed
-              const notificationResult = await invokeChangeNotifications(
-                rowPath,
-                fqcId,
-                null,
-                docData.ownership_plugin_id ?? null,
-                watcherMap,
-                'on_document_deleted'
-              );
-
-              // Update queue row with delivery status
-              const deliveryStatus = notificationResult.errors.length > 0 ? 'failed' : 'delivered';
-              const pluginDeliveryRecord: Record<string, string> = {};
-              for (const [pluginId, result] of notificationResult.pluginResults.entries()) {
-                pluginDeliveryRecord[pluginId] = result.error ? 'failed' : 'acknowledged';
-              }
-
-              await supabase
-                .from('fqc_change_queue')
-                .update({
-                  delivery_status: deliveryStatus,
-                  plugin_delivery: pluginDeliveryRecord,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', changeQueueId);
-
-              logger.info(
-                `[NOTIF-02] deletion notification delivered: "${rowPath}" (${notificationResult.pluginResults.size} plugins, ${notificationResult.errors.length} errors)`
-              );
-            }
-          } catch (notifErr) {
-            logger.warn(
-              `[NOTIF-02] deletion notification failed: ${
-                notifErr instanceof Error ? notifErr.message : String(notifErr)
-              }`
-            );
-            // Don't halt scanning on notification errors — log and continue
-          }
         } else {
           // File still exists but not in seenFqcIds — likely skipped due to read/parse error
           logger.debug(`[SCAN-04] file exists but was skipped: "${rowPath}" (fqc_id=${fqcId}) — will retry next scan`);
