@@ -385,4 +385,21 @@ This document should have its content embedded asynchronously.`;
     // Verify: output contains scan summary
     // (In real CLI, this would be printed to stderr)
   });
+
+  it('TEST-10: ownership columns are synced from frontmatter fields on INSERT', async () => {
+    const content = `---\nfqc_owner: test-plugin\nfqc_type: test-note\n---\n# Ownership Test\n\nContent.`;
+    await writeFile(join(vaultPath, 'ownership-test.md'), content);
+
+    await runScanOnce(config);
+
+    const { data, error } = await supabaseManager.getClient()
+      .from('fqc_documents')
+      .select('ownership_plugin_id, ownership_type')
+      .eq('instance_id', 'scan-test-id')
+      .eq('path', 'ownership-test.md')
+      .single();
+    expect(error).toBeNull();
+    expect(data?.ownership_plugin_id).toBe('test-plugin');
+    expect(data?.ownership_type).toBe('test-note');
+  });
 });
