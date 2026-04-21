@@ -295,11 +295,20 @@ describe('Phase 54 DDL updates (plugin ownership & discovery tracking)', () => {
     );
   });
 
-  it('adds needs_discovery column to fqc_documents', () => {
+  it('drops legacy push-notification infrastructure (Phase 88 LEGACY-07)', () => {
     const ddl = buildSchemaDDL(1536);
-    expect(ddl).toContain(
-      'ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS needs_discovery BOOLEAN DEFAULT FALSE'
-    );
+    // DROP TABLE must precede DROP COLUMN statements (FK ordering)
+    expect(ddl).toContain('DROP TABLE IF EXISTS fqc_change_queue');
+    expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS watcher_claims');
+    expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS needs_discovery');
+    expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS discovery_status');
+    // Legacy ADD COLUMN statements must be absent
+    expect(ddl).not.toContain('ADD COLUMN IF NOT EXISTS needs_discovery');
+    expect(ddl).not.toContain('ADD COLUMN IF NOT EXISTS discovery_status');
+    expect(ddl).not.toContain('ADD COLUMN IF NOT EXISTS watcher_claims');
+    expect(ddl).not.toContain('CREATE TABLE IF NOT EXISTS fqc_change_queue');
+    expect(ddl).not.toContain('idx_fqc_documents_discovery_status');
+    expect(ddl).not.toContain('idx_fqc_change_queue');
   });
 
   it('creates index on (ownership_plugin_id, ownership_type) for query performance', () => {

@@ -389,18 +389,15 @@ ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS description TEXT DE
 -- Phase 39: needs_frontmatter_repair flag for TSA-01 (read-only background scan)
 ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS needs_frontmatter_repair BOOLEAN DEFAULT FALSE;
 
+-- Phase 88: Remove push-notification infrastructure (LEGACY-07)
+DROP TABLE IF EXISTS fqc_change_queue;
+ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS watcher_claims;
+ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS needs_discovery;
+ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS discovery_status;
+
 -- Phase 54 (Scanner Enhancement): Plugin ownership tracking (per DISC-04, PERF-02)
 ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS ownership_plugin_id TEXT DEFAULT NULL;
 ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS ownership_type TEXT DEFAULT NULL;
-ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS needs_discovery BOOLEAN DEFAULT FALSE;
-
--- Phase 56 (Discovery Orchestrator): Discovery status tracking (WRT-04, ERR-03)
-ALTER TABLE IF EXISTS fqc_documents
-  ADD COLUMN IF NOT EXISTS discovery_status TEXT DEFAULT 'pending';
-
--- Phase 56: Watcher plugin tracking (ORCH-03, ORCH-04)
-ALTER TABLE IF EXISTS fqc_documents
-  ADD COLUMN IF NOT EXISTS watcher_claims JSONB DEFAULT '[]'::jsonb;
 
 -- Phase 24: Distributed write locks (LOCK-02)
 CREATE TABLE IF NOT EXISTS fqc_write_locks (
@@ -413,23 +410,6 @@ CREATE TABLE IF NOT EXISTS fqc_write_locks (
 
 CREATE INDEX IF NOT EXISTS idx_fqc_write_locks_expires ON fqc_write_locks (expires_at);
 
--- Phase 58: Change notification queue (NOTIF-01, NOTIF-02)
-CREATE TABLE IF NOT EXISTS fqc_change_queue (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  instance_id TEXT NOT NULL,
-  fqc_id UUID NOT NULL REFERENCES fqc_documents(id) ON DELETE CASCADE,
-  change_type TEXT NOT NULL CHECK (change_type IN ('created', 'modified', 'deleted')),
-  detected_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  changes JSONB,
-  delivery_status TEXT DEFAULT 'pending' CHECK (delivery_status IN ('pending', 'delivered', 'failed')),
-  plugin_delivery JSONB,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_fqc_change_queue_status ON fqc_change_queue(delivery_status);
-CREATE INDEX IF NOT EXISTS idx_fqc_change_queue_fqc_id ON fqc_change_queue(fqc_id);
-CREATE INDEX IF NOT EXISTS idx_fqc_change_queue_instance ON fqc_change_queue(instance_id);
 
 -- Step 3: Create indexes
 
@@ -444,10 +424,6 @@ CREATE INDEX IF NOT EXISTS idx_fqc_documents_status ON fqc_documents (status);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_tags ON fqc_documents USING gin (tags);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_ownership ON fqc_documents(ownership_plugin_id, ownership_type);
 
--- Phase 56: Index for discovery queue filtering (ERR-03 optimization)
-CREATE INDEX IF NOT EXISTS idx_fqc_documents_discovery_status
-  ON fqc_documents(discovery_status)
-  WHERE discovery_status = 'pending';
 
 -- Step 4: Create match_memories RPC function
 
