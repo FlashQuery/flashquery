@@ -2,13 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { serializeOrderedFrontmatter } from '../../src/mcp/utils/frontmatter-sanitizer.js';
 
 describe('serializeOrderedFrontmatter', () => {
-  it('removes all internal fields (content_hash, ownership_plugin_id, discovery_status, embedding, instance_id)', () => {
+  it('removes all internal fields (content_hash, ownership_plugin_id, embedding, instance_id)', () => {
     const input = {
       fqc_id: 'test-uuid-1234',
       title: 'Test Doc',
       content_hash: 'sha256-abc123',
       ownership_plugin_id: 'plugin-xyz',
-      discovery_status: 'complete',
       embedding: JSON.stringify([0.1, 0.2, 0.3]),
       instance_id: 'instance-123',
       status: 'active',
@@ -18,7 +17,6 @@ describe('serializeOrderedFrontmatter', () => {
 
     expect(result).not.toHaveProperty('content_hash');
     expect(result).not.toHaveProperty('ownership_plugin_id');
-    expect(result).not.toHaveProperty('discovery_status');
     expect(result).not.toHaveProperty('embedding');
     expect(result).not.toHaveProperty('instance_id');
     expect(result.fqc_id).toBe('test-uuid-1234');
@@ -138,7 +136,6 @@ describe('serializeOrderedFrontmatter', () => {
       title: 'Test Doc',
       content_hash: 'hash1',
       ownership_plugin_id: 'plugin1',
-      discovery_status: 'complete',
       embedding: 'vector1',
       instance_id: 'inst1',
       status: 'active',
@@ -150,7 +147,6 @@ describe('serializeOrderedFrontmatter', () => {
     const internalFields = [
       'content_hash',
       'ownership_plugin_id',
-      'discovery_status',
       'embedding',
       'instance_id',
     ];

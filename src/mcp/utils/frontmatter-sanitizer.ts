@@ -5,7 +5,7 @@
  * Ensures that internal implementation details (content hashes, instance IDs, etc.)
  * don't leak into user-visible markdown files.
  *
- * Fields removed: content_hash, ownership_plugin_id, discovery_status, embedding, instance_id
+ * Fields removed: content_hash, ownership_plugin_id, embedding, instance_id
  * Fields preserved: fqc_id, fqc_instance, status, title, tags, created, updated, and user-provided fields
  *
  * This enables lazy cleanup — any file written through the normal write paths will have
@@ -15,7 +15,7 @@
 /**
  * Remove database-only fields before persisting to vault.
  * Preserves: fqc_id, fqc_instance, status, title, tags, created, updated, and user-provided fields.
- * Removes: content_hash, ownership_plugin_id, discovery_status, embedding, instance_id, and other internal fields.
+ * Removes: content_hash, ownership_plugin_id, embedding, instance_id, and other internal fields.
  *
  * @param fullFrontmatter - Raw frontmatter object (may contain DB-only fields)
  * @returns New object with internal fields removed and key order preserved
@@ -27,7 +27,6 @@ export function serializeOrderedFrontmatter(
   const internalFields = new Set([
     'content_hash',
     'ownership_plugin_id',
-    'discovery_status',
     'embedding',
     'instance_id',
     // Note: fqc_instance is allowed (per schema) and should be preserved

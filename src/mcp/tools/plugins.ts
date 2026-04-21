@@ -558,13 +558,6 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           .eq('plugin_scope', plugin_id)
           .eq('instance_id', config.instance.id);
 
-        // Count watcher claims (JSONB ? operator)
-        const { count: claimsCount } = await supabase
-          .from('fqc_documents')
-          .select('*', { count: 'exact', head: true })
-          .filter('watcher_claims', 'cs', `{"${plugin_id}":`)
-          .eq('instance_id', config.instance.id);
-
         // Build dry-run response
         const dryRunLines: string[] = [
           `Unregister plugin '${plugin_id}' instance '${instanceName}' — DRY RUN`,
@@ -579,7 +572,6 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         dryRunLines.push('', 'Other changes:');
         dryRunLines.push(`  ${docCount ?? 0} documents will have ownership cleared (files remain in vault)`);
         dryRunLines.push(`  ${memCount ?? 0} plugin-scoped memories will be deleted`);
-        dryRunLines.push(`  ${claimsCount ?? 0} documents will have watcher claims for this plugin removed`);
         dryRunLines.push('', 'Registry entry will be deleted.');
         dryRunLines.push('In-memory plugin entry will be unloaded.');
         dryRunLines.push('Manifest folder mappings will be cleared.');
@@ -630,47 +622,12 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             .update({
               ownership_plugin_id: null,
               ownership_type: null,
-              discovery_status: 'pending',
-              needs_discovery: true,
               updated_at: new Date().toISOString(),
             })
             .eq('ownership_plugin_id', plugin_id)
             .eq('instance_id', config.instance.id);
         } catch (err) {
           logger.error(`Failed to clear document ownership: ${err instanceof Error ? err.message : String(err)}`);
-        }
-
-        // Clear watcher claims (JSONB minus operator)
-        try {
-          await supabase.rpc('clear_plugin_watcher_claims', {
-            plugin_id_param: plugin_id,
-            instance_id_param: config.instance.id,
-          });
-        } catch (err) {
-          logger.warn(`Failed to clear watcher claims via RPC, attempting direct update: ${err instanceof Error ? err.message : String(err)}`);
-          // Fallback: manual update
-          try {
-            const { data: rows } = await supabase
-              .from('fqc_documents')
-              .select('id, watcher_claims')
-              .filter('watcher_claims', 'cs', `{"${plugin_id}":`)
-              .eq('instance_id', config.instance.id);
-
-            if (rows) {
-              for (const row of rows) {
-                const claims = row.watcher_claims as Record<string, unknown>;
-                if (claims && plugin_id in claims) {
-                  delete claims[plugin_id];
-                  await supabase
-                    .from('fqc_documents')
-                    .update({ watcher_claims: claims, updated_at: new Date().toISOString() })
-                    .eq('id', row.id);
-                }
-              }
-            }
-          } catch (fallbackErr) {
-            logger.error(`Watcher claims cleanup failed: ${fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr)}`);
-          }
         }
 
         // Delete plugin-scoped memories
@@ -724,7 +681,6 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         teardownLines.push('', 'Other changes:');
         teardownLines.push(`  ${docCount ?? 0} documents — ownership cleared (files remain in vault, marked for re-discovery)`);
         teardownLines.push(`  ${memCount ?? 0} plugin-scoped memories deleted`);
-        teardownLines.push(`  ${claimsCount ?? 0} documents — watcher claims for this plugin removed`);
         teardownLines.push('  Registry entry deleted');
         teardownLines.push('  In-memory plugin entry unloaded');
         teardownLines.push('  Manifest folder mappings cleared');

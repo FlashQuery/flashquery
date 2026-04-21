@@ -7,7 +7,6 @@ import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
 import { registerRecordTools } from '../../src/mcp/tools/records.js';
 import { registerCompoundTools } from '../../src/mcp/tools/compound.js';
 import { registerScanTools } from '../../src/mcp/tools/scan.js';
-import { registerDiscoveryTools } from '../../src/mcp/tools/discovery.js';
 
 // Minimal config for testing
 const mockConfig: FlashQueryConfig = {
@@ -33,7 +32,6 @@ describe('MCP Tool Descriptions (SPEC-17)', () => {
     registerRecordTools(server, mockConfig);
     registerCompoundTools(server, mockConfig);
     registerScanTools(server, mockConfig);
-    registerDiscoveryTools(server, mockConfig);
 
     // The server should have tools registered
     expect(server).toBeDefined();
@@ -50,7 +48,6 @@ describe('MCP Tool Descriptions (SPEC-17)', () => {
       registerRecordTools(server, mockConfig);
       registerCompoundTools(server, mockConfig);
       registerScanTools(server, mockConfig);
-      registerDiscoveryTools(server, mockConfig);
     }).not.toThrow();
   });
 

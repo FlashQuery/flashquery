@@ -1186,7 +1186,6 @@ describe('get_document', () => {
       frontmatter: {
         content_hash: 'hash123',
         ownership_plugin_id: 'plugin-xyz',
-        discovery_status: 'complete',
         embedding: JSON.stringify([0.1, 0.2]),
         instance_id: 'inst-123',
         custom_user_field: 'user_value',
@@ -1198,7 +1197,6 @@ describe('get_document', () => {
     const internalFields = [
       'content_hash',
       'ownership_plugin_id',
-      'discovery_status',
       'embedding',
       'instance_id',
     ];
