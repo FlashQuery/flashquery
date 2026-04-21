@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
 import { loadPluginManifests, reloadManifests, getFolderMappings, matchesFolderClaim } from '../../src/services/manifest-loader.js';
 import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
+import { initPlugins } from '../../src/plugins/manager.js';
+import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
 import { initLogger } from '../../src/logging/logger.js';
+import pg from 'pg';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
 // Test configuration
@@ -352,6 +356,129 @@ tables: []`;
       expect(matchesFolderClaim('tests/myfolder/file.md', 'Tests/MyFolder')).toBe(true);
       expect(matchesFolderClaim('TESTS/MYFOLDER/FILE.md', 'tests/myfolder')).toBe(true);
       expect(matchesFolderClaim('Tests/OtherFolder/file.md', 'Tests/MyFolder')).toBe(false);
+    });
+  });
+
+  // ── Policy field validation (D-12 / SCHEMA-03) ────────────────────────────
+  // Tests that parsePluginSchema() enforces on_added: auto-track requires
+  // track_as at register_plugin time (registration boundary, not runtime).
+
+  describe('policy field validation at registration time', () => {
+    // Mock server helper — same pattern as plugin-records.integration.test.ts
+    function createMockServer() {
+      const handlers: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {};
+      const server = {
+        registerTool: (_name: string, _cfg: unknown, handler: (params: Record<string, unknown>) => Promise<unknown>) => {
+          handlers[_name] = handler;
+        },
+      } as unknown as McpServer;
+      return { server, getHandler: (name: string) => handlers[name] };
+    }
+
+    // policyConfig mirrors testConfig but uses DATABASE_URL for DDL operations
+    const policyConfig: FlashQueryConfig = {
+      instance: {
+        name: 'plugin-registration-test',
+        id: 'integration-test-manifest',
+        vault: { path: '/tmp/test-vault', markdownExtensions: ['.md'] },
+      },
+      supabase: {
+        url: process.env.SUPABASE_URL || 'https://test.supabase.co',
+        serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || 'test-key',
+        databaseUrl: process.env.DATABASE_URL || 'postgresql://localhost/test',
+        skipDdl: false,
+      },
+      embedding: { provider: 'none', model: '', apiKey: '', dimensions: 1536 },
+      logging: { level: 'error', output: 'stdout' },
+      git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
+      mcp: { transport: 'stdio' },
+      locking: { enabled: false, ttlSeconds: 30 },
+      server: { host: 'localhost', port: 3000 },
+    } as unknown as FlashQueryConfig;
+
+    let pgClient: pg.Client | undefined;
+
+    beforeAll(async () => {
+      // initSupabase is already done by outer beforeAll; initPlugins loads
+      // existing registry rows so register_plugin can call pluginManager.loadEntry
+      await initPlugins(policyConfig);
+      if (process.env.DATABASE_URL) {
+        pgClient = new pg.Client({ connectionString: process.env.DATABASE_URL });
+        await pgClient.connect();
+      }
+    });
+
+    afterAll(async () => {
+      // Clean up test_autotrack_pass registry row and its table (if created)
+      try {
+        await supabaseManager.getClient()
+          .from('fqc_plugin_registry')
+          .delete()
+          .eq('plugin_id', 'test_autotrack_pass')
+          .eq('instance_id', policyConfig.instance.id);
+      } catch (_err) { /* ignore */ }
+
+      if (pgClient) {
+        try {
+          await pgClient.query(`DROP TABLE IF EXISTS fqcp_test_autotrack_pass_default_contacts`);
+        } catch (_err) { /* ignore */ }
+        await pgClient.end();
+      }
+    });
+
+    it('register_plugin rejects schema with on_added: auto-track and no track_as', async () => {
+      const { server, getHandler } = createMockServer();
+      registerPluginTools(server, policyConfig);
+
+      const schemaYaml = `
+plugin:
+  id: test_autotrack_fail
+  name: AutoTrack Fail Test
+  version: 1
+tables:
+  - name: contacts
+    columns: []
+documents:
+  types:
+    - id: contact
+      folder: TestContacts/
+      on_added: auto-track
+`.trim();
+
+      const result = await getHandler('register_plugin')({
+        schema_yaml: schemaYaml,
+      }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toMatch(/track_as|auto-track/i);
+    });
+
+    it('register_plugin accepts schema with on_added: auto-track and valid track_as', async () => {
+      const { server, getHandler } = createMockServer();
+      registerPluginTools(server, policyConfig);
+
+      const schemaYaml = `
+plugin:
+  id: test_autotrack_pass
+  name: AutoTrack Pass Test
+  version: 1
+tables:
+  - name: contacts
+    columns: []
+documents:
+  types:
+    - id: contact
+      folder: TestContactsValid/
+      on_added: auto-track
+      track_as: contacts
+`.trim();
+
+      const result = await getHandler('register_plugin')({
+        schema_yaml: schemaYaml,
+      }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+      // Policy validation passes when track_as references a real table in the schema
+      expect(result.isError).toBeFalsy();
     });
   });
 });
