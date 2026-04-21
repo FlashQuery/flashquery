@@ -479,6 +479,9 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
         (typeof frontmatter.title === 'string' && frontmatter.title) ||
         titleFromFilename(relativePath);
 
+      const fqcOwner = typeof frontmatter.fqc_owner === 'string' ? frontmatter.fqc_owner : null;
+      const fqcType = typeof frontmatter.fqc_type === 'string' ? frontmatter.fqc_type : null;
+
       const dbRowByHash = hashToRow.get(H);
 
       if (dbRowByHash) {
@@ -525,6 +528,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             created_at: (frontmatter.created as string) || now,
             updated_at: now,
             needs_frontmatter_repair: true,
+            ownership_plugin_id: fqcOwner,
+            ownership_type: fqcType,
           });
           seenFqcIds.add(newFqcId);
           newFiles++;
@@ -627,9 +632,11 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
 
         if (dbRowById) {
           // CONTENT CHANGED: known file (by fqc_id), new content
-          const updates: Record<string, string> = {
+          const updates: Record<string, unknown> = {
             content_hash: H,
             updated_at: now,
+            ownership_plugin_id: fqcOwner,
+            ownership_type: fqcType,
           };
           if (dbRowById.path !== relativePath) {
             const originalAbsPath = `${vaultRoot}/${dbRowById.path}`;
@@ -650,6 +657,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
                 created_at: (frontmatter.created as string) || now,
                 updated_at: now,
                 needs_frontmatter_repair: true,
+                ownership_plugin_id: fqcOwner,
+                ownership_type: fqcType,
               });
               seenFqcIds.add(newFqcId);
               newFiles++;
@@ -752,6 +761,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               content_hash: H,
               created_at: (frontmatter.created as string) || now,
               updated_at: now,
+              ownership_plugin_id: fqcOwner,
+              ownership_type: fqcType,
             });
             seenFqcIds.add(Y);
             newFiles++;
@@ -792,6 +803,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
                 updated_at: now,
                 status: (frontmatter.status as string) || dbRowByPath.status,
                 needs_frontmatter_repair: true,
+                ownership_plugin_id: fqcOwner,
+                ownership_type: fqcType,
               })
               .eq('id', reconnectedId);
             seenFqcIds.add(reconnectedId);
@@ -834,6 +847,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             created_at: (frontmatter.created as string) || now,
             updated_at: now,
             needs_frontmatter_repair: true,
+            ownership_plugin_id: fqcOwner,
+            ownership_type: fqcType,
           });
           seenFqcIds.add(newFqcId);
           newFiles++;
