@@ -50,8 +50,9 @@ describe('Shutdown E2E', () => {
         stderrLines.push(line);
         console.log('[FQC]', line.trim());
 
-        // Wait for server to be ready
-        if (line.includes('ready') && !readyLogged) {
+        // Wait for server to be ready — match exact banner line to avoid false positive
+        // on "description column already dropped" which also contains "ready"
+        if (line.includes('FlashQuery ready') && !readyLogged) {
           readyLogged = true;
           // Send SIGINT after server is ready
           setTimeout(() => {
@@ -75,8 +76,9 @@ describe('Shutdown E2E', () => {
         }
       });
 
-      // Handle process exit
-      fqcProcess!.on('exit', (code) => {
+      // Use 'close' (not 'exit') so all stderr data events are guaranteed to have
+      // arrived before we assert on stderrLines — 'exit' fires before stdio drains.
+      fqcProcess!.on('close', (code) => {
         clearTimeout(timeout);
 
         try {
@@ -145,7 +147,7 @@ describe('Shutdown E2E', () => {
         const line = data.toString();
         console.log('[FQC]', line.trim());
 
-        if (line.includes('ready') && !readyLogged) {
+        if (line.includes('FlashQuery ready') && !readyLogged) {
           readyLogged = true;
           setTimeout(() => {
             console.log('[TEST] Sending SIGTERM to FQC process...');
@@ -156,7 +158,7 @@ describe('Shutdown E2E', () => {
         }
       });
 
-      fqcProcess!.on('exit', (code) => {
+      fqcProcess!.on('close', (code) => {
         clearTimeout(timeout);
         try {
           // Exit code should be 0 (success), 1 (timeout), or null (signal-terminated)
@@ -193,7 +195,7 @@ describe('Shutdown E2E', () => {
         const line = data.toString();
         console.log('[FQC]', line.trim());
 
-        if (line.includes('ready') && !readyLogged) {
+        if (line.includes('FlashQuery ready') && !readyLogged) {
           readyLogged = true;
           setTimeout(() => {
             console.log('[TEST] Sending SIGINT to FQC process...');
@@ -205,7 +207,7 @@ describe('Shutdown E2E', () => {
         }
       });
 
-      fqcProcess!.on('exit', (code) => {
+      fqcProcess!.on('close', (code) => {
         clearTimeout(timeout);
         const exitTime = Date.now() - signalSentAt;
 
