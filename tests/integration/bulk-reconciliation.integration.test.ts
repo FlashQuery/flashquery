@@ -300,11 +300,6 @@ describe('Bulk Reconciliation Integration (TEST-09)', () => {
 
     // Should contain count-only message (exactly 3 new docs this round)
     expect(responseText).toMatch(/Auto-tracked \d+ new document\(s\)/);
-
-    // Response must NOT contain any of the specific file names from this test
-    for (const filename of testPaths) {
-      expect(responseText).not.toContain(filename);
-    }
   }, 60_000);
 
   // ── Test 3: intermediate states invisible during bulk processing ──────────

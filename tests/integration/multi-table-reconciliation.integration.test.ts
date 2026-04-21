@@ -142,6 +142,30 @@ describe('Multi-Table Reconciliation Integration', () => {
     initEmbedding(config); // gracefully degrades to NullEmbeddingProvider when apiKey is empty
     await initPlugins(config);
 
+    // Idempotent pre-test cleanup — removes stale data from interrupted previous runs
+    for (const table of createdTables) {
+      await pgClient.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(table)}`).catch(() => {});
+    }
+    await supabaseManager.getClient()
+      .from('fqc_pending_plugin_review')
+      .delete()
+      .eq('plugin_id', 'multi_table_test');
+    await supabaseManager.getClient()
+      .from('fqc_documents')
+      .delete()
+      .eq('instance_id', INSTANCE_ID);
+    // Reset ownership for any documents that had ownership set by this plugin in a previous run.
+    // This prevents Path 2 (ownership_type-based) from finding stale docs that couldn't be deleted
+    // due to FK constraints from plugin tables in other test suites.
+    await supabaseManager.getClient()
+      .from('fqc_documents')
+      .update({ ownership_plugin_id: null, ownership_type: null })
+      .eq('ownership_plugin_id', 'multi_table_test');
+    await supabaseManager.getClient()
+      .from('fqc_plugin_registry')
+      .delete()
+      .eq('instance_id', INSTANCE_ID);
+
     // Create vault subdirectories
     await mkdir(join(vaultPath, 'contacts'), { recursive: true });
     await mkdir(join(vaultPath, 'notes'), { recursive: true });

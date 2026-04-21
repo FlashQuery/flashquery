@@ -161,6 +161,23 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     pgClient = new pg.Client({ connectionString: TEST_DATABASE_URL });
     await pgClient.connect();
 
+    // Idempotent pre-test cleanup — removes stale data from interrupted previous runs
+    for (const table of [contactsTable, legacyTable]) {
+      await pgClient.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(table)}`).catch(() => {});
+    }
+    await supabaseManager.getClient()
+      .from('fqc_pending_plugin_review')
+      .delete()
+      .in('plugin_id', ['rec_int_test', 'rec_legacy_test']);
+    await supabaseManager.getClient()
+      .from('fqc_documents')
+      .delete()
+      .eq('instance_id', INSTANCE_ID);
+    await supabaseManager.getClient()
+      .from('fqc_plugin_registry')
+      .delete()
+      .eq('instance_id', INSTANCE_ID);
+
     // Register the reconciliation plugin
     const { server, getHandler } = createMockServer();
     registerPluginTools(server, config);

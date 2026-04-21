@@ -690,7 +690,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             .from('fqc_pending_plugin_review')
             .delete()
             .eq('plugin_id', plugin_id)
-            .eq('instance_id', instanceName);
+            .eq('instance_id', config.instance.id);
         } catch (err) {
           logger.error(`Failed to delete pending plugin reviews: ${err instanceof Error ? err.message : String(err)}`);
         }
