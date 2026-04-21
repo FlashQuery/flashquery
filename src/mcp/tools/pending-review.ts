@@ -22,7 +22,7 @@ export function registerPendingReviewTools(server: McpServer, config: FlashQuery
           .default('default')
           .describe('Plugin instance identifier (default: "default")'),
         fqc_ids: z
-          .array(z.string().uuid())
+          .array(z.string())
           .default([])
           .describe('Document IDs to clear. Empty array = query mode.'),
       },
@@ -39,6 +39,15 @@ export function registerPendingReviewTools(server: McpServer, config: FlashQuery
         // Use the FQC server instance ID (config.instance.id) for DB scoping, not the plugin instance name
         const fqcInstanceId = config.instance?.id ?? 'default';
         const supabase = supabaseManager.getClient();
+
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        const invalidIds = fqc_ids.filter(id => !UUID_RE.test(id));
+        if (invalidIds.length > 0) {
+          return {
+            content: [{ type: 'text' as const, text: `Error: invalid UUID(s) in fqc_ids: ${invalidIds.join(', ')}` }],
+            isError: true,
+          };
+        }
 
         if (fqc_ids.length > 0) {
           // Clear mode: delete specified rows (idempotent — missing IDs silently ignored by Postgres IN())
