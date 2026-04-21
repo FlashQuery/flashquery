@@ -16,7 +16,6 @@ import { registerPluginTools } from './tools/plugins.js';
 import { registerRecordTools } from './tools/records.js';
 import { registerCompoundTools } from './tools/compound.js';
 import { registerScanTools } from './tools/scan.js';
-import { registerDiscoveryTools } from './tools/discovery.js';
 import { registerPendingReviewTools } from './tools/pending-review.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 
@@ -447,7 +446,6 @@ function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
   registerRecordTools(server, config);
   registerCompoundTools(server, config);
   registerScanTools(server, config);
-  registerDiscoveryTools(server, config);
   registerPendingReviewTools(server, config);
   return server;
 }

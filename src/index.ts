@@ -28,7 +28,6 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, resolveConfigPath, getDeprecationWarnings } from './config/loader.js';
 import { unlockCommand } from './cli/commands/unlock.js';
-import { discoverCommand } from './cli/commands/discover.js';
 import { initLogger, logger } from './logging/logger.js';
 import { checkPortAvailable } from './server/port-checker.js';
 import { initSupabase } from './storage/supabase.js';
@@ -39,7 +38,6 @@ import { initPlugins, pluginManager } from './plugins/manager.js';
 import { initMCP } from './mcp/server.js';
 import { initializeShutdownHandlers } from './server/shutdown.js';
 import { runScanOnce, repairFrontmatter } from './services/scanner.js';
-import { processDiscoveryQueueAsync } from './services/discovery-coordinator.js';
 import { loadPluginManifests } from './services/manifest-loader.js';
 import type { FolderMapping } from './services/manifest-loader.js';
 
@@ -51,7 +49,7 @@ const { version } = require('../package.json') as { version: string };
 // ─────────────────────────────────────────────────────────────────────────────
 
 export { runScanOnce, repairFrontmatter } from './services/scanner.js';
-export type { ScanResult, DiscoveryQueueItem } from './services/scanner.js';
+export type { ScanResult } from './services/scanner.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // runScanCommand — exported for unit testing
@@ -82,17 +80,11 @@ export async function runScanCommand(configPath: string): Promise<void> {
       // Continue with empty mappings
     }
     const scanResult = await runScanOnce(config);
-    const { hashMismatches, statusMismatches, newFiles, movedFiles, deletedFiles, discoveryQueue } = scanResult;
+    const { hashMismatches, statusMismatches, newFiles, movedFiles, deletedFiles } = scanResult;
     process.stderr.write(
       `Scan complete: ${newFiles} new file(s), ${movedFiles} moved, ${deletedFiles} missing, ` +
       `${hashMismatches} hash mismatch(es) queued for re-embed, ${statusMismatches} status mismatch(es) logged.\n`
     );
-
-    // Fire-and-forget discovery processing for documents in plugin-claimed folders
-    // Discovery runs asynchronously; scanner doesn't wait for results (PERF-02)
-    void processDiscoveryQueueAsync(discoveryQueue, config).catch((err: unknown) => {
-      logger.error(`Discovery queue processing failed: ${err instanceof Error ? err.message : String(err)}`);
-    });
 
     process.exit(0);
     return;
@@ -343,7 +335,6 @@ if (isMain) {
     });
 
   program.addCommand(unlockCommand);
-  program.addCommand(discoverCommand);
 
   program.parseAsync(process.argv).catch((err: unknown) => {
     console.error(err instanceof Error ? err.message : String(err));
