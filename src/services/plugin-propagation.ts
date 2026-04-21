@@ -92,8 +92,8 @@ export async function propagateFqcIdChange(
   }
 
   const pgClient = createPgClientIPv4(dbUrl);
-  await pgClient.connect();
   try {
+    await pgClient.connect();
     const result = await pgClient.query<{ table_name: string }>(`
       SELECT DISTINCT table_name
       FROM information_schema.columns
