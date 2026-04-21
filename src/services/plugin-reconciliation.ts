@@ -135,7 +135,7 @@ function emptyResult(): ReconciliationResult {
 // Self-healing ALTER TABLE helper (RECON-08 / D-10)
 // ─────────────────────────────────────────────────────────────────────────────
 
-async function ensureLastSeenColumn(tableName: string, pgClient: pg.Client): Promise<void> {
+export async function ensureLastSeenColumn(tableName: string, pgClient: pg.Client): Promise<void> {
   if (verifiedTables.has(tableName)) return;
   const { rows } = await pgClient.query<{ exists: number }>(
     `SELECT 1 AS exists FROM information_schema.columns
