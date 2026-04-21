@@ -1,39 +1,21 @@
 /**
- * Mock plugin implementations for Phase 59 integration tests.
+ * Mock plugin implementations for reconciliation-based integration tests.
  *
- * Provides configurable mock plugins with controllable callbacks for:
- * - on_document_discovered: configurable claim returns and error injection
- * - on_document_changed / on_document_deleted: configurable delivery results
- * - Latency simulation for realistic multi-plugin timing tests
+ * Provides MockPluginBuilder for configuring plugins with declarative policy fields
+ * (on_added, on_moved, on_modified). Use buildPluginSchemaYaml() to emit schema YAML
+ * compatible with parsePluginSchema() in src/plugins/manager.ts.
  */
 
 import type { PluginManifest, PluginDocumentType } from './discovery-fixtures.js';
-import type { PluginClaim } from '../../src/services/plugin-skill-invoker.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Callback type definitions
+// PluginSchemaPolicy — policy overrides for buildPluginSchemaYaml()
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Callback invoked when plugin discovers a document */
-export type DiscoveryCallback = (
-  path: string,
-  fqcId: string,
-  ownership?: { plugin_id: string; type?: string }
-) => Promise<PluginClaim>;
-
-/** Callback invoked when a watched document changes */
-export type ChangeCallback = (
-  path: string,
-  fqcId: string,
-  changes?: any
-) => Promise<{ acknowledged: boolean; error?: string }>;
-
-/** Recorded invocation for assertion verification */
-export interface SkillInvocation {
-  path: string;
-  fqcId: string;
-  timestamp: number;
-  args?: any[];
+export interface PluginSchemaPolicy {
+  autoTrack?: { tableName: string; fieldMap?: Record<string, string>; template?: string };
+  onMoved?: 'keep-tracking' | 'stop-tracking';
+  onModified?: 'sync-fields' | 'ignore';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,23 +29,20 @@ export interface SkillInvocation {
  * ```typescript
  * const mock = new MockPluginBuilder('crm')
  *   .withDocumentType({ id: 'contact', folder: 'CRM/Contacts/', access_level: 'read-write' })
- *   .onDiscovered(async (path, fqcId) => ({ claim: 'owner', type: 'contact' }))
- *   .withLatency(50)
+ *   .withAutoTrack('crm_contacts')
+ *   .withOnMoved('keep-tracking')
+ *   .withOnModified('sync-fields')
  *   .build();
  * ```
  */
 export class MockPluginBuilder {
   private pluginId: string;
   private documentTypes: PluginDocumentType[] = [];
-  private discoveryCallback: DiscoveryCallback | null = null;
-  private changeCallback: ChangeCallback | null = null;
   private latencyMs: number = 0;
   private version: string = '1.0.0';
-
-  /** Recorded discovery invocations for test assertions */
-  public discoveryInvocations: SkillInvocation[] = [];
-  /** Recorded change invocations for test assertions */
-  public changeInvocations: SkillInvocation[] = [];
+  private autoTrackConfig: { tableName: string; fieldMap?: Record<string, string>; template?: string } | null = null;
+  private onMovedPolicy: 'keep-tracking' | 'stop-tracking' | null = null;
+  private onModifiedPolicy: 'sync-fields' | 'ignore' | null = null;
 
   constructor(pluginId: string) {
     this.pluginId = pluginId;
@@ -85,18 +64,6 @@ export class MockPluginBuilder {
     return this;
   }
 
-  /** Set the on_document_discovered callback */
-  onDiscovered(callback: DiscoveryCallback): this {
-    this.discoveryCallback = callback;
-    return this;
-  }
-
-  /** Set the on_document_changed / on_document_deleted callback */
-  onChanged(callback: ChangeCallback): this {
-    this.changeCallback = callback;
-    return this;
-  }
-
   /** Add artificial delay for timing tests (milliseconds) */
   withLatency(ms: number): this {
     this.latencyMs = ms;
@@ -110,72 +77,68 @@ export class MockPluginBuilder {
   }
 
   /**
-   * Build the plugin manifest and return the configured plugin.
+   * Configure this plugin's document type to auto-track documents via reconciliation.
+   * Sets on_added: auto-track and track_as: tableName in the emitted schema YAML.
+   * Also registers a minimal tables: entry so parsePluginSchema() validation passes.
+   */
+  withAutoTrack(tableName: string, fieldMap?: Record<string, string>, template?: string): this {
+    this.autoTrackConfig = { tableName, fieldMap, template };
+    return this;
+  }
+
+  /**
+   * Set the on_moved policy for this plugin's document types.
+   * Note: use 'stop-tracking' (not 'untrack') — matches DocumentTypePolicy.on_moved.
+   */
+  withOnMoved(policy: 'keep-tracking' | 'stop-tracking'): this {
+    this.onMovedPolicy = policy;
+    return this;
+  }
+
+  /**
+   * Set the on_modified policy for this plugin's document types.
+   */
+  withOnModified(policy: 'sync-fields' | 'ignore'): this {
+    this.onModifiedPolicy = policy;
+    return this;
+  }
+
+  /**
+   * Build the plugin manifest and return it with the plugin ID.
    * The returned manifest can be registered in the database for tests.
    */
   build(): {
     manifest: PluginManifest;
     pluginId: string;
-    invokeDiscovery: DiscoveryCallback;
-    invokeChange: ChangeCallback;
-    discoveryInvocations: SkillInvocation[];
-    changeInvocations: SkillInvocation[];
   } {
-    const self = this;
     const manifest: PluginManifest = {
       plugin_id: this.pluginId,
       version: this.version,
       document_types: [...this.documentTypes],
     };
 
-    const invokeDiscovery: DiscoveryCallback = async (path, fqcId, ownership) => {
-      if (self.latencyMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, self.latencyMs));
-      }
-
-      self.discoveryInvocations.push({
-        path,
-        fqcId,
-        timestamp: Date.now(),
-        args: [path, fqcId, ownership],
-      });
-
-      if (self.discoveryCallback) {
-        return self.discoveryCallback(path, fqcId, ownership);
-      }
-
-      // Default: return 'none' claim (non-participating)
-      return { claim: 'none' };
-    };
-
-    const invokeChange: ChangeCallback = async (path, fqcId, changes) => {
-      if (self.latencyMs > 0) {
-        await new Promise((resolve) => setTimeout(resolve, self.latencyMs));
-      }
-
-      self.changeInvocations.push({
-        path,
-        fqcId,
-        timestamp: Date.now(),
-        args: [path, fqcId, changes],
-      });
-
-      if (self.changeCallback) {
-        return self.changeCallback(path, fqcId, changes);
-      }
-
-      // Default: acknowledge
-      return { acknowledged: true };
-    };
-
     return {
       manifest,
       pluginId: this.pluginId,
-      invokeDiscovery,
-      invokeChange,
-      discoveryInvocations: this.discoveryInvocations,
-      changeInvocations: this.changeInvocations,
     };
+  }
+
+  /**
+   * Build the plugin manifest and emit schema YAML with policy fields applied.
+   * Use this in tests instead of calling buildPluginSchemaYaml(manifest) directly
+   * when policy builder methods (withAutoTrack, withOnMoved, withOnModified) are used.
+   */
+  buildSchemaYaml(): string {
+    const manifest: PluginManifest = {
+      plugin_id: this.pluginId,
+      version: this.version,
+      document_types: [...this.documentTypes],
+    };
+    const policy: PluginSchemaPolicy = {};
+    if (this.autoTrackConfig) policy.autoTrack = this.autoTrackConfig;
+    if (this.onMovedPolicy) policy.onMoved = this.onMovedPolicy;
+    if (this.onModifiedPolicy) policy.onModified = this.onModifiedPolicy;
+    return buildPluginSchemaYaml(manifest, Object.keys(policy).length > 0 ? policy : undefined);
   }
 }
 
@@ -206,99 +169,6 @@ export function simpleMockPlugin(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// errorThrowingPlugin — Plugin that throws on discovery callback
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Create a mock plugin whose on_document_discovered callback throws an error.
- * Used for error path testing (ERR-01 validation).
- *
- * @param pluginId - Plugin identifier
- * @param errorMessage - Error message to throw
- * @param folders - Folder claims for the plugin
- */
-export function errorThrowingPlugin(
-  pluginId: string,
-  errorMessage: string,
-  folders: Array<{ folderPath: string; documentTypeId: string }> = []
-): MockPluginBuilder {
-  const builder = new MockPluginBuilder(pluginId);
-
-  for (const f of folders) {
-    builder.withFolder(f.folderPath, f.documentTypeId);
-  }
-
-  builder.onDiscovered(async () => {
-    throw new Error(errorMessage);
-  });
-
-  return builder;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// slowPlugin — Plugin with configurable callback latency
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Create a mock plugin with artificial latency on callbacks.
- * Used in multi-plugin tests to verify ordering and timing.
- *
- * @param pluginId - Plugin identifier
- * @param delayMs - Artificial delay in milliseconds per callback
- * @param claim - Claim type to return (defaults to 'read-only')
- * @param folders - Folder claims for the plugin
- */
-export function slowPlugin(
-  pluginId: string,
-  delayMs: number,
-  claim: 'owner' | 'read-write' | 'read-only' | 'none' = 'read-only',
-  folders: Array<{ folderPath: string; documentTypeId: string }> = []
-): MockPluginBuilder {
-  const builder = new MockPluginBuilder(pluginId).withLatency(delayMs);
-
-  for (const f of folders) {
-    builder.withFolder(f.folderPath, f.documentTypeId);
-  }
-
-  builder.onDiscovered(async () => ({
-    claim,
-    type: folders[0]?.documentTypeId,
-  }));
-
-  return builder;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// errorChangePlugin — Plugin whose change callback throws
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Create a mock plugin whose on_document_changed callback throws an error.
- * Used for change notification error path testing.
- *
- * @param pluginId - Plugin identifier
- * @param errorMessage - Error message to throw
- * @param folders - Folder claims for the plugin
- */
-export function errorChangePlugin(
-  pluginId: string,
-  errorMessage: string,
-  folders: Array<{ folderPath: string; documentTypeId: string }> = []
-): MockPluginBuilder {
-  const builder = new MockPluginBuilder(pluginId);
-
-  for (const f of folders) {
-    builder.withFolder(f.folderPath, f.documentTypeId);
-  }
-
-  builder.onChanged(async () => {
-    throw new Error(errorMessage);
-  });
-
-  return builder;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // buildPluginSchemaYaml — Convert PluginManifest to database schema_yaml format
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -306,16 +176,29 @@ export function errorChangePlugin(
  * Convert a PluginManifest to the schema_yaml string format expected by the database.
  * Used when registering mock plugins in fqc_plugin_registry.
  *
+ * Accepts an optional PluginSchemaPolicy to emit reconciliation policy fields
+ * (on_added, on_moved, on_modified, track_as, template, field_map) and the
+ * required tables: section when on_added: auto-track is used.
+ *
  * @param manifest - Plugin manifest to serialize
+ * @param policy - Optional policy overrides for reconciliation behaviour
  */
-export function buildPluginSchemaYaml(manifest: PluginManifest): string {
+export function buildPluginSchemaYaml(manifest: PluginManifest, policy?: PluginSchemaPolicy): string {
   const lines = [
     `id: ${manifest.plugin_id}`,
     `name: ${manifest.plugin_id} Test Plugin`,
     `version: ${manifest.version}`,
-    `documents:`,
-    `  types:`,
   ];
+
+  // Emit tables: section when auto-tracking (required by parsePluginSchema validation)
+  if (policy?.autoTrack) {
+    lines.push(`tables:`);
+    lines.push(`  - name: ${policy.autoTrack.tableName}`);
+    lines.push(`    columns: []`);
+  }
+
+  lines.push(`documents:`);
+  lines.push(`  types:`);
 
   for (const dt of manifest.document_types) {
     lines.push(`    - id: ${dt.id}`);
@@ -325,6 +208,27 @@ export function buildPluginSchemaYaml(manifest: PluginManifest): string {
     }
     if (dt.access_level) {
       lines.push(`      access_level: ${dt.access_level}`);
+    }
+
+    // Emit policy fields when set
+    if (policy?.autoTrack) {
+      lines.push(`      on_added: auto-track`);
+      lines.push(`      track_as: ${policy.autoTrack.tableName}`);
+      if (policy.autoTrack.template) {
+        lines.push(`      template: ${policy.autoTrack.template}`);
+      }
+      if (policy.autoTrack.fieldMap && Object.keys(policy.autoTrack.fieldMap).length > 0) {
+        lines.push(`      field_map:`);
+        for (const [fmKey, fmVal] of Object.entries(policy.autoTrack.fieldMap)) {
+          lines.push(`        ${fmKey}: ${fmVal}`);
+        }
+      }
+    }
+    if (policy?.onMoved) {
+      lines.push(`      on_moved: ${policy.onMoved}`);
+    }
+    if (policy?.onModified) {
+      lines.push(`      on_modified: ${policy.onModified}`);
     }
   }
 
