@@ -12,8 +12,6 @@ import { listMarkdownFiles, computeHash } from '../mcp/tools/documents.js';
 import { isValidUuid } from '../utils/uuid.js';
 import { propagateFqcIdChange } from './plugin-propagation.js';
 import { getFolderClaimsMap } from '../plugins/manager.js';
-import { getWatcherMap, invokeChangeNotifications } from './discovery-orchestrator.js';
-import type { ChangePayload } from './plugin-skill-invoker.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
 
@@ -629,17 +627,6 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
 
         if (dbRowById) {
           // CONTENT CHANGED: known file (by fqc_id), new content
-          // NOTIF-01 PREREQUISITE: Compute change payload for notification
-          // This must happen BEFORE we invoke callbacks, so we have the full change details
-          const detectionResult = detectChanges(dbRowById, rawContent);
-          const changePayload: ChangePayload | null = detectionResult.changes ? {
-            content: detectionResult.changes.content,
-            frontmatter: detectionResult.changes.frontmatter,
-            modified_at: detectionResult.changes.modified_at,
-            size_bytes: detectionResult.changes.size_bytes,
-            content_hash: detectionResult.changes.content_hash,
-          } : null;
-
           const updates: Record<string, string> = {
             content_hash: H,
             updated_at: now,
