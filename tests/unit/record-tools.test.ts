@@ -969,7 +969,7 @@ describe('record tools — reconciliation preamble (D-07)', () => {
     const handler = getHandler('create_record');
     await handler({ plugin_id: 'crm', table: 'tasks', fields: {} });
 
-    expect(reconcilePluginDocuments).toHaveBeenCalledWith('crm', 'default');
+    expect(reconcilePluginDocuments).toHaveBeenCalledWith('crm', 'default', expect.any(String));
     expect(executeReconciliationActions).toHaveBeenCalled();
   });
 
