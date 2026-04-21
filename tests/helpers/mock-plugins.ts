@@ -80,6 +80,10 @@ export class MockPluginBuilder {
    * Configure this plugin's document type to auto-track documents via reconciliation.
    * Sets on_added: auto-track and track_as: tableName in the emitted schema YAML.
    * Also registers a minimal tables: entry so parsePluginSchema() validation passes.
+   *
+   * NOTE: buildSchemaYaml() applies policy fields to ALL document types in the manifest.
+   * Only use this builder when the plugin has a single document type. For multi-type
+   * plugins, construct schema YAML directly.
    */
   withAutoTrack(tableName: string, fieldMap?: Record<string, string>, template?: string): this {
     this.autoTrackConfig = { tableName, fieldMap, template };

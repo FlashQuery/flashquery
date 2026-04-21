@@ -577,9 +577,9 @@ describe.skipIf(SKIP_DB)('resurrection lifecycle (RO-46)', () => {
         `SELECT id, fqc_id FROM "${tableName}" WHERE status = 'active' LIMIT 1`
       );
       if (res.rows.length === 0) {
-        // No active row yet — skip rather than fail (auto-track may not have fired)
         await pgClient.end().catch(() => {});
-        return;
+        // Treat as a failed precondition, not a silent pass
+        throw new Error('Resurrection precondition failed: no active plugin row found — auto-track in beforeAll did not fire');
       }
       pluginRowId = res.rows[0].id as string;
       aliceFqcId = res.rows[0].fqc_id as string;

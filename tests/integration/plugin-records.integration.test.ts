@@ -12,6 +12,8 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 // plugin-record CRUD tests do not trigger real reconciliation side effects
 // (vault file-system scans, plugin table writes) that would interfere with
 // test fixtures.  Approach (b) from D-11: backward-compatible empty result.
+// .js extension required: Vitest ESM resolver maps import paths verbatim; the
+// compiled module lives at plugin-reconciliation.js in the dist graph.
 vi.mock('../../src/services/plugin-reconciliation.js', () => ({
   reconcilePluginDocuments: vi.fn().mockResolvedValue({
     added: [],
