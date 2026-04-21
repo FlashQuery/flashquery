@@ -571,9 +571,10 @@ describe.skipIf(SKIP_DB)('resurrection lifecycle (RO-46)', () => {
     await pgClient.connect();
 
     let pluginRowId: string | null = null;
+    let aliceFqcId: string | null = null;
     try {
       const res = await pgClient.query(
-        `SELECT id FROM "${tableName}" WHERE status = 'active' LIMIT 1`
+        `SELECT id, fqc_id FROM "${tableName}" WHERE status = 'active' LIMIT 1`
       );
       if (res.rows.length === 0) {
         // No active row yet — skip rather than fail (auto-track may not have fired)
@@ -581,6 +582,7 @@ describe.skipIf(SKIP_DB)('resurrection lifecycle (RO-46)', () => {
         return;
       }
       pluginRowId = res.rows[0].id as string;
+      aliceFqcId = res.rows[0].fqc_id as string;
 
       // Simulate deletion: archive the plugin table row
       await pgClient.query(
@@ -600,8 +602,12 @@ describe.skipIf(SKIP_DB)('resurrection lifecycle (RO-46)', () => {
     invalidateReconciliationCache();
     const result = await reconcilePluginDocuments(pluginId, pluginInstance, TEST_DATABASE_URL);
 
-    expect(result.resurrected.length).toBeGreaterThan(0);
-    expect(result.added.length).toBe(0);
+    // Alice must appear as resurrected (archived plugin row + active fqc_documents row)
+    expect(result.resurrected.some((r) => r.fqcId === aliceFqcId)).toBe(true);
+    // Alice must NOT appear as added (which would mean she was misclassified)
+    // Note: other documents from unrelated test runs may appear as 'added' in the
+    // shared DB, so we check per-document rather than asserting added.length === 0.
+    expect(result.added.some((d) => d.fqcId === aliceFqcId)).toBe(false);
 
     // Execute actions to write the pending review row
     await executeReconciliationActions(result, pluginId, pluginInstance, instanceId, TEST_DATABASE_URL);
