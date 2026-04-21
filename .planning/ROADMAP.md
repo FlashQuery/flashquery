@@ -54,7 +54,7 @@ Phases 72–80 complete. Phases 81–82 deferred to v2.7.
 - [x] **Phase 86: Record Tool Integration & Pending Review** — Wire reconciliation into all 5 record tools; create `fqc_pending_plugin_review` table and `clear_pending_reviews` MCP tool (completed 2026-04-21)
 - [x] **Phase 87: Scanner Modifications & Frontmatter Sync** — Sync `fqc_owner`/`fqc_type` frontmatter fields to DB columns; remove all notification code paths from scanner (completed 2026-04-21)
 - [x] **Phase 88: Legacy Infrastructure Removal** — Delete 5 source files, remove `flashquery discover` CLI command, drop `fqc_change_queue` table and obsolete columns (completed 2026-04-21)
-- [ ] **Phase 89: Test Helper Cleanup & Final Integration** — MockPluginBuilder updated, discovery-fixtures updated, full suite passes end-to-end
+- [x] **Phase 89: Test Helper Cleanup & Final Integration** — MockPluginBuilder updated, discovery-fixtures updated, full suite passes end-to-end (completed 2026-04-21)
 
 ### Progress Table
 
@@ -65,7 +65,7 @@ Phases 72–80 complete. Phases 81–82 deferred to v2.7.
 | 86. Record Tool Integration & Pending Review | 5/5 | Complete    | 2026-04-21 |
 | 87. Scanner Modifications & Frontmatter Sync | 3/3 | Complete    | 2026-04-21 |
 | 88. Legacy Infrastructure Removal | 6/6 | Complete    | 2026-04-21 |
-| 89. Test Helper & Existing Test Updates | 0/4 | Not started | — |
+| 89. Test Helper & Existing Test Updates | 4/4 | Complete    | 2026-04-21 |
 
 ---
 

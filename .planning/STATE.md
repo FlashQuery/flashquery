@@ -1,0 +1,97 @@
+---
+gsd_state_version: 1.0
+milestone: v2.8
+milestone_name: Plugin Callback Overhaul
+status: complete
+last_updated: "2026-04-21T13:45:00.000Z"
+last_activity: 2026-04-21 — Phase 89 complete (all 4 plans)
+progress:
+  total_phases: 6
+  completed_phases: 6
+  total_plans: 4
+  completed_plans: 4
+  percent: 100
+---
+
+# FlashQuery Core — State
+
+## Current Position
+
+Phase: 89 — COMPLETE
+Plan: 4 of 4
+Status: v2.8 milestone complete
+Last activity: 2026-04-21 — Phase 89 complete (resurrection lifecycle + mixed reconciliation tests, E2E shutdown fixes, full suite validation)
+
+```
+[########################################] 100% — 6/6 phases
+```
+
+## Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260415-cleanup-consolidate | Consolidate CLEANUP.md info into README.md and add verification to cleanup script | 2026-04-15 | d142f1a | [260415-cleanup-consolidate](./quick/260415-cleanup-consolidate/) |
+
+## Accumulated Context
+
+### Milestone v2.8 Initialization (2026-04-20)
+
+**Milestone:** Plugin Callback Overhaul — replace push-based plugin callbacks with reconcile-on-read pattern.
+
+**Phase structure:**
+
+| Phase | Name | Requirements |
+|-------|------|-------------|
+| 84 | Schema Parsing & Policy Infrastructure | SCHEMA-01 through SCHEMA-06 (6 reqs) |
+| 85 | Reconciliation Engine | RECON-01 through RECON-08 (8 reqs) |
+| 86 | Record Tool Integration & Pending Review | RECTOOLS-01 through RECTOOLS-09 (9 reqs) |
+| 87 | Scanner Modifications & Frontmatter Sync | SCANNER-01 through SCANNER-04 (4 reqs) |
+| 88 | Legacy Infrastructure Removal | LEGACY-01 through LEGACY-07 (7 reqs) |
+| 89 | Test Helper & Existing Test Updates | TEST-01 through TEST-17 (17 reqs) |
+
+**Dependencies:**
+
+- Phase 84: no dependencies (foundation)
+- Phase 85: depends on Phase 84
+- Phase 86: depends on Phases 84 + 85
+- Phase 87: depends on Phases 84 + 85 (parallel with Phase 86)
+- Phase 88: depends on Phases 85, 86, 87
+- Phase 89: depends on all previous phases
+
+**Key architectural decisions for this milestone:**
+
+- `ParsedPluginSchema` interface → `DocumentTypePolicy` (updated name)
+- `atomicWriteFrontmatter()` extracted to `src/utils/frontmatter.ts` before legacy deletion
+- `fqc_change_queue` table dropped via `ALTER TABLE IF EXISTS` migration
+- Staleness cache threshold: 30 seconds (hardcoded, configurable in future)
+- `access: read-only` is a warning guardrail only — hard enforcement deferred post-v2.8
+- `flashquery discover` CLI command removed without replacement
+
+**Test suite baseline going into v2.8 (2026-04-15 post-v2.7):**
+
+- Phase 83 (FQC Name Change) completed 2026-04-16
+- Last known passing baseline: ~1117 unit / 323 integration / 40 E2E
+
+### Phase Numbering
+
+v2.7 ended at Phase 83. v2.8 runs Phases 84-89.
+
+### Phase 86 Decisions (2026-04-21)
+
+- `instance_id` in plugin tables and `fqc_pending_plugin_review` must be `config.instance.id` (FQC server identity), not the plugin instance name — these are distinct concepts
+- `executeReconciliationActions` receives `fqcInstanceId` as optional 4th param + `databaseUrl` as optional 5th param (threaded from config, falls back to `process.env.DATABASE_URL`)
+- `clear_pending_reviews` scopes by `config.instance.id`, not `plugin_instance` parameter
+- After auto-tracking a document, `updateDocumentOwnership` must be called so subsequent reconciliation classifies it as `unchanged` not `disassociated`
+- `search_records` reconciliation preamble now guarded by write-lock (consistent with other 4 record tools)
+- Code review fixes applied: WR-02 (databaseUrl threading), WR-03 (search_records lock), WR-04 (UUID validation error surface)
+
+### Phase 87 Decisions (2026-04-21)
+
+- `fqcOwner`/`fqcType` extracted null-safely from frontmatter (`typeof frontmatter.fqc_owner === 'string' ? frontmatter.fqc_owner : null`); synced to `ownership_plugin_id`/`ownership_type` on all 6 INSERT/content-change UPDATE paths; MOVE branch excluded (path-only update, no ownership change)
+- `fqc_change_queue` write blocks (NOTIF-01/NOTIF-02) fully removed from scanner.ts; `invokeChangeNotifications`, `getWatcherMap`, `ChangePayload` imports removed (~265 lines deleted)
+- `ensureLastSeenColumn` exported from `plugin-reconciliation.ts` so `propagateFqcIdChange()` can call it per-table during fqc_id UPDATE
+- `pgClient.connect()` must be inside the try block in `propagateFqcIdChange()` — placing it outside breaks graceful degradation (ECONNREFUSED propagates unhandled)
+
+### Known Issues Going Into v2.8
+
+None recorded. Baseline from v2.7 is production-ready.
