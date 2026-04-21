@@ -11,9 +11,9 @@ import matter from 'gray-matter';
 import { supabaseManager } from '../storage/supabase.js';
 import { logger } from '../logging/logger.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
-import { atomicWriteFrontmatter, vaultManager } from '../storage/vault.js';
+import { atomicWriteFrontmatter } from '../utils/frontmatter.js';
+import { vaultManager } from '../storage/vault.js';
 import { pluginManager, getTypeRegistryMap } from '../plugins/manager.js';
-import { updateDocumentOwnership } from './document-ownership.js';
 import type { DocumentTypePolicy, TypeRegistryEntry, RegistryEntry } from '../plugins/manager.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -401,11 +401,14 @@ export async function executeReconciliationActions(
       autoTracked++;
 
       // Update fqc_documents ownership so subsequent reconciliations classify correctly (not disassociated)
-      await updateDocumentOwnership(doc.fqcId, {
-        plugin_id: pluginId,
-        type: doc.typeId,
-        needs_discovery: false,
-      });
+      await supabase
+        .from('fqc_documents')
+        .update({
+          ownership_plugin_id: pluginId,
+          ownership_type: doc.typeId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', doc.fqcId);
 
       // Conditional pending review — only when template declared
       if (policy.template) {
