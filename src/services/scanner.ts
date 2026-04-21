@@ -11,7 +11,6 @@ import { logger } from '../logging/logger.js';
 import { listMarkdownFiles, computeHash } from '../mcp/tools/documents.js';
 import { isValidUuid } from '../utils/uuid.js';
 import { propagateFqcIdChange } from './plugin-propagation.js';
-import { getFolderClaimsMap } from '../plugins/manager.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
 
@@ -20,16 +19,6 @@ import { getIsShuttingDown } from '../server/shutdown-state.js';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const scanMutex = new Mutex();
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DiscoveryQueueItem — document needing plugin discovery
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface DiscoveryQueueItem {
-  fqcId: string;      // Document ID in fqc_documents table
-  path: string;       // Vault relative path (e.g., "CRM/Contacts/Sarah.md")
-  pluginId: string;   // Plugin that owns this folder
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ScanResult — summary of scan pass outcomes
@@ -41,7 +30,6 @@ export interface ScanResult {
   newFiles: number;
   movedFiles: number;
   deletedFiles: number;
-  discoveryQueue: DiscoveryQueueItem[]; // Documents requiring plugin discovery
   embeddingStatus: 'complete' | 'partial' | 'timed_out' | 'skipped'; // Result of embedding drain
   embedsAwaited: number; // Number of embed promises awaited during drain
 }
@@ -134,7 +122,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     // SHUT-10: Check shutdown flag immediately
     if (getIsShuttingDown()) {
       logger.info('scan: shutdown in progress, aborting');
-      return { hashMismatches: 0, statusMismatches: 0, newFiles: 0, movedFiles: 0, deletedFiles: 0, discoveryQueue: [], embeddingStatus: 'skipped', embedsAwaited: 0 };
+      return { hashMismatches: 0, statusMismatches: 0, newFiles: 0, movedFiles: 0, deletedFiles: 0, embeddingStatus: 'skipped', embedsAwaited: 0 };
     }
 
     const { supabaseManager } = await import('../storage/supabase.js');
@@ -977,48 +965,6 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     );
   }
 
-  // DISC-04: Build discovery queue for documents in plugin-claimed folders (Phase 54)
-  const discoveryQueue: DiscoveryQueueItem[] = [];
-  try {
-    // Phase 55: Folder mappings are loaded from plugin registry at startup
-    // via manifest-loader.ts and populated into folderClaimsMap by pluginManager.
-    // This allows scanner to identify documents in plugin-claimed folders and flag them for discovery.
-    const folderClaimsMap = getFolderClaimsMap(config);
-    if (folderClaimsMap.size > 0 && allDbDocs) {
-      for (const doc of allDbDocs) {
-        const docPath = (doc.path as string).toLowerCase();
-        const docFolderPath = dirname(docPath);
-        const docId = doc.id as string;
-
-        // Check if document is in any plugin-claimed folder
-        for (const [claimedFolder, { pluginId }] of folderClaimsMap.entries()) {
-          const claimedNorm = claimedFolder.toLowerCase();
-          if (docFolderPath === claimedNorm || docFolderPath.startsWith(`${claimedNorm}/`)) {
-            // Document is in a claimed folder - check if needs discovery
-            const { data: docData } = await supabase
-              .from('fqc_documents')
-              .select('ownership_plugin_id')
-              .eq('id', docId)
-              .single();
-
-            if (docData && !docData.ownership_plugin_id) {
-              discoveryQueue.push({
-                fqcId: docId,
-                path: doc.path as string,
-                pluginId,
-              });
-              // Set needs_discovery flag
-              await supabase.from('fqc_documents').update({ needs_discovery: true }).eq('id', docId);
-            }
-            break;
-          }
-        }
-      }
-    }
-  } catch (err: unknown) {
-    logger.warn(`scan: discovery queue building failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
-
   // ── EMBED-DRAIN: await all in-flight embed promises before returning ─────────
   //
   // Phase 1: The scan loop already collected embed promises for every file it
@@ -1126,7 +1072,6 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     newFiles,
     movedFiles,
     deletedFiles,
-    discoveryQueue,
     embeddingStatus,
     embedsAwaited,
   };
