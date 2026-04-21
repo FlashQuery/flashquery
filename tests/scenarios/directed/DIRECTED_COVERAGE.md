@@ -151,7 +151,7 @@ Registration, record CRUD, and teardown of plugin schemas.
 | P-09 | Search records with filters (AND logic) | test_plugin_search | 2026-04-14 | 2026-04-16 |
 | P-10 | Archived record excluded from search_records | test_plugin_lifecycle | 2026-04-14 | 2026-04-16 |
 | P-11 | Unregister plugin dry run shows impact without changes | test_plugin_registration | 2026-04-14 | 2026-04-16 |
-| P-12 | Unregister plugin confirmed drops tables and clears data | test_plugin_registration | 2026-04-14 | 2026-04-16 |
+| P-12 | Unregister plugin confirmed drops tables, clears data, and removes all `fqc_pending_plugin_review` rows for the plugin | test_plugin_registration | 2026-04-21 | 2026-04-16 |
 | P-13 | Register plugin with schema migration (add column) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
 | P-14 | Register plugin rejects unsafe migration (remove column) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
 | P-15 | Plugin instance isolation (same plugin, different instances) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
@@ -191,8 +191,8 @@ Vault scanning, file listing, and directory management.
 | F-13 | remove_directory fails on non-empty directory | test_directory_operations | 2026-04-14 | 2026-04-16 |
 | F-14 | remove_directory prevents vault root removal | test_directory_operations | 2026-04-14 | 2026-04-16 |
 | F-15 | Path traversal protection (escape attempt blocked) | test_directory_operations | 2026-04-14 | 2026-04-16 |
-| F-16 | discover_document in flagged mode | test_discover_document | 2026-04-14 | 2026-04-16 |
-| F-17 | discover_document in paths mode | test_discover_document | 2026-04-14 | 2026-04-16 |
+| ~~F-16~~ | ~~discover_document in flagged mode~~ | ~~test_discover_document~~ | 2026-04-21 | 2026-04-16 |
+| ~~F-17~~ | ~~discover_document in paths mode~~ | ~~test_discover_document~~ | 2026-04-21 | 2026-04-16 |
 | F-18 | force_file_scan preserves user-defined frontmatter fields in newly discovered documents (scan merges FQC identity fields into existing frontmatter rather than replacing it) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
 
 ## 10. Briefing and Aggregation
@@ -255,6 +255,113 @@ Behaviors verifying that FlashQuery auto-commits to the vault's git repository w
 | G-02 | Auto-commit on document update (content change) | test_auto_commit_on_writes | 2026-04-14 | 2026-04-16 |
 | G-03 | Auto-commit on document archive/remove | test_auto_commit_on_writes | 2026-04-14 | 2026-04-16 |
 
+## 14. Plugin Reconciliation
+
+Behaviors verifying the reconcile-on-read engine: how record tool calls trigger reconciliation, how the six reconciliation states are classified and handled, and how declarative policies govern mechanical actions on auto-track, movement, modification, and pending review.
+
+### 14.1 Core Reconciliation
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-01 | Record tool call triggers reconciliation before executing the requested operation | — | 2026-04-21 | |
+| RO-02 | Reconciliation classifies every document into exactly one of six categories (added/resurrected/deleted/disassociated/moved/modified) plus an unchanged count | — | 2026-04-21 | |
+| RO-03 | Reconciliation is idempotent (re-run with no changes produces all unchanged, zero in other categories) | — | 2026-04-21 | |
+| RO-04 | New file in watched folder with no plugin row (active or archived) is classified as `added` | — | 2026-04-21 | |
+| RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs | — | 2026-04-21 | |
+| RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff | — | 2026-04-21 | |
+
+### 14.2 Auto-Track
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-06 | `on_added: auto-track` creates a plugin table row with columns populated from `field_map` | — | 2026-04-21 | |
+| RO-07 | `on_added: auto-track` writes `fqc_owner` and `fqc_type` into the document's frontmatter on disk | — | 2026-04-21 | |
+| RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row | — | 2026-04-21 | |
+| RO-09 | `on_added: auto-track` does NOT modify the document's body content (only frontmatter is changed) | — | 2026-04-21 | |
+| RO-10 | `on_added: auto-track` without a `template` does NOT create a pending review row | — | 2026-04-21 | |
+
+### 14.3 Ignore Policy
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-11 | `on_added: ignore` takes no action — no plugin row created, no frontmatter modified, no mention in tool response | — | 2026-04-21 | |
+| RO-12 | Missing policy fields use conservative defaults: `on_added: ignore`, `on_moved: keep-tracking`, `on_modified: ignore` | — | 2026-04-21 | |
+
+### 14.4 Deletion and Archival
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-13 | Document with `fqc_documents` status `missing` is classified as `deleted`; plugin row is archived | — | 2026-04-21 | |
+| RO-14 | Document with `fqc_documents` status `archived` (MCP-archived) is also classified as `deleted`; plugin row is archived | — | 2026-04-21 | |
+| RO-15 | Archiving a plugin row (due to deleted/disassociated/moved+untrack) does not delete the vault file | — | 2026-04-21 | |
+
+### 14.5 Disassociation
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-16 | Removing `fqc_owner`/`fqc_type` from frontmatter triggers `disassociated`; plugin row is archived | — | 2026-04-21 | |
+| RO-17 | Moving a file with frontmatter intact does NOT trigger `disassociated` (reports `moved` instead) | — | 2026-04-21 | |
+| RO-18 | Disassociated document remains `status: active` in `fqc_documents`; only the plugin row is archived | — | 2026-04-21 | |
+
+### 14.6 Resurrection
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row | — | 2026-04-21 | |
+| RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant | — | 2026-04-21 | |
+| RO-22 | Template is NOT surfaced on resurrection; `field_map` IS re-applied from current frontmatter | — | 2026-04-21 | |
+
+### 14.7 Movement
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-24 | `on_moved: keep-tracking` updates stored path silently; plugin row stays active | — | 2026-04-21 | |
+| RO-25 | `on_moved: untrack` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved | — | 2026-04-21 | |
+| RO-26 | `on_moved` defaults to `keep-tracking` when not declared | — | 2026-04-21 | |
+| RO-27 | After `keep-tracking` path update, subsequent reconciliation reports the document as `unchanged` | — | 2026-04-21 | |
+
+### 14.8 Modification and Field Sync
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-28 | `on_modified: sync-fields` re-applies `field_map` from current frontmatter and updates `last_seen_updated_at` | — | 2026-04-21 | |
+| RO-29 | `on_modified: ignore` takes no action (no field sync) | — | 2026-04-21 | |
+| RO-30 | `on_modified: ignore` still updates `last_seen_updated_at` (preventing re-evaluation on every subsequent pass) | — | 2026-04-21 | |
+| RO-59 | `field_map` sets NULL for frontmatter fields not present in the document | — | 2026-04-21 | |
+
+### 14.9 Frontmatter-Based Discovery
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-31 | Document with `fqc_type` in frontmatter is discovered as `added` even outside watched folders (global type registry Path 2) | — | 2026-04-21 | |
+| RO-32 | Scanner syncs `fqc_owner`/`fqc_type` frontmatter fields to `ownership_plugin_id`/`ownership_type` columns on every pass; removing them from frontmatter sets columns to NULL on next scan | — | 2026-04-21 | |
+
+### 14.10 Policy Validation
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-35 | `on_added: auto-track` without `track_as` causes `register_plugin` to reject or warn | — | 2026-04-21 | |
+| RO-36 | All policy field validation (value ranges, required companions like `track_as`) happens at `register_plugin` time, not at reconciliation time | — | 2026-04-21 | |
+| RO-60 | `access: read-only` emits a warning in the tool response when a tool call attempts to write to a document in that folder | — | 2026-04-21 | |
+
+### 14.11 Pending Plugin Review
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-38 | `clear_pending_reviews` with empty `fqc_ids` returns current pending list without deleting; with non-empty `fqc_ids` clears those items and returns remainder | — | 2026-04-21 | |
+| RO-39 | `clear_pending_reviews` is idempotent (clearing already-cleared `fqc_ids` is a no-op) | — | 2026-04-21 | |
+| RO-40 | Pending review rows cascade-delete when the referenced `fqc_documents` row is deleted | — | 2026-04-21 | |
+| RO-41 | `unregister_plugin` clears all `fqc_pending_plugin_review` rows for the plugin | — | 2026-04-21 | |
+
+### 14.12 Bulk and Multi-Table
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| RO-52 | Tool response summarizes bulk reconciliation by count (not enumeration) when items per category exceed threshold | — | 2026-04-21 | |
+| RO-54 | Auto-track frontmatter writes do not cause spurious `modified` flags on the next reconciliation pass | — | 2026-04-21 | |
+| RO-56 | Reconciliation scans all document-backed tables for a plugin in a single pass (not just the table implied by the current tool call) | — | 2026-04-21 | |
+| RO-58 | Auto-track routes the new plugin row to the correct table based on `track_as` for the matched folder | — | 2026-04-21 | |
+
 ---
 
 ## Coverage Summary
@@ -269,12 +376,13 @@ Behaviors verifying that FlashQuery auto-commits to the vault's git repository w
 | Memory Lifecycle | 15 | 15 | 0 |
 | Plugin Lifecycle | 15 | 15 | 0 |
 | Tag Operations | 7 | 7 | 0 |
-| File System Operations | 18 | 18 | 0 |
+| File System Operations | 16 | 16 | 0 |
 | Briefing | 3 | 3 | 0 |
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| **Total** | **146** | **142** | **4** |
+| Plugin Reconciliation | 43 | 0 | 43 |
+| **Total** | **187** | **140** | **47** |
 
 ---
 
