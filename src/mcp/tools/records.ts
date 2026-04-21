@@ -529,6 +529,20 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         };
       }
 
+      if (config.locking.enabled) {
+        const locked = await acquireLock(
+          supabaseManager.getClient(),
+          config.instance.id,
+          'records',
+          { ttlSeconds: config.locking.ttlSeconds }
+        );
+        if (!locked) {
+          return {
+            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to records. Retry in a few seconds.' }],
+            isError: true,
+          };
+        }
+      }
       try {
         // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
@@ -740,6 +754,10 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`search_records failed: ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+      } finally {
+        if (config.locking.enabled) {
+          await releaseLock(supabaseManager.getClient(), config.instance.id, 'records');
+        }
       }
     }
   );
