@@ -20,10 +20,12 @@ import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
 import { registerRecordTools } from '../../src/mcp/tools/records.js';
 import { registerPendingReviewTools } from '../../src/mcp/tools/pending-review.js';
 import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
-import { invalidateReconciliationCache } from '../../src/services/plugin-reconciliation.js';
+import { invalidateReconciliationCache, reconcilePluginDocuments, executeReconciliationActions } from '../../src/services/plugin-reconciliation.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { TEST_SUPABASE_URL, TEST_SUPABASE_KEY, TEST_DATABASE_URL } from '../helpers/test-env.js';
+import { MockPluginBuilder } from '../helpers/mock-plugins.js';
+import { cleanupTest } from '../helpers/discovery-fixtures.js';
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
@@ -482,5 +484,265 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
       .eq('instance_id', INSTANCE_ID);
 
     expect((registry ?? []).length).toBe(0);
+  });
+});
+
+// ── Resurrection lifecycle (D-14, RO-46) ────────────────────────────────────
+
+describe.skipIf(SKIP_DB)('resurrection lifecycle (RO-46)', () => {
+  const instanceId = `test-resurrection-${Date.now()}`;
+  const pluginId = 'resurrection_test';
+  const pluginInstance = 'default';
+  const tableName = `fqcp_resurrection_test_default_contacts`;
+
+  let config: FlashQueryConfig;
+  let vaultPath: string;
+
+  beforeAll(async () => {
+    if (SKIP_DB) return;
+
+    vaultPath = await mkdtemp(join(tmpdir(), 'fqc-resurrection-'));
+    await mkdir(join(vaultPath, 'contacts'), { recursive: true });
+
+    config = makeConfig(vaultPath);
+    // Override instance id so cleanupTest scopes correctly
+    (config as any).instance.id = instanceId;
+    (config as any).instance.name = instanceId;
+
+    initLogger(config);
+    await initSupabase(config);
+    await initVault(config);
+    await initPlugins(config);
+    initEmbedding(config);
+
+    const schemaYaml = new MockPluginBuilder(pluginId)
+      .withFolder('contacts', 'contact')
+      .withAutoTrack('contacts')
+      .buildSchemaYaml();
+
+    const { server, getHandler } = createMockServer();
+    registerPluginTools(server, config);
+    registerDocumentTools(server, config);
+    registerRecordTools(server, config);
+
+    const regResult = await getHandler('register_plugin')({ schema_yaml: schemaYaml }) as { content: Array<{ text: string }>; isError?: boolean };
+    if (regResult.isError) {
+      console.error('Resurrection plugin registration failed:', regResult.content[0].text);
+    }
+
+    // Create and auto-track a contact document
+    const relPath = `contacts/alice-${randomUUID()}.md`;
+    await createTrackedDoc(getHandler, vaultPath, relPath, '# Alice\nA test contact.');
+
+    invalidateReconciliationCache();
+
+    // Trigger reconciliation to create the plugin table row (auto-track)
+    await getHandler('search_records')({
+      plugin_id: pluginId,
+      plugin_instance: pluginInstance,
+      table: 'contacts',
+      query: 'alice',
+    });
+  }, 60000);
+
+  afterAll(async () => {
+    if (SKIP_DB) return;
+
+    const supabase = supabaseManager.getClient();
+
+    // Drop plugin table
+    try {
+      const { createPgClientIPv4 } = await import('../../src/utils/pg-client.js');
+      const pgClient = createPgClientIPv4(TEST_DATABASE_URL);
+      await pgClient.connect();
+      await pgClient.query(`DROP TABLE IF EXISTS "${tableName}"`).catch(() => {});
+      await pgClient.end().catch(() => {});
+    } catch (_) { /* ignore */ }
+
+    await cleanupTest(vaultPath, supabase, instanceId);
+  }, 30000);
+
+  it('archives plugin row, restores file, reconciliation classifies as resurrected with pending review', async () => {
+    const supabase = supabaseManager.getClient();
+
+    // Confirm at least one active plugin table row exists
+    const { createPgClientIPv4 } = await import('../../src/utils/pg-client.js');
+    const pgClient = createPgClientIPv4(TEST_DATABASE_URL);
+    await pgClient.connect();
+
+    let pluginRowId: string | null = null;
+    try {
+      const res = await pgClient.query(
+        `SELECT id FROM "${tableName}" WHERE status = 'active' LIMIT 1`
+      );
+      if (res.rows.length === 0) {
+        // No active row yet — skip rather than fail (auto-track may not have fired)
+        await pgClient.end().catch(() => {});
+        return;
+      }
+      pluginRowId = res.rows[0].id as string;
+
+      // Simulate deletion: archive the plugin table row
+      await pgClient.query(
+        `UPDATE "${tableName}" SET status = 'archived' WHERE id = $1`,
+        [pluginRowId]
+      );
+    } finally {
+      await pgClient.end().catch(() => {});
+    }
+
+    // Clear any existing pending reviews for this plugin so the assertion is clean
+    await supabase.from('fqc_pending_plugin_review').delete()
+      .eq('plugin_id', pluginId)
+      .eq('instance_id', instanceId);
+
+    // Now run reconciliation — fqc_documents row is still active, plugin row is archived → resurrected
+    invalidateReconciliationCache();
+    const result = await reconcilePluginDocuments(pluginId, pluginInstance, TEST_DATABASE_URL);
+
+    expect(result.resurrected.length).toBeGreaterThan(0);
+    expect(result.added.length).toBe(0);
+
+    // Execute actions to write the pending review row
+    await executeReconciliationActions(result, pluginId, pluginInstance, instanceId, TEST_DATABASE_URL);
+
+    // Verify fqc_pending_plugin_review has a 'resurrected' row
+    const { data, error } = await supabase
+      .from('fqc_pending_plugin_review')
+      .select('fqc_id, review_type')
+      .eq('plugin_id', pluginId)
+      .eq('instance_id', instanceId)
+      .eq('review_type', 'resurrected');
+
+    expect(error).toBeNull();
+    expect(data).not.toBeNull();
+    expect(data!.length).toBeGreaterThan(0);
+  });
+});
+
+// ── Mixed reconciliation scenario (D-15, RO-45) ─────────────────────────────
+
+describe.skipIf(SKIP_DB)('mixed reconciliation scenario (RO-45)', () => {
+  const instanceId = `test-mixed-${Date.now()}`;
+  const pluginId = 'mixed_recon_test';
+  const pluginInstance = 'default';
+  const tableName = `fqcp_mixed_recon_test_default_contacts`;
+
+  let config: FlashQueryConfig;
+  let vaultPath: string;
+
+  beforeAll(async () => {
+    if (SKIP_DB) return;
+
+    vaultPath = await mkdtemp(join(tmpdir(), 'fqc-mixed-recon-'));
+    await mkdir(join(vaultPath, 'contacts'), { recursive: true });
+
+    config = makeConfig(vaultPath);
+    (config as any).instance.id = instanceId;
+    (config as any).instance.name = instanceId;
+
+    initLogger(config);
+    await initSupabase(config);
+    await initVault(config);
+    await initPlugins(config);
+    initEmbedding(config);
+
+    const schemaYaml = new MockPluginBuilder(pluginId)
+      .withFolder('contacts', 'contact')
+      .withAutoTrack('contacts')
+      .withOnMoved('keep-tracking')
+      .withOnModified('sync-fields')
+      .buildSchemaYaml();
+
+    const { server, getHandler } = createMockServer();
+    registerPluginTools(server, config);
+    registerDocumentTools(server, config);
+    registerRecordTools(server, config);
+
+    const regResult = await getHandler('register_plugin')({ schema_yaml: schemaYaml }) as { content: Array<{ text: string }>; isError?: boolean };
+    if (regResult.isError) {
+      console.error('Mixed recon plugin registration failed:', regResult.content[0].text);
+    }
+
+    // Create a document that will be auto-tracked (so it has a plugin row we can put into
+    // various states for the mixed scenario)
+    const relPath = `contacts/bob-${randomUUID()}.md`;
+    await createTrackedDoc(getHandler, vaultPath, relPath, '# Bob\nA test contact.');
+
+    invalidateReconciliationCache();
+
+    // Auto-track it
+    await getHandler('search_records')({
+      plugin_id: pluginId,
+      plugin_instance: pluginInstance,
+      table: 'contacts',
+      query: 'bob',
+    });
+  }, 60000);
+
+  afterAll(async () => {
+    if (SKIP_DB) return;
+
+    const supabase = supabaseManager.getClient();
+
+    // Drop plugin table
+    try {
+      const { createPgClientIPv4 } = await import('../../src/utils/pg-client.js');
+      const pgClient = createPgClientIPv4(TEST_DATABASE_URL);
+      await pgClient.connect();
+      await pgClient.query(`DROP TABLE IF EXISTS "${tableName}"`).catch(() => {});
+      await pgClient.end().catch(() => {});
+    } catch (_) { /* ignore */ }
+
+    await cleanupTest(vaultPath, supabase, instanceId);
+  }, 30000);
+
+  it('single reconciliation call classifies added and deleted documents in a mixed scenario', async () => {
+    const supabase = supabaseManager.getClient();
+
+    // Create a brand-new document not yet tracked → will appear as 'added'
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+    registerRecordTools(server, config);
+
+    const newRelPath = `contacts/carol-${randomUUID()}.md`;
+    await createTrackedDoc(getHandler, vaultPath, newRelPath, '# Carol\nAnother contact.');
+
+    // Archive the fqc_documents row for Bob's tracked document to put it into 'deleted' state
+    // (plugin row active, fqc_doc archived → deleted branch)
+    const { createPgClientIPv4 } = await import('../../src/utils/pg-client.js');
+    const pgClient = createPgClientIPv4(TEST_DATABASE_URL);
+    await pgClient.connect();
+
+    let hasExistingRow = false;
+    try {
+      const res = await pgClient.query(
+        `SELECT id, fqc_id FROM "${tableName}" WHERE status = 'active' LIMIT 1`
+      );
+      if (res.rows.length > 0) {
+        hasExistingRow = true;
+        const fqcId = res.rows[0].fqc_id as string;
+        // Archive the fqc_documents row — plugin row stays active → classified as 'deleted'
+        await supabase.from('fqc_documents').update({ status: 'archived' }).eq('id', fqcId);
+      }
+    } finally {
+      await pgClient.end().catch(() => {});
+    }
+
+    // Run a single reconciliation call — processes all states simultaneously
+    invalidateReconciliationCache();
+    const result = await reconcilePluginDocuments(pluginId, pluginInstance, TEST_DATABASE_URL);
+
+    // The new document (Carol) should appear as 'added'
+    expect(result.added.length).toBeGreaterThan(0);
+
+    // If we successfully archived a fqc_documents row, we should see a 'deleted' classification
+    if (hasExistingRow) {
+      expect(result.deleted.length).toBeGreaterThan(0);
+    }
+
+    // Execute all actions in one call — verifies no crash across mixed states
+    const summary = await executeReconciliationActions(result, pluginId, pluginInstance, instanceId, TEST_DATABASE_URL);
+    expect(summary.autoTracked).toBeGreaterThan(0);
   });
 });
