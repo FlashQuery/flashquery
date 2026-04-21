@@ -95,3 +95,57 @@ v2.7 ended at Phase 83. v2.8 runs Phases 84-89.
 ### Known Issues Going Into v2.8
 
 None recorded. Baseline from v2.7 is production-ready.
+
+## Deferred Items
+
+Items acknowledged and deferred at milestone close on 2026-04-21:
+
+| Category | Item | Status |
+|----------|------|--------|
+| debug | claude-code-auth-reauth | investigating |
+| debug | crm-plugin-multi-bug | verifying |
+| debug | ddl-table-creation | awaiting_human_verify |
+| debug | docker-config-missing | awaiting_human_verify |
+| debug | dockerfile-build-context-and-file-org | awaiting_human_verify |
+| debug | example-config-deprecated-projects | awaiting_human_verify |
+| debug | exit-immediately | investigating |
+| debug | fqc-background-scan-blocks-archives | unknown |
+| debug | fqc-binary-missing | awaiting_human_verify |
+| debug | fqc-cc-auth-mismatch | awaiting_human_verify |
+| debug | fqc-documents-orphaned-rows | awaiting_human_verify |
+| debug | fqc-documents-sync | awaiting_human_verify |
+| debug | fqc-mcp-claude-desktop-ehostunreach | investigating |
+| debug | fqc-memory-tools-create-documents | investigating |
+| debug | fqc-move-vs-duplicate-detection | awaiting_human_verify |
+| debug | fqc-search-documents-path-update | awaiting_human_verify |
+| debug | fqc-vault-scan-zero-docs | investigating |
+| debug | integration-test-vault-undefined | investigating |
+| debug | knowledge-base | unknown |
+| debug | linux-supabase-hang-2026-04-10 | unknown |
+| debug | plugin-registration-yaml-validation | verified |
+| debug | postgres-meta-ddl-failure | root_cause_found |
+| debug | release-not-function-FINAL | unknown |
+| debug | remaining-mcp-tool-tests | pending |
+| debug | scanner-duplicate-race-analysis | unknown |
+| debug | scanner-hash-first-refactor | awaiting_human_verify |
+| debug | search-documents-vault-path-column | investigating |
+| debug | shutdown-listening-debug | investigating |
+| debug | unit-test-mocks | investigating |
+| debug | v17-integration-regression | investigating |
+| uat_gap | Phase 78 (78-HUMAN-UAT.md) | partial — 1 pending scenario |
+| uat_gap | Phase 80 (80-UAT.md) | diagnosed |
+| verification_gap | Phase 78 (78-VERIFICATION.md) | human_needed |
+| quick_task | 260324-mad-configure-internal-supabase-for-testing- | missing |
+| quick_task | 260324-r95-add-ollama-integration-test-for-embeddin | missing |
+| quick_task | 260330-gia-investigate-setup-sh-and-document-implem | missing |
+| quick_task | 260330-x8l-add-test-case-code-samples-to-backlog-it | missing |
+| quick_task | 260331-1os-setup-sh-bearer-token-generation-and-gui | missing |
+| quick_task | 260331-lko-all-e2e-tests-should-remove-test-entries | missing |
+| quick_task | 260331-o5x-fix-integration-test-configs-add-missing | missing |
+| quick_task | 260408-h1j-rename-inner-flashquery-core-folder-to-s | missing |
+| quick_task | 260408-hdk-flatten-flashquery-core-project-structur | missing |
+| quick_task | 260409-r63-audit-docker-support-in-fqc-check-testin | missing |
+| quick_task | 260409-sny-add-docker-compose-syntax-validation-to- | missing |
+| quick_task | 260412-e2e-check-e2e-tests | missing |
+| quick_task | 260414-ey9-understand-the-state-of-unit-integration | unknown |
+| quick_task | 260415-cleanup-consolidate | missing |
