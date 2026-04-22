@@ -370,7 +370,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 |----|----------|------------|--------------|--------------|
 | RO-52 | Tool response summarizes bulk reconciliation by count (not enumeration) when items per category exceed threshold | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
 | RO-54 | Auto-track frontmatter writes do not cause spurious `modified` flags on the next reconciliation pass | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
-| RO-56 | Reconciliation scans all document-backed tables for a plugin in a single pass (not just the table implied by the current tool call) and does NOT scan non-document-backed plugin tables (even if they have an `fqc_id` column) | test_reconciliation_multi_table | 2026-04-21 | |
+| RO-56 | Reconciliation scans all document-backed tables for a plugin in a single pass (not just the table implied by the current tool call) and does NOT scan non-document-backed plugin tables (even if they have an `fqc_id` column) | test_reconciliation_multi_table, test_reconciliation_non_doc_table_isolation | 2026-04-21 | 2026-04-22 |
 | RO-58 | Auto-track routes the new plugin row to the correct table based on `track_as` for the matched folder | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
 | RO-51 | Reconciliation discovers and classifies ALL documents in a watched folder without silent truncation — the full candidate set is returned even when the folder contains more than 1,000 documents | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-04-22 |
 | RO-62 | Reconciliation does not falsely classify active plugin rows as `deleted` when their `fqc_documents` rows exist but were excluded by a query row-limit cap on candidate discovery | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-04-22 |
@@ -550,7 +550,12 @@ Covers: RO-35, RO-36, RO-60
 Covers: RO-38, RO-39, RO-40, RO-41
 
 ### test_reconciliation_multi_table
-Covers: RO-52, RO-54, RO-56, RO-58
+Covers: RO-52, RO-54, RO-56 (doc-backed multi-table single-pass), RO-58
+
+### test_reconciliation_non_doc_table_isolation
+Covers: RO-56 (non-document-backed table not scanned by reconciliation)
+Status: PASS (2026-04-22) — 11/11 steps
+Registers a plugin with one document-backed table and one plain relational table. Verifies that after two reconciliation passes the plain table records are untouched (count and status unchanged), and the reconciliation summary never mentions the plain table. One debug iteration to fix UUID extraction regex (create_record returns "Created record <uuid>" not "ID: <uuid>").
 
 ### test_reconciliation_untrack_policy
 Covers: RO-64
