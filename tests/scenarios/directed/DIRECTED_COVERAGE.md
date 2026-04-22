@@ -323,11 +323,11 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | RO-24 | `on_moved: keep-tracking` updates stored path silently; plugin row stays active | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
-| RO-25 | `on_moved: untrack` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved | test_reconciliation_movement | 2026-04-21 | |
+| RO-25 | `on_moved: untrack` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved | test_reconciliation_movement | 2026-04-21 | 2026-04-22 |
 | RO-26 | `on_moved` defaults to `keep-tracking` when not declared | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
 | RO-27 | After `keep-tracking` path update, subsequent reconciliation reports the document as `unchanged` | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
-| RO-64 | `on_moved: untrack` (spec vocabulary) is accepted at plugin registration and at reconciliation time archives the plugin row with frontmatter preserved — NOT silently treated as a no-op | test_reconciliation_untrack_policy* | 2026-04-22 | FAIL (2026-04-22) |
-| RO-65 | A `keep-tracking` document moved outside watched folders is re-discovered via Path 2 (frontmatter `fqc_type`) on subsequent reconciliations and classified as `unchanged` — NOT re-classified as `moved` | test_reconciliation_keep_tracking_stability* | 2026-04-22 | FAIL (2026-04-22) |
+| RO-64 | `on_moved: untrack` (spec vocabulary) is accepted at plugin registration and at reconciliation time archives the plugin row with frontmatter preserved — NOT silently treated as a no-op | test_reconciliation_untrack_policy | 2026-04-22 | 2026-04-22 |
+| RO-65 | A `keep-tracking` document moved outside watched folders is re-discovered via Path 2 (frontmatter `fqc_type`) on subsequent reconciliations and classified as `unchanged` — NOT re-classified as `moved` | test_reconciliation_keep_tracking_stability | 2026-04-22 | 2026-04-22 |
 
 ### 14.8 Modification and Field Sync
 
@@ -552,15 +552,15 @@ Covers: RO-38, RO-39, RO-40, RO-41
 ### test_reconciliation_multi_table
 Covers: RO-52, RO-54, RO-56, RO-58
 
-### test_reconciliation_untrack_policy*
+### test_reconciliation_untrack_policy
 Covers: RO-64
-Status: FAIL_DEFECT (2026-04-22) — PIR-01
-Defect: `register_plugin` silently accepts `on_moved: untrack` with no error (vocabulary check passes — step 1 of RO-64 is satisfied). However, `plugin-reconciliation.ts` lines 454–465 only branches on `keep-tracking` and `stop-tracking`; `untrack` falls to the no-op else branch. When a tracked document is moved outside the watched folder, the plugin row is NOT archived — it stays active. The frontmatter preservation assertion (fqc_owner/fqc_type remain on disk at the new path) could not be reached. Fix: add `untrack` as a handled branch that archives the plugin row (same outcome as `stop-tracking` but preserving frontmatter rather than stripping it).
+Status: PASS (2026-04-22) — PIR-01 fixed
+Previously FAIL_DEFECT: `on_moved: untrack` was falling to a no-op else branch in plugin-reconciliation.ts, leaving the plugin row active after move. Now passes 11/11 steps.
 
-### test_reconciliation_keep_tracking_stability*
+### test_reconciliation_keep_tracking_stability
 Covers: RO-65
-Status: FAIL_DEFECT (2026-04-22) — PIR-09
-Defect: After a `keep-tracking` document is moved outside the watched folder, the first reconciliation correctly classifies it as `moved` and updates the stored path. But on the second and subsequent reconciliations, the document is re-classified as `moved` again — the path update is re-applied every pass in an infinite loop. Root cause: Path 2 (frontmatter `fqc_type`) re-discovery does not recognize the already-tracked outside-folder document as `unchanged`; the reconciler re-detects it as moved on each cycle. Confirmed via step 13: `recon_summary='Reconciliation: Updated paths for 1 moved document(s).'` on the second pass. The plugin row stays active (not archived), so this is purely a spurious re-classification, not a data-loss defect.
+Status: PASS (2026-04-22) — PIR-09 fixed
+Previously FAIL_DEFECT: keep-tracking documents moved outside watched folders were re-classified as `moved` on every subsequent reconciliation pass (infinite re-flag). Path 2 re-discovery now correctly identifies the already-tracked document as `unchanged`. Now passes 13/13 steps.
 
 ### test_reconciliation_content_hash_cascade
 Covers: RO-67, RO-68, RO-69
