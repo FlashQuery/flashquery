@@ -29,7 +29,7 @@ export interface DocumentTypePolicy {
   description?: string;
   access: 'read-write' | 'read-only';
   on_added: 'auto-track' | 'ignore';
-  on_moved: 'keep-tracking' | 'stop-tracking' | 'ignore';
+  on_moved: 'keep-tracking' | 'stop-tracking' | 'untrack' | 'ignore';
   on_modified: 'sync-fields' | 'ignore';
   track_as?: string;
   template?: string;

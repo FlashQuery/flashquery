@@ -201,9 +201,10 @@ function classifyDocument(args: {
   // 4. Active plugin row + ownership mismatch → disassociated
   if (pluginRow?.status === 'active' && fqcDoc?.status === 'active' &&
       (fqcDoc.ownership_plugin_id === null || fqcDoc.ownership_plugin_id !== pluginId)) return 'disassociated';
-  // 5. Active plugin row + path outside watched folders → moved
+  // 5. Active plugin row + path outside watched folders AND plugin row path not yet updated → moved
   if (pluginRow?.status === 'active' && fqcDoc?.status === 'active' &&
-      !isPathInWatchedFolders(fqcDoc.path, watchedFolders)) return 'moved';
+      !isPathInWatchedFolders(fqcDoc.path, watchedFolders) &&
+      pluginRow.path !== fqcDoc.path) return 'moved';
   // 6. Active plugin row + updated_at != last_seen_updated_at → modified
   if (pluginRow?.status === 'active' && fqcDoc?.status === 'active' &&
       fqcDoc.updated_at !== pluginRow.lastSeenUpdatedAt) return 'modified';
@@ -455,11 +456,11 @@ export async function executeReconciliationActions(
         const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET path = $1, last_seen_updated_at = NOW() WHERE id = $2`;
         await pgClient.query(sql, [ref.newPath, ref.pluginRowId]);
         pathsUpdated++;
-      } else if (policy?.on_moved === 'stop-tracking') {
+      } else if (policy?.on_moved === 'stop-tracking' || policy?.on_moved === 'untrack') {
         const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET status = 'archived' WHERE id = $1`;
         await pgClient.query(sql, [ref.pluginRowId]);
         archived++;
-        // Do NOT touch frontmatter (D-06)
+        // Do NOT touch frontmatter (D-06 / RO-64)
       } else {
         // 'ignore' or missing policy → no-op
         logger.debug(`[RECON] moved doc ${ref.fqcId}: on_moved='${policy?.on_moved ?? 'undefined'}' — no action`);
