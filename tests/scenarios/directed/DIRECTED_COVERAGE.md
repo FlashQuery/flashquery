@@ -274,11 +274,11 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-06 | `on_added: auto-track` creates a plugin table row with columns populated from `field_map` | — | 2026-04-21 | |
-| RO-07 | `on_added: auto-track` writes `fqc_owner` and `fqc_type` into the document's frontmatter on disk | — | 2026-04-21 | |
+| RO-06 | `on_added: auto-track` creates a plugin table row with columns populated from `field_map` | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
+| RO-07 | `on_added: auto-track` writes `fqc_owner` and `fqc_type` into the document's frontmatter on disk | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
 | RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row | — | 2026-04-21 | |
-| RO-09 | `on_added: auto-track` does NOT modify the document's body content (only frontmatter is changed) | — | 2026-04-21 | |
-| RO-10 | `on_added: auto-track` without a `template` does NOT create a pending review row | — | 2026-04-21 | |
+| RO-09 | `on_added: auto-track` does NOT modify the document's body content (only frontmatter is changed) | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
+| RO-10 | `on_added: auto-track` without a `template` does NOT create a pending review row | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
 
 ### 14.3 Ignore Policy
 
@@ -381,8 +381,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| Plugin Reconciliation | 43 | 4 | 39 |
-| **Total** | **187** | **144** | **43** |
+| Plugin Reconciliation | 43 | 8 | 35 |
+| **Total** | **187** | **148** | **39** |
 
 ---
 
@@ -501,3 +501,6 @@ Covers: RO-01, RO-03, RO-04
 
 ### test_reconciliation_six_categories
 Covers: RO-02
+
+### test_reconciliation_auto_track
+Covers: RO-06, RO-07, RO-09, RO-10
