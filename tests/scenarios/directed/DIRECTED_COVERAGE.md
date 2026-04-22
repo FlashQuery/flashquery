@@ -155,6 +155,7 @@ Registration, record CRUD, and teardown of plugin schemas.
 | P-13 | Register plugin with schema migration (add column) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
 | P-14 | Register plugin rejects unsafe migration (remove column) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
 | P-15 | Plugin instance isolation (same plugin, different instances) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
+| P-16 | Plugin with both document-backed tables (`track_as`) and non-document-backed tables registers without DDL errors (no duplicate or conflicting implicit columns) | — | 2026-04-21 | |
 
 ## 8. Tag Operations
 
@@ -269,6 +270,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-04 | New file in watched folder with no plugin row (active or archived) is classified as `added` | test_reconciliation_core | 2026-04-21 | 2026-04-21 |
 | RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
 | RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
+| RO-70 | After background `force_file_scan` completes asynchronously, the next record tool call performs a full reconciliation diff and sees the updated `fqc_documents` state — staleness cache is not prematurely consumed by a pre-scan reconciliation | — | 2026-04-21 | |
 
 ### 14.2 Auto-Track
 
@@ -279,6 +281,9 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
 | RO-09 | `on_added: auto-track` does NOT modify the document's body content (only frontmatter is changed) | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
 | RO-10 | `on_added: auto-track` without a `template` does NOT create a pending review row | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
+| RO-67 | After auto-track writes `fqc_owner`/`fqc_type` frontmatter to disk, `fqc_documents.content_hash` is updated to reflect the post-write file content | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-04-22 |
+| RO-68 | After auto-track completes, `last_seen_updated_at` on the new plugin row equals `fqc_documents.updated_at` as of the post-frontmatter-write state — no stale timestamp mismatch | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-04-22 |
+| RO-69 | Scanner's first pass after auto-track does not re-detect the frontmatter write as a file modification — `fqc_documents.updated_at` is not bumped again because `content_hash` already matches the post-write file | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-04-22 |
 
 ### 14.3 Ignore Policy
 
@@ -310,15 +315,19 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row | test_reconciliation_resurrection | 2026-04-21 | 2026-04-21 |
 | RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant | test_reconciliation_resurrection | 2026-04-21 | 2026-04-21 |
 | RO-22 | Template is NOT surfaced on resurrection; `field_map` IS re-applied from current frontmatter | test_reconciliation_resurrection | 2026-04-21 | 2026-04-21 |
+| RO-71 | Resurrected document outside the plugin's watched folders with `on_moved: untrack` — resurrection succeeds unconditionally, then `on_moved` follow-up re-archives the row; net result: plugin row is archived | — | 2026-04-21 | |
+| RO-72 | Resurrected document outside the plugin's watched folders with `on_moved: keep-tracking` — resurrection succeeds and `on_moved` follow-up keeps the row active at the new out-of-folder path | — | 2026-04-21 | |
 
 ### 14.7 Movement
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | RO-24 | `on_moved: keep-tracking` updates stored path silently; plugin row stays active | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
-| RO-25 | `on_moved: stop-tracking` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
+| RO-25 | `on_moved: untrack` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved | test_reconciliation_movement | 2026-04-21 | |
 | RO-26 | `on_moved` defaults to `keep-tracking` when not declared | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
 | RO-27 | After `keep-tracking` path update, subsequent reconciliation reports the document as `unchanged` | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
+| RO-64 | `on_moved: untrack` (spec vocabulary) is accepted at plugin registration and at reconciliation time archives the plugin row with frontmatter preserved — NOT silently treated as a no-op | test_reconciliation_untrack_policy* | 2026-04-22 | FAIL (2026-04-22) |
+| RO-65 | A `keep-tracking` document moved outside watched folders is re-discovered via Path 2 (frontmatter `fqc_type`) on subsequent reconciliations and classified as `unchanged` — NOT re-classified as `moved` | test_reconciliation_keep_tracking_stability* | 2026-04-22 | FAIL (2026-04-22) |
 
 ### 14.8 Modification and Field Sync
 
@@ -335,6 +344,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 |----|----------|------------|--------------|--------------|
 | RO-31 | Document with `fqc_type` in frontmatter is discovered as `added` even outside watched folders (global type registry Path 2) | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-04-21 |
 | RO-32 | Scanner syncs `fqc_owner`/`fqc_type` frontmatter fields to `ownership_plugin_id`/`ownership_type` columns on every pass; removing them from frontmatter sets columns to NULL on next scan | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-04-21 |
+| RO-73 | Pending review row and tool response for a Path 2 auto-tracked document include the plugin's designated folder for the document type, enabling a skill to identify documents outside their canonical location | — | 2026-04-21 | |
 
 ### 14.10 Policy Validation
 
@@ -343,6 +353,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-35 | `on_added: auto-track` without `track_as` causes `register_plugin` to reject or warn | test_reconciliation_policy_validation | 2026-04-21 | 2026-04-21 |
 | RO-36 | All policy field validation (value ranges, required companions like `track_as`) happens at `register_plugin` time, not at reconciliation time | test_reconciliation_policy_validation | 2026-04-21 | 2026-04-21 |
 | RO-60 | `access: read-only` emits a warning in the tool response when a tool call attempts to write to a document in that folder | test_reconciliation_policy_validation | 2026-04-21 | 2026-04-21 |
+| RO-66 | Registering a plugin with an unrecognized `on_moved` value (any string outside the defined vocabulary) produces a parse-time error or warning at `register_plugin` time — not silently accepted | — | 2026-04-21 | |
 
 ### 14.11 Pending Plugin Review
 
@@ -359,8 +370,11 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 |----|----------|------------|--------------|--------------|
 | RO-52 | Tool response summarizes bulk reconciliation by count (not enumeration) when items per category exceed threshold | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
 | RO-54 | Auto-track frontmatter writes do not cause spurious `modified` flags on the next reconciliation pass | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
-| RO-56 | Reconciliation scans all document-backed tables for a plugin in a single pass (not just the table implied by the current tool call) | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
+| RO-56 | Reconciliation scans all document-backed tables for a plugin in a single pass (not just the table implied by the current tool call) and does NOT scan non-document-backed plugin tables (even if they have an `fqc_id` column) | test_reconciliation_multi_table | 2026-04-21 | |
 | RO-58 | Auto-track routes the new plugin row to the correct table based on `track_as` for the matched folder | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
+| RO-51 | Reconciliation discovers and classifies ALL documents in a watched folder without silent truncation — the full candidate set is returned even when the folder contains more than 1,000 documents | — | 2026-04-21 | |
+| RO-62 | Reconciliation does not falsely classify active plugin rows as `deleted` when their `fqc_documents` rows exist but were excluded by a query row-limit cap on candidate discovery | — | 2026-04-21 | |
+| RO-63 | Path 2 (frontmatter type) discovery returns all matching documents even when more than 1,000 documents share the same `ownership_type` | — | 2026-04-21 | |
 
 ---
 
@@ -374,15 +388,15 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Search — Documents | 9 | 9 | 0 |
 | Search — Cross-type | 5 | 5 | 0 |
 | Memory Lifecycle | 15 | 15 | 0 |
-| Plugin Lifecycle | 15 | 15 | 0 |
+| Plugin Lifecycle | 16 | 15 | 1 |
 | Tag Operations | 7 | 7 | 0 |
 | File System Operations | 16 | 16 | 0 |
 | Briefing | 3 | 3 | 0 |
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| Plugin Reconciliation | 43 | 43 | 0 |
-| **Total** | **187** | **183** | **4** |
+| Plugin Reconciliation | 56 | 48 | 8 |
+| **Total** | **201** | **188** | **13** |
 
 ---
 
@@ -537,3 +551,18 @@ Covers: RO-38, RO-39, RO-40, RO-41
 
 ### test_reconciliation_multi_table
 Covers: RO-52, RO-54, RO-56, RO-58
+
+### test_reconciliation_untrack_policy*
+Covers: RO-64
+Status: FAIL_DEFECT (2026-04-22) — PIR-01
+Defect: `register_plugin` silently accepts `on_moved: untrack` with no error (vocabulary check passes — step 1 of RO-64 is satisfied). However, `plugin-reconciliation.ts` lines 454–465 only branches on `keep-tracking` and `stop-tracking`; `untrack` falls to the no-op else branch. When a tracked document is moved outside the watched folder, the plugin row is NOT archived — it stays active. The frontmatter preservation assertion (fqc_owner/fqc_type remain on disk at the new path) could not be reached. Fix: add `untrack` as a handled branch that archives the plugin row (same outcome as `stop-tracking` but preserving frontmatter rather than stripping it).
+
+### test_reconciliation_keep_tracking_stability*
+Covers: RO-65
+Status: FAIL_DEFECT (2026-04-22) — PIR-09
+Defect: After a `keep-tracking` document is moved outside the watched folder, the first reconciliation correctly classifies it as `moved` and updates the stored path. But on the second and subsequent reconciliations, the document is re-classified as `moved` again — the path update is re-applied every pass in an infinite loop. Root cause: Path 2 (frontmatter `fqc_type`) re-discovery does not recognize the already-tracked outside-folder document as `unchanged`; the reconciler re-detects it as moved on each cycle. Confirmed via step 13: `recon_summary='Reconciliation: Updated paths for 1 moved document(s).'` on the second pass. The plugin row stays active (not archived), so this is purely a spurious re-classification, not a data-loss defect.
+
+### test_reconciliation_content_hash_cascade
+Covers: RO-67, RO-68, RO-69
+Status: PASS (2026-04-22)
+All three hash cascade behaviors verified: content_hash is updated to post-write file content after auto-track frontmatter write (RO-67); last_seen_updated_at on the plugin row matches updated_at after the hash update (RO-68); explicit force_file_scan after auto-track produces no spurious modified classification on the subsequent reconciliation (RO-69). Zero debug iterations.
