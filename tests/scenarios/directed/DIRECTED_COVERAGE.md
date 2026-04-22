@@ -267,8 +267,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-02 | Reconciliation classifies every document into exactly one of six categories (added/resurrected/deleted/disassociated/moved/modified) plus an unchanged count | test_reconciliation_six_categories | 2026-04-21 | 2026-04-21 |
 | RO-03 | Reconciliation is idempotent (re-run with no changes produces all unchanged, zero in other categories) | test_reconciliation_core | 2026-04-21 | 2026-04-21 |
 | RO-04 | New file in watched folder with no plugin row (active or archived) is classified as `added` | test_reconciliation_core | 2026-04-21 | 2026-04-21 |
-| RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs | — | 2026-04-21 | |
-| RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff | — | 2026-04-21 | |
+| RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
+| RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
 
 ### 14.2 Auto-Track
 
@@ -276,7 +276,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 |----|----------|------------|--------------|--------------|
 | RO-06 | `on_added: auto-track` creates a plugin table row with columns populated from `field_map` | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
 | RO-07 | `on_added: auto-track` writes `fqc_owner` and `fqc_type` into the document's frontmatter on disk | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
-| RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row | — | 2026-04-21 | |
+| RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
 | RO-09 | `on_added: auto-track` does NOT modify the document's body content (only frontmatter is changed) | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
 | RO-10 | `on_added: auto-track` without a `template` does NOT create a pending review row | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
 
@@ -284,8 +284,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-11 | `on_added: ignore` takes no action — no plugin row created, no frontmatter modified, no mention in tool response | — | 2026-04-21 | |
-| RO-12 | Missing policy fields use conservative defaults: `on_added: ignore`, `on_moved: keep-tracking`, `on_modified: ignore` | — | 2026-04-21 | |
+| RO-11 | `on_added: ignore` takes no action — no plugin row created, no frontmatter modified, no mention in tool response | test_reconciliation_ignore_policy | 2026-04-21 | 2026-04-21 |
+| RO-12 | Missing policy fields use conservative defaults: `on_added: ignore`, `on_moved: keep-tracking`, `on_modified: ignore` | test_reconciliation_ignore_policy | 2026-04-21 | 2026-04-21 |
 
 ### 14.4 Deletion and Archival
 
@@ -381,8 +381,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| Plugin Reconciliation | 43 | 8 | 35 |
-| **Total** | **187** | **148** | **39** |
+| Plugin Reconciliation | 43 | 13 | 30 |
+| **Total** | **187** | **153** | **34** |
 
 ---
 
@@ -504,3 +504,9 @@ Covers: RO-02
 
 ### test_reconciliation_auto_track
 Covers: RO-06, RO-07, RO-09, RO-10
+
+### test_reconciliation_staleness
+Covers: RO-05, RO-08, RO-61
+
+### test_reconciliation_ignore_policy
+Covers: RO-11, RO-12
