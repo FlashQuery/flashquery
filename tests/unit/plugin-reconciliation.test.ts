@@ -158,13 +158,17 @@ function setupFqcDocuments(rows: FqcDocRow[]) {
   } as any);
 }
 
-function setupPgClient(pluginTableRows: PluginRow[]) {
+function setupPgClient(pluginTableRows: PluginRow[], fqcDocRows: FqcDocRow[] = []) {
   vi.mocked(createPgClientIPv4).mockReturnValue({
     connect: vi.fn().mockResolvedValue(undefined),
     query: vi.fn().mockImplementation((sql: string) => {
       if (sql.includes('information_schema.columns')) {
         // Self-healing check: column exists, no ALTER needed
         return Promise.resolve({ rows: [{ exists: 1 }] });
+      }
+      if (/FROM fqc_documents/i.test(sql)) {
+        // RO-51/RO-62/RO-63: Path 1 and Path 2 now use pgClient, not Supabase
+        return Promise.resolve({ rows: fqcDocRows });
       }
       if (/FROM\s+"fqcp_/i.test(sql)) {
         return Promise.resolve({ rows: pluginTableRows });
@@ -193,7 +197,7 @@ describe('reconcilePluginDocuments — added', () => {
   it('classifies a new document in a watched folder as added', async () => {
     setupPluginEntry();
     setupFqcDocuments([validFqcDoc({ id: 'doc-new', ownership_plugin_id: null, ownership_type: null, path: 'CRM/Contacts/new.md' })]);
-    setupPgClient([]);
+    setupPgClient([], [validFqcDoc({ id: 'doc-new', ownership_plugin_id: null, ownership_type: null, path: 'CRM/Contacts/new.md' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -209,7 +213,7 @@ describe('reconcilePluginDocuments — deleted', () => {
     // No fqc_documents rows — the doc is gone
     setupFqcDocuments([]);
     // Plugin table has one active row
-    setupPgClient([validPluginRow({ fqc_id: 'doc-gone', id: 'row-gone', status: 'active' })]);
+    setupPgClient([validPluginRow({ fqc_id: 'doc-gone', id: 'row-gone', status: 'active' })], []);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -222,7 +226,7 @@ describe('reconcilePluginDocuments — modified', () => {
   it('classifies as modified when fqc_documents.updated_at differs from plugin_row.last_seen_updated_at', async () => {
     setupPluginEntry();
     setupFqcDocuments([validFqcDoc({ updated_at: '2026-04-20T11:00:00Z' })]);
-    setupPgClient([validPluginRow({ last_seen_updated_at: '2026-04-20T10:00:00Z' })]);
+    setupPgClient([validPluginRow({ last_seen_updated_at: '2026-04-20T10:00:00Z' })], [validFqcDoc({ updated_at: '2026-04-20T11:00:00Z' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -236,7 +240,7 @@ describe('reconcilePluginDocuments — unchanged', () => {
     setupPluginEntry();
     const ts = '2026-04-20T10:00:00Z';
     setupFqcDocuments([validFqcDoc({ updated_at: ts })]);
-    setupPgClient([validPluginRow({ last_seen_updated_at: ts })]);
+    setupPgClient([validPluginRow({ last_seen_updated_at: ts })], [validFqcDoc({ updated_at: ts })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -250,7 +254,7 @@ describe('reconcilePluginDocuments — resurrected', () => {
   it('classifies archived plugin row + active fqc_documents as resurrected', async () => {
     setupPluginEntry();
     setupFqcDocuments([validFqcDoc({ status: 'active' })]);
-    setupPgClient([validPluginRow({ status: 'archived' })]);
+    setupPgClient([validPluginRow({ status: 'archived' })], [validFqcDoc({ status: 'active' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -261,7 +265,7 @@ describe('reconcilePluginDocuments — resurrected', () => {
   it('OQ-7: archived plugin row is NOT misclassified as added (resurrection guard)', async () => {
     setupPluginEntry();
     setupFqcDocuments([validFqcDoc({ status: 'active' })]);
-    setupPgClient([validPluginRow({ status: 'archived' })]);
+    setupPgClient([validPluginRow({ status: 'archived' })], [validFqcDoc({ status: 'active' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -276,7 +280,7 @@ describe('reconcilePluginDocuments — deleted (fqc row archived)', () => {
     // fqc_documents shows the doc is archived
     setupFqcDocuments([validFqcDoc({ status: 'archived' })]);
     // Plugin table has one active row
-    setupPgClient([validPluginRow({ status: 'active' })]);
+    setupPgClient([validPluginRow({ status: 'active' })], [validFqcDoc({ status: 'archived' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -289,7 +293,7 @@ describe('reconcilePluginDocuments — disassociated', () => {
   it('classifies as disassociated when ownership_plugin_id points to another plugin', async () => {
     setupPluginEntry();
     setupFqcDocuments([validFqcDoc({ ownership_plugin_id: 'other-plugin' })]);
-    setupPgClient([validPluginRow()]);
+    setupPgClient([validPluginRow()], [validFqcDoc({ ownership_plugin_id: 'other-plugin' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -303,7 +307,7 @@ describe('reconcilePluginDocuments — moved', () => {
     setupPluginEntry(); // watches CRM/Contacts
     // fqcDoc now has a path outside the watched folder
     setupFqcDocuments([validFqcDoc({ path: 'Archive/relocated.md' })]);
-    setupPgClient([validPluginRow({ path: 'CRM/Contacts/alice.md' })]);
+    setupPgClient([validPluginRow({ path: 'CRM/Contacts/alice.md' })], [validFqcDoc({ path: 'Archive/relocated.md' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -317,7 +321,7 @@ describe('reconcilePluginDocuments — idempotency', () => {
     setupPluginEntry();
     const ts = '2026-04-20T10:00:00Z';
     setupFqcDocuments([validFqcDoc({ updated_at: ts })]);
-    setupPgClient([validPluginRow({ last_seen_updated_at: ts })]);
+    setupPgClient([validPluginRow({ last_seen_updated_at: ts })], [validFqcDoc({ updated_at: ts })]);
 
     // First run
     const run1 = await reconcilePluginDocuments('crm', 'default');
@@ -330,7 +334,7 @@ describe('reconcilePluginDocuments — idempotency', () => {
     vi.clearAllMocks();
     setupPluginEntry();
     setupFqcDocuments([validFqcDoc({ updated_at: ts })]);
-    setupPgClient([validPluginRow({ last_seen_updated_at: ts })]);
+    setupPgClient([validPluginRow({ last_seen_updated_at: ts })], [validFqcDoc({ updated_at: ts })]);
     process.env.DATABASE_URL = 'postgres://fake/test';
 
     // Second run
@@ -346,14 +350,15 @@ describe('reconcilePluginDocuments — Path 2 ownership-type discovery', () => {
     // folder='CRM/Contacts', typeId='contact'
     setupPluginEntry([makeDocType({ id: 'contact', folder: 'CRM/Contacts', track_as: 'contacts' })]);
     // doc is OUTSIDE CRM/Contacts but has ownership_type='contact'
-    setupFqcDocuments([validFqcDoc({
+    const fqcDocs1 = [validFqcDoc({
       id: 'doc-out',
       path: 'Archive/relocated.md',
       ownership_type: 'contact',
       ownership_plugin_id: null,
-    })]);
+    })];
+    setupFqcDocuments(fqcDocs1);
     // No plugin row for this doc
-    setupPgClient([]);
+    setupPgClient([], fqcDocs1);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -366,13 +371,14 @@ describe('reconcilePluginDocuments — Path 2 ownership-type discovery', () => {
     setupPluginEntry([makeDocType({ id: 'contact', folder: 'CRM/Contacts', track_as: 'contacts' })]);
     // This doc: path matches watched folder AND ownership_type matches
     // Both Path 1 (.or folder) and Path 2 (.in ownership_type) return the SAME row
-    setupFqcDocuments([validFqcDoc({
+    const fqcDocs2 = [validFqcDoc({
       id: 'doc-both',
       path: 'CRM/Contacts/alice.md',
       ownership_type: 'contact',
       ownership_plugin_id: null,
-    })]);
-    setupPgClient([]);
+    })];
+    setupFqcDocuments(fqcDocs2);
+    setupPgClient([], fqcDocs2);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -415,7 +421,7 @@ describe('reconcilePluginDocuments — mutual exclusivity', () => {
       // resurrected: archived plugin row
       validPluginRow({ id: 'row-res', fqc_id: 'doc-res', status: 'archived' }),
     ];
-    setupPgClient(pluginRows);
+    setupPgClient(pluginRows, fqcDocs);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -452,13 +458,14 @@ describe('reconcilePluginDocuments — cross-table added', () => {
       makeDocType({ id: 'deal', folder: 'CRM/Deals', track_as: 'deals' }),
     ]);
 
-    setupFqcDocuments([
+    const crossTableDocs = [
       validFqcDoc({ id: 'doc-c', path: 'CRM/Contacts/alice.md', ownership_plugin_id: null, ownership_type: null }),
       validFqcDoc({ id: 'doc-d', path: 'CRM/Deals/q4.md', ownership_plugin_id: null, ownership_type: null }),
-    ]);
+    ];
+    setupFqcDocuments(crossTableDocs);
 
     // No rows in either plugin table
-    setupPgClient([]);
+    setupPgClient([], crossTableDocs);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -476,7 +483,7 @@ describe('executeReconciliationActions — smoke test (empty result, no throw)',
   it('does not throw when called with an empty ReconciliationResult', async () => {
     setupPluginEntry();
     setupFqcDocuments([]);
-    setupPgClient([]);
+    setupPgClient([], []);
 
     const emptyResult = {
       added: [],
@@ -498,7 +505,7 @@ describe('reconcilePluginDocuments — modified with on_modified: ignore', () =>
   it("modified + on_modified: 'ignore' classifies the document as modified (policy applied at executeReconciliationActions level)", async () => {
     setupPluginEntry([makeDocType({ on_modified: 'ignore' })]);
     setupFqcDocuments([validFqcDoc({ updated_at: '2026-04-20T11:00:00Z' })]);
-    setupPgClient([validPluginRow({ last_seen_updated_at: '2026-04-20T10:00:00Z' })]);
+    setupPgClient([validPluginRow({ last_seen_updated_at: '2026-04-20T10:00:00Z' })], [validFqcDoc({ updated_at: '2026-04-20T11:00:00Z' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -514,7 +521,7 @@ describe('reconcilePluginDocuments — deleted archives reference', () => {
   it('deleted classification carries the pluginRowId and tableName needed to archive the plugin row', async () => {
     setupPluginEntry();
     setupFqcDocuments([]);
-    setupPgClient([validPluginRow({ id: 'row-arch', fqc_id: 'doc-arch', status: 'active' })]);
+    setupPgClient([validPluginRow({ id: 'row-arch', fqc_id: 'doc-arch', status: 'active' })], []);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -532,7 +539,7 @@ describe('reconcilePluginDocuments — disassociated carries archive reference',
     setupPluginEntry();
     // fqc_documents row shows ownership by a different plugin
     setupFqcDocuments([validFqcDoc({ ownership_plugin_id: 'other-plugin' })]);
-    setupPgClient([validPluginRow({ id: 'row-dis', fqc_id: 'doc-1' })]);
+    setupPgClient([validPluginRow({ id: 'row-dis', fqc_id: 'doc-1' })], [validFqcDoc({ ownership_plugin_id: 'other-plugin' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -549,7 +556,7 @@ describe('reconcilePluginDocuments — moved keep-tracking carries new path', ()
   it("moved + on_moved: 'keep-tracking' (default) carries the new path in the MovedRef", async () => {
     setupPluginEntry([makeDocType({ on_moved: 'keep-tracking' })]);
     setupFqcDocuments([validFqcDoc({ path: 'Archive/relocated.md' })]);
-    setupPgClient([validPluginRow({ path: 'CRM/Contacts/alice.md', id: 'row-mv' })]);
+    setupPgClient([validPluginRow({ path: 'CRM/Contacts/alice.md', id: 'row-mv' })], [validFqcDoc({ path: 'Archive/relocated.md' })]);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 
@@ -566,7 +573,7 @@ describe('reconcilePluginDocuments — missing plugin entry returns empty result
     // Override: getEntry returns undefined (plugin not registered)
     vi.mocked(pluginManager.getEntry).mockReturnValue(undefined as any);
     setupFqcDocuments([]);
-    setupPgClient([]);
+    setupPgClient([], []);
 
     const result = await reconcilePluginDocuments('crm', 'default');
 

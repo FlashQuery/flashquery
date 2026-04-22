@@ -312,6 +312,7 @@ export async function executeReconciliationActions(
     const entry = pluginManager.getEntry(pluginId, instanceId);
     const docTypes = entry?.schema.documents?.types ?? [];
     const policies = new Map(docTypes.map((p) => [p.id, p]));
+    const watchedFolders = new Set<string>(docTypes.map((p) => p.folder));
 
     let autoTracked = 0;
     let archived = 0;
@@ -339,6 +340,27 @@ export async function executeReconciliationActions(
       await pgClient.query(sql, params);
 
       resurrected++;
+
+      // RO-71: If the resurrected path is outside all watched folders, apply on_moved policy
+      // immediately — a subsequent reconciliation pass would classify this as 'modified' (paths match
+      // after resurrection update), so on_moved would never naturally fire.
+      if (!isPathInWatchedFolders(ref.path, watchedFolders)) {
+        const onMoved = policy?.on_moved;
+        if (onMoved === 'untrack' || onMoved === 'stop-tracking') {
+          // Archive the row immediately — resurrection + out-of-folder + untrack → net archived
+          const archiveSql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET status = 'archived' WHERE id = $1`;
+          await pgClient.query(archiveSql, [ref.pluginRowId]);
+          archived++;
+          logger.debug(`[RECON] resurrected doc ${ref.fqcId} at out-of-folder path ${ref.path}: on_moved=${String(onMoved)} applied immediately — archived`);
+          // No pending review for an immediately-archived row
+          continue;
+        } else if (onMoved === 'keep-tracking') {
+          // Path is already updated to ref.path above — keep active, no extra action
+          logger.debug(`[RECON] resurrected doc ${ref.fqcId} at out-of-folder path ${ref.path}: on_moved=keep-tracking — row stays active`);
+        }
+        // 'ignore' or undefined → no additional action; pending review still created below
+      }
+
       await supabase.from('fqc_pending_plugin_review').insert({
         fqc_id: ref.fqcId,
         plugin_id: pluginId,
@@ -419,7 +441,7 @@ export async function executeReconciliationActions(
           instance_id: rowInstanceId,
           table_name: doc.tableName,
           review_type: 'template_available',
-          context: { template: policy.template },
+          context: { template: policy.template, folder: policy.folder },
         });
         pendingReviewsCreated++;
       }
@@ -548,43 +570,46 @@ export async function reconcilePluginDocuments(
       await ensureLastSeenColumn(tableName as string, pgClient);
     }
 
-    // Step F — Two-path candidate discovery via Supabase JS (known table: fqc_documents)
+    // Step F — Two-path candidate discovery using raw pgClient (no Supabase page-limit cap).
+    // Supabase JS .select() defaults to 1000 rows max; raw pg queries return all rows.
+    // RO-51/RO-62/RO-63: both Path 1 and Path 2 must discover all matching documents.
     const candidateMap = new Map<string, FqcDocRow>();
     const supabase = supabaseManager.getClient();
 
-    // Path 1: folder-based query
+    // Path 1: folder-based query — select all docs whose path is inside a watched folder
     if (watchedFolders.size > 0) {
-      const folderFilters: string[] = [];
-      for (const folder of watchedFolders) {
-        folderFilters.push(`path.like.${folder}/%`);
-        folderFilters.push(`path.eq.${folder}`);
-      }
-      const folderFilter = folderFilters.join(',');
-      const { data: path1Data, error: path1Error } = await supabase
-        .from('fqc_documents')
-        .select('id, path, status, updated_at, ownership_plugin_id, ownership_type, content_hash')
-        .or(folderFilter);
-      if (path1Error) {
-        logger.warn('[RECON] fqc_documents query failed: ' + path1Error.message);
-      } else if (path1Data) {
-        for (const row of path1Data as FqcDocRow[]) {
+      const folderList = Array.from(watchedFolders);
+      // Build OR conditions: path = folder OR path LIKE folder/%
+      const conditions = folderList.flatMap((folder, i) => {
+        const base = i * 2;
+        return [
+          `path = $${base + 1}`,
+          `path LIKE $${base + 2}`,
+        ];
+      });
+      const params: string[] = folderList.flatMap((folder) => [folder, `${folder}/%`]);
+      const sql = `SELECT id, path, status, updated_at, ownership_plugin_id, ownership_type, content_hash FROM fqc_documents WHERE ${conditions.join(' OR ')}`;
+      try {
+        const res = await pgClient.query<FqcDocRow>(sql, params);
+        for (const row of res.rows) {
           candidateMap.set(row.id, row);
         }
+      } catch (err) {
+        logger.warn('[RECON] fqc_documents Path 1 query failed: ' + (err instanceof Error ? err.message : String(err)));
       }
     }
 
-    // Path 2: ownership_type-based query
+    // Path 2: ownership_type-based query — select all docs with a matching fqc_type
     if (pluginTypeIds.length > 0) {
-      const { data: path2Data, error: path2Error } = await supabase
-        .from('fqc_documents')
-        .select('id, path, status, updated_at, ownership_plugin_id, ownership_type, content_hash')
-        .in('ownership_type', pluginTypeIds);
-      if (path2Error) {
-        logger.warn('[RECON] fqc_documents query failed: ' + path2Error.message);
-      } else if (path2Data) {
-        for (const row of path2Data as FqcDocRow[]) {
+      const placeholders = pluginTypeIds.map((_, i) => `$${i + 1}`).join(', ');
+      const sql = `SELECT id, path, status, updated_at, ownership_plugin_id, ownership_type, content_hash FROM fqc_documents WHERE ownership_type IN (${placeholders})`;
+      try {
+        const res = await pgClient.query<FqcDocRow>(sql, pluginTypeIds);
+        for (const row of res.rows) {
           candidateMap.set(row.id, row);
         }
+      } catch (err) {
+        logger.warn('[RECON] fqc_documents Path 2 query failed: ' + (err instanceof Error ? err.message : String(err)));
       }
     }
 

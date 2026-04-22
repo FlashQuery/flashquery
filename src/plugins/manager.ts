@@ -63,6 +63,8 @@ export interface RegistryEntry {
 
 const VALID_TYPES = new Set(['text', 'integer', 'boolean', 'uuid', 'timestamptz']);
 
+const VALID_ON_MOVED = new Set(['keep-tracking', 'stop-tracking', 'untrack', 'ignore']);
+
 const TYPE_MAP: Record<string, string> = {
   text: 'TEXT',
   integer: 'INTEGER',
@@ -227,7 +229,14 @@ export function parsePluginSchema(yamlString: string): ParsedPluginSchema {
     // Extract 7 policy fields with conservative defaults (D-08)
     const access = (typeof t.access === 'string' ? t.access : undefined) ?? 'read-write';
     const on_added = (typeof t.on_added === 'string' ? t.on_added : undefined) ?? 'ignore';
-    const on_moved = (typeof t.on_moved === 'string' ? t.on_moved : undefined) ?? 'keep-tracking';
+    const rawOnMoved = typeof t.on_moved === 'string' ? t.on_moved : undefined;
+    if (rawOnMoved !== undefined && !VALID_ON_MOVED.has(rawOnMoved)) {
+      throw new Error(
+        `Plugin ${pluginId}: document type '${typeId}' has invalid on_moved value '${rawOnMoved}'. ` +
+        `Valid values: ${Array.from(VALID_ON_MOVED).join(', ')}`,
+      );
+    }
+    const on_moved = rawOnMoved ?? 'keep-tracking';
     const on_modified = (typeof t.on_modified === 'string' ? t.on_modified : undefined) ?? 'ignore';
     const track_as = typeof t.track_as === 'string' && t.track_as ? t.track_as : undefined;
     const template = typeof t.template === 'string' && t.template ? t.template : undefined;
