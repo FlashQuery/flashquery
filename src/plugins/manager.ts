@@ -359,6 +359,19 @@ export function buildPluginTableDDL(
     return colDef;
   });
 
+  // PIR-03: De-duplicate implicit columns whose names collide with user-defined columns.
+  // Plugin schemas may explicitly declare implicit columns (e.g. fqc_id per §8.4.7).
+  // Without de-duplication, buildPluginTableDDL emits the column twice and Postgres
+  // rejects the DDL with "column X specified more than once".
+  // Strategy: extract the bare column name (first whitespace-separated token) from each
+  // implicit column definition, and drop any implicit column whose name appears in the
+  // user-defined column set.
+  const userColNames = new Set(tableSpec.columns.map((c) => c.name.toLowerCase()));
+  const filteredImplicitCols = implicitCols.filter((def) => {
+    const bareName = def.split(/\s+/)[0]!.toLowerCase();
+    return !userColNames.has(bareName);
+  });
+
   // Embedding columns (D-05) — only when embed_fields present
   const embeddingCols: string[] = [];
   if (tableSpec.embed_fields && tableSpec.embed_fields.length > 0) {
@@ -366,7 +379,7 @@ export function buildPluginTableDDL(
     embeddingCols.push(`embedding_updated_at TIMESTAMPTZ`);
   }
 
-  const allCols = [...implicitCols, ...userCols, ...embeddingCols];
+  const allCols = [...filteredImplicitCols, ...userCols, ...embeddingCols];
 
   return `CREATE TABLE IF NOT EXISTS ${escapedTable} (\n  ${allCols.join(',\n  ')}\n);`;
 }

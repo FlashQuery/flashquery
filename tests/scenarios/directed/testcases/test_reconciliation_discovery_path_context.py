@@ -44,7 +44,6 @@ COVERAGE = ["RO-75"]
 
 import argparse
 import json as _json
-import re
 import sys
 from pathlib import Path
 
@@ -312,22 +311,32 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # exists to guard that discoveryPath is written for Path 2 docs so a skill
         # can distinguish Path 2 discovery from Path 1 (folder) discovery.
 
-        context_match = re.search(r'[Cc]ontext:\s*(\{.*?\})', pending_text, re.DOTALL)
-
+        # Response format: "Pending reviews for ...: N item(s)\n[...JSON array...]"
+        # Parse the JSON array directly — the regex approach can't handle the
+        # quoted-key format ("context": {...}) emitted by JSON.stringify.
         parsed_context: dict | None = None
         parse_error: str = ""
 
-        if context_match:
-            raw_json = context_match.group(1)
-            try:
-                parsed_context = _json.loads(raw_json)
-            except _json.JSONDecodeError as exc:
-                parse_error = f"JSONDecodeError: {exc} | raw={raw_json[:300]!r}"
-        else:
-            parse_error = (
-                f"No 'Context: {{...}}' pattern found in response. "
-                f"Response preview: {pending_text[:500]!r}"
-            )
+        try:
+            bracket_idx = pending_text.index('[')
+            items_json = _json.loads(pending_text[bracket_idx:])
+            if items_json and isinstance(items_json, list) and len(items_json) > 0:
+                first_item = items_json[0]
+                if isinstance(first_item, dict) and 'context' in first_item:
+                    ctx_val = first_item['context']
+                    if isinstance(ctx_val, dict):
+                        parsed_context = ctx_val
+                    else:
+                        parse_error = f"'context' value is not a dict: {ctx_val!r}"
+                else:
+                    parse_error = (
+                        f"First item has no 'context' key. "
+                        f"Keys: {sorted(first_item.keys() if isinstance(first_item, dict) else [])!r}"
+                    )
+            else:
+                parse_error = f"JSON array is empty or not a list: {items_json!r}"
+        except (ValueError, _json.JSONDecodeError) as exc:
+            parse_error = f"Failed to parse JSON response: {exc} | Response: {pending_text[:500]!r}"
 
         if parsed_context is None:
             # Could not parse context — report as failure

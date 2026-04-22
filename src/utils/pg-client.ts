@@ -1,5 +1,12 @@
 import pg from 'pg';
 
+// pg returns timestamptz/timestamp columns as Date objects by default. Date object
+// reference inequality (a !== b even when same time value) breaks the string equality
+// checks in plugin-reconciliation.ts classification. Return ISO strings instead so
+// comparisons work correctly.
+pg.types.setTypeParser(1184, (val: string) => new Date(val).toISOString()); // timestamptz
+pg.types.setTypeParser(1114, (val: string) => new Date(val).toISOString()); // timestamp
+
 /**
  * Creates a PostgreSQL client for use on all platforms.
  *

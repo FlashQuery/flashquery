@@ -12,6 +12,7 @@ import { supabaseManager } from '../storage/supabase.js';
 import { logger } from '../logging/logger.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
 import { atomicWriteFrontmatter } from '../utils/frontmatter.js';
+import { computeHash } from '../mcp/tools/documents.js';
 import { vaultManager } from '../storage/vault.js';
 import { pluginManager, getTypeRegistryMap } from '../plugins/manager.js';
 import type { DocumentTypePolicy, TypeRegistryEntry, RegistryEntry } from '../plugins/manager.js';
@@ -29,6 +30,10 @@ export interface DocumentInfo {
   path: string;
   typeId: string;
   tableName: string | null;
+  /** PIR-04: 'folder' = Path 1 (folder-based discovery); 'frontmatter-type' = Path 2 (type-registry discovery) */
+  discoveryPath?: 'folder' | 'frontmatter-type';
+  /** PIR-04: the plugin's canonical folder for this document type */
+  designatedFolder?: string;
 }
 
 export interface ResurrectionRef {
@@ -399,13 +404,58 @@ export async function executeReconciliationActions(
       const postWriteFm = shouldWriteFrontmatter ? await readFrontmatterFromDisk(doc.path) : existingFm;
       const fieldMapCols = applyFieldMap(policy.field_map, postWriteFm);
 
-      // RECON-05 / D-13: re-query fqc_documents.updated_at for post-write value
+      // PIR-02 + ownership update: combine content_hash update and ownership write into a
+      // single fqc_documents update using ONE timestamp. This is the critical fix:
+      //   - Before PIR-02: ownership update set updated_at = NOW(), but content_hash was
+      //     stale. Scanner detected the hash mismatch, bumped updated_at a second time,
+      //     causing updated_at > last_seen_updated_at → spurious 'modified'.
+      //   - After PIR-02: both content_hash and ownership are written together with one
+      //     timestamp. The re-query below returns that same timestamp as last_seen_updated_at.
+      //     Scanner sees hash match on next pass → no updated_at bump → no spurious modified.
+      //
+      // When shouldWriteFrontmatter is false, content_hash is already current (no file change),
+      // so we only update the ownership fields (keeping updated_at in sync).
+      const finalTs = new Date().toISOString();
+      if (shouldWriteFrontmatter) {
+        try {
+          const absPath = toAbsolutePath(doc.path);
+          const updatedRaw = await readFile(absPath, 'utf-8');
+          const updatedHash = computeHash(updatedRaw);
+          await supabase
+            .from('fqc_documents')
+            .update({
+              content_hash: updatedHash,
+              ownership_plugin_id: pluginId,
+              ownership_type: doc.typeId,
+              updated_at: finalTs,
+            })
+            .eq('id', doc.fqcId);
+          logger.debug(`[RECON] PIR-02: updated content_hash + ownership in single write for ${doc.path}`);
+        } catch (hashErr) {
+          logger.warn(`[RECON] PIR-02: failed to update content_hash after frontmatter write for ${doc.path}: ${hashErr instanceof Error ? hashErr.message : String(hashErr)}`);
+          // Fall back to ownership-only update
+          await supabase
+            .from('fqc_documents')
+            .update({ ownership_plugin_id: pluginId, ownership_type: doc.typeId, updated_at: finalTs })
+            .eq('id', doc.fqcId);
+        }
+      } else {
+        // No frontmatter written — content_hash is already current; update ownership only
+        await supabase
+          .from('fqc_documents')
+          .update({ ownership_plugin_id: pluginId, ownership_type: doc.typeId, updated_at: finalTs })
+          .eq('id', doc.fqcId);
+      }
+
+      // RECON-05 / D-13 + PIR-02: re-query fqc_documents.updated_at AFTER the combined update.
+      // last_seen_updated_at must equal the final updated_at in fqc_documents so the next
+      // reconcile classifies the doc as 'unchanged', not 'modified'.
       const { data: postWriteRow } = await supabase
         .from('fqc_documents')
         .select('updated_at, content_hash')
         .eq('id', doc.fqcId)
         .single();
-      const postWriteUpdatedAt = postWriteRow?.updated_at ?? null;
+      const postWriteUpdatedAt = postWriteRow?.updated_at ?? finalTs;
 
       // INSERT plugin row — always include instance_id (NOT NULL) and last_seen_updated_at
       // fqcInstanceId is the FQC server identity (config.instance.id); instanceId is the plugin instance name.
@@ -418,30 +468,32 @@ export async function executeReconciliationActions(
       const placeholders = allVals.map((_, i) => `$${i + 1}`).join(', ');
       const colList = allCols.map((c) => pg.escapeIdentifier(c)).join(', ');
       const sql = `INSERT INTO ${pg.escapeIdentifier(doc.tableName)} (${colList}) VALUES (${placeholders})`;
-      // Fallback to JS-computed NOW if post-write re-query returned null
-      const finalVals = allVals.map((v, i) => (i === 4 && v === null ? new Date().toISOString() : v));
+      // Fallback to JS-computed finalTs if post-write re-query returned null
+      const finalVals = allVals.map((v, i) => (i === 4 && v === null ? finalTs : v));
       await pgClient.query(sql, finalVals);
       autoTracked++;
 
-      // Update fqc_documents ownership so subsequent reconciliations classify correctly (not disassociated)
-      await supabase
-        .from('fqc_documents')
-        .update({
-          ownership_plugin_id: pluginId,
-          ownership_type: doc.typeId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', doc.fqcId);
-
       // Conditional pending review — only when template declared
       if (policy.template) {
+        // PIR-04: include discoveryPath in context so a skill can distinguish
+        // Path 2 (frontmatter-type) discovery from Path 1 (folder) discovery.
+        const reviewContext: Record<string, unknown> = {
+          template: policy.template,
+          folder: policy.folder,
+        };
+        if (doc.discoveryPath) {
+          reviewContext.discoveryPath = doc.discoveryPath;
+        }
+        if (doc.designatedFolder) {
+          reviewContext.designatedFolder = doc.designatedFolder;
+        }
         await supabase.from('fqc_pending_plugin_review').insert({
           fqc_id: doc.fqcId,
           plugin_id: pluginId,
           instance_id: rowInstanceId,
           table_name: doc.tableName,
           review_type: 'template_available',
-          context: { template: policy.template, folder: policy.folder },
+          context: reviewContext,
         });
         pendingReviewsCreated++;
       }
@@ -600,12 +652,19 @@ export async function reconcilePluginDocuments(
     }
 
     // Path 2: ownership_type-based query — select all docs with a matching fqc_type
+    // PIR-04: track which fqcIds were discovered via Path 2 (frontmatter-type) so we can
+    // set discoveryPath='frontmatter-type' on the resulting DocumentInfo entries.
+    const path2FqcIds = new Set<string>();
     if (pluginTypeIds.length > 0) {
       const placeholders = pluginTypeIds.map((_, i) => `$${i + 1}`).join(', ');
       const sql = `SELECT id, path, status, updated_at, ownership_plugin_id, ownership_type, content_hash FROM fqc_documents WHERE ownership_type IN (${placeholders})`;
       try {
         const res = await pgClient.query<FqcDocRow>(sql, pluginTypeIds);
         for (const row of res.rows) {
+          // Mark as Path 2 only if NOT already found via Path 1 (folder-based)
+          if (!candidateMap.has(row.id)) {
+            path2FqcIds.add(row.id);
+          }
           candidateMap.set(row.id, row);
         }
       } catch (err) {
@@ -654,11 +713,15 @@ export async function reconcilePluginDocuments(
       switch (state) {
         case 'added': {
           const matchedType = fqcDoc ? inferDocTypeForAdded(fqcDoc, docTypes) : undefined;
+          // PIR-04: determine discovery path — Path 2 if fqcId was found only via ownership_type
+          const isPath2 = path2FqcIds.has(fqcId);
           result.added.push({
             fqcId,
             path: fqcDoc?.path ?? '',
             typeId: matchedType?.typeId ?? '',
             tableName: matchedType?.tableName ?? null,
+            discoveryPath: isPath2 ? 'frontmatter-type' : 'folder',
+            designatedFolder: matchedType?.policy.folder,
           });
           break;
         }

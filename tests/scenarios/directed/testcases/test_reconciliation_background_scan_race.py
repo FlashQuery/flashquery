@@ -80,7 +80,8 @@ SEED_COUNT = 10
 BULK_COUNT = 100
 
 # Total seconds to wait from background scan trigger before the third call.
-SCAN_WAIT_SECS = 6
+# 100 bulk file inserts on remote Supabase take ~20-25s; 30s gives safe headroom.
+SCAN_WAIT_SECS = 30
 
 
 # ---------------------------------------------------------------------------

@@ -39,12 +39,22 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
 
       try {
         if (background) {
-          invalidateReconciliationCache();
-          void runScanOnce(config).catch((err: unknown) => {
-            logger.warn(
-              `force_file_scan background error: ${err instanceof Error ? err.message : String(err)}`
-            );
-          });
+          // PIR-05: invalidate AFTER scan completes, not before.
+          // Invalidating before the scan starts allows intermediate record tool calls
+          // (which land while the scan is running) to run a full diff against stale
+          // fqc_documents and repopulate the cache — causing the post-scan call to
+          // be skipped as a cache hit. Invalidating in .then() means intermediate
+          // calls stay within the staleness window and the first post-scan call gets
+          // the fresh invalidated cache.
+          void runScanOnce(config)
+            .then(() => {
+              invalidateReconciliationCache();
+            })
+            .catch((err: unknown) => {
+              logger.warn(
+                `force_file_scan background error: ${err instanceof Error ? err.message : String(err)}`
+              );
+            });
           return {
             content: [
               {
@@ -58,8 +68,9 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
           };
         }
 
-        invalidateReconciliationCache();
+        // PIR-05: invalidate AFTER scan completes in sync mode too.
         const result = await runScanOnce(config);
+        invalidateReconciliationCache();
         return {
           content: [
             {

@@ -1014,7 +1014,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             .then((vector) =>
               supabase
                 .from('fqc_documents')
-                .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
+                .update({ embedding: JSON.stringify(vector) })
                 .eq('id', docId)
                 .then(() => undefined)
             )
