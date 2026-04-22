@@ -156,6 +156,7 @@ Registration, record CRUD, and teardown of plugin schemas.
 | P-14 | Register plugin rejects unsafe migration (remove column) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
 | P-15 | Plugin instance isolation (same plugin, different instances) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
 | P-16 | Plugin with both document-backed tables (`track_as`) and non-document-backed tables registers without DDL errors (no duplicate or conflicting implicit columns) | test_plugin_mixed_tables | 2026-04-22 | 2026-04-22 |
+| P-17 | Plugin schema that explicitly declares `fqc_id` on a document-backed table (per §8.4.7 — the CRM plugin pattern) registers without a DDL error — the DDL builder de-duplicates the plugin-defined and implicit `fqc_id` columns rather than producing a duplicate column definition (PIR-03 regression guard; test schema MUST include `fqc_id` explicitly in the document-backed table columns — P-16 deliberately omits it, masking this defect) | — | 2026-04-22 | |
 
 ## 8. Tag Operations
 
@@ -271,6 +272,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
 | RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
 | RO-70 | After background `force_file_scan` completes asynchronously, the next record tool call performs a full reconciliation diff and sees the updated `fqc_documents` state — staleness cache is not prematurely consumed by a pre-scan reconciliation | test_reconciliation_background_scan_cache | 2026-04-22 | 2026-04-22 |
+| RO-76 | A record tool call made BEFORE a background `force_file_scan` completes does not consume the staleness cache — after the scan finishes a subsequent record tool call still performs a full diff and sees the scan results (PIR-05 race guard; test MUST include an immediate intermediate record tool call between scan trigger and scan completion — pre-populating 100+ files in the vault ensures the scan takes ≥2s so the intermediate call reliably lands in the race window) | — | 2026-04-22 | |
 
 ### 14.2 Auto-Track
 
@@ -284,6 +286,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-67 | After auto-track writes `fqc_owner`/`fqc_type` frontmatter to disk, `fqc_documents.content_hash` is updated to reflect the post-write file content | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-04-22 |
 | RO-68 | After auto-track completes, `last_seen_updated_at` on the new plugin row equals `fqc_documents.updated_at` as of the post-frontmatter-write state — no stale timestamp mismatch | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-04-22 |
 | RO-69 | Scanner's first pass after auto-track does not re-detect the frontmatter write as a file modification — `fqc_documents.updated_at` is not bumped again because `content_hash` already matches the post-write file | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-04-22 |
+| RO-74 | Auto-tracked document with `on_modified: sync-fields` policy is NOT spuriously classified as `modified` on the next reconciliation pass (past staleness window, after an intervening `force_file_scan`) — "Synced fields on N modified" does not appear in the summary (PIR-02 regression guard; test MUST use `sync-fields` — `ignore` masks this defect because no observable signal is emitted for a silent modified pass) | — | 2026-04-22 | |
 
 ### 14.3 Ignore Policy
 
@@ -345,6 +348,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-31 | Document with `fqc_type` in frontmatter is discovered as `added` even outside watched folders (global type registry Path 2) | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-04-21 |
 | RO-32 | Scanner syncs `fqc_owner`/`fqc_type` frontmatter fields to `ownership_plugin_id`/`ownership_type` columns on every pass; removing them from frontmatter sets columns to NULL on next scan | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-04-21 |
 | RO-73 | Pending review row and tool response for a Path 2 auto-tracked document include the plugin's designated folder for the document type, enabling a skill to identify documents outside their canonical location | test_reconciliation_policy_edge_cases | 2026-04-22 | 2026-04-22 |
+| RO-75 | Pending review context JSONB for a Path 2 auto-tracked document includes a `discoveryPath` field with value `'frontmatter-type'`, enabling a skill to distinguish Path 2 discovery from Path 1 (folder) discovery (PIR-04 regression guard; ⚠ not implemented — `discoveryPath` absent from `DocumentInfo` and from all pending review context writes; test MUST assert on the `discoveryPath` key specifically — asserting on the canonical folder string alone passes regardless because `policy.folder` is already in context) | — | 2026-04-22 | |
 
 ### 14.10 Policy Validation
 
@@ -388,15 +392,15 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Search — Documents | 9 | 9 | 0 |
 | Search — Cross-type | 5 | 5 | 0 |
 | Memory Lifecycle | 15 | 15 | 0 |
-| Plugin Lifecycle | 16 | 16 | 0 |
+| Plugin Lifecycle | 17 | 16 | 1 |
 | Tag Operations | 7 | 7 | 0 |
 | File System Operations | 16 | 16 | 0 |
 | Briefing | 3 | 3 | 0 |
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| Plugin Reconciliation | 56 | 56 | 0 |
-| **Total** | **201** | **197** | **4** |
+| Plugin Reconciliation | 59 | 56 | 3 |
+| **Total** | **205** | **197** | **8** |
 
 ---
 
@@ -596,3 +600,74 @@ RO-66: invalid `on_moved` value correctly rejected at `register_plugin` time. RO
 Covers: RO-51, RO-62, RO-63
 Status: PASS (2026-04-22) — 6/6 steps
 Verified with 1,010 documents (above the former 1,000-row Supabase default cap). Server log confirms `added=1010` for both Path 1 (watched folder) and Path 2 (ownership_type) candidate queries. RO-62 confirmed: zero false `deleted` classifications on second reconciliation pass. Test uses log-based assertion for the discovery count since auto-tracking 1,010 files via frontmatter write-back exceeds the 30s HTTP timeout; the [RECON] debug line is emitted before write-back actions begin and is authoritative for the discovery check.
+
+---
+
+## PIR Regression Guard Tests (not yet written — 2026-04-22)
+
+These four behaviors were added to expose PIR-02, PIR-03, PIR-04, and PIR-05, which are confirmed NOT FIXED as of 2026-04-22. Each existing test for the related behavior passes despite the bug being present; the notes below explain why, and what the new test must do differently to trigger a failure.
+
+### test_reconciliation_spurious_sync_fields
+Covers: RO-74
+Status: NOT YET WRITTEN
+PIR covered: PIR-02 (auto-track does not update `content_hash` or set `last_seen_updated_at` to the post-write value)
+
+**Why the existing test (test_reconciliation_content_hash_cascade) passes despite the bug:**
+That test uses `on_modified: ignore`. With `ignore`, a spurious `modified` classification produces no observable signal — `formatReconciliationSummary` only emits "Synced fields on N modified" when `fieldsSynced > 0`, and sync-fields never increments under `ignore`. The test checks for absence of "Synced fields" and finds none even when the bug fires on every reconciliation pass.
+
+**What this test must do differently:**
+- Declare the plugin schema with `on_modified: sync-fields` (not `ignore`).
+- Sequence: register → drop file (no fqc_owner) → force_file_scan (sync, indexes pre-write hash) → search_records (auto-track fires, writes frontmatter, bug leaves content_hash stale) → force_file_scan again (scanner sees stale hash, bumps updated_at) → wait 32s → search_records (reconciler: updated_at > last_seen_updated_at → modified → sync-fields fires → "Synced fields on 1 modified" appears).
+- Assert: "Synced fields on" NOT in the second reconciliation summary.
+- With bug: "Synced fields on 1 modified" appears → test FAILS. After fix: doc is `unchanged` → no sync-fields → test PASSES.
+
+### test_plugin_explicit_fqc_id
+Covers: P-17
+Status: NOT YET WRITTEN
+PIR covered: PIR-03 (`fqc_id` is implicit on all plugin tables; no DDL de-duplication; plugin-defined `fqc_id` collides with implicit)
+
+**Why the existing test (test_plugin_mixed_tables) passes despite the bug:**
+That test was rewritten during authoring specifically to avoid naming any user column `fqc_id`. The test note reads "user-defined column names must not collide with FQC's implicit reserved columns." This workaround prevents the collision, making the defect invisible.
+
+**What this test must do differently:**
+- The document-backed table schema must explicitly declare `fqc_id UUID REFERENCES fqc_documents(id)` as a user column — matching the pattern §8.4.7 specifies for CRM-style plugins.
+- Call `register_plugin` and assert success (no isError, no DDL error in response).
+- With bug: Postgres rejects the DDL with "column fqc_id specified more than once" (or similar) → registration fails with isError → test FAILS. After fix (de-duplication in `buildPluginTableDDL`): registration succeeds → test PASSES.
+
+### test_reconciliation_discovery_path_context
+Covers: RO-75
+Status: NOT YET WRITTEN
+PIR covered: PIR-04 (`DocumentInfo` missing `discoveryPath`; pending review context does not distinguish Path 2 from Path 1 discovery)
+⚠ `discoveryPath` is not found anywhere in `src/` — this is a missing feature, not a subtle state bug.
+
+**Why the existing test (test_reconciliation_policy_edge_cases / RO-73) passes despite the bug:**
+That test asserts that the canonical folder string appears somewhere in the `clear_pending_reviews` response. It does — because `context: { template: policy.template, folder: policy.folder }` already writes `policy.folder` into the pending review JSONB. The test passes without `discoveryPath` ever existing.
+
+**What this test must do differently:**
+- Register a plugin with a canonical folder (e.g., `CRM/Contacts/`) and a distinct doc type.
+- Create a document OUTSIDE the canonical folder but with matching `fqc_type` in frontmatter (Path 2 setup).
+- Scan, then call search_records to trigger Path 2 auto-track and create a pending review row.
+- Call `clear_pending_reviews` (query mode) and parse the returned context JSONB.
+- Assert: the context object contains a key `discoveryPath` with value `"frontmatter-type"`.
+- Do NOT assert merely on the presence of the canonical folder string — that passes regardless.
+- With bug: `discoveryPath` absent from context → assertion fails → test FAILS. After fix: field present → test PASSES.
+
+### test_reconciliation_background_scan_race
+Covers: RO-76
+Status: NOT YET WRITTEN
+PIR covered: PIR-05 (`invalidateReconciliationCache()` called before `runScanOnce()` in background mode; intermediate record tool call between trigger and completion consumes the cache against stale data)
+
+**Why the existing test (test_reconciliation_background_scan_cache / RO-70) passes despite the bug:**
+That test sleeps 5 seconds after triggering the background scan, then calls the record tool once. No record tool call is made in the race window. By the time the single post-sleep call runs, the cache IS invalidated (too early, but done) and the scan is finished — so the call works correctly. The race is never triggered.
+
+**What this test must do differently:**
+- Pre-populate the watched folder with 100+ files before the test sequence begins. This ensures the background scan takes ≥2 seconds, providing a reliable race window.
+- Establish the staleness cache (call search_records → reconciliation runs, cache populated).
+- Drop a new file into the watched folder (no scan yet).
+- Trigger `force_file_scan(background=True)`.
+- IMMEDIATELY (within 1 second) call search_records again — this intermediate call must land before the scan finishes. With the bug, the cache was invalidated before the scan started, so this call runs a full diff against stale `fqc_documents` (new file not yet indexed) and repopulates the cache with a fresh timestamp.
+- Wait 5–6 seconds total from scan trigger (scan should now be complete).
+- Call search_records a third time.
+- Assert: the THIRD call (post-scan) reports "Auto-tracked" for the new file — proving the staleness cache was not consumed by the intermediate call.
+- With bug: intermediate call consumes the cache; third call is within the 30s window → skipped → new file not seen → test FAILS. After fix: intermediate call is within the staleness window (cache not yet invalidated) → skipped; scan completes → cache invalidated → third call runs full diff → new file seen → test PASSES.
+- Note on timing: if the intermediate call reliably races the scan, the 100-file pre-population is sufficient. If the scan finishes in < 100ms despite that (fast I/O), consider increasing to 500+ files or adding a small sleep (500ms) before the intermediate call to ensure the scan is still running.
