@@ -291,25 +291,25 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-13 | Document with `fqc_documents` status `missing` is classified as `deleted`; plugin row is archived | — | 2026-04-21 | |
-| RO-14 | Document with `fqc_documents` status `archived` (MCP-archived) is also classified as `deleted`; plugin row is archived | — | 2026-04-21 | |
-| RO-15 | Archiving a plugin row (due to deleted/disassociated/moved+untrack) does not delete the vault file | — | 2026-04-21 | |
+| RO-13 | Document with `fqc_documents` status `missing` is classified as `deleted`; plugin row is archived | test_reconciliation_deletion | 2026-04-21 | 2026-04-21 |
+| RO-14 | Document with `fqc_documents` status `archived` (MCP-archived) is also classified as `deleted`; plugin row is archived | test_reconciliation_deletion | 2026-04-21 | 2026-04-21 |
+| RO-15 | Archiving a plugin row (due to deleted/disassociated/moved+untrack) does not delete the vault file | test_reconciliation_deletion | 2026-04-21 | 2026-04-21 |
 
 ### 14.5 Disassociation
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-16 | Removing `fqc_owner`/`fqc_type` from frontmatter triggers `disassociated`; plugin row is archived | — | 2026-04-21 | |
-| RO-17 | Moving a file with frontmatter intact does NOT trigger `disassociated` (reports `moved` instead) | — | 2026-04-21 | |
-| RO-18 | Disassociated document remains `status: active` in `fqc_documents`; only the plugin row is archived | — | 2026-04-21 | |
+| RO-16 | Removing `fqc_owner`/`fqc_type` from frontmatter triggers `disassociated`; plugin row is archived | test_reconciliation_disassociation | 2026-04-21 | 2026-04-21 |
+| RO-17 | Moving a file with frontmatter intact does NOT trigger `disassociated` (reports `moved` instead) | test_reconciliation_disassociation | 2026-04-21 | 2026-04-21 |
+| RO-18 | Disassociated document remains `status: active` in `fqc_documents`; only the plugin row is archived | test_reconciliation_disassociation | 2026-04-21 | 2026-04-21 |
 
 ### 14.6 Resurrection
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row | — | 2026-04-21 | |
-| RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant | — | 2026-04-21 | |
-| RO-22 | Template is NOT surfaced on resurrection; `field_map` IS re-applied from current frontmatter | — | 2026-04-21 | |
+| RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row | test_reconciliation_resurrection | 2026-04-21 | 2026-04-21 |
+| RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant | test_reconciliation_resurrection | 2026-04-21 | 2026-04-21 |
+| RO-22 | Template is NOT surfaced on resurrection; `field_map` IS re-applied from current frontmatter | test_reconciliation_resurrection | 2026-04-21 | 2026-04-21 |
 
 ### 14.7 Movement
 
@@ -381,8 +381,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| Plugin Reconciliation | 43 | 13 | 30 |
-| **Total** | **187** | **153** | **34** |
+| Plugin Reconciliation | 43 | 22 | 21 |
+| **Total** | **187** | **162** | **25** |
 
 ---
 
@@ -510,3 +510,12 @@ Covers: RO-05, RO-08, RO-61
 
 ### test_reconciliation_ignore_policy
 Covers: RO-11, RO-12
+
+### test_reconciliation_deletion
+Covers: RO-13, RO-14, RO-15
+
+### test_reconciliation_disassociation
+Covers: RO-16, RO-17, RO-18
+
+### test_reconciliation_resurrection
+Covers: RO-19, RO-20, RO-22
