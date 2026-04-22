@@ -263,10 +263,10 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-01 | Record tool call triggers reconciliation before executing the requested operation | — | 2026-04-21 | |
-| RO-02 | Reconciliation classifies every document into exactly one of six categories (added/resurrected/deleted/disassociated/moved/modified) plus an unchanged count | — | 2026-04-21 | |
-| RO-03 | Reconciliation is idempotent (re-run with no changes produces all unchanged, zero in other categories) | — | 2026-04-21 | |
-| RO-04 | New file in watched folder with no plugin row (active or archived) is classified as `added` | — | 2026-04-21 | |
+| RO-01 | Record tool call triggers reconciliation before executing the requested operation | test_reconciliation_core | 2026-04-21 | 2026-04-21 |
+| RO-02 | Reconciliation classifies every document into exactly one of six categories (added/resurrected/deleted/disassociated/moved/modified) plus an unchanged count | test_reconciliation_six_categories | 2026-04-21 | 2026-04-21 |
+| RO-03 | Reconciliation is idempotent (re-run with no changes produces all unchanged, zero in other categories) | test_reconciliation_core | 2026-04-21 | 2026-04-21 |
+| RO-04 | New file in watched folder with no plugin row (active or archived) is classified as `added` | test_reconciliation_core | 2026-04-21 | 2026-04-21 |
 | RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs | — | 2026-04-21 | |
 | RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff | — | 2026-04-21 | |
 
@@ -381,8 +381,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| Plugin Reconciliation | 43 | 0 | 43 |
-| **Total** | **187** | **140** | **47** |
+| Plugin Reconciliation | 43 | 4 | 39 |
+| **Total** | **187** | **144** | **43** |
 
 ---
 
@@ -495,3 +495,9 @@ Covers: SC-07
 
 ### test_frontmatter_preservation
 Covers: D-25, D-26, C-18, C-19, C-20, F-18
+
+### test_reconciliation_core
+Covers: RO-01, RO-03, RO-04
+
+### test_reconciliation_six_categories
+Covers: RO-02
