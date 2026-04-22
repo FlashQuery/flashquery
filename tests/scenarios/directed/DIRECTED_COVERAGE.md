@@ -315,34 +315,34 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-24 | `on_moved: keep-tracking` updates stored path silently; plugin row stays active | — | 2026-04-21 | |
-| RO-25 | `on_moved: untrack` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved | — | 2026-04-21 | |
-| RO-26 | `on_moved` defaults to `keep-tracking` when not declared | — | 2026-04-21 | |
-| RO-27 | After `keep-tracking` path update, subsequent reconciliation reports the document as `unchanged` | — | 2026-04-21 | |
+| RO-24 | `on_moved: keep-tracking` updates stored path silently; plugin row stays active | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
+| RO-25 | `on_moved: stop-tracking` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
+| RO-26 | `on_moved` defaults to `keep-tracking` when not declared | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
+| RO-27 | After `keep-tracking` path update, subsequent reconciliation reports the document as `unchanged` | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
 
 ### 14.8 Modification and Field Sync
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-28 | `on_modified: sync-fields` re-applies `field_map` from current frontmatter and updates `last_seen_updated_at` | — | 2026-04-21 | |
-| RO-29 | `on_modified: ignore` takes no action (no field sync) | — | 2026-04-21 | |
-| RO-30 | `on_modified: ignore` still updates `last_seen_updated_at` (preventing re-evaluation on every subsequent pass) | — | 2026-04-21 | |
-| RO-59 | `field_map` sets NULL for frontmatter fields not present in the document | — | 2026-04-21 | |
+| RO-28 | `on_modified: sync-fields` re-applies `field_map` from current frontmatter and updates `last_seen_updated_at` | test_reconciliation_modification | 2026-04-21 | 2026-04-21 |
+| RO-29 | `on_modified: ignore` takes no action (no field sync) | test_reconciliation_modification | 2026-04-21 | 2026-04-21 |
+| RO-30 | `on_modified: ignore` still updates `last_seen_updated_at` (preventing re-evaluation on every subsequent pass) | test_reconciliation_modification | 2026-04-21 | 2026-04-21 |
+| RO-59 | `field_map` sets NULL for frontmatter fields not present in the document | test_reconciliation_modification | 2026-04-21 | 2026-04-21 |
 
 ### 14.9 Frontmatter-Based Discovery
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-31 | Document with `fqc_type` in frontmatter is discovered as `added` even outside watched folders (global type registry Path 2) | — | 2026-04-21 | |
-| RO-32 | Scanner syncs `fqc_owner`/`fqc_type` frontmatter fields to `ownership_plugin_id`/`ownership_type` columns on every pass; removing them from frontmatter sets columns to NULL on next scan | — | 2026-04-21 | |
+| RO-31 | Document with `fqc_type` in frontmatter is discovered as `added` even outside watched folders (global type registry Path 2) | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-04-21 |
+| RO-32 | Scanner syncs `fqc_owner`/`fqc_type` frontmatter fields to `ownership_plugin_id`/`ownership_type` columns on every pass; removing them from frontmatter sets columns to NULL on next scan | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-04-21 |
 
 ### 14.10 Policy Validation
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-35 | `on_added: auto-track` without `track_as` causes `register_plugin` to reject or warn | — | 2026-04-21 | |
-| RO-36 | All policy field validation (value ranges, required companions like `track_as`) happens at `register_plugin` time, not at reconciliation time | — | 2026-04-21 | |
-| RO-60 | `access: read-only` emits a warning in the tool response when a tool call attempts to write to a document in that folder | — | 2026-04-21 | |
+| RO-35 | `on_added: auto-track` without `track_as` causes `register_plugin` to reject or warn | test_reconciliation_policy_validation | 2026-04-21 | 2026-04-21 |
+| RO-36 | All policy field validation (value ranges, required companions like `track_as`) happens at `register_plugin` time, not at reconciliation time | test_reconciliation_policy_validation | 2026-04-21 | 2026-04-21 |
+| RO-60 | `access: read-only` emits a warning in the tool response when a tool call attempts to write to a document in that folder | test_reconciliation_policy_validation | 2026-04-21 | 2026-04-21 |
 
 ### 14.11 Pending Plugin Review
 
@@ -381,8 +381,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| Plugin Reconciliation | 43 | 22 | 21 |
-| **Total** | **187** | **162** | **25** |
+| Plugin Reconciliation | 43 | 35 | 8 |
+| **Total** | **187** | **175** | **12** |
 
 ---
 
@@ -519,3 +519,15 @@ Covers: RO-16, RO-17, RO-18
 
 ### test_reconciliation_resurrection
 Covers: RO-19, RO-20, RO-22
+
+### test_reconciliation_movement
+Covers: RO-24, RO-25, RO-26, RO-27
+
+### test_reconciliation_modification
+Covers: RO-28, RO-29, RO-30, RO-59
+
+### test_reconciliation_frontmatter_discovery
+Covers: RO-31, RO-32
+
+### test_reconciliation_policy_validation
+Covers: RO-35, RO-36, RO-60
