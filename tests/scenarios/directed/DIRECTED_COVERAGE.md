@@ -348,19 +348,19 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-38 | `clear_pending_reviews` with empty `fqc_ids` returns current pending list without deleting; with non-empty `fqc_ids` clears those items and returns remainder | — | 2026-04-21 | |
-| RO-39 | `clear_pending_reviews` is idempotent (clearing already-cleared `fqc_ids` is a no-op) | — | 2026-04-21 | |
-| RO-40 | Pending review rows cascade-delete when the referenced `fqc_documents` row is deleted | — | 2026-04-21 | |
-| RO-41 | `unregister_plugin` clears all `fqc_pending_plugin_review` rows for the plugin | — | 2026-04-21 | |
+| RO-38 | `clear_pending_reviews` with empty `fqc_ids` returns current pending list without deleting; with non-empty `fqc_ids` clears those items and returns remainder | test_reconciliation_pending_review | 2026-04-21 | 2026-04-21 |
+| RO-39 | `clear_pending_reviews` is idempotent (clearing already-cleared `fqc_ids` is a no-op) | test_reconciliation_pending_review | 2026-04-21 | 2026-04-21 |
+| RO-40 | Pending review rows cascade-delete when the referenced `fqc_documents` row is deleted | test_reconciliation_pending_review | 2026-04-21 | 2026-04-21 |
+| RO-41 | `unregister_plugin` clears all `fqc_pending_plugin_review` rows for the plugin | test_reconciliation_pending_review | 2026-04-21 | 2026-04-21 |
 
 ### 14.12 Bulk and Multi-Table
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-52 | Tool response summarizes bulk reconciliation by count (not enumeration) when items per category exceed threshold | — | 2026-04-21 | |
-| RO-54 | Auto-track frontmatter writes do not cause spurious `modified` flags on the next reconciliation pass | — | 2026-04-21 | |
-| RO-56 | Reconciliation scans all document-backed tables for a plugin in a single pass (not just the table implied by the current tool call) | — | 2026-04-21 | |
-| RO-58 | Auto-track routes the new plugin row to the correct table based on `track_as` for the matched folder | — | 2026-04-21 | |
+| RO-52 | Tool response summarizes bulk reconciliation by count (not enumeration) when items per category exceed threshold | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
+| RO-54 | Auto-track frontmatter writes do not cause spurious `modified` flags on the next reconciliation pass | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
+| RO-56 | Reconciliation scans all document-backed tables for a plugin in a single pass (not just the table implied by the current tool call) | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
+| RO-58 | Auto-track routes the new plugin row to the correct table based on `track_as` for the matched folder | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
 
 ---
 
@@ -381,8 +381,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
-| Plugin Reconciliation | 43 | 35 | 8 |
-| **Total** | **187** | **175** | **12** |
+| Plugin Reconciliation | 43 | 43 | 0 |
+| **Total** | **187** | **183** | **4** |
 
 ---
 
@@ -531,3 +531,9 @@ Covers: RO-31, RO-32
 
 ### test_reconciliation_policy_validation
 Covers: RO-35, RO-36, RO-60
+
+### test_reconciliation_pending_review
+Covers: RO-38, RO-39, RO-40, RO-41
+
+### test_reconciliation_multi_table
+Covers: RO-52, RO-54, RO-56, RO-58
