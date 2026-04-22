@@ -1,0 +1,125 @@
+name: ir11_plugin_cross_folder_move
+description: >
+  A plugin has two document types, each watching a different folder and tracking into
+  different tables. When a document is moved from folder A to folder B (both watched by
+  the same plugin), the reconciler reports it as 'moved' in the source table and does NOT
+  insert a new 'added' row in the destination table — the document's identity is preserved.
+  This verifies that cross-folder moves within the same plugin are handled as relocations,
+  not as delete-plus-add pairs. Covers IR-11.
+coverage: [IR-11]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin with two document types watching different folders"
+    action: register_plugin
+    args:
+      plugin_instance: ir11test
+      schema_yaml: |
+        plugin:
+          id: ir11
+          name: IR-11 Cross-Folder Move Test Plugin
+          version: 1.0.0
+          description: Tests that cross-folder moves are classified as moved, not added+deleted
+        tables:
+          - name: active_docs
+            description: Documents in the active folder
+            columns:
+              - name: title
+                type: text
+          - name: archive_docs
+            description: Documents in the archive folder
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir11-active
+              folder: _integration/ir11/active
+              on_added: auto-track
+              on_moved: keep-tracking
+              track_as: active_docs
+              field_map:
+                title: title
+            - id: ir11-archive
+              folder: _integration/ir11/archive
+              on_added: auto-track
+              on_moved: keep-tracking
+              track_as: archive_docs
+              field_map:
+                title: title
+
+  - label: "Create a document in the active folder"
+    action: vault.write
+    name: active_doc
+    path: "ir11/active/report_q1.md"
+    title: "Q1 Report"
+    content: "Quarterly report in the active folder. IR-11 cross-folder move test."
+    tags: [ir11-tag]
+
+  - label: "First search_records on active_docs — Q1 Report is auto-tracked"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir11
+        plugin_instance: ir11test
+        table: active_docs
+      expect_contains: "Auto-tracked"
+
+  - label: "Q1 Report appears in active_docs table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir11
+        plugin_instance: ir11test
+        table: active_docs
+      expect_contains: "Q1 Report"
+
+  - label: "First search_records on archive_docs — nothing there yet"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir11
+        plugin_instance: ir11test
+        table: archive_docs
+      expect_not_contains: "Q1 Report"
+
+  # ── Move the document to the archive folder ───────────────────────────────────
+
+  - label: "Move the document from active folder to archive folder"
+    action: move_document
+    args:
+      identifier: "${active_doc.fqc_id}"
+      destination: "_integration/ir11/archive/report_q1.md"
+
+  - label: "Scan vault to reset staleness cache"
+    action: scan_vault
+
+  # ── Assert: classified as moved in source, NOT added in destination ───────────
+
+  - label: "search_records on active_docs — Q1 Report record still active, not deleted (IR-11)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir11
+        plugin_instance: ir11test
+        table: active_docs
+      expect_contains: "Q1 Report"
+
+  - label: "search_records on archive_docs — Q1 Report NOT added as a new entry (IR-11)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir11
+        plugin_instance: ir11test
+        table: archive_docs
+      expect_not_contains: "Auto-tracked"
+
+  - label: "Q1 Report does not appear as a new entry in archive_docs"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir11
+        plugin_instance: ir11test
+        table: archive_docs
+      expect_not_contains: "Q1 Report"

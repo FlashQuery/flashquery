@@ -81,19 +81,19 @@ multi-step workflows involving plugin tables, record tools, scan, and frontmatte
 
 | ID     | Behavior                                                                                             | Covered By | Date Updated | Last Passing |
 |--------|------------------------------------------------------------------------------------------------------|------------|--------------|--------------|
-| IR-01  | Mixed reconciliation: auto-track + ignore + deleted + moved all handled in single pass               | —          | 2026-04-22   |              |
-| IR-02  | Full resurrection lifecycle: track → delete → restore → resurrect with FK references intact          | —          | 2026-04-22   |              |
-| IR-03  | Auto-track + pending template review + clear → subsequent tool responses show no pending items       | —          | 2026-04-22   |              |
-| IR-04  | Document created via MCP in watched folder is immediately visible to same-call reconciliation        | —          | 2026-04-22   |              |
-| IR-05  | Plugin with no declared policies ignores new docs, follows moved docs, ignores modifications         | —          | 2026-04-22   |              |
-| IR-06  | Document moved out with on_moved:untrack, then moved back → resurrects, not re-added                 | —          | 2026-04-22   |              |
-| IR-07  | Cross-plugin resurrection: original plugin resurrects; second plugin independently discovers as added | —          | 2026-04-22   |              |
-| IR-08  | Bulk auto-track: all new documents processed in single pass with no silent cap                       | —          | 2026-04-22   |              |
-| IR-09  | Multiple state transitions between reconciliation runs: only current state classified                | —          | 2026-04-22   |              |
-| IR-10  | Large pending review backlog processable incrementally — subset cleared per invocation, remainder stable | —       | 2026-04-22   |              |
-| IR-11  | Document moved between plugin-owned folders reports moved in source table, not added in destination  | —          | 2026-04-22   |              |
-| IR-12  | Pending review items appear in record tool response even when reconciliation staleness check skips diff | —        | 2026-04-22   |              |
-| IR-13  | Frontmatter-based type discovery: document outside all watched folders picked up via fqc_type        | —          | 2026-04-22   |              |
+| IR-01  | Mixed reconciliation: auto-track + ignore + deleted + moved all handled in single pass               | ir01_plugin_mixed_reconciliation | 2026-04-22   | 2026-04-22   |
+| IR-02  | Full resurrection lifecycle: track → delete → restore → resurrect with FK references intact          | ir02_plugin_deletion_lifecycle | 2026-04-22   | 2026-04-22   |
+| IR-03  | Auto-track + pending template review + clear → subsequent tool responses show no pending items       | ir03_plugin_autotrack_pending_clear | 2026-04-22   | 2026-04-22   |
+| IR-04  | Document created via MCP in watched folder is immediately visible to same-call reconciliation        | ir04_plugin_mcp_immediate_reconciliation | 2026-04-22   | 2026-04-22   |
+| IR-05  | Plugin with no declared policies ignores new docs, follows moved docs, ignores modifications         | ir05_plugin_no_policies_defaults | 2026-04-22   | 2026-04-22   |
+| IR-06  | Document moved out with on_moved:untrack, then moved back → resurrects, not re-added                 | ir06_plugin_stop_tracking_lifecycle | 2026-04-22   | 2026-04-22   |
+| IR-07  | Cross-plugin resurrection: original plugin resurrects; second plugin independently discovers as added | ir07_plugin_cross_plugin_discovery | 2026-04-22   | 2026-04-22   |
+| IR-08  | Bulk auto-track: all new documents processed in single pass with no silent cap                       | ir08_plugin_bulk_autotrack   | 2026-04-22   | 2026-04-22   |
+| IR-09  | Multiple state transitions between reconciliation runs: only current state classified                | ir09_plugin_state_transitions | 2026-04-22   | 2026-04-22   |
+| IR-10  | Large pending review backlog processable incrementally — subset cleared per invocation, remainder stable | ir10_plugin_incremental_pending_review | 2026-04-22   | 2026-04-22   |
+| IR-11  | Document moved between plugin-owned folders reports moved in source table, not added in destination  | ir11_plugin_cross_folder_move | 2026-04-22   | 2026-04-22   |
+| IR-12  | Pending review items appear in record tool response even when reconciliation staleness check skips diff | ir12_plugin_pending_review_staleness | 2026-04-22   | 2026-04-22   |
+| IR-13  | Frontmatter-based type discovery: document outside all watched folders picked up via fqc_type        | ir13_plugin_frontmatter_discovery | 2026-04-22   | 2026-04-22   |
 
 ---
 

@@ -1,0 +1,108 @@
+name: ir13_plugin_frontmatter_discovery
+description: >
+  A document moved outside a plugin's watched folder is still discoverable by the reconciler
+  via Path 2: ownership_type-based query. When a document is auto-tracked, the reconciler
+  writes ownership_type into fqc_documents. If the document is later moved outside the
+  watched folder, Path 1 (folder query) no longer finds it, but Path 2 (ownership_type
+  query) still does — and classifies it as 'moved'. This verifies that Path 2 discovery
+  correctly handles docs that have drifted outside their original watched folder. Covers IR-13.
+coverage: [IR-13]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin watching _integration/ir13/inside"
+    action: register_plugin
+    args:
+      plugin_instance: ir13test
+      schema_yaml: |
+        plugin:
+          id: ir13
+          name: IR-13 Path 2 Discovery Test Plugin
+          version: 1.0.0
+          description: Tests Path 2 ownership_type-based discovery after doc moves outside watched folder
+        tables:
+          - name: items
+            description: Tracked items
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir13-item
+              folder: _integration/ir13/inside
+              on_added: auto-track
+              on_moved: keep-tracking
+              track_as: items
+              field_map:
+                title: title
+
+  - label: "Create document inside the watched folder"
+    action: vault.write
+    name: item_doc
+    path: "ir13/inside/tracked_item.md"
+    title: "Tracked Item"
+    content: "Document inside the watched folder. Will be auto-tracked, then moved outside. IR-13 test."
+    tags: [ir13-tag]
+
+  # ── Step 1: Auto-track the doc — sets ownership_type in fqc_documents ─────────
+
+  - label: "search_records auto-tracks the doc — sets ownership_type='ir13-item' in fqc_documents"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir13
+        plugin_instance: ir13test
+        table: items
+      expect_contains: "Auto-tracked"
+
+  - label: "Tracked Item appears in the items table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir13
+        plugin_instance: ir13test
+        table: items
+      expect_contains: "Tracked Item"
+
+  # ── Step 2: Move doc OUTSIDE the watched folder ───────────────────────────────
+  # After this, Path 1 (folder query) no longer finds the doc.
+  # Path 2 (ownership_type query) will still find it via fqc_documents.ownership_type.
+
+  - label: "Move document outside the watched folder"
+    action: move_document
+    args:
+      identifier: "${item_doc.fqc_id}"
+      destination: "_integration/ir13/outside/tracked_item.md"
+
+  - label: "Scan vault to reset reconciliation staleness cache"
+    action: scan_vault
+
+  # ── Assert: Path 2 finds the doc outside the folder via ownership_type ─────────
+
+  - label: "search_records — Path 2 finds doc via ownership_type, classifies as moved (IR-13)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir13
+        plugin_instance: ir13test
+        table: items
+      expect_contains: "Updated paths for 1"
+
+  - label: "Tracked Item record is still active after out-of-folder move (IR-13)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir13
+        plugin_instance: ir13test
+        table: items
+      expect_contains: "Tracked Item"
+
+  - label: "Plugin row reflects the new outside-folder path"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir13
+        plugin_instance: ir13test
+        table: items
+      expect_contains: "ir13/outside"

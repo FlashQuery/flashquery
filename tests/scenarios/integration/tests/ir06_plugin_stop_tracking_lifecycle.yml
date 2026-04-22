@@ -1,0 +1,123 @@
+name: ir06_plugin_stop_tracking_lifecycle
+description: >
+  A document tracked in a plugin table is moved out of the watched folder. With
+  on_moved: stop-tracking, the reconciler archives the plugin row when the move is
+  detected. If the document is then moved back into the watched folder, the reconciler
+  resurrects the existing row (rather than inserting a duplicate). This verifies that
+  stop-tracking produces an archived row that is eligible for resurrection. Covers IR-06.
+coverage: [IR-06]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin watching _integration/ir06 with on_moved: stop-tracking"
+    action: register_plugin
+    args:
+      plugin_instance: ir06test
+      schema_yaml: |
+        plugin:
+          id: ir06
+          name: IR-06 Stop-Tracking Lifecycle Test Plugin
+          version: 1.0.0
+          description: Tests move-out with stop-tracking archives the row; move-back resurrects it
+        tables:
+          - name: projects
+            description: Tracked projects
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir06-project
+              folder: _integration/ir06
+              on_added: auto-track
+              on_moved: stop-tracking
+              track_as: projects
+              field_map:
+                title: title
+
+  - label: "Create a document in the watched folder"
+    action: vault.write
+    name: project_doc
+    path: "ir06/project_aurora.md"
+    title: "Project Aurora"
+    content: "Active project for IR-06 stop-tracking lifecycle test."
+    tags: [ir06-tag]
+
+  # ── Step 1: Auto-track ───────────────────────────────────────────────────────
+
+  - label: "search_records auto-tracks the project document"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir06
+        plugin_instance: ir06test
+        table: projects
+      expect_contains: "Auto-tracked"
+
+  - label: "Project Aurora is active in the projects table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir06
+        plugin_instance: ir06test
+        table: projects
+      expect_contains: "Project Aurora"
+
+  # ── Step 2: Move document OUT of watched folder ──────────────────────────────
+
+  - label: "Move document out of watched folder to an untracked location"
+    action: move_document
+    args:
+      identifier: "${project_doc.fqc_id}"
+      destination: "_integration/ir06_archive/project_aurora.md"
+
+  - label: "Scan vault to reset staleness cache after move-out"
+    action: scan_vault
+
+  - label: "search_records — on_moved: stop-tracking archives the project row (IR-06)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir06
+        plugin_instance: ir06test
+        table: projects
+      expect_contains: "Archived"
+
+  - label: "Project Aurora no longer appears as active"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir06
+        plugin_instance: ir06test
+        table: projects
+      expect_not_contains: "Project Aurora"
+
+  # ── Step 3: Move document BACK into watched folder ───────────────────────────
+
+  - label: "Move document back into the watched folder"
+    action: move_document
+    args:
+      identifier: "${project_doc.fqc_id}"
+      destination: "_integration/ir06/project_aurora.md"
+
+  - label: "Scan vault to reset staleness cache after move-back"
+    action: scan_vault
+
+  - label: "search_records — move-back resurrects the existing row, not a new one (IR-06)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir06
+        plugin_instance: ir06test
+        table: projects
+      expect_contains: "Resurrected"
+
+  - label: "Project Aurora is active again after resurrection"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir06
+        plugin_instance: ir06test
+        table: projects
+      expect_contains: "Project Aurora"

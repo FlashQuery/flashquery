@@ -1,0 +1,132 @@
+name: ir01_plugin_mixed_reconciliation
+description: >
+  A single reconciliation pass handles multiple document states simultaneously: auto-track
+  fires on a newly added document, a previously-tracked document is archived when its source
+  doc is archived (deleted state), and a moved document has its path updated. All four
+  classification states — added, deleted, moved, and unchanged — are resolved in one pass
+  with no scan between setup and reconciliation. Covers IR-01.
+coverage: [IR-01]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin watching _integration/ir01"
+    action: register_plugin
+    args:
+      plugin_instance: ir01test
+      schema_yaml: |
+        plugin:
+          id: ir01
+          name: IR-01 Mixed Reconciliation Test Plugin
+          version: 1.0.0
+          description: Tests that all reconciliation states are handled in one pass
+        tables:
+          - name: notes
+            description: Tracked notes
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir01-note
+              folder: _integration/ir01
+              on_added: auto-track
+              on_moved: keep-tracking
+              track_as: notes
+              field_map:
+                title: title
+
+  - label: "Create an existing document that will be tracked and then archived"
+    action: vault.write
+    name: archived_doc
+    path: "ir01/note_to_archive.md"
+    title: "Note To Archive"
+    content: "This note will be archived. IR-01 mixed reconciliation test."
+    tags: [ir01-tag]
+
+  - label: "Create a document that will be moved"
+    action: vault.write
+    name: moved_doc
+    path: "ir01/note_to_move.md"
+    title: "Note To Move"
+    content: "This note will be moved within the watched folder. IR-01 test."
+    tags: [ir01-tag]
+
+  - label: "First search_records — auto-tracks both existing docs"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir01
+        plugin_instance: ir01test
+        table: notes
+      expect_contains: "Auto-tracked 2"
+
+  - label: "Both notes are tracked after first pass"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir01
+        plugin_instance: ir01test
+        table: notes
+      expect_contains: "Note To Archive"
+
+  # ── Modify state: archive one doc, move another, add a new one ────────────────
+
+  - label: "Archive the document that should produce a deleted record"
+    action: archive_document
+    args:
+      identifiers: "${archived_doc.fqc_id}"
+
+  - label: "Move the document OUTSIDE the watched folder to trigger a moved classification"
+    action: move_document
+    args:
+      identifier: "${moved_doc.fqc_id}"
+      destination: "_integration/ir01_outbox/note_moved_dest.md"
+
+  - label: "Create a new document that will be auto-tracked in this pass"
+    action: vault.write
+    path: "ir01/note_new.md"
+    title: "New Note"
+    content: "Brand new note for IR-01 mixed reconciliation test."
+    tags: [ir01-tag]
+
+  # ── Scan to reset staleness, then trigger mixed reconciliation ────────────────
+
+  - label: "Scan vault to reset reconciliation staleness cache"
+    action: scan_vault
+
+  - label: "search_records — single pass handles added, deleted, and moved simultaneously (IR-01)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir01
+        plugin_instance: ir01test
+        table: notes
+      expect_contains: "Auto-tracked 1"
+
+  - label: "Archived doc's record is cleaned up (deleted classification)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir01
+        plugin_instance: ir01test
+        table: notes
+      expect_not_contains: "Note To Archive"
+
+  - label: "Moved doc's record path is updated (moved classification)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir01
+        plugin_instance: ir01test
+        table: notes
+      expect_contains: "note_moved_dest"
+
+  - label: "New note is now tracked"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir01
+        plugin_instance: ir01test
+        table: notes
+      expect_contains: "New Note"

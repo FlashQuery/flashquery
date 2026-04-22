@@ -1,0 +1,64 @@
+name: ir04_plugin_mcp_immediate_reconciliation
+description: >
+  A document created via the MCP tool (create_document / vault.write) in a plugin's
+  watched folder is immediately visible to reconciliation on the very next record tool
+  call — no force_file_scan is required. This verifies the "in-conversation" change path:
+  create_document writes to fqc_documents directly, so the reconciler finds the new doc
+  without waiting for a scanner pass. Covers IR-04 / RO-48.
+coverage: [IR-04]
+
+steps:
+  # ── Setup ──────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin watching _integration/ir04 with on_added: auto-track"
+    action: register_plugin
+    args:
+      plugin_instance: ir04test
+      schema_yaml: |
+        plugin:
+          id: ir04
+          name: IR-04 Immediate Reconciliation Test Plugin
+          version: 1.0.0
+          description: Tests that MCP-created docs are immediately visible to reconciliation
+        tables:
+          - name: contacts
+            description: Tracked contacts
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir04-contact
+              folder: _integration/ir04
+              on_added: auto-track
+              track_as: contacts
+              field_map:
+                title: title
+
+  - label: "Create document in the watched folder via MCP (no scan needed)"
+    action: vault.write
+    name: contact_doc
+    path: "ir04/alice_chen.md"
+    title: "Alice Chen"
+    content: "Contact note for IR-04 test. Created directly via MCP tool in the watched folder."
+    tags: [ir04-tag, contact]
+
+  # ── Assert: immediate reconciliation ───────────────────────────────────────
+
+  - label: "search_records triggers reconciliation — new doc auto-tracked without any scan (IR-04)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir04
+        plugin_instance: ir04test
+        table: contacts
+      expect_contains: "Auto-tracked"
+
+  - label: "Alice Chen appears as a tracked contact in the plugin table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir04
+        plugin_instance: ir04test
+        table: contacts
+      expect_contains: "Alice Chen"

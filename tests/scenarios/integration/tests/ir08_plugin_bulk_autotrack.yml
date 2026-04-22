@@ -1,0 +1,126 @@
+name: ir08_plugin_bulk_autotrack
+description: >
+  When multiple documents exist in a plugin's watched folder at the time of the first
+  record tool call, the reconciler processes all of them in a single pass — there is no
+  silent cap that would leave some documents untracked. This verifies that bulk auto-track
+  handles N documents without truncation. Covers IR-08.
+coverage: [IR-08]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin watching _integration/ir08 with on_added: auto-track"
+    action: register_plugin
+    args:
+      plugin_instance: ir08test
+      schema_yaml: |
+        plugin:
+          id: ir08
+          name: IR-08 Bulk Auto-Track Test Plugin
+          version: 1.0.0
+          description: Tests that all new documents are auto-tracked in a single pass without a silent cap
+        tables:
+          - name: entries
+            description: Tracked entries
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir08-entry
+              folder: _integration/ir08
+              on_added: auto-track
+              track_as: entries
+              field_map:
+                title: title
+
+  - label: "Create first document in the watched folder"
+    action: vault.write
+    path: "ir08/entry_alpha.md"
+    title: "Entry Alpha"
+    content: "First bulk entry for IR-08 test."
+    tags: [ir08-tag]
+
+  - label: "Create second document in the watched folder"
+    action: vault.write
+    path: "ir08/entry_beta.md"
+    title: "Entry Beta"
+    content: "Second bulk entry for IR-08 test."
+    tags: [ir08-tag]
+
+  - label: "Create third document in the watched folder"
+    action: vault.write
+    path: "ir08/entry_gamma.md"
+    title: "Entry Gamma"
+    content: "Third bulk entry for IR-08 test."
+    tags: [ir08-tag]
+
+  - label: "Create fourth document in the watched folder"
+    action: vault.write
+    path: "ir08/entry_delta.md"
+    title: "Entry Delta"
+    content: "Fourth bulk entry for IR-08 test."
+    tags: [ir08-tag]
+
+  - label: "Create fifth document in the watched folder"
+    action: vault.write
+    path: "ir08/entry_epsilon.md"
+    title: "Entry Epsilon"
+    content: "Fifth bulk entry for IR-08 test."
+    tags: [ir08-tag]
+
+  # ── Assert: all 5 docs auto-tracked in one pass ───────────────────────────────
+
+  - label: "search_records triggers reconciliation — all 5 docs auto-tracked in one pass (IR-08)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir08
+        plugin_instance: ir08test
+        table: entries
+      expect_contains: "Auto-tracked 5"
+
+  - label: "Entry Alpha is in the entries table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir08
+        plugin_instance: ir08test
+        table: entries
+      expect_contains: "Entry Alpha"
+
+  - label: "Entry Beta is in the entries table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir08
+        plugin_instance: ir08test
+        table: entries
+      expect_contains: "Entry Beta"
+
+  - label: "Entry Gamma is in the entries table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir08
+        plugin_instance: ir08test
+        table: entries
+      expect_contains: "Entry Gamma"
+
+  - label: "Entry Delta is in the entries table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir08
+        plugin_instance: ir08test
+        table: entries
+      expect_contains: "Entry Delta"
+
+  - label: "Entry Epsilon is in the entries table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir08
+        plugin_instance: ir08test
+        table: entries
+      expect_contains: "Entry Epsilon"

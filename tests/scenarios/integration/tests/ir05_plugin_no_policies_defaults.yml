@@ -1,0 +1,133 @@
+name: ir05_plugin_no_policies_defaults
+description: >
+  A plugin with no explicit on_added policy uses the default: on_added defaults to 'ignore',
+  meaning new documents in the watched folder are NOT auto-tracked. This verifies that the
+  reconciler does not insert records for ignored documents, and that a separately configured
+  plugin with explicit on_added: auto-track can track the same documents. The on_moved
+  keep-tracking default is verified by IR-01. Covers IR-05.
+coverage: [IR-05]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin with no explicit on_added policy (defaults to ignore)"
+    action: register_plugin
+    args:
+      plugin_instance: ir05test
+      schema_yaml: |
+        plugin:
+          id: ir05
+          name: IR-05 Default Policy Test Plugin
+          version: 1.0.0
+          description: Tests that default on_added=ignore means new docs are not auto-tracked
+        tables:
+          - name: items
+            description: Tracked items
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir05-item
+              folder: _integration/ir05
+              track_as: items
+              field_map:
+                title: title
+
+  - label: "Create first document in the watched folder"
+    action: vault.write
+    path: "ir05/item_alpha.md"
+    title: "Item Alpha"
+    content: "First item in the watched folder — should be ignored by default policy."
+    tags: [ir05-tag]
+
+  - label: "Create second document in the watched folder"
+    action: vault.write
+    path: "ir05/item_beta.md"
+    title: "Item Beta"
+    content: "Second item in the watched folder — should also be ignored."
+    tags: [ir05-tag]
+
+  # ── Assert: new docs are NOT auto-tracked (on_added defaults to ignore) ────────
+
+  - label: "search_records does NOT auto-track any docs (on_added=ignore by default, IR-05)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir05
+        plugin_instance: ir05test
+        table: items
+      expect_not_contains: "Auto-tracked"
+
+  - label: "Item Alpha does not appear in the items table — it was ignored"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir05
+        plugin_instance: ir05test
+        table: items
+      expect_not_contains: "Item Alpha"
+
+  - label: "Item Beta does not appear in the items table — it was also ignored"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir05
+        plugin_instance: ir05test
+        table: items
+      expect_not_contains: "Item Beta"
+
+  - label: "Reconciliation summary confirms 0 records tracked (ignored new docs)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir05
+        plugin_instance: ir05test
+        table: items
+      expect_not_contains: "Auto-tracked"
+
+  # ── Verify a second plugin WITH auto-track DOES track the same docs ────────────
+  # This confirms on_added=ignore is plugin-specific, not a global setting.
+
+  - label: "Register a second plugin watching the SAME folder with explicit on_added: auto-track"
+    action: register_plugin
+    args:
+      plugin_instance: ir05b
+      schema_yaml: |
+        plugin:
+          id: ir05b
+          name: IR-05b Auto-Track Plugin
+          version: 1.0.0
+          description: Second plugin watching same folder with auto-track to confirm ignore is plugin-scoped
+        tables:
+          - name: tracked_items
+            description: Items tracked by auto-track plugin
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir05b-item
+              folder: _integration/ir05
+              on_added: auto-track
+              track_as: tracked_items
+              field_map:
+                title: title
+
+  - label: "search_records on ir05b — auto-tracks both docs that ir05 ignored (IR-05)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir05b
+        plugin_instance: ir05b
+        table: tracked_items
+      expect_contains: "Auto-tracked 2"
+
+  - label: "Item Alpha appears in ir05b's tracked_items (was ignored by ir05)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir05b
+        plugin_instance: ir05b
+        table: tracked_items
+      expect_contains: "Item Alpha"

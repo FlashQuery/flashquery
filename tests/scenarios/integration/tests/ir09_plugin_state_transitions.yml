@@ -1,0 +1,121 @@
+name: ir09_plugin_state_transitions
+description: >
+  When a document goes through multiple state transitions between two reconciliation runs,
+  only the document's final state is classified — not each intermediate step. This test
+  auto-tracks a document, then moves it outside the watched folder twice (to an intermediate
+  location, then to a final location). On the next reconciliation pass, the reconciler sees
+  only one 'moved' classification for the final location — intermediate transitions are
+  invisible. The plugin row path reflects the final destination, not the intermediate one.
+  Covers IR-09.
+coverage: [IR-09]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin watching _integration/ir09"
+    action: register_plugin
+    args:
+      plugin_instance: ir09test
+      schema_yaml: |
+        plugin:
+          id: ir09
+          name: IR-09 State Transitions Test Plugin
+          version: 1.0.0
+          description: Tests that only the final state after multiple transitions is classified
+        tables:
+          - name: files
+            description: Tracked files
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir09-file
+              folder: _integration/ir09
+              on_added: auto-track
+              on_moved: keep-tracking
+              track_as: files
+              field_map:
+                title: title
+
+  - label: "Create first document — will be tracked, then moved twice before next recon"
+    action: vault.write
+    name: doc_a
+    path: "ir09/file_a.md"
+    title: "File A"
+    content: "This file will be moved twice outside the watched folder. IR-09 test."
+    tags: [ir09-tag]
+
+  - label: "Create second document — will remain stable"
+    action: vault.write
+    name: doc_b
+    path: "ir09/file_b.md"
+    title: "File B"
+    content: "Stable file for IR-09 test."
+    tags: [ir09-tag]
+
+  - label: "First search_records — both docs auto-tracked in initial pass"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir09
+        plugin_instance: ir09test
+        table: files
+      expect_contains: "Auto-tracked 2"
+
+  # ── Two moves outside the watched folder before the next reconciliation ────────
+  # File A is moved to an intermediate outside location, then to a final outside location.
+  # The reconciler should see only the final state — one 'moved', not two.
+
+  - label: "Move File A to intermediate outside location (first transition)"
+    action: move_document
+    args:
+      identifier: "${doc_a.fqc_id}"
+      destination: "_integration/ir09_staging/file_a_interim.md"
+
+  - label: "Move File A to final outside location (second transition — intermediate is invisible)"
+    action: move_document
+    args:
+      identifier: "${doc_a.fqc_id}"
+      destination: "_integration/ir09_final/file_a_final.md"
+
+  # ── Scan to reset staleness, then reconcile ───────────────────────────────────
+
+  - label: "Scan vault to reset staleness cache"
+    action: scan_vault
+
+  - label: "search_records — classifies only one moved event for File A's final location (IR-09)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir09
+        plugin_instance: ir09test
+        table: files
+      expect_contains: "Updated paths for 1"
+
+  - label: "File A's plugin row reflects the final destination path, not the intermediate"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir09
+        plugin_instance: ir09test
+        table: files
+      expect_contains: "file_a_final"
+
+  - label: "Intermediate path is not present in the record results"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir09
+        plugin_instance: ir09test
+        table: files
+      expect_not_contains: "file_a_interim"
+
+  - label: "File B record is still active and unchanged"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir09
+        plugin_instance: ir09test
+        table: files
+      expect_contains: "File B"

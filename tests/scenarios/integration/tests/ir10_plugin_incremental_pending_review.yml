@@ -1,0 +1,131 @@
+name: ir10_plugin_incremental_pending_review
+description: >
+  When a plugin has multiple pending review items, they can be processed incrementally —
+  clearing a subset on each invocation while leaving the remainder stable and accessible
+  on subsequent calls. This verifies that partial clears work correctly and that uncleaned
+  items persist across calls. Covers IR-10.
+coverage: [IR-10]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin with template — all auto-tracked docs create pending reviews"
+    action: register_plugin
+    args:
+      plugin_instance: ir10test
+      schema_yaml: |
+        plugin:
+          id: ir10
+          name: IR-10 Incremental Pending Review Test Plugin
+          version: 1.0.0
+          description: Tests incremental clearing of pending review items
+        tables:
+          - name: tasks
+            description: Tracked tasks
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir10-task
+              folder: _integration/ir10
+              on_added: auto-track
+              track_as: tasks
+              template: templates/task-template.md
+              field_map:
+                title: title
+
+  - label: "Create first document — will generate a pending review"
+    action: vault.write
+    name: task_one
+    path: "ir10/task_one.md"
+    title: "Task One"
+    content: "First task for IR-10 incremental pending review test."
+    tags: [ir10-tag]
+
+  - label: "Create second document — will generate a pending review"
+    action: vault.write
+    name: task_two
+    path: "ir10/task_two.md"
+    title: "Task Two"
+    content: "Second task for IR-10 incremental pending review test."
+    tags: [ir10-tag]
+
+  - label: "Create third document — will generate a pending review"
+    action: vault.write
+    name: task_three
+    path: "ir10/task_three.md"
+    title: "Task Three"
+    content: "Third task for IR-10 incremental pending review test."
+    tags: [ir10-tag]
+
+  # ── Trigger auto-track which creates 3 pending review items ──────────────────
+
+  - label: "search_records auto-tracks all 3 docs and creates 3 pending review items"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir10
+        plugin_instance: ir10test
+        table: tasks
+      expect_contains: "3 pending review item"
+
+  - label: "Query mode shows 3 pending review items in the backlog"
+    assert:
+      op: clear_pending_reviews
+      args:
+        plugin_id: ir10
+        plugin_instance: ir10test
+        fqc_ids: []
+      expect_contains: "3 item"
+
+  # ── Clear only the first item ─────────────────────────────────────────────────
+
+  - label: "Clear pending review for Task One only (partial clear)"
+    action: clear_pending_reviews
+    args:
+      plugin_id: ir10
+      plugin_instance: ir10test
+      fqc_ids:
+        - "${task_one.fqc_id}"
+
+  - label: "After partial clear, 2 items remain in the backlog (IR-10)"
+    assert:
+      op: clear_pending_reviews
+      args:
+        plugin_id: ir10
+        plugin_instance: ir10test
+        fqc_ids: []
+      expect_contains: "2 item"
+
+  # ── Clear the remaining two items ─────────────────────────────────────────────
+
+  - label: "Clear pending reviews for Task Two and Task Three"
+    action: clear_pending_reviews
+    args:
+      plugin_id: ir10
+      plugin_instance: ir10test
+      fqc_ids:
+        - "${task_two.fqc_id}"
+        - "${task_three.fqc_id}"
+
+  - label: "Scan vault to reset staleness cache"
+    action: scan_vault
+
+  - label: "After clearing all items, record tool reports no pending reviews"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir10
+        plugin_instance: ir10test
+        table: tasks
+      expect_not_contains: "pending review item"
+
+  - label: "Query mode confirms no pending items remain"
+    assert:
+      op: clear_pending_reviews
+      args:
+        plugin_id: ir10
+        plugin_instance: ir10test
+        fqc_ids: []
+      expect_contains: "No pending reviews"

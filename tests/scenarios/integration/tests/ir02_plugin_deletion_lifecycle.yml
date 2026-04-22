@@ -1,0 +1,95 @@
+name: ir02_plugin_deletion_lifecycle
+description: >
+  Track a document via auto-track, then archive it (simulating deletion from the plugin's
+  perspective — the document is no longer active). On the next reconciliation pass the
+  plugin record is archived/cleaned up. This covers the deletion half of the resurrection
+  lifecycle: track → document archived → plugin record archived. Full resurrection
+  (physical file delete → restore → resurrected state) is not testable via MCP tools
+  since the scanner is responsible for the missing → active transition. Covers IR-02.
+coverage: [IR-02]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin watching _integration/ir02"
+    action: register_plugin
+    args:
+      plugin_instance: ir02test
+      schema_yaml: |
+        plugin:
+          id: ir02
+          name: IR-02 Deletion Lifecycle Test Plugin
+          version: 1.0.0
+          description: Tests track → archive → plugin record cleanup lifecycle
+        tables:
+          - name: contacts
+            description: Tracked contacts
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir02-contact
+              folder: _integration/ir02
+              on_added: auto-track
+              track_as: contacts
+              field_map:
+                title: title
+
+  - label: "Create a document in the watched folder"
+    action: vault.write
+    name: contact_doc
+    path: "ir02/bob_smith.md"
+    title: "Bob Smith"
+    content: "Contact record for IR-02 deletion lifecycle test."
+    tags: [ir02-tag]
+
+  # ── Step 1: Auto-track the document ──────────────────────────────────────────
+
+  - label: "search_records triggers reconciliation — Bob Smith is auto-tracked"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir02
+        plugin_instance: ir02test
+        table: contacts
+      expect_contains: "Auto-tracked"
+
+  - label: "Bob Smith appears in the contacts table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir02
+        plugin_instance: ir02test
+        table: contacts
+      expect_contains: "Bob Smith"
+
+  # ── Step 2: Archive the document (simulates file deletion) ────────────────────
+
+  - label: "Archive the contact document"
+    action: archive_document
+    args:
+      identifiers: "${contact_doc.fqc_id}"
+
+  # ── Step 3: Verify plugin record is cleaned up on next reconciliation ─────────
+
+  - label: "Scan vault to reset staleness cache"
+    action: scan_vault
+
+  - label: "search_records — archived doc triggers deletion classification (IR-02)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir02
+        plugin_instance: ir02test
+        table: contacts
+      expect_contains: "Archived"
+
+  - label: "Bob Smith no longer appears as an active contact"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir02
+        plugin_instance: ir02test
+        table: contacts
+      expect_not_contains: "Bob Smith"

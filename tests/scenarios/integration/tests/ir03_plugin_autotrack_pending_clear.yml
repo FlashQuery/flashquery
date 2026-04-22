@@ -1,0 +1,106 @@
+name: ir03_plugin_autotrack_pending_clear
+description: >
+  A plugin with a template declared on its document type creates a pending review item
+  when auto-track fires. The pending review item appears in clear_pending_reviews (query mode)
+  and in the record tool response. After calling clear_pending_reviews to clear the item,
+  subsequent record tool calls no longer report any pending items. Covers IR-03.
+coverage: [IR-03]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin with template declared — triggers pending review on auto-track"
+    action: register_plugin
+    args:
+      plugin_instance: ir03test
+      schema_yaml: |
+        plugin:
+          id: ir03
+          name: IR-03 Pending Review Clear Test Plugin
+          version: 1.0.0
+          description: Tests pending review lifecycle — auto-track with template, then clear
+        tables:
+          - name: leads
+            description: Sales leads
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir03-lead
+              folder: _integration/ir03
+              on_added: auto-track
+              track_as: leads
+              template: templates/lead-template.md
+              field_map:
+                title: title
+
+  - label: "Create a document in the watched folder"
+    action: vault.write
+    name: lead_doc
+    path: "ir03/acme_corp.md"
+    title: "Acme Corp Lead"
+    content: "Potential enterprise deal. IR-03 pending review test."
+    tags: [ir03-tag, lead]
+
+  # ── Assert: pending review appears on first record call ──────────────────────
+
+  - label: "search_records auto-tracks the doc and reports a pending review item (IR-03)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir03
+        plugin_instance: ir03test
+        table: leads
+      expect_contains: "pending review item"
+
+  - label: "Acme Corp Lead is tracked in the leads table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir03
+        plugin_instance: ir03test
+        table: leads
+      expect_contains: "Acme Corp Lead"
+
+  - label: "clear_pending_reviews (query mode) shows the pending item"
+    assert:
+      op: clear_pending_reviews
+      args:
+        plugin_id: ir03
+        plugin_instance: ir03test
+        fqc_ids: []
+      expect_contains: "item"
+
+  # ── Clear the pending review ──────────────────────────────────────────────────
+
+  - label: "Clear the pending review for the lead doc"
+    action: clear_pending_reviews
+    args:
+      plugin_id: ir03
+      plugin_instance: ir03test
+      fqc_ids:
+        - "${lead_doc.fqc_id}"
+
+  # ── Assert: no pending items after clear ─────────────────────────────────────
+
+  - label: "Scan vault to reset reconciliation staleness cache"
+    action: scan_vault
+
+  - label: "After clearing, search_records no longer reports pending review items (IR-03)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir03
+        plugin_instance: ir03test
+        table: leads
+      expect_not_contains: "pending review item"
+
+  - label: "clear_pending_reviews (query mode) now reports no pending items"
+    assert:
+      op: clear_pending_reviews
+      args:
+        plugin_id: ir03
+        plugin_instance: ir03test
+        fqc_ids: []
+      expect_contains: "No pending reviews"

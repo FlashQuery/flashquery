@@ -1,0 +1,98 @@
+name: ir12_plugin_pending_review_staleness
+description: >
+  Pending review items appear in the record tool response even when the reconciliation
+  staleness check causes the diff to be skipped. After the first record call creates a
+  pending review, a second immediate call (within the 30-second staleness window) skips
+  re-diffing documents but still queries fqc_pending_plugin_review and includes pending
+  items in the response. This verifies that staleness-skipped runs still surface work
+  items that need attention. Covers IR-12.
+coverage: [IR-12]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register plugin with template declared — triggers pending review on auto-track"
+    action: register_plugin
+    args:
+      plugin_instance: ir12test
+      schema_yaml: |
+        plugin:
+          id: ir12
+          name: IR-12 Pending Review Staleness Test Plugin
+          version: 1.0.0
+          description: Tests that pending reviews are shown even when staleness check skips the diff
+        tables:
+          - name: items
+            description: Tracked items
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir12-item
+              folder: _integration/ir12
+              on_added: auto-track
+              track_as: items
+              template: templates/item-template.md
+              field_map:
+                title: title
+
+  - label: "Create a document in the watched folder"
+    action: vault.write
+    name: item_doc
+    path: "ir12/widget.md"
+    title: "Widget Item"
+    content: "An item for the IR-12 pending review staleness test."
+    tags: [ir12-tag]
+
+  # ── First call: reconciliation runs, auto-tracks, creates pending review ───────
+
+  - label: "First search_records — reconciliation runs, doc auto-tracked, pending review created (IR-12)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir12
+        plugin_instance: ir12test
+        table: items
+      expect_contains: "pending review item"
+
+  - label: "Widget Item is tracked in items table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir12
+        plugin_instance: ir12test
+        table: items
+      expect_contains: "Widget Item"
+
+  # ── Second call: staleness check skips diff, but pending review still shown ────
+  # NOTE: No scan_vault call here — we deliberately stay within the 30s staleness window.
+  # The reconciler should skip re-diffing documents, but still query for pending reviews.
+
+  - label: "Second immediate search_records — staleness skips diff but pending review still shown (IR-12)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir12
+        plugin_instance: ir12test
+        table: items
+      expect_contains: "pending review item"
+
+  # ── Third call after clearing — pending review gone ──────────────────────────
+
+  - label: "Clear the pending review"
+    action: clear_pending_reviews
+    args:
+      plugin_id: ir12
+      plugin_instance: ir12test
+      fqc_ids:
+        - "${item_doc.fqc_id}"
+
+  - label: "After clearing, even a staleness-skipping call shows no pending reviews"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir12
+        plugin_instance: ir12test
+        table: items
+      expect_not_contains: "pending review item"

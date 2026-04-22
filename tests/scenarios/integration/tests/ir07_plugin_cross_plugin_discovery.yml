@@ -1,0 +1,109 @@
+name: ir07_plugin_cross_plugin_discovery
+description: >
+  Two independent plugins watch the same folder. When a document is created in that folder,
+  each plugin independently discovers and tracks it according to its own policies. Plugin A
+  auto-tracks with on_added: auto-track. Plugin B also auto-tracks, but independently —
+  it does not inherit or share state with Plugin A. Each plugin table ends up with its own
+  row for the document, using its own fqc_id reference. Covers IR-07.
+coverage: [IR-07]
+
+steps:
+  # ── Setup ────────────────────────────────────────────────────────────────────
+
+  - label: "Register Plugin A watching _integration/ir07"
+    action: register_plugin
+    args:
+      plugin_instance: ir07a
+      schema_yaml: |
+        plugin:
+          id: ir07a
+          name: IR-07 Plugin A
+          version: 1.0.0
+          description: First independent plugin watching _integration/ir07
+        tables:
+          - name: assets
+            description: Plugin A tracked assets
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir07a-asset
+              folder: _integration/ir07
+              on_added: auto-track
+              track_as: assets
+              field_map:
+                title: title
+
+  - label: "Register Plugin B watching the same folder _integration/ir07"
+    action: register_plugin
+    args:
+      plugin_instance: ir07b
+      schema_yaml: |
+        plugin:
+          id: ir07b
+          name: IR-07 Plugin B
+          version: 1.0.0
+          description: Second independent plugin watching the same _integration/ir07 folder
+        tables:
+          - name: resources
+            description: Plugin B tracked resources
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: ir07b-resource
+              folder: _integration/ir07
+              on_added: auto-track
+              track_as: resources
+              field_map:
+                title: title
+
+  - label: "Create a document in the shared watched folder"
+    action: vault.write
+    name: shared_doc
+    path: "ir07/shared_asset.md"
+    title: "Shared Asset"
+    content: "This document is in a folder watched by two independent plugins. IR-07 test."
+    tags: [ir07-tag]
+
+  # ── Assert: Plugin A independently discovers and tracks the doc ───────────────
+
+  - label: "Plugin A search_records — auto-tracks the shared doc independently (IR-07)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir07a
+        plugin_instance: ir07a
+        table: assets
+      expect_contains: "Auto-tracked"
+
+  - label: "Shared Asset is tracked in Plugin A's assets table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir07a
+        plugin_instance: ir07a
+        table: assets
+      expect_contains: "Shared Asset"
+
+  # ── Assert: Plugin B independently discovers and tracks the doc ───────────────
+
+  - label: "Plugin B search_records — auto-tracks the shared doc independently (IR-07)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir07b
+        plugin_instance: ir07b
+        table: resources
+      expect_contains: "Auto-tracked"
+
+  - label: "Shared Asset is tracked in Plugin B's resources table"
+    assert:
+      op: search_records
+      args:
+        plugin_id: ir07b
+        plugin_instance: ir07b
+        table: resources
+      expect_contains: "Shared Asset"
