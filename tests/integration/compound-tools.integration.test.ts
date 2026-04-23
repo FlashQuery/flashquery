@@ -30,6 +30,7 @@ import { registerCompoundTools } from '../../src/mcp/tools/compound.js';
 import { registerMemoryTools } from '../../src/mcp/tools/memory.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -866,8 +867,8 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       expect(text).toContain('Integration test memory for get_memory round-trip.');
       expect(text).toContain(memoryId);
       expect(text).toContain('#get-memory-test');
-      expect(text).toContain('created');
-      expect(text).toContain('updated');
+      expect(text).toContain('Created:');
+      expect(text).toContain('Updated:');
     });
   });
 

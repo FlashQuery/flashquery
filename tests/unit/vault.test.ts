@@ -175,19 +175,19 @@ describe('writeMarkdown / readMarkdown', () => {
     expect(existsSync(join(testDir, 'Personal', 'Journal', 'test.md'))).toBe(true);
   });
 
-  it('always overwrites the updated field with current ISO timestamp', async () => {
+  it('always overwrites the fq_updated field with current ISO timestamp', async () => {
     const oldUpdated = '2020-01-01T00:00:00.000Z';
     await vaultManager.writeMarkdown(
       'test.md',
-      { title: 'Test', created: '2026-01-01T00:00:00.000Z', updated: oldUpdated },
+      { fq_title: 'Test', fq_created: '2026-01-01T00:00:00.000Z', fq_updated: oldUpdated },
       'content'
     );
 
     const { data } = await vaultManager.readMarkdown('test.md');
-    expect(data.updated).not.toBe(oldUpdated);
-    expect(typeof data.updated).toBe('string');
+    expect(data.fq_updated).not.toBe(oldUpdated);
+    expect(typeof data.fq_updated).toBe('string');
     // Should be a valid recent ISO timestamp (long enough to be real)
-    expect((data.updated as string).length).toBeGreaterThan(10);
+    expect((data.fq_updated as string).length).toBeGreaterThan(10);
   });
 
   it('creates intermediate directories if missing', async () => {
@@ -266,12 +266,12 @@ describe('writeMarkdown — atomic write-then-rename', () => {
     expect(tmpFiles).toHaveLength(0);
   });
 
-  it('written file content matches gray-matter serialized output with updated timestamp', async () => {
-    await vaultManager.writeMarkdown('content-check.md', { title: 'Check', created: '2026-01-01T00:00:00.000Z' }, 'Hello body');
+  it('written file content matches gray-matter serialized output with fq_updated timestamp', async () => {
+    await vaultManager.writeMarkdown('content-check.md', { fq_title: 'Check', fq_created: '2026-01-01T00:00:00.000Z' }, 'Hello body');
     const { data, content } = await vaultManager.readMarkdown('content-check.md');
-    expect(data.title).toBe('Check');
-    expect(data.created).toBe('2026-01-01T00:00:00.000Z');
-    expect(typeof data.updated).toBe('string');
+    expect(data.fq_title).toBe('Check');
+    expect(data.fq_created).toBe('2026-01-01T00:00:00.000Z');
+    expect(typeof data.fq_updated).toBe('string');
     expect(content.trim()).toBe('Hello body');
   });
 

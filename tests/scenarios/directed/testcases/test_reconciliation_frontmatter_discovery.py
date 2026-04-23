@@ -124,10 +124,10 @@ def _remove_fqc_ownership(ctx: TestContext, relative_path: str) -> tuple[bool, s
         doc = ctx.vault.read_file(relative_path)
         fm_kept = {
             k: v for k, v in doc.frontmatter.items()
-            if k not in ("fqc_owner", "fqc_type")
+            if k not in ("fq_owner", "fq_type")
         }
         # Touch the updated timestamp so the scanner detects a modification
-        fm_kept["updated"] = (
+        fm_kept["fq_updated"] = (
             datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.")
             + f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
         )
@@ -140,8 +140,8 @@ def _remove_fqc_ownership(ctx: TestContext, relative_path: str) -> tuple[bool, s
 
         # Verify
         verify = ctx.vault.read_file(relative_path)
-        owner_absent = "fqc_owner" not in verify.frontmatter
-        type_absent = "fqc_type" not in verify.frontmatter
+        owner_absent = "fq_owner" not in verify.frontmatter
+        type_absent = "fq_type" not in verify.frontmatter
         if owner_absent and type_absent:
             return True, "fqc_owner and fqc_type removed successfully"
         return False, f"Keys still present: fm={dict(verify.frontmatter)!r}"
@@ -164,9 +164,9 @@ def _rewrite_fqc_ownership(
     try:
         doc = ctx.vault.read_file(relative_path)
         fm = dict(doc.frontmatter)
-        fm["fqc_owner"] = new_owner
-        fm["fqc_type"] = new_type
-        fm["updated"] = (
+        fm["fq_owner"] = new_owner
+        fm["fq_type"] = new_type
+        fm["fq_updated"] = (
             datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.")
             + f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
         )
@@ -180,8 +180,8 @@ def _rewrite_fqc_ownership(
         # Verify
         verify = ctx.vault.read_file(relative_path)
         ok = (
-            verify.frontmatter.get("fqc_owner") == new_owner
-            and verify.frontmatter.get("fqc_type") == new_type
+            verify.frontmatter.get("fq_owner") == new_owner
+            and verify.frontmatter.get("fq_type") == new_type
         )
         if ok:
             return True, f"fqc_owner={new_owner!r} fqc_type={new_type!r} written"
@@ -253,8 +253,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             body="## Frontmatter Discovery Test A\n\nThis doc is outside the watched folder.\nGlobal type registry should discover it via fqc_type.",
             tags=["fqc-test", "recon-fd"],
             extra_frontmatter={
-                "fqc_type": DOC_TYPE_ID,
-                "fqc_owner": PLUGIN_ID,
+                "fq_type": DOC_TYPE_ID,
+                "fq_owner": PLUGIN_ID,
             },
         )
         ctx.cleanup.track_dir(outside_folder)
@@ -276,8 +276,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             body="## Frontmatter Discovery Test B\n\nThis doc tests scanner ownership sync (RO-32).",
             tags=["fqc-test", "recon-fd"],
             extra_frontmatter={
-                "fqc_type": DOC_TYPE_ID,
-                "fqc_owner": PLUGIN_ID,
+                "fq_type": DOC_TYPE_ID,
+                "fq_owner": PLUGIN_ID,
             },
         )
 
@@ -359,10 +359,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         t0 = time.monotonic()
         try:
             disk_doc_a = ctx.vault.read_file(doc_a_path)
-            fqc_id_a = disk_doc_a.frontmatter.get("fqc_id")
+            fqc_id_a = disk_doc_a.frontmatter.get("fq_id")
             # Also check fqc_owner/fqc_type on disk (auto-track may have re-written them)
-            fqc_owner_a = disk_doc_a.frontmatter.get("fqc_owner")
-            fqc_type_a = disk_doc_a.frontmatter.get("fqc_type")
+            fqc_owner_a = disk_doc_a.frontmatter.get("fq_owner")
+            fqc_type_a = disk_doc_a.frontmatter.get("fq_type")
 
             doc_a_in_results = bool(fqc_id_a) and fqc_id_a in prime_result.text
 

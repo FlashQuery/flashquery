@@ -130,12 +130,12 @@ class VaultManagerImpl implements VaultManager {
     // Create intermediate directories if missing (D-06, Pitfall 3)
     await mkdir(dirname(absolutePath), { recursive: true });
 
-    // Always overwrite `updated` with current timestamp (D-06)
+    // Always overwrite `fq_updated` with current timestamp (D-06)
     // NOTE: For externally-added files (new documents not previously tracked),
-    // callers should use extractMinimalFrontmatter() to pass only fqc_id + status.
+    // callers should use extractMinimalFrontmatter() to pass only fq_id + fq_status.
     // This preserves external file integrity per OBS-04. Other fields (content_hash,
     // version, etc.) are DB-only and computed on next scan pass.
-    const fm = { ...frontmatter, updated: new Date().toISOString() };
+    const fm = { ...frontmatter, [FM.UPDATED]: new Date().toISOString() };
 
     // Serialize using gray-matter (default import — CJS interop)
     const output = matter.stringify(content, fm);

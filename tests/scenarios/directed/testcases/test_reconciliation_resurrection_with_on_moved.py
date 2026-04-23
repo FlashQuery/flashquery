@@ -285,7 +285,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         fqc_id_untrack = None
         try:
             disk_ut = ctx.vault.read_file(doc_untrack_path)
-            fqc_id_untrack = disk_ut.frontmatter.get("fqc_id")
+            fqc_id_untrack = disk_ut.frontmatter.get("fq_id")
 
             checks = {
                 "fqc_id present in frontmatter after auto-track": fqc_id_untrack is not None,
@@ -462,7 +462,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         fqc_id_keep = None
         try:
             disk_kt = ctx.vault.read_file(doc_keep_path)
-            fqc_id_keep = disk_kt.frontmatter.get("fqc_id")
+            fqc_id_keep = disk_kt.frontmatter.get("fq_id")
 
             checks = {
                 "fqc_id present in frontmatter after auto-track": fqc_id_keep is not None,
@@ -609,8 +609,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 tags=["fqc-test", "recon-res-om", "resurrected"],
                 fqc_id=fqc_id_untrack,  # SAME fqc_id — key for resurrection matching
                 extra_frontmatter={
-                    "fqc_owner": PLUGIN_ID_UNTRACK,
-                    "fqc_type": DOC_TYPE_ID_UNTRACK,
+                    "fq_owner": PLUGIN_ID_UNTRACK,
+                    "fq_type": DOC_TYPE_ID_UNTRACK,
                 },
             )
             ctx.cleanup.track_file(doc_untrack_resurrected)
@@ -647,8 +647,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 tags=["fqc-test", "recon-res-om", "resurrected"],
                 fqc_id=fqc_id_keep,  # SAME fqc_id — key for resurrection matching
                 extra_frontmatter={
-                    "fqc_owner": PLUGIN_ID_KEEP,
-                    "fqc_type": DOC_TYPE_ID_KEEP,
+                    "fq_owner": PLUGIN_ID_KEEP,
+                    "fq_type": DOC_TYPE_ID_KEEP,
                 },
             )
             ctx.cleanup.track_file(doc_keep_resurrected)

@@ -475,7 +475,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         header_c20 = ctx.client.call_tool(
             "update_doc_header",
             identifier=identifier_b,
-            updates={"title": updated_title_b},
+            updates={"fq_title": updated_title_b},
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

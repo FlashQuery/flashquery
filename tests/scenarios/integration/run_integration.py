@@ -342,7 +342,7 @@ def _substitute(value: Any, variables: dict[str, dict]) -> Any:
 # FQC responses use "Field: value" lines — these patterns extract named fields.
 # Extended here as new action types are added.
 _EXTRACT_PATTERNS: dict[str, str] = {
-    "fqc_id":    r"^FQC ID:\s*(.+)$",
+    "fq_id":     r"^FQC ID:\s*(.+)$",
     "path":      r"^Path:\s*(.+)$",
     "title":     r"^Title:\s*(.+)$",
     "status":    r"^Status:\s*(.+)$",
@@ -355,7 +355,7 @@ _EXTRACT_PATTERNS: dict[str, str] = {
 
 # Fields to extract for variable binding, keyed by action name
 _ACTION_EXTRACT_FIELDS: dict[str, tuple[str, ...]] = {
-    "vault.write":  ("fqc_id", "path", "title", "status"),
+    "vault.write":  ("fq_id", "path", "title", "status"),
     "memory.write": ("memory_id", "content"),
 }
 
@@ -533,15 +533,15 @@ def _execute_action(
 
     if op == "vault.write":
         # Extract actual path and fqc_id from the response for reliable cleanup
-        resp_fields = _extract(result.text, "fqc_id", "path")
+        resp_fields = _extract(result.text, "fq_id", "path")
         actual_path = resp_fields.get("path") or args.get("path", "")
         if actual_path:
             ctx.cleanup.track_file(actual_path)
             parts = Path(actual_path).parts
             for i in range(1, len(parts)):
                 ctx.cleanup.track_dir(str(Path(*parts[:i])))
-        if resp_fields.get("fqc_id"):
-            ctx.cleanup.track_mcp_document(resp_fields["fqc_id"])
+        if resp_fields.get("fq_id"):
+            ctx.cleanup.track_mcp_document(resp_fields["fq_id"])
 
     elif op == "memory.write":
         resp_fields = _extract(result.text, "memory_id")

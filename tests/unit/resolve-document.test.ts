@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Hoisted mocks to preserve references
@@ -177,7 +178,7 @@ describe('resolveDocumentIdentifier', () => {
     expect(result.fqcId).toBe(SAMPLE_UUID);
     expect(result.relativePath).toBe('docs/my-doc.md');
     expect(result.absPath).toBe('/mock-vault/docs/my-doc.md');
-    expect(result.resolvedVia).toBe('fqc_id');
+    expect(result.resolvedVia).toBe(FM.ID);
   });
 
   it('UUID not found in DB — throws Document not found error', async () => {
