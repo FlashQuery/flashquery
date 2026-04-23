@@ -1,7 +1,6 @@
 import http from 'node:http';
 import https from 'node:https';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import pg from 'pg';
 import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { verifySchema } from './schema-verify.js';
@@ -826,6 +825,7 @@ class SupabaseManagerImpl implements SupabaseManager {
     return this.client;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async close(): Promise<void> {
     this.client = null;
   }

@@ -24,6 +24,6 @@ export default tseslint.config(
   },
   eslintConfigPrettier,
   {
-    ignores: ['dist/', 'node_modules/', '*.config.js', '*.config.ts'],
+    ignores: ['dist/', 'src/dist/', 'node_modules/', '*.config.js', '*.config.ts', 'tsup.config.ts'],
   },
 );

@@ -64,7 +64,7 @@ export async function loadPluginManifests(config: FlashQueryConfig): Promise<Map
     for (const plugin of plugins) {
       try {
         // Parse the plugin schema
-        const schema = parsePluginSchema(plugin.schema_yaml);
+        const schema = parsePluginSchema(plugin.schema_yaml as string);
 
         // Validate that documents section exists
         if (!schema.documents || schema.documents === null) {
@@ -90,7 +90,7 @@ export async function loadPluginManifests(config: FlashQueryConfig): Promise<Map
 
           folderMappings.set(docType.folder, {
             pluginId: schema.plugin.id,
-            pluginInstance: plugin.plugin_instance || 'default',
+            pluginInstance: (plugin.plugin_instance as string | null | undefined) || 'default',
             typeId: docType.id,
             description: docType.description,
           });

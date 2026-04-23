@@ -7,11 +7,9 @@ import { Mutex } from 'async-mutex';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { logger } from '../../logging/logger.js';
-import { listMarkdownFiles, computeHash } from '../tools/documents.js';
-import { embeddingProvider } from '../../embedding/provider.js';
+import { listMarkdownFiles } from '../tools/documents.js';
 import { vaultManager } from '../../storage/vault.js';
 import { isValidUuid } from '../../utils/uuid.js';
-import { scanMutex } from '../../services/scanner.js';
 import { propagateFqcIdChange } from '../../services/plugin-propagation.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 
@@ -67,19 +65,20 @@ export async function resolveDocumentIdentifier(
 
   // ── 1. UUID check ──────────────────────────────────────────────────────────
   if (isValidUuid(identifier)) {
-    const { data: row, error } = await supabase
+    const queryResult = await supabase
       .from('fqc_documents')
       .select('id, path, title')
       .eq('id', identifier)
       .eq('instance_id', config.instance.id)
-      .single();
+      .single() as { data: { id: string; path: string; title: string } | null; error: unknown };
+
+    const { data: row, error } = queryResult;
 
     if (error || !row) {
       throw new Error(`Document not found: no document with id "${identifier}"`);
     }
 
-    const docRow = row as { id: string; path: string; title: string };
-    const absPath = join(vaultRoot, docRow.path);
+    const absPath = join(vaultRoot, row.path);
 
     // Security: ensure resolved path is within vault root (T-32-01)
     const resolvedAbs = resolve(absPath);
@@ -91,8 +90,8 @@ export async function resolveDocumentIdentifier(
 
     return {
       absPath,
-      relativePath: docRow.path,
-      fqcId: docRow.id,
+      relativePath: row.path,
+      fqcId: row.id,
       resolvedVia: FM.ID,
     };
   }
@@ -116,12 +115,12 @@ export async function resolveDocumentIdentifier(
         .select('id')
         .eq('path', identifier)
         .eq('instance_id', config.instance.id)
-        .single();
+        .single() as { data: { id: string } | null };
 
       return {
         absPath,
         relativePath: identifier,
-        fqcId: (dbRow as { id: string } | null)?.id ?? null, // get from DB if provisioned, else null
+        fqcId: dbRow?.id ?? null, // get from DB if provisioned, else null
         resolvedVia: 'path',
       };
     }
@@ -134,11 +133,10 @@ export async function resolveDocumentIdentifier(
       .select('id, path')
       .eq('path', identifier)
       .eq('instance_id', config.instance.id)
-      .single();
+      .single() as { data: { id: string; path: string } | null };
 
     if (dbRow) {
-      const row = dbRow as { id: string; path: string };
-      const fqcId = row.id;
+      const fqcId = dbRow.id;
 
       // Scan vault for file with matching fqc_id frontmatter
       const allFiles = await listMarkdownFiles(vaultRoot, ['.md']);

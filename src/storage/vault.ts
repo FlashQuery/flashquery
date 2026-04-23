@@ -27,7 +27,7 @@ import { FM } from '../constants/frontmatter-fields.js';
 export function extractMinimalFrontmatter(fullFrontmatter: Record<string, unknown>): Record<string, unknown> {
   return {
     [FM.ID]: fullFrontmatter[FM.ID],
-    [FM.STATUS]: (fullFrontmatter[FM.STATUS] as string) ?? 'active',
+    [FM.STATUS]: (fullFrontmatter[FM.STATUS]) ?? 'active',
   };
 }
 
@@ -170,7 +170,7 @@ class VaultManagerImpl implements VaultManager {
     const duration = Math.round(performance.now() - startTime);
     logger.debug(`Vault: read ${relativePath} (${duration}ms) — frontmatter extracted and validated`);
     return {
-      data: parsed.data as Record<string, unknown>,
+      data: parsed.data,
       content: parsed.content,
     };
   }

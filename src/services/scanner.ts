@@ -93,14 +93,14 @@ export function detectChanges(
   }
 
   // Hash mismatch: file was modified
-  const { data: frontmatter, content: body } = matter(fileContent);
+  const { data: frontmatter } = matter(fileContent);
 
   return {
     changed: true,
     newHash,
     changes: {
       content: fileContent,
-      frontmatter: frontmatter as Record<string, unknown>,
+      frontmatter: frontmatter,
       modified_at: new Date().toISOString(),
       size_bytes: Buffer.byteLength(fileContent, 'utf8'),
       content_hash: newHash,
@@ -185,11 +185,11 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   // when a previously-missing file reappears (hash or fqc_id found in these maps).
   // SCAN-04 already guards with `rowStatus === 'active'` so missing rows are never
   // re-marked missing — the SCAN-04 loop only acts on active rows.
-  const { data: allDbDocs, error: dbDocsError } = await supabase
+  const { data: allDbDocs, error: dbDocsError } = await (supabase
     .from('fqc_documents')
     .select('id, path, content_hash, title, status, updated_at')
     .eq('instance_id', instanceId)
-    .in('status', ['active', 'missing']);
+    .in('status', ['active', 'missing']) as Promise<{ data: DbRow[] | null; error: unknown }>);
 
   const hashToRow = new Map<string, DbRow>();
   const idToRow = new Map<string, DbRow>();
@@ -198,50 +198,50 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   const archivedDuplicateIds = new Set<string>(); // INF-02: track archived IDs to exclude from SCAN-04
 
   if (!dbDocsError && allDbDocs) {
-    for (const row of allDbDocs) {
+    for (const dbRow of allDbDocs) {
       // WR-02: Deduplicate by content_hash — keep newer row, log warning (mirrors pathToRow pattern)
-      const existingByHash = hashToRow.get(row.content_hash as string);
+      const existingByHash = hashToRow.get(dbRow.content_hash);
       if (existingByHash) {
         const existingUpdated = existingByHash.updated_at ?? '';
-        const rowUpdated = (row as DbRow).updated_at ?? '';
+        const rowUpdated = dbRow.updated_at ?? '';
         if (rowUpdated > existingUpdated) {
-          hashToRow.set(row.content_hash as string, row as DbRow);
+          hashToRow.set(dbRow.content_hash, dbRow);
           logger.warn(
-            `[INF-02] duplicate content_hash="${row.content_hash}" in DB — keeping newer of rows id=${existingByHash.id} (older) and id=${row.id} (newer)`
+            `[INF-02] duplicate content_hash="${dbRow.content_hash}" in DB — keeping newer of rows id=${existingByHash.id} (older) and id=${dbRow.id} (newer)`
           );
         } else {
           logger.warn(
-            `[INF-02] duplicate content_hash="${row.content_hash}" in DB — keeping newer of rows id=${row.id} (older) and id=${existingByHash.id} (newer)`
+            `[INF-02] duplicate content_hash="${dbRow.content_hash}" in DB — keeping newer of rows id=${dbRow.id} (older) and id=${existingByHash.id} (newer)`
           );
         }
       } else {
-        hashToRow.set(row.content_hash as string, row as DbRow);
+        hashToRow.set(dbRow.content_hash, dbRow);
       }
-      idToRow.set(row.id as string, row as DbRow);
+      idToRow.set(dbRow.id, dbRow);
 
       // INF-01: Build pathToRow map; INF-02: handle duplicate paths by keeping newer row
-      const vaultPath = row.path as string;
+      const vaultPath = dbRow.path;
       const existing = pathToRow.get(vaultPath);
       if (existing) {
         // D-10: Two DB rows share the same vault_path — keep the one with more recent updated_at
         const existingUpdated = existing.updated_at ?? '';
-        const rowUpdated = (row as DbRow).updated_at ?? '';
+        const rowUpdated = dbRow.updated_at ?? '';
         if (rowUpdated > existingUpdated) {
           // Current row is newer — archive the existing (older) one
           logger.warn(
-            `[INF-02] duplicate path detected: "${vaultPath}" — rows id=${existing.id} (older) and id=${row.id} (newer) — archiving older`
+            `[INF-02] duplicate path detected: "${vaultPath}" — rows id=${existing.id} (older) and id=${dbRow.id} (newer) — archiving older`
           );
-          pathToRow.set(vaultPath, row as DbRow);
+          pathToRow.set(vaultPath, dbRow);
           duplicateIdsToArchive.push(existing.id);
         } else {
           // Existing row is newer — archive the current row
           logger.warn(
-            `[INF-02] duplicate path detected: "${vaultPath}" — rows id=${row.id} (older) and id=${existing.id} (newer) — archiving older`
+            `[INF-02] duplicate path detected: "${vaultPath}" — rows id=${dbRow.id} (older) and id=${existing.id} (newer) — archiving older`
           );
-          duplicateIdsToArchive.push(row.id);
+          duplicateIdsToArchive.push(dbRow.id);
         }
       } else {
-        pathToRow.set(vaultPath, row as DbRow);
+        pathToRow.set(vaultPath, dbRow);
       }
     }
   }
@@ -416,7 +416,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
       try {
         // Attempt normal YAML parse via matter()
         const parsed = matter(rawContent);
-        frontmatter = parsed.data as Record<string, unknown>;
+        frontmatter = parsed.data;
         content = parsed.content;
       } catch (yamlErr: unknown) {
         // YAML parse failed — attempt regex recovery of fqc_id
@@ -569,7 +569,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
         } else {
           // MOVE: original path is gone, file relocated to new path
           // OBS-03: Add path-comparison annotation to determine move type (rename vs directory move)
-          const oldPath = dbRowByHash.path as string;
+          const oldPath = dbRowByHash.path;
           const newPath = relativePath;
           const sameDirectory = dirname(oldPath) === dirname(newPath);
           const moveType = sameDirectory ? 'rename in same directory' : 'directory changed';
@@ -680,7 +680,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
           await supabase
             .from('fqc_documents')
             .update(updates)
-            .eq('id', Y as string);
+            .eq('id', Y);
           seenFqcIds.add(Y as string);
           hashMismatches++;
           logger.info(
@@ -874,9 +874,9 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   // means the file has gone missing from the vault.
   if (!dbDocsError && allDbDocs) {
     for (const row of allDbDocs) {
-      const fqcId = row.id as string;
-      const rowPath = row.path as string;
-      const rowStatus = row.status as string;
+      const fqcId = row.id;
+      const rowPath = row.path;
+      const rowStatus = row.status;
 
       if (!seenFqcIds.has(fqcId) && !archivedDuplicateIds.has(fqcId) && rowStatus === 'active') {
         // ERR-05: Verify file is genuinely gone before marking missing
@@ -1117,7 +1117,7 @@ export async function repairFrontmatter(config: FlashQueryConfig): Promise<void>
             const raw = await readFile(`${vaultRoot}/${filePath}`, 'utf-8');
             const parsed = matter(raw);
             fileContent = parsed.content;
-            existingFrontmatter = parsed.data as Record<string, unknown>;
+            existingFrontmatter = parsed.data;
           } catch {
             // If file is unreadable, write empty body with frontmatter
             fileContent = '';

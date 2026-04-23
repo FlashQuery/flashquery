@@ -123,5 +123,5 @@ export async function isLocked(
     .maybeSingle();
 
   if (error || !data) return { locked: false };
-  return { locked: true, instanceId: data.instance_id, expiresAt: data.expires_at };
+  return { locked: true, instanceId: data.instance_id as string, expiresAt: data.expires_at as string };
 }

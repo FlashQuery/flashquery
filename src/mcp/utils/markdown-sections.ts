@@ -4,7 +4,7 @@
  */
 
 import { extractHeadings } from './markdown-utils.js';
-import { formatKeyValueEntry, formatBatchSeparator } from './response-formats.js';
+import { formatKeyValueEntry } from './response-formats.js';
 
 /**
  * Heading object with metadata
@@ -309,8 +309,8 @@ export function insertAtPosition(
   }
 
   // Exhaustiveness check — all position modes handled above
-  const _: never = position;
-  throw new Error(`Unreachable: unhandled position "${_}"`);
+  const _exhaustive: never = position;
+  throw new Error(`Unreachable: unhandled position "${String(_exhaustive)}"`);
 }
 
 /**

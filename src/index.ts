@@ -37,7 +37,7 @@ import { initEmbedding, embeddingProvider, NullEmbeddingProvider } from './embed
 import { initPlugins, pluginManager } from './plugins/manager.js';
 import { initMCP } from './mcp/server.js';
 import { initializeShutdownHandlers } from './server/shutdown.js';
-import { runScanOnce, repairFrontmatter } from './services/scanner.js';
+import { runScanOnce } from './services/scanner.js';
 import { loadPluginManifests } from './services/manifest-loader.js';
 import type { FolderMapping } from './services/manifest-loader.js';
 

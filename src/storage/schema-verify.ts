@@ -19,7 +19,7 @@ export async function tableExists(client: pg.Client, tableName: string): Promise
     `SELECT to_regclass('public.${tableName}') IS NOT NULL`
   );
   // PostgreSQL returns the column as '?column?' when unnamed
-  return result.rows[0]['?column?'] === true;
+  return (result.rows[0] as Record<string, unknown>)['?column?'] === true;
 }
 
 /**

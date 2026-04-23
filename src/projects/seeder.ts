@@ -1,4 +1,3 @@
-import pg from 'pg';
 import { logger } from '../logging/logger.js';
 import { supabaseManager } from '../storage/supabase.js';
 import type { FlashQueryConfig } from '../config/loader.js';

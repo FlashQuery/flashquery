@@ -127,14 +127,16 @@ export function createGlobalErrorHandler() {
 function wrapServerWithCorrelationIds(server: McpServer): McpServer {
   const originalTool = server.tool.bind(server);
   // Override tool() to wrap the last argument (the handler) with initializeContext
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
   (server as any).tool = (...args: any[]) => {
     const lastIdx = args.length - 1;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const originalHandler = args[lastIdx];
     if (typeof originalHandler === 'function') {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       args[lastIdx] = async (params: any) => {
         const correlationId = generateCorrelationId();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return
         return await initializeContext(correlationId, () => originalHandler(params));
       };
     }
@@ -188,7 +190,7 @@ export function createTokenHandler(config: FlashQueryConfig) {
 
       // Extract grant_type from body or query (OAuth 2.0 allows both)
       const grantType = (req.body as Record<string, unknown>)?.grant_type || req.query?.grant_type;
-      logger.detail(`[POST /token] extracted grant_type: ${grantType || '(none)'}`);
+      logger.detail(`[POST /token] extracted grant_type: ${typeof grantType === 'string' ? grantType : '(none)'}`);
 
       // ── Branch 1: grant_type=authorization_code (Phase 51, D-07) ──
       if (grantType === 'authorization_code') {
@@ -395,7 +397,7 @@ export function createAuthorizeHandler(config: FlashQueryConfig) {
       // Handle validation errors (Zod) and unexpected errors
       if (err instanceof z.ZodError) {
         // Invalid parameters — return OAuth 2.0 error (RFC 6749 Section 4.1.2.1, D-08)
-        const issueKey = err.issues[0]?.path?.[0] ?? 'unknown';
+        const issueKey = String(err.issues[0]?.path?.[0] ?? 'unknown');
 
         // DEBUG: Log validation failure (D-09)
         logger.debug(`[authorize] validation error: ${issueKey}`);
@@ -621,7 +623,7 @@ export async function initMCP(
         resolve(server);
       });
       server.on('error', (err) => {
-        logger.error(`HTTP server error: ${(err as Error).message}`);
+        logger.error(`HTTP server error: ${(err).message}`);
         reject(err);
       });
     });

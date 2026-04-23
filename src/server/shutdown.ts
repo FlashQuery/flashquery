@@ -99,7 +99,7 @@ export class ShutdownCoordinator {
   }
 
   private async drainMcpRequests(): Promise<void> {
-    const deadline = Date.now() + 10_000; // 10-second timeout (SHUT-06)
+    const _deadline = Date.now() + 10_000; // 10-second timeout (SHUT-06)
     this.logInfo('MCP sessions draining (timeout=10s)');
 
     const activeSessionCount = 0; // Placeholder — actual count would come from MCP server
@@ -202,7 +202,7 @@ export class ShutdownCoordinator {
       process.stdout.destroy();
       process.stderr.destroy();
       // Note: this log may not appear since we just destroyed stderr
-    } catch (err: unknown) {
+    } catch {
       // Ignore errors — stdio may already be closed
     }
   }
@@ -224,7 +224,6 @@ export class ShutdownCoordinator {
   }
 
   private logDebug(message: string): void {
-    const timestamp = this.formatTimestamp();
     logger.debug(`${message}`);
   }
 
@@ -260,6 +259,7 @@ export class ShutdownCoordinator {
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/require-await
 export async function initializeShutdownHandlers(
   config: FlashQueryConfig,
   httpServer?: http.Server

@@ -21,7 +21,6 @@ import {
   formatKeyValueEntry,
   formatBatchSeparator,
   formatEmptyResults,
-  formatMissingIds,
   joinBatchEntries,
   shouldShowProgress,
   progressMessage,
@@ -71,7 +70,7 @@ function sanitizeFilename(title: string): string {
 // Helper: build document path with collision handling
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildDocPath(
+function _buildDocPath(
   vaultRoot: string,
   project: string,
   title: string
@@ -595,7 +594,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         );
 
         const relativePath = preScan.relativePath;
-        const absPath = preScan.absPath;
+        const _absPath = preScan.absPath;
         const fqcId = preScan.capturedFrontmatter.fqcId;
 
         // Read raw file — use for both hashing and content display
@@ -615,7 +614,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             .eq('id', fqcId)
             .single();
 
-          if (row && (row as { content_hash: string }).content_hash !== contentHash) {
+          if (row && (row).content_hash !== contentHash) {
             logger.debug(
               `get_document: stale hash detected for ${relativePath} — queuing background re-embed`
             );
@@ -810,7 +809,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         // Read existing file — extract current frontmatter and body
         const rawContent = await readFile(absPath, 'utf-8');
         const parsed = matter(rawContent);
-        const existingData = parsed.data as Record<string, unknown>;
+        const existingData = parsed.data;
         const existingBody = parsed.content;
 
         // Merge frontmatter: existing first, then caller overrides, then protected fields last
@@ -826,9 +825,9 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           // Protected fields — caller cannot override these
           [FM.TITLE]: effectiveTitle,
           [FM.TAGS]: effectiveTags,
-          [FM.INSTANCE]: existingData[FM.INSTANCE] ?? config.instance.id,
-          [FM.CREATED]: existingData[FM.CREATED],
-          [FM.STATUS]: existingData[FM.STATUS] ?? 'active',
+          [FM.INSTANCE]: (existingData[FM.INSTANCE] as string | undefined) ?? config.instance.id,
+          [FM.CREATED]: existingData[FM.CREATED] as string | undefined,
+          [FM.STATUS]: (existingData[FM.STATUS] as string | undefined) ?? 'active',
           // NOTE: vaultManager.writeMarkdown() sets `updated` automatically
         };
 
@@ -994,7 +993,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               relativePath,
               archivedFm,
               parsed.content,
-              { gitAction: 'update', gitTitle: String(archivedFm[FM.TITLE] ?? relativePath) }
+              { gitAction: 'update', gitTitle: typeof archivedFm[FM.TITLE] === 'string' ? archivedFm[FM.TITLE] : relativePath }
             );
 
             // Step 3: Update Supabase fqc_documents
@@ -1388,7 +1387,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         // Read source document
         const rawContent = await readFile(sourceResolved.absPath, 'utf-8');
         const parsed = matter(rawContent);
-        const sourceData = parsed.data as Record<string, unknown>;
+        const sourceData = parsed.data;
 
         // Preserve source metadata immutably (SPEC-06: no parameter overrides)
         const copyTitle = typeof sourceData[FM.TITLE] === 'string' ? sourceData[FM.TITLE] as string : sourceResolved.relativePath;
@@ -1992,7 +1991,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           const newFilename = newFilenameWithExt.replace(/\.md$/, '');
 
           // Update title only if it matches the old filename (derived)
-          let updateData: Record<string, unknown> = {
+          const updateData: Record<string, unknown> = {
             path: destPath,
           };
 

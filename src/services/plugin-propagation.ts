@@ -81,7 +81,7 @@ export async function propagateFqcIdChange(
   }
 
   // ── Step 2: Discover plugin tables via information_schema ────────────────
-  let discoveredTables: string[] = [];
+  let discoveredTables: string[];
   let updateCount = 0;
 
   const dbUrl = databaseUrl ?? process.env.DATABASE_URL;

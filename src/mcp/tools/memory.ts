@@ -9,7 +9,6 @@ import { validateAllTags } from '../../utils/tag-validator.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
   formatKeyValueEntry,
-  formatBatchSeparator,
   shouldShowProgress,
   progressMessage,
   formatEmptyResults,
@@ -123,16 +122,16 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
         let scopeCorrected = false;
         if (plugin_scope && plugin_scope !== 'global') {
           try {
-            const { data: matchedScope, error: rpcError } = await supabaseManager.getClient()
+            const { data: matchedScope, error: rpcError } = await (supabaseManager.getClient()
               .rpc('find_plugin_scope', {
                 search_name: plugin_scope,
                 p_instance_id: config.instance.id,
                 threshold: 0.8,
-              });
+              }) as Promise<{ data: string; error: { message: string } | null }>);
             if (rpcError) {
               logger.warn(`save_memory: plugin_scope lookup failed: ${rpcError.message} — defaulting to 'global'`);
             } else {
-              resolvedScope = matchedScope as string;
+              resolvedScope = matchedScope;
               if (resolvedScope !== plugin_scope && resolvedScope !== 'global') {
                 scopeCorrected = true;
               }
@@ -165,7 +164,8 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
             : ' Scope: Global.';
 
         // Fire-and-forget: embed after MCP response is returned (matches update_memory pattern)
-        const newId = (data as { id: string }).id;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const newId: string = data.id;
         void embeddingProvider
           .embed(content)
           .then((vector) =>
@@ -370,7 +370,8 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
         );
 
         // Fire-and-forget: embed after MCP response is returned (matches create_document pattern)
-        const newId = (data as { id: string }).id;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        const newId: string = data.id;
         void embeddingProvider
           .embed(content)
           .then((vector) =>
@@ -529,7 +530,7 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
 
       try {
         const isBatch = Array.isArray(memory_ids);
-        const ids = isBatch ? memory_ids : [memory_ids as string];
+        const ids = isBatch ? memory_ids : [memory_ids];
 
         const supabase = supabaseManager.getClient();
         const { data, error } = await supabase

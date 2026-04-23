@@ -20,7 +20,6 @@ import { vaultManager } from '../../storage/vault.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
   formatKeyValueEntry,
-  formatBatchSeparator,
   shouldShowProgress,
   progressMessage,
   formatLinkedDocEntry,
@@ -28,7 +27,7 @@ import {
   joinBatchEntries,
   formatEmptyResults,
 } from '../utils/response-formats.js';
-import { extractWikilinks, extractHeadings as mdExtractHeadings, filterHeadingsByDepth } from '../utils/markdown-utils.js';
+import { filterHeadingsByDepth } from '../utils/markdown-utils.js';
 import { insertAtPosition, findHeadingOccurrence, getSectionBoundaries } from '../utils/markdown-sections.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 import { serializeOrderedFrontmatter } from '../utils/frontmatter-sanitizer.js';
@@ -49,7 +48,6 @@ function applyTagChanges(existing: string[], addTags: string[], removeTags: stri
 // ─────────────────────────────────────────────────────────────────────────────
 
 const LINKED_DOC_REGEX = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
-const HEADING_REGEX = /^(#{1,6})\s+(.+)$/gm;
 
 interface HeadingEntry {
   level: number;
@@ -158,7 +156,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const newHash = computeHash(serialized);
 
         // Call targetedScan to update frontmatter
-        const preScan = await targetedScan(config, supabase, resolved, newHash, logger);
+        await targetedScan(config, supabase, resolved, newHash, logger);
 
         // Update fm with fq_id from targetedScan
         parsed.data[FM.ID] = fqcId;
@@ -1080,7 +1078,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               isError: true,
             };
           }
-          dbRows = (data ?? []) as typeof dbRows;
+          dbRows = (data ?? []);
         }
 
         // Build fqcId → row map for O(1) lookup
@@ -1556,7 +1554,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         // Insert content at specified position
         let modifiedBody: string;
         try {
-          modifiedBody = insertAtPosition(body, position as any, insertContent, heading, occurrence);
+          modifiedBody = insertAtPosition(body, position, insertContent, heading, occurrence);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return {

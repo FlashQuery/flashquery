@@ -145,6 +145,7 @@ export function parsePluginSchema(yamlString: string): ParsedPluginSchema {
 
   // D-02: Parse version as string first, fall back to Number if already numeric
   const versionValue = plugin.version ?? '1.0.0';
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string
   const pluginVersion = typeof versionValue === 'string' ? versionValue : String(versionValue);
 
   const pluginDescription =
@@ -368,7 +369,7 @@ export function buildPluginTableDDL(
   // user-defined column set.
   const userColNames = new Set(tableSpec.columns.map((c) => c.name.toLowerCase()));
   const filteredImplicitCols = implicitCols.filter((def) => {
-    const bareName = def.split(/\s+/)[0]!.toLowerCase();
+    const bareName = def.split(/\s+/)[0].toLowerCase();
     return !userColNames.has(bareName);
   });
 
@@ -389,7 +390,7 @@ export function buildPluginTableDDL(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getFolderClaimsMap(
-  config: FlashQueryConfig
+  _config: FlashQueryConfig
 ): Map<string, { pluginId: string; typeId: string }> {
   try {
     // Get all plugin entries from the global singleton

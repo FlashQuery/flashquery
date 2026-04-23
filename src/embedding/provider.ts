@@ -136,6 +136,7 @@ export class NullEmbeddingProvider implements EmbeddingProvider {
     this.dimensions = dimensions;
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async embed(_text: string): Promise<number[]> {
     throw new Error(
       'Semantic search unavailable (no API key configured). Use tag-based search instead.'

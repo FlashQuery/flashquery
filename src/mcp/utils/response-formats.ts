@@ -34,6 +34,8 @@ export function formatKeyValueEntry(label: string, value: unknown): string {
     return `${label}: ${value}`;
   }
 
+  // At this point value is a primitive (string/symbol/bigint/function) — safe to stringify
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string
   return `${label}: ${String(value)}`;
 }
 

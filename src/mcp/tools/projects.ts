@@ -19,7 +19,7 @@ export function registerProjectTools(server: McpServer, _config: FlashQueryConfi
         '@deprecated Projects model removed in v1.7. Use `fqc scan` to list vault files.',
       inputSchema: {},
     },
-    async () => {
+    () => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -56,7 +56,7 @@ export function registerProjectTools(server: McpServer, _config: FlashQueryConfi
         project: z.string().optional().describe('@deprecated This parameter is ignored.'),
       },
     },
-    async () => {
+    () => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {

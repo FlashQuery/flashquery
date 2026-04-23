@@ -137,7 +137,7 @@ async function checkLegacyTables(config: FlashQueryConfig): Promise<CheckResult>
     }
 
     return { name: 'Legacy schema tables', passed: true };
-  } catch (err) {
+  } catch {
     // Connection error — skip this check gracefully
     return {
       name: 'Legacy schema tables',

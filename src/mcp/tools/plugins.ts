@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { readFileSync } from 'node:fs';
-import pg from 'pg';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import {
@@ -18,7 +17,7 @@ import { createPgClientIPv4 } from '../../utils/pg-client.js';
 import { compareSchemaVersions, analyzeSchemaChanges } from '../../utils/schema-migration.js';
 import { reloadManifests } from '../../services/manifest-loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
-import { formatKeyValueEntry } from '../utils/response-formats.js';
+// formatKeyValueEntry imported for potential future use — not currently referenced in this file
 
 // ─────────────────────────────────────────────────────────────────────────────
 // registerPluginTools — registers register_plugin and get_plugin_info
@@ -99,7 +98,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
 
         // Step 5: handle version mismatch with auto-migration logic (SPEC-15)
         if (existing && existing.schema_version !== schema.plugin.version) {
-          const versionComparison = compareSchemaVersions(existing.schema_version, schema.plugin.version);
+          const versionComparison = compareSchemaVersions(existing.schema_version as string, schema.plugin.version);
           let safeChangeCount = 0;
 
           // Identical versions (should not happen, but idempotent check)
@@ -138,7 +137,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             // Parse old schema for comparison
             let oldSchema;
             try {
-              oldSchema = parsePluginSchema(registryData.schema_yaml);
+              oldSchema = parsePluginSchema(registryData.schema_yaml as string);
             } catch (err) {
               logger.warn(`register_plugin: failed to parse old schema for migration: ${err instanceof Error ? err.message : String(err)}`);
               return {
@@ -193,7 +192,8 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                       if (col) {
                         const fullTableName = resolveTableName(schema.plugin.id, instanceName, table.name);
                         const nullabilityClause = col.required ? ' NOT NULL' : '';
-                        const defaultClause = col.default !== undefined ? ` DEFAULT '${col.default}'` : '';
+                        // eslint-disable-next-line @typescript-eslint/no-base-to-string
+                        const defaultClause = col.default !== undefined ? ` DEFAULT '${String(col.default)}'` : '';
                         const alterDDL = `ALTER TABLE "${fullTableName}" ADD COLUMN IF NOT EXISTS "${col.name}" ${col.type}${defaultClause}${nullabilityClause}`;
                         await pgClient.query(alterDDL);
                       }
@@ -506,14 +506,14 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         // Parse schema to get table names
         let tablesToDrop: string[] = [];
         try {
-          const schema = parsePluginSchema(registryRow.schema_yaml);
+          const schema = parsePluginSchema(registryRow.schema_yaml as string);
           tablesToDrop = schema.tables.map((t) => resolveTableName(plugin_id, instanceName, t.name));
         } catch (err) {
           logger.warn(`unregister_plugin: failed to parse schema for ${plugin_id}: ${err instanceof Error ? err.message : String(err)}`);
         }
 
         // Count affected records
-        let tableStats: Array<{ table: string; count: number }> = [];
+        const tableStats: Array<{ table: string; count: number }> = [];
         const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
 
         try {
@@ -526,14 +526,14 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                 `SELECT COUNT(*) as count FROM information_schema.tables WHERE table_name = $1 AND table_schema = 'public'`,
                 [table]
               );
-              const tableExists = (result.rows[0]?.count ?? 0) > 0;
+              const tableExists = ((result.rows[0] as { count?: unknown })?.count ?? 0) > 0;
               if (tableExists) {
                 const countResult = await pgClient.query(
                   `SELECT COUNT(*) as count FROM "${table}" WHERE status = 'active'`
                 );
                 tableStats.push({
                   table,
-                  count: Number(countResult.rows[0]?.count ?? 0),
+                  count: Number((countResult.rows[0] as { count?: unknown })?.count ?? 0),
                 });
               }
             } catch (err) {

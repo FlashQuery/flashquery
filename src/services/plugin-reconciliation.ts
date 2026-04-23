@@ -14,8 +14,8 @@ import { createPgClientIPv4 } from '../utils/pg-client.js';
 import { atomicWriteFrontmatter } from '../utils/frontmatter.js';
 import { computeHash } from '../mcp/tools/documents.js';
 import { vaultManager } from '../storage/vault.js';
-import { pluginManager, getTypeRegistryMap } from '../plugins/manager.js';
-import type { DocumentTypePolicy, TypeRegistryEntry, RegistryEntry } from '../plugins/manager.js';
+import { pluginManager } from '../plugins/manager.js';
+import type { DocumentTypePolicy, RegistryEntry } from '../plugins/manager.js';
 import { FM } from '../constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,7 +270,7 @@ async function readFrontmatterFromDisk(relativePath: string): Promise<Record<str
     const absPath = toAbsolutePath(relativePath);
     const raw = await readFile(absPath, 'utf-8');
     const parsed = matter(raw);
-    return (parsed.data ?? {}) as Record<string, unknown>;
+    return (parsed.data ?? {});
   } catch (err) {
     logger.debug(`[RECON] Failed to read frontmatter for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`);
     return {};
@@ -398,7 +398,8 @@ export async function executeReconciliationActions(
           [FM.TYPE]: doc.typeId,
         });
       } else {
-        logger.debug(`[RECON] Document ${doc.path} already owned by ${String(existingOwner)}, skipping frontmatter write for ${pluginId}`);
+        // eslint-disable-next-line @typescript-eslint/no-base-to-string
+        logger.debug(`[RECON] Document ${doc.path} already owned by ${typeof existingOwner === 'string' ? existingOwner : String(existingOwner)}, skipping frontmatter write for ${pluginId}`);
       }
 
       // Re-read frontmatter for field_map application
@@ -455,7 +456,7 @@ export async function executeReconciliationActions(
         .from('fqc_documents')
         .select('updated_at, content_hash')
         .eq('id', doc.fqcId)
-        .single();
+        .single() as { data: { updated_at: string; content_hash: string } | null };
       const postWriteUpdatedAt = postWriteRow?.updated_at ?? finalTs;
 
       // INSERT plugin row — always include instance_id (NOT NULL) and last_seen_updated_at
@@ -628,7 +629,7 @@ export async function reconcilePluginDocuments(
     // Supabase JS .select() defaults to 1000 rows max; raw pg queries return all rows.
     // RO-51/RO-62/RO-63: both Path 1 and Path 2 must discover all matching documents.
     const candidateMap = new Map<string, FqcDocRow>();
-    const supabase = supabaseManager.getClient();
+    const _supabase = supabaseManager.getClient();
 
     // Path 1: folder-based query — select all docs whose path is inside a watched folder
     if (watchedFolders.size > 0) {
@@ -681,7 +682,7 @@ export async function reconcilePluginDocuments(
       const sql = `SELECT id, fqc_id, status, path, last_seen_updated_at FROM ${pg.escapeIdentifier(tableName as string)}`;
       let rows: Array<{ id: string; fqc_id: string; status: string; path: string | null; last_seen_updated_at: string | null }> = [];
       try {
-        const res = await pgClient.query(sql);
+        const res = await pgClient.query<{ id: string; fqc_id: string; status: string; path: string | null; last_seen_updated_at: string | null }>(sql);
         rows = res.rows;
       } catch (err) {
         const pgErr = err as { code?: string };
