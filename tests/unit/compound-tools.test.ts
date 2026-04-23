@@ -206,7 +206,7 @@ describe('TSA-04: targetedScan integration in compound tools', () => {
 
     // Default: readFile returns a document with frontmatter + body
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Test Doc\nfqc_id: doc-uuid-123\nstatus: active\n---\n\nExisting body content.' as unknown as Buffer
+      '---\nfq_title: Test Doc\nfq_id: doc-uuid-123\nfq_status: active\n---\n\nExisting body content.' as unknown as Buffer
     );
 
     // Default: writeFile succeeds
@@ -261,7 +261,7 @@ describe('TSA-04: targetedScan integration in compound tools', () => {
 
     await handler({
       identifier: '_global/test-doc.md',
-      updates: { title: 'New Title' },
+      updates: { fq_title: 'New Title' },
     });
 
     // targetedScan should have been called
@@ -326,7 +326,7 @@ describe('append_to_doc', () => {
 
     // CRITICAL: Use mockImplementation to ensure fresh mock behavior for each call
     // This prevents mock state pollution from previous describe blocks
-    const testDocContent = '---\ntitle: Test Doc\nfqc_id: doc-uuid-123\nstatus: active\n---\n\nExisting body content.';
+    const testDocContent = '---\nfq_title: Test Doc\nfq_id: doc-uuid-123\nfq_status: active\n---\n\nExisting body content.';
     vi.mocked(fsPromises.readFile).mockImplementation(async () => testDocContent as unknown as Buffer);
 
     // Default: writeFile succeeds
@@ -487,7 +487,7 @@ describe('append_to_doc', () => {
       resolvedVia: 'path',
     });
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: No ID Doc\nstatus: active\n---\n\nBody content.' as unknown as Buffer
+      '---\nfq_title: No ID Doc\nfq_status: active\n---\n\nBody content.' as unknown as Buffer
     );
 
     const handler = mockServer.getHandler('append_to_doc');
@@ -518,7 +518,7 @@ describe('update_doc_header', () => {
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Old\nstatus: draft\nfqc_id: doc-uuid-456\n---\n\nBody unchanged.' as unknown as Buffer
+      '---\nfq_title: Old\nfq_status: draft\nfq_id: doc-uuid-456\n---\n\nBody unchanged.' as unknown as Buffer
     );
     vi.mocked(fsPromises.writeFile).mockResolvedValue(undefined);
 
@@ -547,25 +547,25 @@ describe('update_doc_header', () => {
 
     await handler({
       identifier: '_global/doc.md',
-      updates: { title: 'New' },
+      updates: { fq_title: 'New' },
     });
 
     expect(vaultManager.writeMarkdown).toHaveBeenCalledOnce();
     const [, writtenFrontmatter, writtenBody] = (vaultManager.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
 
     // New title must appear in frontmatter
-    expect(writtenFrontmatter.title).toBe('New');
+    expect(writtenFrontmatter['fq_title']).toBe('New');
     // Old status must be preserved
-    expect(writtenFrontmatter.status).toBe('draft');
+    expect(writtenFrontmatter['fq_status']).toBe('draft');
     // Body must be preserved
     expect(writtenBody).toContain('Body unchanged.');
     // Old title must not be present
-    expect(writtenFrontmatter.title).not.toBe('Old');
+    expect(writtenFrontmatter['fq_title']).not.toBe('Old');
   });
 
   it('Test 6: passing null value removes the key from frontmatter entirely', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Doc\nstatus: draft\nobsolete_field: some_value\nfqc_id: doc-uuid-456\n---\n\nBody.' as unknown as Buffer
+      '---\nfq_title: Doc\nfq_status: draft\nobsolete_field: some_value\nfq_id: doc-uuid-456\n---\n\nBody.' as unknown as Buffer
     );
 
     const handler = mockServer.getHandler('update_doc_header');
@@ -587,7 +587,7 @@ describe('update_doc_header', () => {
 
     await handler({
       identifier: '_global/doc.md',
-      updates: { tags: ['tag1', 'tag2'] },
+      updates: { fq_tags: ['tag1', 'tag2'] },
     });
 
     // Supabase update must have been called with 'fqc_documents'
@@ -604,7 +604,7 @@ describe('update_doc_header', () => {
 
     await handler({
       identifier: '_global/doc.md',
-      updates: { title: 'New Title' },
+      updates: { fq_title: 'New Title' },
     });
 
     expect(embeddingProvider.embed).not.toHaveBeenCalled();
@@ -617,7 +617,7 @@ describe('update_doc_header', () => {
 
     const result = await handler({
       identifier: '_global/doc.md',
-      updates: { tags: ['#status/draft', '#status/published'] },
+      updates: { fq_tags: ['#status/draft', '#status/published'] },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     // D-06: #status/* tags treated like any other tag — no conflict rejection
@@ -628,7 +628,7 @@ describe('update_doc_header', () => {
   it('Task2: update_doc_header with document containing multiple #status/* tags proceeds normally (D-06)', async () => {
     // Mock a document with 2 #status/* tags (previously a conflict, now treated as normal tags)
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Old\nfqc_id: doc-uuid-456\ntags:\n  - "#status/draft"\n  - "#status/published"\n---\n\nBody unchanged.' as unknown as Buffer
+      '---\nfq_title: Old\nfq_id: doc-uuid-456\nfq_tags:\n  - "#status/draft"\n  - "#status/published"\n---\n\nBody unchanged.' as unknown as Buffer
     );
 
     const handler = mockServer.getHandler('update_doc_header');
@@ -636,7 +636,7 @@ describe('update_doc_header', () => {
     // Update a non-tag field — D-06 means no conflict check happens
     const result = await handler({
       identifier: '_global/doc.md',
-      updates: { title: 'New Title' },
+      updates: { fq_title: 'New Title' },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     // D-06: No conflict detection for #status/* tags — update proceeds
@@ -652,7 +652,7 @@ describe('update_doc_header', () => {
 
     const result = await handler({
       identifier: '_global/missing.md',
-      updates: { title: 'New' },
+      updates: { fq_title: 'New' },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(true);
@@ -664,7 +664,7 @@ describe('update_doc_header', () => {
 
     await handler({
       identifier: '_global/doc.md',
-      updates: { title: 'New Title' },
+      updates: { fq_title: 'New Title' },
     });
 
     expect(vaultManager.writeMarkdown).toHaveBeenCalledOnce();
@@ -692,8 +692,8 @@ describe('insert_doc_link', () => {
     // Default: readFile returns source doc content for the source, target doc for the target
     // First call = target (to read title), second call = source (to read links array)
     vi.mocked(fsPromises.readFile)
-      .mockResolvedValueOnce('---\ntitle: My Doc\nfqc_id: target-uuid\n---\n\nTarget body.' as unknown as Buffer)  // target
-      .mockResolvedValue('---\ntitle: Source Doc\nfqc_id: source-uuid\n---\n\nSource body.' as unknown as Buffer);  // source
+      .mockResolvedValueOnce('---\nfq_title: My Doc\nfq_id: target-uuid\n---\n\nTarget body.' as unknown as Buffer)  // target
+      .mockResolvedValue('---\nfq_title: Source Doc\nfq_id: source-uuid\n---\n\nSource body.' as unknown as Buffer);  // source
 
     vi.mocked(fsPromises.writeFile).mockResolvedValue(undefined);
 
@@ -737,8 +737,8 @@ describe('insert_doc_link', () => {
     // Reset readFile: first call = target (title read), second call = source (with existing links)
     vi.mocked(fsPromises.readFile).mockReset();
     vi.mocked(fsPromises.readFile)
-      .mockResolvedValueOnce('---\ntitle: My Doc\nfqc_id: target-uuid\n---\n\nTarget body.' as unknown as Buffer)
-      .mockResolvedValueOnce('---\ntitle: Source Doc\nfqc_id: source-uuid\nlinks:\n  - "[[Existing]]"\n---\n\nSource body.' as unknown as Buffer);
+      .mockResolvedValueOnce('---\nfq_title: My Doc\nfq_id: target-uuid\n---\n\nTarget body.' as unknown as Buffer)
+      .mockResolvedValueOnce('---\nfq_title: Source Doc\nfq_id: source-uuid\nlinks:\n  - "[[Existing]]"\n---\n\nSource body.' as unknown as Buffer);
 
     const handler = mockServer.getHandler('insert_doc_link');
 
@@ -756,8 +756,8 @@ describe('insert_doc_link', () => {
   it('Test 12: inserting a link that already exists is a no-op — array unchanged', async () => {
     vi.mocked(fsPromises.readFile).mockReset();
     vi.mocked(fsPromises.readFile)
-      .mockResolvedValueOnce('---\ntitle: My Doc\nfqc_id: target-uuid\n---\n\nTarget body.' as unknown as Buffer)
-      .mockResolvedValueOnce('---\ntitle: Source Doc\nfqc_id: source-uuid\nlinks:\n  - "[[My Doc]]"\n---\n\nSource body.' as unknown as Buffer);
+      .mockResolvedValueOnce('---\nfq_title: My Doc\nfq_id: target-uuid\n---\n\nTarget body.' as unknown as Buffer)
+      .mockResolvedValueOnce('---\nfq_title: Source Doc\nfq_id: source-uuid\nlinks:\n  - "[[My Doc]]"\n---\n\nSource body.' as unknown as Buffer);
 
     const handler = mockServer.getHandler('insert_doc_link');
 
@@ -839,8 +839,8 @@ describe('insert_doc_link', () => {
     // Reset readFile so beforeEach queued values don't interfere
     vi.mocked(fsPromises.readFile).mockReset();
     vi.mocked(fsPromises.readFile)
-      .mockResolvedValueOnce('---\nfqc_id: target-uuid\n---\n\nTarget body (no title).' as unknown as Buffer)
-      .mockResolvedValueOnce('---\ntitle: Source Doc\nfqc_id: source-uuid\n---\n\nSource body.' as unknown as Buffer);
+      .mockResolvedValueOnce('---\nfq_id: target-uuid\n---\n\nTarget body (no title).' as unknown as Buffer)
+      .mockResolvedValueOnce('---\nfq_title: Source Doc\nfq_id: source-uuid\n---\n\nSource body.' as unknown as Buffer);
 
     const handler = mockServer.getHandler('insert_doc_link');
 
@@ -914,7 +914,7 @@ describe('apply_tags', () => {
 
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Tagged Doc\nfqc_id: doc-uuid-tags\ntags:\n  - old\n---\n\nBody content.' as unknown as Buffer
+      '---\nfq_title: Tagged Doc\nfq_id: doc-uuid-tags\nfq_tags:\n  - old\n---\n\nBody content.' as unknown as Buffer
     );
     vi.mocked(fsPromises.writeFile).mockResolvedValue(undefined);
 
@@ -945,8 +945,8 @@ describe('apply_tags', () => {
     // vaultManager.writeMarkdown should have been called (not raw writeFile)
     expect(vaultManager.writeMarkdown).toHaveBeenCalledOnce();
     const [, writtenFrontmatter] = (vaultManager.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
-    expect(writtenFrontmatter.tags).toContain('old');
-    expect(writtenFrontmatter.tags).toContain('new');
+    expect(writtenFrontmatter['fq_tags']).toContain('old');
+    expect(writtenFrontmatter['fq_tags']).toContain('new');
 
     // Supabase fqc_documents update must have been called
     expect(mockClient.from).toHaveBeenCalledWith('fqc_documents');
@@ -962,7 +962,7 @@ describe('apply_tags', () => {
     const mockClient = makeApplyTagsDocMock(['old', 'existing']);
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockClient as unknown as ReturnType<typeof supabaseManager.getClient>);
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Tagged Doc\nfqc_id: doc-uuid-tags\ntags:\n  - old\n  - existing\n---\n\nBody.' as unknown as Buffer
+      '---\nfq_title: Tagged Doc\nfq_id: doc-uuid-tags\nfq_tags:\n  - old\n  - existing\n---\n\nBody.' as unknown as Buffer
     );
 
     const handler = mockServer.getHandler('apply_tags');
@@ -975,7 +975,7 @@ describe('apply_tags', () => {
     const [, writtenFrontmatter] = (vaultManager.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
 
     // 'existing' must appear exactly once in the tags array
-    const tags = writtenFrontmatter.tags as string[];
+    const tags = writtenFrontmatter['fq_tags'] as string[];
     const existingCount = tags.filter((t) => t === 'existing').length;
     expect(existingCount).toBe(1);
   });
@@ -984,7 +984,7 @@ describe('apply_tags', () => {
     const mockClient = makeApplyTagsDocMock(['old', 'keep']);
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockClient as unknown as ReturnType<typeof supabaseManager.getClient>);
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Tagged Doc\nfqc_id: doc-uuid-tags\ntags:\n  - old\n  - keep\n---\n\nBody.' as unknown as Buffer
+      '---\nfq_title: Tagged Doc\nfq_id: doc-uuid-tags\nfq_tags:\n  - old\n  - keep\n---\n\nBody.' as unknown as Buffer
     );
 
     const handler = mockServer.getHandler('apply_tags');
@@ -995,7 +995,7 @@ describe('apply_tags', () => {
 
     expect(vaultManager.writeMarkdown).toHaveBeenCalledOnce();
     const [, writtenFrontmatter] = (vaultManager.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
-    const tags = writtenFrontmatter.tags as string[];
+    const tags = writtenFrontmatter['fq_tags'] as string[];
     expect(tags).not.toContain('old');
     expect(tags).toContain('keep');
 
@@ -1012,7 +1012,7 @@ describe('apply_tags', () => {
     const mockClient = makeApplyTagsDocMock(['existing']);
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockClient as unknown as ReturnType<typeof supabaseManager.getClient>);
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Tagged Doc\nfqc_id: doc-uuid-tags\ntags:\n  - existing\n---\n\nBody.' as unknown as Buffer
+      '---\nfq_title: Tagged Doc\nfq_id: doc-uuid-tags\nfq_tags:\n  - existing\n---\n\nBody.' as unknown as Buffer
     );
 
     const handler = mockServer.getHandler('apply_tags');
@@ -1052,7 +1052,7 @@ describe('apply_tags', () => {
     const mockClient = makeApplyTagsDocMock(['keep', 'remove-me']);
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockClient as unknown as ReturnType<typeof supabaseManager.getClient>);
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Tagged Doc\nfqc_id: doc-uuid-tags\ntags:\n  - keep\n  - remove-me\n---\n\nBody.' as unknown as Buffer
+      '---\nfq_title: Tagged Doc\nfq_id: doc-uuid-tags\nfq_tags:\n  - keep\n  - remove-me\n---\n\nBody.' as unknown as Buffer
     );
 
     const handler = mockServer.getHandler('apply_tags');
@@ -1064,7 +1064,7 @@ describe('apply_tags', () => {
 
     expect(vaultManager.writeMarkdown).toHaveBeenCalledOnce();
     const [, writtenFrontmatter] = (vaultManager.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
-    const tags = writtenFrontmatter.tags as string[];
+    const tags = writtenFrontmatter['fq_tags'] as string[];
     expect(tags).toContain('keep');
     expect(tags).toContain('added');
     expect(tags).not.toContain('remove-me');
@@ -1086,7 +1086,7 @@ describe('apply_tags', () => {
     const mockClient = makeApplyTagsDocMock(['#status/draft']);
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockClient as unknown as ReturnType<typeof supabaseManager.getClient>);
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Tagged Doc\nfqc_id: doc-uuid-tags\ntags:\n  - "#status/draft"\n---\n\nBody.' as unknown as Buffer
+      '---\nfq_title: Tagged Doc\nfq_id: doc-uuid-tags\nfq_tags:\n  - "#status/draft"\n---\n\nBody.' as unknown as Buffer
     );
 
     const handler = mockServer.getHandler('apply_tags');
@@ -1106,7 +1106,7 @@ describe('apply_tags', () => {
     const mockClient = makeApplyTagsDocMock([]);
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockClient as unknown as ReturnType<typeof supabaseManager.getClient>);
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Tagged Doc\nfqc_id: doc-uuid-tags\ntags: []\n---\n\nBody.' as unknown as Buffer
+      '---\nfq_title: Tagged Doc\nfq_id: doc-uuid-tags\nfq_tags: []\n---\n\nBody.' as unknown as Buffer
     );
 
     const handler = mockServer.getHandler('apply_tags');
@@ -1155,7 +1155,7 @@ describe('apply_tags', () => {
 
       // Mock document with existing custom status: 'in-review'
       vi.mocked(fsPromises.readFile).mockResolvedValue(
-        '---\ntitle: Doc in Review\nfqc_id: doc-uuid-status\nstatus: in-review\ntags:\n  - existing-tag\n---\n\nBody content.' as unknown as Buffer
+        '---\nfq_title: Doc in Review\nfq_id: doc-uuid-status\nfq_status: in-review\nfq_tags:\n  - existing-tag\n---\n\nBody content.' as unknown as Buffer
       );
 
       const handler = mockServer.getHandler('apply_tags');
@@ -1173,9 +1173,9 @@ describe('apply_tags', () => {
       const frontmatterArg = writeCall[1];
 
       // Status should remain 'in-review' (unchanged)
-      expect(frontmatterArg.status).toBe('in-review');
+      expect(frontmatterArg['fq_status']).toBe('in-review');
       // Tags should be updated (new-tag added)
-      expect(frontmatterArg.tags).toContain('new-tag');
+      expect(frontmatterArg['fq_tags']).toContain('new-tag');
     });
 
     it('STAT-08b: does not inject #status/* tags into the tags array', async () => {
@@ -1183,7 +1183,7 @@ describe('apply_tags', () => {
       vi.mocked(supabaseManager.getClient).mockReturnValue(mockClient as unknown as ReturnType<typeof supabaseManager.getClient>);
 
       vi.mocked(fsPromises.readFile).mockResolvedValue(
-        '---\ntitle: Doc for Tags\nfqc_id: doc-uuid-tags\ntags: []\n---\n\nBody content.' as unknown as Buffer
+        '---\nfq_title: Doc for Tags\nfq_id: doc-uuid-tags\nfq_tags: []\n---\n\nBody content.' as unknown as Buffer
       );
 
       const handler = mockServer.getHandler('apply_tags');
@@ -1199,11 +1199,11 @@ describe('apply_tags', () => {
       const frontmatterArg = writeCall[1];
 
       // Verify no #status/* tags are present in the tags array
-      const hasSuspiciousTag = frontmatterArg.tags && frontmatterArg.tags.some((t: string) => t.startsWith('#status/'));
+      const hasSuspiciousTag = frontmatterArg['fq_tags'] && (frontmatterArg['fq_tags'] as string[]).some((t: string) => t.startsWith('#status/'));
       expect(hasSuspiciousTag).toBe(false);
 
       // Verify the requested tag is present
-      expect(frontmatterArg.tags).toContain('mytag');
+      expect(frontmatterArg['fq_tags']).toContain('mytag');
     });
 
     it('STAT-08c: applies D-02c by making null status explicit when writing', async () => {
@@ -1212,7 +1212,7 @@ describe('apply_tags', () => {
 
       // Mock document with NO status property (null/missing)
       vi.mocked(fsPromises.readFile).mockResolvedValue(
-        '---\ntitle: Doc No Status\nfqc_id: doc-uuid-nostatus\ntags:\n  - old-tag\n---\n\nBody content.' as unknown as Buffer
+        '---\nfq_title: Doc No Status\nfq_id: doc-uuid-nostatus\nfq_tags:\n  - old-tag\n---\n\nBody content.' as unknown as Buffer
       );
 
       const handler = mockServer.getHandler('apply_tags');
@@ -1228,9 +1228,9 @@ describe('apply_tags', () => {
       const frontmatterArg = writeCall[1];
 
       // D-02c: null status should be made explicit to 'active' on write
-      expect(frontmatterArg.status).toBe('active');
+      expect(frontmatterArg['fq_status']).toBe('active');
       // Tags should be updated
-      expect(frontmatterArg.tags).toContain('new-tag');
+      expect(frontmatterArg['fq_tags']).toContain('new-tag');
     });
   });
 });
