@@ -1177,64 +1177,75 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const perLimit = limit ?? 10;
 
         // ── Documents section (SPEC-14: section headers with counts, key-value blocks, Match%) ──────────────────────────────
+        let embeddingAvailable = useEmbedding;
         let docSectionText = '';
         if (effectiveTypes.includes('documents')) {
           if (useEmbedding) {
-            // Semantic search via extracted helper
-            const semanticDocs = await searchDocumentsSemantic(config, query, {
-              tags,
-              tagMatch: matchMode,
-              limit: perLimit,
-            });
-            const semanticPaths = new Set(semanticDocs.map((d) => d.path));
+            // Semantic search via extracted helper; fall back to filesystem on API failure
+            let semanticDocs: Array<{ id: string; path: string; title: string; tags: string[]; similarity: number; created_at: string }> = [];
+            try {
+              semanticDocs = await searchDocumentsSemantic(config, query, {
+                tags,
+                tagMatch: matchMode,
+                limit: perLimit,
+              });
+            } catch (embedErr) {
+              logger.warn(`search_all: embedding unavailable, falling back to filesystem search: ${embedErr instanceof Error ? embedErr.message : String(embedErr)}`);
+              embeddingAvailable = false;
+            }
 
-            // Supplement with filesystem title/path search for newly-created documents
-            // that may not yet have embeddings (fire-and-forget embed still in progress).
-            const vaultRoot = config.instance.vault.path;
-            const fsFiles = await listMarkdownFiles(vaultRoot, ['.md']);
-            const fsMeta = (await Promise.all(fsFiles.map((f) => parseDocMeta(vaultRoot, f))))
-              .filter((m): m is DocMeta => m !== null)
-              .filter((m) => m.status !== 'archived' && !semanticPaths.has(m.relativePath));
-            let fsFiltered = fsMeta;
-            if (tags && tags.length > 0) {
-              if (matchMode === 'any') {
-                fsFiltered = fsFiltered.filter((m) => m.tags.some((t) => tags.includes(t)));
+            if (embeddingAvailable) {
+              const semanticPaths = new Set(semanticDocs.map((d) => d.path));
+
+              // Supplement with filesystem title/path search for newly-created documents
+              // that may not yet have embeddings (fire-and-forget embed still in progress).
+              const vaultRoot = config.instance.vault.path;
+              const fsFiles = await listMarkdownFiles(vaultRoot, ['.md']);
+              const fsMeta = (await Promise.all(fsFiles.map((f) => parseDocMeta(vaultRoot, f))))
+                .filter((m): m is DocMeta => m !== null)
+                .filter((m) => m.status !== 'archived' && !semanticPaths.has(m.relativePath));
+              let fsFiltered = fsMeta;
+              if (tags && tags.length > 0) {
+                if (matchMode === 'any') {
+                  fsFiltered = fsFiltered.filter((m) => m.tags.some((t) => tags.includes(t)));
+                } else {
+                  fsFiltered = fsFiltered.filter((m) => tags.every((t) => m.tags.includes(t)));
+                }
+              }
+              const lq = query.toLowerCase();
+              fsFiltered = fsFiltered.filter(
+                (m) => m.title.toLowerCase().includes(lq) || m.relativePath.toLowerCase().includes(lq)
+              );
+
+              const semanticEntries = semanticDocs.slice(0, perLimit).map((doc) =>
+                [
+                  formatKeyValueEntry('Title', doc.title),
+                  formatKeyValueEntry('Path', doc.path),
+                  formatKeyValueEntry('Tags', doc.tags && doc.tags.length > 0 ? doc.tags : 'none'),
+                  formatKeyValueEntry('FQC ID', doc.id),
+                  formatKeyValueEntry('Match', `${Math.round(doc.similarity * 100)}%`),
+                ].join('\n')
+              );
+              const remainingSlots = perLimit - semanticEntries.length;
+              const fsEntries = fsFiltered.slice(0, Math.max(0, remainingSlots)).map((meta) =>
+                [
+                  formatKeyValueEntry('Title', meta.title),
+                  formatKeyValueEntry('Path', meta.relativePath),
+                  formatKeyValueEntry('Tags', meta.tags.length > 0 ? meta.tags : 'none'),
+                  formatKeyValueEntry('FQC ID', meta.fqcId ?? 'unknown'),
+                ].join('\n')
+              );
+
+              const allDocEntries = [...semanticEntries, ...fsEntries];
+              docSectionText = `## Documents (${allDocEntries.length})`;
+              if (allDocEntries.length > 0) {
+                docSectionText += '\n\n' + joinBatchEntries(allDocEntries);
               } else {
-                fsFiltered = fsFiltered.filter((m) => tags.every((t) => m.tags.includes(t)));
+                docSectionText += '\n\n' + formatEmptyResults('documents');
               }
             }
-            const lq = query.toLowerCase();
-            fsFiltered = fsFiltered.filter(
-              (m) => m.title.toLowerCase().includes(lq) || m.relativePath.toLowerCase().includes(lq)
-            );
-
-            const semanticEntries = semanticDocs.slice(0, perLimit).map((doc) =>
-              [
-                formatKeyValueEntry('Title', doc.title),
-                formatKeyValueEntry('Path', doc.path),
-                formatKeyValueEntry('Tags', doc.tags && doc.tags.length > 0 ? doc.tags : 'none'),
-                formatKeyValueEntry('FQC ID', doc.id),
-                formatKeyValueEntry('Match', `${Math.round(doc.similarity * 100)}%`),
-              ].join('\n')
-            );
-            const remainingSlots = perLimit - semanticEntries.length;
-            const fsEntries = fsFiltered.slice(0, Math.max(0, remainingSlots)).map((meta) =>
-              [
-                formatKeyValueEntry('Title', meta.title),
-                formatKeyValueEntry('Path', meta.relativePath),
-                formatKeyValueEntry('Tags', meta.tags.length > 0 ? meta.tags : 'none'),
-                formatKeyValueEntry('FQC ID', meta.fqcId ?? 'unknown'),
-              ].join('\n')
-            );
-
-            const allDocEntries = [...semanticEntries, ...fsEntries];
-            docSectionText = `## Documents (${allDocEntries.length})`;
-            if (allDocEntries.length > 0) {
-              docSectionText += '\n\n' + joinBatchEntries(allDocEntries);
-            } else {
-              docSectionText += '\n\n' + formatEmptyResults('documents');
-            }
-          } else {
+          }
+          if (!embeddingAvailable) {
             // Filesystem fallback (D-04)
             const vaultRoot = config.instance.vault.path;
             const files = await listMarkdownFiles(vaultRoot, ['.md']);
@@ -1290,8 +1301,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         // ── Memories section (SPEC-14: section headers with counts, key-value blocks, Match%) ───────────────────────────────
         let memSectionText = '';
         if (effectiveTypes.includes('memories')) {
-          if (!useEmbedding) {
-            // D-05: memories-only with no embedding = isError: true
+          if (!embeddingAvailable) {
+            // D-05: memories-only with no embedding (or API unreachable) = isError: true
             if (!effectiveTypes.includes('documents')) {
               return {
                 content: [{
@@ -1304,27 +1315,35 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             // Mixed with no embedding = omit memories section with note (isError: false)
             memSectionText = '\n\n## Memories (0)\n\nMemory search requires embedding configuration. Use list_memories for tag-based memory browsing.';
           } else {
-            const mems = await searchMemoriesSemantic(config, query, {
-              tags,
-              tagMatch: matchMode,
-              limit: perLimit,
-            });
-            memSectionText = `\n\n## Memories (${mems.length})`;
-            if (mems.length > 0) {
-              const memEntries = mems.map((mem) => {
-                const truncatedContent = mem.content.length > 200 ? mem.content.substring(0, 200) + '...' : mem.content;
-                const lines = [
-                  formatKeyValueEntry('Content', truncatedContent),
-                  formatKeyValueEntry('Memory ID', mem.id),
-                  formatKeyValueEntry('Tags', mem.tags && mem.tags.length > 0 ? mem.tags : 'none'),
-                  formatKeyValueEntry('Match', `${Math.round(mem.similarity * 100)}%`),
-                  formatKeyValueEntry('Created', mem.created_at),
-                ];
-                return lines.join('\n');
+            let mems: Array<{ id: string; content: string; tags: string[]; similarity: number; created_at: string }> = [];
+            try {
+              mems = await searchMemoriesSemantic(config, query, {
+                tags,
+                tagMatch: matchMode,
+                limit: perLimit,
               });
-              memSectionText += '\n\n' + joinBatchEntries(memEntries);
-            } else {
-              memSectionText += '\n\n' + formatEmptyResults('memories');
+            } catch (embedErr) {
+              logger.warn(`search_all: memory embedding unavailable: ${embedErr instanceof Error ? embedErr.message : String(embedErr)}`);
+              memSectionText = '\n\n## Memories (0)\n\nMemory search requires embedding configuration. Use list_memories for tag-based memory browsing.';
+            }
+            if (memSectionText === '') {
+              memSectionText = `\n\n## Memories (${mems.length})`;
+              if (mems.length > 0) {
+                const memEntries = mems.map((mem) => {
+                  const truncatedContent = mem.content.length > 200 ? mem.content.substring(0, 200) + '...' : mem.content;
+                  const lines = [
+                    formatKeyValueEntry('Content', truncatedContent),
+                    formatKeyValueEntry('Memory ID', mem.id),
+                    formatKeyValueEntry('Tags', mem.tags && mem.tags.length > 0 ? mem.tags : 'none'),
+                    formatKeyValueEntry('Match', `${Math.round(mem.similarity * 100)}%`),
+                    formatKeyValueEntry('Created', mem.created_at),
+                  ];
+                  return lines.join('\n');
+                });
+                memSectionText += '\n\n' + joinBatchEntries(memEntries);
+              } else {
+                memSectionText += '\n\n' + formatEmptyResults('memories');
+              }
             }
           }
         }
