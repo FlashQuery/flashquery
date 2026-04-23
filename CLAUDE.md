@@ -152,7 +152,7 @@ src/
 - Unit tests: `tests/unit/*.test.ts` — mock external deps, run fast
 - Integration tests: `tests/integration/*.test.ts` — require Supabase (local or cloud)
 - E2E tests: `tests/e2e/*.test.ts` — full stack, spawn FQC as subprocess
-- Scenario tests: `tests/scenarios/` — directed and integration scenario suites
+- Scenario tests: `tests/scenarios/` — directed, integration, MCP, framework, and DB tool scenario suites
 - Run unit tests: `npm test`
 - Run integration tests: `npm run test:integration`
 - Run E2E tests: `npm run test:e2e`
