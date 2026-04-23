@@ -54,6 +54,8 @@ jobs:
 
       - name: Validate docker-compose files
         run: |
+          # Stub .env so docker compose config can parse variable references without erroring
+          printf 'POSTGRES_PASSWORD=ci-stub\nSUPABASE_ANON_KEY=ci-stub\nSUPABASE_SERVICE_ROLE_KEY=ci-stub\n' > .env
           for file in docker/docker-compose.yml docker/docker-compose.db-only.yml docker/docker-compose.flashquery-only.yml; do
             echo "Validating $file..."
             docker compose -f "$file" config --quiet || exit 1
