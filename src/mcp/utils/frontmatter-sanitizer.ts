@@ -1,3 +1,5 @@
+import { FM } from '../../constants/frontmatter-fields.js';
+
 /**
  * Frontmatter Sanitizer (SPEC-18)
  *
@@ -5,8 +7,10 @@
  * Ensures that internal implementation details (content hashes, instance IDs, etc.)
  * don't leak into user-visible markdown files.
  *
- * Fields removed: content_hash, ownership_plugin_id, embedding, instance_id
- * Fields preserved: fqc_id, fqc_instance, status, title, tags, created, updated, and user-provided fields
+ * Fields removed: content_hash, ownership_plugin_id, embedding, instance_id,
+ *   fq_owner, fq_type, fq_instance (FQ-managed — placed at end via preserveOrder)
+ * Fields preserved: fq_id, fq_instance, fq_status, fq_title, fq_tags, fq_created,
+ *   fq_updated, and user-provided fields
  *
  * This enables lazy cleanup — any file written through the normal write paths will have
  * DB metadata automatically stripped on next write, with no need for an explicit cleanup command.
@@ -14,40 +18,48 @@
 
 /**
  * Remove database-only fields before persisting to vault.
- * Preserves: fqc_id, fqc_instance, status, title, tags, created, updated, and user-provided fields.
+ * User-defined fields appear FIRST; FQ-managed fields appear AFTER in established order.
  * Removes: content_hash, ownership_plugin_id, embedding, instance_id, and other internal fields.
  *
  * @param fullFrontmatter - Raw frontmatter object (may contain DB-only fields)
- * @returns New object with internal fields removed and key order preserved
+ * @returns New object with internal fields removed and key order: user fields first, FQ fields after
  */
 export function serializeOrderedFrontmatter(
   fullFrontmatter: Record<string, unknown>
 ): Record<string, unknown> {
   // Define fields that should never be persisted to user files
+  // FM.OWNER, FM.TYPE, FM.INSTANCE must be here AND in preserveOrder to prevent
+  // them appearing in the user-fields loop (double-output guard)
   const internalFields = new Set([
     'content_hash',
     'ownership_plugin_id',
     'embedding',
     'instance_id',
-    // Note: fqc_instance is allowed (per schema) and should be preserved
+    FM.OWNER,
+    FM.TYPE,
+    FM.INSTANCE,
   ]);
 
-  // Define preserve-order fields: these appear first in the output for YAML stability
-  const preserveOrder = ['fqc_id', 'status', 'title', 'tags', 'created', 'updated'];
+  // FQ-managed fields: placed at the end of the output in established order
+  const preserveOrder = [
+    FM.TITLE, FM.STATUS, FM.TAGS, FM.CREATED, FM.UPDATED,
+    FM.OWNER, FM.TYPE, FM.INSTANCE, FM.ID,
+  ];
 
-  // Build ordered output: preserve-order fields first
+  // Build ordered output: user-defined fields FIRST, FQ-managed fields AFTER
   const ordered: Record<string, unknown> = {};
 
-  for (const key of preserveOrder) {
-    if (key in fullFrontmatter) {
-      ordered[key] = fullFrontmatter[key];
-    }
-  }
-
-  // Add remaining user-provided fields (not internal, not already added)
+  // User-defined fields first (not internal, not FQ-managed)
   for (const [key, value] of Object.entries(fullFrontmatter)) {
     if (!internalFields.has(key) && !preserveOrder.includes(key)) {
       ordered[key] = value;
+    }
+  }
+
+  // FQ-managed fields after, in established order
+  for (const key of preserveOrder) {
+    if (key in fullFrontmatter) {
+      ordered[key] = fullFrontmatter[key];
     }
   }
 
