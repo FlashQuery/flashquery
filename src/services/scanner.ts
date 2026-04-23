@@ -189,7 +189,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     .from('fqc_documents')
     .select('id, path, content_hash, title, status, updated_at')
     .eq('instance_id', instanceId)
-    .in('status', ['active', 'missing']) as Promise<{ data: DbRow[] | null; error: unknown }>);
+    .in('status', ['active', 'missing']) as unknown as Promise<{ data: DbRow[] | null; error: unknown }>);
 
   const hashToRow = new Map<string, DbRow>();
   const idToRow = new Map<string, DbRow>();
