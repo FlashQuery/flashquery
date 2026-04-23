@@ -536,8 +536,9 @@ export async function executeReconciliationActions(
         archived++;
         // Do NOT touch frontmatter (D-06 / RO-64)
       } else {
-        // 'ignore' or missing policy → no-op
-        logger.debug(`[RECON] moved doc ${ref.fqcId}: on_moved='${policy?.on_moved ?? 'undefined'}' — no action`);
+        // PIR-08: 'ignore' was removed from on_moved vocabulary (no stable end state).
+        // This branch is defensive only — should not be reached with valid policies.
+        logger.warn(`[RECON] moved doc ${ref.fqcId}: unexpected on_moved='${policy?.on_moved ?? 'undefined'}' — no action`);
       }
     }
 

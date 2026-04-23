@@ -100,7 +100,7 @@ def _build_schema_yaml(watched_folder: str) -> str:
         "      on_added: auto-track\n"
         "      track_as: notes\n"
         "      on_modified: ignore\n"
-        "      on_moved: ignore\n"
+        "      on_moved: keep-tracking\n"
     )
 
 

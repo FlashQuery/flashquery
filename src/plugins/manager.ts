@@ -29,7 +29,7 @@ export interface DocumentTypePolicy {
   description?: string;
   access: 'read-write' | 'read-only';
   on_added: 'auto-track' | 'ignore';
-  on_moved: 'keep-tracking' | 'stop-tracking' | 'untrack' | 'ignore';
+  on_moved: 'keep-tracking' | 'stop-tracking' | 'untrack';
   on_modified: 'sync-fields' | 'ignore';
   track_as?: string;
   template?: string;
@@ -63,7 +63,7 @@ export interface RegistryEntry {
 
 const VALID_TYPES = new Set(['text', 'integer', 'boolean', 'uuid', 'timestamptz']);
 
-const VALID_ON_MOVED = new Set(['keep-tracking', 'stop-tracking', 'untrack', 'ignore']);
+const VALID_ON_MOVED = new Set(['keep-tracking', 'stop-tracking', 'untrack']);
 
 const TYPE_MAP: Record<string, string> = {
   text: 'TEXT',
