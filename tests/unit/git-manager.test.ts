@@ -70,7 +70,7 @@ vi.mock('simple-git', () => ({
 }));
 
 // Also mock the ESM entry resolved from src/node_modules (used by production ts files via vitest transform)
-vi.mock('/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-core/src/node_modules/simple-git/dist/esm/index.js', () => ({
+vi.mock('/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery/src/node_modules/simple-git/dist/esm/index.js', () => ({
   simpleGit: vi.fn(() => mocks.mockGitInstance),
   default: { simpleGit: vi.fn(() => mocks.mockGitInstance) },
 }));

@@ -40,7 +40,7 @@ export class GitManagerImpl {
   async initialize(config: FlashQueryConfig): Promise<void> {
     // Check 1: git binary available
     try {
-      await simpleGit().version();
+      await this.git.version();
       this.gitAvailable = true;
     } catch {
       logger.warn(

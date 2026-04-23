@@ -60,6 +60,18 @@ vi.mock('../../src/plugins/manager.js', () => ({
   },
 }));
 
+// Also mock the gray-matter instance used by src/ files via src/node_modules resolution.
+// compound.ts resolves gray-matter from src/node_modules/gray-matter (a different instance than
+// the test file imports from the root node_modules). Without this mock, matter.clearCache() in
+// the test file does not clear the cache used by compound.ts, causing cross-test pollution
+// when update_doc_header mutates parsed.data[fq_title] in gray-matter's cache.
+vi.mock('/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery/src/node_modules/gray-matter/index.js', async () => {
+  // Return the same module instance as the test file imports (from root node_modules).
+  // This ensures matter.clearCache() in tests clears the same cache compound.ts uses.
+  const actual = await import('gray-matter');
+  return { default: actual.default };
+});
+
 vi.mock('../../src/mcp/utils/resolve-document.js', async (importOriginal) => {
   const actual = await importOriginal();
   return {
@@ -320,6 +332,7 @@ describe('append_to_doc', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    matter.clearCache(); // Prevent gray-matter cache pollution from prior describe blocks
 
     // Setup mocks BEFORE creating mockServer and registering tools (mock state must be ready when handlers are registered)
     // Default: file exists
