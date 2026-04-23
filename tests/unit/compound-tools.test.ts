@@ -1617,8 +1617,8 @@ More content.
 
   it('Test 18 (get_doc_outline): returns deduplicated linked documents', async () => {
     const docWithDuplicate = `---
-title: Dup Test
-fqc_id: dup-uuid
+fq_title: Dup Test
+fq_id: dup-uuid
 links:
   - "[[Shared Note]]"
 ---

@@ -34,7 +34,7 @@ import { FM } from '../constants/frontmatter-fields.js';
  */
 export async function atomicWriteFrontmatter(
   absolutePath: string,
-  updates: Record<string, any>
+  updates: Record<string, unknown>
 ): Promise<void> {
   try {
     // Step 1: Read current document
