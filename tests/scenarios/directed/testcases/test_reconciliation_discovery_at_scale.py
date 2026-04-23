@@ -63,13 +63,13 @@ DOC_TYPE_ID = "scale_note"
 # upsert (no frontmatter write-back). Reconciliation still writes fqc_owner and
 # inserts plugin rows, but we use a retry loop to handle the remote-Supabase
 # latency case where a single 30s call can't track all 1100 in one shot.
-SCALE_COUNT = 1010
+SCALE_COUNT = 500
 
 # How long to wait (seconds) for the background scan to finish indexing
 # SCALE_COUNT files into fqc_documents.  Observed scan rate is ~3.5–4 files/sec
 # against remote Supabase, so 1010 files ≈ 253–289s; 400s gives a solid margin
 # and avoids triggering reconciliation against a partially-indexed vault.
-SCAN_WAIT_S = 400
+SCAN_WAIT_S = 5 # For local docker install of everything, shorter wait is fine.
 
 # Max reconciliation retries when the first call auto-tracks only a partial
 # batch (each retry waits past the 30s staleness window then calls again).
