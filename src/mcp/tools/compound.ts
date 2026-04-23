@@ -30,6 +30,7 @@ import {
 } from '../utils/response-formats.js';
 import { extractWikilinks, extractHeadings as mdExtractHeadings, filterHeadingsByDepth } from '../utils/markdown-utils.js';
 import { insertAtPosition, findHeadingOccurrence, getSectionBoundaries } from '../utils/markdown-sections.js';
+import { FM } from '../../constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: apply tag set operations (idempotent add, graceful remove)
@@ -146,7 +147,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const raw = await readFile(absPath, 'utf-8');
         const parsed = matter(raw);
 
-        const title = (parsed.data.title as string | undefined) ?? relativePath;
+        const title = (parsed.data[FM.TITLE] as string | undefined) ?? relativePath;
 
         // Append content — two newlines before content for clean markdown spacing
         const newBody = parsed.content + '\n\n' + content;
@@ -158,8 +159,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         // Call targetedScan to update frontmatter
         const preScan = await targetedScan(config, supabase, resolved, newHash, logger);
 
-        // Update fm with fqc_id from targetedScan
-        parsed.data.fqc_id = fqcId;
+        // Update fm with fq_id from targetedScan
+        parsed.data[FM.ID] = fqcId;
 
         // Write back atomically via vaultManager (DCP-05)
         await vaultManager.writeMarkdown(relativePath, parsed.data, newBody);
@@ -269,7 +270,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const parsed = matter(raw);
 
         // Detect existing document conflicts before applying any updates (TAGS-06)
-        const existingTags = Array.isArray(parsed.data.tags) ? parsed.data.tags as string[] : [];
+        const existingTags = Array.isArray(parsed.data[FM.TAGS]) ? parsed.data[FM.TAGS] as string[] : [];
         const existingValidation = validateAllTags(existingTags);
         if (existingValidation.conflicts.length > 1) {
           return {
@@ -281,9 +282,9 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           };
         }
 
-        // Tag validation: if tags key is in updates, validate and normalize new tags
-        if ('tags' in updates && Array.isArray(updates.tags)) {
-          const tagValidation = validateAllTags(updates.tags as string[]);
+        // Tag validation: if fq_tags key is in updates, validate and normalize new tags
+        if (FM.TAGS in updates && Array.isArray(updates[FM.TAGS])) {
+          const tagValidation = validateAllTags(updates[FM.TAGS] as string[]);
           if (!tagValidation.valid) {
             const messages = [
               ...tagValidation.errors,
@@ -297,7 +298,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             };
           }
           // Replace raw tags with deduplicated version in updates before applying (D-05a)
-          updates.tags = deduplicateTags(tagValidation.normalized);
+          updates[FM.TAGS] = deduplicateTags(tagValidation.normalized);
         }
 
         // Catch-all frontmatter editor — act on whatever keys are passed
@@ -310,9 +311,9 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
         }
 
-        // Track whether caller explicitly requested status deletion (status: null)
+        // Track whether caller explicitly requested status deletion (fq_status: null)
         // Used below to skip the D-02c guard when deletion is intentional
-        const statusExplicitlyDeleted = 'status' in updates && updates.status === null;
+        const statusExplicitlyDeleted = FM.STATUS in updates && updates[FM.STATUS] === null;
 
         // Compute hash of the new content about to be written
         const serialized = matter.stringify(parsed.content, parsed.data);
@@ -322,13 +323,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const preScan = await targetedScan(config, supabase, resolved, newHash, logger);
         const fqcId = preScan.capturedFrontmatter.fqcId;
 
-        // Update fm with fqc_id from targetedScan
-        parsed.data.fqc_id = fqcId;
+        // Update fm with fq_id from targetedScan
+        parsed.data[FM.ID] = fqcId;
 
         // D-02c: If status is null/missing, make implicit 'active' explicit on write
-        // Skip if caller explicitly passed { status: null } to delete the key
-        if (!parsed.data.status && !statusExplicitlyDeleted) {
-          parsed.data.status = 'active';
+        // Skip if caller explicitly passed { fq_status: null } to delete the key
+        if (!parsed.data[FM.STATUS] && !statusExplicitlyDeleted) {
+          parsed.data[FM.STATUS] = 'active';
           logger.info(`update_doc_header: document ${relativePath}: status was null, explicitly set to 'active' (D-02c)`);
         }
 
@@ -338,13 +339,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const changedFields = Object.keys(updates).join(', ');
         logger.info(`update_doc_header: updated fields [${changedFields}] in ${relativePath}`);
 
-        // Sync tags to Supabase fqc_documents when tags key is in updates
+        // Sync tags to Supabase fqc_documents when fq_tags key is in updates
         const updatesMap = updates;
-        if ('tags' in updatesMap && updatesMap.tags !== null && fqcId) {
+        if (FM.TAGS in updatesMap && updatesMap[FM.TAGS] !== null && fqcId) {
           // Tags in updatesMap are already deduplicated from earlier deduplication step
           const { error: tagError } = await supabase
             .from('fqc_documents')
-            .update({ tags: updatesMap.tags as string[], updated_at: new Date().toISOString() })
+            .update({ tags: updatesMap[FM.TAGS] as string[], updated_at: new Date().toISOString() })
             .eq('id', fqcId);
 
           if (tagError) {
@@ -427,7 +428,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         try {
           const targetRaw = await readFile(targetResolved.absPath, 'utf-8');
           const targetParsed = matter(targetRaw);
-          targetTitle = (targetParsed.data.title as string | undefined) ?? targetResolved.relativePath;
+          targetTitle = (targetParsed.data[FM.TITLE] as string | undefined) ?? targetResolved.relativePath;
         } catch {
           // Fall back to relative path as display text
           targetTitle = targetResolved.relativePath;
@@ -456,8 +457,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const preScan = await targetedScan(config, supabase, sourceResolved, newHash, logger);
         const fqcId = preScan.capturedFrontmatter.fqcId;
 
-        // Update fm with fqc_id from targetedScan
-        parsed.data.fqc_id = fqcId;
+        // Update fm with fq_id from targetedScan
+        parsed.data[FM.ID] = fqcId;
 
         // Write back atomically via vaultManager (DCP-05)
         await vaultManager.writeMarkdown(sourceResolved.relativePath, parsed.data, parsed.content);
@@ -556,8 +557,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               const parsed = matter(raw);
 
               // Get existing tags (idempotent add, graceful remove)
-              const existing: string[] = Array.isArray(parsed.data.tags)
-                ? (parsed.data.tags as string[])
+              const existing: string[] = Array.isArray(parsed.data[FM.TAGS])
+                ? (parsed.data[FM.TAGS] as string[])
                 : [];
               const newTags = applyTagChanges(existing, addTags, removeTags);
 
@@ -575,7 +576,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               }
 
               // Write back frontmatter atomically with deduplicated tags (vault-authoritative, DCP-05, D-05a)
-              parsed.data.tags = deduplicateTags(docTagValidation.normalized);
+              parsed.data[FM.TAGS] = deduplicateTags(docTagValidation.normalized);
 
               // Compute hash of the new content about to be written
               const serialized = matter.stringify(parsed.content, parsed.data);
@@ -585,12 +586,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               const preScan = await targetedScan(config, supabase, resolved, newHash, logger);
               const fqcId = preScan.capturedFrontmatter.fqcId;
 
-              // Update fm with fqc_id from targetedScan
-              parsed.data.fqc_id = fqcId;
+              // Update fm with fq_id from targetedScan
+              parsed.data[FM.ID] = fqcId;
 
               // D-02c: If status is null/missing, make implicit 'active' explicit on write
-              if (!parsed.data.status) {
-                parsed.data.status = 'active';
+              if (!parsed.data[FM.STATUS]) {
+                parsed.data[FM.STATUS] = 'active';
                 logger.info(`apply_tags: document ${relativePath}: status was null, explicitly set to 'active' (D-02c)`);
               }
 
@@ -934,7 +935,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
           if (!existingRow) {
             // Auto-provision: create DB row for untracked file
-            const title = (parsed.data.title as string) || preScan.relativePath;
+            const title = (parsed.data[FM.TITLE] as string) || preScan.relativePath;
             const { error: insertError } = await supabase.from('fqc_documents').insert({
               id: fqcId,
               instance_id: config.instance.id,
@@ -942,7 +943,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               title,
               status: preScan.capturedFrontmatter.status,
               content_hash: contentHash,
-              tags: Array.isArray(parsed.data.tags) ? (parsed.data.tags as string[]) : [],
+              tags: Array.isArray(parsed.data[FM.TAGS]) ? (parsed.data[FM.TAGS] as string[]) : [],
               created_at: preScan.capturedFrontmatter.created,
               updated_at: new Date().toISOString(),
             });
@@ -1569,11 +1570,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         });
 
         // Trigger fire-and-forget embedding
-        const docTitle = typeof frontmatter.title === 'string' ? frontmatter.title : relativePath;
+        const docTitle = typeof frontmatter[FM.TITLE] === 'string' ? frontmatter[FM.TITLE] as string : relativePath;
         void (async () => {
           try {
             const vector = await embeddingProvider.embed(`${docTitle}\n\n${modifiedBody}`);
-            const fqcId = typeof frontmatter.fqc_id === 'string' ? frontmatter.fqc_id : undefined;
+            const fqcId = typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : undefined;
             if (fqcId) {
               await supabaseManager
                 .getClient()
@@ -1757,7 +1758,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             .eq('instance_id', config.instance.id);
 
           // Step 12: Fire-and-forget re-embedding
-          const docTitle = typeof document.data.title === 'string' ? document.data.title : resolved.relativePath;
+          const docTitle = typeof document.data[FM.TITLE] === 'string' ? document.data[FM.TITLE] as string : resolved.relativePath;
           void embeddingProvider
             .embed(`${docTitle}\n\n${newContent}`)
             .then((vector) =>
