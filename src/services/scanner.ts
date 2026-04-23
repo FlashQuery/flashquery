@@ -13,6 +13,7 @@ import { isValidUuid } from '../utils/uuid.js';
 import { propagateFqcIdChange } from './plugin-propagation.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
+import { FM } from '../constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // scanMutex — DCP-03: serializes concurrent runScanOnce() calls
@@ -158,7 +159,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
       } catch {
         continue; // file missing — skip
       }
-      const vaultStatus = vaultFrontmatter['status'] as string | undefined;
+      const vaultStatus = vaultFrontmatter[FM.STATUS] as string | undefined;
       const dbStatus = doc.status as string;
       if (vaultStatus && vaultStatus !== dbStatus) {
         statusMismatches++;
@@ -424,7 +425,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
 
         // Extract fqc_id from first 1KB of file (frontmatter block) — T-38-05: limit scope
         const frontmatterBlock = rawContent.slice(0, 1024);
-        const match = frontmatterBlock.match(/\bfqc_id:\s*([^\s\n]+)/);
+        const match = frontmatterBlock.match(new RegExp(`\\b${FM.ID}:\\s*([^\\s\\n]+)`));
 
         let recoveredFqcId: string | undefined;
         if (match && match[1]) {
@@ -440,13 +441,13 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
 
         // Continue with empty frontmatter and regex-recovered fqc_id (may be undefined)
         frontmatter = {
-          fqc_id: recoveredFqcId,
+          [FM.ID]: recoveredFqcId,
         };
         content = '';
       }
 
-      const rawY = typeof frontmatter.fqc_id === 'string' && frontmatter.fqc_id.length > 0
-        ? (frontmatter.fqc_id as string)
+      const rawY = typeof frontmatter[FM.ID] === 'string' && (frontmatter[FM.ID] as string).length > 0
+        ? (frontmatter[FM.ID] as string)
         : undefined;
 
       // INF-03, IDC-05: Validate UUID format — malformed values treated as absent with warning
@@ -464,11 +465,11 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
       }
 
       const title =
-        (typeof frontmatter.title === 'string' && frontmatter.title) ||
+        (typeof frontmatter[FM.TITLE] === 'string' && (frontmatter[FM.TITLE] as string)) ||
         titleFromFilename(relativePath);
 
-      const fqcOwner = typeof frontmatter.fqc_owner === 'string' ? frontmatter.fqc_owner : null;
-      const fqcType = typeof frontmatter.fqc_type === 'string' ? frontmatter.fqc_type : null;
+      const fqcOwner = typeof frontmatter[FM.OWNER] === 'string' ? (frontmatter[FM.OWNER] as string) : null;
+      const fqcType = typeof frontmatter[FM.TYPE] === 'string' ? (frontmatter[FM.TYPE] as string) : null;
 
       const dbRowByHash = hashToRow.get(H);
 
@@ -511,9 +512,9 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             instance_id: instanceId,
             path: relativePath,
             title,
-            status: (frontmatter.status as string) || 'active',
+            status: (frontmatter[FM.STATUS] as string) || 'active',
             content_hash: H,  // pre-write hash (file as-is on disk)
-            created_at: (frontmatter.created as string) || now,
+            created_at: (frontmatter[FM.CREATED] as string) || now,
             updated_at: now,
             needs_frontmatter_repair: true,
             ownership_plugin_id: fqcOwner,
@@ -640,9 +641,9 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
                 instance_id: instanceId,
                 path: relativePath,
                 title,
-                status: (frontmatter.status as string) || 'active',
+                status: (frontmatter[FM.STATUS] as string) || 'active',
                 content_hash: H,  // pre-write hash (file as-is on disk)
-                created_at: (frontmatter.created as string) || now,
+                created_at: (frontmatter[FM.CREATED] as string) || now,
                 updated_at: now,
                 needs_frontmatter_repair: true,
                 ownership_plugin_id: fqcOwner,
@@ -745,9 +746,9 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               instance_id: instanceId,
               path: relativePath,
               title,
-              status: (frontmatter.status as string) || 'active',
+              status: (frontmatter[FM.STATUS] as string) || 'active',
               content_hash: H,
-              created_at: (frontmatter.created as string) || now,
+              created_at: (frontmatter[FM.CREATED] as string) || now,
               updated_at: now,
               ownership_plugin_id: fqcOwner,
               ownership_type: fqcType,
@@ -789,7 +790,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               .update({
                 content_hash: H,  // pre-write hash (file as-is on disk)
                 updated_at: now,
-                status: (frontmatter.status as string) || dbRowByPath.status,
+                status: (frontmatter[FM.STATUS] as string) || dbRowByPath.status,
                 needs_frontmatter_repair: true,
                 ownership_plugin_id: fqcOwner,
                 ownership_type: fqcType,
@@ -830,9 +831,9 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             instance_id: instanceId,
             path: relativePath,
             title,
-            status: (frontmatter.status as string) || 'active',
+            status: (frontmatter[FM.STATUS] as string) || 'active',
             content_hash: H,  // pre-write hash (file as-is on disk)
-            created_at: (frontmatter.created as string) || now,
+            created_at: (frontmatter[FM.CREATED] as string) || now,
             updated_at: now,
             needs_frontmatter_repair: true,
             ownership_plugin_id: fqcOwner,
@@ -1125,11 +1126,11 @@ export async function repairFrontmatter(config: FlashQueryConfig): Promise<void>
           // Merge FQC identity fields into existing frontmatter — user-defined fields survive
           const frontmatter = {
             ...existingFrontmatter,
-            fqc_id: fqcId,
-            title: (existingFrontmatter.title as string | undefined) ?? titleFromFilename(filePath),
-            created: createdAt,
-            status,
-            fqc_instance: instanceId,
+            [FM.ID]:       fqcId,
+            [FM.TITLE]:    (existingFrontmatter[FM.TITLE] as string | undefined) ?? titleFromFilename(filePath),
+            [FM.CREATED]:  createdAt,
+            [FM.STATUS]:   status,
+            [FM.INSTANCE]: instanceId,
           };
 
           await vaultManager.writeMarkdown(filePath, frontmatter, fileContent);
