@@ -230,6 +230,8 @@ npm run test:e2e         # End-to-end tests (spawns FlashQuery as subprocess)
 npm run test:benchmark   # Performance benchmarks (vault discovery, search throughput)
 ```
 
+**Note**: We have also built a high level test infrastructure that tests for expected behaviors from file system to MCP.  See the `./tests/scenarios/` folders to find our directed tests coded in Python (under `directed/`) and integration tests that are written in YAML and interpreted at runtime (under `integration`).  There is a runner script written in Python that can run the suite or individual test cases.  There is a README in the scenarios folder that provides more information.
+
 ### Code Quality
 
 ```bash
