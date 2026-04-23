@@ -110,8 +110,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tags=original_tags,
             frontmatter={
                 "project": "x",
-                "fqc_id": bogus_fqc_id,
-                "status": "archived",
+                "fq_id": bogus_fqc_id,
+                "fq_status": "archived",
             },
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -280,8 +280,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             identifier=read_identifier,
             frontmatter={
                 "client": "acme",
-                "fqc_id": bogus_fqc_id,
-                "status": "archived",
+                "fq_id": bogus_fqc_id,
+                "fq_status": "archived",
             },
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None

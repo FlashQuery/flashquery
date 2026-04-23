@@ -243,11 +243,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             doc_disk = ctx.vault.read_file(doc_path)
             fm = doc_disk.frontmatter
 
-            fqc_id = fm.get("fqc_id")
+            fqc_id = fm.get("fq_id")
             checks_before: dict[str, bool] = {
                 "fqc_id present after auto-track": bool(fqc_id),
-                "fqc_owner present after auto-track": bool(fm.get("fqc_owner")),
-                "fqc_type present after auto-track": bool(fm.get("fqc_type")),
+                "fqc_owner present after auto-track": bool(fm.get("fq_owner")),
+                "fqc_type present after auto-track": bool(fm.get("fq_type")),
             }
             all_ok_before = all(checks_before.values())
             detail_before = ""
@@ -434,10 +434,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
             checks_fm: dict[str, bool] = {
                 "RO-64: fqc_owner preserved in moved file after untrack archival": bool(
-                    fm_moved.get("fqc_owner")
+                    fm_moved.get("fq_owner")
                 ),
                 "RO-64: fqc_type preserved in moved file after untrack archival": bool(
-                    fm_moved.get("fqc_type")
+                    fm_moved.get("fq_type")
                 ),
             }
             all_ok_fm = all(checks_fm.values())

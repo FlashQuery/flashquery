@@ -247,7 +247,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         try:
             disk_doc = ctx.vault.read_file(original_file_path)
-            original_fqc_id = disk_doc.frontmatter.get("fqc_id")
+            original_fqc_id = disk_doc.frontmatter.get("fq_id")
 
             # Also get the record ID from search_records result
             record = _extract_first_record(first_search.text)
@@ -408,8 +408,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 fqc_id=original_fqc_id,  # SAME fqc_id — key for RO-20
                 extra_frontmatter={
                     "priority": "critical",  # Updated priority — will be re-mapped by field_map
-                    "fqc_owner": PLUGIN_ID,
-                    "fqc_type": DOC_TYPE_ID,
+                    "fq_owner": PLUGIN_ID,
+                    "fq_type": DOC_TYPE_ID,
                 },
             )
             ctx.cleanup.track_file(resurrected_file_path)

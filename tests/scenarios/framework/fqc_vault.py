@@ -100,7 +100,10 @@ def _get_dumper() -> type:
 # Frontmatter constants — mirrors src/mcp/utils/frontmatter-sanitizer.ts
 # ---------------------------------------------------------------------------
 
-_ORDERED_FIELDS = ("fqc_id", "status", "title", "tags", "created", "updated")
+_ORDERED_FIELDS = (
+    "fq_title", "fq_status", "fq_tags", "fq_created", "fq_updated",
+    "fq_owner", "fq_type", "fq_instance", "fq_id",
+)
 _EXCLUDED_FIELDS = frozenset({
     "content_hash", "ownership_plugin_id", "discovery_status",
     "embedding", "instance_id",
@@ -121,20 +124,26 @@ class VaultDocument:
 
     # Convenience accessors
     @property
-    def fqc_id(self) -> str | None:
-        return self.frontmatter.get("fqc_id")
+    def fq_id(self) -> str | None:
+        return self.frontmatter.get("fq_id")
 
     @property
-    def title(self) -> str | None:
-        return self.frontmatter.get("title")
+    def fq_title(self) -> str | None:
+        return self.frontmatter.get("fq_title")
 
     @property
-    def tags(self) -> list[str]:
-        return self.frontmatter.get("tags", []) or []
+    def fq_tags(self) -> list[str]:
+        return self.frontmatter.get("fq_tags", []) or []
 
     @property
-    def status(self) -> str | None:
-        return self.frontmatter.get("status")
+    def fq_status(self) -> str | None:
+        return self.frontmatter.get("fq_status")
+
+    # Backward-compat aliases for test files not yet migrated to fq_* names
+    fqc_id = property(lambda self: self.fq_id)
+    title = property(lambda self: self.fq_title)
+    tags = property(lambda self: self.fq_tags)
+    status = property(lambda self: self.fq_status)
 
 
 # ---------------------------------------------------------------------------
@@ -205,7 +214,7 @@ def _serialize_frontmatter(fm: dict[str, Any]) -> str:
         if key in fm:
             val = fm[key]
             # Tags should render as flow-style list
-            if key == "tags" and isinstance(val, list):
+            if key == "fq_tags" and isinstance(val, list):
                 val = _FlowList(val)
             ordered[key] = val
 
@@ -382,12 +391,12 @@ class VaultHelper:
 
         now = _now_iso()
         fm: dict[str, Any] = {
-            "fqc_id": fqc_id or str(uuid4()),
-            "status": status,
-            "title": title,
-            "tags": normalized_tags,
-            "created": now,
-            "updated": now,
+            "fq_title": title,
+            "fq_status": status,
+            "fq_tags": normalized_tags,
+            "fq_created": now,
+            "fq_updated": now,
+            "fq_id": fqc_id or str(uuid4()),
         }
         if extra_frontmatter:
             for k, v in extra_frontmatter.items():
@@ -423,7 +432,7 @@ class VaultHelper:
         doc = self.read_file(relative_path)
         fm = {**doc.frontmatter, **updates}
         if touch_updated:
-            fm["updated"] = _now_iso()
+            fm["fq_updated"] = _now_iso()
 
         fm_yaml = _serialize_frontmatter(fm)
         markdown = f"---\n{fm_yaml}---\n\n{doc.body}"
@@ -540,10 +549,10 @@ class VaultHelper:
         return results
 
     def find_by_fqc_id(self, fqc_id: str, directory: str = "") -> VaultDocument | None:
-        """Find a single document by its fqc_id. Returns None if not found."""
+        """Find a single document by its fq_id. Returns None if not found."""
         matches = self.find_files(
             directory=directory,
-            frontmatter_match={"fqc_id": fqc_id},
+            frontmatter_match={"fq_id": fqc_id},
             limit=1,
         )
         return matches[0] if matches else None

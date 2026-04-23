@@ -402,17 +402,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
             doc_b_disk = ctx.vault.read_file(doc_b_path)
             doc_c_disk = ctx.vault.read_file(doc_c_path)
 
-            fqc_id_a = doc_a_disk.frontmatter.get("fqc_id")
-            fqc_id_b = doc_b_disk.frontmatter.get("fqc_id")
-            fqc_id_c = doc_c_disk.frontmatter.get("fqc_id")
+            fqc_id_a = doc_a_disk.frontmatter.get("fq_id")
+            fqc_id_b = doc_b_disk.frontmatter.get("fq_id")
+            fqc_id_c = doc_c_disk.frontmatter.get("fq_id")
 
             checks = {
                 "doc A has fqc_id": bool(fqc_id_a),
-                "doc A has fqc_owner": bool(doc_a_disk.frontmatter.get("fqc_owner")),
+                "doc A has fqc_owner": bool(doc_a_disk.frontmatter.get("fq_owner")),
                 "doc B has fqc_id": bool(fqc_id_b),
-                "doc B has fqc_owner": bool(doc_b_disk.frontmatter.get("fqc_owner")),
+                "doc B has fqc_owner": bool(doc_b_disk.frontmatter.get("fq_owner")),
                 "doc C has fqc_id": bool(fqc_id_c),
-                "doc C has fqc_owner": bool(doc_c_disk.frontmatter.get("fqc_owner")),
+                "doc C has fqc_owner": bool(doc_c_disk.frontmatter.get("fq_owner")),
             }
             all_ok = all(checks.values())
             detail = ""
@@ -687,10 +687,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
             checks_25b: dict[str, bool] = {
                 "RO-25: fqc_owner preserved in moved file frontmatter after stop-tracking archival": bool(
-                    fm_c.get("fqc_owner")
+                    fm_c.get("fq_owner")
                 ),
                 "RO-25: fqc_type preserved in moved file frontmatter after stop-tracking archival": bool(
-                    fm_c.get("fqc_type")
+                    fm_c.get("fq_type")
                 ),
             }
             all_ok_25b = all(checks_25b.values())
