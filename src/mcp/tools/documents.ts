@@ -28,6 +28,7 @@ import {
 } from '../utils/response-formats.js';
 import { extractSection, buildSectionResponse } from '../utils/markdown-sections.js';
 import { pluginManager, getFolderClaimsMap } from '../../plugins/manager.js';
+import { FM } from '../../constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal types
@@ -139,12 +140,12 @@ export async function parseDocMeta(vaultRoot: string, relativePath: string): Pro
     const { data } = matter(raw);
     return {
       relativePath,
-      title: String(data.title ?? relativePath),
-      tags: Array.isArray(data.tags) ? (data.tags as string[]) : [],
+      title: String(data[FM.TITLE] ?? relativePath),
+      tags: Array.isArray(data[FM.TAGS]) ? (data[FM.TAGS] as string[]) : [],
       project: String(data.project ?? ''),
-      status: String(data.status ?? 'active'),
-      fqcId: String(data.fqc_id ?? ''),
-      modified: String(data.updated ?? data.created ?? ''),
+      status: String(data[FM.STATUS] ?? 'active'),
+      fqcId: String(data[FM.ID] ?? ''),
+      modified: String(data[FM.UPDATED] ?? data[FM.CREATED] ?? ''),
     };
   } catch {
     logger.warn(`search_documents: skipping malformed file ${relativePath}`);
@@ -171,7 +172,7 @@ export async function reconcileMissingRow(
     try {
       const raw = await readFile(join(vaultRoot, candidate), 'utf-8');
       const { data: fm } = matter(raw);
-      if (fm.fqc_id === fqcId) {
+      if (fm[FM.ID] === fqcId) {
         newPath = candidate;
         break;
       }
@@ -280,7 +281,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           .record(z.string(), z.unknown())
           .optional()
           .describe(
-            'Additional frontmatter fields (cannot override fqc_id, status, created, fqc_instance)'
+            'Additional frontmatter fields (cannot override fq_id, fq_status, fq_created, fq_instance)'
           ),
       },
     },
@@ -361,7 +362,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             try {
               const existing = await readFile(guardAbsPath, 'utf-8');
               const existingParsed = matter(existing);
-              const existingFqcId = existingParsed.data.fqc_id as unknown;
+              const existingFqcId = existingParsed.data[FM.ID] as unknown;
               if (typeof existingFqcId === 'string' && existingFqcId.length > 0) {
                 return {
                   content: [
@@ -414,12 +415,12 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const deduplicated = deduplicateTags(validation.normalized);
         const fm: Record<string, unknown> = {
           ...(frontmatter ?? {}),
-          title,
-          fqc_id: fqcId,
-          fqc_instance: config.instance.id,
-          status: 'active',
-          tags: deduplicated,
-          created: now,
+          [FM.TITLE]: title,
+          [FM.ID]: fqcId,
+          [FM.INSTANCE]: config.instance.id,
+          [FM.STATUS]: 'active',
+          [FM.TAGS]: deduplicated,
+          [FM.CREATED]: now,
           // NOTE: do NOT set `updated` here — vaultManager.writeMarkdown() sets it automatically
         };
 
@@ -745,7 +746,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           .record(z.string(), z.unknown())
           .optional()
           .describe(
-            'Additional frontmatter fields to merge in (cannot override fqc_id, fqc_instance, created, status)'
+            'Additional frontmatter fields to merge in (cannot override fq_id, fq_instance, fq_created, fq_status)'
           ),
       },
     },
@@ -814,20 +815,20 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
         // Merge frontmatter: existing first, then caller overrides, then protected fields last
         const effectiveTitle =
-          title ?? (typeof existingData.title === 'string' ? existingData.title : relativePath);
+          title ?? (typeof existingData[FM.TITLE] === 'string' ? existingData[FM.TITLE] as string : relativePath);
         const effectiveTags =
-          tags ?? (Array.isArray(existingData.tags) ? (existingData.tags as string[]) : []);
+          tags ?? (Array.isArray(existingData[FM.TAGS]) ? (existingData[FM.TAGS] as string[]) : []);
         const effectiveBody = content ?? existingBody;
 
         const fm: Record<string, unknown> = {
           ...existingData,
           ...(frontmatter ?? {}),
           // Protected fields — caller cannot override these
-          title: effectiveTitle,
-          tags: effectiveTags,
-          fqc_instance: existingData.fqc_instance ?? config.instance.id,
-          created: existingData.created,
-          status: existingData.status ?? 'active',
+          [FM.TITLE]: effectiveTitle,
+          [FM.TAGS]: effectiveTags,
+          [FM.INSTANCE]: existingData[FM.INSTANCE] ?? config.instance.id,
+          [FM.CREATED]: existingData[FM.CREATED],
+          [FM.STATUS]: existingData[FM.STATUS] ?? 'active',
           // NOTE: vaultManager.writeMarkdown() sets `updated` automatically
         };
 
@@ -846,8 +847,8 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
         const fqcId = preScan.capturedFrontmatter.fqcId;
 
-        // Update fm with fqc_id from targetedScan
-        fm.fqc_id = fqcId;
+        // Update fm with fq_id from targetedScan
+        fm[FM.ID] = fqcId;
 
         const sanitizedFm = serializeOrderedFrontmatter(fm);
         await vaultManager.writeMarkdown(relativePath, sanitizedFm, effectiveBody, {
@@ -973,7 +974,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
             // Step 2: Call targetedScan to update frontmatter with archived status
             // Compute hash of the file with archived status
-            const archivedFm: Record<string, unknown> = { ...parsed.data, status: 'archived' };
+            const archivedFm: Record<string, unknown> = { ...parsed.data, [FM.STATUS]: 'archived' };
             const serialized = matter.stringify(parsed.content, archivedFm);
             const newContentHash = computeHash(serialized);
 
@@ -985,15 +986,15 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               logger
             );
 
-            // Update fm with fqc_id from targetedScan
-            archivedFm.fqc_id = preScan.capturedFrontmatter.fqcId;
+            // Update fm with fq_id from targetedScan
+            archivedFm[FM.ID] = preScan.capturedFrontmatter.fqcId;
 
             // Write archived status to vault (VAULT-FIRST)
             await vaultManager.writeMarkdown(
               relativePath,
               archivedFm,
               parsed.content,
-              { gitAction: 'update', gitTitle: String(archivedFm.title ?? relativePath) }
+              { gitAction: 'update', gitTitle: String(archivedFm[FM.TITLE] ?? relativePath) }
             );
 
             // Step 3: Update Supabase fqc_documents
@@ -1390,8 +1391,8 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const sourceData = parsed.data as Record<string, unknown>;
 
         // Preserve source metadata immutably (SPEC-06: no parameter overrides)
-        const copyTitle = typeof sourceData.title === 'string' ? sourceData.title : sourceResolved.relativePath;
-        const copyTags = Array.isArray(sourceData.tags) ? (sourceData.tags as string[]) : [];
+        const copyTitle = typeof sourceData[FM.TITLE] === 'string' ? sourceData[FM.TITLE] as string : sourceResolved.relativePath;
+        const copyTags = Array.isArray(sourceData[FM.TAGS]) ? (sourceData[FM.TAGS] as string[]) : [];
 
         // Validate tags (from source)
         const validation = validateAllTags(copyTags);
@@ -1432,12 +1433,12 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const deduplicated = deduplicateTags(validation.normalized);
         const copyFm: Record<string, unknown> = {
           ...sourceData,
-          title: copyTitle,
-          fqc_id: newFqcId,
-          fqc_instance: config.instance.id,
-          status: 'active',
-          tags: deduplicated,
-          created: now,
+          [FM.TITLE]: copyTitle,
+          [FM.ID]: newFqcId,
+          [FM.INSTANCE]: config.instance.id,
+          [FM.STATUS]: 'active',
+          [FM.TAGS]: deduplicated,
+          [FM.CREATED]: now,
           // NOTE: vaultManager.writeMarkdown() sets `updated` automatically
         };
 
@@ -1771,8 +1772,8 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           try {
             const raw = await readFile(join(vaultRoot, file), 'utf-8');
             const { data: fm } = matter(raw);
-            if (typeof fm.fqc_id === 'string' && fm.fqc_id) {
-              fqcIdIndex.set(fm.fqc_id, file);
+            if (typeof fm[FM.ID] === 'string' && fm[FM.ID]) {
+              fqcIdIndex.set(fm[FM.ID] as string, file);
             }
           } catch {
             // skip unreadable files
@@ -1982,7 +1983,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           // Read the file to check if title was derived from filename
           const fileContent = await readFile(destAbsPath, 'utf-8');
           const { data: fm } = matter(fileContent);
-          const currentTitle = fm.title as string | undefined;
+          const currentTitle = fm[FM.TITLE] as string | undefined;
 
           // Extract filename without extension
           const sourceFilenameWithExt = basename(resolved.relativePath);
