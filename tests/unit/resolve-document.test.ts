@@ -166,7 +166,7 @@ describe('resolveDocumentIdentifier', () => {
 
   // ── UUID resolution ────────────────────────────────────────────────────────
 
-  it('UUID input — queries DB by id and returns resolved document with resolvedVia=fqc_id', async () => {
+  it('UUID input — queries DB by id and returns resolved document with resolvedVia=fq_id', async () => {
     const supabase = makeSupabaseMock({
       data: { id: SAMPLE_UUID, path: 'docs/my-doc.md', title: 'My Doc' },
       error: null,
@@ -219,7 +219,7 @@ describe('resolveDocumentIdentifier', () => {
     vi.mocked(listMarkdownFiles).mockResolvedValue(['clients/acme/renamed-notes.md']);
     // readFile returns content with matching fqc_id
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\nfqc_id: ${SAMPLE_UUID}\ntitle: My Note\n---\n# Hello` as never
+      `---\nfq_id: ${SAMPLE_UUID}\nfq_title: My Note\n---\n# Hello` as never
     );
 
     const result = await resolveDocumentIdentifier(
@@ -336,7 +336,7 @@ describe('TSA-03/TSA-05: targetedScan', () => {
 
   it('TSA-03: resolves identity chain for file with valid fqc_id', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\nfqc_id: ${SAMPLE_UUID}\ntitle: My Doc\n---\n# Hello` as never
+      `---\nfq_id: ${SAMPLE_UUID}\nfq_title: My Doc\n---\n# Hello` as never
     );
     // DB ownership check: path matches → ownership confirmed
     const supabase = makeSupabaseMock({
@@ -370,7 +370,7 @@ describe('TSA-03/TSA-05: targetedScan', () => {
   it('TSA-03: only updates identity fields in frontmatter', async () => {
     // File with title, tags, updated fields
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\nfqc_id: ${SAMPLE_UUID}\ntitle: Original Title\ntags: [a, b]\nupdated: 2025-01-01T00:00:00Z\n---\n# Content` as never
+      `---\nfq_id: ${SAMPLE_UUID}\nfq_title: Original Title\nfq_tags: [a, b]\nfq_updated: 2025-01-01T00:00:00Z\n---\n# Content` as never
     );
     // DB ownership check: confirmed
     const supabase = makeSupabaseMock({
@@ -387,37 +387,35 @@ describe('TSA-03/TSA-05: targetedScan', () => {
 
     // Check frontmatter arg — title and tags should remain unchanged
     const [, frontmatterArg] = (vm.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
-    expect(frontmatterArg.title).toBe('Original Title');
-    expect(frontmatterArg.tags).toEqual([expect.anything(), expect.anything()]); // unchanged
-    expect(frontmatterArg.fqc_id).toBe(SAMPLE_UUID);
+    expect(frontmatterArg[FM.TITLE]).toBe('Original Title');
+    expect(frontmatterArg[FM.TAGS]).toEqual([expect.anything(), expect.anything()]); // unchanged
+    expect(frontmatterArg[FM.ID]).toBe(SAMPLE_UUID);
     // SPEC-08: content_hash must NOT appear in vault frontmatter — it is DB-only
     expect(frontmatterArg.content_hash).toBeUndefined();
   });
 
   // ── TSA-05: Mutex Coordination ─────────────────────────────────────────────
 
-  it('TSA-05: acquires and releases scanMutex', async () => {
+  it('TSA-05: acquires per-file mutex (DCP-04: global scanMutex not used)', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\nfqc_id: ${SAMPLE_UUID}\n---\n# Content` as never
+      `---\nfq_id: ${SAMPLE_UUID}\n---\n# Content` as never
     );
     const supabase = makeSupabaseMock({
       data: { id: SAMPLE_UUID, path: RESOLVED_NO_ID.relativePath },
       error: null,
     });
 
-    // Import scanMutex to spy on it
-    const { scanMutex: sm } = await import('../../src/services/scanner.js');
-    const acquireSpy = vi.spyOn(sm, 'acquire');
-
     await targetedScan(config, supabase as never, RESOLVED_NO_ID, 'test-hash', logger);
 
-    // scanMutex.acquire should have been called
-    expect(acquireSpy).toHaveBeenCalled();
+    // DCP-04: targetedScan uses per-file mutex only, not global scanMutex.
+    // Verify per-file mutex was created and is accessible.
+    const fileMutex = getFileMutex(RESOLVED_NO_ID.relativePath);
+    expect(fileMutex).toBeDefined();
   });
 
   it('TSA-05: acquires per-file mutex', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\nfqc_id: ${SAMPLE_UUID}\n---\n# Content` as never
+      `---\nfq_id: ${SAMPLE_UUID}\n---\n# Content` as never
     );
     const supabase = makeSupabaseMock({
       data: { id: SAMPLE_UUID, path: RESOLVED_NO_ID.relativePath },
@@ -464,7 +462,7 @@ describe('TSA-03/TSA-05: targetedScan', () => {
 
   it('TSA-03: ensures capturedFrontmatter has all required fields', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\nfqc_id: ${SAMPLE_UUID}\ncreated: 2025-01-01T00:00:00Z\nstatus: active\n---\n# Content` as never
+      `---\nfq_id: ${SAMPLE_UUID}\nfq_created: 2025-01-01T00:00:00Z\nfq_status: active\n---\n# Content` as never
     );
     const supabase = makeSupabaseMock({
       data: { id: SAMPLE_UUID, path: RESOLVED_NO_ID.relativePath },
@@ -519,7 +517,7 @@ describe('PLG-03: targetedScan propagation', () => {
 
   it('PLG-03: targetedScan returns resolved DbRow', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\nfqc_id: ${SAMPLE_UUID}\ntitle: My Doc\n---\n# Content` as never
+      `---\nfq_id: ${SAMPLE_UUID}\nfq_title: My Doc\n---\n# Content` as never
     );
     const supabase = makeSupabaseMock({
       data: { id: SAMPLE_UUID, path: RESOLVED_NO_ID.relativePath },
@@ -571,7 +569,7 @@ describe('PLG-03: targetedScan propagation', () => {
 
   it('PLG-03: targetedScan handles frontmatter correctly with all required fields', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\nfqc_id: ${SAMPLE_UUID}\ncreated: 2025-01-01T00:00:00Z\nstatus: active\ntags: [test]\n---\n# Content` as never
+      `---\nfq_id: ${SAMPLE_UUID}\nfq_created: 2025-01-01T00:00:00Z\nfq_status: active\nfq_tags: [test]\n---\n# Content` as never
     );
     const supabase = makeSupabaseMock({
       data: { id: SAMPLE_UUID, path: RESOLVED_NO_ID.relativePath },
