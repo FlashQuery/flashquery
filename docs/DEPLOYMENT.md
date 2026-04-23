@@ -48,6 +48,10 @@ This runs four checks in sequence:
 
 **If any step fails, fix it before pushing.** CI runs the same checks and will block the PR.
 
+### If you work with Claude Code
+
+The repo ships a `pre-push` Claude skill (`.claude/skills/pre-push/`) that enforces this automatically. Whenever Claude is about to run `git push` — regardless of how you phrase it ("push it", "ship it", "push to origin", etc.) — it runs `npm run preflight` first and blocks the push if any step fails. You have to explicitly say "push anyway" to override. No manual step required; the gate is built in.
+
 > **Note on test coverage:** Two test files (`git-manager.test.ts`, `compound-tools.test.ts`) have known platform-specific failures on macOS that do not reproduce on the Linux CI runner. They are excluded from the preflight test run but included in `npm test` (the full suite). If you are working on git or compound-tool code, run `npm test` directly to see the full picture.
 
 ---
