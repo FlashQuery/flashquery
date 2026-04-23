@@ -109,7 +109,8 @@ The first question it asks is how you're running Supabase:
 ```bash
 npm run dev
 
-# Or run the compiled binary directly (after npm run build):
+# Or build and run the compiled binary:
+npm run build
 node dist/index.js start --config ./flashquery.yml
 
 # The `flashquery` command is only available globally after: npm install -g flashquery
