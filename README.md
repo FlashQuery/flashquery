@@ -22,18 +22,7 @@ Every interaction an AI has with FlashQuery is logged and searchable. When Claud
 
 FlashQuery runs as an MCP server, so any AI tool that speaks MCP can connect to it. Think of it as "Obsidian for AI workflows": local, yours, composable.
 
-```mermaid
-graph TD
-  A["Claude Desktop<br/>Claude Code<br/>Any MCP Client"] -->|"MCP Protocol<br/>(stdio or HTTP)"| B["FlashQuery<br/>(MCP Server)"]
-  B -->|"Memories · Documents<br/>Vector Search"| C["Supabase<br/>(Postgres + pgvector)"]
-  B -->|Read/Write| D["Your Folders<br/>(Markdown Files)"]
-  D -->|Auto-commit| G["Git Repository"]
-  E["Any Text Editor<br/>Obsidian"] -.->|Browse & Edit| D
-  style B fill:#4A90E2,stroke:#2E5C8A,color:#fff
-  style C fill:#5EB8FF,stroke:#2E5C8A,color:#fff
-  style D fill:#50C878,stroke:#2E7D4E,color:#fff
-  style G fill:#F5A623,stroke:#C47D0E,color:#fff
-```
+![How FlashQuery works](https://flashquery.ai/assets/img/core/FQC-diagram-sm.jpg)
 
 ---
 
