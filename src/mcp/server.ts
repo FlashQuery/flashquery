@@ -436,7 +436,7 @@ export function createAuthorizeHandler(config: FlashQueryConfig) {
  * automatically propagate REQ:uuid through their async call stacks.
  */
 function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
-  const server = new McpServer({ name: 'flashquery-core', version });
+  const server = new McpServer({ name: 'flashquery', version });
   // Apply correlation ID wrapping BEFORE tool registration so all 26 tools
   // automatically inherit context without modifying individual tool files.
   wrapServerWithCorrelationIds(server);
@@ -535,7 +535,7 @@ export async function initMCP(
       logger.warn(
         'WARNING: HTTP transport active without authentication configured. ' +
           'Set mcp.auth_secret in flashquery.yml or MCP_AUTH_SECRET env var. ' +
-          'See https://github.com/flashquery/flashquery-core/blob/main/docs/SECURITY-TOKENS.md'
+          'See https://github.com/FlashQuery/flashquery/blob/main/docs/SECURITY-TOKENS.md'
       );
     }
 
