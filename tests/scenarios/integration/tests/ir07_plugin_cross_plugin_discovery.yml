@@ -33,7 +33,7 @@ steps:
               on_added: auto-track
               track_as: assets
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Register Plugin B watching the same folder _integration/ir07"
     action: register_plugin
@@ -58,7 +58,7 @@ steps:
               on_added: auto-track
               track_as: resources
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create a document in the shared watched folder"
     action: vault.write

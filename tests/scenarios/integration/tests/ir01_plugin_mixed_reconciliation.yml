@@ -34,7 +34,7 @@ steps:
               on_moved: keep-tracking
               track_as: notes
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create an existing document that will be tracked and then archived"
     action: vault.write
@@ -75,12 +75,12 @@ steps:
   - label: "Archive the document that should produce a deleted record"
     action: archive_document
     args:
-      identifiers: "${archived_doc.fqc_id}"
+      identifiers: "${archived_doc.fq_id}"
 
   - label: "Move the document OUTSIDE the watched folder to trigger a moved classification"
     action: move_document
     args:
-      identifier: "${moved_doc.fqc_id}"
+      identifier: "${moved_doc.fq_id}"
       destination: "_integration/ir01_outbox/note_moved_dest.md"
 
   - label: "Create a new document that will be auto-tracked in this pass"

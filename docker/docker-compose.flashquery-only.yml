@@ -40,7 +40,7 @@ services:
       context: ..
       dockerfile: Dockerfile
     restart: unless-stopped
-    user: "10001:10001"
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     # network_mode: host — makes the container share the host's network stack.
     # On Linux this means localhost inside the container == localhost on the host,
     # so DATABASE_URL and SUPABASE_URL in .env work without any changes.

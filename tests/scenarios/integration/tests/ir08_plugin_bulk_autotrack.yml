@@ -32,7 +32,7 @@ steps:
               on_added: auto-track
               track_as: entries
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create first document in the watched folder"
     action: vault.write

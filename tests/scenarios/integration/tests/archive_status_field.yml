@@ -25,18 +25,18 @@ steps:
   - label: "Archive the document"
     action: archive_document
     args:
-      identifiers: ["${draft_doc.fqc_id}"]
+      identifiers: ["${draft_doc.fq_id}"]
 
   - label: "Document is still retrievable after archive by fqc_id"
     assert:
       op: get_document
       args:
-        identifier: "${draft_doc.fqc_id}"
+        identifier: "${draft_doc.fq_id}"
       expect_contains: "This is a draft that will be archived"
 
   - label: "Verify archived document content is still readable"
     assert:
       op: get_document
       args:
-        identifier: "${draft_doc.fqc_id}"
+        identifier: "${draft_doc.fq_id}"
       expect_contains: "This is a draft that will be archived."

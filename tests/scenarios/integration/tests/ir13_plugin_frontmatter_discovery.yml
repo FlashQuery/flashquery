@@ -35,7 +35,7 @@ steps:
               on_moved: keep-tracking
               track_as: items
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create document inside the watched folder"
     action: vault.write
@@ -72,7 +72,7 @@ steps:
   - label: "Move document outside the watched folder"
     action: move_document
     args:
-      identifier: "${item_doc.fqc_id}"
+      identifier: "${item_doc.fq_id}"
       destination: "_integration/ir13/outside/tracked_item.md"
 
   - label: "Scan vault to reset reconciliation staleness cache"

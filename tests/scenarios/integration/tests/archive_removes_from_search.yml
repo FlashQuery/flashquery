@@ -45,7 +45,7 @@ steps:
   - label: "Archive the document by fqc_id"
     action: archive_document
     args:
-      identifiers: "${sunset_doc.fqc_id}"
+      identifiers: "${sunset_doc.fq_id}"
 
   - label: "After archive: document is gone from search_all"
     assert:

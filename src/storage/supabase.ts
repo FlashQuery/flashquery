@@ -420,7 +420,23 @@ CREATE INDEX IF NOT EXISTS idx_fqc_memory_status ON fqc_memory (status);
 CREATE INDEX IF NOT EXISTS idx_fqc_vault_instance ON fqc_vault (instance_id);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_embedding ON fqc_documents USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_instance ON fqc_documents (instance_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_documents_instance_path ON fqc_documents (instance_id, path);
+-- Phase 90: migrate from full to partial unique index on (instance_id, path).
+-- Archived rows are excluded so a new document at the same path (after archiving
+-- the old one) can be inserted without conflict, enabling clean test re-runs and
+-- correct stale-row recovery in create_document when plugin FK constraints exist.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_indexes
+    WHERE schemaname = 'public'
+      AND indexname = 'idx_fqc_documents_instance_path'
+      AND indexdef NOT LIKE '%WHERE%'
+  ) THEN
+    DROP INDEX idx_fqc_documents_instance_path;
+  END IF;
+END$$;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_documents_instance_path
+  ON fqc_documents (instance_id, path) WHERE (status = 'active');
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_status ON fqc_documents (status);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_tags ON fqc_documents USING gin (tags);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_ownership ON fqc_documents(ownership_plugin_id, ownership_type);

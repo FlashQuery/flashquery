@@ -19,19 +19,19 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${nested_doc.fqc_id}"
+        identifier: "${nested_doc.fq_id}"
       expect_contains: "deeply nested directory"
 
   - label: "Archive the nested document"
     action: archive_document
     args:
-      identifiers: ["${nested_doc.fqc_id}"]
+      identifiers: ["${nested_doc.fq_id}"]
 
   - label: "Retrieve archived nested document by fqc_id"
     assert:
       op: get_document
       args:
-        identifier: "${nested_doc.fqc_id}"
+        identifier: "${nested_doc.fq_id}"
       expect_contains: "deeply nested directory structure"
 
   - label: "Confirm archived nested document is absent from search"

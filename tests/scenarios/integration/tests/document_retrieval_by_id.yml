@@ -26,5 +26,5 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${tidal_doc.fqc_id}"
+        identifier: "${tidal_doc.fq_id}"
       expect_contains: "gravitational pull of the moon"

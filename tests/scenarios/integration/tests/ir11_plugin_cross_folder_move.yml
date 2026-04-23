@@ -40,14 +40,14 @@ steps:
               on_moved: keep-tracking
               track_as: active_docs
               field_map:
-                title: title
+                fq_title: title
             - id: ir11-archive
               folder: _integration/ir11/archive
               on_added: auto-track
               on_moved: keep-tracking
               track_as: archive_docs
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create a document in the active folder"
     action: vault.write
@@ -89,7 +89,7 @@ steps:
   - label: "Move the document from active folder to archive folder"
     action: move_document
     args:
-      identifier: "${active_doc.fqc_id}"
+      identifier: "${active_doc.fq_id}"
       destination: "_integration/ir11/archive/report_q1.md"
 
   - label: "Scan vault to reset staleness cache"

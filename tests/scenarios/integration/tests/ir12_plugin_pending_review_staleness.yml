@@ -35,7 +35,7 @@ steps:
               track_as: items
               template: templates/item-template.md
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create a document in the watched folder"
     action: vault.write
@@ -86,7 +86,7 @@ steps:
       plugin_id: ir12
       plugin_instance: ir12test
       fqc_ids:
-        - "${item_doc.fqc_id}"
+        - "${item_doc.fq_id}"
 
   - label: "After clearing, even a staleness-skipping call shows no pending reviews"
     assert:

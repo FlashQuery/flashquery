@@ -33,7 +33,7 @@ steps:
               track_as: leads
               template: templates/lead-template.md
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create a document in the watched folder"
     action: vault.write
@@ -80,7 +80,7 @@ steps:
       plugin_id: ir03
       plugin_instance: ir03test
       fqc_ids:
-        - "${lead_doc.fqc_id}"
+        - "${lead_doc.fq_id}"
 
   # ── Assert: no pending items after clear ─────────────────────────────────────
 

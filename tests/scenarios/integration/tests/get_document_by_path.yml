@@ -18,7 +18,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${path_doc.fqc_id}"
+        identifier: "${path_doc.fq_id}"
       expect_contains: "explains the fundamentals"
 
   - label: "Retrieve document by vault-relative path"

@@ -33,7 +33,7 @@ steps:
               track_as: tasks
               template: templates/task-template.md
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create first document — will generate a pending review"
     action: vault.write
@@ -87,7 +87,7 @@ steps:
       plugin_id: ir10
       plugin_instance: ir10test
       fqc_ids:
-        - "${task_one.fqc_id}"
+        - "${task_one.fq_id}"
 
   - label: "After partial clear, 2 items remain in the backlog (IR-10)"
     assert:
@@ -106,8 +106,8 @@ steps:
       plugin_id: ir10
       plugin_instance: ir10test
       fqc_ids:
-        - "${task_two.fqc_id}"
-        - "${task_three.fqc_id}"
+        - "${task_two.fq_id}"
+        - "${task_three.fq_id}"
 
   - label: "Scan vault to reset staleness cache"
     action: scan_vault

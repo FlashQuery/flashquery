@@ -26,7 +26,7 @@ steps:
   - label: "Append new content to the document"
     action: append_to_doc
     args:
-      identifier: "${fieldnotes_doc.fqc_id}"
+      identifier: "${fieldnotes_doc.fq_id}"
       content: "## Afternoon Follow-Up\n\nSecondary readings confirmed unusual bioluminescence patterns near the tidal pools."
 
   - label: "Scan vault to ensure index reflects the appended content"
@@ -36,7 +36,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${fieldnotes_doc.fqc_id}"
+        identifier: "${fieldnotes_doc.fq_id}"
       expect_contains: "bioluminescence patterns near the tidal pools"
 
   - label: "Document is still discoverable by title after append"
@@ -50,5 +50,5 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${fieldnotes_doc.fqc_id}"
+        identifier: "${fieldnotes_doc.fq_id}"
       expect_contains: "morning low-tide window"

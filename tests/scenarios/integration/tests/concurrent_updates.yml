@@ -34,26 +34,26 @@ steps:
   - label: "Update document A"
     action: update_document
     args:
-      identifier: "${doc_a.fqc_id}"
+      identifier: "${doc_a.fq_id}"
       content: "Updated content for A"
 
   - label: "Update document B"
     action: update_document
     args:
-      identifier: "${doc_b.fqc_id}"
+      identifier: "${doc_b.fq_id}"
       content: "Updated content for B"
 
   - label: "Update document C"
     action: update_document
     args:
-      identifier: "${doc_c.fqc_id}"
+      identifier: "${doc_c.fq_id}"
       content: "Updated content for C"
 
   - label: "Retrieve A and verify updated state"
     assert:
       op: get_document
       args:
-        identifier: "${doc_a.fqc_id}"
+        identifier: "${doc_a.fq_id}"
       expect_contains: "Updated content for A"
       expect_not_contains: "Original content for A"
 
@@ -61,7 +61,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${doc_b.fqc_id}"
+        identifier: "${doc_b.fq_id}"
       expect_contains: "Updated content for B"
       expect_not_contains: "Original content for B"
 
@@ -69,7 +69,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${doc_c.fqc_id}"
+        identifier: "${doc_c.fq_id}"
       expect_contains: "Updated content for C"
       expect_not_contains: "Original content for C"
 
@@ -77,12 +77,12 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${doc_a.fqc_id}"
+        identifier: "${doc_a.fq_id}"
       expect_not_contains: "Updated content for B"
 
   - label: "Verify B does not contain C's updated content"
     assert:
       op: get_document
       args:
-        identifier: "${doc_b.fqc_id}"
+        identifier: "${doc_b.fq_id}"
       expect_not_contains: "Updated content for C"

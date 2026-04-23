@@ -58,5 +58,5 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${deepsea_doc.fqc_id}"
+        identifier: "${deepsea_doc.fq_id}"
       expect_contains: "extreme pressure and darkness"

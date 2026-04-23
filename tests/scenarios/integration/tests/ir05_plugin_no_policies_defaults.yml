@@ -32,7 +32,7 @@ steps:
               folder: _integration/ir05
               track_as: items
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create first document in the watched folder"
     action: vault.write
@@ -112,7 +112,7 @@ steps:
               on_added: auto-track
               track_as: tracked_items
               field_map:
-                title: title
+                fq_title: title
 
   - label: "search_records on ir05b — auto-tracks both docs that ir05 ignored (IR-05)"
     assert:

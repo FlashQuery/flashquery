@@ -19,7 +19,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${meta_doc.fqc_id}"
+        identifier: "${meta_doc.fq_id}"
       expect_contains: "Key concepts for understanding the system"
 
   - label: "Retrieve document by path returns same content"

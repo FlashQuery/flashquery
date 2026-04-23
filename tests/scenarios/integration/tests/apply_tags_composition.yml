@@ -25,7 +25,7 @@ steps:
   - label: "Apply additional tags [atc-math, atc-advanced] to the document"
     action: apply_tags
     args:
-      identifiers: ["${physics_doc.fqc_id}"]
+      identifiers: ["${physics_doc.fq_id}"]
       add_tags: [atc-math, atc-advanced]
 
   - label: "Document is now searchable by new tag atc-math"

@@ -25,7 +25,7 @@ steps:
   - label: "Append new entry to the document"
     action: append_to_doc
     args:
-      identifier: "${log_doc.fqc_id}"
+      identifier: "${log_doc.fq_id}"
       content: "\nNew event: User logged in from 192.168.1.100"
 
   - label: "Scan vault to index appended content"
@@ -35,20 +35,20 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${log_doc.fqc_id}"
+        identifier: "${log_doc.fq_id}"
       expect_contains: "New event: User logged in"
 
   - label: "Original content still present after append"
     assert:
       op: get_document
       args:
-        identifier: "${log_doc.fqc_id}"
+        identifier: "${log_doc.fq_id}"
       expect_contains: "Initial log entry"
 
   - label: "Retrieve document and verify appended content"
     assert:
       op: get_document
       args:
-        identifier: "${log_doc.fqc_id}"
+        identifier: "${log_doc.fq_id}"
       expect_contains: "Initial log entry at session start."
       expect_contains: "New event: User logged in from 192.168.1.100"

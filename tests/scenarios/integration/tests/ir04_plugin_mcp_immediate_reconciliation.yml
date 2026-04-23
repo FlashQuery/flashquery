@@ -33,7 +33,7 @@ steps:
               on_added: auto-track
               track_as: contacts
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create document in the watched folder via MCP (no scan needed)"
     action: vault.write

@@ -25,7 +25,7 @@ steps:
   - label: "Update the document with a new title and revised content"
     action: update_document
     args:
-      identifier: "${report_doc.fqc_id}"
+      identifier: "${report_doc.fq_id}"
       title: "Expedition Notes Final"
       content: "Final field observations compiled from the northern and southern survey teams after full review."
 
@@ -40,7 +40,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${report_doc.fqc_id}"
+        identifier: "${report_doc.fq_id}"
       expect_contains: "northern and southern survey teams"
 
   - label: "Original draft title no longer appears in search results"

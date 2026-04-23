@@ -34,7 +34,7 @@ steps:
               on_moved: stop-tracking
               track_as: projects
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create a document in the watched folder"
     action: vault.write
@@ -69,7 +69,7 @@ steps:
   - label: "Move document out of watched folder to an untracked location"
     action: move_document
     args:
-      identifier: "${project_doc.fqc_id}"
+      identifier: "${project_doc.fq_id}"
       destination: "_integration/ir06_archive/project_aurora.md"
 
   - label: "Scan vault to reset staleness cache after move-out"
@@ -98,7 +98,7 @@ steps:
   - label: "Move document back into the watched folder"
     action: move_document
     args:
-      identifier: "${project_doc.fqc_id}"
+      identifier: "${project_doc.fq_id}"
       destination: "_integration/ir06/project_aurora.md"
 
   - label: "Scan vault to reset staleness cache after move-back"

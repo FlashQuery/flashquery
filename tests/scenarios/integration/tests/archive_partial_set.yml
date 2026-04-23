@@ -42,7 +42,7 @@ steps:
   - label: "Archive one document (glacier_b)"
     action: archive_document
     args:
-      identifiers: "${glacier_b.fqc_id}"
+      identifiers: "${glacier_b.fq_id}"
 
   - label: "After archive: archived document is gone from search_all"
     assert:

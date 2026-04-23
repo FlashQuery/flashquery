@@ -34,7 +34,7 @@ steps:
               on_added: auto-track
               track_as: contacts
               field_map:
-                title: title
+                fq_title: title
 
   - label: "Create a document in the watched folder"
     action: vault.write
@@ -69,7 +69,7 @@ steps:
   - label: "Archive the contact document"
     action: archive_document
     args:
-      identifiers: "${contact_doc.fqc_id}"
+      identifiers: "${contact_doc.fq_id}"
 
   # ── Step 3: Verify plugin record is cleaned up on next reconciliation ─────────
 
