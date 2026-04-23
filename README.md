@@ -57,7 +57,11 @@ make db-up              # or: docker compose --env-file docker/.env.docker -f do
 npm run dev             # FlashQuery runs locally with hot reload
 # Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
 
-# ── Option C: Supabase Cloud or existing self-hosted (no local Docker needed) ──────────────────
+# ── Option C: FlashQuery in Docker, Supabase external/cloud ─────────────────────────────────────
+make fq-up              # or: docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml up -d
+# Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
+
+# ── Option D: Supabase Cloud or existing self-hosted (no local Docker needed) ──────────────────
 npm run dev             # FlashQuery connects to your external Supabase
 # Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
 ```
