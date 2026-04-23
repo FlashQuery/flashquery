@@ -156,7 +156,7 @@ export function createEmbeddingProvider(config: FlashQueryConfig['embedding']): 
   switch (config.provider) {
     case 'openai':
       return new OpenAICompatibleProvider(
-        'https://api.openai.com',
+        config.endpoint ?? 'https://api.openai.com',
         config.model,
         config.apiKey!,
         config.dimensions,
@@ -164,7 +164,7 @@ export function createEmbeddingProvider(config: FlashQueryConfig['embedding']): 
       );
     case 'openrouter':
       return new OpenAICompatibleProvider(
-        'https://openrouter.ai/api',
+        config.endpoint ?? 'https://openrouter.ai/api',
         config.model,
         config.apiKey!,
         config.dimensions,

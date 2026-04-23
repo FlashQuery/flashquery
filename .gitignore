@@ -43,9 +43,6 @@ memory/
 # Keep flashquery.example.yml and flashquery.example.yaml (templates for others)
 flashquery.yml
 
-# Test config with real cloud credentials (moved from project root in Phase 72)
-# NEVER commit — contains real Supabase service role key and database URL
-tests/fixtures/flashquery.test.yml
 
 # Test artifacts (generated during test runs)
 coverage/

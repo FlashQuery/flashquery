@@ -167,7 +167,7 @@ describe('createAuthMiddleware', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
     expect(res.setHeader).toHaveBeenCalledWith(
       'WWW-Authenticate',
-      expect.stringMatching(/Bearer realm="FlashQuery Core"/)
+      expect.stringMatching(/Bearer realm="FlashQuery"/)
     );
   });
 
@@ -183,7 +183,7 @@ describe('createAuthMiddleware', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
     expect(res.setHeader).toHaveBeenCalledWith(
       'WWW-Authenticate',
-      expect.stringMatching(/Bearer realm="FlashQuery Core"/)
+      expect.stringMatching(/Bearer realm="FlashQuery"/)
     );
   });
 
@@ -198,7 +198,7 @@ describe('createAuthMiddleware', () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.setHeader).toHaveBeenCalledWith(
       'WWW-Authenticate',
-      expect.stringMatching(/Bearer realm="FlashQuery Core"/)
+      expect.stringMatching(/Bearer realm="FlashQuery"/)
     );
   });
 
@@ -215,7 +215,7 @@ describe('createAuthMiddleware', () => {
     expect(res.json).toHaveBeenCalledWith({ error: 'Unauthorized' });
     expect(res.setHeader).toHaveBeenCalledWith(
       'WWW-Authenticate',
-      expect.stringMatching(/Bearer realm="FlashQuery Core"/)
+      expect.stringMatching(/Bearer realm="FlashQuery"/)
     );
   });
 
@@ -230,7 +230,7 @@ describe('createAuthMiddleware', () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.setHeader).toHaveBeenCalledWith(
       'WWW-Authenticate',
-      expect.stringMatching(/Bearer realm="FlashQuery Core"/)
+      expect.stringMatching(/Bearer realm="FlashQuery"/)
     );
   });
 
@@ -245,7 +245,7 @@ describe('createAuthMiddleware', () => {
     expect(res.status).toHaveBeenCalledWith(401);
     expect(res.setHeader).toHaveBeenCalledWith(
       'WWW-Authenticate',
-      expect.stringMatching(/Bearer realm="FlashQuery Core"/)
+      expect.stringMatching(/Bearer realm="FlashQuery"/)
     );
   });
 });
