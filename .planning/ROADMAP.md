@@ -57,6 +57,20 @@ Full phase details: [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
 
 **Roadmap structure:** Completed milestones are archived to keep the main ROADMAP lean and current.
 
+### Phase 90: Centralize frontmatter field names into FM constants and rename fqc_ prefix fields to fq_
+
+**Goal:** Create a single TypeScript constants file (FM object) as the source of truth for all 9 FlashQuery frontmatter field names, rename all fqc_* and bare-name fields to fq_* equivalents across 8 TS source files, 4 TS test files, and 14 Python test files, and invert frontmatter field ordering so user-defined fields appear before FQ-managed fields.
+**Requirements**: NEW-01, NEW-02, ORD-01, ORD-02, ORD-03, ORD-04, REF-01, REF-02, REF-03, REF-04
+**Depends on:** Phase 89
+**Plans:** 5 plans
+
+Plans:
+- [ ] 90-01-PLAN.md — FM constants file + test stubs (Wave 1: RED/GREEN canary; RED ordering stubs)
+- [ ] 90-02-PLAN.md — frontmatter-sanitizer, frontmatter.ts, vault.ts, plugin-reconciliation, resolve-document (Wave 2)
+- [ ] 90-03-PLAN.md — scanner.ts — 10+ frontmatter key locations (Wave 2, parallel with 02 and 04)
+- [ ] 90-04-PLAN.md — documents.ts + compound.ts — 25+ total locations (Wave 2, parallel with 02 and 03)
+- [ ] 90-05-PLAN.md — TypeScript test updates + Python test framework + 14 Python files (Wave 3)
+
 ---
 
-*Last updated: 2026-04-21 — v2.8 Plugin Callback Overhaul shipped*
+*Last updated: 2026-04-22 — Phase 90 planned*
