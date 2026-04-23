@@ -176,7 +176,7 @@ describe('create_document', () => {
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabaseClient as unknown as ReturnType<typeof supabaseManager.getClient>);
 
     // Default: readFile returns a mock raw content string
-    vi.mocked(fsPromises.readFile).mockResolvedValue('---\ntitle: Mock\n---\nbody' as unknown as Buffer);
+    vi.mocked(fsPromises.readFile).mockResolvedValue('---\nfq_title: Mock\n---\nbody' as unknown as Buffer);
 
     // Default: embed returns a mock vector
     vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
@@ -203,13 +203,13 @@ describe('create_document', () => {
     expect(relativePath).toBe('Personal/Journal/My Test Document.md');
 
     // Required frontmatter fields — no project field (D-08)
-    expect(fm.title).toBe('My Test Document');
+    expect(fm['fq_title']).toBe('My Test Document');
     expect(fm.project).toBeUndefined();
-    // fqc_id is any valid UUID (uuid mock may not intercept ESM named re-export)
-    expect(fm.fqc_id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(fm.fqc_instance).toBe('test-instance-id');
-    expect(fm.status).toBe('active');
-    expect(fm.created).toBeDefined();
+    // fq_id is any valid UUID (uuid mock may not intercept ESM named re-export)
+    expect(fm['fq_id']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(fm['fq_instance']).toBe('test-instance-id');
+    expect(fm['fq_status']).toBe('active');
+    expect(fm['fq_created']).toBeDefined();
 
     // Content passed through
     expect(content).toBe('Hello world');
@@ -255,15 +255,15 @@ describe('create_document', () => {
     await handler({
       title: 'Test',
       content: 'body',
-      frontmatter: { fqc_id: 'attacker-uuid', status: 'archived', custom_field: 'value' },
+      frontmatter: { fq_id: 'attacker-uuid', fq_status: 'archived', custom_field: 'value' },
     });
 
     const [, fm] = (vaultManager.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
 
-    // Required fields must NOT be overridden (fqc_id is a fresh UUID, not attacker-supplied)
-    expect(fm.fqc_id).not.toBe('attacker-uuid');
-    expect(fm.fqc_id).toMatch(/^[0-9a-f-]{36}$/);
-    expect(fm.status).toBe('active');
+    // Required fields must NOT be overridden (fq_id is a fresh UUID, not attacker-supplied)
+    expect(fm['fq_id']).not.toBe('attacker-uuid');
+    expect(fm['fq_id']).toMatch(/^[0-9a-f-]{36}$/);
+    expect(fm['fq_status']).toBe('active');
 
     // Caller-supplied custom field should be present
     expect(fm.custom_field).toBe('value');
@@ -278,13 +278,13 @@ describe('create_document', () => {
     await handler({ title: 'Tagged Doc', content: 'body', tags: ['meeting', 'notes'] });
 
     const [, fm] = (vaultManager.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
-    expect(Array.isArray(fm.tags)).toBe(true);
+    expect(Array.isArray(fm['fq_tags'])).toBe(true);
     // STAT-01: status is frontmatter property only; no #status/active tag injected
-    expect((fm.tags as string[])).not.toContain('#status/active');
-    expect((fm.tags as string[])).toContain('meeting');
-    expect((fm.tags as string[])).toContain('notes');
+    expect((fm['fq_tags'] as string[])).not.toContain('#status/active');
+    expect((fm['fq_tags'] as string[])).toContain('meeting');
+    expect((fm['fq_tags'] as string[])).toContain('notes');
     // status property must be set explicitly (D-02c)
-    expect(fm.status).toBe('active');
+    expect(fm['fq_status']).toBe('active');
   });
 
   it('does NOT set updated field in frontmatter (writeMarkdown handles it)', async () => {
@@ -306,9 +306,9 @@ describe('create_document', () => {
 
     // File exists at the explicit path
     vi.mocked(fs.existsSync).mockReturnValue(true);
-    // The file has a valid fqc_id in frontmatter
+    // The file has a valid fq_id in frontmatter
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Existing Doc\nfqc_id: existing-uuid-aaaa-bbbb-cccc-dddd00000000\nstatus: active\n---\nOriginal body.' as unknown as Buffer
+      '---\nfq_title: Existing Doc\nfq_id: existing-uuid-aaaa-bbbb-cccc-dddd00000000\nfq_status: active\n---\nOriginal body.' as unknown as Buffer
     );
 
     const handler = getHandler('create_document');
@@ -334,10 +334,10 @@ describe('create_document', () => {
     // File exists but has no fqc_id
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fsPromises.readFile)
-      // First call: guard reads existing file — no fqc_id
-      .mockResolvedValueOnce('---\ntitle: Legacy Doc\n---\nOld body.' as unknown as Buffer)
+      // First call: guard reads existing file — no fq_id
+      .mockResolvedValueOnce('---\nfq_title: Legacy Doc\n---\nOld body.' as unknown as Buffer)
       // Second call: post-write hash computation
-      .mockResolvedValueOnce('---\ntitle: Legacy Doc\nfqc_id: test-uuid-1234-5678-9abc-def012345678\n---\nNew body.' as unknown as Buffer);
+      .mockResolvedValueOnce('---\nfq_title: Legacy Doc\nfq_id: test-uuid-1234-5678-9abc-def012345678\n---\nNew body.' as unknown as Buffer);
 
     const handler = getHandler('create_document');
     const result = await handler({
@@ -507,9 +507,9 @@ describe('create_document', () => {
     expect(vaultManager.writeMarkdown).toHaveBeenCalledOnce();
 
     const [, fm] = (vaultManager.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
-    expect((fm.tags as string[])).toContain('mytag');
-    expect((fm.tags as string[])).not.toContain(' MyTag ');
-    expect((fm.tags as string[])).not.toContain('MyTag');
+    expect((fm['fq_tags'] as string[])).toContain('mytag');
+    expect((fm['fq_tags'] as string[])).not.toContain(' MyTag ');
+    expect((fm['fq_tags'] as string[])).not.toContain('MyTag');
   });
 
   it('TAX-01: vault is authoritative — vault write must precede Supabase insert', async () => {
@@ -526,7 +526,7 @@ describe('create_document', () => {
     });
 
     // Mock readFile (hash computation between vault write and supabase insert)
-    vi.mocked(fsPromises.readFile).mockResolvedValueOnce('---\ntitle: TAX-01 Test\n---\nbody' as unknown as Buffer);
+    vi.mocked(fsPromises.readFile).mockResolvedValueOnce('---\nfq_title: TAX-01 Test\n---\nbody' as unknown as Buffer);
 
     // Mock supabase insert to record call order
     const mockInsert = vi.fn().mockImplementationOnce(async () => {
@@ -562,7 +562,7 @@ describe('TSA-04: targetedScan integration in document tools', () => {
     // CRITICAL: Reset mockResolvedValue after vi.clearAllMocks() to prevent mock state pollution
     // Use frontmatter with all expected fields to avoid serialization issues
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Mock\ncreated: 2026-01-01T00:00:00Z\nstatus: active\n---\nbody' as unknown as Buffer
+      '---\nfq_title: Mock\nfq_created: 2026-01-01T00:00:00Z\nfq_status: active\n---\nbody' as unknown as Buffer
     );
     vi.mocked(vaultManager.writeMarkdown).mockResolvedValue(undefined);
     vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
@@ -673,7 +673,7 @@ describe('get_document', () => {
     registerDocumentTools(server, config);
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: My Document\nproject: Personal/Journal\nfqc_id: some-uuid\nstatus: active\n---\n# Hello\n\nThis is the document body.' as unknown as Buffer
+      '---\nfq_title: My Document\nproject: Personal/Journal\nfq_id: some-uuid\nfq_status: active\n---\n# Hello\n\nThis is the document body.' as unknown as Buffer
     );
 
     const handler = getHandler('get_document');
@@ -714,7 +714,7 @@ describe('get_document', () => {
     registerDocumentTools(server, config);
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: My Doc\nfqc_id: test-uuid-1234-5678-9abc-def012345678\n---\nHello world' as unknown as Buffer
+      '---\nfq_title: My Doc\nfq_id: test-uuid-1234-5678-9abc-def012345678\n---\nHello world' as unknown as Buffer
     );
     vi.mocked(supabaseManager.getClient).mockReturnValue({
       from: vi.fn().mockReturnValue({
@@ -744,7 +744,7 @@ describe('get_document', () => {
     registerDocumentTools(server, config);
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Changed Doc\nfqc_id: test-uuid-1234-5678-9abc-def012345678\n---\nUpdated content' as unknown as Buffer
+      '---\nfq_title: Changed Doc\nfq_id: test-uuid-1234-5678-9abc-def012345678\n---\nUpdated content' as unknown as Buffer
     );
     // Stored hash differs from computed 'mock-sha256-hash-abc123'
     const mockUpdate = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: null }) });
@@ -779,7 +779,7 @@ describe('get_document', () => {
     registerDocumentTools(server, config);
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Test Doc\nfqc_id: test-fqc-id\n---\nBody content' as unknown as Buffer
+      '---\nfq_title: Test Doc\nfq_id: test-fqc-id\n---\nBody content' as unknown as Buffer
     );
 
     const handler = getHandler('get_document');
@@ -798,7 +798,7 @@ describe('get_document', () => {
     registerDocumentTools(server, config);
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Provisioned Doc\nfqc_id: test-fqc-id\n---\nProvisioned body' as unknown as Buffer
+      '---\nfq_title: Provisioned Doc\nfq_id: test-fqc-id\n---\nProvisioned body' as unknown as Buffer
     );
 
     const handler = getHandler('get_document');
@@ -828,7 +828,7 @@ describe('get_document', () => {
     });
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Moved Doc\nfqc_id: test-fqc-id\n---\nContent at new location' as unknown as Buffer
+      '---\nfq_title: Moved Doc\nfq_id: test-fqc-id\n---\nContent at new location' as unknown as Buffer
     );
 
     const handler = getHandler('get_document');
@@ -937,7 +937,7 @@ describe('get_document', () => {
     });
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Note\nfqc_id: test-fqc-id\n---\nContent body' as unknown as Buffer
+      '---\nfq_title: Note\nfq_id: test-fqc-id\n---\nContent body' as unknown as Buffer
     );
 
     const handler = getHandler('get_document');
@@ -972,7 +972,7 @@ describe('get_document', () => {
     });
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Moved\nfqc_id: test-fqc-id\n---\nContent' as unknown as Buffer
+      '---\nfq_title: Moved\nfq_id: test-fqc-id\n---\nContent' as unknown as Buffer
     );
 
     const handler = getHandler('get_document');
@@ -1008,7 +1008,7 @@ describe('get_document', () => {
     });
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\ntitle: Note\nfqc_id: test-fqc-id\n---\n${expectedContent}` as unknown as Buffer
+      `---\nfq_title: Note\nfq_id: test-fqc-id\n---\n${expectedContent}` as unknown as Buffer
     );
 
     const handler = getHandler('get_document');
@@ -1044,7 +1044,7 @@ describe('get_document', () => {
     });
 
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Note\nfqc_id: test-fqc-id\n---\nUpdated content' as unknown as Buffer
+      '---\nfq_title: Note\nfq_id: test-fqc-id\n---\nUpdated content' as unknown as Buffer
     );
 
     vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
@@ -1087,7 +1087,7 @@ describe('get_document', () => {
     };
 
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabaseClient as unknown as ReturnType<typeof supabaseManager.getClient>);
-    vi.mocked(fsPromises.readFile).mockResolvedValue('---\ntitle: Mock\n---\nbody' as unknown as Buffer);
+    vi.mocked(fsPromises.readFile).mockResolvedValue('---\nfq_title: Mock\n---\nbody' as unknown as Buffer);
     vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
 
     const handler = getHandler('create_document');
@@ -1132,7 +1132,7 @@ describe('get_document', () => {
     };
 
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabaseClient as unknown as ReturnType<typeof supabaseManager.getClient>);
-    vi.mocked(fsPromises.readFile).mockResolvedValue('---\ntitle: Mock\n---\nbody' as unknown as Buffer);
+    vi.mocked(fsPromises.readFile).mockResolvedValue('---\nfq_title: Mock\n---\nbody' as unknown as Buffer);
     vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
 
     const handler = getHandler('create_document');
@@ -1176,7 +1176,7 @@ describe('get_document', () => {
     };
 
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabaseClient as unknown as ReturnType<typeof supabaseManager.getClient>);
-    vi.mocked(fsPromises.readFile).mockResolvedValue('---\ntitle: Mock\n---\nbody' as unknown as Buffer);
+    vi.mocked(fsPromises.readFile).mockResolvedValue('---\nfq_title: Mock\n---\nbody' as unknown as Buffer);
     vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
 
     const handler = getHandler('create_document');
@@ -1260,7 +1260,7 @@ describe('search_documents', () => {
       const doc = docs.find(d => d.relativePath === rel);
       if (!doc) throw new Error(`ENOENT: ${filePath}`);
       const tagsYaml = doc.tags.map(t => `  - ${t}`).join('\n');
-      return `---\ntitle: ${doc.title}\nproject: ${doc.project}\ntags:\n${tagsYaml}\nstatus: ${doc.status ?? 'active'}\ncreated: ${doc.created ?? '2026-01-01T00:00:00Z'}\n---\n\nBody content.`;
+      return `---\nfq_title: ${doc.title}\nproject: ${doc.project}\nfq_tags:\n${tagsYaml}\nfq_status: ${doc.status ?? 'active'}\nfq_created: ${doc.created ?? '2026-01-01T00:00:00Z'}\n---\n\nBody content.`;
     }) as typeof fsPromises.readFile);
   }
 
@@ -1438,7 +1438,7 @@ describe('search_documents', () => {
 
     // readFile for vault scan returns frontmatter with matching fqc_id
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\nfqc_id: moved-id\ntitle: Moved Doc\nproject: Archive\ntags: []\nstatus: active\n---\nContent here.' as unknown as Buffer
+      '---\nfq_id: moved-id\nfq_title: Moved Doc\nproject: Archive\nfq_tags: []\nfq_status: active\n---\nContent here.' as unknown as Buffer
     );
 
     const mockEq = vi.fn().mockResolvedValue({ error: null });
@@ -1488,7 +1488,7 @@ describe('search_documents', () => {
 
     // readFile for vault scan returns frontmatter with matching fqc_id
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\nfqc_id: mixed-moved-id\ntitle: Mixed Moved Doc\nproject: Archive\ntags: []\nstatus: active\n---\nContent.' as unknown as Buffer
+      '---\nfq_id: mixed-moved-id\nfq_title: Mixed Moved Doc\nproject: Archive\nfq_tags: []\nfq_status: active\n---\nContent.' as unknown as Buffer
     );
 
     const mockEq = vi.fn().mockResolvedValue({ error: null });
@@ -1559,8 +1559,8 @@ describe('search_documents status filtering (STAT-04, STAT-05, STAT-07, STAT-09,
       const doc = docs.find(d => d.relativePath === rel);
       if (!doc) throw new Error(`ENOENT: ${filePath}`);
       const tagsYaml = doc.tags.map(t => `  - ${t}`).join('\n');
-      const statusLine = doc.status != null ? `status: ${doc.status}` : '';
-      return `---\ntitle: ${doc.title}\nproject: Work\ntags:\n${tagsYaml}\n${statusLine}\ncreated: 2026-01-01T00:00:00Z\n---\n\nBody.`;
+      const statusLine = doc.status != null ? `fq_status: ${doc.status}` : '';
+      return `---\nfq_title: ${doc.title}\nproject: Work\nfq_tags:\n${tagsYaml}\n${statusLine}\nfq_created: 2026-01-01T00:00:00Z\n---\n\nBody.`;
     }) as typeof fsPromises.readFile);
   }
 
@@ -1735,7 +1735,7 @@ describe('reconcile_documents', () => {
     ] as never);
     // readFile: vault scan finds matching fqc_id at new path
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\ntitle: Moved Doc\nfqc_id: ${movedFqcId}\nstatus: active\n---\nContent.` as unknown as Buffer
+      `---\nfq_title: Moved Doc\nfq_id: ${movedFqcId}\nfq_status: active\n---\nContent.` as unknown as Buffer
     );
 
     const handler = getHandler('reconcile_documents');
@@ -1782,7 +1782,7 @@ describe('reconcile_documents', () => {
       { name: 'Other.md', isFile: () => true, parentPath: '/tmp/test-vault/Work' },
     ] as never);
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      '---\ntitle: Other\nfqc_id: completely-unrelated-fqc-id-0000\n---\nBody.' as unknown as Buffer
+      '---\nfq_title: Other\nfq_id: completely-unrelated-fqc-id-0000\n---\nBody.' as unknown as Buffer
     );
 
     const handler = getHandler('reconcile_documents');
@@ -1925,7 +1925,7 @@ describe('archive_document', () => {
       capturedFrontmatter: {},
     } as unknown as ReturnType<typeof resolveDocumentModule.resolveDocumentIdentifier>);
 
-    vi.mocked(vaultManager.readMarkdown).mockResolvedValueOnce({ data: { status: 'active' }, content: 'body text' });
+    vi.mocked(vaultManager.readMarkdown).mockResolvedValueOnce({ data: { fq_status: 'active' }, content: 'body text' });
 
     // Mock targetedScan to return scan result with fqcId
     vi.mocked(resolveDocumentModule.targetedScan).mockResolvedValueOnce({
@@ -1969,7 +1969,7 @@ describe('archive_document', () => {
       capturedFrontmatter: {},
     } as unknown as ReturnType<typeof resolveDocumentModule.resolveDocumentIdentifier>);
 
-    vi.mocked(vaultManager.readMarkdown).mockResolvedValueOnce({ data: { status: 'active', title: 'Test' }, content: 'body' });
+    vi.mocked(vaultManager.readMarkdown).mockResolvedValueOnce({ data: { fq_status: 'active', fq_title: 'Test' }, content: 'body' });
 
     // Mock targetedScan
     vi.mocked(resolveDocumentModule.targetedScan).mockResolvedValueOnce({
@@ -1992,7 +1992,7 @@ describe('archive_document', () => {
 
     expect(vaultManager.writeMarkdown).toHaveBeenCalledWith(
       'Notes/test.md',
-      expect.objectContaining({ status: 'archived' }),
+      expect.objectContaining({ fq_status: 'archived' }),
       'body',
       expect.objectContaining({ gitAction: 'update' }),
     );
@@ -2051,7 +2051,7 @@ describe('search_documents tag_match (TAGMATCH-01, TAGMATCH-06)', () => {
       const doc = docs.find(d => d.relativePath === rel);
       if (!doc) throw new Error(`ENOENT: ${filePath}`);
       const tagsYaml = doc.tags.map(t => `  - ${t}`).join('\n');
-      return `---\ntitle: ${doc.title}\nproject: ${doc.project}\ntags:\n${tagsYaml}\nstatus: ${doc.status}\ncreated: 2026-01-01T00:00:00Z\n---\n\nBody.`;
+      return `---\nfq_title: ${doc.title}\nproject: ${doc.project}\nfq_tags:\n${tagsYaml}\nfq_status: ${doc.status}\nfq_created: 2026-01-01T00:00:00Z\n---\n\nBody.`;
     }) as typeof fsPromises.readFile);
   }
 
