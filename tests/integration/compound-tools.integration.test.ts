@@ -867,8 +867,8 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       expect(text).toContain('Integration test memory for get_memory round-trip.');
       expect(text).toContain(memoryId);
       expect(text).toContain('#get-memory-test');
-      expect(text).toContain(FM.CREATED);
-      expect(text).toContain(FM.UPDATED);
+      expect(text).toContain('Created:');
+      expect(text).toContain('Updated:');
     });
   });
 
