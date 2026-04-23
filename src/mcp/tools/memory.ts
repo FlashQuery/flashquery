@@ -249,12 +249,69 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
         }
 
         // Delegate to shared helper (also used by search_all)
-        const results = await searchMemoriesSemantic(config, query, {
-          tags,
-          tagMatch: tag_match ?? 'any',
-          threshold,
-          limit,
-        });
+        let semanticAvailable = true;
+        let results: Array<{ id: string; content: string; tags: string[]; similarity: number; created_at: string }> = [];
+        try {
+          results = await searchMemoriesSemantic(config, query, {
+            tags,
+            tagMatch: tag_match ?? 'any',
+            threshold,
+            limit,
+          });
+        } catch (embedErr) {
+          logger.warn(`search_memory: embedding unavailable, falling back to tag-based search: ${embedErr instanceof Error ? embedErr.message : String(embedErr)}`);
+          semanticAvailable = false;
+        }
+
+        if (!semanticAvailable) {
+          // Strict thresholds (>=0.5) require precise semantic scoring — return empty with a note.
+          // Lenient thresholds (<0.5 or default 0.4) fall back to tag-based DB filtering.
+          const effectiveThreshold = threshold ?? 0.4;
+          if (effectiveThreshold >= 0.5) {
+            return {
+              content: [{ type: 'text' as const, text: formatEmptyResults('memories') }],
+              isError: false,
+            };
+          }
+
+          const supabase = supabaseManager.getClient();
+          let dbQuery = supabase
+            .from('fqc_memory')
+            .select('id, content, tags, created_at')
+            .eq('instance_id', config.instance.id)
+            .eq('status', 'active')
+            .order('created_at', { ascending: false })
+            .limit(limit ?? 10);
+
+          if (tags && tags.length > 0) {
+            const matchMode = tag_match ?? 'any';
+            if (matchMode === 'any') {
+              dbQuery = dbQuery.overlaps('tags', tags);
+            } else {
+              dbQuery = dbQuery.contains('tags', tags);
+            }
+          }
+
+          const { data: fallbackData, error: fallbackError } = await dbQuery;
+          if (fallbackError) throw new Error(fallbackError.message);
+
+          const fallbackMemories = fallbackData ?? [];
+          if (fallbackMemories.length === 0) {
+            return { content: [{ type: 'text' as const, text: formatEmptyResults('memories') }], isError: false };
+          }
+
+          const fallbackBlocks = fallbackMemories.map((m) => [
+            formatKeyValueEntry('Memory ID', m.id),
+            formatKeyValueEntry('Content', m.content),
+            formatKeyValueEntry('Tags', m.tags),
+            formatKeyValueEntry('Created', m.created_at),
+          ].join('\n'));
+
+          return {
+            content: [{ type: 'text' as const, text: joinBatchEntries(fallbackBlocks) }],
+          };
+        }
+
         if (results.length === 0) {
           return {
             content: [{ type: 'text' as const, text: formatEmptyResults('memories') }],
