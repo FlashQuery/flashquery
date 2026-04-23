@@ -103,7 +103,7 @@ describe.skipIf(SKIP)('update_doc_header tag validation (integration)', () => {
     // Update tags with mixed-case input
     const updateResult = await getHandler('update_doc_header')({
       identifier: docVaultPath,
-      updates: { tags: [' MixedCase ', 'UPPER'] },
+      updates: { fq_tags: [' MixedCase ', 'UPPER'] },
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(updateResult.isError).toBeUndefined();
@@ -111,7 +111,7 @@ describe.skipIf(SKIP)('update_doc_header tag validation (integration)', () => {
     // Verify vault frontmatter has normalized tags
     const rawFile = await readFile(join(vaultPath, docVaultPath), 'utf-8');
     const parsed = matter(rawFile);
-    const vaultTags: string[] = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
+    const vaultTags: string[] = Array.isArray(parsed.data.fq_tags) ? parsed.data.fq_tags : [];
     expect(vaultTags).toContain('mixedcase');
     expect(vaultTags).toContain('upper');
     expect(vaultTags).not.toContain(' MixedCase ');
@@ -176,14 +176,14 @@ describe.skipIf(SKIP)('update_doc_header tag validation (integration)', () => {
     // Manually set multiple #status/* tags in vault (D-06: no conflict rejection)
     const rawFile = await readFile(join(vaultPath, docVaultPath), 'utf-8');
     const parsed = matter(rawFile);
-    parsed.data.tags = ['#status/active', '#status/archived'];
+    parsed.data.fq_tags = ['#status/active', '#status/archived'];
     const corruptedRaw = matter.stringify(parsed.content, parsed.data);
     await writeFile(join(vaultPath, docVaultPath), corruptedRaw, 'utf-8');
 
     // D-06: update proceeds normally even with multiple status tags present
     const result = await getHandler('update_doc_header')({
       identifier: docVaultPath,
-      updates: { title: 'New Title' },
+      updates: { fq_title: 'New Title' },
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
