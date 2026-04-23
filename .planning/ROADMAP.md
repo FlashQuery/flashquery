@@ -70,8 +70,8 @@ Plans:
 - [ ] 90-03-PLAN.md — scanner.ts — 10+ frontmatter key locations (Wave 2, parallel with 02 and 04)
 - [ ] 90-04-PLAN.md — documents.ts + compound.ts — 25+ total locations (Wave 2, parallel with 02 and 03)
 - [ ] 90-05-PLAN.md — TypeScript test updates + Python test framework + 14 Python files (Wave 3)
-- [ ] 90-06-PLAN.md — Gap closure: resolve-document.ts targetedScan + path-reconciliation raw strings (Wave 1, gap)
-- [ ] 90-07-PLAN.md — Gap closure: test mock YAML strings + data.title + error message strings (Wave 2, gap)
+- [x] 90-06-PLAN.md — Gap closure: resolve-document.ts targetedScan + path-reconciliation raw strings (Wave 1, gap)
+- [x] 90-07-PLAN.md — Gap closure: test mock YAML strings + data.title + error message strings (Wave 2, gap)
 
 ---
 

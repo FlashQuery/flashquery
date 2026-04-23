@@ -1,26 +1,26 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.8
-milestone_name: Plugin Callback Overhaul
-status: complete
-last_updated: "2026-04-21T13:45:00.000Z"
-last_activity: 2026-04-21 — Phase 89 complete (all 4 plans)
+milestone: v2.7
+milestone_name: "**For detailed information about completed milestones:**"
+status: executing
+last_updated: "2026-04-23T12:02:01.994Z"
+last_activity: 2026-04-23 -- Phase 90 execution started
 progress:
-  total_phases: 6
-  completed_phases: 6
-  total_plans: 4
-  completed_plans: 4
-  percent: 100
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 7
+  completed_plans: 5
+  percent: 71
 ---
 
 # FlashQuery Core — State
 
 ## Current Position
 
-Phase: 89 — COMPLETE
-Plan: 4 of 4
-Status: v2.8 milestone complete
-Last activity: 2026-04-21 — Phase 89 complete (resurrection lifecycle + mixed reconciliation tests, E2E shutdown fixes, full suite validation)
+Phase: 90 (centralize-frontmatter-field-names-into-fm-constants-and-ren) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 90
+Last activity: 2026-04-23 -- Phase 90 execution started
 
 ```
 [########################################] 100% — 6/6 phases
