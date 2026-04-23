@@ -62,7 +62,7 @@ Full phase details: [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
 **Goal:** Create a single TypeScript constants file (FM object) as the source of truth for all 9 FlashQuery frontmatter field names, rename all fqc_* and bare-name fields to fq_* equivalents across 8 TS source files, 4 TS test files, and 14 Python test files, and invert frontmatter field ordering so user-defined fields appear before FQ-managed fields.
 **Requirements**: NEW-01, NEW-02, ORD-01, ORD-02, ORD-03, ORD-04, REF-01, REF-02, REF-03, REF-04
 **Depends on:** Phase 89
-**Plans:** 5 plans
+**Plans:** 7 plans (5 original + 2 gap-closure)
 
 Plans:
 - [ ] 90-01-PLAN.md — FM constants file + test stubs (Wave 1: RED/GREEN canary; RED ordering stubs)
@@ -70,7 +70,9 @@ Plans:
 - [ ] 90-03-PLAN.md — scanner.ts — 10+ frontmatter key locations (Wave 2, parallel with 02 and 04)
 - [ ] 90-04-PLAN.md — documents.ts + compound.ts — 25+ total locations (Wave 2, parallel with 02 and 03)
 - [ ] 90-05-PLAN.md — TypeScript test updates + Python test framework + 14 Python files (Wave 3)
+- [ ] 90-06-PLAN.md — Gap closure: resolve-document.ts targetedScan + path-reconciliation raw strings (Wave 1, gap)
+- [ ] 90-07-PLAN.md — Gap closure: test mock YAML strings + data.title + error message strings (Wave 2, gap)
 
 ---
 
-*Last updated: 2026-04-22 — Phase 90 planned*
+*Last updated: 2026-04-23 — Phase 90 gap-closure plans 06-07 added*
