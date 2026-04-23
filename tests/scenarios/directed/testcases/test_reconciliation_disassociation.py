@@ -52,6 +52,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -239,17 +240,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
         try:
             doc_dis = ctx.vault.read_file(doc_disassoc_path)
             fm_dis = doc_dis.frontmatter
-            fqc_id_disassoc = fm_dis.get("fq_id")
+            fqc_id_disassoc = fm_dis.get(FM.ID)
 
             doc_mov = ctx.vault.read_file(doc_moved_path)
             fm_mov = doc_mov.frontmatter
-            fqc_id_moved = fm_mov.get("fq_id")
-            fqc_owner_moved = fm_mov.get("fq_owner")
-            fqc_type_moved = fm_mov.get("fq_type")
+            fqc_id_moved = fm_mov.get(FM.ID)
+            fqc_owner_moved = fm_mov.get(FM.OWNER)
+            fqc_type_moved = fm_mov.get(FM.TYPE)
 
             checks = {
-                "doc_disassoc has fqc_owner in frontmatter": bool(fm_dis.get("fq_owner")),
-                "doc_disassoc has fqc_type in frontmatter": bool(fm_dis.get("fq_type")),
+                "doc_disassoc has fqc_owner in frontmatter": bool(fm_dis.get(FM.OWNER)),
+                "doc_disassoc has fqc_type in frontmatter": bool(fm_dis.get(FM.TYPE)),
                 "doc_disassoc has fqc_id": bool(fqc_id_disassoc),
                 "doc_moved has fqc_owner in frontmatter": bool(fqc_owner_moved),
                 "doc_moved has fqc_type in frontmatter": bool(fqc_type_moved),
@@ -296,11 +297,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             # Build frontmatter without fqc_owner and fqc_type
             fm_keys_to_keep = {
                 k: v for k, v in dis_doc.frontmatter.items()
-                if k not in ("fq_owner", "fq_type")
+                if k not in (FM.OWNER, FM.TYPE)
             }
             # Update the 'updated' timestamp to ensure the scanner detects a change
             from datetime import datetime, timezone
-            fm_keys_to_keep["fq_updated"] = (
+            fm_keys_to_keep[FM.UPDATED] = (
                 datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.")
                 + f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
             )
@@ -313,8 +314,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
             # Verify the write removed fqc_owner
             verify_doc = ctx.vault.read_file(doc_disassoc_path)
-            owner_absent = "fq_owner" not in verify_doc.frontmatter
-            type_absent = "fq_type" not in verify_doc.frontmatter
+            owner_absent = FM.OWNER not in verify_doc.frontmatter
+            type_absent = FM.TYPE not in verify_doc.frontmatter
 
             elapsed = int((time.monotonic() - t0) * 1000)
             checks = {

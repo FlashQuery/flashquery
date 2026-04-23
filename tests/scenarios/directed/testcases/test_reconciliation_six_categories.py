@@ -12,7 +12,7 @@ Scenario:
         added          — file in watched folder, no plugin row
         modified       — plugin row exists, file content changed since last_seen_updated_at
         deleted        — plugin row exists, file deleted (scanner marks it missing)
-        disassociated  — plugin row exists, fqc_owner rewritten to a foreign plugin id
+        disassociated  — plugin row exists, fq_owner rewritten to a foreign plugin id
                          (scanner updates ownership_plugin_id → mismatch triggers disassociated)
 
     States not exercised:
@@ -59,6 +59,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +181,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 2: Drop 4 docs directly into watched folder via ctx.create_file ──
         # Using ctx.create_file (not create_document MCP tool) so the files have no
-        # fqc_owner yet — they'll be detected as 'added' by the first reconciliation pass.
+        # fq_owner yet — they'll be detected as 'added' by the first reconciliation pass.
         # ctx.create_file also registers cleanup automatically.
         for fname, title in [
             (path_unchanged,     "Unchanged Doc"),
@@ -199,7 +200,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         ctx.cleanup.track_dir("_test_recon6")
 
         run.step(
-            label="create 4 docs in watched folder (no fqc_owner — will be 'added')",
+            label="create 4 docs in watched folder (no fq_owner — will be 'added')",
             passed=True,
             detail=f"Files created: {path_unchanged}, {path_modified}, {path_deleted}, {path_disassociated}",
         )
@@ -223,7 +224,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: Prime reconciliation — auto-tracks all 4 docs (all 'added') ──
         # This first call sees all 4 docs with no plugin rows → classifies them as 'added'.
         # executeReconciliationActions then:
-        #   - writes fqc_owner/fqc_type to each file's frontmatter
+        #   - writes fq_owner/fq_type to each file's frontmatter
         #   - inserts plugin rows with last_seen_updated_at = post-write updated_at
         #   - updates fqc_documents.ownership_plugin_id and BUMPS updated_at again
         # After this, all 4 docs have updated_at > last_seen_updated_at (inherent to
@@ -275,8 +276,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not upd_result.ok:
             return run
 
-        # ── 5b: 'disassociated' — write a foreign fqc_owner to the file ──────
-        # After the prime auto-track, fqc_owner = PLUGIN_ID in the file's frontmatter.
+        # ── 5b: 'disassociated' — write a foreign fq_owner to the file ──────
+        # After the prime auto-track, fq_owner = PLUGIN_ID in the file's frontmatter.
         # We rewrite it to a different plugin id. The scanner will read this, update
         # ownership_plugin_id = "other_plugin" in fqc_documents. The reconciler then
         # sees: active plugin row for PLUGIN_ID, but fqc_doc.ownership_plugin_id !=
@@ -285,24 +286,24 @@ def run_test(args: argparse.Namespace) -> TestRun:
         try:
             doc_disassoc = ctx.vault.read_file(path_disassociated)
             fm = dict(doc_disassoc.frontmatter)
-            # Overwrite fqc_owner with a different plugin id
+            # Overwrite fq_owner with a different plugin id
             # The scanner reads this and sets ownership_plugin_id = "other_plugin" in DB
-            fm["fqc_owner"] = "other_plugin"
-            fm["fqc_type"] = "other_type"
+            fm[FM.OWNER] = "other_plugin"
+            fm[FM.TYPE] = "other_type"
             # Write the complete frontmatter back (using write_frontmatter with the full dict)
             ctx.vault.write_frontmatter(path_disassociated, fm, touch_updated=True)
 
             elapsed = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="overwrite fqc_owner to 'other_plugin' — set up 'disassociated' state",
+                label="overwrite fq_owner to 'other_plugin' — set up 'disassociated' state",
                 passed=True,
-                detail="fqc_owner set to 'other_plugin' so scanner will update ownership_plugin_id",
+                detail="fq_owner set to 'other_plugin' so scanner will update ownership_plugin_id",
                 timing_ms=elapsed,
             )
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="overwrite fqc_owner to 'other_plugin' — set up 'disassociated' state",
+                label="overwrite fq_owner to 'other_plugin' — set up 'disassociated' state",
                 passed=False,
                 detail=f"Exception: {e}",
                 timing_ms=elapsed,

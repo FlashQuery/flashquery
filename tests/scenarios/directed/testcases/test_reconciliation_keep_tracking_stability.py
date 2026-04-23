@@ -62,6 +62,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -221,11 +222,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         fqc_id = None
         try:
             doc_disk = ctx.vault.read_file(doc_path)
-            fqc_id = doc_disk.frontmatter.get("fq_id")
+            fqc_id = doc_disk.frontmatter.get(FM.ID)
 
             checks = {
                 "doc has fqc_id (auto-track assigned one)": bool(fqc_id),
-                "doc has fqc_owner": bool(doc_disk.frontmatter.get("fq_owner")),
+                "doc has fqc_owner": bool(doc_disk.frontmatter.get(FM.OWNER)),
                 "doc fqc_id in search results": bool(fqc_id) and fqc_id in prime.text,
             }
             all_ok = all(checks.values())

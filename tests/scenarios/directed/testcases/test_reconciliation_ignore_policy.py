@@ -9,7 +9,7 @@ Scenario:
     3. Index the file into fqc_documents (force_file_scan)
     4. Trigger reconciliation via search_records — verify no "Auto-tracked" in response,
        response contains "0 record(s)" (no plugin row inserted)
-    5. Read the vault file from disk — verify no fqc_owner and no fqc_type in frontmatter
+    5. Read the vault file from disk — verify no fq_owner and no fq_type in frontmatter
     6. Unregister plugin A explicitly before Block B
 
     Block B — RO-12 (no policy fields → defaults to ignore):
@@ -19,7 +19,7 @@ Scenario:
     9. Index the file into fqc_documents (force_file_scan)
     10. Trigger reconciliation via search_records — verify no "Auto-tracked" in response,
         response contains "0 record(s)"
-    11. Read the vault file from disk — verify no fqc_owner and no fqc_type in frontmatter
+    11. Read the vault file from disk — verify no fq_owner and no fq_type in frontmatter
     Cleanup is automatic (filesystem + database) even if the test fails.
 
 Coverage points: RO-11, RO-12
@@ -53,6 +53,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -231,7 +232,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not search_a.ok:
             return run
 
-        # ── Step 5: RO-11 — read vault file from disk; no fqc_owner or fqc_type ──
+        # ── Step 5: RO-11 — read vault file from disk; no fq_owner or fq_type ──
         # Reconciliation took no action, so frontmatter is exactly what ctx.create_file wrote.
         t0 = time.monotonic()
         try:
@@ -239,8 +240,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             fm_a = disk_doc_a.frontmatter
 
             checks_a = {
-                "no fqc_owner written (RO-11)": fm_a.get("fqc_owner") is None,
-                "no fqc_type written (RO-11)": fm_a.get("fqc_type") is None,
+                "no fq_owner written (RO-11)": fm_a.get(FM.OWNER) is None,
+                "no fq_type written (RO-11)": fm_a.get(FM.TYPE) is None,
             }
             all_ok_a = all(checks_a.values())
             detail_a = ""
@@ -248,13 +249,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 failed_a = [k for k, v in checks_a.items() if not v]
                 detail_a = (
                     f"Failed: {', '.join(failed_a)}. "
-                    f"fqc_owner={fm_a.get('fqc_owner')!r}, "
-                    f"fqc_type={fm_a.get('fqc_type')!r}"
+                    f"fq_owner={fm_a.get(FM.OWNER)!r}, "
+                    f"fq_type={fm_a.get(FM.TYPE)!r}"
                 )
 
             elapsed_a = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="RO-11: disk check — no fqc_owner and no fqc_type in frontmatter",
+                label="RO-11: disk check — no fq_owner and no fq_type in frontmatter",
                 passed=all_ok_a,
                 detail=detail_a,
                 timing_ms=elapsed_a,
@@ -265,7 +266,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         except Exception as e:
             elapsed_a = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="RO-11: disk check — no fqc_owner and no fqc_type in frontmatter",
+                label="RO-11: disk check — no fq_owner and no fq_type in frontmatter",
                 passed=False,
                 detail=f"Exception reading vault file: {e}",
                 timing_ms=elapsed_a,
@@ -389,15 +390,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not search_b.ok:
             return run
 
-        # ── Step 11: RO-12 — read vault file from disk; no fqc_owner or fqc_type ──
+        # ── Step 11: RO-12 — read vault file from disk; no fq_owner or fq_type ──
         t0 = time.monotonic()
         try:
             disk_doc_b = ctx.vault.read_file(watched_file_path_b)
             fm_b = disk_doc_b.frontmatter
 
             checks_b = {
-                "no fqc_owner written (RO-12)": fm_b.get("fqc_owner") is None,
-                "no fqc_type written (RO-12)": fm_b.get("fqc_type") is None,
+                "no fq_owner written (RO-12)": fm_b.get(FM.OWNER) is None,
+                "no fq_type written (RO-12)": fm_b.get(FM.TYPE) is None,
             }
             all_ok_b = all(checks_b.values())
             detail_b = ""
@@ -405,13 +406,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 failed_b = [k for k, v in checks_b.items() if not v]
                 detail_b = (
                     f"Failed: {', '.join(failed_b)}. "
-                    f"fqc_owner={fm_b.get('fqc_owner')!r}, "
-                    f"fqc_type={fm_b.get('fqc_type')!r}"
+                    f"fq_owner={fm_b.get(FM.OWNER)!r}, "
+                    f"fq_type={fm_b.get(FM.TYPE)!r}"
                 )
 
             elapsed_b = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="RO-12: disk check — no fqc_owner and no fqc_type in frontmatter",
+                label="RO-12: disk check — no fq_owner and no fq_type in frontmatter",
                 passed=all_ok_b,
                 detail=detail_b,
                 timing_ms=elapsed_b,
@@ -420,7 +421,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         except Exception as e:
             elapsed_b = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="RO-12: disk check — no fqc_owner and no fqc_type in frontmatter",
+                label="RO-12: disk check — no fq_owner and no fq_type in frontmatter",
                 passed=False,
                 detail=f"Exception reading vault file: {e}",
                 timing_ms=elapsed_b,

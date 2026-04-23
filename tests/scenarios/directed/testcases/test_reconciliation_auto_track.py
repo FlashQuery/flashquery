@@ -8,7 +8,7 @@ Scenario:
     3. Index the file into fqc_documents (force_file_scan)
     4. Trigger reconciliation — auto-track fires (search_records)
     5. Verify plugin row has field_map columns populated from frontmatter (RO-06)
-    6. Verify fqc_owner and fqc_type written to document frontmatter on disk (RO-07)
+    6. Verify fq_owner and fq_type written to document frontmatter on disk (RO-07)
     7. Verify document body content is unchanged — only frontmatter was modified (RO-09)
     8. Verify no pending review row — no template declared (clear_pending_reviews) (RO-10)
     Cleanup is automatic (filesystem + database) even if the test fails.
@@ -45,6 +45,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -260,7 +261,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             return run
 
         # ── Step 6: RO-07 + RO-09 — read vault file from disk ─────────────────
-        # fqc_owner and fqc_type should be in frontmatter (RO-07).
+        # fq_owner and fq_type should be in frontmatter (RO-07).
         # Body content must be identical to what we wrote (RO-09).
         t0 = time.monotonic()
         try:
@@ -268,8 +269,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             fm = disk_doc.frontmatter
 
             checks = {
-                "fqc_owner written to frontmatter (RO-07)": fm.get("fqc_owner") == PLUGIN_ID,
-                "fqc_type written to frontmatter (RO-07)": fm.get("fqc_type") == DOC_TYPE_ID,
+                "fq_owner written to frontmatter (RO-07)": fm.get(FM.OWNER) == PLUGIN_ID,
+                "fq_type written to frontmatter (RO-07)": fm.get(FM.TYPE) == DOC_TYPE_ID,
                 "body content unchanged (RO-09)": disk_doc.body.strip() == expected_body.strip(),
             }
             all_ok = all(checks.values())
@@ -278,14 +279,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 failed = [k for k, v in checks.items() if not v]
                 detail = (
                     f"Failed: {', '.join(failed)}. "
-                    f"fqc_owner={fm.get('fqc_owner')!r}, "
-                    f"fqc_type={fm.get('fqc_type')!r}, "
+                    f"fq_owner={fm.get(FM.OWNER)!r}, "
+                    f"fq_type={fm.get(FM.TYPE)!r}, "
                     f"body_preview={disk_doc.body[:80]!r}"
                 )
 
             elapsed = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="RO-07 + RO-09: fqc_owner/fqc_type in frontmatter; body content unchanged",
+                label="RO-07 + RO-09: fq_owner/fq_type in frontmatter; body content unchanged",
                 passed=all_ok,
                 detail=detail,
                 timing_ms=elapsed,
@@ -296,7 +297,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="RO-07 + RO-09: fqc_owner/fqc_type in frontmatter; body content unchanged",
+                label="RO-07 + RO-09: fq_owner/fq_type in frontmatter; body content unchanged",
                 passed=False,
                 detail=f"Exception reading vault file: {e}",
                 timing_ms=elapsed,

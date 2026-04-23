@@ -97,10 +97,10 @@ def _build_schema_yaml(plugin_id: str, plugin_name: str, doc_type_id: str, folde
 
 def _extract_pending_fqc_ids(text: str) -> list[str]:
     """
-    Extract fqc_ids from a clear_pending_reviews response.
-    The response embeds a JSON array of objects with "fqc_id" keys, e.g.:
+    Extract fq_ids from a clear_pending_reviews response.
+    The response embeds a JSON array of objects with "fq_id" keys, e.g.:
         Pending reviews for plugin_id: N item(s)
-        [{"fqc_id": "<uuid>", ...}, ...]
+        [{"fq_id": "<uuid>", ...}, ...]
     Falls back to a regex for any non-JSON format.
     """
     # Try to parse the embedded JSON array
@@ -119,11 +119,11 @@ def _extract_pending_fqc_ids(text: str) -> list[str]:
         try:
             items = _json.loads(text[start:end + 1])
             if isinstance(items, list):
-                return [item["fqc_id"] for item in items if isinstance(item, dict) and "fqc_id" in item]
+                return [item["fq_id"] for item in items if isinstance(item, dict) and "fq_id" in item]
         except (_json.JSONDecodeError, KeyError):
             pass
-    # Fallback: match quoted UUID values after "fqc_id"
-    return re.findall(r'"fqc_id"\s*:\s*"([a-f0-9-]{36})"', text)
+    # Fallback: match quoted UUID values after "fq_id"
+    return re.findall(r'"fq_id"\s*:\s*"([a-f0-9-]{36})"', text)
 
 
 def _extract_pending_count(text: str) -> int:

@@ -3,7 +3,7 @@
 Test: Content-hash cascade after auto-track frontmatter write (RO-67, RO-68, RO-69).
 
 Scenario:
-    After auto-track writes fqc_owner/fqc_type into a document's frontmatter, the
+    After auto-track writes fq_owner/fq_type into a document's frontmatter, the
     system must update content_hash and last_seen_updated_at to match the post-write
     file state. If it doesn't, the scanner's next pass will re-detect the frontmatter
     write as a modification, causing a spurious 'modified' classification on the next
@@ -17,12 +17,12 @@ Scenario:
     'unchanged'. If either is wrong, the next reconciliation reports 'modified'.
 
     1. Register plugin with on_added: auto-track (register_plugin)
-    2. Drop a file WITHOUT fqc_owner/fqc_type into the watched folder (ctx.create_file)
+    2. Drop a file WITHOUT fq_owner/fq_type into the watched folder (ctx.create_file)
     3. Index the file (force_file_scan — sync)
-    4. Trigger reconciliation — auto-track fires, writes fqc_owner/fqc_type to frontmatter
+    4. Trigger reconciliation — auto-track fires, writes fq_owner/fq_type to frontmatter
        (search_records)
     5. Verify plugin row was created (search_records response)
-    6. Verify fqc_owner/fqc_type written to file on disk (read via ctx.vault)
+    6. Verify fq_owner/fq_type written to file on disk (read via ctx.vault)
     7. Run force_file_scan again (sync) — RO-69: scanner re-examines file; if RO-67 is
        correct the hash already matches and no updated_at bump occurs
     8. Wait past the 30s reconciliation staleness window
@@ -63,6 +63,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -191,7 +192,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         ctx.cleanup.track_plugin_registration(PLUGIN_ID, instance_name)
 
         # ── Step 2: Drop test file into watched folder ────────────────────────
-        # Write a plain file WITHOUT fqc_owner/fqc_type so auto-track has something to do.
+        # Write a plain file WITHOUT fq_owner/fq_type so auto-track has something to do.
         ctx.create_file(
             watched_file_path,
             title=doc_title,
@@ -202,7 +203,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         ctx.cleanup.track_dir("_test_recon_chc")
 
         run.step(
-            label="drop test file into watched folder (no fqc_owner/fqc_type — auto-track will add them)",
+            label="drop test file into watched folder (no fq_owner/fq_type — auto-track will add them)",
             passed=True,
             detail=f"Created: {watched_file_path}",
         )
@@ -226,7 +227,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: search_records — reconciliation fires, auto-tracks the file ──
         # Auto-track:
         #   1. Creates plugin row in 'items' table
-        #   2. Writes fqc_owner + fqc_type into the file's frontmatter on disk
+        #   2. Writes fq_owner + fq_type into the file's frontmatter on disk
         #   3. (RO-67) Must update content_hash in fqc_documents to reflect post-write content
         #   4. (RO-68) Must set last_seen_updated_at = post-write updated_at (not pre-write)
         log_mark = ctx.server.log_position if ctx.server else 0
@@ -241,7 +242,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         recon1_result.expect_contains("Auto-tracked")
 
         run.step(
-            label="search_records — reconciliation #1 fires; auto-track writes fqc_owner/fqc_type to frontmatter",
+            label="search_records — reconciliation #1 fires; auto-track writes fq_owner/fq_type to frontmatter",
             passed=(recon1_result.ok and recon1_result.status == "pass"),
             detail=expectation_detail(recon1_result) or recon1_result.error or "",
             timing_ms=recon1_result.timing_ms,
@@ -274,15 +275,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not all_ok_row:
             return run
 
-        # ── Step 6: RO-07 baseline — verify fqc_owner/fqc_type on disk ───────
+        # ── Step 6: RO-07 baseline — verify fq_owner/fq_type on disk ───────
         t0 = time.monotonic()
         try:
             disk_doc = ctx.vault.read_file(watched_file_path)
             fm = disk_doc.frontmatter
 
             checks_fm = {
-                "fqc_owner written to frontmatter by auto-track": fm.get("fqc_owner") == PLUGIN_ID,
-                "fqc_type written to frontmatter by auto-track": fm.get("fqc_type") == DOC_TYPE_ID,
+                "fq_owner written to frontmatter by auto-track": fm.get(FM.OWNER) == PLUGIN_ID,
+                "fq_type written to frontmatter by auto-track": fm.get(FM.TYPE) == DOC_TYPE_ID,
             }
             all_ok_fm = all(checks_fm.values())
             detail_fm = ""
@@ -290,17 +291,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 failed = [k for k, v in checks_fm.items() if not v]
                 detail_fm = (
                     f"Failed: {', '.join(failed)}. "
-                    f"fqc_owner={fm.get('fqc_owner')!r}, "
-                    f"fqc_type={fm.get('fqc_type')!r}"
+                    f"fq_owner={fm.get(FM.OWNER)!r}, "
+                    f"fq_type={fm.get(FM.TYPE)!r}"
                 )
             else:
                 detail_fm = (
-                    f"fqc_owner={fm.get('fqc_owner')!r}, fqc_type={fm.get('fqc_type')!r} "
+                    f"fq_owner={fm.get(FM.OWNER)!r}, fq_type={fm.get(FM.TYPE)!r} "
                     f"(both present — auto-track wrote frontmatter)"
                 )
 
             run.step(
-                label="verify fqc_owner/fqc_type written to frontmatter on disk (auto-track completed)",
+                label="verify fq_owner/fq_type written to frontmatter on disk (auto-track completed)",
                 passed=all_ok_fm,
                 detail=detail_fm,
                 timing_ms=int((time.monotonic() - t0) * 1000),
@@ -310,7 +311,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         except Exception as e:
             run.step(
-                label="verify fqc_owner/fqc_type written to frontmatter on disk (auto-track completed)",
+                label="verify fq_owner/fq_type written to frontmatter on disk (auto-track completed)",
                 passed=False,
                 detail=f"Exception reading vault file: {e}",
                 timing_ms=int((time.monotonic() - t0) * 1000),

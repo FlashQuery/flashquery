@@ -48,6 +48,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -475,7 +476,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         header_c20 = ctx.client.call_tool(
             "update_doc_header",
             identifier=identifier_b,
-            updates={"fq_title": updated_title_b},
+            updates={FM.TITLE: updated_title_b},
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

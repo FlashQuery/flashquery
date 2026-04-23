@@ -49,6 +49,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -164,7 +165,7 @@ def _write_frontmatter_direct(ctx, vault_path: str, frontmatter_dict: dict, body
     import yaml
     from datetime import datetime, timezone
     # Update the 'updated' timestamp so the scanner detects a change
-    frontmatter_dict["fq_updated"] = (
+    frontmatter_dict[FM.UPDATED] = (
         datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.")
         + f"{datetime.now(timezone.utc).microsecond // 1000:03d}Z"
     )

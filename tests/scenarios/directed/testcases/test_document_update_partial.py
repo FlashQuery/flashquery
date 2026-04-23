@@ -49,6 +49,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -110,8 +111,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tags=original_tags,
             frontmatter={
                 "project": "x",
-                "fq_id": bogus_fqc_id,
-                "fq_status": "archived",
+                FM.ID: bogus_fqc_id,
+                FM.STATUS: "archived",
             },
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -280,8 +281,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             identifier=read_identifier,
             frontmatter={
                 "client": "acme",
-                "fq_id": bogus_fqc_id,
-                "fq_status": "archived",
+                FM.ID: bogus_fqc_id,
+                FM.STATUS: "archived",
             },
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None

@@ -59,6 +59,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +248,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         try:
             disk_doc = ctx.vault.read_file(original_file_path)
-            original_fqc_id = disk_doc.frontmatter.get("fq_id")
+            original_fqc_id = disk_doc.frontmatter.get(FM.ID)
 
             # Also get the record ID from search_records result
             record = _extract_first_record(first_search.text)
@@ -408,8 +409,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 fqc_id=original_fqc_id,  # SAME fqc_id — key for RO-20
                 extra_frontmatter={
                     "priority": "critical",  # Updated priority — will be re-mapped by field_map
-                    "fq_owner": PLUGIN_ID,
-                    "fq_type": DOC_TYPE_ID,
+                    FM.OWNER: PLUGIN_ID,
+                    FM.TYPE: DOC_TYPE_ID,
                 },
             )
             ctx.cleanup.track_file(resurrected_file_path)

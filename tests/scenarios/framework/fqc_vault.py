@@ -97,13 +97,12 @@ def _get_dumper() -> type:
 
 
 # ---------------------------------------------------------------------------
-# Frontmatter constants — mirrors src/mcp/utils/frontmatter-sanitizer.ts
+# Frontmatter constants — sourced from the single source of truth
 # ---------------------------------------------------------------------------
 
-_ORDERED_FIELDS = (
-    "fq_title", "fq_status", "fq_tags", "fq_created", "fq_updated",
-    "fq_owner", "fq_type", "fq_instance", "fq_id",
-)
+from frontmatter_fields import FM  # noqa: E402  (after sys.path manipulation above)
+
+_ORDERED_FIELDS = FM.ALL
 _EXCLUDED_FIELDS = frozenset({
     "content_hash", "ownership_plugin_id", "discovery_status",
     "embedding", "instance_id",
@@ -125,19 +124,19 @@ class VaultDocument:
     # Convenience accessors
     @property
     def fq_id(self) -> str | None:
-        return self.frontmatter.get("fq_id")
+        return self.frontmatter.get(FM.ID)
 
     @property
     def fq_title(self) -> str | None:
-        return self.frontmatter.get("fq_title")
+        return self.frontmatter.get(FM.TITLE)
 
     @property
     def fq_tags(self) -> list[str]:
-        return self.frontmatter.get("fq_tags", []) or []
+        return self.frontmatter.get(FM.TAGS, []) or []
 
     @property
     def fq_status(self) -> str | None:
-        return self.frontmatter.get("fq_status")
+        return self.frontmatter.get(FM.STATUS)
 
     # Backward-compat aliases for test files not yet migrated to fq_* names
     fqc_id = property(lambda self: self.fq_id)
@@ -214,7 +213,7 @@ def _serialize_frontmatter(fm: dict[str, Any]) -> str:
         if key in fm:
             val = fm[key]
             # Tags should render as flow-style list
-            if key == "fq_tags" and isinstance(val, list):
+            if key == FM.TAGS and isinstance(val, list):
                 val = _FlowList(val)
             ordered[key] = val
 
@@ -391,12 +390,12 @@ class VaultHelper:
 
         now = _now_iso()
         fm: dict[str, Any] = {
-            "fq_title": title,
-            "fq_status": status,
-            "fq_tags": normalized_tags,
-            "fq_created": now,
-            "fq_updated": now,
-            "fq_id": fqc_id or str(uuid4()),
+            FM.TITLE:   title,
+            FM.STATUS:  status,
+            FM.TAGS:    normalized_tags,
+            FM.CREATED: now,
+            FM.UPDATED: now,
+            FM.ID:      fqc_id or str(uuid4()),
         }
         if extra_frontmatter:
             for k, v in extra_frontmatter.items():
@@ -432,7 +431,7 @@ class VaultHelper:
         doc = self.read_file(relative_path)
         fm = {**doc.frontmatter, **updates}
         if touch_updated:
-            fm["fq_updated"] = _now_iso()
+            fm[FM.UPDATED] = _now_iso()
 
         fm_yaml = _serialize_frontmatter(fm)
         markdown = f"---\n{fm_yaml}---\n\n{doc.body}"
@@ -552,7 +551,7 @@ class VaultHelper:
         """Find a single document by its fq_id. Returns None if not found."""
         matches = self.find_files(
             directory=directory,
-            frontmatter_match={"fq_id": fqc_id},
+            frontmatter_match={FM.ID: fqc_id},
             limit=1,
         )
         return matches[0] if matches else None

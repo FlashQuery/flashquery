@@ -74,6 +74,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -243,11 +244,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             doc_disk = ctx.vault.read_file(doc_path)
             fm = doc_disk.frontmatter
 
-            fqc_id = fm.get("fq_id")
+            fqc_id = fm.get(FM.ID)
             checks_before: dict[str, bool] = {
                 "fqc_id present after auto-track": bool(fqc_id),
-                "fqc_owner present after auto-track": bool(fm.get("fq_owner")),
-                "fqc_type present after auto-track": bool(fm.get("fq_type")),
+                "fqc_owner present after auto-track": bool(fm.get(FM.OWNER)),
+                "fqc_type present after auto-track": bool(fm.get(FM.TYPE)),
             }
             all_ok_before = all(checks_before.values())
             detail_before = ""
@@ -434,10 +435,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
             checks_fm: dict[str, bool] = {
                 "RO-64: fqc_owner preserved in moved file after untrack archival": bool(
-                    fm_moved.get("fq_owner")
+                    fm_moved.get(FM.OWNER)
                 ),
                 "RO-64: fqc_type preserved in moved file after untrack archival": bool(
-                    fm_moved.get("fq_type")
+                    fm_moved.get(FM.TYPE)
                 ),
             }
             all_ok_fm = all(checks_fm.values())
@@ -446,8 +447,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 failed = [k for k, v in checks_fm.items() if not v]
                 detail_fm = (
                     f"Failed: {', '.join(failed)}. "
-                    f"fqc_owner={fm_moved.get('fqc_owner')!r}, "
-                    f"fqc_type={fm_moved.get('fqc_type')!r}"
+                    f"fqc_owner={fm_moved.get(FM.OWNER)!r}, "
+                    f"fqc_type={fm_moved.get(FM.TYPE)!r}"
                 )
 
             elapsed = int((time.monotonic() - t0) * 1000)
@@ -455,8 +456,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 label="RO-64: vault frontmatter preserved at new path — fqc_owner/fqc_type intact",
                 passed=all_ok_fm,
                 detail=detail_fm or (
-                    f"fqc_owner={fm_moved.get('fqc_owner')!r}, "
-                    f"fqc_type={fm_moved.get('fqc_type')!r}"
+                    f"fqc_owner={fm_moved.get(FM.OWNER)!r}, "
+                    f"fqc_type={fm_moved.get(FM.TYPE)!r}"
                 ),
                 timing_ms=elapsed,
             )

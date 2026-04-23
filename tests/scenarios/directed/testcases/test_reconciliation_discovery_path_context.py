@@ -51,6 +51,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -167,8 +168,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             ),
             tags=["fqc-test", "recon-dpc"],
             extra_frontmatter={
-                "fqc_type": DOC_TYPE_ID,
-                "fqc_owner": PLUGIN_ID,
+                FM.TYPE: DOC_TYPE_ID,
+                FM.OWNER: PLUGIN_ID,
             },
         )
         ctx.cleanup.track_dir(outside_folder)

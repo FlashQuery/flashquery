@@ -72,6 +72,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from frontmatter_fields import FM
 
 
 # ---------------------------------------------------------------------------
@@ -402,17 +403,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
             doc_b_disk = ctx.vault.read_file(doc_b_path)
             doc_c_disk = ctx.vault.read_file(doc_c_path)
 
-            fqc_id_a = doc_a_disk.frontmatter.get("fq_id")
-            fqc_id_b = doc_b_disk.frontmatter.get("fq_id")
-            fqc_id_c = doc_c_disk.frontmatter.get("fq_id")
+            fqc_id_a = doc_a_disk.frontmatter.get(FM.ID)
+            fqc_id_b = doc_b_disk.frontmatter.get(FM.ID)
+            fqc_id_c = doc_c_disk.frontmatter.get(FM.ID)
 
             checks = {
                 "doc A has fqc_id": bool(fqc_id_a),
-                "doc A has fqc_owner": bool(doc_a_disk.frontmatter.get("fq_owner")),
+                "doc A has fqc_owner": bool(doc_a_disk.frontmatter.get(FM.OWNER)),
                 "doc B has fqc_id": bool(fqc_id_b),
-                "doc B has fqc_owner": bool(doc_b_disk.frontmatter.get("fq_owner")),
+                "doc B has fqc_owner": bool(doc_b_disk.frontmatter.get(FM.OWNER)),
                 "doc C has fqc_id": bool(fqc_id_c),
-                "doc C has fqc_owner": bool(doc_c_disk.frontmatter.get("fq_owner")),
+                "doc C has fqc_owner": bool(doc_c_disk.frontmatter.get(FM.OWNER)),
             }
             all_ok = all(checks.values())
             detail = ""
@@ -687,10 +688,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
             checks_25b: dict[str, bool] = {
                 "RO-25: fqc_owner preserved in moved file frontmatter after stop-tracking archival": bool(
-                    fm_c.get("fq_owner")
+                    fm_c.get(FM.OWNER)
                 ),
                 "RO-25: fqc_type preserved in moved file frontmatter after stop-tracking archival": bool(
-                    fm_c.get("fq_type")
+                    fm_c.get(FM.TYPE)
                 ),
             }
             all_ok_25b = all(checks_25b.values())
@@ -699,7 +700,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 failed = [k for k, v in checks_25b.items() if not v]
                 detail_25b = (
                     f"Failed: {', '.join(failed)}. "
-                    f"fqc_owner={fm_c.get('fqc_owner')!r}, fqc_type={fm_c.get('fqc_type')!r}"
+                    f"fqc_owner={fm_c.get(FM.OWNER)!r}, fqc_type={fm_c.get(FM.TYPE)!r}"
                 )
 
             elapsed = int((time.monotonic() - t0) * 1000)
@@ -707,7 +708,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 label="RO-25: vault frontmatter preserved — fqc_owner/fqc_type intact on moved file",
                 passed=all_ok_25b,
                 detail=detail_25b or (
-                    f"fqc_owner={fm_c.get('fqc_owner')!r}, fqc_type={fm_c.get('fqc_type')!r}"
+                    f"fqc_owner={fm_c.get(FM.OWNER)!r}, fqc_type={fm_c.get(FM.TYPE)!r}"
                 ),
                 timing_ms=elapsed,
             )
