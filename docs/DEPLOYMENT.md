@@ -8,6 +8,7 @@ For **the full set of deployment paths** (Full Docker, DB-Only Docker, Manual Po
 
 ## Table of Contents
 
+- [Pre-push checklist (contributors)](#pre-push-checklist-contributors)
 - [Choosing a deployment path](#choosing-a-deployment-path)
 - [What "the FlashQuery binary" actually is](#what-the-flashquery-binary-actually-is)
 - [Running as a managed service](#running-as-a-managed-service)
@@ -25,6 +26,29 @@ For **the full set of deployment paths** (Full Docker, DB-Only Docker, Manual Po
 - [Backup and recovery](#backup-and-recovery)
 - [Logging and observability](#logging-and-observability)
 - [Related documentation](#related-documentation)
+
+---
+
+## Pre-push checklist (contributors)
+
+Before pushing changes to the repository, run the preflight script to catch the same issues CI will catch:
+
+```bash
+npm run preflight
+```
+
+This runs four checks in sequence:
+
+| Step | Command | What it catches |
+|------|---------|-----------------|
+| Lint | `npm run lint` | TypeScript and ESLint errors, unused vars, floating promises |
+| Tests | `npm run preflight:test` | Unit test regressions (56 test files, ~1 000 tests) |
+| Package contents | `npm run preflight:pack` | Accidental inclusion of `src/`, `tests/`, or `.env` in the published package |
+| Docker Compose | `npm run preflight:docker` | Structural errors in the three compose files (skipped if Docker is not installed) |
+
+**If any step fails, fix it before pushing.** CI runs the same checks and will block the PR.
+
+> **Note on test coverage:** Two test files (`git-manager.test.ts`, `compound-tools.test.ts`) have known platform-specific failures on macOS that do not reproduce on the Linux CI runner. They are excluded from the preflight test run but included in `npm test` (the full suite). If you are working on git or compound-tool code, run `npm test` directly to see the full picture.
 
 ---
 

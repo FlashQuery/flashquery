@@ -27,7 +27,11 @@
     "test:benchmark": "vitest run --config tests/config/vitest.benchmark.config.ts",
     "lint": "eslint src/ --max-warnings 0",
     "format": "prettier --write src/",
-    "format:check": "prettier --check src/"
+    "format:check": "prettier --check src/",
+    "preflight": "npm run lint && npm run preflight:test && npm run preflight:pack && npm run preflight:docker",
+    "preflight:test": "vitest run --config tests/config/vitest.preflight.config.ts",
+    "preflight:pack": "node -e \"const{execSync}=require('child_process');const p=JSON.parse(execSync('npm pack --dry-run --json').toString())[0];const bad=p.files.filter(f=>f.path.includes('src/')||f.path.includes('tests/')||f.path.includes('.env')||f.path.includes('node_modules/'));if(bad.length){console.error('Unwanted files in package:',bad.map(f=>f.path));process.exit(1);}console.log('Package contents OK');\"",
+    "preflight:docker": "bash scripts/preflight-docker.sh"
   },
   "engines": {
     "node": ">=20"
