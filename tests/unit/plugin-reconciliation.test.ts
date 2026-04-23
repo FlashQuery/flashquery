@@ -671,7 +671,7 @@ describe('executeReconciliationActions — RECON-05 added path (post-write updat
     expect(vi.mocked(atomicWriteFrontmatter)).toHaveBeenCalledTimes(1);
     expect(vi.mocked(atomicWriteFrontmatter)).toHaveBeenCalledWith(
       expect.stringContaining('recon05.md'),
-      expect.objectContaining({ fqc_owner: 'crm', fqc_type: 'contact' }),
+      expect.objectContaining({ fq_owner: 'crm', fq_type: 'contact' }),
     );
 
     // Assert 2 — pg.query called at least once for the INSERT into the plugin table
