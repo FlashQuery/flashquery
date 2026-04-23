@@ -16,6 +16,7 @@ import { computeHash } from '../mcp/tools/documents.js';
 import { vaultManager } from '../storage/vault.js';
 import { pluginManager, getTypeRegistryMap } from '../plugins/manager.js';
 import type { DocumentTypePolicy, TypeRegistryEntry, RegistryEntry } from '../plugins/manager.js';
+import { FM } from '../constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Exported types (D-02)
@@ -388,13 +389,13 @@ export async function executeReconciliationActions(
 
       // OQ-3: Check existing frontmatter ownership BEFORE writing
       const existingFm = await readFrontmatterFromDisk(doc.path);
-      const existingOwner = existingFm.fqc_owner;
+      const existingOwner = existingFm[FM.OWNER];
       const shouldWriteFrontmatter = !existingOwner || existingOwner === pluginId;
 
       if (shouldWriteFrontmatter) {
         await atomicWriteFrontmatter(toAbsolutePath(doc.path), {
-          fqc_owner: pluginId,
-          fqc_type: doc.typeId,
+          [FM.OWNER]: pluginId,
+          [FM.TYPE]: doc.typeId,
         });
       } else {
         logger.debug(`[RECON] Document ${doc.path} already owned by ${String(existingOwner)}, skipping frontmatter write for ${pluginId}`);

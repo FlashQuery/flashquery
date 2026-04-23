@@ -6,6 +6,7 @@
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import matter from 'gray-matter';
 import { logger } from '../logging/logger.js';
+import { FM } from '../constants/frontmatter-fields.js';
 
 /**
  * Update document frontmatter atomically using the .fqc-tmp pattern (WRT-03).
@@ -47,7 +48,7 @@ export async function atomicWriteFrontmatter(
     const mergedFrontmatter = {
       ...existingFrontmatter,
       ...updates,
-      updated: new Date().toISOString(), // Always update timestamp
+      [FM.UPDATED]: new Date().toISOString(), // Always update timestamp
     };
 
     // Step 4: Serialize back to markdown

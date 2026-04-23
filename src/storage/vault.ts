@@ -5,6 +5,7 @@ import matter from 'gray-matter';
 import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { gitManager } from '../git/manager.js';
+import { FM } from '../constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OBS-04: Minimal frontmatter for externally-added files (D-06)
@@ -25,8 +26,8 @@ import { gitManager } from '../git/manager.js';
  */
 export function extractMinimalFrontmatter(fullFrontmatter: Record<string, unknown>): Record<string, unknown> {
   return {
-    fqc_id: fullFrontmatter.fqc_id,
-    status: fullFrontmatter.status ?? 'active',
+    [FM.ID]: fullFrontmatter[FM.ID],
+    [FM.STATUS]: (fullFrontmatter[FM.STATUS] as string) ?? 'active',
   };
 }
 
