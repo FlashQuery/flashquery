@@ -466,6 +466,9 @@ DATABASE_URL=${DATABASE_URL}
 # Required for MCP bearer-token auth (used by the scenario test suite)
 MCP_AUTH_SECRET=${MCP_AUTH_SECRET}
 
+# Required for disk-verify steps in the scenario test suite
+VAULT_PATH=${VAULT_PATH}
+
 # Required for embedding tests
 OPENAI_API_KEY=${TEST_OPENAI_API_KEY}
 
