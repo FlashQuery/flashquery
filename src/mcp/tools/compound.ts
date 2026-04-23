@@ -136,7 +136,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         // LOGIC-03: Validate document has valid fqcId before modifying
         if (!resolved.fqcId) {
           return {
-            content: [{ type: 'text' as const, text: 'Error: Unable to provision document. Document must have an fqc_id to be modified.' }],
+            content: [{ type: 'text' as const, text: 'Error: Unable to provision document. Document must have an fq_id to be modified.' }],
             isError: true,
           };
         }

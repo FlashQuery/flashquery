@@ -368,7 +368,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
                   content: [
                     {
                       type: 'text' as const,
-                      text: `Error: Document already exists at "${relativePath}" with fqc_id "${existingFqcId}". Use update_document to modify an existing document.`,
+                      text: `Error: Document already exists at "${relativePath}" with fq_id "${existingFqcId}". Use update_document to modify an existing document.`,
                     },
                   ],
                   isError: true,
@@ -605,7 +605,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
         // Stale hash check — background re-embed if content changed since last read
         if (fqcId) {
-          const docTitle = typeof data.title === 'string' ? data.title : relativePath;
+          const docTitle = typeof data[FM.TITLE] === 'string' ? data[FM.TITLE] as string : relativePath;
           const now = new Date().toISOString();
 
           const { data: row } = await supabaseManager
