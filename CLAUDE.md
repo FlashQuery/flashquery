@@ -52,20 +52,12 @@ Compiles TypeScript to ESM JavaScript in `dist/` via `tsup`. Creates `dist/index
 node dist/index.js start --config ./flashquery.yml
 ```
 
-Or with `npx` (shorthand, if you prefer):
-```bash
-npm run build
-npx fqc start --config ./flashquery.yml
-```
-
 ### Important: Local Repo vs. Published Package
 
-The `"bin"` entry in `package.json` exists for **when FQC is published to npm**. When you `npm install flashquery-core` (the published package) globally or as a package dependency, npm automatically creates the `fqc` binary in your PATH.
+The `"bin"` entry in `package.json` maps the `flashquery` command to `dist/index.js`. This binary is only available in your PATH when the package is installed via npm (`npm install -g flashquery`). From a cloned repo, use:
 
-**For a cloned repo, always use:**
 - `npm run dev` — preferred for active development
-- `node dist/index.js` — for running the built binary
-- `npx fqc` — shorthand (after `npm run build`)
+- `node dist/index.js start --config ./flashquery.yml` — for running the built binary
 
 **Never use `npm link` for local development** — it installs globally outside the project folder, which is not appropriate for a cloned repository that multiple developers might work on.
 

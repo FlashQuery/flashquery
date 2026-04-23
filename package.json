@@ -4,8 +4,7 @@
   "description": "Open source, local-first data management layer for AI workflows",
   "type": "module",
   "bin": {
-    "flashquery": "./dist/index.js",
-    "fqc": "./dist/index.js"
+    "flashquery": "./dist/index.js"
   },
   "files": [
     "dist/",
