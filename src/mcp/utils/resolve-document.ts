@@ -147,7 +147,7 @@ export async function resolveDocumentIdentifier(
         try {
           const raw = await readFile(join(vaultRoot, candidate), 'utf-8');
           const { data: fm } = matter(raw);
-          if (fm.fqc_id === fqcId) {
+          if (fm[FM.ID] === fqcId) {
             newPath = candidate;
             break;
           }
@@ -206,7 +206,7 @@ export async function resolveDocumentIdentifier(
 
   if (matches.length > 1) {
     throw new Error(
-      `Ambiguous filename "${identifier}" matches ${matches.length} files:\n${matches.map((m) => `  - ${m}`).join('\n')}\nUse a vault-relative path or fqc_id instead.`
+      `Ambiguous filename "${identifier}" matches ${matches.length} files:\n${matches.map((m) => `  - ${m}`).join('\n')}\nUse a vault-relative path or fq_id instead.`
     );
   }
 
@@ -267,7 +267,7 @@ export async function targetedScan(
 
     // Parse frontmatter
     const parsed = matter(raw);
-    const existingFqcId = parsed.data.fqc_id as string | undefined;
+    const existingFqcId = parsed.data[FM.ID] as string | undefined;
     const oldFqcId = existingFqcId; // Track original ID to detect changes
 
     // Step 1: Validate UUID format
@@ -293,13 +293,13 @@ export async function targetedScan(
 
       if (ownerRow && (ownerRow as { path: string }).path === resolved.relativePath) {
         // Ownership confirmed — use existing fqc_id
-        parsed.data.fqc_id = validatedFqcId;
+        parsed.data[FM.ID] = validatedFqcId;
       } else if (!ownerRow) {
         // Foreign UUID — adopt as-is
         log.info(
           `targetedScan: adopted foreign UUID=${validatedFqcId} for "${resolved.relativePath}"`
         );
-        parsed.data.fqc_id = validatedFqcId;
+        parsed.data[FM.ID] = validatedFqcId;
       } else {
         // UUID owned by different file — fall through to path-based fallback
         log.warn(
@@ -321,7 +321,7 @@ export async function targetedScan(
       if (pathRow) {
         const reconnectedId = (pathRow as { id: string }).id;
         log.info(`targetedScan: path-based reconnect for "${resolved.relativePath}" → fqc_id=${reconnectedId}`);
-        parsed.data.fqc_id = reconnectedId;
+        parsed.data[FM.ID] = reconnectedId;
         validatedFqcId = reconnectedId;
       }
     }
@@ -329,7 +329,7 @@ export async function targetedScan(
     // Step 4: Generate new fqc_id if needed
     if (!validatedFqcId) {
       validatedFqcId = uuidv4();
-      parsed.data.fqc_id = validatedFqcId;
+      parsed.data[FM.ID] = validatedFqcId;
     }
 
     // Step 4a: Call propagateFqcIdChange if identity changed (PLG-03)
@@ -359,18 +359,18 @@ export async function targetedScan(
     let frontmatterChanged = false;
 
     // fqc_id: already set above — detect if it changed
-    if (parsed.data.fqc_id !== existingFqcId) {
+    if (parsed.data[FM.ID] !== existingFqcId) {
       frontmatterChanged = true;
     }
 
     // created: set to now if missing
-    if (!parsed.data.created) {
-      parsed.data.created = new Date().toISOString();
+    if (!parsed.data[FM.CREATED]) {
+      parsed.data[FM.CREATED] = new Date().toISOString();
       frontmatterChanged = true;
     }
     // status: preserve if present, set to 'active' if missing
-    if (!parsed.data.status) {
-      parsed.data.status = 'active';
+    if (!parsed.data[FM.STATUS]) {
+      parsed.data[FM.STATUS] = 'active';
       frontmatterChanged = true;
     }
 
@@ -391,8 +391,8 @@ export async function targetedScan(
     // Build and return snapshot
     const snapshot: FrontmatterSnapshot = {
       fqcId: validatedFqcId,
-      created: parsed.data.created as string,
-      status: parsed.data.status as string,
+      created: parsed.data[FM.CREATED] as string,
+      status: parsed.data[FM.STATUS] as string,
       contentHash: newContentHash,
     };
 
@@ -412,7 +412,7 @@ export async function targetedScan(
       try {
         const raw = await readFile(resolved.absPath, 'utf-8');
         const parsed = matter(raw);
-        const existingFqcId = parsed.data.fqc_id as string | undefined;
+        const existingFqcId = parsed.data[FM.ID] as string | undefined;
 
         // Minimal identity resolution on retry: use existing fqc_id if valid, otherwise generate new
         let resolvedFqcId: string;
@@ -425,8 +425,8 @@ export async function targetedScan(
         // Return best-effort snapshot without writing
         const snapshot: FrontmatterSnapshot = {
           fqcId: resolvedFqcId,
-          created: (parsed.data.created as string) || new Date().toISOString(),
-          status: (parsed.data.status as string) || 'active',
+          created: (parsed.data[FM.CREATED] as string) || new Date().toISOString(),
+          status: (parsed.data[FM.STATUS] as string) || 'active',
           contentHash: newContentHash,
         };
 
