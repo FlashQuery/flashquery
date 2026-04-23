@@ -2,25 +2,25 @@
 gsd_state_version: 1.0
 milestone: v2.7
 milestone_name: "**For detailed information about completed milestones:**"
-status: executing
+status: milestone_complete
 last_updated: "2026-04-23T12:02:01.994Z"
 last_activity: 2026-04-23 -- Phase 90 execution started
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
   completed_plans: 5
-  percent: 71
+  percent: 100
 ---
 
 # FlashQuery Core — State
 
 ## Current Position
 
-Phase: 90 (centralize-frontmatter-field-names-into-fm-constants-and-ren) — EXECUTING
-Plan: 1 of 7
-Status: Executing Phase 90
-Last activity: 2026-04-23 -- Phase 90 execution started
+Phase: 90
+Plan: Not started
+Status: Milestone complete
+Last activity: 2026-04-23
 
 ```
 [########################################] 100% — 6/6 phases
