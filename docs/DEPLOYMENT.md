@@ -52,7 +52,7 @@ This is worth stating plainly because the language in various docs has been impr
 What exists:
 
 - **`npm run build`** runs tsup over `src/index.ts` and produces `dist/index.js` — a bundled ESM JavaScript module. You still need Node.js 20+ installed on the target machine to run it.
-- **`package.json`'s `"bin"` field** exposes two CLI commands — `flashquery` and `fqc` — that become available on your PATH when the package is installed globally (via `npm install -g flashquery-core`). These are just `dist/index.js` with a shebang-equivalent; they call into Node.
+- **`package.json`'s `"bin"` field** exposes the `flashquery` CLI command, which becomes available on your PATH when the package is installed globally (via `npm install -g flashquery`). This is just `dist/index.js` with a shebang; it calls into Node.
 - **`flashquery start --config ./flashquery.yml`** is the normal way to run it once installed. `npm run dev` (during development) and `node dist/index.js start --config ./flashquery.yml` (after a build) do the same thing.
 
 Practically, this means any production deployment needs Node.js on the host. If you want a true single-file binary in the future (for air-gapped or minimal-image deployments), that's a separate build target — Node SEA is the most likely path, but it isn't set up yet.
@@ -79,9 +79,9 @@ After=network.target
 Type=simple
 User=flashquery
 Group=flashquery
-WorkingDirectory=/opt/flashquery-core
-EnvironmentFile=/opt/flashquery-core/.env
-ExecStart=/usr/bin/node /opt/flashquery-core/dist/index.js start --config /opt/flashquery-core/flashquery.yml
+WorkingDirectory=/opt/flashquery
+EnvironmentFile=/opt/flashquery/.env
+ExecStart=/usr/bin/node /opt/flashquery/dist/index.js start --config /opt/flashquery/flashquery.yml
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -92,7 +92,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
 PrivateTmp=true
-ReadWritePaths=/opt/flashquery-core/vault /opt/flashquery-core/logs
+ReadWritePaths=/opt/flashquery/vault /opt/flashquery/logs
 
 [Install]
 WantedBy=multi-user.target
@@ -101,8 +101,8 @@ WantedBy=multi-user.target
 Then:
 
 ```bash
-sudo useradd --system --home /opt/flashquery-core --shell /usr/sbin/nologin flashquery
-sudo chown -R flashquery:flashquery /opt/flashquery-core
+sudo useradd --system --home /opt/flashquery --shell /usr/sbin/nologin flashquery
+sudo chown -R flashquery:flashquery /opt/flashquery
 sudo systemctl daemon-reload
 sudo systemctl enable --now flashquery
 sudo journalctl -u flashquery -f   # tail the logs
@@ -116,7 +116,7 @@ Notes:
 
 ### launchd (macOS)
 
-Create `~/Library/LaunchAgents/dev.flashquery.core.plist`:
+Create `~/Library/LaunchAgents/dev.flashquery.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -125,17 +125,17 @@ Create `~/Library/LaunchAgents/dev.flashquery.core.plist`:
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>dev.flashquery.core</string>
+    <string>dev.flashquery</string>
     <key>ProgramArguments</key>
     <array>
         <string>/usr/local/bin/node</string>
-        <string>/Users/you/flashquery-core/dist/index.js</string>
+        <string>/Users/you/flashquery/dist/index.js</string>
         <string>start</string>
         <string>--config</string>
-        <string>/Users/you/flashquery-core/flashquery.yml</string>
+        <string>/Users/you/flashquery/flashquery.yml</string>
     </array>
     <key>WorkingDirectory</key>
-    <string>/Users/you/flashquery-core</string>
+    <string>/Users/you/flashquery</string>
     <key>EnvironmentVariables</key>
     <dict>
         <!-- launchd doesn't natively load .env files; paste key vars here,
@@ -148,9 +148,9 @@ Create `~/Library/LaunchAgents/dev.flashquery.core.plist`:
     <key>RunAtLoad</key>
     <true/>
     <key>StandardOutPath</key>
-    <string>/Users/you/flashquery-core/logs/flashquery.stdout.log</string>
+    <string>/Users/you/flashquery/logs/flashquery.stdout.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/you/flashquery-core/logs/flashquery.stderr.log</string>
+    <string>/Users/you/flashquery/logs/flashquery.stderr.log</string>
 </dict>
 </plist>
 ```
@@ -158,8 +158,8 @@ Create `~/Library/LaunchAgents/dev.flashquery.core.plist`:
 Then:
 
 ```bash
-launchctl load ~/Library/LaunchAgents/dev.flashquery.core.plist
-launchctl start dev.flashquery.core
+launchctl load ~/Library/LaunchAgents/dev.flashquery.plist
+launchctl start dev.flashquery
 tail -f ~/flashquery-core/logs/flashquery.stdout.log
 ```
 
@@ -302,7 +302,7 @@ FlashQuery ships a `flashquery backup` CLI command that writes a JSON snapshot o
 Run it on a schedule via cron or launchd. Example nightly-at-2am cron entry:
 
 ```cron
-0 2 * * * /usr/local/bin/flashquery backup --config /opt/flashquery-core/flashquery.yml
+0 2 * * * /usr/local/bin/flashquery backup --config /opt/flashquery/flashquery.yml
 ```
 
 Use `--db-only` to skip the full vault commit+tag if you only want the database snapshot.

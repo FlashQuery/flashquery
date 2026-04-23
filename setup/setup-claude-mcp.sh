@@ -98,7 +98,7 @@ echo "🔗 Registering with Claude Code..."
 MCP_URL="http://$HOST:$PORT/mcp"
 
 # Register using the workaround (user header flag)
-claude mcp add flashquery-core "$MCP_URL" \
+claude mcp add flashquery "$MCP_URL" \
   -t http \
   -s user \
   -H "Authorization: Bearer $ACCESS_TOKEN"

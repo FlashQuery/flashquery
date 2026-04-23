@@ -15,7 +15,7 @@ This directory contains sample configurations for connecting FlashQuery to three
 - Best for: local development, single-user setups
 - Communication: JSON-RPC over stdin/stdout
 - Security: inherent (only accessible to the spawning process)
-- Example: Claude Desktop spawns `node /path/to/dist/index.js start --config /path/to/flashquery.yaml`
+- Example: Claude Desktop spawns `node /path/to/flashquery/dist/index.js start --config /path/to/flashquery.yml`
 
 **HTTP Transport:**
 - FlashQuery runs as a standalone server on localhost:3100 (or custom port)
@@ -39,7 +39,7 @@ This directory contains sample configurations for connecting FlashQuery to three
 
 1. Choose the config file that matches your setup (table above)
 2. Copy the file to your platform's MCP config location (see platform-specific instructions below)
-3. Replace `/path/to/flashquery-core` with your actual path (absolute, not relative)
+3. Replace `/path/to/flashquery` with your actual absolute path
 4. Restart the client
 5. FlashQuery tools should appear in your tool list
 
@@ -55,7 +55,7 @@ Steps:
 1. Close Claude Desktop
 2. Open the config file in a text editor
 3. Copy the contents of `claude-desktop-stdio.json` (or http variant) into the file
-4. Replace `/path/to/flashquery-core` with your actual path
+4. Replace `/path/to/flashquery` with your actual path
 5. Save and close
 6. Reopen Claude Desktop
 7. Tools should appear in the tool list
@@ -66,17 +66,17 @@ Steps:
 
 **Option A — CLI (Recommended):**
 ```bash
-claude mcp add --transport stdio flashquery-core -- \
-  node /path/to/flashquery-core/dist/index.js \
-  start --config /path/to/flashquery.yaml
+claude mcp add --transport stdio flashquery -- \
+  node /path/to/flashquery/dist/index.js \
+  start --config /path/to/flashquery/flashquery.yml
 ```
 
-Replace `/path/to/flashquery-core` with your absolute path.
+Replace `/path/to/flashquery` with your absolute path.
 
 **Option B — Manual .mcp.json:**
 1. Create or edit `.mcp.json` in your project root (or `~/.claude.json` for global)
 2. Copy the contents of `claude-code-stdio.json` into the file
-3. Replace `/path/to/flashquery-core` with your absolute path
+3. Replace `/path/to/flashquery` with your absolute path
 4. Restart Claude Code
 5. Tools should appear
 
@@ -89,7 +89,7 @@ Config location:
 Steps:
 1. Use Settings UI or edit `mcp_servers.json`
 2. Add a new MCP server entry with contents of `cursor-stdio.json`
-3. Replace `/path/to/flashquery-core` with your absolute path
+3. Replace `/path/to/flashquery` with your absolute path
 4. Restart Cursor
 5. Tools should appear
 
@@ -101,18 +101,17 @@ Steps:
 - Check firewall (if using HTTP transport)
 - Restart the AI client
 
-**"fqc: command not found":**
-- You're using the wrong transport or path
-- stdio: use full path to `dist/index.js` (e.g., `/Users/you/flashquery-core/flashquery-core/dist/index.js`)
-- http: ensure `fqc start` is running in another terminal on localhost:3100
+**"flashquery: command not found" or "node: No such file":**
+- For stdio transport: use the full path to `dist/index.js` (e.g., `node /Users/you/flashquery/dist/index.js`)
+- For HTTP transport: ensure FlashQuery is running (`npm run dev` or `node dist/index.js start --config ./flashquery.yml`) on localhost:3100
 
 **"Connection refused":**
-- HTTP transport: Is FlashQuery running? `fqc start --config ./flashquery.yaml` in terminal
-- stdio: Does the path exist? `ls /path/to/dist/index.js`
+- HTTP transport: Is FlashQuery running? Start it with `npm run dev` or `node dist/index.js start --config ./flashquery.yml`
+- stdio: Does the path exist? `ls /path/to/flashquery/dist/index.js`
 
 ## Advanced: Custom Ports & Hosts
 
-For HTTP transport, you can customize the port in `flashquery.yaml`:
+For HTTP transport, you can customize the port in `flashquery.yml`:
 ```yaml
 mcp:
   transport: streamable-http
@@ -125,4 +124,4 @@ Then update the config URL: `http://localhost:YOUR_PORT/...`
 
 ---
 
-**Questions?** See [ARCHITECTURE.md](./ARCHITECTURE.md) or [README.md](../README.md) for more info.
+**Questions?** See [ARCHITECTURE.md](../docs/ARCHITECTURE.md) or [README.md](../README.md) for more info.

@@ -211,7 +211,7 @@ All three paths share the same production-deployment story: run FlashQuery as a 
 
 ## CLI Commands
 
-When the package is installed globally (`npm install -g flashquery-core`), two binary entry points are available: `flashquery` and `fqc`. Both are registered in `package.json`'s `"bin"` field and both point to the same `dist/index.js`. Either name accepts all six subcommands:
+When the package is installed globally (`npm install -g flashquery`), the `flashquery` binary becomes available on your PATH. It is registered in `package.json`'s `"bin"` field and points to `dist/index.js`. It accepts all six subcommands:
 
 - **`start --config <path>`** — starts the MCP server using the given `flashquery.yml`. Accepts `--transport http` (streamable-http) or `--transport stdio` to override the yaml setting for a single run.
 - **`doctor`** — runs health checks against the current config: database reachable, pgvector extension present, vault path writable, embedding provider configured, git available if auto-commit is on. Prints a pass/fail line per check.
@@ -241,7 +241,7 @@ When an external tool strips frontmatter from a vault file, FlashQuery can detec
 ## File Structure
 
 ```
-flashquery-core/
+flashquery/
 ├── src/
 │   ├── index.ts                      # CLI entry (start / doctor / scan / backup)
 │   ├── config/

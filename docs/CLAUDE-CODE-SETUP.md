@@ -8,7 +8,7 @@ This guide covers how to register a running FlashQuery instance as an MCP server
 
    ```bash
    npm run dev
-   # or: flashquery start --config ./flashquery.yml
+   # or, after building: node dist/index.js start --config ./flashquery.yml
    ```
 
 2. **`.env` with `MCP_AUTH_SECRET`.** `setup/setup.sh` generates this automatically. If you set up manually, run `openssl rand -hex 32` and add `MCP_AUTH_SECRET=<result>` to `.env`.
@@ -26,20 +26,19 @@ This guide covers how to register a running FlashQuery instance as an MCP server
 ## Register FlashQuery with Claude Code
 
 ```bash
-npm run mcp:claude
+./setup/setup-claude-mcp.sh
 ```
 
-Or run the script directly if you need a custom host or port:
+Or with a custom host or port:
 
 ```bash
-# Custom host and port
 ./setup/setup-claude-mcp.sh 192.168.1.100 3100
 ```
 
 The script will:
 1. Read `MCP_AUTH_SECRET` from `.env`
 2. Fetch a bearer token from `POST /token` on the running FlashQuery instance
-3. Run `claude mcp add flashquery-core http://localhost:3100/mcp -t http -H "Authorization: Bearer <token>"`
+3. Run `claude mcp add flashquery http://localhost:3100/mcp -t http -H "Authorization: Bearer <token>"`
 
 On success it prints confirmation and tells you to restart Claude Code to load the new configuration.
 
@@ -47,7 +46,7 @@ On success it prints confirmation and tells you to restart Claude Code to load t
 
 ## Token lifetime
 
-FlashQuery bearer tokens are valid until `MCP_AUTH_SECRET` is rotated — they do not expire on a time limit. Once Claude Code stores the token, the registration persists indefinitely. You only need to re-run `npm run mcp:claude` if you change `MCP_AUTH_SECRET` (e.g., you ran `setup/setup.sh` again and a new secret was generated, or you manually rotated it for security reasons).
+FlashQuery bearer tokens are valid until `MCP_AUTH_SECRET` is rotated — they do not expire on a time limit. Once Claude Code stores the token, the registration persists indefinitely. You only need to re-run `./setup/setup-claude-mcp.sh` if you change `MCP_AUTH_SECRET` (e.g., you ran `setup/setup.sh` again and a new secret was generated, or you manually rotated it for security reasons).
 
 ---
 
@@ -59,7 +58,7 @@ After registration, restart Claude Code. Then check the config:
 cat ~/.claude/claude.json | jq '.mcpServers'
 ```
 
-You should see a `flashquery-core` entry with the MCP URL and Authorization header. In a Claude Code session, FlashQuery tools will be available immediately.
+You should see a `flashquery` entry with the MCP URL and Authorization header. In a Claude Code session, FlashQuery tools will be available immediately.
 
 ---
 
@@ -67,7 +66,7 @@ You should see a `flashquery-core` entry with the MCP URL and Authorization head
 
 **`curl: (7) Failed to connect`** — FlashQuery is not running. Start it with `npm run dev` and try again.
 
-**`401 Unauthorized` when fetching a token** — `MCP_AUTH_SECRET` in `.env` doesn't match the secret FlashQuery started with. Verify the values match, or re-run `npm run setup` and then `npm run mcp:claude`.
+**`401 Unauthorized` when fetching a token** — `MCP_AUTH_SECRET` in `.env` doesn't match the secret FlashQuery started with. Verify the values match, or re-run `npm run setup` and then `./setup/setup-claude-mcp.sh`.
 
 **`claude: command not found`** — Claude Code CLI is not installed. Run `npm install -g @anthropic-ai/claude-code`.
 
@@ -93,7 +92,7 @@ TOKEN=$(curl -s -X POST http://localhost:3100/token \
   -d '{}' | jq -r '.access_token')
 
 # 4. Register with Claude Code
-claude mcp add flashquery-core http://localhost:3100/mcp \
+claude mcp add flashquery http://localhost:3100/mcp \
   -t http \
   -s user \
   -H "Authorization: Bearer $TOKEN"
