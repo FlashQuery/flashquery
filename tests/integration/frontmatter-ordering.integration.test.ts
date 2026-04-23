@@ -163,7 +163,7 @@ describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
       const result = await handlers('create_document')({
         title: 'Ordering Test Create',
         content: 'Body content for ORD-01.',
-        extra_frontmatter: { description: 'user field', owner_name: 'user field' },
+        frontmatter: { description: 'user field', owner_name: 'user field' },
       });
 
       expect(isError(result)).toBe(false);
@@ -209,7 +209,7 @@ describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
       const createResult = await handlers('create_document')({
         title: 'Ordering Test Update',
         content: 'Original body for ORD-02.',
-        extra_frontmatter: { note: 'user note', priority: 'high' },
+        frontmatter: { note: 'user note', priority: 'high' },
       });
       expect(isError(createResult)).toBe(false);
       const createText = getText(createResult);
@@ -261,7 +261,7 @@ describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
       const createResult = await handlers('create_document')({
         title: 'Ordering Test Header',
         content: 'Body for ORD-03.',
-        extra_frontmatter: { category: 'testing', source: 'integration' },
+        frontmatter: { category: 'testing', source: 'integration' },
       });
       expect(isError(createResult)).toBe(false);
       const createText = getText(createResult);
@@ -277,10 +277,10 @@ describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
         .single();
       expect(row).not.toBeNull();
 
-      // Update header (add a tag)
+      // Update header (add a tag via updates map)
       const headerResult = await handlers('update_doc_header')({
         identifier: docId,
-        add_tags: ['#ordering-test'],
+        updates: { [FM.TAGS]: ['#ordering-test'] },
       });
       expect(isError(headerResult)).toBe(false);
 
@@ -313,7 +313,7 @@ describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
       const createResult = await handlers('create_document')({
         title: 'Ordering Test Reconcile',
         content: 'Body for ORD-04.',
-        extra_frontmatter: { project_name: 'test-project', env: 'integration' },
+        frontmatter: { project_name: 'test-project', env: 'integration' },
       });
       expect(isError(createResult)).toBe(false);
       const createText = getText(createResult);

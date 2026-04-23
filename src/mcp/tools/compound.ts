@@ -31,6 +31,7 @@ import {
 import { extractWikilinks, extractHeadings as mdExtractHeadings, filterHeadingsByDepth } from '../utils/markdown-utils.js';
 import { insertAtPosition, findHeadingOccurrence, getSectionBoundaries } from '../utils/markdown-sections.js';
 import { FM } from '../../constants/frontmatter-fields.js';
+import { serializeOrderedFrontmatter } from '../utils/frontmatter-sanitizer.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: apply tag set operations (idempotent add, graceful remove)
@@ -334,7 +335,9 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         }
 
         // Write back atomically via vaultManager (DCP-05)
-        await vaultManager.writeMarkdown(relativePath, parsed.data, parsed.content);
+        // Apply ordering sanitizer so user fields remain first (SPEC-18)
+        const sanitizedFm = serializeOrderedFrontmatter(parsed.data);
+        await vaultManager.writeMarkdown(relativePath, sanitizedFm, parsed.content);
 
         const changedFields = Object.keys(updates).join(', ');
         logger.info(`update_doc_header: updated fields [${changedFields}] in ${relativePath}`);
