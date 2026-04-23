@@ -2,7 +2,7 @@
 
 ## What This Is
 
-FlashQuery is an open source, local-first data management layer for AI workflows. It sits between AI tools (any LLM, via MCP) and a unified data store (Supabase + local Obsidian vault). It manages memory, documents, and (eventually) relational data, files, and vector embeddings. The user owns all data.
+FlashQuery is an open source, local-first data management layer for AI workflows. It sits between AI tools (any LLM, via MCP) and a unified data store (Supabase + local Obsidian vault). It manages memory, documents, relational records, and vector embeddings. The user owns all data.
 
 ## Prerequisites
 
@@ -18,51 +18,20 @@ AI Tools (Claude, ChatGPT, Cursor) ──via MCP──> FlashQuery ──> Supab
                                                                 ──> Local vault (markdown files, Obsidian-compatible)
 ```
 
-FlashQuery runs as a server process started from the CLI. At v1, it uses **stdio MCP transport** (Claude Desktop/Code spawns it as a subprocess). It connects to a local or hosted Supabase instance for relational data and vector search, and manages a local folder of markdown files that doubles as an Obsidian vault.
-
-## Current Build Phase
-
-**IMPORTANT: At the start of every session, read `STATUS.md` first.** It tells you the current phase, what's been completed, and any notes from previous phases.
-
-Check the `tasks/` directory for numbered task files. Work through them in order. Each task file contains everything you need for that phase — do NOT read the full definition document (it's 130KB and will consume your context window).
-
-**Definition document location:** `../Definition/FlashQuery-Core Definition.md` — reference specific sections only when a task file points you there. Never read the whole thing.
-
-## Build Status Protocol
-
-FlashQuery uses two mechanisms to maintain continuity across sessions:
-
-### STATUS.md (project-level log)
-- **Read it first** at the start of every session
-- **Update it** at the end of every phase with: what was built, test results, decisions made, known issues, and actual package versions installed
-- This is how the next session knows what state the project is in
-
-### Completion Log (per-task)
-- Every task file has a `## Completion Log` section at the bottom
-- **Fill it in** when you finish the phase: what was done, test output, any deviations from the spec
-- This keeps the record co-located with the task definition
-
-### Session workflow
-1. Read `STATUS.md` — understand current state
-2. Read the current task file (e.g., `tasks/03-logging.md`)
-3. Implement the phase
-4. Run tests, verify the "Done When" checklist
-5. Update the task file's Completion Log
-6. Update `STATUS.md` with the phase summary
-7. Advance "Current Phase" in `STATUS.md` to the next task
+FlashQuery runs as a server process started from the CLI. It uses **stdio MCP transport** (Claude Desktop/Code spawns it as a subprocess). It connects to a local or hosted Supabase instance for relational data and vector search, and manages a local folder of markdown files that doubles as an Obsidian vault.
 
 ## Technology Stack
 
 - **Runtime:** Node.js >= 20 LTS
 - **Language:** TypeScript (strict mode)
 - **Module system:** ESM (`"type": "module"`)
-- **MCP SDK:** `@modelcontextprotocol/sdk` v1.27.1 (with `zod` peer dependency)
+- **MCP SDK:** `@modelcontextprotocol/sdk` (with `zod` peer dependency)
 - **Supabase:** `@supabase/supabase-js` for data ops, `pg` for DDL
 - **Build:** `tsup` for production, `tsx` for development
 - **Test:** Vitest
-- **Other:** `simple-git`, `js-yaml`, `gray-matter` (frontmatter parsing)
+- **Other:** `simple-git`, `js-yaml`, `gray-matter` (frontmatter parsing), `async-mutex`, `uuid`
 
-## Build & Execution (Phase 17+)
+## Build & Execution
 
 **From the project root directory:**
 
@@ -111,22 +80,65 @@ The `"bin"` entry in `package.json` exists for **when FQC is published to npm**.
 ### File Organization
 ```
 src/
-├── index.ts                # CLI entry point, startup sequence
+├── index.ts                    # CLI entry point, startup sequence
+├── cli/
+│   ├── commands/
+│   │   └── unlock.ts           # Vault lock management command
+│   └── doctor.ts               # Diagnostics command
 ├── config/
-│   └── loader.ts           # YAML config parsing and validation
-├── mcp/
-│   ├── server.ts           # MCP server setup and tool registration
-│   └── tools/
-│       ├── memory.ts       # save_memory, search_memory, list_memories
-│       ├── documents.ts    # create_document, get_document, search_documents
-│       └── projects.ts     # list_projects, get_project_info
-├── storage/
-│   ├── supabase.ts         # Supabase client wrapper (both pg and supabase-js)
-│   └── vault.ts            # File system operations for the vault
+│   └── loader.ts               # YAML config parsing and validation
+├── constants/
+│   └── frontmatter-fields.ts   # Canonical frontmatter field name constants
 ├── embedding/
-│   └── provider.ts         # Embedding generation (OpenAI, OpenRouter)
-└── logging/
-    └── logger.ts           # Structured logging
+│   └── provider.ts             # Embedding generation (OpenAI, OpenRouter)
+├── git/
+│   └── manager.ts              # Git operations for the vault
+├── logging/
+│   ├── logger.ts               # Structured logging
+│   └── context.ts              # Per-request logging context
+├── mcp/
+│   ├── server.ts               # MCP server setup and tool registration
+│   ├── auth.ts                 # MCP authentication
+│   ├── redaction.ts            # Sensitive field redaction
+│   ├── tools/
+│   │   ├── memory.ts           # save_memory, search_memory, list_memories
+│   │   ├── documents.ts        # create_document, get_document, search_documents
+│   │   ├── projects.ts         # list_projects, get_project_info
+│   │   ├── records.ts          # Relational record CRUD
+│   │   ├── compound.ts         # Compound / multi-step tools
+│   │   ├── scan.ts             # Vault scanning tools
+│   │   ├── plugins.ts          # Plugin management tools
+│   │   └── pending-review.ts   # Pending review queue tools
+│   └── utils/
+│       ├── frontmatter-sanitizer.ts
+│       ├── markdown-sections.ts
+│       ├── markdown-utils.ts
+│       ├── resolve-document.ts
+│       └── response-formats.ts
+├── plugins/
+│   └── manager.ts              # Plugin lifecycle management
+├── projects/
+│   └── seeder.ts               # Project seeding utilities
+├── server/
+│   ├── port-checker.ts
+│   ├── shutdown.ts
+│   └── shutdown-state.ts
+├── services/
+│   ├── scanner.ts              # Vault file scanner
+│   ├── manifest-loader.ts
+│   ├── plugin-propagation.ts
+│   ├── plugin-reconciliation.ts
+│   └── write-lock.ts
+├── storage/
+│   ├── supabase.ts             # Supabase client wrapper
+│   ├── vault.ts                # File system operations for the vault
+│   └── schema-verify.ts        # DB schema verification
+└── utils/
+    ├── frontmatter.ts
+    ├── pg-client.ts
+    ├── schema-migration.ts
+    ├── tag-validator.ts
+    └── uuid.ts
 ```
 
 ### Naming
@@ -139,9 +151,11 @@ src/
 ### Testing
 - Unit tests: `tests/unit/*.test.ts` — mock external deps, run fast
 - Integration tests: `tests/integration/*.test.ts` — require Supabase (local or cloud)
-- MCP protocol tests: `tests/mcp/*.test.ts` — spawn FQC as subprocess, connect via MCP client
+- E2E tests: `tests/e2e/*.test.ts` — full stack, spawn FQC as subprocess
+- Scenario tests: `tests/scenarios/` — directed and integration scenario suites
 - Run unit tests: `npm test`
 - Run integration tests: `npm run test:integration`
+- Run E2E tests: `npm run test:e2e`
 
 ### Test Environment Setup
 Integration and E2E tests read connection credentials from `.env.test` (gitignored).
@@ -159,10 +173,6 @@ All MCP tools return `{ content: [{ type: "text", text: "..." }] }`. On error, a
 ## Important: What NOT To Do
 
 - Do NOT use CommonJS (`require`). Everything is ESM.
-- Do NOT use `@modelcontextprotocol/server` — that package does not exist on npm. Use `@modelcontextprotocol/sdk` (v1.27.1 installed).
-- Do NOT build a web UI. v1 is CLI + MCP only.
-- Do NOT implement Git auto-commit (deferred to v1.5).
-- Do NOT implement the plugin system (deferred to v1.5).
-- Do NOT implement relational record CRUD (deferred to v1.5).
-- Do NOT implement Tier 2 compound tools (deferred to v1.5).
+- Do NOT use `@modelcontextprotocol/server` — that package does not exist on npm. Use `@modelcontextprotocol/sdk`.
+- Do NOT build a web UI. FlashQuery is CLI + MCP only.
 - Do NOT implement server-side session state. MCP is stateless; project context is per-call.
