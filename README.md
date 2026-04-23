@@ -49,17 +49,17 @@ npm install
 npm run setup
 
 # ── Option A: Bundled Docker stack (Supabase + FlashQuery, everything local) ───────────────────
-npm run docker:up       # or: docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d
-npm run mcp:claude      # register with Claude Code once FlashQuery is up
+make up                 # or: docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d
+# Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
 
 # ── Option B: Dev mode (database in Docker, FlashQuery on the host for hot reload) ─────────────
-npm run db:up           # or: docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml up -d
+make db-up              # or: docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml up -d
 npm run dev             # FlashQuery runs locally with hot reload
-npm run mcp:claude      # register with Claude Code
+# Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
 
 # ── Option C: Supabase Cloud or existing self-hosted (no local Docker needed) ──────────────────
 npm run dev             # FlashQuery connects to your external Supabase
-npm run mcp:claude      # register with Claude Code
+# Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
 ```
 
 ---
@@ -111,17 +111,23 @@ npm run dev
 
 ```bash
 # Start the full stack (Postgres, PostgREST, GoTrue, Kong, Studio, FlashQuery)
-npm run docker:up
-# or manually: docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d
+make up
+# or: docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d
 ```
 
-FlashQuery runs inside the container — no separate `npm run dev` needed. Wait ~20 seconds for all services to be healthy, then check `npm run docker:logs` to confirm FlashQuery is up.
+FlashQuery runs inside the container — no separate `npm run dev` needed. Wait ~20 seconds for all services to be healthy, then check logs to confirm FlashQuery is up:
+
+```bash
+make logs
+```
 
 FlashQuery will print a bearer token in its container logs. Retrieve it with:
 
 ```bash
-npm run docker:logs 2>&1 | grep -i "bearer\|token"
-``` Copy that token — you'll use it to connect MCP clients.
+make logs 2>&1 | grep -i "bearer\|token"
+```
+
+Copy that token — you'll use it to connect MCP clients.
 
 On first run, if your vault directory isn't a git repository, `setup/setup.sh` offers to `git init` it for you (the default `flashquery.yml` enables auto-commit, which needs a git repo).
 
@@ -133,13 +139,7 @@ FlashQuery uses **streamable-http** transport out of the box — no configuratio
 
 ### Claude Code
 
-The quickest path is the setup script, which fetches a bearer token from the running server and registers it automatically:
-
-```bash
-npm run mcp:claude
-```
-
-See [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) for prerequisites, troubleshooting, and manual registration steps.
+See [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) for step-by-step registration instructions, prerequisites, and troubleshooting.
 
 ### Claude Desktop (stdio fallback)
 
@@ -203,7 +203,7 @@ For technical details on all three, see [ARCHITECTURE.md § Plugin Propagation D
 
 - [**flashquery-plugins**](https://github.com/FlashQuery/flashquery-plugins) — Claude skills and demo apps that showcase what FlashQuery can do
 - [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design, data flow, the four base deployment paths
-- [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) — registering FlashQuery with Claude Code (`npm run mcp:claude`)
+- [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) — registering FlashQuery with Claude Code
 - [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) — production deployment: reverse proxy, service supervision (systemd / launchd), backups, logging
 - [`docs/SECURITY-TOKENS.md`](./docs/SECURITY-TOKENS.md) — bearer token authentication, token lifetime configuration, troubleshooting
 - [`tests/scenarios/README.md`](./tests/scenarios/README.md) — scenario testing framework (behaviors, writing new tests, running the suite)
@@ -212,46 +212,70 @@ For technical details on all three, see [ARCHITECTURE.md § Plugin Propagation D
 
 ## Development Commands
 
-From the repo root:
+### Application
 
 ```bash
-npm run setup                    # Interactive setup (generates .env + flashquery.yml)
-npm run mcp:claude               # Register with Claude Code (FlashQuery must be running first)
-npm run dev                      # Run FlashQuery with hot reload
-npm run build                    # Build production binary
-npm test                         # Unit tests
-npm run test:integration         # Integration tests (requires Supabase)
-npm run test:e2e                 # End-to-end tests
-npm run lint                     # Check code quality
-npm run format                   # Auto-format code
+npm run setup            # Interactive first-time setup (generates .env + flashquery.yml)
+npm run dev              # Run FlashQuery with hot reload (reads ./flashquery.yml)
+npm run dev:test         # Run with .env.test credentials (for manual integration testing)
+npm run build            # Compile TypeScript to dist/ via tsup
+npm run start            # Run the compiled binary (after npm run build)
 ```
 
-For the bundled Docker stack (from the repo root — no need to `cd docker/`):
+### Testing
 
 ```bash
-npm run docker:up        # Start the full stack (Postgres + Supabase + FlashQuery) in background
-npm run docker:down      # Stop the full stack
-npm run docker:logs      # Tail logs from all containers
-npm run docker:status    # Show container health and port bindings
-npm run docker:restart   # Restart all containers
+npm test                 # Unit tests (fast, no external deps)
+npm run test:watch       # Unit tests in watch mode
+npm run test:integration # Integration tests (requires Supabase via .env.test)
+npm run test:e2e         # End-to-end tests (spawns FlashQuery as subprocess)
+npm run test:benchmark   # Performance benchmarks (vault discovery, search throughput)
 ```
 
-For the FlashQuery-only stack (connect to an external/cloud Supabase, FlashQuery in Docker):
+### Code Quality
 
 ```bash
-npm run docker:fq:up     # Start FlashQuery container in background
-npm run docker:fq:down   # Stop FlashQuery container
-npm run docker:fq:logs   # Tail FlashQuery container logs
-npm run docker:fq:status # Show FlashQuery container status
-npm run docker:fq:build  # Rebuild the FlashQuery image
-npm run docker:fq:watch  # Start in foreground (logs stream to terminal)
+npm run lint             # ESLint — zero warnings policy
+npm run format           # Auto-format with Prettier
+npm run format:check     # Check formatting without writing
 ```
 
-For the database-only stack (Postgres + pgvector, FlashQuery runs locally via `npm run dev`):
+### Docker
+
+Docker operations use `make` from the repo root. Run `make help` to see all targets.
+
+**Full stack** (Postgres + Supabase services + FlashQuery):
 
 ```bash
-npm run db:up            # Start database containers in background
-npm run db:down          # Stop database containers
-npm run db:logs          # Tail database logs
-npm run db:status        # Show database container status
+make up        # Start in background
+make down      # Stop
+make restart   # Restart all containers
+make logs      # Tail all logs
+make status    # Show container health and ports
+make build     # Build FlashQuery image
+make rebuild   # Force rebuild with no cache
+make shell     # Open a shell in the FlashQuery container
+make clean     # Stop and remove all volumes  ⚠ wipes data
+```
+
+**FlashQuery only** (connect to external/cloud Supabase):
+
+```bash
+make fq-up     # Start in background
+make fq-down   # Stop
+make fq-logs   # Tail logs
+make fq-status # Show container status
+make fq-build  # Build image
+make fq-rebuild # Force rebuild with no cache
+make fq-shell  # Open a shell in the container
+make fq-watch  # Start in foreground (logs stream to terminal)
+```
+
+**Database only** (Postgres + pgvector; FlashQuery runs locally via `npm run dev`):
+
+```bash
+make db-up     # Start in background
+make db-down   # Stop
+make db-logs   # Tail logs
+make db-status # Show container status
 ```

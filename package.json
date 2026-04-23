@@ -17,37 +17,14 @@
   ],
   "scripts": {
     "setup": "bash setup/setup.sh",
-    "mcp:claude": "bash setup/setup-claude-mcp.sh",
-
     "dev": "tsx src/index.ts start --config ./flashquery.yml",
-    "devtest": "DOTENV_CONFIG_PATH=./.env.test tsx src/index.ts start --config ./flashquery.yml",
-    "// devtest": "To use a separate test YAML (requires flashquery.test.yml to exist): DOTENV_CONFIG_PATH=./.env.test tsx src/index.ts start --config ./flashquery.test.yml",
+    "dev:test": "DOTENV_CONFIG_PATH=./.env.test tsx src/index.ts start --config ./flashquery.yml",
     "build": "tsup src/index.ts --format esm --dts",
     "start": "node dist/index.js",
-
-    "docker:up": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d",
-    "docker:down": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml down",
-    "docker:logs": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml logs -f",
-    "docker:status": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml ps",
-    "docker:restart": "docker compose --env-file docker/.env.docker -f docker/docker-compose.yml restart",
-
-    "docker:fq:up": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml up -d",
-    "docker:fq:watch": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml up",
-    "docker:fq:down": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml down",
-    "docker:fq:logs": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml logs -f",
-    "docker:fq:status": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml ps",
-    "docker:fq:build": "docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml build",
-
-    "db:up": "docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml up -d",
-    "db:down": "docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml down",
-    "db:logs": "docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml logs -f",
-    "db:status": "docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml ps",
-
     "test": "vitest run --config tests/config/vitest.unit.config.ts",
     "test:watch": "vitest --config tests/config/vitest.unit.config.ts",
     "test:integration": "vitest run --config tests/config/vitest.integration.config.ts",
     "test:e2e": "vitest run --config tests/config/vitest.e2e.config.ts",
-    "test:http": "vitest run --config tests/config/vitest.http.config.ts",
     "test:benchmark": "vitest run --config tests/config/vitest.benchmark.config.ts",
     "lint": "eslint src/ --max-warnings 0",
     "format": "prettier --write src/",
