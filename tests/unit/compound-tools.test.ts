@@ -3,6 +3,7 @@ import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import type { RegistryEntry } from '../../src/plugins/manager.js';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module mocks (must be before imports of mocked modules)
@@ -1482,9 +1483,9 @@ describe('get_doc_outline', () => {
   let config: FlashQueryConfig;
 
   const SAMPLE_DOC = `---
-title: Outline Test
-fqc_id: outline-uuid
-status: active
+fq_title: Outline Test
+fq_id: outline-uuid
+fq_status: active
 links:
   - "[[Frontmatter Link]]"
 ---
@@ -1560,9 +1561,9 @@ More content.
     expect(result.isError).toBeUndefined();
     const text = result.content[0].text;
     // Frontmatter fields must appear
-    expect(text).toContain('title');
+    expect(text).toContain(FM.TITLE);
     expect(text).toContain('Outline Test');
-    expect(text).toContain('fqc_id');
+    expect(text).toContain(FM.ID);
     // Body prose must NOT appear
     expect(text).not.toContain('Some intro text');
     expect(text).not.toContain('Some background content');
