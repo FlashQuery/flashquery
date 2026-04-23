@@ -13,6 +13,7 @@ import { vaultManager } from '../../storage/vault.js';
 import { isValidUuid } from '../../utils/uuid.js';
 import { scanMutex } from '../../services/scanner.js';
 import { propagateFqcIdChange } from '../../services/plugin-propagation.js';
+import { FM } from '../../constants/frontmatter-fields.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ResolvedDocument — result of resolveDocumentIdentifier
@@ -22,7 +23,7 @@ export interface ResolvedDocument {
   absPath: string;
   relativePath: string;
   fqcId: string | null;
-  resolvedVia: 'path' | 'fqc_id' | 'filename' | 'reconciliation';
+  resolvedVia: 'path' | typeof FM.ID | 'filename' | 'reconciliation';
   stalePathNote?: string;
 }
 
@@ -92,7 +93,7 @@ export async function resolveDocumentIdentifier(
       absPath,
       relativePath: docRow.path,
       fqcId: docRow.id,
-      resolvedVia: 'fqc_id',
+      resolvedVia: FM.ID,
     };
   }
 
