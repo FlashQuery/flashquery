@@ -14,6 +14,20 @@
 # Usage:
 #   bash setup.sh
 #   npm run setup
+#   npm run setup -- --answers-file /path/to/answers.env
+#
+# Answers file format (key=value, one per line, comments with #):
+#   SUPABASE_CHOICE=1
+#   SUPABASE_URL=https://xxx.supabase.co
+#   SUPABASE_SERVICE_ROLE_KEY=...
+#   DATABASE_URL=postgresql://...
+#   INSTANCE_NAME=My FlashQuery
+#   INSTANCE_ID=i-123456
+#   VAULT_PATH=./vault
+#   EMBEDDING_PROVIDER=openai
+#   EMBEDDING_MODEL=text-embedding-3-small
+#   EMBEDDING_API_KEY=sk-...
+#   LOG_LEVEL=info
 # ============================================================================
 
 # ─── Colors ──────────────────────────────────────────────────────────────────
@@ -28,10 +42,33 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$PROJECT_ROOT"
 
+# ─── Argument parsing ────────────────────────────────────────────────────────
+ANSWERS_FILE=""
+NONINTERACTIVE=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --answers-file)
+      ANSWERS_FILE="$2"
+      shift 2
+      ;;
+    --answers-file=*)
+      ANSWERS_FILE="${1#*=}"
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
 # ─── Prompt helpers ──────────────────────────────────────────────────────────
 
 prompt_with_default() {
   local var_name="$1" prompt_text="$2" default_val="$3" input
+  if [ -n "$NONINTERACTIVE" ]; then
+    [ -z "${!var_name}" ] && printf -v "$var_name" '%s' "$default_val"
+    return
+  fi
   if [ -n "$default_val" ]; then
     printf "%b%s%b [%b%s%b]: " "$CYAN" "$prompt_text" "$RESET" "$YELLOW" "$default_val" "$RESET"
   else
@@ -48,6 +85,16 @@ prompt_with_default() {
 
 prompt_required() {
   local var_name="$1" prompt_text="$2" default_val="${3:-}" input
+  if [ -n "$NONINTERACTIVE" ]; then
+    local current="${!var_name}"
+    [ -z "$current" ] && current="$default_val"
+    if [ -z "$current" ]; then
+      printf "%bError: required field '%s' is not set in the answers file and has no default.%b\n" "$RED" "$var_name" "$RESET" >&2
+      exit 1
+    fi
+    printf -v "$var_name" '%s' "$current"
+    return
+  fi
   while true; do
     if [ -n "$default_val" ]; then
       printf "%b%s%b [%b%s%b]: " "$CYAN" "$prompt_text" "$RESET" "$YELLOW" "$default_val" "$RESET"
@@ -75,6 +122,7 @@ warn_on_change() {
   local old="$1" new="$2" field="$3" message="$4"
   [ -z "$old" ] && return 0          # no prior value, nothing to warn about
   [ "$old" = "$new" ] && return 0    # unchanged, nothing to warn about
+  [ -n "$NONINTERACTIVE" ] && return 0  # auto-accept in non-interactive mode
   echo ""
   printf "%b⚠  You are changing %s%b\n" "$YELLOW" "$field" "$RESET"
   printf "   Previous:  %s\n" "$old"
@@ -92,6 +140,16 @@ warn_on_change() {
 
 prompt_enum() {
   local var_name="$1" prompt_text="$2" options_str="$3" default_val="$4" input
+  if [ -n "$NONINTERACTIVE" ]; then
+    local current="${!var_name}"
+    [ -z "$current" ] && current="$default_val"
+    if [[ "|${options_str}|" != *"|${current}|"* ]]; then
+      printf "%bError: invalid value '%s' for '%s'. Valid options: %s%b\n" "$RED" "$current" "$var_name" "$options_str" "$RESET" >&2
+      exit 1
+    fi
+    printf -v "$var_name" '%s' "$current"
+    return
+  fi
   while true; do
     printf "%b%s%b (%s) [%b%s%b]: " "$CYAN" "$prompt_text" "$RESET" "$options_str" "$YELLOW" "$default_val" "$RESET"
     read -r input
@@ -188,9 +246,13 @@ ensure_vault_is_git_repo() {
   printf "\n%bYour vault at %s is not a git repository.%b\n" "$YELLOW" "$vault" "$RESET"
   echo "flashquery.yml has git.auto_commit enabled by default, which requires a git repo."
   local answer
-  printf "%bInitialize it now?%b (Y/n): " "$CYAN" "$RESET"
-  read -r answer
-  answer="${answer:-Y}"
+  if [ -n "$NONINTERACTIVE" ]; then
+    answer="Y"
+  else
+    printf "%bInitialize it now?%b (Y/n): " "$CYAN" "$RESET"
+    read -r answer
+    answer="${answer:-Y}"
+  fi
   if [[ "$answer" =~ ^[Yy] ]]; then
     ( cd "$vault" && git init -q -b main \
         && git commit --allow-empty -q -m "Initialize vault for FlashQuery" )
@@ -240,6 +302,22 @@ load_env_keys ".env" \
   MCP_AUTH_SECRET LOG_LEVEL NODE_ENV
 load_env_keys "docker/.env.docker" \
   POSTGRES_PASSWORD SUPABASE_JWT_SECRET SUPABASE_ANON_KEY LOG_PATH
+
+# ─── Load answers file (overrides existing .env defaults; enables non-interactive mode) ──
+if [ -n "$ANSWERS_FILE" ]; then
+  if [ ! -f "$ANSWERS_FILE" ]; then
+    printf "%bError: answers file not found: %s%b\n" "$RED" "$ANSWERS_FILE" "$RESET" >&2
+    exit 1
+  fi
+  NONINTERACTIVE=1
+  load_env_keys "$ANSWERS_FILE" \
+    SUPABASE_CHOICE \
+    SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY DATABASE_URL \
+    INSTANCE_NAME INSTANCE_ID VAULT_PATH \
+    EMBEDDING_PROVIDER EMBEDDING_API_KEY EMBEDDING_MODEL OLLAMA_URL \
+    LOG_LEVEL NODE_ENV
+  printf "%b[non-interactive] Using answers file: %s%b\n" "$CYAN" "$ANSWERS_FILE" "$RESET"
+fi
 
 # ─── Step 1: Supabase path ───────────────────────────────────────────────────
 # Infer the previous choice so re-runs default to what the user picked last
