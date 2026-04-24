@@ -9,6 +9,8 @@ import {
   joinBatchEntries,
   formatHeadingEntry,
   formatLinkedDocEntry,
+  formatTableHeader,
+  formatTableRow,
 } from '../../src/mcp/utils/response-formats.js';
 
 describe('response-formats utilities', () => {
@@ -274,5 +276,55 @@ describe('response-formats utilities', () => {
       expect(responseText).toContain('Not found');
       expect(responseText).toContain('id-1');
     });
+  });
+});
+
+describe('formatTableHeader', () => {
+  it('returns header and separator rows joined by newline (U-59)', () => {
+    const result = formatTableHeader();
+    const lines = result.split('\n');
+    expect(lines).toHaveLength(2);
+  });
+
+  it('header row contains all five column names (U-60)', () => {
+    const result = formatTableHeader();
+    expect(result).toContain('Name');
+    expect(result).toContain('Type');
+    expect(result).toContain('Size');
+    expect(result).toContain('Created');
+    expect(result).toContain('Updated');
+  });
+});
+
+describe('formatTableRow', () => {
+  it('formats pipe-delimited row with all five columns (U-63)', () => {
+    const row = formatTableRow('notes.md', 'file', '2.3 KB', '2026-01-01', '2026-04-01');
+    expect(row).toBe('| notes.md | file | 2.3 KB | 2026-01-01 | 2026-04-01 |');
+  });
+
+  it('passes directory name with trailing slash through unchanged (U-64)', () => {
+    const row = formatTableRow('CRM/', 'directory', '5 items', '2026-01-01', '2026-01-01');
+    expect(row).toContain('CRM/');
+    expect(row).toContain('directory');
+    expect(row).toContain('5 items');
+  });
+
+  it('all five values appear in the output (U-65)', () => {
+    const row = formatTableRow('a', 'b', 'c', 'd', 'e');
+    expect(row).toContain('a');
+    expect(row).toContain('b');
+    expect(row).toContain('c');
+    expect(row).toContain('d');
+    expect(row).toContain('e');
+  });
+
+  it('passes plain filename through unchanged (U-61)', () => {
+    const row = formatTableRow('notes.md', 'file', '1.0 KB', '2026-01-01', '2026-01-01');
+    expect(row).toContain('notes.md');
+  });
+
+  it('passes relative path through unchanged (U-62)', () => {
+    const row = formatTableRow('CRM/Contacts/notes.md', 'file', '1.0 KB', '2026-01-01', '2026-01-01');
+    expect(row).toContain('CRM/Contacts/notes.md');
   });
 });
