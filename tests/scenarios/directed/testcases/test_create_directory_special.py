@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test: create_directory — special cases (dot-prefixed directory creation, F-51 deferred, F-52 deferred).
+Test: create_directory — special cases (dot-prefixed directory creation, F-51 list_vault integration, F-52 deferred).
 
 Coverage points: F-50, F-51, F-52
 
@@ -85,16 +85,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # F-51: dot-prefixed directory invisible to list_vault
-        # DEFERRED to Phase 93 — requires list_vault tool which is not implemented yet.
-        # When Phase 93 is complete, add a step here that:
-        #   1. Creates a dot-prefixed dir (e.g. ".hidden/")
-        #   2. Calls list_vault and asserts it does NOT appear in results
+        # ── F-51: dot-prefixed directory invisible to list_vault ─────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        result = ctx.client.call_tool("list_vault", show="directories", path=base_dir)
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        hidden_visible = ".plugin-staging/" in result.text
+        passed_f51 = result.ok and not hidden_visible
+
         run.step(
-            label="F-51: dot-prefixed directory invisible to list_vault (SKIPPED — Phase 93)",
-            passed=True,
-            detail="Deferred to Phase 93 — requires list_vault.",
-            timing_ms=0,
+            label="F-51: dot-prefixed directory invisible to list_vault",
+            passed=passed_f51,
+            detail=f"ok={result.ok} hidden_visible={hidden_visible} | {result.text[:200]}",
+            timing_ms=result.timing_ms,
+            tool_result=result,
+            server_logs=step_logs,
         )
 
         # F-52: shutdown check rejects create_directory when server is shutting down
