@@ -240,14 +240,14 @@ describe.skipIf(SKIP_DB)('Plugin System Integration', () => {
     expect(data).not.toBeNull();
     expect(data!.plugin_id).toBe('crm_test');
     expect(data!.plugin_instance).toBe('default');
-    expect(data!.schema_version).toBe(1);
+    expect(data!.schema_version).toBe('1');
     expect(data!.status).toBe('active');
     expect(data!.table_prefix).toBe('fqcp_crm_test_default_');
   });
 
   // ── Scenario 2: Version Mismatch Warning ─────────────────────────────────
 
-  it('PLUG-03: re-registration with changed version logs WARNING, skips DDL, preserves existing schema', async () => {
+  it('PLUG-03: re-registration with changed version applies safe DDL and updates schema_version', async () => {
     const { server, getHandler } = createMockServer();
     registerPluginTools(server, config);
 
@@ -257,9 +257,10 @@ describe.skipIf(SKIP_DB)('Plugin System Integration', () => {
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text.toLowerCase()).toContain('warning');
+    // Implementation applies safe DDL migrations (not warn-and-skip)
+    expect(result.content[0].text.toLowerCase()).toContain('schema updated');
 
-    // Verify the 'phone' column was NOT added (DDL was skipped)
+    // Verify the 'phone' column WAS added (safe DDL applied)
     const colResult = await pgClient.query(`
       SELECT column_name
       FROM information_schema.columns
@@ -267,9 +268,9 @@ describe.skipIf(SKIP_DB)('Plugin System Integration', () => {
         AND table_name = 'fqcp_crm_test_default_contacts'
         AND column_name = 'phone'
     `);
-    expect(colResult.rows).toHaveLength(0);
+    expect(colResult.rows).toHaveLength(1);
 
-    // Verify registry row was updated to new version
+    // Verify registry row was updated to new version (schema_version is TEXT)
     const { data } = await supabaseManager.getClient()
       .from('fqc_plugin_registry')
       .select('schema_version')
@@ -277,7 +278,7 @@ describe.skipIf(SKIP_DB)('Plugin System Integration', () => {
       .eq('instance_id', INSTANCE_ID)
       .single();
 
-    expect(data!.schema_version).toBe(2);
+    expect(data!.schema_version).toBe('2');
   });
 
   // ── Scenario 4: Multi-instance Isolation ─────────────────────────────────

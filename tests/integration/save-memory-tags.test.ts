@@ -113,17 +113,17 @@ describe.skipIf(SKIP)('save_memory tag normalization (integration)', () => {
     expect(result.content[0].text).toContain("Tag 'duplicate' appears multiple times");
   });
 
-  it('save_memory rejects conflicting status tags with isError', async () => {
+  it('save_memory accepts multiple status tags — D-06 removed status mutual exclusivity', async () => {
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
 
+    // D-06: multiple #status/* tags are now allowed
     const result = await getHandler('save_memory')({
       content: 'Status conflict test.',
       tags: ['#status/active', '#status/archived'],
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Tag validation failed');
-    expect(result.content[0].text).toContain('conflicting statuses');
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain('Memory saved');
   });
 });

@@ -152,7 +152,7 @@ export async function ensureLastSeenColumn(tableName: string, pgClient: pg.Clien
     await pgClient.query(
       `ALTER TABLE ${pg.escapeIdentifier(tableName)} ADD COLUMN IF NOT EXISTS last_seen_updated_at TIMESTAMPTZ`,
     );
-    logger.debug(`[RECON-08] Added last_seen_updated_at column to ${tableName}`);
+    logger?.debug(`[RECON-08] Added last_seen_updated_at column to ${tableName}`);
   }
   verifiedTables.add(tableName);
 }

@@ -293,8 +293,8 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Check the file now has fqc_owner frontmatter
     const raw = await import('node:fs/promises').then(fs => fs.readFile(filePath, 'utf-8'));
     const parsed = matter(raw);
-    expect(parsed.data.fqc_owner).toBeDefined();
-    expect(parsed.data.fqc_type).toBeDefined();
+    expect(parsed.data.fq_owner).toBeDefined();
+    expect(parsed.data.fq_type).toBeDefined();
   });
 
   // ── Test 3: auto-track does not modify document body ─────────────────────
@@ -418,7 +418,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Overwrite frontmatter with a different fqc_owner — simulates disassociation
     const rawOld = await import('node:fs/promises').then(fs => fs.readFile(filePath, 'utf-8'));
     const parsedOld = matter(rawOld);
-    const newFm = { ...parsedOld.data, fqc_owner: 'different_plugin' };
+    const newFm = { ...parsedOld.data, fq_owner: 'different_plugin' };
     const newYaml = Object.entries(newFm).map(([k, v]) => `${k}: ${String(v)}`).join('\n');
     await writeFile(filePath, `---\n${newYaml}\n---\n${parsedOld.content}`, 'utf-8');
 
@@ -501,7 +501,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Get fqc_id from the file frontmatter
     const raw = await import('node:fs/promises').then(fs => fs.readFile(filePath, 'utf-8'));
     const parsed = matter(raw);
-    const fqcId = parsed.data.fqc_id as string | undefined;
+    const fqcId = parsed.data.fq_id as string | undefined;
 
     if (!fqcId) {
       // If create_document didn't write fqc_id to frontmatter, get it from DB

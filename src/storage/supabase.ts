@@ -408,6 +408,27 @@ CREATE TABLE IF NOT EXISTS fqc_write_locks (
   PRIMARY KEY (instance_id, resource_type)
 );
 
+-- Migration: if fqc_write_locks was created before instance_id was added to the schema,
+-- drop and recreate it. Write locks are ephemeral (all expire on restart) so data loss is safe.
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'fqc_write_locks'
+      AND column_name = 'instance_id'
+  ) THEN
+    DROP TABLE IF EXISTS fqc_write_locks;
+    CREATE TABLE fqc_write_locks (
+      instance_id TEXT NOT NULL,
+      resource_type TEXT NOT NULL,
+      locked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+      expires_at TIMESTAMPTZ NOT NULL,
+      PRIMARY KEY (instance_id, resource_type)
+    );
+  END IF;
+END$$;
+
 CREATE INDEX IF NOT EXISTS idx_fqc_write_locks_expires ON fqc_write_locks (expires_at);
 
 

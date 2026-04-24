@@ -19,6 +19,7 @@ import { registerCompoundTools } from '../../src/mcp/tools/compound.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { TEST_SUPABASE_URL, TEST_SUPABASE_KEY, TEST_DATABASE_URL, HAS_SUPABASE } from '../helpers/test-env.js';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 
 const SUPABASE_URL = TEST_SUPABASE_URL;
 const SUPABASE_KEY = TEST_SUPABASE_KEY;
@@ -115,7 +116,7 @@ describe.skipIf(SKIP)('apply_tags tag validation (integration)', () => {
     // Verify vault frontmatter has normalized tags
     const rawFile = await readFile(join(vaultPath, docVaultPath), 'utf-8');
     const parsed = matter(rawFile);
-    const vaultTags: string[] = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
+    const vaultTags: string[] = Array.isArray(parsed.data[FM.TAGS]) ? parsed.data[FM.TAGS] as string[] : [];
     expect(vaultTags).toContain('mixedcase');
     expect(vaultTags).toContain('upper');
     expect(vaultTags).not.toContain(' MixedCase ');
@@ -131,12 +132,11 @@ describe.skipIf(SKIP)('apply_tags tag validation (integration)', () => {
     expect(vaultTags.sort()).toEqual(dbTags.sort());
   });
 
-  it('apply_tags adding conflicting status tag reports failure in results', async () => {
+  it('apply_tags accepts multiple status tags — D-06 removed status mutual exclusivity', async () => {
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
     registerCompoundTools(server, config);
 
-    // Create a document with tag 'dup' already present
     const createResult = await getHandler('create_document')({
       title: 'Apply Tags Dup Test',
       content: 'Content.',
@@ -153,22 +153,17 @@ describe.skipIf(SKIP)('apply_tags tag validation (integration)', () => {
       .from('fqc_documents').select('path').eq('id', fqcId).single();
     const docVaultPath = (docRow as { path: string }).path;
 
-    // Try to add the same tag again — final set would have normalized duplicate
-    // Since applyTagChanges uses a Set, duplicates are deduped before validation
-    // So test: adding an unnormalized version of existing tag creates a scenario
-    // where after normalization the add results in a clean set (Set-dedup handles it)
-    // Instead test with a truly invalid final: force a status conflict
+    // D-06: multiple #status/* tags are now allowed — no validation error expected
     const result = await getHandler('apply_tags')({
       identifiers: docVaultPath,
-      add_tags: ['#status/published'],  // doc already has #status/active from create_document
+      add_tags: ['#status/published'],
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
-    // Per-item errors reported in results text (batch identifiers mode)
-    expect(result.content[0].text).toContain('Tag validation failed');
-    expect(result.content[0].text).toContain('conflicting statuses');
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain('Updated tags:');
   });
 
-  it('apply_tags with final set having conflicting statuses returns failure in results', async () => {
+  it('apply_tags with multiple status tags succeeds — D-06 removed status mutual exclusivity', async () => {
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
     registerCompoundTools(server, config);
@@ -189,17 +184,17 @@ describe.skipIf(SKIP)('apply_tags tag validation (integration)', () => {
       .from('fqc_documents').select('path').eq('id', fqcId).single();
     const docVaultPath = (docRow as { path: string }).path;
 
-    // Adding another status tag would conflict with existing #status/active
+    // D-06: multiple #status/* tags are now allowed — should succeed
     const result = await getHandler('apply_tags')({
       identifiers: docVaultPath,
       add_tags: ['#status/archived'],
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
-    // Per-item errors reported in results text (batch identifiers mode)
-    expect(result.content[0].text).toContain('conflicting statuses');
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain('Updated tags:');
   });
 
-  it('apply_tags on memory with conflicting statuses returns isError', async () => {
+  it('apply_tags on memory accepts multiple status tags — D-06 removed status mutual exclusivity', async () => {
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
     registerCompoundTools(server, config);
@@ -217,13 +212,12 @@ describe.skipIf(SKIP)('apply_tags tag validation (integration)', () => {
     }
     const memId = idMatch[1];
 
-    // Try to add a second status tag
+    // D-06: multiple #status/* tags are now allowed — should succeed without isError
     const result = await getHandler('apply_tags')({
       memory_id: memId,
       add_tags: ['#status/archived'],
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('conflicting statuses');
+    expect(result.isError).toBeUndefined();
   });
 });

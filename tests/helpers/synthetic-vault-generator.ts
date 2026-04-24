@@ -223,7 +223,7 @@ export function generateRealisticMarkdown(
   // Build frontmatter
   const frontmatterLines = [
     '---',
-    `fqc_id: ${fqcId}`,
+    `fq_id: ${fqcId}`,
     `title: "${title}"`,
     `created: "${new Date().toISOString()}"`,
     `updated: "${new Date().toISOString()}"`,

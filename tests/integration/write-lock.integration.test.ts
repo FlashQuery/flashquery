@@ -31,6 +31,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import pg from 'pg';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Environment variable check
@@ -483,37 +484,45 @@ describe.skipIf(!hasTestEnv)('multi-instance write locks (requires test Supabase
     const AUTH_SECRET = 'test-secret-ttl';
     const SHORT_TTL = 2; // seconds
 
-    // Insert a lock row with a TTL of 2s (simulating a crashed Instance A)
-    const lockedAt = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + SHORT_TTL * 1000).toISOString();
+    // Use pg directly — fqc_write_locks may not be in PostgREST schema cache
+    const pgClient = new pg.Client({ connectionString: TEST_SUPABASE_DATABASE_URL });
+    await pgClient.connect();
 
-    await supabase.from('fqc_write_locks').insert({
-      instance_id: 'test-a-crashed',
-      resource_type: 'memory',
-      locked_at: lockedAt,
-      expires_at: expiresAt,
-    });
+    try {
+      // Insert a lock row with a TTL of 2s (simulating a crashed Instance A)
+      const lockedAt = new Date().toISOString();
+      const expiresAt = new Date(Date.now() + SHORT_TTL * 1000).toISOString();
 
-    // Verify the lock exists
-    const { data: lockBefore } = await supabase
-      .from('fqc_write_locks')
-      .select('*')
-      .eq('instance_id', 'test-a-crashed')
-      .single();
-    expect(lockBefore).not.toBeNull();
+      await pgClient.query(
+        `INSERT INTO fqc_write_locks (instance_id, resource_type, locked_at, expires_at)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (instance_id, resource_type) DO UPDATE
+           SET locked_at = EXCLUDED.locked_at, expires_at = EXCLUDED.expires_at`,
+        ['test-a-crashed', 'memory', lockedAt, expiresAt],
+      );
 
-    // Wait for TTL to expire (SHORT_TTL + 1s buffer)
-    await new Promise((r) => setTimeout(r, (SHORT_TTL + 1) * 1000));
+      // Verify the lock exists
+      const { rows: lockRows } = await pgClient.query(
+        `SELECT * FROM fqc_write_locks WHERE instance_id = $1 AND resource_type = $2`,
+        ['test-a-crashed', 'memory'],
+      );
+      expect(lockRows).toHaveLength(1);
+      const lockBefore = lockRows[0];
+      expect(lockBefore).not.toBeNull();
 
-    // Verify the lock is now expired (expires_at is in the past)
-    const now = new Date().toISOString();
-    const { data: lockAfter } = await supabase
-      .from('fqc_write_locks')
-      .select('*')
-      .eq('instance_id', 'test-a-crashed')
-      .gt('expires_at', now)
-      .maybeSingle();
-    expect(lockAfter).toBeNull(); // Lock is expired — no active lock remains
+      // Wait for TTL to expire (SHORT_TTL + 1s buffer)
+      await new Promise((r) => setTimeout(r, (SHORT_TTL + 1) * 1000));
+
+      // Verify the lock is now expired (expires_at is in the past)
+      const now = new Date().toISOString();
+      const { rows: expiredRows } = await pgClient.query(
+        `SELECT * FROM fqc_write_locks WHERE instance_id = $1 AND resource_type = $2 AND expires_at > $3`,
+        ['test-a-crashed', 'memory', now],
+      );
+      expect(expiredRows).toHaveLength(0); // Lock is expired — no active lock remains
+    } finally {
+      await pgClient.end();
+    }
 
     // Start Instance C — should successfully acquire the lock and complete the write
     const instanceC = await spawnFqcInstance('test-c-recovery', 3203, {

@@ -217,7 +217,7 @@ describe.skipIf(SKIP)('Phase 38: Error Resilience', () => {
       const filePath = join(vaultPath, fileName);
 
       // Setup: Create file with valid frontmatter
-      writeFileSync(filePath, `---\nfqc_id: ${testId}\ntitle: ERR-01 Test\nstatus: active\n---\n\nContent.`);
+      writeFileSync(filePath, `---\nfq_id: ${testId}\ntitle: ERR-01 Test\nstatus: active\n---\n\nContent.`);
 
       // Insert DB row manually (active status)
       await insertDbRow(supabase, testId, fileName);
@@ -301,12 +301,12 @@ describe.skipIf(SKIP)('Phase 38: Error Resilience', () => {
       const filePath = join(vaultPath, fileName);
 
       // Setup: First create a normal file and insert a DB row for it
-      writeFileSync(filePath, `---\nfqc_id: ${testId}\ntitle: Binary Existing Test\nstatus: active\n---\n\nNormal content.`);
+      writeFileSync(filePath, `---\nfq_id: ${testId}\ntitle: Binary Existing Test\nstatus: active\n---\n\nNormal content.`);
       await insertDbRow(supabase, testId, fileName);
 
       // Now replace file content with binary (null bytes)
       const binaryContent = Buffer.concat([
-        Buffer.from('---\nfqc_id: '),
+        Buffer.from('---\nfq_id: '),
         Buffer.from(testId),
         Buffer.alloc(32, 0), // null bytes corrupt it
         Buffer.from('\n---\n'),
@@ -348,7 +348,7 @@ describe.skipIf(SKIP)('Phase 38: Error Resilience', () => {
       const filePath = join(vaultPath, fileName);
 
       // Setup: Copy the malformed-yaml fixture content to a temp file in vault
-      const fixtureContent = `---\nfqc_id: ${fixtureFqcId}\ntitle: "Broken Frontmatter\ndescription: missing closing quote\ntags: [broken, array, missing closing bracket\n---\n\nThis is the content of the malformed YAML fixture.`;
+      const fixtureContent = `---\nfq_id: ${fixtureFqcId}\ntitle: "Broken Frontmatter\ndescription: missing closing quote\ntags: [broken, array, missing closing bracket\n---\n\nThis is the content of the malformed YAML fixture.`;
       writeFileSync(filePath, fixtureContent);
 
       const { logs } = captureLogger(config);
@@ -412,7 +412,7 @@ describe.skipIf(SKIP)('Phase 38: Error Resilience', () => {
       const newFqcId = uuidv4();
       writeFileSync(
         filePath,
-        `---\nfqc_id: ${newFqcId}\ntitle: ERR-05 ExistsSync Test\nstatus: active\n---\n\nContent.`
+        `---\nfq_id: ${newFqcId}\ntitle: ERR-05 ExistsSync Test\nstatus: active\n---\n\nContent.`
       );
 
       // Compute real hash of file content for the new row

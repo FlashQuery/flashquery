@@ -30,6 +30,7 @@ import type { FlashQueryConfig } from '../../src/config/loader.js';
 // ── Config ────────────────────────────────────────────────────────────────────
 
 import { TEST_SUPABASE_URL, TEST_SUPABASE_KEY, TEST_DATABASE_URL, HAS_SUPABASE } from '../helpers/test-env.js';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 
 const SUPABASE_URL = TEST_SUPABASE_URL;
 const SUPABASE_KEY = TEST_SUPABASE_KEY;
@@ -85,7 +86,7 @@ async function seedDocument(opts: {
   frontmatter?: Record<string, unknown>;
 }): Promise<string> {
   const fqcId = randomUUID();
-  const fm = { title: opts.title, fqc_id: fqcId, status: 'active', tags: [], ...opts.frontmatter };
+  const fm = { [FM.TITLE]: opts.title, [FM.ID]: fqcId, [FM.STATUS]: 'active', [FM.TAGS]: [], ...opts.frontmatter };
   const raw = matter.stringify(opts.body, fm);
   const absPath = join(opts.vaultPath, opts.relPath);
   await mkdir(join(opts.vaultPath, opts.relPath, '..'), { recursive: true });
@@ -157,8 +158,8 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
 
   // ── TAX-03: #status/active tag prefix round-trip ──────────────────────────
 
-  describe('TAX-03: #status/active tag prefix', () => {
-    it('create_document writes #status/active (with #) to vault frontmatter and fqc_documents.tags', async () => {
+  describe('TAX-03: document status field round-trip', () => {
+    it('create_document writes fq_status=active to vault frontmatter and status=active to fqc_documents — D-02c/STAT-01: status is not a tag', async () => {
       const result = await getDocHandler('create_document')({
         title: 'TAX-03 Test Doc',
         content: 'Body content for tag prefix test.',
@@ -166,7 +167,6 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
       });
       expect(isError(result)).toBe(false);
 
-      // Extract fqc_id from response text (format: "fqc_id: <uuid>")
       const text = getText(result);
       const fqcIdMatch = text.match(/FQC ID:\s*([a-f0-9-]{36})/);
       if (!fqcIdMatch) {
@@ -174,27 +174,28 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
       }
       const fqcId = fqcIdMatch[1];
 
-      // Extract vault path from response (format: "Document created: <path>")
-      const pathMatch = text.match(/Document created:\s*(.+)/);
+      const pathMatch = text.match(/Path:\s*(.+)/);
       if (!pathMatch) {
         throw new Error(`Expected document path in response, got:\n${text}`);
       }
-      const relPath = pathMatch[1];
+      const relPath = pathMatch[1].trim();
 
-      // Assert vault frontmatter has #status/active (with #)
+      // Assert vault frontmatter has fq_status=active, NOT #status/active in tags
       const raw = await readFile(join(vaultPath, relPath), 'utf-8');
       const parsed = matter(raw);
-      expect(parsed.data.tags).toEqual(expect.arrayContaining(['#status/active']));
-      // Must NOT contain bare 'status/active' without #
-      expect((parsed.data.tags as string[]).some(t => t === 'status/active')).toBe(false);
+      expect(parsed.data[FM.STATUS]).toBe('active');
+      // Tags should NOT contain #status/active — status is a separate field (D-02c/STAT-01)
+      const tags: string[] = Array.isArray(parsed.data[FM.TAGS]) ? (parsed.data[FM.TAGS] as string[]) : [];
+      expect(tags).not.toContain('#status/active');
 
-      // Assert fqc_documents.tags TEXT[] has #status/active
+      // Assert fqc_documents.status = 'active' (not stored as a tag)
       const { data } = await supabaseManager.getClient()
         .from('fqc_documents')
-        .select('tags')
+        .select('status, tags')
         .eq('id', fqcId)
         .single();
-      expect((data!.tags as string[])).toContain('#status/active');
+      expect(data!.status).toBe('active');
+      expect((data!.tags as string[])).not.toContain('#status/active');
     });
   });
 
@@ -205,7 +206,7 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
       const fqcId = await seedDocument({
         vaultPath, relPath: '_global/archive-doc-test.md',
         title: 'Archive Doc Test', body: 'Will be archived.',
-        frontmatter: { status: 'active' },
+        frontmatter: { [FM.STATUS]: 'active' },
       });
 
       const result = await getDocHandler('archive_document')({ identifiers: '_global/archive-doc-test.md' });
@@ -214,7 +215,7 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
       // Assert vault frontmatter
       const raw = await readFile(join(vaultPath, '_global/archive-doc-test.md'), 'utf-8');
       const parsed = matter(raw);
-      expect(parsed.data.status).toBe('archived');
+      expect(parsed.data[FM.STATUS]).toBe('archived');
 
       // Assert fqc_documents row
       const { data } = await supabaseManager.getClient()
@@ -322,7 +323,7 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
       expect(before!.content_hash).toBe(computeHash(originalRaw));
 
       // Simulate external Obsidian edit — overwrite file content directly
-      const editedContent = '---\ntitle: Scan Test Doc\nfqc_id: ' + fqcId + '\nstatus: active\ntags: []\n---\nEdited by Obsidian externally.\n';
+      const editedContent = matter.stringify('Edited by Obsidian externally.', { [FM.TITLE]: 'Scan Test Doc', [FM.ID]: fqcId, [FM.STATUS]: 'active', [FM.TAGS]: [] });
       await writeFile(absPath, editedContent, 'utf-8');
 
       // Run scan

@@ -124,7 +124,7 @@ describeIf('tag_match integration', () => {
     ];
     for (const doc of docs) {
       const fqcId = randomUUID();
-      const fm = { title: doc.title, fqc_id: fqcId, status: 'active', tags: doc.tags };
+      const fm = { fq_title: doc.title, fq_id: fqcId, fq_status: 'active', fq_tags: doc.tags };
       const raw = matter.stringify(`Body of ${doc.title}.`, fm);
       await mkdir(join(vaultPath, '_global'), { recursive: true });
       await writeFile(join(vaultPath, '_global', doc.name), raw, 'utf-8');

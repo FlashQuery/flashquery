@@ -15,9 +15,23 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as fs from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import * as net from 'node:net';
 
 const __dirname = import.meta.dirname;
 const projectRoot = join(__dirname, '../..');
+
+/** Find a free TCP port by binding to :0 and immediately releasing it. */
+function findFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.listen(0, '127.0.0.1', () => {
+      const addr = srv.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      srv.close((err) => (err ? reject(err) : resolve(port)));
+    });
+    srv.on('error', reject);
+  });
+}
 
 interface SpawnedProcess {
   process: ChildProcess;
@@ -93,10 +107,41 @@ describe('Server Startup — Port Availability (Integration)', () => {
   });
 
   it('PORT-07: startup fails with actionable error when port is already in use', async () => {
-    const testConfig = join(__dirname, '../fixtures/flashquery.port-test.yaml');
+    // Use a dynamically allocated free port to avoid conflicts with any running server
+    const testPort = await findFreePort();
+    const tempConfigPath = join(tmpdir(), `fqc-port-test-${testPort}.yml`);
+    await fs.writeFile(
+      tempConfigPath,
+      `instance:
+  name: "Port Test FlashQuery"
+  id: "test-fqc-port-${testPort}"
+  vault:
+    path: "${tmpdir()}/fqc-port-test-vault-${testPort}"
+    markdown_extensions: [".md"]
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.dummy"
+  database_url: "postgresql://postgres:testpass@localhost:5432/postgres"
+  skip_ddl: true
+git:
+  auto_commit: false
+  auto_push: false
+mcp:
+  transport: "streamable-http"
+  host: "127.0.0.1"
+  port: ${testPort}
+embedding:
+  provider: "none"
+  model: ""
+  dimensions: 1536
+logging:
+  level: "info"
+  output: "stdout"
+`
+    );
 
     // 1. Start first FQC instance (should succeed)
-    firstProcess = await spawnFQC(testConfig);
+    firstProcess = await spawnFQC(tempConfigPath);
 
     // Wait for first instance to bind to port (wait for "ready" message)
     // The instance should get past port check and log "Port 3100 available" and then "ready"
@@ -111,7 +156,7 @@ describe('Server Startup — Port Availability (Integration)', () => {
       const checkReady = () => {
         // Check for various success indicators that the port check passed
         if (
-          firstProcess!.stderr.value.includes('Port 3100 available') ||
+          firstProcess!.stderr.value.includes(`Port ${testPort} available`) ||
           firstProcess!.stderr.value.includes('Core ready') ||
           firstProcess!.stderr.value.includes('MCP')
         ) {
@@ -146,7 +191,7 @@ describe('Server Startup — Port Availability (Integration)', () => {
     await new Promise((resolve) => setTimeout(resolve, 500));
 
     // 2. Start second FQC instance with same config (should fail on port check)
-    secondProcess = await spawnFQC(testConfig);
+    secondProcess = await spawnFQC(tempConfigPath);
 
     // 3. Wait for second instance to exit (should be immediate due to port check failure)
     const result = await new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
@@ -169,7 +214,7 @@ describe('Server Startup — Port Availability (Integration)', () => {
     expect(result.code).toBe(1);
 
     // 5. Verify error message contains key phrases
-    expect(result.stderr).toContain('Port 3100 already in use');
+    expect(result.stderr).toContain(`Port ${testPort} already in use`);
     expect(result.stderr).toContain('change mcp.port');
   }, 10000); // 10 second timeout for integration test
 });

@@ -146,7 +146,7 @@ async function seedDocument(opts: {
   frontmatter?: Record<string, unknown>;
 }): Promise<string> {
   const fqcId = randomUUID();
-  const fm = { title: opts.title, fqc_id: fqcId, status: 'active', tags: [], ...opts.frontmatter };
+  const fm = { title: opts.title, fq_id: fqcId, status: 'active', tags: [], ...opts.frontmatter };
   const raw = matter.stringify(opts.body, fm);
   const absPath = join(opts.vaultPath, opts.relPath);
   await mkdir(join(opts.vaultPath, opts.relPath, '..'), { recursive: true });
@@ -270,7 +270,7 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       const raw = await readFile(join(scAVaultPath, 'Work/ScenarioA/base-doc.md'), 'utf-8');
       const parsed = matter(raw);
       expect(parsed.data.title).toBe('Scenario A Base Doc');
-      expect(parsed.data.fqc_id).toBe(docId);
+      expect(parsed.data.fq_id).toBe(docId);
     });
 
     it('A3: content_hash updated in DB after section write; not injected into frontmatter (SPEC-08)', async () => {
@@ -407,7 +407,7 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       });
       expect(isError(result)).toBe(false);
       const parsed = matter(await readFile(join(scBVaultPath, 'Work/Archive/MetaDoc.md'), 'utf-8'));
-      expect(parsed.data.fqc_id).toBe(metaDocId);
+      expect(parsed.data.fq_id).toBe(metaDocId);
       expect(parsed.data.title).toBe('Metadata Preservation Doc');
       expect(parsed.data.tags).toContain('important');
       expect(parsed.data.tags).toContain('archive');
@@ -520,7 +520,7 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       for (let i = 1; i <= 150; i++) {
         creates.push(writeFile(
           join(scCVaultPath, largeDir, `doc-${String(i).padStart(3, '0')}.md`),
-          `---\ntitle: Large Doc ${i}\nfqc_id: ${randomUUID()}\nstatus: active\ntags: []\n---\nBody ${i}.`,
+          `---\ntitle: Large Doc ${i}\nfq_id: ${randomUUID()}\nstatus: active\ntags: []\n---\nBody ${i}.`,
           'utf-8',
         ));
       }

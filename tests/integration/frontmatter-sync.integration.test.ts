@@ -91,7 +91,7 @@ describe.skipIf(SKIP)('TEST-08: Frontmatter-to-Column Sync', () => {
   });
 
   it('RO-32: fqc_owner frontmatter field is synced to ownership_plugin_id on INSERT', async () => {
-    const content = `---\nfqc_owner: my-plugin\n---\n# Test Doc\n\nContent here.`;
+    const content = `---\nfq_owner: my-plugin\n---\n# Test Doc\n\nContent here.`;
     await writeFile(join(vaultPath, 'owned.md'), content);
 
     await runScanOnce(config);
@@ -106,7 +106,7 @@ describe.skipIf(SKIP)('TEST-08: Frontmatter-to-Column Sync', () => {
   });
 
   it('RO-33: fqc_type frontmatter field is synced to ownership_type on INSERT', async () => {
-    const content = `---\nfqc_owner: my-plugin\nfqc_type: contact-note\n---\n# Typed Doc\n\nContent here.`;
+    const content = `---\nfq_owner: my-plugin\nfq_type: contact-note\n---\n# Typed Doc\n\nContent here.`;
     await writeFile(join(vaultPath, 'typed.md'), content);
 
     await runScanOnce(config);
@@ -122,7 +122,7 @@ describe.skipIf(SKIP)('TEST-08: Frontmatter-to-Column Sync', () => {
 
   it('RO-34: removing fqc_owner from frontmatter sets ownership_plugin_id to NULL on content-change UPDATE', async () => {
     // First scan: create document with fqc_owner
-    const initialContent = `---\nfqc_owner: my-plugin\n---\n# Owned Doc\n\nInitial content.`;
+    const initialContent = `---\nfq_owner: my-plugin\n---\n# Owned Doc\n\nInitial content.`;
     const filePath = join(vaultPath, 'owner-removal.md');
     await writeFile(filePath, initialContent);
     await runScanOnce(config);
@@ -150,7 +150,7 @@ describe.skipIf(SKIP)('TEST-08: Frontmatter-to-Column Sync', () => {
   });
 
   it('RO-42: scan does not write to fqc_change_queue', async () => {
-    const content = `---\nfqc_owner: my-plugin\n---\n# Change Queue Test\n\nContent.`;
+    const content = `---\nfq_owner: my-plugin\n---\n# Change Queue Test\n\nContent.`;
     await writeFile(join(vaultPath, 'change-queue-check.md'), content);
 
     await runScanOnce(config);

@@ -4,7 +4,9 @@
  * Run: npm run test:integration
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises';
+import matter from 'gray-matter';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { initLogger } from '../../src/logging/logger.js';
@@ -140,7 +142,7 @@ describe.skipIf(SKIP)('Document Embedding Integration', () => {
 
     expect(searchResult.isError).toBeUndefined();
     expect(searchResult.content[0].text).toContain('Quantum Computing Overview');
-    expect(searchResult.content[0].text).toMatch(/\d+% match/);
+    expect(searchResult.content[0].text).toMatch(/Match: \d+%/);
   });
 });
 
@@ -157,7 +159,7 @@ describe.skipIf(!HAS_SUPABASE)('search_documents status filtering (STAT-04, STAT
     return {
       instance: { name: 'stat-filter-test', id: 'stat-filter-test-id', vault: { path: vp, markdownExtensions: ['.md'] } },
       supabase: { url: TEST_SUPABASE_URL, serviceRoleKey: TEST_SUPABASE_KEY, databaseUrl: TEST_DATABASE_URL, skipDdl: false },
-      embedding: { provider: 'none' as never },
+      embedding: { provider: 'none' as never, model: '', apiKey: '', dimensions: 1536 },
       logging: { level: 'error', output: 'stdout' },
       locking: { enabled: false, ttlSeconds: 30 },
     } as unknown as FlashQueryConfig;
@@ -182,17 +184,16 @@ describe.skipIf(!HAS_SUPABASE)('search_documents status filtering (STAT-04, STAT
 
   it('STAT-04/STAT-05: search_documents excludes archived, includes active and custom status', async () => {
     // Write test documents with various status values directly to vault
-    const { writeFile, mkdir } = await import('node:fs/promises');
     await mkdir(join(vaultPath, 'Work'), { recursive: true });
 
     await writeFile(join(vaultPath, 'Work', 'active-doc.md'),
-      '---\ntitle: Active Document\nstatus: active\ntags: []\n---\n\nBody.\n');
+      matter.stringify('Body.', { [FM.TITLE]: 'Active Document', [FM.STATUS]: 'active', [FM.TAGS]: [] }));
     await writeFile(join(vaultPath, 'Work', 'custom-doc.md'),
-      '---\ntitle: Custom Status Document\nstatus: in-review\ntags: []\n---\n\nBody.\n');
+      matter.stringify('Body.', { [FM.TITLE]: 'Custom Status Document', [FM.STATUS]: 'in-review', [FM.TAGS]: [] }));
     await writeFile(join(vaultPath, 'Work', 'archived-doc.md'),
-      '---\ntitle: Archived Document\nstatus: archived\ntags: []\n---\n\nBody.\n');
+      matter.stringify('Body.', { [FM.TITLE]: 'Archived Document', [FM.STATUS]: 'archived', [FM.TAGS]: [] }));
     await writeFile(join(vaultPath, 'Work', 'null-status-doc.md'),
-      '---\ntitle: Null Status Document\ntags: []\n---\n\nBody.\n');
+      matter.stringify('Body.', { [FM.TITLE]: 'Null Status Document', [FM.TAGS]: [] }));
 
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -214,15 +215,14 @@ describe.skipIf(!HAS_SUPABASE)('search_documents status filtering (STAT-04, STAT
   });
 
   it('STAT-10: case-insensitive archived filtering excludes Archived/ARCHIVED/Archived', async () => {
-    const { writeFile, mkdir } = await import('node:fs/promises');
     await mkdir(join(vaultPath, 'CaseTest'), { recursive: true });
 
     await writeFile(join(vaultPath, 'CaseTest', 'case-upper.md'),
-      '---\ntitle: ARCHIVED Case Upper\nstatus: ARCHIVED\ntags: []\n---\n\nBody.\n');
+      matter.stringify('Body.', { [FM.TITLE]: 'ARCHIVED Case Upper', [FM.STATUS]: 'ARCHIVED', [FM.TAGS]: [] }));
     await writeFile(join(vaultPath, 'CaseTest', 'case-mixed.md'),
-      '---\ntitle: Archived Case Mixed\nstatus: Archived\ntags: []\n---\n\nBody.\n');
+      matter.stringify('Body.', { [FM.TITLE]: 'Archived Case Mixed', [FM.STATUS]: 'Archived', [FM.TAGS]: [] }));
     await writeFile(join(vaultPath, 'CaseTest', 'case-normal.md'),
-      '---\ntitle: Normal Active\nstatus: active\ntags: []\n---\n\nBody.\n');
+      matter.stringify('Body.', { [FM.TITLE]: 'Normal Active', [FM.STATUS]: 'active', [FM.TAGS]: [] }));
 
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);

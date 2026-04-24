@@ -162,9 +162,10 @@ describe.skipIf(!HAS_SUPABASE)('Supabase integration', () => {
     ];
 
     for (const table of requiredTables) {
-      // Simple existence check: SELECT EXISTS(SELECT 1 FROM table)
+      // Existence check via information_schema (works even for empty tables)
       const result = await verifyClient.query(
-        `SELECT EXISTS(SELECT 1 FROM ${table} LIMIT 1) AS table_exists`
+        `SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1) AS table_exists`,
+        [table]
       );
 
       expect(result.rows[0].table_exists).toBe(true);

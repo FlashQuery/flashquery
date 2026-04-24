@@ -90,7 +90,7 @@ async function seedDocument(opts: {
   frontmatter?: Record<string, unknown>;
 }): Promise<string> {
   const fqcId = randomUUID();
-  const fm = { title: opts.title, fqc_id: fqcId, status: 'active', tags: [], ...opts.frontmatter };
+  const fm = { [FM.TITLE]: opts.title, [FM.ID]: fqcId, [FM.STATUS]: 'active', [FM.TAGS]: [], ...opts.frontmatter };
   const raw = matter.stringify(opts.body, fm);
   const absPath = join(opts.vaultPath, opts.relPath);
   await mkdir(join(opts.vaultPath, opts.relPath, '..'), { recursive: true });
@@ -213,7 +213,11 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
     await mkdir(join(vaultPath, '_global'), { recursive: true });
     await writeFile(
       join(vaultPath, linkTargetPath),
-      `---\ntitle: ${linkTargetTitle}\nfqc_id: ${linkTargetFqcId}\nstatus: active\n---\nLink target content.`
+      matter.stringify('Link target content.', {
+        [FM.TITLE]: linkTargetTitle,
+        [FM.ID]: linkTargetFqcId,
+        [FM.STATUS]: 'active',
+      })
     );
 
     // ── Seed: insert_doc_link — two docs with same ambiguous title ───────────
@@ -251,7 +255,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       relPath: tagsDocPath,
       title: 'Tags Test Document',
       body: 'Document for tag sync testing.',
-      frontmatter: { tags: ['existing-tag'] },
+      frontmatter: { [FM.TAGS]: ['existing-tag'] },
     });
 
     // ── Seed: apply_tags — memory ────────────────────────────────────────────
@@ -266,7 +270,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       relPath: '_global/briefing-doc.md',
       title: 'Briefing Test Document',
       body: 'Briefing doc body.',
-      frontmatter: { tags: ['#briefing-test', '#extra-tag'] },
+      frontmatter: { [FM.TAGS]: ['#briefing-test', '#extra-tag'] },
     });
     await supabaseManager.getClient()
       .from('fqc_documents')
@@ -308,7 +312,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       expect(parsed.content.indexOf('## New Section'))
         .toBeGreaterThan(parsed.content.indexOf('Original body content here.'));
       // fqc_id not mangled by gray-matter round-trip
-      expect(parsed.data.fqc_id).toBe(appendDocFqcId);
+      expect(parsed.data.fq_id).toBe(appendDocFqcId);
     });
 
     it('T2-01b: synchronously updates content_hash in fqc_documents after write', async () => {
@@ -380,13 +384,13 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
 
       await handlers('update_doc_header')({
         identifier: headerDocPath,
-        updates: { tags: newTags },
+        updates: { [FM.TAGS]: newTags },
       });
 
       // Verify vault frontmatter
       const raw = await readFile(join(vaultPath, headerDocPath), 'utf-8');
       const parsed = matter(raw);
-      expect(parsed.data.tags).toEqual(newTags);
+      expect(parsed.data[FM.TAGS]).toEqual(newTags);
 
       // Verify fqc_documents.tags TEXT[] column in Supabase
       const { data, error } = await supabaseManager.getClient()
@@ -472,7 +476,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       // Vault frontmatter
       const raw = await readFile(join(vaultPath, tagsDocPath), 'utf-8');
       const parsed = matter(raw);
-      const frontmatterTags = parsed.data.tags as string[];
+      const frontmatterTags = parsed.data[FM.TAGS] as string[];
       expect(frontmatterTags).toContain('existing-tag');
       expect(frontmatterTags).toContain('new-tag-a');
       expect(frontmatterTags).toContain('new-tag-b');
@@ -504,7 +508,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
 
       const raw = await readFile(join(vaultPath, tagsDocPath), 'utf-8');
       const parsed = matter(raw);
-      const tags = parsed.data.tags as string[];
+      const tags = parsed.data[FM.TAGS] as string[];
       const dupes = tags.filter(t => t === 'idempotent-tag');
       expect(dupes).toHaveLength(1);
     });
@@ -552,7 +556,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
         relPath: deduplicationDocPath,
         title: 'Deduplication Test Document',
         body: 'Content for deduplication testing.',
-        frontmatter: { tags: ['initial'] },
+        frontmatter: { [FM.TAGS]: ['initial'] },
       });
 
       // Apply same tag twice
@@ -568,7 +572,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       // Verify: document contains 'newtag' only once
       const raw = await readFile(join(vaultPath, deduplicationDocPath), 'utf-8');
       const parsed = matter(raw);
-      const docTags = parsed.data.tags as string[];
+      const docTags = parsed.data[FM.TAGS] as string[];
       const newtagCount = docTags.filter(t => t === 'newtag').length;
       expect(newtagCount).toBe(1);
 
@@ -591,7 +595,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
         relPath: mixedCaseDocPath,
         title: 'Mixed Case Status Test',
         body: 'Content for mixed case testing.',
-        frontmatter: { tags: ['status'] },  // Start with normalized tag
+        frontmatter: { [FM.TAGS]: ['status'] },  // Start with normalized tag
       });
 
       // Apply same tag with different casing
@@ -603,7 +607,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       // Verify: document contains deduplicated normalized tag only once
       const raw = await readFile(join(vaultPath, mixedCaseDocPath), 'utf-8');
       const parsed = matter(raw);
-      const docTags = parsed.data.tags as string[];
+      const docTags = parsed.data[FM.TAGS] as string[];
       // Should have only one 'status' tag (normalized and deduplicated)
       expect(docTags.filter(t => t.toLowerCase() === 'status')).toHaveLength(1);
     });
@@ -616,13 +620,13 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
         relPath: headerDeduplicationDocPath,
         title: 'Header Update Deduplication Test',
         body: 'Content for header tag deduplication.',
-        frontmatter: { tags: ['existing'] },
+        frontmatter: { [FM.TAGS]: ['existing'] },
       });
 
       // Update header with different tags
       const result = await handlers('update_doc_header')({
         identifier: headerDeduplicationDocPath,
-        updates: { tags: ['new1', 'new2'] },
+        updates: { [FM.TAGS]: ['new1', 'new2'] },
       });
 
       expect(isError(result)).toBe(false);
@@ -630,7 +634,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       // Verify: document contains exactly the tags specified (no duplicates)
       const raw = await readFile(join(vaultPath, headerDeduplicationDocPath), 'utf-8');
       const parsed = matter(raw);
-      const docTags = parsed.data.tags as string[];
+      const docTags = parsed.data[FM.TAGS] as string[];
 
       // Should have exactly 2 unique tags
       expect(docTags).toHaveLength(2);
@@ -659,7 +663,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       const text = getText(result);
 
       // Header with tag present
-      expect(text).toContain('Briefing for tags:');
+      // Header: response starts with ## Documents section
       expect(text).toContain('#briefing-test');
 
       // Memory section present with seeded memory
@@ -682,10 +686,10 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       const text = getText(result);
 
       expect(text).toContain('## Documents');
-      expect(text).toContain('=== _global/briefing-doc.md ===');
-      expect(text).toContain('title: Briefing Test Document');
-      expect(text).toContain('fqc_id:');
-      expect(text).toContain('status: active');
+      expect(text).toContain('Path: _global/briefing-doc.md');
+      expect(text).toContain('Title: Briefing Test Document');
+      expect(text).toContain('FQC ID:');
+      expect(text).toContain('Status: active');
     });
 
     it('T2-05d: tag_match=all with multiple tags narrows results correctly', async () => {
@@ -737,7 +741,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
         body,
         frontmatter: {
           related: ['[[Frontmatter Link]]'],
-          tags: ['outline', 'test'],
+          [FM.TAGS]: ['outline', 'test'],
         },
       });
 
@@ -747,7 +751,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
         relPath: batchDoc2Path,
         title: 'Batch Test Document Two',
         body: '# Another Heading\n\nBody text.',
-        frontmatter: { tags: ['batch', 'test'] },
+        frontmatter: { [FM.TAGS]: ['batch', 'test'] },
       });
     });
 
@@ -792,13 +796,13 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       expect(isError(result)).toBe(false);
       const text = getText(result);
 
-      expect(text).toContain('=== _global/outline-test.md ===');
-      expect(text).toContain('=== _global/batch-test-2.md ===');
-      expect(text).toContain('title: Outline Test Document');
-      expect(text).toContain('title: Batch Test Document Two');
-      expect(text).toContain('fqc_id:');
-      expect(text).toContain('tags:');
-      expect(text).toContain('status: active');
+      expect(text).toContain('Path: _global/outline-test.md');
+      expect(text).toContain('Path: _global/batch-test-2.md');
+      expect(text).toContain('Title: Outline Test Document');
+      expect(text).toContain('Title: Batch Test Document Two');
+      expect(text).toContain('FQC ID:');
+      expect(text).toContain('Tags:');
+      expect(text).toContain('Status: active');
     });
 
     it('T2-06d: batch get_doc_outline does not include headings (DB-only, no file I/O)', async () => {
@@ -819,7 +823,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       const untrackedAbsPath = join(vaultPath, untrackedRelPath);
       await writeFile(
         untrackedAbsPath,
-        '---\ntitle: Untracked Outline Doc\ntags: []\nstatus: active\n---\n# Heading\n\nBody text.\n'
+        matter.stringify('# Heading\n\nBody text.\n', { [FM.TITLE]: 'Untracked Outline Doc', [FM.TAGS]: [], [FM.STATUS]: 'active' })
       );
 
       const result = await handlers('get_doc_outline')({ identifiers: untrackedRelPath });
@@ -830,8 +834,8 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
 
       const raw = await readFile(untrackedAbsPath, 'utf-8');
       const parsed = matter(raw);
-      expect(parsed.data.fqc_id).toBeTruthy();
-      expect(typeof parsed.data.fqc_id).toBe('string');
+      expect(parsed.data[FM.ID]).toBeTruthy();
+      expect(typeof parsed.data[FM.ID]).toBe('string');
 
       const { data } = await supabaseManager.getClient()
         .from('fqc_documents')
@@ -840,7 +844,7 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
         .eq('instance_id', INSTANCE_ID)
         .single();
       expect(data).not.toBeNull();
-      expect((data as { id: string }).id).toBe(parsed.data.fqc_id);
+      expect((data as { id: string }).id).toBe(parsed.data.fq_id);
     });
   });
 

@@ -79,7 +79,7 @@ export async function createTestDocument(
   content: string = ''
 ): Promise<void> {
   const fm = {
-    fqc_id: uuidv4(),
+    fq_id: uuidv4(),
     ...frontmatter,
     created: frontmatter.created || new Date().toISOString(),
   };

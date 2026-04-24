@@ -15,6 +15,16 @@ const HAS_OLLAMA = !!process.env.OLLAMA_URL;
 const OLLAMA_URL = TEST_OLLAMA_URL;
 const OLLAMA_MODEL = 'granite-embedding:278m';
 
+/** Returns true if the Ollama server at the given URL is reachable. */
+async function isOllamaReachable(url: string): Promise<boolean> {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(2000) });
+    return res.ok || res.status < 500;
+  } catch {
+    return false;
+  }
+}
+
 function cosineSimilarity(a: number[], b: number[]): number {
   const dot = a.reduce((sum, v, i) => sum + v * b[i], 0);
   const magA = Math.sqrt(a.reduce((sum, v) => sum + v * v, 0));
@@ -24,8 +34,11 @@ function cosineSimilarity(a: number[], b: number[]): number {
 
 describe.skipIf(!HAS_OLLAMA)('Ollama embedding integration', () => {
   let provider: ReturnType<typeof createEmbeddingProvider>;
+  let ollamaReachable = false;
 
-  beforeAll(() => {
+  beforeAll(async () => {
+    ollamaReachable = await isOllamaReachable(OLLAMA_URL);
+    if (!ollamaReachable) return;
     initLogger({ logging: { level: 'error', output: 'stdout' } } as any);
     provider = createEmbeddingProvider({
       provider: 'ollama',
@@ -36,6 +49,7 @@ describe.skipIf(!HAS_OLLAMA)('Ollama embedding integration', () => {
   });
 
   it('returns a non-empty numeric vector for a text input', async () => {
+    if (!ollamaReachable) return;
     const vec = await provider.embed('hello world');
     expect(Array.isArray(vec)).toBe(true);
     expect(vec.length).toBeGreaterThan(0);
@@ -44,6 +58,7 @@ describe.skipIf(!HAS_OLLAMA)('Ollama embedding integration', () => {
   });
 
   it('produces different vectors for different inputs', async () => {
+    if (!ollamaReachable) return;
     const [vecA, vecB] = await Promise.all([
       provider.embed('the quick brown fox'),
       provider.embed('quantum physics and thermodynamics'),
@@ -52,6 +67,7 @@ describe.skipIf(!HAS_OLLAMA)('Ollama embedding integration', () => {
   });
 
   it('produces near-identical vectors for the same input twice', async () => {
+    if (!ollamaReachable) return;
     const [vec1, vec2] = await Promise.all([
       provider.embed('deterministic embedding test'),
       provider.embed('deterministic embedding test'),
@@ -61,6 +77,7 @@ describe.skipIf(!HAS_OLLAMA)('Ollama embedding integration', () => {
   });
 
   it('getDimensions() matches the actual vector length returned', async () => {
+    if (!ollamaReachable) return;
     const vec = await provider.embed('dimension check');
     // getDimensions() returns the configured value — actual may differ by model
     // This test documents the real output dimension for granite-embedding:278m

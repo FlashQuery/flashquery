@@ -176,7 +176,7 @@ describe.skipIf(SKIP)('Phase 37: Identity Resolution', () => {
       const createdAt = new Date().toISOString();
 
       await writeVaultFile(vaultPath, testPath, {
-        fqc_id: foreignUuid,
+        fq_id: foreignUuid,
         title: 'Foreign Document',
         status: 'active',
         tags: [],
@@ -230,7 +230,7 @@ describe.skipIf(SKIP)('Phase 37: Identity Resolution', () => {
 
       // 1. Create file WITH fqc_id and run scan to establish DB row
       await writeVaultFile(vaultPath, testPath, {
-        fqc_id: originalUuid,
+        fq_id: originalUuid,
         title: 'Reconnect Test',
         status: 'active',
         tags: [],
@@ -282,7 +282,7 @@ describe.skipIf(SKIP)('Phase 37: Identity Resolution', () => {
 
       // 6. fqc_id written back to file frontmatter
       const fm = await readVaultFrontmatter(vaultPath, testPath);
-      expect(fm.fqc_id).toBe(originalUuid);
+      expect(fm.fq_id).toBe(originalUuid);
 
       // 7. Exactly one DB row (no orphan created)
       const { data: allRows } = await supabaseManager.getClient()
@@ -304,7 +304,7 @@ describe.skipIf(SKIP)('Phase 37: Identity Resolution', () => {
       const createdAt = new Date().toISOString();
 
       await writeVaultFile(vaultPath, testPath, {
-        fqc_id: malformedId,
+        fq_id: malformedId,
         title: 'Malformed Test',
         status: 'active',
         tags: [],
@@ -329,7 +329,7 @@ describe.skipIf(SKIP)('Phase 37: Identity Resolution', () => {
 
       // 2. File frontmatter must now have a valid UUID (not the malformed one)
       const fm = await readVaultFrontmatter(vaultPath, testPath);
-      const newFqcId = fm.fqc_id as string;
+      const newFqcId = fm.fq_id as string;
       expect(newFqcId).toBeDefined();
       expect(newFqcId).not.toBe(malformedId);
       expect(newFqcId).toMatch(
@@ -396,7 +396,7 @@ describe.skipIf(SKIP)('Phase 37: Identity Resolution', () => {
 
       // 2. Create the vault file with the newer UUID in frontmatter
       await writeVaultFile(vaultPath, testPath, {
-        fqc_id: newerId,
+        fq_id: newerId,
         title: 'New Version',
         status: 'active',
         tags: [],

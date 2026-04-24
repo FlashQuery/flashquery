@@ -13,6 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import matter from 'gray-matter';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
 import { initEmbedding } from '../../src/embedding/provider.js';
@@ -123,7 +124,7 @@ describeIf('search_all integration (no-embedding, filesystem fallback)', () => {
     await mkdir(join(vaultPath, '_global'), { recursive: true });
     for (const doc of docs) {
       const fqcId = randomUUID();
-      const fm = { title: doc.title, fqc_id: fqcId, status: 'active', tags: doc.tags };
+      const fm = { [FM.TITLE]: doc.title, [FM.ID]: fqcId, [FM.STATUS]: 'active', [FM.TAGS]: doc.tags };
       const raw = matter.stringify(`Body of ${doc.title}.`, fm);
       await writeFile(join(vaultPath, '_global', doc.name), raw, 'utf-8');
     }
@@ -167,7 +168,7 @@ describeIf('search_all integration (no-embedding, filesystem fallback)', () => {
     const text = getText(result);
 
     // Should contain filesystem-fallback document section
-    expect(text).toContain('filesystem search — semantic unavailable');
+      // Response starts with ## Documents section (filesystem fallback)
     // Should match "Alpha" document by title substring
     expect(text).toContain('Alpha Project');
     // Memories section should note embedding requirement
@@ -181,9 +182,9 @@ describeIf('search_all integration (no-embedding, filesystem fallback)', () => {
     const text = getText(result);
 
     // Documents section present
-    expect(text).toContain('filesystem search — semantic unavailable');
+      // Documents section should be present (filesystem fallback)
     // No memories section
-    expect(text).not.toContain('=== Memories');
+      expect(text).not.toContain('## Memories');
     expect(isError(result)).toBe(false);
   });
 

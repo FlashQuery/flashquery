@@ -17,6 +17,7 @@ import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { TEST_SUPABASE_URL, TEST_SUPABASE_KEY, TEST_DATABASE_URL, HAS_SUPABASE } from '../helpers/test-env.js';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 
 const SUPABASE_URL = TEST_SUPABASE_URL;
 const SUPABASE_KEY = TEST_SUPABASE_KEY;
@@ -89,7 +90,7 @@ describe.skipIf(SKIP)('create_document tag normalization (integration)', () => {
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain('Document created');
+    expect(result.content[0].text).toContain('FQC ID:');
 
     // Extract fqc_id from response
     const fqcIdMatch = result.content[0].text.match(/FQC ID: ([a-f0-9-]{36})/);
@@ -117,7 +118,7 @@ describe.skipIf(SKIP)('create_document tag normalization (integration)', () => {
     // Verify vault frontmatter ALSO has normalized tags (Pitfall 1 prevention)
     const rawFile = await readFile(join(vaultPath, dbRow!.path), 'utf-8');
     const parsed = matter(rawFile);
-    const vaultTags: string[] = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
+    const vaultTags: string[] = Array.isArray(parsed.data[FM.TAGS]) ? parsed.data[FM.TAGS] as string[] : [];
     expect(vaultTags).toContain('mixedcase');
     expect(vaultTags).toContain('upper');
     expect(vaultTags).toContain('spaced');
@@ -142,18 +143,18 @@ describe.skipIf(SKIP)('create_document tag normalization (integration)', () => {
     expect(result.content[0].text).toContain("Tag 'duplicate' appears multiple times");
   });
 
-  it('create_document rejects conflicting status tags with isError', async () => {
+  it('create_document accepts multiple status tags — D-06 removed status mutual exclusivity', async () => {
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
 
+    // D-06: multiple #status/* tags are now allowed
     const result = await getHandler('create_document')({
-      title: 'Conflict Status Rejection',
+      title: 'Multi Status Test',
       content: 'Content.',
       tags: ['#status/draft', '#status/published'],
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Tag validation failed');
-    expect(result.content[0].text).toContain('conflicting statuses');
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain('FQC ID:');
   });
 });

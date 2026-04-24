@@ -165,7 +165,7 @@ The scanner should discover this and add frontmatter.`;
     // Verify: file now has frontmatter with fqc_id
     const updatedContent = readFileSync(filePath, 'utf-8');
     expect(updatedContent).toMatch(/^---\n/); // Has frontmatter
-    expect(updatedContent).toMatch(/fqc_id:/); // Has fqc_id
+    expect(updatedContent).toMatch(/fq_id:/); // Has fq_id
     // Title is derived from filename as-is (with hyphens/spaces preserved from filename)
     expect(updatedContent).toMatch(/title:\s*[^:\n]+/); // Has title field
     expect(updatedContent).toMatch(/status:/); // Has status
@@ -188,11 +188,11 @@ Content here.`;
     expect(frontmatterMatch).toBeTruthy();
 
     const frontmatter = frontmatterMatch![1];
-    expect(frontmatter).toMatch(/fqc_id:\s*[a-f0-9\-]+/); // UUID format
+    expect(frontmatter).toMatch(/fq_id:\s*[a-f0-9\-]+/); // UUID format
     expect(frontmatter).toMatch(/title:/);
     expect(frontmatter).toMatch(/status:/);
     expect(frontmatter).toMatch(/created:/); // Timestamp field (not created_at)
-    expect(frontmatter).toMatch(/fqc_instance:/); // Instance tracking
+    expect(frontmatter).toMatch(/fq_instance:/); // Instance tracking
   });
 
   it('SCAN-03: detects moved files via fqc_id matching', async () => {
@@ -211,7 +211,7 @@ Original content.`;
 
     // Read the file to get the fqc_id that was assigned
     const fileWithId = readFileSync(originalPath, 'utf-8');
-    const fqcIdMatch = fileWithId.match(/fqc_id:\s*([a-f0-9\-]+)/);
+    const fqcIdMatch = fileWithId.match(/fq_id:\s*([a-f0-9\-]+)/);
     expect(fqcIdMatch).toBeTruthy();
     const fqcId = fqcIdMatch![1];
 
@@ -254,7 +254,7 @@ This file will be deleted.`;
 
     // Read the file to get the assigned fqc_id
     const fileContent = readFileSync(filePath, 'utf-8');
-    const fqcIdMatch = fileContent.match(/fqc_id:\s*([a-f0-9\-]+)/);
+    const fqcIdMatch = fileContent.match(/fq_id:\s*([a-f0-9\-]+)/);
     expect(fqcIdMatch).toBeTruthy();
     const fqcId = fqcIdMatch![1];
 
@@ -349,10 +349,10 @@ This document should have its content embedded asynchronously.`;
     // Verify: no duplicate database entries (upsert with ignoreDuplicates handled it)
     const docs = await supabaseManager.getClient()
       .from('fqc_documents')
-      .select('fqc_id')
+      .select('id')
       .eq('instance_id', 'scan-test-id');
 
-    const uniqueIds = new Set(docs.data?.map(d => d.fqc_id) ?? []);
+    const uniqueIds = new Set(docs.data?.map(d => d.id) ?? []);
     expect(uniqueIds.size).toBe(docs.data?.length ?? 0); // No duplicates
   });
 
@@ -387,7 +387,7 @@ This document should have its content embedded asynchronously.`;
   });
 
   it('TEST-10: ownership columns are synced from frontmatter fields on INSERT', async () => {
-    const content = `---\nfqc_owner: test-plugin\nfqc_type: test-note\n---\n# Ownership Test\n\nContent.`;
+    const content = `---\nfq_owner: test-plugin\nfq_type: test-note\n---\n# Ownership Test\n\nContent.`;
     await writeFile(join(vaultPath, 'ownership-test.md'), content);
 
     await runScanOnce(config);
