@@ -101,11 +101,32 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           };
         }
 
-        // Step 4: Normalize each input path and join with root
-        // Silently skip paths that become empty after normalization (SPEC-20 — Pitfall 1)
-        const resolvedPaths: Array<{ resolved: string; original: string }> = rawPaths
-          .map((p, _i) => ({ resolved: normalizedRoot ? joinWithRoot(normalizedRoot, normalizePath(p)) : normalizePath(p), original: p }))
-          .filter(({ resolved }) => resolved !== '');
+        // Step 4: Normalize each input path and join with root.
+        // - Absolute paths (starting with '/') are collected as failures immediately — they
+        //   would silently become vault-relative after normalizePath strips the leading slash,
+        //   giving a misleading success. Reject them before normalization (Rule 1 fix, F-38).
+        // - Silently skip paths that become empty AFTER normalization (SPEC-20 — Pitfall 1).
+        const resolvedPaths: Array<{ resolved: string; original: string }> = [];
+        const absolutePathFailures: Array<{ kind: 'failed'; original: string; error: string }> = [];
+        for (const p of rawPaths) {
+          // Detect raw absolute paths before normalization strips the leading '/'
+          if (p.startsWith('/')) {
+            absolutePathFailures.push({ kind: 'failed', original: p, error: 'Path traversal detected — path must be within the vault root.' });
+            continue;
+          }
+          const normalized = normalizePath(p);
+          if (normalized === '') continue; // silently skip (SPEC-20: empty-string in array)
+          const resolved = normalizedRoot ? joinWithRoot(normalizedRoot, normalized) : normalized;
+          if (resolved !== '') resolvedPaths.push({ resolved, original: p });
+        }
+
+        // If the entire input collapses to nothing (e.g. paths=['.', '']) treat as no valid input
+        if (resolvedPaths.length === 0 && absolutePathFailures.length === 0) {
+          return {
+            content: [{ type: 'text' as const, text: 'No paths provided.' }],
+            isError: true,
+          };
+        }
 
         // Per-path result tracking
         type SegmentMeta = {
@@ -120,21 +141,9 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         const results: PathResult[] = [];
 
         for (const { resolved: resolvedPath, original: originalInput } of resolvedPaths) {
-          // Validate the full resolved path (traversal, symlink, vault-root target)
-          const validation = await validateVaultPath(vaultRoot, resolvedPath);
-          if (!validation.valid) {
-            results.push({ kind: 'failed', original: originalInput, error: validation.error ?? 'Invalid path.' });
-            continue;
-          }
-
-          // Total-path byte-length check (4096-byte limit — Pitfall 4 / T-92-07)
-          const totalBytes = Buffer.byteLength(resolvedPath, 'utf8');
-          if (totalBytes > 4096) {
-            results.push({ kind: 'failed', original: originalInput, error: `Resolved path exceeds the 4,096-byte filesystem limit (${totalBytes} bytes).` });
-            continue;
-          }
-
-          // Per-segment sanitize + validate (T-92-05)
+          // Step A: Per-segment sanitize + validate FIRST (T-92-05)
+          // Must happen before validateVaultPath to strip NUL/control chars that would
+          // crash lstat/path operations (Rule 1 fix).
           const rawSegments = resolvedPath.split('/');
           const sanitizedSegmentsMeta: Array<{ name: string; original: string; replacedChars: string }> = [];
           let segmentError: string | null = null;
@@ -150,6 +159,21 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           }
 
           const sanitizedPath = sanitizedSegmentsMeta.map(m => m.name).join('/');
+
+          // Step B: Validate the sanitized path (traversal, symlink, vault-root target)
+          // Use sanitizedPath so NUL/control chars don't reach lstat calls
+          const validation = await validateVaultPath(vaultRoot, sanitizedPath);
+          if (!validation.valid) {
+            results.push({ kind: 'failed', original: originalInput, error: validation.error ?? 'Invalid path.' });
+            continue;
+          }
+
+          // Step C: Total-path byte-length check (4096-byte limit — T-92-07)
+          const totalBytes = Buffer.byteLength(sanitizedPath, 'utf8');
+          if (totalBytes > 4096) {
+            results.push({ kind: 'failed', original: originalInput, error: `Resolved path exceeds the 4,096-byte filesystem limit (${totalBytes} bytes).` });
+            continue;
+          }
 
           // Pre-walk stat to detect pre-existing segments and file conflicts (Pitfall 6 / T-92-04)
           const segmentStatus: SegmentMeta[] = [];
@@ -203,6 +227,11 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           if (segmentStatus.every(s => s.preExisted)) {
             logger.warn(`create_directory: path already exists: ${sanitizedPath}`);
           }
+        }
+
+        // Merge absolute-path failures (collected before the per-path loop) into results
+        for (const f of absolutePathFailures) {
+          results.push(f);
         }
 
         // Response assembly

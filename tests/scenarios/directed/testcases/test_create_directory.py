@@ -62,12 +62,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
     ) as ctx:
         ctx.cleanup.track_dir(base_dir)
 
+        # Pre-create base_dir so that per-step tests measure exactly the new subdirs created
+        ctx.vault._abs(base_dir).mkdir(parents=True, exist_ok=True)
+
         # ── F-19: create_directory creates a single directory ────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/inbox")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         dir_exists = ctx.vault._abs(f"{base_dir}/inbox").is_dir()
+        # base_dir pre-exists, so only inbox is created → exactly 1 new directory
         passed_f19 = result.ok and dir_exists and "Created 1 directory:" in result.text
 
         run.step(

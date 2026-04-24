@@ -71,7 +71,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         passed_f37 = (
             not result.ok
-            and "resolves outside the vault root" in result.text
+            and ("resolves outside the vault root" in result.text
+                 or "Path traversal detected" in result.text
+                 or "must be within the vault root" in result.text)
         )
 
         run.step(

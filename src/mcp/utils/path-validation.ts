@@ -87,9 +87,11 @@ export async function validateVaultPath(
       }
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException).code;
-      // ENOENT means the segment doesn't exist yet — skip it
-      // ENAMETOOLONG means the combined absolute path is too long for the OS to stat
-      if (code !== 'ENOENT' && code !== 'ENAMETOOLONG') {
+      // ENOENT: segment doesn't exist yet — skip it
+      // ENAMETOOLONG: combined absolute path too long for the OS to stat — skip it
+      // ENOTDIR: an intermediate segment is a file, not a directory — skip it
+      //          (the caller's pre-walk stat will detect and report this conflict)
+      if (code !== 'ENOENT' && code !== 'ENAMETOOLONG' && code !== 'ENOTDIR') {
         throw err;
       }
     }
@@ -103,19 +105,26 @@ export async function validateVaultPath(
 }
 
 /**
- * Normalize a user-supplied path by stripping leading/trailing slashes
- * and collapsing consecutive slashes.
+ * Normalize a user-supplied path by stripping leading/trailing slashes,
+ * collapsing consecutive slashes, and removing dot (.) segments.
  *
  * @example
- * normalizePath('/CRM')        → 'CRM'
- * normalizePath('CRM/')        → 'CRM'
+ * normalizePath('/CRM')          → 'CRM'
+ * normalizePath('CRM/')          → 'CRM'
  * normalizePath('CRM//Contacts') → 'CRM/Contacts'
+ * normalizePath('CRM/./Active')  → 'CRM/Active'
+ * normalizePath('./here')        → 'here'
  */
 export function normalizePath(userPath: string): string {
-  return userPath
+  const collapsed = userPath
     .replace(/^\/+/, '')
     .replace(/\/+$/, '')
     .replace(/\/\/+/g, '/');
+  // Remove dot segments (e.g. "./here" → "here", "a/./b" → "a/b")
+  return collapsed
+    .split('/')
+    .filter(segment => segment !== '.')
+    .join('/');
 }
 
 /**
