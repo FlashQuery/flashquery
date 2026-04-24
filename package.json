@@ -19,7 +19,7 @@
     "dev": "tsx src/index.ts start --config ./flashquery.yml",
     "dev:test": "DOTENV_CONFIG_PATH=./.env.test tsx src/index.ts start --config ./flashquery.yml",
     "build": "tsup src/index.ts --format esm --dts",
-    "start": "node dist/index.js",
+    "start": "node dist/index.js start --config ./flashquery.yml",
     "test": "vitest run --config tests/config/vitest.unit.config.ts",
     "test:watch": "vitest --config tests/config/vitest.unit.config.ts",
     "test:integration": "vitest run --config tests/config/vitest.integration.config.ts",

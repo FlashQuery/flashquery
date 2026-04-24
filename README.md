@@ -63,6 +63,7 @@ The interactive script asks a handful of questions and writes three files:
 |---|---|
 | `.env` | Secrets, URLs, vault path, instance identity — gitignored, per-install |
 | `flashquery.yml` | Structural config and defaults — safe to read and commit |
+| `.env.test` | Test credentials synced from `.env` — gitignored, used by `npm run test:integration` |
 | `docker/.env.docker` | Generated only when you choose the bundled Docker stack |
 
 The first question picks your Supabase backend:
@@ -102,10 +103,10 @@ The script reads `MCP_AUTH_SECRET` from `.env`, fetches a bearer token from the 
 Verify the registration:
 
 ```bash
-cat ~/.claude/claude.json | jq '.mcpServers.flashquery'
+claude mcp list
 ```
 
-You should see the MCP URL and Authorization header. FlashQuery tools are now available in every Claude Code session.
+You should see `flashquery` listed with the MCP URL. FlashQuery tools are now available in every Claude Code session.
 
 > **Token note:** Startup logs show a masked token (`Bearer eyJhbGci***`) for confirmation only. The full usable secret is `MCP_AUTH_SECRET` in `.env` and is accepted directly as a Bearer token by all FlashQuery endpoints.
 
@@ -248,10 +249,10 @@ For technical details on all three: [ARCHITECTURE.md § Plugin Propagation Desig
 
 ```bash
 npm run setup            # Interactive first-time setup (generates .env + flashquery.yml)
-npm run dev              # Run FlashQuery with hot reload (reads ./flashquery.yml)
-npm run dev:test         # Run with .env.test credentials (for manual integration testing)
-npm run build            # Compile TypeScript to dist/ via tsup
-npm run start            # Run the compiled binary (after npm run build)
+npm run dev              # Development: run TypeScript directly via tsx, hot-reloads on file changes
+npm run dev:test         # Same as dev but using .env.test credentials (manual integration testing)
+npm run build            # Compile TypeScript to dist/ via tsup (required before npm run start)
+npm run start            # Production: run the compiled dist/ binary — same behavior as dev, no hot reload; use for PM2/systemd
 ```
 
 ### Testing

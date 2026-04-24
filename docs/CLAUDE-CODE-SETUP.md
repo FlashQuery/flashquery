@@ -55,10 +55,10 @@ FlashQuery bearer tokens are valid until `MCP_AUTH_SECRET` is rotated — they d
 After registration, restart Claude Code. Then check the config:
 
 ```bash
-cat ~/.claude/claude.json | jq '.mcpServers'
+claude mcp list
 ```
 
-You should see a `flashquery` entry with the MCP URL and Authorization header. In a Claude Code session, FlashQuery tools will be available immediately.
+You should see `flashquery` listed with the MCP URL and transport type. In a Claude Code session, FlashQuery tools will be available immediately.
 
 ---
 

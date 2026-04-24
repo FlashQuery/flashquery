@@ -111,7 +111,7 @@ if [ $? -eq 0 ]; then
   echo "   1. Restart Claude Code / Claude Desktop"
   echo "   2. The FlashQuery Core MCP will be available in Claude"
   echo ""
-  echo "💾 MCP Configuration saved to: ~/.claude/claude.json"
+  echo "💾 MCP Configuration saved to: ~/.claude.json (Linux) or ~/.claude/claude.json (macOS)"
   exit 0
 else
   echo ""
