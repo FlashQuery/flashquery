@@ -222,22 +222,16 @@ describe('validateSegment', () => {
   });
 
   it('validateVaultPath accepts path whose total length is 4096 bytes (U-31)', async () => {
-    // Build a path with segments that total exactly 4096 bytes
-    // Use a single long segment just under 255 bytes repeated to approach 4096
-    // 255-byte segment + '/' = 256 chars; 4096 / 256 = 16 — use 15 segments of 255 + extra padding
-    const seg = 'a'.repeat(253); // 253 bytes each
-    // 15 segments joined by '/' = 15*253 + 14 = 3795 + 14 = 3809 bytes < 4096
-    // Add a final segment to pad to 4096: 4096 - 3809 - 1 (slash) = 286 bytes — too long per segment
-    // Strategy: use 4095-byte total path (just under limit)
-    const seg2 = 'b'.repeat(100);
-    // Let's just build 4096 bytes: 4096 = 16 * 255 + 16 * slash... that's 16*256 = 4096
-    // So: 16 segments of 255 bytes each with slashes = 16*255 + 15 = 4095 bytes — valid
+    // Build a path whose relative portion is exactly 4095 bytes (16 segments of 255 'a' chars
+    // joined by 15 slashes: 16*255 + 15 = 4095 < 4096 — must not be rejected for path length)
     const segments = Array(16).fill('a'.repeat(255));
     const longPath = segments.join('/');
     expect(Buffer.byteLength(longPath, 'utf8')).toBe(4095); // 16*255 + 15 slashes
     const result = await validateVaultPath(testDir, longPath);
-    // Should not fail due to path length (4095 < 4096)
-    expect(result.error).not.toMatch(/path.*too long|exceeds.*4096/i);
+    // Should not be rejected for path-length reasons (4095 < 4096)
+    // result may be valid=true or valid=false for other reasons (e.g. OS limits on lstat)
+    // but the error must NOT mention exceeding 4096 bytes
+    expect(result.error ?? '').not.toMatch(/path.*too long|exceeds.*4096/i);
   });
 
   it('validateVaultPath rejects path whose total length is 4097 bytes (U-32)', async () => {
