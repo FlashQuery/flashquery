@@ -99,7 +99,8 @@ function makeConfig(vaultPath = '/vault') {
 }
 
 /**
- * Invoke create_directory by capturing the handler registered via registerFileTools.
+ * Invoke create_directory by capturing handlers[0] registered via registerFileTools.
+ * create_directory is the FIRST registerTool call (handlers[0]).
  * Follows the same dynamic-import + handler-capture pattern as remove-directory.test.ts.
  */
 async function callCreateDirectory({
@@ -111,7 +112,7 @@ async function callCreateDirectory({
 }): Promise<ToolResult> {
   const { registerFileTools } = await import('../../src/mcp/tools/files.js');
 
-  let capturedHandler: ((args: Record<string, unknown>) => Promise<ToolResult>) | null = null;
+  const handlers: Array<(args: Record<string, unknown>) => Promise<ToolResult>> = [];
 
   const mockServer = {
     registerTool: vi.fn(
@@ -120,21 +121,23 @@ async function callCreateDirectory({
         _config: unknown,
         handler: (args: Record<string, unknown>) => Promise<ToolResult>
       ) => {
-        capturedHandler = handler;
+        handlers.push(handler);
       }
     ),
   } as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer;
 
   registerFileTools(mockServer, makeConfig());
 
-  if (!capturedHandler) {
+  // create_directory is registered first (handlers[0])
+  const createDirHandler = handlers[0];
+  if (!createDirHandler) {
     throw new Error('registerFileTools did not call server.registerTool');
   }
 
   const args: Record<string, unknown> = { paths };
   if (root_path !== undefined) args['root_path'] = root_path;
 
-  return (capturedHandler as (args: Record<string, unknown>) => Promise<ToolResult>)(args);
+  return createDirHandler(args);
 }
 
 /**
