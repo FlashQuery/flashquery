@@ -152,8 +152,10 @@ export function sanitizeDirectorySegment(name: string): {
   const replacedChars: string[] = [];
   const seen = new Set<string>();
 
+  // eslint-disable-next-line no-control-regex -- intentionally matches NUL and ASCII control chars 1-31
+  const illegalCharsRe = /[:/\\?*|<>"'\0\x01-\x1f]/g;
   const sanitized = name
-    .replace(/[:/\\?*|<>"'\0\x01-\x1f]/g, (ch) => {
+    .replace(illegalCharsRe, (ch) => {
       if (!seen.has(ch)) {
         seen.add(ch);
         replacedChars.push(ch);
