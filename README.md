@@ -20,46 +20,28 @@ FlashQuery is a persistent data layer for AI workflows. It sits between AI tools
 
 Every interaction an AI has with FlashQuery is logged and searchable. When Claude asks for "memories about the project," FlashQuery retrieves relevant stored summaries using vector search. When it creates a new meeting note, the note is saved both to your vault (as markdown) and indexed in the database. You own all of it — no vendor lock-in, no training on your data.
 
-FlashQuery runs as an MCP server, so any AI tool that speaks MCP can connect to it. Think of it as "Obsidian for AI workflows": local, yours, composable.
+FlashQuery exposes its tools via [MCP (Model Context Protocol)](https://modelcontextprotocol.io), Anthropic's open standard for connecting AI assistants to external data and services. Any MCP-capable client — Claude Code, Claude Desktop, Cursor — can connect to it. Think of it as "Obsidian for AI workflows": local, yours, composable.
 
 ![How FlashQuery works](https://flashquery.ai/assets/img/core/FQC-diagram-sm.jpg)
 
 ---
 
-## At a glance
-
-```bash
-# Clone and install
-git clone https://github.com/FlashQuery/flashquery.git
-cd flashquery
-npm install
-
-# First time — generates .env, flashquery.yml, and (for the bundled stack) docker/.env.docker
-npm run setup
-
-# ── Option A: Bundled Docker stack (Supabase + FlashQuery, everything local) ───────────────────
-make up                 # or: docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d
-# Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
-
-# ── Option B: Dev mode (database in Docker, FlashQuery on the host for hot reload) ─────────────
-make db-up              # or: docker compose --env-file docker/.env.docker -f docker/docker-compose.db-only.yml up -d
-npm run dev             # FlashQuery runs locally with hot reload
-# Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
-
-# ── Option C: FlashQuery in Docker, Supabase external/cloud ─────────────────────────────────────
-make fq-up              # or: docker compose --env-file docker/.env.docker -f docker/docker-compose.flashquery-only.yml up -d
-# Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
-
-# ── Option D: Supabase Cloud or existing self-hosted (no local Docker needed) ──────────────────
-npm run dev             # FlashQuery connects to your external Supabase
-# Register with Claude Code — see docs/CLAUDE-CODE-SETUP.md
-```
-
----
-
 ## Quick Start
 
-Three steps, regardless of how you're hosting Supabase.
+This walks you from `git clone` to FlashQuery tools available inside Claude Code. Takes about 5 minutes.
+
+### Before you begin
+
+You need:
+
+- **Node.js 20+** and **git**
+- **A database** — pick one:
+  - **Supabase Cloud** — free project at [supabase.com](https://supabase.com), nothing to install
+  - **Bundled Docker stack** — Docker Desktop (or Engine + Compose) is all you need;  FlashQuery's setup can provision Supabase for you automatically
+  - **Existing self-hosted Supabase** — if you already run one
+- An **embedding API key** (OpenAI or OpenRouter) — or a local [Ollama](https://ollama.ai) instance, or choose `none` to disable semantic search entirely
+
+> **Node.js 18:** Will install and start FlashQuery but `npm install` shows an `EBADENGINE` warning and `supabase-js` logs a runtime deprecation notice. Node 20 LTS is required for supported operation.
 
 ### 1. Clone and install
 
@@ -69,79 +51,103 @@ cd flashquery
 npm install
 ```
 
-Prerequisites: **Node.js 20+** and **git**. If you plan to use the bundled Docker stack, you also need **Docker Desktop** (or Docker Engine + Compose).
-
 ### 2. Run setup
 
 ```bash
 npm run setup
 ```
 
-The interactive setup script asks you a handful of questions and generates everything you need:
+The interactive script asks a handful of questions and writes three files:
 
-- `./.env` — FlashQuery application config (secrets, instance identity, vault path, embedding provider)
-- `./flashquery.yml` — structural config (copied from `flashquery.example.yml`, references `.env` for values)
-- `./docker/.env.docker` — **only if** you choose the bundled Docker stack
+| File | Purpose |
+|---|---|
+| `.env` | Secrets, URLs, vault path, instance identity — gitignored, per-install |
+| `flashquery.yml` | Structural config and defaults — safe to read and commit |
+| `docker/.env.docker` | Generated only when you choose the bundled Docker stack |
 
-The first question it asks is how you're running Supabase:
+The first question picks your Supabase backend:
 
-1. **Supabase Cloud** — you have a project at supabase.com. Fastest path; `setup/setup.sh` prompts for your Supabase URL, service role key, and database connection string.
-2. **Existing self-hosted Supabase** — you already run Supabase somewhere. Same prompts, with sensible defaults for a local self-hosted instance.
-3. **Bundled Docker stack** — run Supabase locally via `docker/docker-compose.yml`. `setup/setup.sh` auto-generates every secret you need (Postgres password, JWT secret, anon and service-role keys) and wires them together.
+1. **Supabase Cloud** — project at supabase.com. Fastest path. Prompts for your URL, service role key, and database connection string.
+2. **Existing self-hosted** — a Supabase instance you already run. Same prompts.
+3. **Bundled Docker stack** — generates all secrets and wires up Supabase locally. Requires Docker Desktop or Docker Engine + Compose.
 
-`setup/setup.sh` is re-runnable. If you later want to change your vault path, log level, or instance name, just run it again — existing values become the defaults for prompts, and it warns you before letting you change anything sensitive (database URL, instance ID, embedding model).
+`npm run setup` is safe to re-run at any time. Existing values become defaults; it warns before letting you change anything sensitive (database URL, instance ID, embedding model).
 
 ### 3. Start FlashQuery
 
-**Supabase Cloud or self-hosted (no local Docker):**
+**Supabase Cloud or self-hosted (options 1 and 2):**
 
 ```bash
 npm run dev
-
-# Or build and run the compiled binary:
-npm run build
-node dist/index.js start --config ./flashquery.yml
-
-# The `flashquery` command is only available globally after: npm install -g flashquery
 ```
 
-**Bundled Docker stack (everything local):**
+**Bundled Docker stack (option 3 — starts Supabase and FlashQuery together):**
 
 ```bash
-# Start the full stack (Postgres, PostgREST, GoTrue, Kong, Studio, FlashQuery)
 make up
-# or: docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d
-```
-
-FlashQuery runs inside the container — no separate `npm run dev` needed. Wait ~20 seconds for all services to be healthy, then check logs to confirm FlashQuery is up:
-
-```bash
+# Wait ~20 seconds for all services to be healthy, then verify:
 make logs
 ```
 
-FlashQuery will print a bearer token in its container logs. Retrieve it with:
+In both cases you'll see `FlashQuery ready.` in the output when the server is up.
+
+### 4. Register with Claude Code
 
 ```bash
-make logs 2>&1 | grep -i "bearer\|token"
+./setup/setup-claude-mcp.sh
 ```
 
-Copy that token — you'll use it to connect MCP clients.
+The script reads `MCP_AUTH_SECRET` from `.env`, fetches a bearer token from the running server, and calls `claude mcp add` for you. Once it succeeds, restart Claude Code.
 
-On first run, if your vault directory isn't a git repository, `setup/setup.sh` offers to `git init` it for you (the default `flashquery.yml` enables auto-commit, which needs a git repo).
+Verify the registration:
+
+```bash
+cat ~/.claude/claude.json | jq '.mcpServers.flashquery'
+```
+
+You should see the MCP URL and Authorization header. FlashQuery tools are now available in every Claude Code session.
+
+> **Token note:** Startup logs show a masked token (`Bearer eyJhbGci***`) for confirmation only. The full usable secret is `MCP_AUTH_SECRET` in `.env` and is accepted directly as a Bearer token by all FlashQuery endpoints.
+
+---
+
+## Deployment Options
+
+Four ways to run, depending on what you already have:
+
+```bash
+# A — Docker full local stack: Supabase + FlashQuery are in the one docker compose file (easiest)
+make up
+
+# B — Dev mode: Supabase in Docker, FlashQuery on the host with hot reload
+make db-up && npm run dev
+
+# C — FlashQuery in Docker, Supabase external or cloud
+make fq-up
+
+# D — No Docker: FlashQuery on the host, Supabase Cloud or existing self-hosted
+npm run dev
+```
+
+Run `make help` to see all available targets. For production deployment (reverse proxy, TLS, systemd/launchd, backups): [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
 
 ---
 
 ## Connect an MCP Client
 
-FlashQuery uses **streamable-http** transport out of the box — no configuration needed. It listens on `http://localhost:3100/mcp` and works with Claude Code, Claude Desktop (modern versions), and any other HTTP-capable MCP client.
+FlashQuery uses **streamable-http** transport by default, listening on `http://localhost:3100/mcp`.
 
 ### Claude Code
 
-See [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) for step-by-step registration instructions, prerequisites, and troubleshooting.
+```bash
+./setup/setup-claude-mcp.sh
+```
+
+See [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) for custom host/port, manual registration steps, and troubleshooting.
 
 ### Claude Desktop (stdio fallback)
 
-Streamable-http is the default. If you're on an older Claude Desktop version that doesn't support HTTP MCP, you can fall back to stdio: edit `flashquery.yml`, change `mcp.transport` to `"stdio"`, then add to your Claude Desktop config:
+Streamable-http works with modern Claude Desktop versions. If you're on an older build that doesn't support HTTP MCP, fall back to stdio: set `mcp.transport: "stdio"` in `flashquery.yml`, then add to your Claude Desktop config:
 
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
@@ -162,51 +168,79 @@ Streamable-http is the default. If you're on an older Claude Desktop version tha
 }
 ```
 
-Use absolute paths — Claude Desktop spawns processes from its own directory, not yours.
+Use absolute paths — Claude Desktop spawns processes from its own working directory, not yours.
 
 ### Cloud / remote deployments
 
-FlashQuery itself doesn't terminate TLS or route by host header. To expose it at a public FQDN (e.g. `fq.yourdomain.com`), run it behind a reverse proxy like Caddy, nginx, or Cloudflare Tunnel. There's one gotcha: disable response buffering in the proxy so streamable-http's server-sent events reach the client in real time. See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for worked Caddy / nginx / Cloudflare Tunnel examples and production setup (systemd, launchd, backups, logging).
+FlashQuery doesn't terminate TLS or route by host header. To expose it at a public URL, put it behind Caddy, nginx, or Cloudflare Tunnel. Disable response buffering in the proxy so streamable-http's server-sent events reach clients in real time. See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for worked Caddy, nginx, and Cloudflare Tunnel examples.
 
 ---
 
-## How configuration works
+## How Configuration Works
 
-FlashQuery's config is split across two files for good reasons:
+Config is split across two files deliberately:
 
-- **`./.env`** holds values that vary between installations — secrets, URLs, your vault path, your instance's name. Gitignored. Every value in here is per-install.
-- **`./flashquery.yml`** holds the application's structural config — default behaviors, schema for each section, `${VAR}` references into `.env`. Safe to read; can be committed if you want.
+- **`.env`** — everything that varies per install: secrets, URLs, vault path, instance identity. Gitignored.
+- **`flashquery.yml`** — structural config and defaults. References `.env` via `${VAR}`. Safe to commit.
 
-If you chose the bundled Docker stack at setup time, there's also a **`./docker/.env.docker`** holding Docker-orchestration values (Postgres password, JWT secret, anon key, service-role key). This file is specifically for the Docker stack — the FlashQuery app itself reads `./.env`.
+If you chose the bundled Docker stack, there's also **`docker/.env.docker`** — orchestration values (Postgres password, JWT secret, anon/service-role keys) used only by the Docker Compose stack. The FlashQuery app itself reads `.env`.
 
-See [`.env.example`](./.env.example) and [`flashquery.example.yml`](./flashquery.example.yml) for the full list of values with inline comments explaining each one.
+See [`.env.example`](./.env.example) and [`flashquery.example.yml`](./flashquery.example.yml) for all available values with inline documentation.
+
+### Non-interactive setup
+
+For CI or scripted installs, pass a pre-filled answers file to skip all prompts:
+
+```bash
+npm run setup -- --answers-file /path/to/answers.env
+```
+
+The file is `KEY=value` format (lines starting with `#` are ignored). Any key omitted falls back to its default. Example for Supabase Cloud:
+
+```ini
+SUPABASE_CHOICE=1          # 1=Cloud  2=self-hosted  3=bundled Docker
+SUPABASE_URL=https://xxx.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=...
+DATABASE_URL=postgresql://postgres:...@db.xxx.supabase.co:5432/postgres
+INSTANCE_NAME=My FlashQuery
+VAULT_PATH=./vault
+EMBEDDING_PROVIDER=openai  # openai | openrouter | ollama | none
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_API_KEY=sk-...
+LOG_LEVEL=info
+```
+
+---
 
 ## Known Limitations
 
-### Symlinks in Vault
+**Symlinks in vault** — FlashQuery does not follow symbolic links. Symlinks are skipped during scanning; original files sync normally. Symlink handling is unreliable on network filesystems (NFS, SMB) and in containers, so this is deliberate.
 
-FlashQuery does not follow symbolic links in your vault. Symlinks are skipped during scanning; original files sync normally. Symlink handling is unreliable on network filesystems (NFS, SMB) and in containerized environments, so this limitation is deliberate. The scanner logs skipped symlinks at INFO level.
+**Multiple instances on the same vault** — Concurrent writes from two instances can cause race conditions on document updates and stale plugin table references. One instance per vault is recommended. Multi-instance coordination is planned for v2.1.
 
-### Multiple Instances on Same Vault
+**Plugin table consistency** — Plugin tables reference documents by `fqc_id`. In rare cases (external file edits that strip frontmatter) references can be temporarily orphaned. Run `fqc scan` to recover. File watcher support is planned for v2.1.
 
-Running two FlashQuery instances against the same vault simultaneously can lead to race conditions on document updates and stale plugin table references. Recommendation: one instance per vault. Multi-instance coordination is planned for v2.1.
+For technical details on all three: [ARCHITECTURE.md § Plugin Propagation Design](./docs/ARCHITECTURE.md#plugin-propagation-design).
 
-### Plugin Table Consistency
-
-Plugin tables reference documents by `fqc_id`. The periodic scanner and MCP tools both keep these up to date; in rare cases (external file edits stripping frontmatter) references can be temporarily orphaned. Run `fqc scan` to recover. File watcher support is planned for v2.1.
-
-For technical details on all three, see [ARCHITECTURE.md § Plugin Propagation Design](./docs/ARCHITECTURE.md#plugin-propagation-design).
+---
 
 ## Further Reading
 
+**Using FlashQuery**
 - [**flashquery-plugins**](https://github.com/FlashQuery/flashquery-plugins) — Claude skills and demo apps that showcase what FlashQuery can do
-- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design, data flow, the four base deployment paths
-- [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) — registering FlashQuery with Claude Code
-- [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) — production deployment: reverse proxy, service supervision (systemd / launchd), backups, logging
-- [`docs/SECURITY-TOKENS.md`](./docs/SECURITY-TOKENS.md) — bearer token authentication, token lifetime configuration, troubleshooting
-- [`tests/scenarios/README.md`](./tests/scenarios/README.md) — scenario testing framework (behaviors, writing new tests, running the suite)
+- [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) — Claude Code registration, token management, troubleshooting
+- [`docs/SECURITY-TOKENS.md`](./docs/SECURITY-TOKENS.md) — bearer token internals and lifetime configuration
+
+**Operating FlashQuery**
+- [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) — reverse proxy, TLS, systemd/launchd, backups, logging
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — system design, data flow, the four deployment paths
+
+**Contributing**
 - [`CONTRIBUTING.md`](./CONTRIBUTING.md) — development setup, test commands, PR guidelines
+- [`tests/scenarios/README.md`](./tests/scenarios/README.md) — scenario testing framework
 - [`CHANGELOG.md`](./CHANGELOG.md) — release history
+
+---
 
 ## Development Commands
 
@@ -230,7 +264,7 @@ npm run test:e2e         # End-to-end tests (spawns FlashQuery as subprocess)
 npm run test:benchmark   # Performance benchmarks (vault discovery, search throughput)
 ```
 
-**Note**: We have also built a high level test infrastructure that tests for expected behaviors from file system to MCP.  See the `./tests/scenarios/` folders to find our directed tests coded in Python (under `directed/`) and integration tests that are written in YAML and interpreted at runtime (under `integration`).  There is a runner script written in Python that can run the suite or individual test cases.  There is a README in the scenarios folder that provides more information.
+The `tests/scenarios/` directory contains a higher-level test suite: directed tests in Python (`directed/`) and YAML-driven integration tests (`integration/`), run by a Python runner script. See [`tests/scenarios/README.md`](./tests/scenarios/README.md).
 
 ### Code Quality
 
@@ -261,14 +295,14 @@ make clean     # Stop and remove all volumes  ⚠ wipes data
 **FlashQuery only** (connect to external/cloud Supabase):
 
 ```bash
-make fq-up     # Start in background
-make fq-down   # Stop
-make fq-logs   # Tail logs
-make fq-status # Show container status
-make fq-build  # Build image
+make fq-up      # Start in background
+make fq-down    # Stop
+make fq-logs    # Tail logs
+make fq-status  # Show container status
+make fq-build   # Build image
 make fq-rebuild # Force rebuild with no cache
-make fq-shell  # Open a shell in the container
-make fq-watch  # Start in foreground (logs stream to terminal)
+make fq-shell   # Open a shell in the container
+make fq-watch   # Start in foreground (logs stream to terminal)
 ```
 
 **Database only** (Postgres + pgvector; FlashQuery runs locally via `npm run dev`):
