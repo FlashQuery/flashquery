@@ -160,18 +160,20 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
 
           const sanitizedPath = sanitizedSegmentsMeta.map(m => m.name).join('/');
 
-          // Step B: Validate the sanitized path (traversal, symlink, vault-root target)
+          // Step B: Total-path byte-length check (4096-byte limit — T-92-07)
+          // Run before validateVaultPath so the informative "(N bytes)" message fires instead
+          // of the generic traversal error that validateVaultPath would produce for long paths.
+          const totalBytes = Buffer.byteLength(sanitizedPath, 'utf8');
+          if (totalBytes > 4096) {
+            results.push({ kind: 'failed', original: originalInput, error: `Resolved path exceeds the 4,096-byte filesystem limit (${totalBytes} bytes).` });
+            continue;
+          }
+
+          // Step C: Validate the sanitized path (traversal, symlink, vault-root target)
           // Use sanitizedPath so NUL/control chars don't reach lstat calls
           const validation = await validateVaultPath(vaultRoot, sanitizedPath);
           if (!validation.valid) {
             results.push({ kind: 'failed', original: originalInput, error: validation.error ?? 'Invalid path.' });
-            continue;
-          }
-
-          // Step C: Total-path byte-length check (4096-byte limit — T-92-07)
-          const totalBytes = Buffer.byteLength(sanitizedPath, 'utf8');
-          if (totalBytes > 4096) {
-            results.push({ kind: 'failed', original: originalInput, error: `Resolved path exceeds the 4,096-byte filesystem limit (${totalBytes} bytes).` });
             continue;
           }
 
