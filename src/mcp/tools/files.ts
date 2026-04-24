@@ -101,11 +101,158 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           };
         }
 
-        // TODO(Task 2): per-path loop — validate, sanitize, pre-walk stat, mkdir, partial-success response assembly
-        return {
-          content: [{ type: 'text' as const, text: 'Not yet implemented — Task 2' }],
-          isError: true,
+        // Step 4: Normalize each input path and join with root
+        // Silently skip paths that become empty after normalization (SPEC-20 — Pitfall 1)
+        const resolvedPaths: Array<{ resolved: string; original: string }> = rawPaths
+          .map((p, _i) => ({ resolved: normalizedRoot ? joinWithRoot(normalizedRoot, normalizePath(p)) : normalizePath(p), original: p }))
+          .filter(({ resolved }) => resolved !== '');
+
+        // Per-path result tracking
+        type SegmentMeta = {
+          rel: string;
+          preExisted: boolean;
+          sanitizedFrom?: string;
+          replacedChars?: string;
         };
+        type PathResult =
+          | { kind: 'success'; original: string; segments: SegmentMeta[] }
+          | { kind: 'failed'; original: string; error: string };
+        const results: PathResult[] = [];
+
+        for (const { resolved: resolvedPath, original: originalInput } of resolvedPaths) {
+          // Validate the full resolved path (traversal, symlink, vault-root target)
+          const validation = await validateVaultPath(vaultRoot, resolvedPath);
+          if (!validation.valid) {
+            results.push({ kind: 'failed', original: originalInput, error: validation.error ?? 'Invalid path.' });
+            continue;
+          }
+
+          // Total-path byte-length check (4096-byte limit — Pitfall 4 / T-92-07)
+          const totalBytes = Buffer.byteLength(resolvedPath, 'utf8');
+          if (totalBytes > 4096) {
+            results.push({ kind: 'failed', original: originalInput, error: `Resolved path exceeds the 4,096-byte filesystem limit (${totalBytes} bytes).` });
+            continue;
+          }
+
+          // Per-segment sanitize + validate (T-92-05)
+          const rawSegments = resolvedPath.split('/');
+          const sanitizedSegmentsMeta: Array<{ name: string; original: string; replacedChars: string }> = [];
+          let segmentError: string | null = null;
+          for (let si = 0; si < rawSegments.length; si++) {
+            const { sanitized, replacedChars } = sanitizeDirectorySegment(rawSegments[si]);
+            const segErr = validateSegment(sanitized, si);
+            if (segErr) { segmentError = segErr; break; }
+            sanitizedSegmentsMeta.push({ name: sanitized, original: rawSegments[si], replacedChars: replacedChars.join('') });
+          }
+          if (segmentError) {
+            results.push({ kind: 'failed', original: originalInput, error: segmentError });
+            continue;
+          }
+
+          const sanitizedPath = sanitizedSegmentsMeta.map(m => m.name).join('/');
+
+          // Pre-walk stat to detect pre-existing segments and file conflicts (Pitfall 6 / T-92-04)
+          const segmentStatus: SegmentMeta[] = [];
+          let fileConflictError: string | null = null;
+          let cumulative = '';
+          for (let si = 0; si < sanitizedSegmentsMeta.length; si++) {
+            const segMeta = sanitizedSegmentsMeta[si];
+            cumulative = cumulative ? `${cumulative}/${segMeta.name}` : segMeta.name;
+            let preExisted = false;
+            try {
+              const s = await stat(join(vaultRoot, cumulative));
+              if (!s.isDirectory()) {
+                fileConflictError = `"${segMeta.name}" already exists as a file at ${cumulative}. Cannot create a directory at this location.`;
+                break;
+              }
+              preExisted = true;
+            } catch (e) {
+              if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+                fileConflictError = `Could not stat "${cumulative}": ${(e as Error).message}.`;
+                break;
+              }
+              // ENOENT — segment doesn't exist yet, will be created
+            }
+            segmentStatus.push({
+              rel: cumulative,
+              preExisted,
+              sanitizedFrom: segMeta.replacedChars ? segMeta.original : undefined,
+              replacedChars: segMeta.replacedChars || undefined,
+            });
+          }
+          if (fileConflictError) {
+            results.push({ kind: 'failed', original: originalInput, error: fileConflictError });
+            continue;
+          }
+
+          // mkdir with recursive:true — map OS errors to human-readable messages (SPEC-20)
+          try {
+            await mkdir(join(vaultRoot, sanitizedPath), { recursive: true });
+          } catch (e) {
+            const code = (e as NodeJS.ErrnoException).code;
+            let msg: string;
+            if (code === 'EACCES') msg = `Permission denied: could not create "${originalInput}".`;
+            else if (code === 'ENOSPC') msg = `Disk full: could not create "${originalInput}". Free space on the volume containing the vault.`;
+            else if (code === 'EROFS') msg = `Read-only filesystem: could not create "${originalInput}". The vault volume is mounted read-only.`;
+            else msg = `Could not create "${originalInput}": ${(e as Error).message}.`;
+            results.push({ kind: 'failed', original: originalInput, error: msg });
+            continue;
+          }
+
+          results.push({ kind: 'success', original: originalInput, segments: segmentStatus });
+          if (segmentStatus.every(s => s.preExisted)) {
+            logger.warn(`create_directory: path already exists: ${sanitizedPath}`);
+          }
+        }
+
+        // Response assembly
+        const successes = results.filter((r): r is Extract<PathResult, { kind: 'success' }> => r.kind === 'success');
+        const failures = results.filter((r): r is Extract<PathResult, { kind: 'failed' }> => r.kind === 'failed');
+
+        // Deduplicate segments across batch paths by relative path (intermediate dirs may appear multiple times)
+        const seen = new Set<string>();
+        const uniqueSegments = successes.flatMap(r => r.segments).filter(s => {
+          if (seen.has(s.rel)) return false;
+          seen.add(s.rel);
+          return true;
+        });
+
+        // Count only newly created segments (not pre-existing) — Pitfall 2
+        const createdCount = uniqueSegments.filter(s => !s.preExisted).length;
+
+        const lines: string[] = [];
+        if (normalizedRoot) lines.push(`Root: ${normalizedRoot}/`);
+
+        if (uniqueSegments.length === 0 && failures.length > 0) {
+          lines.push('All paths failed:');
+        } else {
+          lines.push(`Created ${createdCount} director${createdCount === 1 ? 'y' : 'ies'}:`);
+          for (const s of uniqueSegments) {
+            const statusWord = s.preExisted ? 'already exists' : 'created';
+            const sanitizedNote = s.sanitizedFrom
+              ? `, sanitized from "${s.sanitizedFrom}" — replaced "${s.replacedChars}"`
+              : '';
+            lines.push(`- ${s.rel}/ (${statusWord}${sanitizedNote})`);
+          }
+        }
+
+        if (failures.length > 0) {
+          if (uniqueSegments.length > 0) lines.push('');
+          lines.push(`Failed (${failures.length} path${failures.length === 1 ? '' : 's'}):`);
+          for (const f of failures) {
+            lines.push(`- "${f.original}": ${f.error}`);
+          }
+        }
+
+        // isError = true only when ALL paths failed (Pitfall 3 / D-04)
+        const successCount = successes.length;
+        const isError = successCount === 0 && failures.length > 0;
+
+        if (!isError && createdCount > 0) {
+          logger.info(`create_directory: created ${createdCount} director${createdCount === 1 ? 'y' : 'ies'}`);
+        }
+
+        return { content: [{ type: 'text' as const, text: lines.join('\n') }], isError };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`create_directory failed: ${msg}`);
