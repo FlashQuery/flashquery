@@ -433,11 +433,12 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
 
           const results: WalkEntry[] = [];
           for (const entry of dirents) {
+            const name = String(entry.name);
             // Dotfile filter (LIST-13) — applies to BOTH files and directories
-            if (entry.name.startsWith('.')) continue;
+            if (name.startsWith('.')) continue;
 
-            const entryRel = relBase ? `${relBase}/${entry.name}` : entry.name;
-            const entryAbs = join(absDir, entry.name);
+            const entryRel = relBase ? `${relBase}/${name}` : name;
+            const entryAbs = join(absDir, name);
 
             if (entry.isDirectory()) {
               results.push({ kind: 'dir', name: entry.name, relativePath: entryRel, absPath: entryAbs });
@@ -543,7 +544,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
               .eq('instance_id', config.instance.id)
               .in('path', batch);
             for (const row of rows ?? []) {
-              dbRecordMap.set(row.path as string, row as DbRow);
+              dbRecordMap.set(row.path as string, row);
             }
           }
         }
