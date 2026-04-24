@@ -241,3 +241,36 @@ export function formatLinkedDocEntry(doc: { title: string; resolved: boolean }):
   const status = doc.resolved ? 'resolved' : 'unresolved';
   return [formatKeyValueEntry('Title', doc.title), formatKeyValueEntry('Status', status)].join('\n');
 }
+
+/**
+ * Format markdown table header for vault directory listing
+ * Returns header row and separator row as a single newline-joined string
+ *
+ * Pattern (Phase 91):
+ * - Used by list_vault format: "table" output mode
+ *
+ * @example
+ * formatTableHeader()
+ * → '| Name | Type | Size | Created | Updated |\n|------|------|------|---------|---------|'
+ */
+export function formatTableHeader(): string {
+  return '| Name | Type | Size | Created | Updated |\n|------|------|------|---------|---------|';
+}
+
+/**
+ * Format a single markdown table row for vault directory listing
+ * The caller is responsible for assembling the Name value (filename or relative path)
+ *
+ * @example
+ * formatTableRow('notes.md', 'file', '2.3 KB', '2026-01-01', '2026-04-01')
+ * → '| notes.md | file | 2.3 KB | 2026-01-01 | 2026-04-01 |'
+ */
+export function formatTableRow(
+  name: string,
+  type: string,
+  size: string,
+  created: string,
+  updated: string
+): string {
+  return `| ${name} | ${type} | ${size} | ${created} | ${updated} |`;
+}
