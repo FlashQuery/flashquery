@@ -118,8 +118,11 @@ Plans:
   3. Calling list_vault on a non-existent path returns isError: true (behavior change from old list_files)
   4. Tracked files return DB-enriched metadata (title, tags, fqc_id, status, DB timestamps); untracked files are marked as such
   5. No regressions in the existing test suite (TEST-08)
-**Plans**: TBD
-**UI hint**: no
+**Plans:** 2 plans
+
+Plans:
+- [ ] 93-01-PLAN.md — list_vault unit tests (U-34..U-43, U-54..U-58, U-66..U-69) + handler implementation in files.ts (Wave 1, TDD)
+- [ ] 93-02-PLAN.md — 7 directed scenario test files (F-08..F-11, F-53..F-97) + F-51 un-skip (Wave 2)
 
 ---
 
@@ -191,7 +194,7 @@ Plans:
 | 90. Frontmatter Field Name Centralization | v2.9 pre | 7/7 | Complete | 2026-04-23 |
 | 91. Shared Utilities | v2.9 | 2/2 | Complete    | 2026-04-24 |
 | 92. create_directory Handler | v2.9 | 1/1 | Complete    | 2026-04-24 |
-| 93. list_vault Handler | v2.9 | 0/? | Not started | - |
+| 93. list_vault Handler | v2.9 | 0/2 | Not started | - |
 | 94. Migration and Cleanup | v2.9 | 0/? | Not started | - |
 | 95. Integration Tests | v2.9 | 0/? | Not started | - |
 | 96. Coverage Matrix Updates | v2.9 | 0/? | Not started | - |
@@ -210,4 +213,4 @@ Plans:
 
 ---
 
-*Last updated: 2026-04-24 — Phase 91 plans finalized (2 plans, Wave 1 parallel)*
+*Last updated: 2026-04-24 — Phase 93 plans finalized (2 plans, Wave 1 + Wave 2 sequential)*
