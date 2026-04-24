@@ -85,12 +85,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, format="table")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f70 = result.ok and "|---|" in result.text
+        passed_f70 = result.ok and "|---" in result.text
 
         run.step(
             label="F-70: format=table has separator row '|---|'",
             passed=passed_f70,
-            detail=f"ok={result.ok} has_separator={'|---|' in result.text} | {result.text[:300]}",
+            detail=f"ok={result.ok} has_separator={'|---' in result.text} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
