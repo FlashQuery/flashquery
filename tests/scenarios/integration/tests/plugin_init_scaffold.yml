@@ -42,13 +42,20 @@ steps:
       root_path: "_integration/if13"
       paths: ["contacts", "companies"]
 
-  - label: "list_vault confirms scaffolded directories exist (IF-13)"
+  - label: "list_vault confirms contacts/ directory exists (IF-13)"
     assert:
       op: list_vault
       args:
         path: "_integration/if13"
         show: "directories"
       expect_contains: "contacts/"
+
+  - label: "list_vault confirms companies/ directory exists (IF-13)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if13"
+        show: "directories"
       expect_contains: "companies/"
 
   # ── Write contact document and assert tracking ──────────────────────────────

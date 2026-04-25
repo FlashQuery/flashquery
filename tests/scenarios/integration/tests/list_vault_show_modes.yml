@@ -28,11 +28,18 @@ steps:
       expect_contains: "note.md"
       expect_not_contains: "subdir/"
 
-  - label: "list_vault(show: all) includes both file and directory (IF-11)"
+  - label: "list_vault(show: all) includes file (IF-11)"
     assert:
       op: list_vault
       args:
         path: "_integration/if11"
         show: "all"
       expect_contains: "note.md"
+
+  - label: "list_vault(show: all) includes directory (IF-11)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if11"
+        show: "all"
       expect_contains: "subdir/"

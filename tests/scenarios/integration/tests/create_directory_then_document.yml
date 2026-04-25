@@ -19,11 +19,18 @@ steps:
     content: "Content for the IF-03 integration test."
     tags: [if03-tag]
 
-  - label: "list_vault(show: all) shows both directory and document (IF-03)"
+  - label: "list_vault(show: all) shows subdirectory (IF-03)"
     assert:
       op: list_vault
       args:
         path: "_integration/if03"
         show: "all"
       expect_contains: "docs/"
+
+  - label: "list_vault(show: all) shows document (IF-03)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if03"
+        show: "all"
       expect_contains: "note.md"

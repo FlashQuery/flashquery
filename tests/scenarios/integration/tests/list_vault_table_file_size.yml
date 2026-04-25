@@ -27,4 +27,21 @@ steps:
         format: "table"
         show: "files"
       expect_contains: "| Name |"
+
+  - label: "list_vault(format: table, show: files) shows note.md file entry (IF-16)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if16/docs"
+        format: "table"
+        show: "files"
       expect_contains: "note.md"
+
+  - label: "list_vault(format: table, show: files) shows a file size value (IF-16)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if16/docs"
+        format: "table"
+        show: "files"
+      expect_contains: " B"

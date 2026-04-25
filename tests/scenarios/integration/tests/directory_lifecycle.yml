@@ -42,7 +42,7 @@ steps:
       root_path: "_integration/if06"
       paths: ["parent", "parent/child-a", "parent/child-b"]
 
-  - label: "list_vault recursive shows full nested tree (IF-06)"
+  - label: "list_vault recursive shows parent/ (IF-06)"
     assert:
       op: list_vault
       args:
@@ -50,7 +50,23 @@ steps:
         show: "directories"
         recursive: true
       expect_contains: "parent/"
+
+  - label: "list_vault recursive shows child-a/ (IF-06)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if06"
+        show: "directories"
+        recursive: true
       expect_contains: "child-a/"
+
+  - label: "list_vault recursive shows child-b/ (IF-06)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if06"
+        show: "directories"
+        recursive: true
       expect_contains: "child-b/"
 
   - label: "Remove leaf directory child-a first (IF-06)"
@@ -68,7 +84,7 @@ steps:
     args:
       path: "_integration/if06/parent"
 
-  - label: "After leaf-first removal: list_vault confirms all directories gone (IF-06)"
+  - label: "After leaf-first removal: list_vault confirms parent/ gone (IF-06)"
     assert:
       op: list_vault
       args:
@@ -76,5 +92,21 @@ steps:
         show: "directories"
         recursive: true
       expect_not_contains: "parent/"
+
+  - label: "After leaf-first removal: list_vault confirms child-a/ gone (IF-06)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if06"
+        show: "directories"
+        recursive: true
       expect_not_contains: "child-a/"
+
+  - label: "After leaf-first removal: list_vault confirms child-b/ gone (IF-06)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if06"
+        show: "directories"
+        recursive: true
       expect_not_contains: "child-b/"

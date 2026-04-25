@@ -19,7 +19,7 @@ steps:
     content: "Markdown document for the IF-12 extension filter test."
     tags: [if12-tag]
 
-  - label: "list_vault(show: all, extensions: [.md]) shows both dir and .md file (IF-12)"
+  - label: "list_vault(show: all, extensions: [.md]) shows directory (IF-12)"
     assert:
       op: list_vault
       args:
@@ -27,4 +27,12 @@ steps:
         show: "all"
         extensions: [".md"]
       expect_contains: "docs/"
+
+  - label: "list_vault(show: all, extensions: [.md]) shows .md file (IF-12)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if12"
+        show: "all"
+        extensions: [".md"]
       expect_contains: "readme.md"

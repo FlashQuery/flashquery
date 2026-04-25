@@ -29,7 +29,7 @@ steps:
       root_path: "_integration/if02"
       paths: ["notes", "archive", "drafts"]
 
-  - label: "list_vault(recursive: true) shows full tree (IF-02)"
+  - label: "list_vault(recursive: true) shows notes/ (IF-02)"
     assert:
       op: list_vault
       args:
@@ -37,5 +37,21 @@ steps:
         show: "directories"
         recursive: true
       expect_contains: "notes/"
+
+  - label: "list_vault(recursive: true) shows archive/ (IF-02)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if02"
+        show: "directories"
+        recursive: true
       expect_contains: "archive/"
+
+  - label: "list_vault(recursive: true) shows drafts/ (IF-02)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if02"
+        show: "directories"
+        recursive: true
       expect_contains: "drafts/"
