@@ -770,8 +770,19 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
       try {
         const vaultRoot = config.instance.vault.path;
 
+        // ── Step 1: Vault-root guard (mirrors list_vault pattern) ─────────────
+        // normalizePath('/') → '' (empty string). Reject the vault root explicitly
+        // before delegating to validateVaultPath so the error message is clear.
+        const normalizedInput = normalizePath(dirPath);
+        if (normalizedInput === '') {
+          return {
+            content: [{ type: 'text' as const, text: 'Cannot remove the vault root directory.' }],
+            isError: true,
+          };
+        }
+
         // Path validation using validateVaultPath() (migrated in Phase 94 — replaces inline traversal block)
-        const validation = await validateVaultPath(vaultRoot, dirPath);
+        const validation = await validateVaultPath(vaultRoot, normalizedInput);
         if (!validation.valid) {
           return { content: [{ type: 'text' as const, text: validation.error ?? 'Invalid path.' }], isError: true };
         }
