@@ -1,5 +1,4 @@
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import matter from 'gray-matter';
 import { z } from 'zod';
