@@ -129,6 +129,7 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
   # Initialize a new MCP session (required before any tool call on streamable-http transport)
   INIT_RESP=$(curl -si --max-time 10 -X POST http://localhost:3100/mcp \
     -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
     -H "Authorization: Bearer ${MCP_AUTH_SECRET}" \
     -d "$INIT_PAYLOAD" 2>/dev/null || true)
 
@@ -139,6 +140,7 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
     # Session established — make a tool call that touches the database
     TOOL_RESP=$(curl -s --max-time 10 -X POST http://localhost:3100/mcp \
       -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
       -H "Authorization: Bearer ${MCP_AUTH_SECRET}" \
       -H "mcp-session-id: $SESSION_ID" \
       -d "$TOOL_PAYLOAD" 2>/dev/null || true)
