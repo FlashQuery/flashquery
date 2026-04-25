@@ -97,6 +97,32 @@ multi-step workflows involving plugin tables, record tools, scan, and frontmatte
 
 ---
 
+## IF — Filesystem Composition
+
+Verifies that directory creation, listing, and removal compose correctly with other
+FlashQuery tools (create_document, move_document, register_plugin, search_documents).
+
+| ID     | Behavior                                                                                              | Covered By | Date Updated | Last Passing |
+|--------|-------------------------------------------------------------------------------------------------------|------------|--------------|--------------|
+| IF-01  | create_directory → list_vault(show: "directories") confirms created directory                         | —          | 2026-04-25   |              |
+| IF-02  | create_directory with root_path → list_vault recursive shows full tree                               | —          | 2026-04-25   |              |
+| IF-03  | create_directory → create_document → list_vault(show: "all") shows both directory and document       | —          | 2026-04-25   |              |
+| IF-04  | create_directory → create_document → search_documents finds document by title                        | —          | 2026-04-25   |              |
+| IF-05  | create_directory → remove_directory (empty) → list_vault confirms absence                            | —          | 2026-04-25   |              |
+| IF-06  | batch create_directory → list_vault recursive → remove leaf directories first → list_vault confirms  | —          | 2026-04-25   |              |
+| IF-07  | create_directory called twice with same path → list_vault shows no duplicate entries (idempotency)   | —          | 2026-04-25   |              |
+| IF-08  | dot-prefixed directory created → list_vault shows it is invisible to default listing                 | —          | 2026-04-25   |              |
+| IF-09  | create_directory with name requiring sanitization → list_vault shows sanitized name → create_document in it succeeds | —  | 2026-04-25   |              |
+| IF-10  | create_directory → move_document into new directory → list_vault confirms moved document             | —          | 2026-04-25   |              |
+| IF-11  | list_vault(show: "files") excludes directories; list_vault(show: "all") includes both                | —          | 2026-04-25   |              |
+| IF-12  | list_vault(show: "all", extensions: [".md"]) — directories unfiltered, only .md files shown         | —          | 2026-04-25   |              |
+| IF-13  | register_plugin → create_directory scaffold → list_vault confirms dirs → create_document → search_records confirms auto-tracking | —  | 2026-04-25   |              |
+| IF-14  | register_plugin → create_directory scaffold → vault.write in watched folder → reconciliation → search_records | —  | 2026-04-25   |              |
+| IF-15  | create_directory → list_vault(format: "table") vs list_vault(format: "detailed") produce correct formats | —      | 2026-04-25   |              |
+| IF-16  | create_directory → create_document → list_vault(format: "table") shows file size for the document   | —          | 2026-04-25   |              |
+
+---
+
 ## How to update this file
 
 When a test passes for the first time, update its row:
