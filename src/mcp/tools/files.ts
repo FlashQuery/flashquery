@@ -1,8 +1,8 @@
 /**
  * Filesystem primitive tools for vault operations.
  *
- * Provides create_directory and list_vault, with remove_directory
- * migration planned for Phase 94.
+ * Provides create_directory, list_vault, and remove_directory — all filesystem
+ * primitives for vault operations, co-located in this module.
  *
  * Design:
  * - No write lock: directory creation is OS-atomic (mkdir -p), not a document op (D-02)
@@ -10,11 +10,12 @@
  * - Partial-success semantics: isError=false when at least one path succeeded (D-04)
  * - Idempotent: already-existing directories are reported, not errored (D-05)
  * - list_vault: read-only; DB enrichment via supabaseManager.getClient() inside handler
+ * - remove_directory: migrated from documents.ts in Phase 94; uses validateVaultPath()
  */
 
 import { z } from 'zod';
-import { mkdir, stat, readdir } from 'node:fs/promises';
-import { join, extname } from 'node:path';
+import { mkdir, stat, readdir, rmdir } from 'node:fs/promises';
+import { join, extname, resolve, relative } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
@@ -27,6 +28,7 @@ import {
   validateSegment,
 } from '../utils/path-validation.js';
 import { supabaseManager } from '../../storage/supabase.js';
+import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { formatFileSize } from '../utils/format-file-size.js';
 import { parseDateFilter } from '../utils/date-filter.js';
 import {
@@ -38,7 +40,7 @@ import {
 
 /**
  * Register filesystem primitive tools on the MCP server.
- * Phase 93 will add list_vault here; Phase 94 will migrate remove_directory here.
+ * Registers create_directory, list_vault, and remove_directory (migrated from documents.ts in Phase 94).
  */
 export function registerFileTools(server: McpServer, config: FlashQueryConfig): void {
   // ─── Tool: create_directory ──────────────────────────────────────────────────
@@ -720,6 +722,176 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`list_vault failed: ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+      }
+    }
+  );
+
+  // ─── Tool: remove_directory ──────────────────────────────────────────────────
+  server.registerTool(
+    'remove_directory',
+    {
+      description:
+        'Safely remove an empty directory from the vault. Returns an error listing contents if the directory is not empty. No recursive deletion, no force parameter — only empty directories can be removed. Use when cleaning up temporary or staging folders.',
+      inputSchema: {
+        path: z
+          .string()
+          .describe('Vault-relative path of the directory to remove.'),
+      },
+    },
+    async ({ path: dirPath }) => {
+      // D-02b: Check shutdown flag immediately
+      if (getIsShuttingDown()) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Server is shutting down; new requests cannot be processed',
+            },
+          ],
+          isError: true,
+        };
+      }
+
+      if (config.locking.enabled) {
+        const locked = await acquireLock(
+          supabaseManager.getClient(),
+          config.instance.id,
+          'documents',
+          { ttlSeconds: config.locking.ttlSeconds }
+        );
+        if (!locked) {
+          return {
+            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.' }],
+            isError: true,
+          };
+        }
+      }
+
+      try {
+        const vaultRoot = config.instance.vault.path;
+
+        // Path traversal protection + vault root guard (proven pattern from resolveDocumentIdentifier)
+        const absPath = join(vaultRoot, dirPath);
+        const resolvedAbs = resolve(absPath);
+        const resolvedVault = resolve(vaultRoot);
+
+        // Reject vault root removal
+        if (resolvedAbs === resolvedVault) {
+          return {
+            content: [{ type: 'text' as const, text: 'Cannot remove the vault root directory.' }],
+            isError: true,
+          };
+        }
+
+        // Reject path traversal
+        const rel = relative(resolvedVault, resolvedAbs);
+        if (rel.startsWith('..') || rel === '..') {
+          return {
+            content: [{ type: 'text' as const, text: 'Path must be within the vault root.' }],
+            isError: true,
+          };
+        }
+
+        // Stat the path — must exist and be a directory
+        let dirStat;
+        try {
+          dirStat = await stat(absPath);
+        } catch (statErr) {
+          const code = (statErr as NodeJS.ErrnoException).code;
+          if (code === 'ENOENT') {
+            return {
+              content: [{ type: 'text' as const, text: `Directory '${dirPath}' does not exist.` }],
+              isError: true,
+            };
+          }
+          if (code === 'EACCES') {
+            return {
+              content: [{ type: 'text' as const, text: `Permission denied for directory '${dirPath}'.` }],
+              isError: true,
+            };
+          }
+          throw statErr;
+        }
+
+        if (!dirStat.isDirectory()) {
+          return {
+            content: [{ type: 'text' as const, text: `'${dirPath}' is a file, not a directory.` }],
+            isError: true,
+          };
+        }
+
+        // Read directory contents (no filtering — includes hidden files)
+        let entries: string[];
+        try {
+          entries = await readdir(absPath);
+        } catch (readdirErr) {
+          const code = (readdirErr as NodeJS.ErrnoException).code;
+          if (code === 'EACCES') {
+            return {
+              content: [{ type: 'text' as const, text: `Permission denied for directory '${dirPath}'.` }],
+              isError: true,
+            };
+          }
+          throw readdirErr;
+        }
+
+        // Non-empty check — return formatted listing
+        if (entries.length > 0) {
+          // Classify each entry as file or dir
+          const listing: string[] = [];
+          for (const entry of entries) {
+            let entryType = 'file';
+            try {
+              const entryStat = await stat(join(absPath, entry));
+              entryType = entryStat.isDirectory() ? 'dir' : 'file';
+            } catch {
+              // If stat fails, treat as file
+            }
+            listing.push(entryType === 'dir' ? `- [dir] ${entry}/` : `- [file] ${entry}`);
+          }
+
+          const errorText = [
+            `Directory "${dirPath}" is not empty.`,
+            '',
+            `Contents (${entries.length} item${entries.length === 1 ? '' : 's'}):`,
+            ...listing,
+            '',
+            'Remove or move these items first.',
+          ].join('\n');
+
+          return {
+            content: [{ type: 'text' as const, text: errorText }],
+            isError: true,
+          };
+        }
+
+        // Remove confirmed empty directory
+        try {
+          await rmdir(absPath);
+        } catch (rmdirErr) {
+          const code = (rmdirErr as NodeJS.ErrnoException).code;
+          if (code === 'EACCES') {
+            return {
+              content: [{ type: 'text' as const, text: `Permission denied for directory '${dirPath}'.` }],
+              isError: true,
+            };
+          }
+          throw rmdirErr;
+        }
+
+        logger.info(`remove_directory: removed empty directory ${dirPath}`);
+
+        return {
+          content: [{ type: 'text' as const, text: `Removed directory: ${dirPath}` }],
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error(`remove_directory failed: ${msg}`);
+        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+      } finally {
+        if (config.locking.enabled) {
+          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
+        }
       }
     }
   );
