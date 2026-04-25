@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-04-25
+
+### Fixed
+- Supabase Studio container always reported `(unhealthy)` in `make status` despite
+  functioning correctly — Next.js 16 no longer binds to `127.0.0.1`, so the image's
+  built-in healthcheck (which probes `http://localhost:3000/...`) always returned
+  `ECONNREFUSED`. The healthcheck in `docker/docker-compose.yml` is now overridden
+  to probe the container's network hostname instead of localhost.
+
 ## [1.1.0] - 2026-04-25
 
 This release introduces native filesystem navigation to the vault. The new `create_directory` and `list_vault` tools give AI agents direct control over vault structure, replacing `list_files` with a significantly more capable listing interface that supports filtering by type, date, extension, and format.
@@ -76,6 +85,7 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/FlashQuery/flashquery/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/FlashQuery/flashquery/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/FlashQuery/flashquery/releases/tag/v1.0.0
