@@ -1,20 +1,20 @@
 name: create_directory_then_document
 description: >
-  create_directory creates a directory, then vault.write creates a document inside it.
-  list_vault(show: "all") confirms both the directory and the document appear in the
-  listing. Covers IF-03.
+  create_directory creates a subdirectory, then vault.write creates a document in the
+  parent directory. list_vault(show: "all") confirms both the subdirectory and the
+  document appear in the same listing. Covers IF-03.
 coverage: [IF-03]
 
 steps:
-  - label: "Create directory for IF-03"
+  - label: "Create subdirectory for IF-03"
     action: create_directory
     args:
       paths: "_integration/if03/docs"
 
-  - label: "Write a document inside the new directory"
+  - label: "Write a document in the parent directory"
     action: vault.write
     name: if03_doc
-    path: "if03/docs/note.md"
+    path: "if03/note.md"
     title: "IF-03 Test Note"
     content: "Content for the IF-03 integration test."
     tags: [if03-tag]
