@@ -165,6 +165,7 @@ services:
       EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-none}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      MCP_AUTH_SECRET: ${MCP_AUTH_SECRET:-ci-smoke-test-secret}
     command: start --transport http --config ./flashquery.yaml
     volumes:
       - ${VAULT_PATH:-./vault}:/app/vault

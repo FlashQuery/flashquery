@@ -117,6 +117,9 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Testing MCP connectivity (max 120 seconds f
 INIT_PAYLOAD='{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke-test","version":"1.0"}},"id":1}'
 TOOL_PAYLOAD='{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_memories","arguments":{"tags":["smoke-test"]}},"id":2}'
 
+# Bearer token matches MCP_AUTH_SECRET in .env.docker.example / docker-compose.yml default.
+MCP_AUTH_SECRET="${MCP_AUTH_SECRET:-ci-smoke-test-secret}"
+
 MAX_WAIT=120
 ELAPSED=0
 MCP_PASSED=0
@@ -126,6 +129,7 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
   # Initialize a new MCP session (required before any tool call on streamable-http transport)
   INIT_RESP=$(curl -si --max-time 10 -X POST http://localhost:3100/mcp \
     -H "Content-Type: application/json" \
+    -H "Authorization: Bearer ${MCP_AUTH_SECRET}" \
     -d "$INIT_PAYLOAD" 2>/dev/null || true)
 
   # Extract the session ID from response headers
@@ -135,6 +139,7 @@ while [ "$ELAPSED" -lt "$MAX_WAIT" ]; do
     # Session established — make a tool call that touches the database
     TOOL_RESP=$(curl -s --max-time 10 -X POST http://localhost:3100/mcp \
       -H "Content-Type: application/json" \
+      -H "Authorization: Bearer ${MCP_AUTH_SECRET}" \
       -H "mcp-session-id: $SESSION_ID" \
       -d "$TOOL_PAYLOAD" 2>/dev/null || true)
 
