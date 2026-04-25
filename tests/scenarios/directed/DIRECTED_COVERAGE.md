@@ -176,6 +176,8 @@ Batch tag operations across entity types.
 
 Vault scanning, file listing, and directory management.
 
+### 9.1 Vault Scanning and File Listing
+
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | F-01 | force_file_scan (sync) indexes new files | test_search_after_create | 2026-04-13 | 2026-04-16 |
@@ -185,10 +187,10 @@ Vault scanning, file listing, and directory management.
 | F-05 | reconcile_documents dry run reports without changes | test_reconcile_documents | 2026-04-14 | 2026-04-16 |
 | F-06 | reconcile_documents detects moved files via fqc_id | test_reconcile_documents | 2026-04-14 | 2026-04-16 |
 | F-07 | reconcile_documents archives permanently gone files | test_reconcile_documents | 2026-04-14 | 2026-04-16 |
-| F-08 | list_files returns entries for a directory | test_list_files | 2026-04-14 | 2026-04-16 |
-| F-09 | list_files recursive mode | test_list_files | 2026-04-14 | 2026-04-16 |
-| F-10 | list_files with extension filter | test_list_files | 2026-04-14 | 2026-04-16 |
-| F-11 | list_files with date range filter | test_list_files | 2026-04-14 | 2026-04-16 |
+| F-08 | list_vault returns file entries for a directory (renamed from list_files) | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-09 | list_vault recursive mode returns files from subdirectories (renamed from list_files) | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-10 | list_vault with extension filter (renamed from list_files) | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-11 | list_vault with date range filter (renamed from list_files) | test_list_vault | 2026-04-25 | 2026-04-25 |
 | F-12 | remove_directory succeeds on empty directory | test_directory_operations | 2026-04-14 | 2026-04-16 |
 | F-13 | remove_directory fails on non-empty directory | test_directory_operations | 2026-04-14 | 2026-04-16 |
 | F-14 | remove_directory prevents vault root removal | test_directory_operations | 2026-04-14 | 2026-04-16 |
@@ -196,6 +198,100 @@ Vault scanning, file listing, and directory management.
 | ~~F-16~~ | ~~discover_document in flagged mode~~ | ~~test_discover_document~~ | 2026-04-21 | 2026-04-16 |
 | ~~F-17~~ | ~~discover_document in paths mode~~ | ~~test_discover_document~~ | 2026-04-21 | 2026-04-16 |
 | F-18 | force_file_scan preserves user-defined frontmatter fields in newly discovered documents (scan merges FQC identity fields into existing frontmatter rather than replacing it) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
+
+### 9.2 Directory Creation (`create_directory`)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| F-19 | `create_directory` creates a single directory at the vault root and it exists on the filesystem | test_create_directory | 2026-04-25 | 2026-04-25 |
+| F-20 | `create_directory` creates a deep hierarchy (`a/b/c/d`) — all intermediate directories exist | test_create_directory | 2026-04-25 | 2026-04-25 |
+| F-21 | `create_directory` reports `(already exists)` for a pre-existing directory; `isError` is `false`; count is 0 | test_create_directory | 2026-04-25 | 2026-04-25 |
+| F-22 | `create_directory` with partial overlap — existing segments reported as `(already exists)`, new segments as `(created)` | test_create_directory | 2026-04-25 | 2026-04-25 |
+| F-23 | `create_directory` batch creation (array of paths) — all new directories created in one call | test_create_directory_batch | 2026-04-25 | 2026-04-25 |
+| F-24 | `create_directory` batch with mixed results — valid paths created, invalid paths listed in `Failed` section, overall `isError` is `false` | test_create_directory_batch | 2026-04-25 | 2026-04-25 |
+| F-25 | `create_directory` batch where all paths fail — overall `isError` is `true` | test_create_directory_batch | 2026-04-25 | 2026-04-25 |
+| F-26 | `create_directory` with `root_path` — directories created relative to root; root itself created if absent | test_create_directory_root_path | 2026-04-25 | 2026-04-25 |
+| F-27 | `create_directory` with `root_path` that already exists — root shown as `(already exists)`, subfolders created | test_create_directory_root_path | 2026-04-25 | 2026-04-25 |
+| F-28 | `create_directory` with deep `root_path` (`Plugins/CRM/v2`) — entire root hierarchy created | test_create_directory_root_path | 2026-04-25 | 2026-04-25 |
+| F-29 | `create_directory` is idempotent — repeated identical calls all succeed with `(already exists)` | test_create_directory | 2026-04-25 | 2026-04-25 |
+| F-30 | Leading `/` stripped — `"/inbox"` creates `inbox/` | test_create_directory_normalization | 2026-04-25 | 2026-04-25 |
+| F-31 | Trailing `/` stripped — `"inbox/"` creates `inbox/` | test_create_directory_normalization | 2026-04-25 | 2026-04-25 |
+| F-32 | Consecutive slashes collapsed — `"CRM//Contacts///Active"` creates `CRM/Contacts/Active/` | test_create_directory_normalization | 2026-04-25 | 2026-04-25 |
+
+### 9.3 Directory Creation (`create_directory`) — Sanitization and Rejection
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| F-33 | Illegal character (colon) sanitized — `"Work: Projects"` creates `"Work  Projects/"` with sanitization note in response | test_create_directory_sanitization | 2026-04-25 | 2026-04-25 |
+| F-34 | Multiple illegal characters sanitized in one segment — response shows all replacements | test_create_directory_sanitization | 2026-04-25 | 2026-04-25 |
+| F-35 | NUL character sanitized | test_create_directory_sanitization | 2026-04-25 | 2026-04-25 |
+| F-36 | Control characters (bytes 1–31) sanitized | test_create_directory_sanitization | 2026-04-25 | 2026-04-25 |
+| F-37 | Path traversal (`../../etc`) rejected with `isError: true` | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-38 | Vault root (`"/"`, `"."`, `""`) rejected as target | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-39 | Symlink in path rejected — even symlinks pointing within vault | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-40 | File conflict — existing file at path segment blocks directory creation | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-41 | File conflict mid-hierarchy — file at `a/file.md`, request for `a/file.md/sub` rejected | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-42 | Whitespace-only segment rejected | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-43 | Segment exceeding 255 bytes rejected with byte count in message | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-44 | Total resolved path exceeding 4,096 bytes rejected | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-45 | Array exceeding 50 paths rejected immediately — no paths processed | test_create_directory_batch | 2026-04-25 | 2026-04-25 |
+| F-46 | Empty array rejected | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-47 | Wrong type for `paths` (e.g., number) rejected | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-48 | Invalid `root_path` (traversal) rejects entire call — no paths processed | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-49 | `root_path` pointing to an existing file rejects entire call | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
+| F-50 | Dot-prefixed directory (`.staging/temp`) created successfully | test_create_directory_special | 2026-04-25 | 2026-04-25 |
+| F-51 | Dot-prefixed directory is invisible to `list_vault` (scanner ignore patterns) | test_create_directory_special | 2026-04-25 | 2026-04-25 |
+| F-52 | Shutdown check — call during shutdown returns `isError: true` with shutdown message | test_create_directory_special | 2026-04-25 | 2026-04-25 |
+
+### 9.4 Vault Listing (`list_vault`)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| F-53 | `list_vault` with `show: "files"` (explicit) returns only file entries — no directory entries in non-recursive mode | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-54 | `list_vault` with `show: "files"` in recursive mode returns only file entries (consistent with non-recursive) | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-55 | `list_vault` with `show: "directories"` non-recursive returns only immediate subdirectories | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
+| F-56 | `list_vault` with `show: "directories"` recursive returns complete directory tree sorted by depth then alphabetical | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
+| F-57 | `list_vault` with `show: "directories"` includes empty directories (0 children) | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
+| F-58 | `list_vault` with `show: "directories"` excludes dot-prefixed directories (scanner ignore patterns) | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
+| F-59 | `list_vault` with `show: "all"` returns both directory and file entries, directories grouped first | test_list_vault_all | 2026-04-25 | 2026-04-25 |
+| F-60 | `list_vault` with `show: "all"` recursive returns entries from entire tree | test_list_vault_all | 2026-04-25 | 2026-04-25 |
+| F-61 | `list_vault` with `show: "all"` and `extensions` filter — directories unfiltered, only matching files included | test_list_vault_all | 2026-04-25 | 2026-04-25 |
+| F-62 | `list_vault` with `show: "directories"` and `extensions` — extensions silently ignored, only directories returned | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
+| F-63 | `list_vault` with `show: "directories"` and date filter — only directories modified within the date range appear | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
+| F-64 | `list_vault` with `show: "directories"` and `limit` — result truncated at limit with `truncated: true` | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
+| F-65 | `list_vault` rejects invalid `show` value (e.g., `"folders"`) with `isError: true` | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-66 | `list_vault` shutdown check — call during shutdown returns `isError: true` | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-67 | `list_vault` directory entry format includes `path` (trailing `/`), `type`, `children`, `updated`, `created` | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
+| F-68 | `list_vault` default behavior — call with no `show` parameter behaves like `show: "all"` (returns both directories and files) | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-69 | `list_vault` with `format: "table"` (default) returns markdown table with header row, separator row, and data rows | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-70 | `list_vault` with `format: "table"` includes all five columns: Name, Type, Size, Created, Updated | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-71 | `list_vault` with `format: "table"` — file Size column shows human-readable size from `formatFileSize` | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-72 | `list_vault` with `format: "table"` — directory Size column shows `"N items"` child count | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-73 | `list_vault` with `format: "table"` — directory Name column trails with `/` | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-74 | `list_vault` with `format: "table"` — non-recursive Name shows filename/dirname only; recursive Name shows relative path | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-75 | `list_vault` with `format: "table"` — dates use `YYYY-MM-DD` format (no time component) | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-76 | `list_vault` with `format: "detailed"` returns key-value pair entries separated by `---` | test_list_vault_format_detailed | 2026-04-25 | 2026-04-25 |
+| F-77 | `list_vault` with `format: "detailed"` — file entries include `Size` field with human-readable value | test_list_vault_format_detailed | 2026-04-25 | 2026-04-25 |
+| F-78 | `list_vault` with `format: "detailed"` — directory entries include `Children` count and `Type: directory` | test_list_vault_format_detailed | 2026-04-25 | 2026-04-25 |
+| F-79 | `list_vault` with `format: "detailed"` — timestamps use ISO 8601 format | test_list_vault_format_detailed | 2026-04-25 | 2026-04-25 |
+| F-80 | `list_vault` with no `format` parameter behaves like `format: "table"` | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-81 | `list_vault` rejects invalid `format` value (e.g., `"verbose"`) with `isError: true` | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-82 | `list_vault` with `format: "table"` and `show: "directories"` — table contains only directory rows | test_list_vault_format | 2026-04-25 | 2026-04-25 |
+| F-83 | `list_vault` with `format: "detailed"` and `show: "all"` — directories grouped first, then files | test_list_vault_format_detailed | 2026-04-25 | 2026-04-25 |
+| F-84 | `list_vault` with non-existent `path` returns `isError: true` | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-85 | `list_vault` with `path` pointing to a file (not directory) returns `isError: true` | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-86 | `list_vault` with no parameters (`list_vault({})`) — `path` defaults to `"/"`, `show` to `"all"`, `format` to `"table"`, `recursive` to `false`. Returns markdown table of top-level vault entries | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-87 | `list_vault` response includes untracked file trailing note when untracked files are present | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-88 | `list_vault` response includes summary line (`Showing N of M entries in {path}/.`) | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-89 | `list_vault` with `date_field: "created"` filters by creation date, not modification date | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-90 | `list_vault` with multiple `extensions` (array) filters files correctly — directories unaffected | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-91 | `list_vault` path traversal (`"../../etc"`) returns `isError: true` | test_list_vault | 2026-04-25 | 2026-04-25 |
+| F-92 | `list_vault` with `extensions` as bare string (not array) — Zod validation rejects before handler | test_list_vault_param_validation | 2026-04-25 | 2026-04-25 |
+| F-93 | `list_vault` with `limit: 0` — Zod validation rejects (must be positive integer) | test_list_vault_param_validation | 2026-04-25 | 2026-04-25 |
+| F-94 | `list_vault` with `limit: -5` — Zod validation rejects (must be positive integer) | test_list_vault_param_validation | 2026-04-25 | 2026-04-25 |
+| F-95 | `list_vault` with `date_field: "modified"` — Zod validation rejects (must be `"updated"` or `"created"`) | test_list_vault_param_validation | 2026-04-25 | 2026-04-25 |
+| F-96 | `list_vault` skips inaccessible subdirectory (permission denied) without `isError` — returns results for accessible entries | test_list_vault_fs_resilience | 2026-04-25 | 2026-04-25 |
+| F-97 | `list_vault` skips unreadable file (stat error) without `isError` — returns results for readable files | test_list_vault_fs_resilience | 2026-04-25 | 2026-04-25 |
 
 ## 10. Briefing and Aggregation
 
@@ -394,13 +490,13 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Memory Lifecycle | 15 | 15 | 0 |
 | Plugin Lifecycle | 17 | 17 | 0 |
 | Tag Operations | 7 | 7 | 0 |
-| File System Operations | 16 | 16 | 0 |
+| File System Operations | 95 | 95 | 0 |
 | Briefing | 3 | 3 | 0 |
 | Scale and Correctness | 8 | 4 | 4 |
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| **Total** | **205** | **201** | **4** |
+| **Total** | **284** | **280** | **4** |
 
 ---
 
@@ -451,8 +547,8 @@ Covers: P-11, P-12, P-13, P-14, P-15
 ### test_directory_operations
 Covers: F-12, F-13, F-14, F-15
 
-### test_list_files
-Covers: F-08, F-09, F-10, F-11
+### test_list_vault
+Covers: F-08, F-09, F-10, F-11, F-53, F-54, F-65, F-66, F-68, F-84, F-85, F-86, F-87, F-88, F-89, F-90, F-91
 
 ### test_search_modes
 Covers: S-07, S-08, S-09, X-10
@@ -615,6 +711,51 @@ Previously FAIL: Postgres rejected registration with "column fqc_id specified mo
 Covers: RO-75
 Status: PASS (2026-04-22) — PIR-04 fixed
 Previously FAIL: `discoveryPath` key was absent from pending review context JSONB. Fixed by adding `discoveryPath` and `designatedFolder` fields to the `DocumentInfo` interface, tracking Path 2 fqcIds in a `path2FqcIds` set, and writing `discoveryPath` into the pending review context in `plugin-reconciliation.ts`. Also fixed a test-side assertion bug: the original regex (`Context: {...}`) could not match the quoted-key JSON format (`"context": {...}`) emitted by the server; replaced with direct JSON array parsing. Now passes 6/6 steps.
+
+### test_create_directory
+Covers: F-19, F-20, F-21, F-22, F-29
+
+### test_create_directory_batch
+Covers: F-23, F-24, F-25
+
+### test_create_directory_root_path
+Covers: F-26, F-27, F-28
+
+### test_create_directory_normalization
+Covers: F-30, F-31, F-32
+
+### test_create_directory_sanitization
+Covers: F-33, F-34, F-35, F-36
+
+### test_create_directory_rejection
+Covers: F-37, F-38, F-39, F-40, F-41, F-42, F-43, F-44, F-45, F-46, F-47, F-48, F-49
+
+### test_create_directory_special
+Covers: F-50, F-51, F-52
+
+### test_list_vault_directories
+Covers: F-55, F-56, F-57, F-58, F-62, F-63, F-64, F-67
+
+### test_list_vault_all
+Covers: F-59, F-60, F-61
+
+### test_list_vault_format
+Covers: F-69, F-70, F-71, F-72, F-73, F-74, F-75, F-80, F-81, F-82
+
+### test_list_vault_format_detailed
+Covers: F-76, F-77, F-78, F-79, F-83
+
+### test_list_vault_param_validation
+Covers: F-92, F-93, F-94, F-95
+
+### test_list_vault_fs_resilience
+Covers: F-96, F-97
+
+---
+
+## PIR Regression Guard Tests — Resolution (2026-04-22)
+
+All four PIR regression guard tests were written on 2026-04-22 to expose confirmed unfixed bugs, then fixed and verified passing the same day. The notes below document why each existing test missed the bug, what the regression guard tests differently, and what was ultimately fixed.
 
 ### test_reconciliation_background_scan_race
 Covers: RO-76

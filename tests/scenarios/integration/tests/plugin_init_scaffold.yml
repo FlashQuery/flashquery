@@ -1,0 +1,78 @@
+name: plugin_init_scaffold
+description: >
+  register_plugin sets up a plugin that watches a folder under _integration/if13.
+  create_directory scaffolds the plugin's folder structure. list_vault confirms the
+  directories exist. vault.write creates a document in the watched folder, which is
+  immediately auto-tracked. search_records confirms the tracked record appears. Covers IF-13.
+coverage: [IF-13]
+
+steps:
+  # ── Setup: Register plugin ──────────────────────────────────────────────────
+
+  - label: "Register plugin watching _integration/if13/contacts with on_added: auto-track"
+    action: register_plugin
+    args:
+      plugin_instance: if13test
+      schema_yaml: |
+        plugin:
+          id: if13
+          name: IF-13 Plugin Init Scaffold Test
+          version: 1.0.0
+          description: Tests create_directory scaffold for plugin folder structure
+        tables:
+          - name: contacts
+            description: Tracked contacts
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: if13-contact
+              folder: _integration/if13/contacts
+              on_added: auto-track
+              track_as: contacts
+              field_map:
+                fq_title: title
+
+  # ── Scaffold plugin directories ─────────────────────────────────────────────
+
+  - label: "Scaffold plugin directories with create_directory using root_path"
+    action: create_directory
+    args:
+      root_path: "_integration/if13"
+      paths: ["contacts", "companies"]
+
+  - label: "list_vault confirms contacts/ directory exists (IF-13)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if13"
+        show: "directories"
+      expect_contains: "contacts/"
+
+  - label: "list_vault confirms companies/ directory exists (IF-13)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if13"
+        show: "directories"
+      expect_contains: "companies/"
+
+  # ── Write contact document and assert tracking ──────────────────────────────
+
+  - label: "Create a contact document in the watched folder"
+    action: vault.write
+    name: if13_contact
+    path: "if13/contacts/alice.md"
+    title: "Alice"
+    content: "IF-13 test contact document."
+    tags: [if13-tag]
+
+  - label: "search_records confirms auto-tracking of Alice contact (IF-13)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: if13
+        plugin_instance: if13test
+        table: contacts
+      expect_contains: "Alice"

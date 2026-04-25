@@ -1,0 +1,47 @@
+name: list_vault_table_file_size
+description: >
+  create_directory creates a directory, then vault.write creates a document inside it.
+  list_vault(format: "table", show: "files") returns a markdown table that includes
+  file size column data for the created document. Covers IF-16.
+coverage: [IF-16]
+
+steps:
+  - label: "Create a directory for IF-16"
+    action: create_directory
+    args:
+      paths: "_integration/if16/docs"
+
+  - label: "Write a document in the new directory for IF-16"
+    action: vault.write
+    name: if16_doc
+    path: "if16/docs/note.md"
+    title: "IF-16 File Size Note"
+    content: "Document for verifying file size column in list_vault table format."
+    tags: [if16-tag]
+
+  - label: "list_vault(format: table, show: files) shows file size column header (IF-16)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if16/docs"
+        format: "table"
+        show: "files"
+      expect_contains: "| Name |"
+
+  - label: "list_vault(format: table, show: files) shows note.md file entry (IF-16)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if16/docs"
+        format: "table"
+        show: "files"
+      expect_contains: "note.md"
+
+  - label: "list_vault(format: table, show: files) shows a file size value (IF-16)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if16/docs"
+        format: "table"
+        show: "files"
+      expect_contains: " B"

@@ -149,17 +149,15 @@ logging:
       let hasExited = false;
       const timeout = setTimeout(() => {
         if (!hasExited) {
-          reject(new Error('First FQC instance did not reach ready state within 5 seconds'));
+          reject(new Error('First FQC instance did not reach ready state within 20 seconds'));
         }
-      }, 5000);
+      }, 20000);
 
       const checkReady = () => {
-        // Check for various success indicators that the port check passed
-        if (
-          firstProcess!.stderr.value.includes(`Port ${testPort} available`) ||
-          firstProcess!.stderr.value.includes('Core ready') ||
-          firstProcess!.stderr.value.includes('MCP')
-        ) {
+        // Wait for the HTTP server to actually bind — "MCP server: ready (streamable-http"
+        // is logged inside app.listen() callback, after the port is truly occupied.
+        // Waiting for "Port X available" is too early: it's logged before initMCP runs.
+        if (firstProcess!.stderr.value.includes('MCP server: ready (streamable-http')) {
           clearTimeout(timeout);
           resolve();
         }
@@ -184,7 +182,7 @@ logging:
         if (!hasExited) {
           checkReady();
         }
-      }, 5000);
+      }, 20000);
     });
 
     // Small delay to ensure first process is fully listening on port
@@ -211,10 +209,10 @@ logging:
     });
 
     // 4. Verify exit code is 1
-    expect(result.code).toBe(1);
+    expect(result.code, `Second instance exited with code ${result.code}. stderr:\n${result.stderr}`).toBe(1);
 
     // 5. Verify error message contains key phrases
     expect(result.stderr).toContain(`Port ${testPort} already in use`);
     expect(result.stderr).toContain('change mcp.port');
-  }, 10000); // 10 second timeout for integration test
+  }, 30000); // 30 second timeout — first instance needs to fully bind before second starts
 });

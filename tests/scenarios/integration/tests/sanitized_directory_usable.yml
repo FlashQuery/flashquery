@@ -1,0 +1,37 @@
+name: sanitized_directory_usable
+description: >
+  create_directory with a name requiring sanitization (e.g. spaces or special characters)
+  creates the directory under its sanitized name. list_vault shows the sanitized name.
+  vault.write inside the sanitized directory succeeds. Covers IF-09.
+coverage: [IF-09]
+
+steps:
+  - label: "Create a directory with a name that requires sanitization (IF-09)"
+    action: create_directory
+    args:
+      paths: "_integration/if09/my:project*docs"
+
+  - label: "list_vault shows the sanitized directory name (IF-09)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if09"
+        show: "directories"
+      expect_contains: "my project docs/"
+
+  - label: "vault.write inside the sanitized directory succeeds (IF-09)"
+    action: vault.write
+    name: if09_doc
+    path: "if09/my project docs/readme.md"
+    title: "IF-09 Sanitized Directory Doc"
+    content: "Document written inside a sanitized directory path."
+    tags: [if09-tag]
+
+  - label: "Document is findable inside the sanitized directory path (IF-09)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if09"
+        show: "all"
+        recursive: true
+      expect_contains: "readme.md"

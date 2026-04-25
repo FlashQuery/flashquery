@@ -1,0 +1,48 @@
+name: list_vault_format_modes
+description: >
+  create_directory creates a test directory. Two list_vault calls with different format
+  parameters verify that format="table" returns a markdown pipe-delimited table and
+  format="detailed" returns key-value block output. Covers IF-15.
+coverage: [IF-15]
+
+steps:
+  - label: "Create a test directory for IF-15"
+    action: create_directory
+    args:
+      paths: "_integration/if15/test-dir"
+
+  - label: "list_vault(format: table) returns markdown table header (IF-15)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if15"
+        format: "table"
+        show: "directories"
+      expect_contains: "| Name |"
+
+  - label: "list_vault(format: table) shows test-dir/ entry (IF-15)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if15"
+        format: "table"
+        show: "directories"
+      expect_contains: "test-dir/"
+
+  - label: "list_vault(format: detailed) returns key-value block with type field (IF-15)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if15"
+        format: "detailed"
+        show: "directories"
+      expect_contains: "Type: directory"
+
+  - label: "list_vault(format: detailed) shows test-dir entry (IF-15)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if15"
+        format: "detailed"
+        show: "directories"
+      expect_contains: "test-dir"

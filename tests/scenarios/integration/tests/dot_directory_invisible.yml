@@ -1,0 +1,20 @@
+name: dot_directory_invisible
+description: >
+  A directory with a dot-prefixed name (e.g. ".hidden") is created via create_directory.
+  list_vault with default options does not show it — dot-prefixed entries are hidden from
+  standard listings. Covers IF-08.
+coverage: [IF-08]
+
+steps:
+  - label: "Create a dot-prefixed directory for IF-08"
+    action: create_directory
+    args:
+      paths: "_integration/if08/.hidden-dir"
+
+  - label: "list_vault with default options does not show dot-prefixed directory (IF-08)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if08"
+        show: "directories"
+      expect_not_contains: ".hidden-dir"

@@ -1,0 +1,30 @@
+name: create_directory_then_search
+description: >
+  create_directory creates a directory, then vault.write creates a document inside it.
+  After a scan_vault to index the new document, search_documents finds the document
+  by its title. Covers IF-04.
+coverage: [IF-04]
+
+steps:
+  - label: "Create directory for IF-04"
+    action: create_directory
+    args:
+      paths: "_integration/if04/notes"
+
+  - label: "Write a document in the new directory"
+    action: vault.write
+    name: if04_doc
+    path: "if04/notes/entry.md"
+    title: "IF-04 Search Entry"
+    content: "Content for the IF-04 search integration test."
+    tags: [if04-tag]
+
+  - label: "Scan vault to index new document"
+    action: scan_vault
+
+  - label: "search_documents finds document by title (IF-04)"
+    assert:
+      op: search_documents
+      args:
+        query: "IF-04 Search Entry"
+      expect_contains: "IF-04 Search Entry"

@@ -2,8 +2,10 @@
  * Unit tests for remove_directory MCP tool (SPEC-07)
  *
  * Tests all exception paths and success cases using vi.mock() for fs/promises.
- * Handler is exercised via the registerDocumentTools factory — same pattern as
- * other document tool unit tests.
+ * Handler is exercised via the registerFileTools factory — same pattern as
+ * files-tools.test.ts (callCreateDirectory / callListVault).
+ *
+ * remove_directory is the THIRD tool registered by registerFileTools (handlers[2]).
  */
 
 import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
@@ -83,191 +85,95 @@ vi.mock('../utils/resolve-document.js', () => ({
   targetedScan: vi.fn().mockResolvedValue(undefined),
 }));
 
-// ─── Helpers to build a minimal tool handler ─────────────────────────────────
+// Mock path-validation.ts to avoid lstat calls on non-existent paths.
+// validateVaultPath is mocked to approve safe paths and reject traversal / root.
+// normalizePath and other pure helpers are passed through from the real implementation.
+vi.mock('../../src/mcp/utils/path-validation.js', async () => {
+  const actual = await vi.importActual<typeof import('../../src/mcp/utils/path-validation.js')>(
+    '../../src/mcp/utils/path-validation.js'
+  );
+  return {
+    ...actual,
+    validateVaultPath: vi.fn(async (_vaultRoot: string, userPath: string) => {
+      if (userPath.startsWith('..')) {
+        return {
+          valid: false,
+          absPath: '',
+          relativePath: userPath,
+          error: 'Path traversal detected — path must be within the vault root.',
+        };
+      }
+      if (userPath === '' || userPath === '.') {
+        return {
+          valid: false,
+          absPath: '',
+          relativePath: userPath,
+          error: 'Path cannot target the vault root itself.',
+        };
+      }
+      return { valid: true, absPath: `/vault/${userPath}`, relativePath: userPath };
+    }),
+  };
+});
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ToolResult = {
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Build a minimal config object for the vault root at /vault
+ * Build a minimal FlashQueryConfig for the vault root at /vault.
  */
-function makeConfig(vaultPath = '/vault') {
+function makeConfig(vaultPath = '/vault', lockingEnabled = false) {
   return {
     instance: {
       id: 'test-instance',
       vault: { path: vaultPath },
     },
-    locking: { enabled: false, ttlSeconds: 30 },
-  };
+    locking: { enabled: lockingEnabled, ttlSeconds: 30 },
+  } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
 }
 
 /**
- * Invoke the remove_directory logic directly, replicating what registerDocumentTools wires up.
- * This avoids importing the full MCP server; we exercise the handler logic inline.
+ * Invoke remove_directory by capturing handlers[2] registered via registerFileTools.
+ * Registration order in registerFileTools:
+ *   handlers[0] — create_directory
+ *   handlers[1] — list_vault
+ *   handlers[2] — remove_directory
  */
 async function callRemoveDirectory(
   dirPath: string,
   vaultPath = '/vault',
   lockingEnabled = false
-) {
-  // Dynamically import the handler module so mocks take effect
-  const { stat: statFn, readdir: readdirFn, rmdir: rmdirFn } = await import('node:fs/promises');
-  const { getIsShuttingDown } = await import('../../src/server/shutdown-state.js');
-  const { acquireLock, releaseLock } = await import('../../src/services/write-lock.js');
-  const { supabaseManager } = await import('../../src/storage/supabase.js');
-  const { logger } = await import('../../src/logging/logger.js');
+): Promise<ToolResult> {
+  const { registerFileTools } = await import('../../src/mcp/tools/files.js');
 
-  const { join, normalize, sep } = await import('node:path');
+  const handlers: Array<(args: Record<string, unknown>) => Promise<ToolResult>> = [];
+  const mockServer = {
+    registerTool: vi.fn(
+      (
+        _name: string,
+        _config: unknown,
+        handler: (args: Record<string, unknown>) => Promise<ToolResult>
+      ) => {
+        handlers.push(handler);
+      }
+    ),
+  } as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer;
 
-  const config = {
-    instance: { id: 'test-instance', vault: { path: vaultPath } },
-    locking: { enabled: lockingEnabled, ttlSeconds: 30 },
-  };
+  registerFileTools(mockServer, makeConfig(vaultPath, lockingEnabled));
 
-  // D-02b shutdown check
-  if ((getIsShuttingDown as MockedFunction<typeof getIsShuttingDown>)()) {
-    return {
-      content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed' }],
-      isError: true,
-    };
+  // remove_directory is registered third (handlers[2])
+  const removeDirHandler = handlers[2];
+  if (!removeDirHandler) {
+    throw new Error('remove_directory handler not registered (expected handlers[2])');
   }
 
-  if (lockingEnabled) {
-    const locked = await (acquireLock as MockedFunction<typeof acquireLock>)(
-      supabaseManager.getClient(),
-      config.instance.id,
-      'documents',
-      { ttlSeconds: config.locking.ttlSeconds }
-    );
-    if (!locked) {
-      return {
-        content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.' }],
-        isError: true,
-      };
-    }
-  }
-
-  try {
-    const vaultRoot = config.instance.vault.path;
-    const absPath = join(vaultRoot, dirPath);
-    const normalized = normalize(absPath);
-
-    // Vault root rejection
-    if (normalized === normalize(vaultRoot)) {
-      return {
-        content: [{ type: 'text' as const, text: 'Cannot remove the vault root directory.' }],
-        isError: true,
-      };
-    }
-
-    // Path traversal protection
-    if (!normalized.startsWith(vaultRoot + sep) && normalized !== vaultRoot) {
-      return {
-        content: [{ type: 'text' as const, text: 'Path must be within the vault root.' }],
-        isError: true,
-      };
-    }
-
-    // Stat check
-    let dirStat: Awaited<ReturnType<typeof stat>>;
-    try {
-      dirStat = await (statFn as MockedFunction<typeof stat>)(absPath);
-    } catch (statErr) {
-      const code = (statErr as NodeJS.ErrnoException).code;
-      if (code === 'ENOENT') {
-        return {
-          content: [{ type: 'text' as const, text: `Directory '${dirPath}' does not exist.` }],
-          isError: true,
-        };
-      }
-      if (code === 'EACCES') {
-        return {
-          content: [{ type: 'text' as const, text: `Permission denied for directory '${dirPath}'.` }],
-          isError: true,
-        };
-      }
-      throw statErr;
-    }
-
-    if (!dirStat.isDirectory()) {
-      return {
-        content: [{ type: 'text' as const, text: `'${dirPath}' is a file, not a directory.` }],
-        isError: true,
-      };
-    }
-
-    // Readdir
-    let entries: string[];
-    try {
-      entries = (await (readdirFn as MockedFunction<typeof readdir>)(absPath)) as string[];
-    } catch (readdirErr) {
-      const code = (readdirErr as NodeJS.ErrnoException).code;
-      if (code === 'EACCES') {
-        return {
-          content: [{ type: 'text' as const, text: `Permission denied for directory '${dirPath}'.` }],
-          isError: true,
-        };
-      }
-      throw readdirErr;
-    }
-
-    // Non-empty error
-    if (entries.length > 0) {
-      const listing: string[] = [];
-      for (const entry of entries) {
-        let entryType = 'file';
-        try {
-          const entryStat = await (statFn as MockedFunction<typeof stat>)(join(absPath, entry));
-          entryType = entryStat.isDirectory() ? 'dir' : 'file';
-        } catch {
-          // treat as file
-        }
-        listing.push(entryType === 'dir' ? `- [dir] ${entry}/` : `- [file] ${entry}`);
-      }
-
-      const errorText = [
-        `Directory "${dirPath}" is not empty.`,
-        '',
-        `Contents (${entries.length} item${entries.length === 1 ? '' : 's'}):`,
-        ...listing,
-        '',
-        'Remove or move these items first.',
-      ].join('\n');
-
-      return {
-        content: [{ type: 'text' as const, text: errorText }],
-        isError: true,
-      };
-    }
-
-    // Remove empty directory
-    try {
-      await (rmdirFn as MockedFunction<typeof rmdir>)(absPath);
-    } catch (rmdirErr) {
-      const code = (rmdirErr as NodeJS.ErrnoException).code;
-      if (code === 'EACCES') {
-        return {
-          content: [{ type: 'text' as const, text: `Permission denied for directory '${dirPath}'.` }],
-          isError: true,
-        };
-      }
-      throw rmdirErr;
-    }
-
-    logger.info(`remove_directory: removed empty directory ${dirPath}`);
-
-    return {
-      content: [{ type: 'text' as const, text: `Removed directory: ${dirPath}` }],
-    };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
-  } finally {
-    if (lockingEnabled) {
-      await (releaseLock as MockedFunction<typeof releaseLock>)(
-        supabaseManager.getClient(),
-        config.instance.id,
-        'documents'
-      );
-    }
-  }
+  return removeDirHandler({ path: dirPath });
 }
 
 // ─── Helper: make a stat mock that returns isDirectory() ─────────────────────
@@ -300,8 +206,14 @@ describe('remove_directory (SPEC-07)', () => {
   // ── 1. Path validation ────────────────────────────────────────────────────
 
   describe('Path validation', () => {
-    it('should reject vault root removal', async () => {
+    it('should reject vault root removal (path=".")', async () => {
       const result = await callRemoveDirectory('.');
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toBe('Cannot remove the vault root directory.');
+    });
+
+    it('should reject vault root removal (path="/")', async () => {
+      const result = await callRemoveDirectory('/');
       expect(result.isError).toBe(true);
       expect(result.content[0].text).toBe('Cannot remove the vault root directory.');
     });
@@ -309,7 +221,7 @@ describe('remove_directory (SPEC-07)', () => {
     it('should reject path traversal that escapes vault', async () => {
       const result = await callRemoveDirectory('../outside');
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toBe('Path must be within the vault root.');
+      expect(result.content[0].text).toContain('Path traversal detected');
     });
 
     it('should accept a valid subdirectory path within vault', async () => {

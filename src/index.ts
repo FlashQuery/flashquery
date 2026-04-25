@@ -238,8 +238,8 @@ if (isMain) {
         if (resolvedTransport === 'streamable-http') {
           const port = config.mcp.port ?? 3100;
           try {
-            await checkPortAvailable(port, '127.0.0.1');
-            logger.info(`Port ${port} available, binding to 127.0.0.1:${port}`); // D-02d
+            await checkPortAvailable(port, '::');
+            logger.info(`Port ${port} available, binding to [::]:${port}`); // D-02d
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
             logger.error(message); // D-03b

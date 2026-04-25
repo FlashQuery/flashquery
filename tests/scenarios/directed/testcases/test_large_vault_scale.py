@@ -8,7 +8,7 @@ Scenario:
     3. Interleave external file modifications at strategic points
     4. Force synchronous file scans to reconcile external changes
     5. Validate correctness at checkpoints:
-       - list_files returns accurate counts and filtering
+       - list_vault returns accurate counts and filtering
        - search_documents and search_all find correct documents
        - archived documents are properly excluded
        - no index corruption after sustained operations
@@ -76,7 +76,7 @@ def _extract_field(text: str, field: str) -> str:
 
 
 def _extract_count_from_list(text: str) -> int:
-    """Parse the number of files returned by list_files."""
+    """Parse the number of files returned by list_vault (detailed format)."""
     lines = text.strip().split("\n---\n")
     # Filter out empty lines; each entry starts with "Title:"
     return sum(1 for entry in lines if entry.strip() and "Title:" in entry)
@@ -205,9 +205,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 3: Validate initial counts ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         list_result = ctx.client.call_tool(
-            "list_files",
+            "list_vault",
             path=f"_test/{run.run_id}",
             recursive=True,
+            format="detailed",
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -216,7 +217,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         detail = f"Found {initial_count} files, expected ≈{expected_after_seed}"
 
         run.step(
-            label="list_files (after external pre-seed)",
+            label="list_vault (after external pre-seed)",
             passed=(list_result.ok and list_result.status == "pass"),
             detail=detail,
             timing_ms=list_result.timing_ms,
@@ -260,9 +261,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 6: Validate counts after creates ────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         list_result = ctx.client.call_tool(
-            "list_files",
+            "list_vault",
             path=f"_test/{run.run_id}",
             recursive=True,
+            format="detailed",
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -271,7 +273,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         detail = f"Found {count_after_creates} files, expected ≈{expected_after_creates}"
 
         run.step(
-            label="list_files (after creates)",
+            label="list_vault (after creates)",
             passed=(list_result.ok and count_after_creates >= expected_after_creates - 1),
             detail=detail,
             timing_ms=list_result.timing_ms,
@@ -415,9 +417,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 13: Final file count validation ──────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         list_result = ctx.client.call_tool(
-            "list_files",
+            "list_vault",
             path=f"_test/{run.run_id}",
             recursive=True,
+            format="detailed",
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -435,7 +438,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
 
         run.step(
-            label="list_files (final validation)",
+            label="list_vault (final validation)",
             passed=(list_result.ok and list_result.status == "pass"),
             detail=detail,
             timing_ms=list_result.timing_ms,

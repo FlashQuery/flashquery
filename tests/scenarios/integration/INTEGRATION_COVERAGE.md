@@ -14,14 +14,14 @@ Verifies that content written through one path is discoverable through the expec
 
 | ID     | Behavior                                                             | Covered By                  | Date Updated | Last Passing |
 |--------|----------------------------------------------------------------------|-----------------------------|--------------|--------------|
-| IS-01  | Create document → appears in search_documents results                | write_then_search            | 2026-04-23   | 2026-04-23   |
-| IS-02  | Create memory → appears in search_memories results                   | write_then_search            | 2026-04-23   | 2026-04-23   |
-| IS-03  | Create document + memory → both appear in search_all results         | cross_domain_search          | 2026-04-23   | 2026-04-23   |
-| IS-04  | search_all with entity_types=['documents'] returns only documents    | cross_domain_search          | 2026-04-23   | 2026-04-23   |
-| IS-05  | search_all with entity_types=['memories'] returns only memories      | search_memories_only         | 2026-04-23   | 2026-04-23   |
-| IS-06  | Tagged document appears in tag-filtered search_documents             | tag_filtered_documents       | 2026-04-23   | 2026-04-23   |
-| IS-07  | Tagged memory appears in tag-filtered search_memories                | tag_filtered_memories        | 2026-04-23   | 2026-04-23   |
-| IS-08  | Multi-tag filter returns only documents matching all specified tags  | multitag_filter              | 2026-04-23   | 2026-04-23   |
+| IS-01  | Create document → appears in search_documents results                | write_then_search            | 2026-04-25   | 2026-04-25   |
+| IS-02  | Create memory → appears in search_memories results                   | write_then_search            | 2026-04-25   | 2026-04-25   |
+| IS-03  | Create document + memory → both appear in search_all results         | cross_domain_search          | 2026-04-25   | 2026-04-25   |
+| IS-04  | search_all with entity_types=['documents'] returns only documents    | cross_domain_search          | 2026-04-25   | 2026-04-25   |
+| IS-05  | search_all with entity_types=['memories'] returns only memories      | search_memories_only         | 2026-04-25   | 2026-04-25   |
+| IS-06  | Tagged document appears in tag-filtered search_documents             | tag_filtered_documents       | 2026-04-25   | 2026-04-25   |
+| IS-07  | Tagged memory appears in tag-filtered search_memories                | tag_filtered_memories        | 2026-04-25   | 2026-04-25   |
+| IS-08  | Multi-tag filter returns only documents matching all specified tags  | multitag_filter              | 2026-04-25   | 2026-04-25   |
 
 ---
 
@@ -32,14 +32,14 @@ content unaffected.
 
 | ID     | Behavior                                                              | Covered By                      | Date Updated | Last Passing |
 |--------|-----------------------------------------------------------------------|---------------------------------|--------------|--------------|
-| IA-01  | Archive document → absent from search_documents                       | archive_removes_from_search  | 2026-04-23   | 2026-04-23   |
-| IA-02  | Archive document → memory with same topic still searchable            | archive_removes_from_search  | 2026-04-23   | 2026-04-23   |
-| IA-03  | Archive document → absent from search_all results                     | archive_removes_from_search  | 2026-04-23   | 2026-04-23   |
-| IA-04  | Archive memory → absent from search_memories                          | archive_memory               | 2026-04-23   | 2026-04-23   |
-| IA-05  | Archive memory → document with same topic still searchable            | archive_memory               | 2026-04-23   | 2026-04-23   |
-| IA-06  | Archive one of several tagged documents → others remain discoverable  | archive_partial_set          | 2026-04-23   | 2026-04-23   |
-| IA-07  | Archive document → get_document reflects status='archived'             | archive_status_field         | 2026-04-23   | 2026-04-23   |
-| IA-08  | Create and archive document in nested vault path → remains correctly archived and retrievable | archive_nested_path          | 2026-04-23   | 2026-04-23   |
+| IA-01  | Archive document → absent from search_documents                       | archive_removes_from_search  | 2026-04-25   | 2026-04-25   |
+| IA-02  | Archive document → memory with same topic still searchable            | archive_removes_from_search  | 2026-04-25   | 2026-04-25   |
+| IA-03  | Archive document → absent from search_all results                     | archive_removes_from_search  | 2026-04-25   | 2026-04-25   |
+| IA-04  | Archive memory → absent from search_memories                          | archive_memory               | 2026-04-25   | 2026-04-25   |
+| IA-05  | Archive memory → document with same topic still searchable            | archive_memory               | 2026-04-25   | 2026-04-25   |
+| IA-06  | Archive one of several tagged documents → others remain discoverable  | archive_partial_set          | 2026-04-25   | 2026-04-25   |
+| IA-07  | Archive document → get_document reflects status='archived'             | archive_status_field         | 2026-04-25   | 2026-04-25   |
+| IA-08  | Create and archive document in nested vault path → remains correctly archived and retrievable | archive_nested_path          | 2026-04-25   | 2026-04-25   |
 
 ---
 
@@ -49,14 +49,14 @@ Verifies behaviors that span more than one FlashQuery domain (documents, memorie
 
 | ID     | Behavior                                                                    | Covered By           | Date Updated | Last Passing |
 |--------|-----------------------------------------------------------------------------|----------------------|--------------|--------------|
-| IX-01  | Document and memory share a tag → search_all with that tag returns both     | cross_domain_search          | 2026-04-23   | 2026-04-23   |
-| IX-02  | Archived document → only memory found in search_all after archive           | archive_removes_from_search  | 2026-04-23   | 2026-04-23   |
-| IX-03  | Create via vault.write, update via update_document → search returns new content | update_document_then_search  | 2026-04-23   | 2026-04-23   |
-| IX-04  | Create document, get_document by fqc_id → returns correct content           | document_retrieval_by_id     | 2026-04-23   | 2026-04-23   |
-| IX-05  | Create document with tags, apply_tags to add more → all tags searchable     | apply_tags_composition       | 2026-04-23   | 2026-04-23   |
-| IX-06  | Get document by vault-relative path → returns same content as fqc_id retrieval | get_document_by_path         | 2026-04-23   | 2026-04-23   |
-| IX-07  | Get document returns all metadata fields (title, tags, status, fqc_id, path) | get_document_metadata        | 2026-04-23   | 2026-04-23   |
-| IX-08  | Create multiple documents, update each, retrieve all → each returns updated state | concurrent_updates           | 2026-04-23   | 2026-04-23   |
+| IX-01  | Document and memory share a tag → search_all with that tag returns both     | cross_domain_search          | 2026-04-25   | 2026-04-25   |
+| IX-02  | Archived document → only memory found in search_all after archive           | archive_removes_from_search  | 2026-04-25   | 2026-04-25   |
+| IX-03  | Create via vault.write, update via update_document → search returns new content | update_document_then_search  | 2026-04-25   | 2026-04-25   |
+| IX-04  | Create document, get_document by fqc_id → returns correct content           | document_retrieval_by_id     | 2026-04-25   | 2026-04-25   |
+| IX-05  | Create document with tags, apply_tags to add more → all tags searchable     | apply_tags_composition       | 2026-04-25   | 2026-04-25   |
+| IX-06  | Get document by vault-relative path → returns same content as fqc_id retrieval | get_document_by_path         | 2026-04-25   | 2026-04-25   |
+| IX-07  | Get document returns all metadata fields (title, tags, status, fqc_id, path) | get_document_metadata        | 2026-04-25   | 2026-04-25   |
+| IX-08  | Create multiple documents, update each, retrieve all → each returns updated state | concurrent_updates           | 2026-04-25   | 2026-04-25   |
 
 ---
 
@@ -67,10 +67,10 @@ discoverable through search after the mutation.
 
 | ID     | Behavior                                                                         | Covered By | Date Updated | Last Passing |
 |--------|----------------------------------------------------------------------------------|------------|--------------|--------------|
-| IC-01  | Append content to document → appended content appears in search_documents        | append_then_search           | 2026-04-23   | 2026-04-23   |
-| IC-02  | Update document body → updated content appears in search_documents               | update_document_then_search  | 2026-04-23   | 2026-04-23   |
-| IC-03  | Replace section in document → replaced content appears, original absent          | replace_section              | 2026-04-23   | 2026-04-23   |
-| IC-04  | Append to document → search reflects appended text immediately after append      | append_and_search            | 2026-04-23   | 2026-04-23   |
+| IC-01  | Append content to document → appended content appears in search_documents        | append_then_search           | 2026-04-25   | 2026-04-25   |
+| IC-02  | Update document body → updated content appears in search_documents               | update_document_then_search  | 2026-04-25   | 2026-04-25   |
+| IC-03  | Replace section in document → replaced content appears, original absent          | replace_section              | 2026-04-25   | 2026-04-25   |
+| IC-04  | Append to document → search reflects appended text immediately after append      | append_and_search            | 2026-04-25   | 2026-04-25   |
 
 ---
 
@@ -81,19 +81,45 @@ multi-step workflows involving plugin tables, record tools, scan, and frontmatte
 
 | ID     | Behavior                                                                                             | Covered By | Date Updated | Last Passing |
 |--------|------------------------------------------------------------------------------------------------------|------------|--------------|--------------|
-| IR-01  | Mixed reconciliation: auto-track + ignore + deleted + moved all handled in single pass               | ir01_plugin_mixed_reconciliation | 2026-04-23   | 2026-04-23   |
-| IR-02  | Full resurrection lifecycle: track → delete → restore → resurrect with FK references intact          | ir02_plugin_deletion_lifecycle | 2026-04-23   | 2026-04-23   |
-| IR-03  | Auto-track + pending template review + clear → subsequent tool responses show no pending items       | ir03_plugin_autotrack_pending_clear | 2026-04-23   | 2026-04-23   |
-| IR-04  | Document created via MCP in watched folder is immediately visible to same-call reconciliation        | ir04_plugin_mcp_immediate_reconciliation | 2026-04-23   | 2026-04-23   |
-| IR-05  | Plugin with no declared policies ignores new docs, follows moved docs, ignores modifications         | ir05_plugin_no_policies_defaults | 2026-04-23   | 2026-04-23   |
-| IR-06  | Document moved out with on_moved:untrack, then moved back → resurrects, not re-added                 | ir06_plugin_stop_tracking_lifecycle | 2026-04-23   | 2026-04-23   |
-| IR-07  | Cross-plugin resurrection: original plugin resurrects; second plugin independently discovers as added | ir07_plugin_cross_plugin_discovery | 2026-04-23   | 2026-04-23   |
-| IR-08  | Bulk auto-track: all new documents processed in single pass with no silent cap                       | ir08_plugin_bulk_autotrack   | 2026-04-23   | 2026-04-23   |
-| IR-09  | Multiple state transitions between reconciliation runs: only current state classified                | ir09_plugin_state_transitions | 2026-04-23   | 2026-04-23   |
-| IR-10  | Large pending review backlog processable incrementally — subset cleared per invocation, remainder stable | ir10_plugin_incremental_pending_review | 2026-04-23   | 2026-04-23   |
-| IR-11  | Document moved between plugin-owned folders reports moved in source table, not added in destination  | ir11_plugin_cross_folder_move | 2026-04-23   | 2026-04-23   |
-| IR-12  | Pending review items appear in record tool response even when reconciliation staleness check skips diff | ir12_plugin_pending_review_staleness | 2026-04-23   | 2026-04-23   |
-| IR-13  | Frontmatter-based type discovery: document outside all watched folders picked up via fqc_type        | ir13_plugin_frontmatter_discovery | 2026-04-23   | 2026-04-23   |
+| IR-01  | Mixed reconciliation: auto-track + ignore + deleted + moved all handled in single pass               | ir01_plugin_mixed_reconciliation | 2026-04-25   | 2026-04-25   |
+| IR-02  | Full resurrection lifecycle: track → delete → restore → resurrect with FK references intact          | ir02_plugin_deletion_lifecycle | 2026-04-25   | 2026-04-25   |
+| IR-03  | Auto-track + pending template review + clear → subsequent tool responses show no pending items       | ir03_plugin_autotrack_pending_clear | 2026-04-25   | 2026-04-25   |
+| IR-04  | Document created via MCP in watched folder is immediately visible to same-call reconciliation        | ir04_plugin_mcp_immediate_reconciliation | 2026-04-25   | 2026-04-25   |
+| IR-05  | Plugin with no declared policies ignores new docs, follows moved docs, ignores modifications         | ir05_plugin_no_policies_defaults | 2026-04-25   | 2026-04-25   |
+| IR-06  | Document moved out with on_moved:untrack, then moved back → resurrects, not re-added                 | ir06_plugin_stop_tracking_lifecycle | 2026-04-25   | 2026-04-25   |
+| IR-07  | Cross-plugin resurrection: original plugin resurrects; second plugin independently discovers as added | ir07_plugin_cross_plugin_discovery | 2026-04-25   | 2026-04-25   |
+| IR-08  | Bulk auto-track: all new documents processed in single pass with no silent cap                       | ir08_plugin_bulk_autotrack   | 2026-04-25   | 2026-04-25   |
+| IR-09  | Multiple state transitions between reconciliation runs: only current state classified                | ir09_plugin_state_transitions | 2026-04-25   | 2026-04-25   |
+| IR-10  | Large pending review backlog processable incrementally — subset cleared per invocation, remainder stable | ir10_plugin_incremental_pending_review | 2026-04-25   | 2026-04-25   |
+| IR-11  | Document moved between plugin-owned folders reports moved in source table, not added in destination  | ir11_plugin_cross_folder_move | 2026-04-25   | 2026-04-25   |
+| IR-12  | Pending review items appear in record tool response even when reconciliation staleness check skips diff | ir12_plugin_pending_review_staleness | 2026-04-25   | 2026-04-25   |
+| IR-13  | Frontmatter-based type discovery: document outside all watched folders picked up via fqc_type        | ir13_plugin_frontmatter_discovery | 2026-04-25   | 2026-04-25   |
+
+---
+
+## IF — Filesystem Composition
+
+Verifies that directory creation, listing, and removal compose correctly with other
+FlashQuery tools (create_document, move_document, register_plugin, search_documents).
+
+| ID     | Behavior                                                                                              | Covered By | Date Updated | Last Passing |
+|--------|-------------------------------------------------------------------------------------------------------|------------|--------------|--------------|
+| IF-01  | create_directory → list_vault(show: "directories") confirms created directory                         | create_then_list_directories | 2026-04-25   | 2026-04-25   |
+| IF-02  | create_directory with root_path → list_vault recursive shows full tree                               | create_then_list_directories | 2026-04-25   | 2026-04-25   |
+| IF-03  | create_directory → create_document → list_vault(show: "all") shows both directory and document       | create_directory_then_document | 2026-04-25   | 2026-04-25   |
+| IF-04  | create_directory → create_document → search_documents finds document by title                        | create_directory_then_search | 2026-04-25   | 2026-04-25   |
+| IF-05  | create_directory → remove_directory (empty) → list_vault confirms absence                            | directory_lifecycle          | 2026-04-25   | 2026-04-25   |
+| IF-06  | batch create_directory → list_vault recursive → remove leaf directories first → list_vault confirms  | directory_lifecycle          | 2026-04-25   | 2026-04-25   |
+| IF-07  | create_directory called twice with same path → list_vault shows no duplicate entries (idempotency)   | create_directory_idempotent  | 2026-04-25   | 2026-04-25   |
+| IF-08  | dot-prefixed directory created → list_vault shows it is invisible to default listing                 | dot_directory_invisible      | 2026-04-25   | 2026-04-25   |
+| IF-09  | create_directory with name requiring sanitization → list_vault shows sanitized name → create_document in it succeeds | sanitized_directory_usable   | 2026-04-25   | 2026-04-25   |
+| IF-10  | create_directory → move_document into new directory → list_vault confirms moved document             | move_document_to_new_directory | 2026-04-25   | 2026-04-25   |
+| IF-11  | list_vault(show: "files") excludes directories; list_vault(show: "all") includes both                | list_vault_show_modes        | 2026-04-25   | 2026-04-25   |
+| IF-12  | list_vault(show: "all", extensions: [".md"]) — directories unfiltered, only .md files shown         | list_vault_extension_filter_with_directories | 2026-04-25   | 2026-04-25   |
+| IF-13  | register_plugin → create_directory scaffold → list_vault confirms dirs → create_document → search_records confirms auto-tracking | plugin_init_scaffold         | 2026-04-25   | 2026-04-25   |
+| IF-14  | register_plugin → create_directory scaffold → vault.write in watched folder → reconciliation → search_records | plugin_init_with_reconciliation | 2026-04-25   | 2026-04-25   |
+| IF-15  | create_directory → list_vault(format: "table") vs list_vault(format: "detailed") produce correct formats | list_vault_format_modes      | 2026-04-25   | 2026-04-25   |
+| IF-16  | create_directory → create_document → list_vault(format: "table") shows file size for the document   | list_vault_table_file_size   | 2026-04-25   | 2026-04-25   |
 
 ---
 
