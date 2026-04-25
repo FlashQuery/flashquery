@@ -276,5 +276,16 @@ export async function initializeShutdownHandlers(
     coordinator.execute().catch(() => process.exit(1));
   });
 
+  // SIGHUP: sent by the OS when the controlling terminal closes (e.g. SSH disconnect,
+  // tmux session teardown) or, on some platforms, when a parent process exits.
+  // Without a handler, Node.js default behaviour is to exit immediately — bypassing
+  // the graceful shutdown sequence and leaving Supabase connections and the git mutex
+  // in an inconsistent state. Treat SIGHUP the same as SIGTERM so that all subsystems
+  // are flushed before the process exits.
+  process.on('SIGHUP', () => {
+    logger.info('Received SIGHUP (terminal closed / parent exited) — initiating graceful shutdown');
+    coordinator.execute().catch(() => process.exit(1));
+  });
+
   return coordinator;
 }
