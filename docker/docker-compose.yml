@@ -27,7 +27,8 @@ services:
   # =========================================================================
   postgres:
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false
     image: supabase/postgres:15.8.1.085
     restart: unless-stopped
     environment:
@@ -148,7 +149,8 @@ services:
     restart: unless-stopped
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
     env_file:
-      - ../.env
+      - path: ../.env
+        required: false
     environment:
       # Docker-specific overrides (these differ from .env values)
       NODE_ENV: production
