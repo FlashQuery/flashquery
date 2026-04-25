@@ -9,7 +9,7 @@ steps:
   - label: "Create a directory with a name that requires sanitization (IF-09)"
     action: create_directory
     args:
-      paths: "_integration/if09/my project docs"
+      paths: "_integration/if09/my:project*docs"
 
   - label: "list_vault shows the sanitized directory name (IF-09)"
     assert:
@@ -17,7 +17,7 @@ steps:
       args:
         path: "_integration/if09"
         show: "directories"
-      expect_contains: "my"
+      expect_contains: "my project docs/"
 
   - label: "vault.write inside the sanitized directory succeeds (IF-09)"
     action: vault.write
