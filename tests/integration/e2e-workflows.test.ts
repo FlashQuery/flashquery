@@ -30,6 +30,7 @@ import { initVault } from '../../src/storage/vault.js';
 import { initPlugins } from '../../src/plugins/manager.js';
 import { registerCompoundTools } from '../../src/mcp/tools/compound.js';
 import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
+import { registerFileTools } from '../../src/mcp/tools/files.js';
 import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
 import { validateToolResponse, validateBatchFormat } from '../../src/mcp/utils/response-formats.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -464,6 +465,7 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       const { server, getHandler } = createMockServer();
       registerCompoundTools(server, scCConfig);
       registerDocumentTools(server, scCConfig);
+      registerFileTools(server, scCConfig);
       scCHandlers = getHandler;
 
       project1Id = await seedDocument({
@@ -487,8 +489,8 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       try { await rm(scCVaultPath, { recursive: true, force: true }); } catch { /* no-op */ }
     });
 
-    it('C1: list_files returns all files with key-value metadata (SPEC-04)', async () => {
-      const result = await scCHandlers('list_files')({ path: 'Work/Projects-C' });
+    it('C1: list_vault returns all files with key-value metadata (SPEC-04)', async () => {
+      const result = await scCHandlers('list_vault')({ path: 'Work/Projects-C', format: 'detailed' });
       expect(isError(result)).toBe(false);
       const text = getText(result);
       expect(text).toContain('project1.md');
@@ -496,15 +498,15 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       expect(text).toContain('project3.md');
       expect(text).toContain('Title:');
       expect(text).toContain('Path:');
-      expect(text).toContain('FQC ID:');
+      expect(text).toContain('fqc_id:');
       expect(text).toContain('Status:');
       const check = validateToolResponse(result);
       expect(check.valid).toBe(true);
     });
 
-    it('C2: list_files with extension filter returns only .md files', async () => {
+    it('C2: list_vault with extension filter returns only .md files', async () => {
       await writeFile(join(scCVaultPath, 'Work/Projects-C/notes.txt'), 'Some text notes', 'utf-8');
-      const result = await scCHandlers('list_files')({ path: 'Work/Projects-C', extension: '.md' });
+      const result = await scCHandlers('list_vault')({ path: 'Work/Projects-C', extensions: ['.md'] });
       expect(isError(result)).toBe(false);
       const text = getText(result);
       expect(text).toContain('project1.md');
@@ -513,7 +515,7 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       expect(text).not.toContain('notes.txt');
     });
 
-    it('C3: list_files with >100 items completes and returns all files', async () => {
+    it('C3: list_vault with >100 items completes and returns all files', async () => {
       const largeDir = 'Work/LargeDir';
       await mkdir(join(scCVaultPath, largeDir), { recursive: true });
       const creates: Promise<void>[] = [];
@@ -525,7 +527,7 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
         ));
       }
       await Promise.all(creates);
-      const result = await scCHandlers('list_files')({ path: largeDir });
+      const result = await scCHandlers('list_vault')({ path: largeDir });
       expect(isError(result)).toBe(false);
       const text = getText(result);
       expect(text).toContain('doc-001.md');
@@ -675,6 +677,7 @@ describe.skipIf(SKIP)('Scenario E: 1000+ Document Discovery with Plugin Ownershi
     const { server, getHandler } = createMockServer();
     registerCompoundTools(server, config);
     registerDocumentTools(server, config);
+    registerFileTools(server, config);
     registerPluginTools(server, config);
     handlers = getHandler;
   }, 120_000); // Allow up to 2 min for beforeAll including vault gen
@@ -780,17 +783,17 @@ describe.skipIf(SKIP)('Scenario E: 1000+ Document Discovery with Plugin Ownershi
     expect(pluginIds).toContain('tasks');
   }, 30_000);
 
-  // ── E3: list_files on CRM/Contacts directory (200+ docs) ──────────────────
+  // ── E3: list_vault on CRM/Contacts directory (200+ docs) ──────────────────
 
-  it('E3: list_files on CRM/Contacts with 200+ documents completes without error', async () => {
+  it('E3: list_vault on CRM/Contacts with 200+ documents completes without error', async () => {
     // Verify we have documents in CRM/Contacts from vault generation
     const crmContactDocs = vaultMeta.documents.filter((d) =>
       d.path.startsWith('CRM/Contacts/')
     );
     expect(crmContactDocs.length).toBeGreaterThan(100); // Should have 200 per default distribution
 
-    // Call list_files on the large directory
-    const result = await handlers('list_files')({ path: 'CRM/Contacts' });
+    // Call list_vault on the large directory (detailed format for key-value metadata)
+    const result = await handlers('list_vault')({ path: 'CRM/Contacts', format: 'detailed' });
 
     // Should complete without error
     expect(isError(result)).toBe(false);
@@ -801,32 +804,33 @@ describe.skipIf(SKIP)('Scenario E: 1000+ Document Discovery with Plugin Ownershi
     expect(text).toBeTruthy();
 
     // If files were found, verify response format (SPEC-04: correct metadata structure)
-    if (!text.includes('No files found')) {
+    if (!text.includes('No entries found')) {
       // Response should contain structured metadata for each file
       // Check for expected key-value format from response-formats.ts
-      expect(text).toMatch(/Title:|Path:|FQC ID:/i);
+      expect(text).toMatch(/Title:|Path:|fqc_id:/i);
     }
   }, 30_000);
 
-  // ── E4: list_files returns correct metadata structure ───────────────────────
+  // ── E4: list_vault returns correct metadata structure ───────────────────────
 
-  it('E4: list_files returns complete file metadata with all required fields', async () => {
-    // Call list_files on a directory with discovered docs
-    const result = await handlers('list_files')({ path: 'CRM/Contacts' });
+  it('E4: list_vault returns complete file metadata with all required fields', async () => {
+    // Call list_vault on a directory with discovered docs (detailed format for key-value metadata)
+    const result = await handlers('list_vault')({ path: 'CRM/Contacts', format: 'detailed' });
 
     expect(isError(result)).toBe(false);
     const text = getText(result);
 
-    // Skip metadata validation if no files found
-    if (text.includes('No files found')) {
+    // Skip metadata validation if no entries found
+    if (text.includes('No entries found')) {
       return;
     }
 
     // SPEC-04: Verify required metadata fields are present in response
-    // Response format: Title, Path, Size, Modified, FQC ID, Tags, Status
-    expect(text).toContain('Title:');
+    // list_vault detailed format: Path, Type, Size, Updated, Created are always present.
+    // Title and fqc_id are only present for DB-tracked files; untracked files show Tracked: false.
     expect(text).toContain('Path:');
-    expect(text).toContain('FQC ID:');
+    expect(text).toContain('Type:');
+    expect(text).toContain('Size:');
 
     // Verify response is not corrupted (should be parseable text)
     expect(text.length).toBeGreaterThan(0);
@@ -872,10 +876,10 @@ describe.skipIf(SKIP)('Scenario E: 1000+ Document Discovery with Plugin Ownershi
     }
   }, 30_000);
 
-  // ── E6: Concurrent list_files operations on large directories ───────────────
+  // ── E6: Concurrent list_vault operations on large directories ───────────────
 
-  it('E6: concurrent list_files on multiple large directories completes without races', async () => {
-    // Run 5 parallel list_files calls on different large folders
+  it('E6: concurrent list_vault on multiple large directories completes without races', async () => {
+    // Run 5 parallel list_vault calls on different large folders
     const folders = [
       'CRM/Contacts',
       'CRM/Companies',
@@ -886,7 +890,7 @@ describe.skipIf(SKIP)('Scenario E: 1000+ Document Discovery with Plugin Ownershi
 
     // Execute all calls in parallel
     const results = await Promise.all(
-      folders.map((folder) => handlers('list_files')({ path: folder }))
+      folders.map((folder) => handlers('list_vault')({ path: folder }))
     );
 
     // All calls should complete without error
@@ -902,7 +906,7 @@ describe.skipIf(SKIP)('Scenario E: 1000+ Document Discovery with Plugin Ownershi
     // Verify responses are consistent (each folder's response only has its own paths)
     for (let i = 0; i < results.length; i++) {
       const text = getText(results[i]);
-      if (!text.includes('No files found')) {
+      if (!text.includes('No entries found')) {
         // Response should only contain paths from the requested folder
         // (not bleeding from other concurrent calls)
         const folderName = folders[i].split('/')[0]; // e.g. "CRM", "Notes", "Tasks"

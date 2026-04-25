@@ -232,9 +232,14 @@ describe('create_directory handler', () => {
 
   it('DIR-10: create_directory handler source does not reference acquireLock or embeddingProvider', () => {
     const source = readFileSync('src/mcp/tools/files.ts', 'utf8');
-    // Extract only the create_directory handler portion (before list_vault section)
+    // Extract only the create_directory handler body (between its tool comment and list_vault section).
+    // acquireLock is imported at module level for remove_directory (Phase 94), so we must start
+    // extraction from the handler comment rather than the file start.
+    const createDirStart = source.indexOf('// ─── Tool: create_directory');
     const createDirEnd = source.indexOf('// ─── Tool: list_vault');
-    const createDirSource = createDirEnd > 0 ? source.slice(0, createDirEnd) : source;
+    const createDirSource = (createDirStart > 0 && createDirEnd > createDirStart)
+      ? source.slice(createDirStart, createDirEnd)
+      : source;
     expect(createDirSource).not.toMatch(/acquireLock|embeddingProvider/i);
   });
 
