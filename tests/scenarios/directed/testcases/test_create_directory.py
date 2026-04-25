@@ -2,7 +2,7 @@
 """
 Test: create_directory — basic creation, deep hierarchy, idempotency, partial-existing, trailing slash.
 
-Coverage points: F-19, F-20, F-21, F-22, F-29
+Coverage points: F-19, F-20, F-21, F-22, F-29, F-31
 
 Modes:
     Default     Connects to an already-running FQC instance (config from flashquery.yml)
@@ -23,7 +23,7 @@ Exit codes:
 from __future__ import annotations
 
 
-COVERAGE = ["F-19", "F-20", "F-21", "F-22", "F-29"]
+COVERAGE = ["F-19", "F-20", "F-21", "F-22", "F-29", "F-31"]
 
 import argparse
 import sys
@@ -153,7 +153,34 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-29: trailing slash in path is normalized (no double-slash artifact)
+        # ── F-29: create_directory is idempotent — repeated identical calls succeed ──
+        log_mark = ctx.server.log_position if ctx.server else 0
+        result1 = ctx.client.call_tool("create_directory", paths=f"{base_dir}/idem")
+        timing1 = result1.timing_ms
+        result2 = ctx.client.call_tool("create_directory", paths=f"{base_dir}/idem")
+        timing2 = result2.timing_ms
+        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/idem")
+        timing3 = result.timing_ms
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        passed_f29 = (
+            result1.ok
+            and result2.ok
+            and result.ok
+            and "already exists" in result2.text
+            and "already exists" in result.text
+        )
+
+        run.step(
+            label="F-29: create_directory is idempotent — repeated identical calls all succeed with (already exists)",
+            passed=passed_f29,
+            detail=f"call1_ok={result1.ok} call2_ok={result2.ok} call3_ok={result.ok} | call2_already_exists={'already exists' in result2.text} call3_already_exists={'already exists' in result.text} | {result.text[:200]}",
+            timing_ms=timing1 + timing2 + timing3,
+            tool_result=result,
+            server_logs=step_logs,
+        )
+
+        # ── F-31: trailing slash stripped — creates dir without trailing-slash artifact
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/withslash/")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -161,11 +188,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         dir_exists = ctx.vault._abs(f"{base_dir}/withslash").is_dir()
         # Response should show the path without double-slash
         no_double_slash = "//" not in result.text
-        passed_f29 = result.ok and dir_exists and no_double_slash and "withslash/" in result.text
+        passed_f31 = result.ok and dir_exists and no_double_slash and "withslash/" in result.text
 
         run.step(
-            label="F-29: trailing slash in path is normalized (no double-slash artifact)",
-            passed=passed_f29,
+            label="F-31: trailing slash stripped (creates withslash/ not withslash//)",
+            passed=passed_f31,
             detail=f"dir_exists={dir_exists} no_double_slash={no_double_slash} | ok={result.ok} | {result.text[:200]}",
             timing_ms=result.timing_ms,
             tool_result=result,

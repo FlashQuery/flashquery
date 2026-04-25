@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test: create_directory — root_path parameter (relative base prefix, slash equivalence, nested prefix).
+Test: create_directory — root_path parameter (relative base prefix, already-existing root, nested prefix).
 
 Coverage points: F-26, F-27, F-28
 
@@ -91,23 +91,38 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-27: root_path='/' behaves same as no root_path (no Root: line) ─
+        # ── F-27: root_path that already exists — root shown as (already exists) ─
+        crm2_root = f"{base_dir}/CRM2"
+        # First call: establish the root directory
+        ctx.client.call_tool(
+            "create_directory",
+            paths=crm2_root,
+        )
+        # Second call (the test call): root already exists, new subfolder created
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool(
             "create_directory",
-            paths=f"{base_dir}/solo",
-            root_path="/",
+            root_path=crm2_root,
+            paths=["Inbox"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        solo_exists = ctx.vault._abs(f"{base_dir}/solo").is_dir()
-        no_root_line = "Root:" not in result.text
-        passed_f27 = result.ok and solo_exists and no_root_line
+        inbox_exists = ctx.vault._abs(f"{crm2_root}/Inbox").is_dir()
+        root_line_present = f"Root: {crm2_root}/" in result.text
+        already_exists_present = "(already exists)" in result.text
+        created_present = "(created)" in result.text
+        passed_f27 = (
+            result.ok
+            and inbox_exists
+            and root_line_present
+            and already_exists_present
+            and created_present
+        )
 
         run.step(
-            label="F-27: root_path='/' is equivalent to no root_path (no Root: line)",
+            label="F-27: root_path that already exists — root shown as (already exists), subfolders created",
             passed=passed_f27,
-            detail=f"solo={solo_exists} no_root_line={no_root_line} | ok={result.ok} | {result.text[:200]}",
+            detail=f"inbox={inbox_exists} root_line={root_line_present} already_exists={already_exists_present} created={created_present} | ok={result.ok} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

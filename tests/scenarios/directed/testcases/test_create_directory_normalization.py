@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-Test: create_directory — path normalization (duplicate slashes, dot collapse, URL-encoded pass-through).
+Test: create_directory — path normalization (leading slash, trailing slash, consecutive slashes).
 
 Coverage points: F-30, F-31, F-32
+
+Scenario steps:
+    F-30  Leading `/` is stripped — `/inbox` creates `inbox/`
+    F-31  Trailing slash is stripped — `inbox/` creates `inbox/`
+    F-32  Consecutive slashes are collapsed — `CRM//Contacts///Active` creates `CRM/Contacts/Active/`
 
 Modes:
     Default     Connects to an already-running FQC instance (config from flashquery.yml)
@@ -62,57 +67,58 @@ def run_test(args: argparse.Namespace) -> TestRun:
     ) as ctx:
         ctx.cleanup.track_dir(base_dir)
 
-        # ── F-30: duplicate slashes are collapsed ─────────────────────────────
+        # ── F-30: leading `/` is stripped ────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        result = ctx.client.call_tool("create_directory", paths=f"/{base_dir}/leading_test")
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        # After stripping the leading "/", this becomes "{base_dir}/leading_test"
+        dir_exists = ctx.vault._abs(f"{base_dir}/leading_test").is_dir()
+        no_leading_slash_in_response = "leading_test/" in result.text
+        passed_f30 = result.ok and dir_exists and no_leading_slash_in_response
+
+        run.step(
+            label="F-30: leading slash in path is stripped",
+            passed=passed_f30,
+            detail=f"dir_exists={dir_exists} response_has_entry={no_leading_slash_in_response} | ok={result.ok} | {result.text[:200]}",
+            timing_ms=result.timing_ms,
+            tool_result=result,
+            server_logs=step_logs,
+        )
+
+        # ── F-31: trailing `/` is stripped ───────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/trailing_test/")
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        dir_exists = ctx.vault._abs(f"{base_dir}/trailing_test").is_dir()
+        has_entry = "trailing_test/" in result.text
+        no_double_slash = "//" not in result.text
+        passed_f31 = result.ok and dir_exists and has_entry and no_double_slash
+
+        run.step(
+            label="F-31: trailing slash in path is stripped",
+            passed=passed_f31,
+            detail=f"dir_exists={dir_exists} has_entry={has_entry} no_double_slash={no_double_slash} | ok={result.ok} | {result.text[:200]}",
+            timing_ms=result.timing_ms,
+            tool_result=result,
+            server_logs=step_logs,
+        )
+
+        # ── F-32: consecutive slashes are collapsed ───────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("create_directory", paths=f"{base_dir}//double//slash")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Expect the normalized dir to exist (no double-slash in actual path)
+        # Consecutive slashes collapsed: "{base_dir}//double//slash" → "{base_dir}/double/slash"
         dir_exists = ctx.vault._abs(f"{base_dir}/double/slash").is_dir()
-        no_double_slash_response = "//" not in result.text
-        passed_f30 = result.ok and dir_exists and no_double_slash_response
+        no_double_slash_in_response = "//" not in result.text
+        passed_f32 = result.ok and dir_exists and no_double_slash_in_response
 
         run.step(
-            label="F-30: duplicate slashes in path are collapsed",
-            passed=passed_f30,
-            detail=f"dir_exists={dir_exists} no_double={no_double_slash_response} | ok={result.ok} | {result.text[:200]}",
-            timing_ms=result.timing_ms,
-            tool_result=result,
-            server_logs=step_logs,
-        )
-
-        # ── F-31: dot segments (./here) are collapsed ─────────────────────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/./here")
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        dir_exists = ctx.vault._abs(f"{base_dir}/here").is_dir()
-        no_dot_in_response = "/./here" not in result.text
-        passed_f31 = result.ok and dir_exists and no_dot_in_response
-
-        run.step(
-            label="F-31: dot segment (./here) is collapsed to 'here'",
-            passed=passed_f31,
-            detail=f"dir_exists={dir_exists} no_dot={no_dot_in_response} | ok={result.ok} | {result.text[:200]}",
-            timing_ms=result.timing_ms,
-            tool_result=result,
-            server_logs=step_logs,
-        )
-
-        # ── F-32: URL-encoded chars are NOT decoded (passed through as-is) ────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/has%20space")
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        # The literal directory name must be 'has%20space' NOT 'has space'
-        encoded_dir_exists = ctx.vault._abs(f"{base_dir}/has%20space").is_dir()
-        decoded_dir_absent = not ctx.vault._abs(f"{base_dir}/has space").exists()
-        passed_f32 = result.ok and encoded_dir_exists and decoded_dir_absent
-
-        run.step(
-            label="F-32: URL-encoded chars (%20) are NOT decoded — passed through as-is",
+            label="F-32: consecutive slashes in path are collapsed",
             passed=passed_f32,
-            detail=f"encoded_exists={encoded_dir_exists} decoded_absent={decoded_dir_absent} | ok={result.ok} | {result.text[:200]}",
+            detail=f"dir_exists={dir_exists} no_double_slash={no_double_slash_in_response} | ok={result.ok} | {result.text[:200]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

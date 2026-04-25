@@ -81,6 +81,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         const rawPaths = typeof paths === 'string' ? [paths] : paths;
 
         // Step 2: Normalize root_path and validate it (pre-loop guard, D-04 Pitfall 4)
+        // Checks: traversal, symlinks, vault-root targeting, and file-conflict (F-49).
         const normalizedRoot = normalizePath(root_path ?? '/');
         if (normalizedRoot) {
           const rootCheck = await validateVaultPath(vaultRoot, normalizedRoot);
@@ -91,6 +92,27 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
               ],
               isError: true,
             };
+          }
+          // File-conflict check: root_path must not be an existing file (F-49)
+          try {
+            const rootStat = await stat(rootCheck.absPath);
+            if (!rootStat.isDirectory()) {
+              return {
+                content: [
+                  {
+                    type: 'text' as const,
+                    text: `Invalid root_path: "${normalizedRoot}" exists as a file, not a directory.`,
+                  },
+                ],
+                isError: true,
+              };
+            }
+          } catch (e) {
+            if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+              // Any error other than "does not exist yet" is unexpected — propagate
+              throw e;
+            }
+            // ENOENT: root_path does not exist yet; mkdir -p will create it as needed
           }
         }
 
@@ -114,18 +136,11 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         }
 
         // Step 4: Normalize each input path and join with root.
-        // - Absolute paths (starting with '/') are collected as failures immediately — they
-        //   would silently become vault-relative after normalizePath strips the leading slash,
-        //   giving a misleading success. Reject them before normalization (Rule 1 fix, F-38).
+        // - Leading '/' is stripped per spec (SPEC-20: "Leading / is optional and stripped if present").
+        //   normalizePath() handles this; do NOT reject before normalization.
         // - Silently skip paths that become empty AFTER normalization (SPEC-20 — Pitfall 1).
         const resolvedPaths: Array<{ resolved: string; original: string }> = [];
-        const absolutePathFailures: Array<{ kind: 'failed'; original: string; error: string }> = [];
         for (const p of rawPaths) {
-          // Detect raw absolute paths before normalization strips the leading '/'
-          if (p.startsWith('/')) {
-            absolutePathFailures.push({ kind: 'failed', original: p, error: 'Path traversal detected — path must be within the vault root.' });
-            continue;
-          }
           const normalized = normalizePath(p);
           if (normalized === '') continue; // silently skip (SPEC-20: empty-string in array)
           const resolved = normalizedRoot ? joinWithRoot(normalizedRoot, normalized) : normalized;
@@ -133,7 +148,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         }
 
         // If the entire input collapses to nothing (e.g. paths=['.', '']) treat as no valid input
-        if (resolvedPaths.length === 0 && absolutePathFailures.length === 0) {
+        if (resolvedPaths.length === 0) {
           return {
             content: [{ type: 'text' as const, text: 'No paths provided.' }],
             isError: true,
@@ -241,11 +256,6 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           if (segmentStatus.every(s => s.preExisted)) {
             logger.warn(`create_directory: path already exists: ${sanitizedPath}`);
           }
-        }
-
-        // Merge absolute-path failures (collected before the per-path loop) into results
-        for (const f of absolutePathFailures) {
-          results.push(f);
         }
 
         // Response assembly

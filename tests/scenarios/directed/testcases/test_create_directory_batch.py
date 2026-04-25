@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Test: create_directory — batch operations (size limit, partial success, 50-path max).
+Test: create_directory — batch operations (batch all-new, size limit, partial success, all-fail).
 
-Coverage points: F-23, F-24, F-25
+Coverage points: F-23, F-24, F-25, F-45
 
 Modes:
     Default     Connects to an already-running FQC instance (config from flashquery.yml)
@@ -23,7 +23,7 @@ Exit codes:
 from __future__ import annotations
 
 
-COVERAGE = ["F-23", "F-24", "F-25"]
+COVERAGE = ["F-23", "F-24", "F-25", "F-45"]
 
 import argparse
 import sys
@@ -62,7 +62,36 @@ def run_test(args: argparse.Namespace) -> TestRun:
     ) as ctx:
         ctx.cleanup.track_dir(base_dir)
 
-        # ── F-23: 51-path batch is rejected before any mkdir ─────────────────
+        # ── F-23: batch all-new — multiple paths created in one call ─────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        batch_paths = [f"{base_dir}/batch_a", f"{base_dir}/batch_b", f"{base_dir}/batch_c/sub"]
+        result = ctx.client.call_tool("create_directory", paths=batch_paths)
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        batch_a_exists = ctx.vault._abs(f"{base_dir}/batch_a").is_dir()
+        batch_b_exists = ctx.vault._abs(f"{base_dir}/batch_b").is_dir()
+        batch_c_exists = ctx.vault._abs(f"{base_dir}/batch_c").is_dir()
+        batch_c_sub_exists = ctx.vault._abs(f"{base_dir}/batch_c/sub").is_dir()
+        all_batch_exist = batch_a_exists and batch_b_exists and batch_c_exists and batch_c_sub_exists
+        passed_f23 = (
+            result.ok
+            and all_batch_exist
+            and "directories:" in result.text
+        )
+
+        run.step(
+            label="F-23: batch all-new — multiple paths created in one call",
+            passed=passed_f23,
+            detail=(
+                f"ok={result.ok} batch_a={batch_a_exists} batch_b={batch_b_exists} "
+                f"batch_c={batch_c_exists} batch_c/sub={batch_c_sub_exists} | {result.text[:200]}"
+            ),
+            timing_ms=result.timing_ms,
+            tool_result=result,
+            server_logs=step_logs,
+        )
+
+        # ── F-45: 51-path batch is rejected immediately before any paths are processed ──
         log_mark = ctx.server.log_position if ctx.server else 0
         paths_51 = [f"{base_dir}/p{i}" for i in range(51)]
         result = ctx.client.call_tool("create_directory", paths=paths_51)
@@ -70,15 +99,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # None of the 51 dirs should have been created
         none_created = not any(ctx.vault._abs(p).exists() for p in paths_51)
-        passed_f23 = (
+        passed_f45 = (
             not result.ok
             and "Too many paths: 51 provided, maximum is 50." in result.text
             and none_created
         )
 
         run.step(
-            label="F-23: 51-path batch is rejected (over limit)",
-            passed=passed_f23,
+            label="F-45: 51-path batch is rejected immediately before any paths are processed",
+            passed=passed_f45,
             detail=f"ok={result.ok} none_created={none_created} | {result.text[:200]}",
             timing_ms=result.timing_ms,
             tool_result=result,
@@ -111,19 +140,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-25: exactly 50-path batch is accepted ──────────────────────────
+        # ── F-25: all paths fail → isError: true ─────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        paths_50 = [f"{base_dir}/q{i}" for i in range(50)]
-        result = ctx.client.call_tool("create_directory", paths=paths_50)
+        all_fail_paths = ["../../etc", "../../tmp", "../../var"]
+        result = ctx.client.call_tool("create_directory", paths=all_fail_paths)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        all_created = all(ctx.vault._abs(p).is_dir() for p in paths_50)
-        passed_f25 = result.ok and all_created and "directories:" in result.text
+        passed_f25 = (
+            not result.ok
+            and "All paths failed:" in result.text
+        )
 
         run.step(
-            label="F-25: exactly 50-path batch is accepted (at limit)",
+            label="F-25: all paths fail (traversal) → isError: true, All paths failed: header",
             passed=passed_f25,
-            detail=f"ok={result.ok} all_created={all_created} | {result.text[:200]}",
+            detail=f"ok={result.ok} | {result.text[:200]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

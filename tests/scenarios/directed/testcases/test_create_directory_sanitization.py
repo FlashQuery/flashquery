@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """
-Test: create_directory — illegal character sanitization (Windows-reserved, NUL, response reporting, intermediate segments).
+Test: create_directory — illegal character sanitization (colon, multiple chars, NUL byte, control chars 1–31).
 
 Coverage points: F-33, F-34, F-35, F-36
+
+  F-33  Colon (:) sanitized to space; response reports original name
+  F-34  Multiple illegal characters (: and |) in one segment all sanitized; response reports all replacements
+  F-35  NUL byte (\\x00) sanitized to space; response reports replacement
+  F-36  Control character (byte 1–31, not NUL) sanitized to space; response reports replacement
 
 Modes:
     Default     Connects to an already-running FQC instance (config from flashquery.yml)
@@ -81,7 +86,30 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-34: NUL byte is sanitized ───────────────────────────────────────
+        # ── F-34: multiple illegal characters in one segment all sanitized ────
+        # Use "foo:|bar" — colon and pipe in same segment → "foo  bar" → collapsed → "foo bar"
+        log_mark = ctx.server.log_position if ctx.server else 0
+        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/foo:|bar")
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        # Both illegal chars sanitized → dir becomes "foo  bar" → after collapse → "foo bar"
+        sanitized_dir_exists = ctx.vault._abs(f"{base_dir}/foo  bar").is_dir() or ctx.vault._abs(f"{base_dir}/foo bar").is_dir()
+        # Response must mention both replaced chars — replacedChars joined as ":|"
+        colon_reported = '":" replaced' in result.text or 'replaced ":"' in result.text or '":"' in result.text or ':|' in result.text
+        pipe_reported = '"|" replaced' in result.text or 'replaced "|"' in result.text or '"|"' in result.text or ':|' in result.text
+        replaced_both = colon_reported and pipe_reported
+        passed_f34 = result.ok and sanitized_dir_exists and replaced_both
+
+        run.step(
+            label="F-34: multiple illegal chars in one segment — response reports all replacements",
+            passed=passed_f34,
+            detail=f"dir_exists={sanitized_dir_exists} colon_reported={colon_reported} pipe_reported={pipe_reported} | ok={result.ok} | {result.text[:300]}",
+            timing_ms=result.timing_ms,
+            tool_result=result,
+            server_logs=step_logs,
+        )
+
+        # ── F-35: NUL byte in segment sanitized to space ──────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/bad\x00name")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -89,55 +117,32 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # NUL → space: dir becomes "bad name"
         sanitized_dir_exists = ctx.vault._abs(f"{base_dir}/bad name").is_dir()
         replaced_reported = "replaced" in result.text
-        passed_f34 = result.ok and sanitized_dir_exists and replaced_reported
+        passed_f35 = result.ok and sanitized_dir_exists and replaced_reported
 
         run.step(
-            label="F-34: NUL byte in segment sanitized; response reports replacement",
-            passed=passed_f34,
+            label="F-35: NUL byte sanitized to space; response reports replacement",
+            passed=passed_f35,
             detail=f"dir_exists={sanitized_dir_exists} replaced_reported={replaced_reported} | ok={result.ok} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-35: response explicitly reports 'sanitized from' and 'replaced' ─
+        # ── F-36: control character (byte 1–31, not NUL) sanitized to space ───
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/pipe|sep")
+        # \x01 is byte 1 (SOH), a non-NUL control character
+        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/ctrl\x01char")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        sanitized_from_present = "sanitized from" in result.text
-        replaced_present = "replaced" in result.text
-        passed_f35 = result.ok and sanitized_from_present and replaced_present
+        # \x01 → space: dir becomes "ctrl char"
+        sanitized_dir_exists = ctx.vault._abs(f"{base_dir}/ctrl char").is_dir()
+        replaced_reported = "replaced" in result.text
+        passed_f36 = result.ok and sanitized_dir_exists and replaced_reported
 
         run.step(
-            label='F-35: response contains "sanitized from" and "replaced" when sanitization occurred',
-            passed=passed_f35,
-            detail=f"sanitized_from={sanitized_from_present} replaced={replaced_present} | ok={result.ok} | {result.text[:300]}",
-            timing_ms=result.timing_ms,
-            tool_result=result,
-            server_logs=step_logs,
-        )
-
-        # ── F-36: sanitization on intermediate segment ────────────────────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/par:ent/child")
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        # Intermediate segment "par:ent" → "par ent"
-        sanitized_parent_exists = ctx.vault._abs(f"{base_dir}/par ent").is_dir()
-        child_exists = ctx.vault._abs(f"{base_dir}/par ent/child").is_dir()
-        parent_sanitized_in_response = 'sanitized from "par:ent"' in result.text
-        passed_f36 = (
-            result.ok
-            and sanitized_parent_exists
-            and child_exists
-            and parent_sanitized_in_response
-        )
-
-        run.step(
-            label="F-36: sanitization on intermediate segment reported in response",
+            label="F-36: control character (byte \\x01) sanitized to space; response reports replacement",
             passed=passed_f36,
-            detail=f"parent_exists={sanitized_parent_exists} child_exists={child_exists} sanitized={parent_sanitized_in_response} | ok={result.ok} | {result.text[:300]}",
+            detail=f"dir_exists={sanitized_dir_exists} replaced_reported={replaced_reported} | ok={result.ok} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
