@@ -1,0 +1,30 @@
+name: list_vault_extension_filter_with_directories
+description: >
+  list_vault with show="all" and extensions=[".md"] returns directories (unfiltered by
+  extension) alongside only .md files. Verifies that extension filtering applies to files
+  only and does not suppress directories from the listing. Covers IF-12.
+coverage: [IF-12]
+
+steps:
+  - label: "Create a directory for IF-12"
+    action: create_directory
+    args:
+      paths: "_integration/if12/docs"
+
+  - label: "Write a markdown document for IF-12"
+    action: vault.write
+    name: if12_doc
+    path: "if12/readme.md"
+    title: "IF-12 Extension Filter Doc"
+    content: "Markdown document for the IF-12 extension filter test."
+    tags: [if12-tag]
+
+  - label: "list_vault(show: all, extensions: [.md]) shows both dir and .md file (IF-12)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if12"
+        show: "all"
+        extensions: [".md"]
+      expect_contains: "docs/"
+      expect_contains: "readme.md"

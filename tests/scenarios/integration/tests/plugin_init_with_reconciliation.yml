@@ -1,0 +1,65 @@
+name: plugin_init_with_reconciliation
+description: >
+  register_plugin sets up a plugin watching _integration/if14/contacts. create_directory
+  scaffolds the folder. vault.write writes a document to the watched folder. scan_vault
+  triggers reconciliation. search_records confirms the reconciliation engine picked up
+  the document via the reconcile-on-read path. Covers IF-14.
+coverage: [IF-14]
+
+steps:
+  # ── Setup: Register plugin ──────────────────────────────────────────────────
+
+  - label: "Register plugin watching _integration/if14/contacts for reconciliation path"
+    action: register_plugin
+    args:
+      plugin_instance: if14test
+      schema_yaml: |
+        plugin:
+          id: if14
+          name: IF-14 Plugin Init Reconciliation Test
+          version: 1.0.0
+          description: Tests create_directory scaffold followed by reconciliation via scan_vault
+        tables:
+          - name: contacts
+            description: Tracked contacts
+            columns:
+              - name: title
+                type: text
+        documents:
+          types:
+            - id: if14-contact
+              folder: _integration/if14/contacts
+              on_added: auto-track
+              track_as: contacts
+              field_map:
+                fq_title: title
+
+  # ── Scaffold plugin directories ─────────────────────────────────────────────
+
+  - label: "Scaffold plugin directory with create_directory"
+    action: create_directory
+    args:
+      root_path: "_integration/if14"
+      paths: ["contacts"]
+
+  # ── Write via vault.write, then scan, then assert via search_records ─────────
+
+  - label: "Write document to watched folder via vault.write"
+    action: vault.write
+    name: if14_contact
+    path: "if14/contacts/bob.md"
+    title: "Bob"
+    content: "IF-14 test contact document for reconciliation path."
+    tags: [if14-tag]
+
+  - label: "Scan vault to trigger reconciliation (IF-14)"
+    action: scan_vault
+
+  - label: "search_records confirms reconciliation tracked the document (IF-14)"
+    assert:
+      op: search_records
+      args:
+        plugin_id: if14
+        plugin_instance: if14test
+        table: contacts
+      expect_contains: "Bob"

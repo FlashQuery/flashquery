@@ -1,0 +1,38 @@
+name: list_vault_show_modes
+description: >
+  Verifies that list_vault show modes work correctly: show="files" excludes directories
+  and show="all" includes both files and directories in the same path. A directory and
+  a document are created in the same parent, then both show modes are asserted. Covers IF-11.
+coverage: [IF-11]
+
+steps:
+  - label: "Create a directory for IF-11"
+    action: create_directory
+    args:
+      paths: "_integration/if11/subdir"
+
+  - label: "Write a document in the same parent path for IF-11"
+    action: vault.write
+    name: if11_doc
+    path: "if11/note.md"
+    title: "IF-11 Show Modes Note"
+    content: "Document for the IF-11 show-modes test."
+    tags: [if11-tag]
+
+  - label: "list_vault(show: files) excludes the directory (IF-11)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if11"
+        show: "files"
+      expect_contains: "note.md"
+      expect_not_contains: "subdir/"
+
+  - label: "list_vault(show: all) includes both file and directory (IF-11)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if11"
+        show: "all"
+      expect_contains: "note.md"
+      expect_contains: "subdir/"

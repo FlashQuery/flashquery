@@ -1,0 +1,80 @@
+name: directory_lifecycle
+description: >
+  Tests the full directory lifecycle: create an empty directory, verify it exists via
+  list_vault, then remove it and verify it is gone. Also tests batch directory creation
+  with leaf-first removal of a nested structure. Covers IF-05 and IF-06.
+coverage: [IF-05, IF-06]
+
+steps:
+  # ── IF-05: Simple create → remove lifecycle ─────────────────────────────────
+
+  - label: "Create an empty directory for IF-05"
+    action: create_directory
+    args:
+      paths: "_integration/if05/temp"
+
+  - label: "Before remove: list_vault confirms directory exists (IF-05)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if05"
+        show: "directories"
+      expect_contains: "temp/"
+
+  - label: "Remove the empty directory"
+    action: remove_directory
+    args:
+      path: "_integration/if05/temp"
+
+  - label: "After remove: list_vault confirms directory is gone (IF-05)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if05"
+        show: "directories"
+      expect_not_contains: "temp/"
+
+  # ── IF-06: Batch create → recursive list → leaf-first removal ───────────────
+
+  - label: "Batch create nested directories for IF-06"
+    action: create_directory
+    args:
+      root_path: "_integration/if06"
+      paths: ["parent", "parent/child-a", "parent/child-b"]
+
+  - label: "list_vault recursive shows full nested tree (IF-06)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if06"
+        show: "directories"
+        recursive: true
+      expect_contains: "parent/"
+      expect_contains: "child-a/"
+      expect_contains: "child-b/"
+
+  - label: "Remove leaf directory child-a first (IF-06)"
+    action: remove_directory
+    args:
+      path: "_integration/if06/parent/child-a"
+
+  - label: "Remove leaf directory child-b next (IF-06)"
+    action: remove_directory
+    args:
+      path: "_integration/if06/parent/child-b"
+
+  - label: "Remove parent directory now that it is empty (IF-06)"
+    action: remove_directory
+    args:
+      path: "_integration/if06/parent"
+
+  - label: "After leaf-first removal: list_vault confirms all directories gone (IF-06)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if06"
+        show: "directories"
+        recursive: true
+      expect_not_contains: "parent/"
+      expect_not_contains: "child-a/"
+      expect_not_contains: "child-b/"

@@ -1,0 +1,34 @@
+name: move_document_to_new_directory
+description: >
+  create_directory creates a new directory, then a document originally written to a
+  different location is moved into the new directory via move_document. list_vault
+  on the new directory confirms the moved document appears there. Covers IF-10.
+coverage: [IF-10]
+
+steps:
+  - label: "Write a document in the original location"
+    action: vault.write
+    name: orig_doc
+    path: "if10/source/original.md"
+    title: "IF-10 Original Document"
+    content: "Document to be moved into the new directory."
+    tags: [if10-tag]
+
+  - label: "Create the destination directory for IF-10"
+    action: create_directory
+    args:
+      paths: "_integration/if10/new-dir"
+
+  - label: "Move the document into the new directory (IF-10)"
+    action: move_document
+    args:
+      identifier: "${orig_doc.fq_id}"
+      destination: "_integration/if10/new-dir/original.md"
+
+  - label: "list_vault on new directory confirms moved document appears (IF-10)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if10/new-dir"
+        show: "files"
+      expect_contains: "original.md"
