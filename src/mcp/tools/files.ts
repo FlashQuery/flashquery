@@ -15,7 +15,7 @@
 
 import { z } from 'zod';
 import { mkdir, stat, readdir, rmdir } from 'node:fs/promises';
-import { join, extname, resolve, relative } from 'node:path';
+import { join, extname } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
@@ -770,27 +770,12 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
       try {
         const vaultRoot = config.instance.vault.path;
 
-        // Path traversal protection + vault root guard (proven pattern from resolveDocumentIdentifier)
-        const absPath = join(vaultRoot, dirPath);
-        const resolvedAbs = resolve(absPath);
-        const resolvedVault = resolve(vaultRoot);
-
-        // Reject vault root removal
-        if (resolvedAbs === resolvedVault) {
-          return {
-            content: [{ type: 'text' as const, text: 'Cannot remove the vault root directory.' }],
-            isError: true,
-          };
+        // Path validation using validateVaultPath() (migrated in Phase 94 — replaces inline traversal block)
+        const validation = await validateVaultPath(vaultRoot, dirPath);
+        if (!validation.valid) {
+          return { content: [{ type: 'text' as const, text: validation.error ?? 'Invalid path.' }], isError: true };
         }
-
-        // Reject path traversal
-        const rel = relative(resolvedVault, resolvedAbs);
-        if (rel.startsWith('..') || rel === '..') {
-          return {
-            content: [{ type: 'text' as const, text: 'Path must be within the vault root.' }],
-            isError: true,
-          };
-        }
+        const absPath = validation.absPath;
 
         // Stat the path — must exist and be a directory
         let dirStat;
