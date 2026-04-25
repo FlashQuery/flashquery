@@ -19,6 +19,7 @@ This release introduces native filesystem navigation to the vault. The new `crea
 - Response-format utilities: `formatTableHeader`, `formatTableRow`, `formatFileSize`, `parseDateFilter`
 - Filesystem integration test suite covering 16 composition scenarios (IF-01..IF-16)
 - Directed scenario test coverage for `create_directory` (34 scenarios) and `list_vault` (F-08..F-97)
+- New FlashQuery MCP Tool Guide.md under /docs/
 
 ### Changed
 - `remove_directory` is now part of the filesystem tool group alongside `create_directory` and `list_vault`
