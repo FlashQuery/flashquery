@@ -262,6 +262,41 @@ flashquery-core/src/
     └── logger.ts            # Structured logging
 ```
 
+## Pre-Push Checklist for Docker / CI Changes
+
+Three classes of change are high-risk for breaking the CI smoke test. Before pushing, run through the relevant section.
+
+### 1. Touching `flashquery.example.yml` (config template)
+
+The config YAML uses `${VAR}` references that `expandEnvVars()` replaces at startup. If a var is unset the literal string `${VAR}` reaches Zod validation and the container crashes.
+
+- [ ] Every `${VAR}` reference in `flashquery.example.yml` has a corresponding entry in `docker/.env.docker.example` with a **valid enum value** (not a placeholder like `your-value-here`).
+- [ ] If the var is optional in production, use `none` / `info` / `false` / `""` as the CI default — whatever passes the schema validator.
+- [ ] Add the same var with a `${VAR:-default}` fallback to the `flashquery` service `environment:` block in `docker/docker-compose.yml`.
+
+### 2. Touching `src/mcp/auth.ts` or adding new HTTP requirements to the MCP server
+
+The smoke test sends a raw `curl` to `POST /mcp`. If the server starts requiring new headers, credentials, or content negotiation, the test breaks silently (the curl just gets a 4xx and SESSION_ID stays empty).
+
+- [ ] For any new **required header**: add it to both curl calls in `scripts/smoke-test.sh` (`INIT_RESP` and `TOOL_RESP`).
+- [ ] For new **auth mechanisms**: add the corresponding credential to `docker/.env.docker.example` and `docker/docker-compose.yml`, and update the smoke test to send it.
+- [ ] Verify the smoke test locally (see below) before pushing.
+
+### 3. Touching `scripts/smoke-test.sh` or `docker/docker-compose.yml`
+
+- [ ] Run the smoke test locally with the example env to confirm it passes end-to-end:
+  ```bash
+  # Requires Docker
+  ./scripts/smoke-test.sh
+  ```
+- [ ] If `.env.docker` is absent on your machine, the script falls back to `.env.docker.example` — the same path CI takes. This is the best local approximation of the CI run.
+
+### Why this matters
+
+In one CI incident, three sequential failures all traced to the same root pattern — a new server requirement existed in code but the example env file and smoke test script weren't updated in the same commit. The result was 10+ pushes to fix what should have been caught in one review pass. Each of these checks takes under a minute and prevents that chain.
+
+---
+
 ## Community and Conduct
 
 We follow the [Contributor Covenant 2.1](./CODE_OF_CONDUCT.md). Our community values:
