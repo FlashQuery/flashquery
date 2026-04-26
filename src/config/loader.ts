@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import * as yaml from 'js-yaml';
+import { config as dotenvConfig } from 'dotenv';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
@@ -372,10 +373,19 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // 4. Reject old config formats with clear error messages (v1.7 breaking change)
   rejectLegacyFields(raw);
 
-  // 5. Expand env vars
+  // 5. Load .env from the config file's directory (supplements CWD .env already loaded by
+  //    dotenv/config in index.ts — required when the process is spawned by a host like
+  //    Claude Desktop that has a different CWD than the config file's location)
+  const configDir = dirname(resolve(configPath));
+  const sidecarEnvPath = join(configDir, '.env');
+  if (existsSync(sidecarEnvPath)) {
+    dotenvConfig({ path: sidecarEnvPath, override: false });
+  }
+
+  // 6. Expand env vars
   const expanded = expandEnvVars(raw);
 
-  // 6. Validate with Zod
+  // 7. Validate with Zod
   const result = ConfigSchema.safeParse(expanded);
   if (!result.success) {
     const message = formatZodErrors(result.error.issues as ZodIssue[]);
@@ -395,7 +405,6 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 
   // 8.5. Resolve relative vault path to absolute path (relative to config file directory)
   if (!isAbsolute(config.instance.vault.path)) {
-    const configDir = dirname(resolve(configPath));
     config.instance.vault.path = resolve(configDir, config.instance.vault.path);
   }
 
