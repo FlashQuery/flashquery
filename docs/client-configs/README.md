@@ -15,7 +15,9 @@ This directory contains sample configurations for connecting FlashQuery to three
 - Best for: local development, single-user setups
 - Communication: JSON-RPC over stdin/stdout
 - Security: inherent (only accessible to the spawning process)
-- Example: Claude Desktop spawns `node /path/to/flashquery/dist/index.js start --config /path/to/flashquery.yml`
+- Example: Claude Desktop spawns `node /path/to/flashquery/dist/index.js start --config /path/to/flashquery.yml --transport stdio`
+
+> **Note:** Always pass `--transport stdio` explicitly in the args. This overrides whatever transport is set in `flashquery.yml`, so the same config file works for both HTTP (dev server) and stdio (Claude Desktop) use cases.
 
 **HTTP Transport:**
 - FlashQuery runs as a standalone server on localhost:3100 (or custom port)
@@ -108,6 +110,15 @@ Steps:
 **"Connection refused":**
 - HTTP transport: Is FlashQuery running? Start it with `npm run dev` or `node dist/index.js start --config ./flashquery.yml`
 - stdio: Does the path exist? `ls /path/to/flashquery/dist/index.js`
+
+**"Config error: embedding.provider — Invalid option" (or similar) on Claude Desktop:**
+- Claude Desktop spawns FlashQuery from its own working directory, so it never loads your project's `.env` file automatically.
+- Fix: place a `.env` file in the same directory as `flashquery.yml`. FlashQuery's config loader automatically checks for a `.env` sidecar alongside the config file and loads it silently.
+- Also ensure you are passing `--transport stdio` in the args (see example above) — without it, FlashQuery may attempt to start in HTTP mode.
+
+**"Claude Desktop keeps prompting to approve tools":**
+- This is expected on first use. Click **Always allow** when prompted — Claude Desktop remembers the decision per tool and will not ask again.
+- There is no bulk-approve option in Claude Desktop's config; you approve each tool once.
 
 ## Advanced: Custom Ports & Hosts
 

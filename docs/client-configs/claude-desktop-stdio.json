@@ -6,7 +6,9 @@
         "/absolute/path/to/flashquery/dist/index.js",
         "start",
         "--config",
-        "/absolute/path/to/flashquery/flashquery.yml"
+        "/absolute/path/to/flashquery/flashquery.yml",
+        "--transport",
+        "stdio"
       ]
     }
   }

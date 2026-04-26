@@ -146,9 +146,9 @@ FlashQuery uses **streamable-http** transport by default, listening on `http://l
 
 See [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) for custom host/port, manual registration steps, and troubleshooting.
 
-### Claude Desktop (stdio fallback)
+### Claude Desktop (stdio)
 
-Streamable-http works with modern Claude Desktop versions. If you're on an older build that doesn't support HTTP MCP, fall back to stdio: set `mcp.transport: "stdio"` in `flashquery.yml`, then add to your Claude Desktop config:
+Claude Desktop spawns FlashQuery as a subprocess and communicates over stdio. Add to your Claude Desktop config:
 
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
@@ -162,14 +162,20 @@ Streamable-http works with modern Claude Desktop versions. If you're on an older
         "/absolute/path/to/flashquery/dist/index.js",
         "start",
         "--config",
-        "/absolute/path/to/flashquery/flashquery.yml"
+        "/absolute/path/to/flashquery/flashquery.yml",
+        "--transport",
+        "stdio"
       ]
     }
   }
 }
 ```
 
-Use absolute paths — Claude Desktop spawns processes from its own working directory, not yours.
+The `--transport stdio` flag overrides whatever transport is set in `flashquery.yml`, so your config file can stay as-is for other clients.
+
+**Important — `.env` file location:** Claude Desktop spawns processes from its own working directory, not your project directory. FlashQuery will not find a `.env` file in your project unless you also place one (or symlink one) in the same directory as `flashquery.yml`. The loader automatically checks for a `.env` alongside the config file and loads it silently — no extra configuration needed.
+
+**Tool approvals:** The first time each FlashQuery tool is called, Claude Desktop will prompt for approval. Click **Always allow** to permanently approve that tool. You only need to do this once per tool.
 
 ### Cloud / remote deployments
 
