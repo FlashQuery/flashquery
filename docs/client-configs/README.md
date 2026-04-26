@@ -19,12 +19,13 @@ This directory contains sample configurations for connecting FlashQuery to three
 
 > **Note:** Always pass `--transport stdio` explicitly in the args. This overrides whatever transport is set in `flashquery.yml`, so the same config file works for both HTTP (dev server) and stdio (Claude Desktop) use cases.
 
-**HTTP Transport:**
+**HTTP Transport (via mcp-remote):**
 - FlashQuery runs as a standalone server on localhost:3100 (or custom port)
-- Best for: Docker deployments, team setups, CI/CD
-- Communication: JSON-RPC over HTTP
+- Best for: Docker deployments, team setups, sharing one server across multiple clients
+- Communication: JSON-RPC over HTTP (streamable-http)
 - Security: DNS rebinding protection + origin header validation
-- Example: `curl -X POST http://localhost:3100 -H "Content-Type: application/json" -d '{...}'`
+- Claude Desktop does not natively speak HTTP MCP — use `mcp-remote` as a bridge: `npx mcp-remote http://localhost:3100/mcp`
+- Other clients (Claude Code, Cursor) connect directly via URL
 
 ## Choosing a Config
 

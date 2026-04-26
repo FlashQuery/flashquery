@@ -146,12 +146,20 @@ FlashQuery uses **streamable-http** transport by default, listening on `http://l
 
 See [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) for custom host/port, manual registration steps, and troubleshooting.
 
-### Claude Desktop (stdio)
+### Claude Desktop
 
-Claude Desktop spawns FlashQuery as a subprocess and communicates over stdio. Add to your Claude Desktop config:
+Claude Desktop supports both transport modes. Choose based on your setup:
 
+| Mode | When to use |
+|------|-------------|
+| **stdio** | FlashQuery runs only while Claude Desktop is open; simplest setup |
+| **streamable-http** | FlashQuery runs as a persistent server; share one instance across multiple clients |
+
+Config file locations:
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
+
+**Option A — stdio** (Claude Desktop spawns FlashQuery as a subprocess):
 
 ```json
 {
@@ -171,11 +179,33 @@ Claude Desktop spawns FlashQuery as a subprocess and communicates over stdio. Ad
 }
 ```
 
-The `--transport stdio` flag overrides whatever transport is set in `flashquery.yml`, so your config file can stay as-is for other clients.
+The `--transport stdio` flag overrides whatever transport is set in `flashquery.yml`, so the same config file works for all clients.
 
-**Important — `.env` file location:** Claude Desktop spawns processes from its own working directory, not your project directory. FlashQuery will not find a `.env` file in your project unless you also place one (or symlink one) in the same directory as `flashquery.yml`. The loader automatically checks for a `.env` alongside the config file and loads it silently — no extra configuration needed.
+**Important — `.env` file location:** Claude Desktop spawns processes from its own working directory, not your project directory. Place a `.env` file in the same directory as `flashquery.yml` — the loader picks it up automatically.
 
-**Tool approvals:** The first time each FlashQuery tool is called, Claude Desktop will prompt for approval. Click **Always allow** to permanently approve that tool. You only need to do this once per tool.
+**Option B — streamable-http** (FlashQuery runs as a persistent server; Claude Desktop connects via `mcp-remote`):
+
+Start FlashQuery first: `npm run dev` or `node dist/index.js start --config ./flashquery.yml`
+
+Claude Desktop does not natively speak HTTP MCP, so use the `mcp-remote` bridge:
+
+```json
+{
+  "mcpServers": {
+    "flashquery": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "http://localhost:3100/mcp"
+      ]
+    }
+  }
+}
+```
+
+`npx mcp-remote` downloads and runs the bridge automatically on first use. See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) for running FlashQuery as a persistent server and auth configuration.
+
+**Tool approvals:** The first time each FlashQuery tool is called, Claude Desktop will prompt for approval. Click **Always allow** to permanently approve that tool — you only need to do this once per tool.
 
 ### Cloud / remote deployments
 

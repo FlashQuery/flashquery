@@ -1,14 +1,10 @@
 {
   "mcpServers": {
     "flashquery": {
-      "command": "node",
+      "command": "npx",
       "args": [
-        "/absolute/path/to/flashquery/dist/index.js",
-        "start",
-        "--transport",
-        "http",
-        "--config",
-        "/absolute/path/to/flashquery/flashquery.yml"
+        "mcp-remote",
+        "http://localhost:3100/mcp"
       ]
     }
   }
