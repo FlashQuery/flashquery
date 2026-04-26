@@ -832,7 +832,12 @@ class SupabaseManagerImpl implements SupabaseManager {
         );
 
       if (vaultError) {
-        logger.error(`Failed to seed fqc_vault: ${vaultError.message}`);
+        const isAuthError = /invalid api key|unauthorized|jwt/i.test(vaultError.message);
+        const detail = isAuthError
+          ? `Auth rejected by Supabase (${vaultError.message}). ` +
+            `Check that SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in your .env both belong to the same Supabase project.`
+          : vaultError.message;
+        logger.error(`Failed to seed fqc_vault: ${detail}`);
       } else {
         logger.info(`Vault instance registered: ${vaultPath} (id=${instanceId})`);
       }
