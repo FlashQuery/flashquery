@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import * as yaml from 'js-yaml';
-import { config as dotenvConfig } from 'dotenv';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
@@ -176,6 +175,33 @@ function expandEnvVars(obj: unknown): unknown {
     return result;
   }
   return obj;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Silent .env file loader — parses key=value pairs and injects into process.env
+// without any console output. Required for stdio MCP mode: dotenv v17+ writes
+// informational messages to stdout, which corrupts the JSON-RPC protocol channel.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function loadEnvFileSilently(envPath: string): void {
+  const contents = readFileSync(envPath, 'utf-8');
+  for (const line of contents.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    let value = trimmed.slice(eqIdx + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (!(key in process.env)) {
+      process.env[key] = value;
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -379,7 +405,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   const configDir = dirname(resolve(configPath));
   const sidecarEnvPath = join(configDir, '.env');
   if (existsSync(sidecarEnvPath)) {
-    dotenvConfig({ path: sidecarEnvPath, override: false });
+    loadEnvFileSilently(sidecarEnvPath);
   }
 
   // 6. Expand env vars
