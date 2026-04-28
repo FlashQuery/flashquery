@@ -73,6 +73,28 @@ from fqc_vault import VaultHelper
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively merge overlay into a copy of base.
+
+    Behavior:
+      - dict values are recursively merged
+      - list values in overlay REPLACE the base value
+      - scalar values in overlay REPLACE the base value
+      - keys present only in base are preserved
+    """
+    result = dict(base)
+    for key, val in overlay.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
+
+
+# ---------------------------------------------------------------------------
 # FQCServer — managed subprocess with log capture
 # ---------------------------------------------------------------------------
 
@@ -136,6 +158,7 @@ class FQCServer:
         require_embedding: bool = False,
         enable_locking: bool = False,
         enable_git: bool = False,
+        extra_config: dict | None = None,
     ) -> None:
         # Resolve the flashquery-core project directory
         dir_hint = fqc_dir or os.environ.get("FQC_DIR")
@@ -155,6 +178,7 @@ class FQCServer:
         self.require_embedding = require_embedding
         self.enable_locking = enable_locking
         self.enable_git = enable_git
+        self.extra_config = extra_config or {}
 
         # Vault: use provided path or create a temp directory
         self._owns_vault = vault_path is None
@@ -234,6 +258,13 @@ class FQCServer:
                 "output": "stdout",
             },
         }
+
+        # Deep-merge any caller-supplied extra_config (e.g., directed scenarios that
+        # need to inject an `llm:` block). Top-level keys in extra_config are merged
+        # at the root; nested dict keys are recursively merged; list values are
+        # replaced (not appended).
+        if self.extra_config:
+            config = _deep_merge(config, self.extra_config)
 
         fd, path = tempfile.mkstemp(prefix="fqc-test-config-", suffix=".yml")
         with os.fdopen(fd, "w") as f:
@@ -643,6 +674,7 @@ class TestContext:
         require_embedding: bool = False,
         enable_locking: bool = False,
         enable_git: bool = False,
+        extra_config: dict | None = None,
     ) -> None:
         self.test_prefix = test_prefix
         self._fqc_dir = fqc_dir
@@ -656,6 +688,7 @@ class TestContext:
         self._require_embedding = require_embedding
         self._enable_locking = enable_locking
         self._enable_git = enable_git
+        self.extra_config = extra_config
 
         # Initialized in __enter__
         self.client: FQCClient = None  # type: ignore
@@ -678,6 +711,7 @@ class TestContext:
                 require_embedding=self._require_embedding,
                 enable_locking=self._enable_locking,
                 enable_git=self._enable_git,
+                extra_config=self.extra_config,
             )
             self.server.start()
 
