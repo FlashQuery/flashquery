@@ -189,11 +189,43 @@ logging:
 
 
 # ─── LLM (optional) ─────────────────────────────────────────────────────────
-# Internal LLM access for features that need it. Most installations don't
-# need this section — leave commented out unless a feature you're using
-# explicitly requires it. If you enable it, the api_key belongs in .env.
+# Three-layer LLM config (v3.0+): providers + models + purposes.
+# Entire section is OPTIONAL — comment out or delete to disable LLM features.
+# See REQUIREMENTS.md (PROV-01..PURP-03, CONF-01..CONF-07) for the full spec.
 #
+# Naming rules: lowercase a-z 0-9 _ -, must start with [a-z0-9].
+# Names are auto-lowercased at load time, so "Nano" and "nano" collide.
+
 # llm:
-#   provider: "anthropic"
-#   model: "claude-sonnet-4-20250514"
-#   api_key: "${LLM_API_KEY}"
+#   providers:
+#     - name: openai
+#       type: openai-compatible
+#       endpoint: https://api.openai.com
+#       api_key: ${OPENAI_API_KEY}
+#     # - name: openrouter
+#     #   type: openai-compatible
+#     #   endpoint: https://openrouter.ai/api
+#     #   api_key: ${OPENROUTER_API_KEY}
+#     # - name: local-ollama
+#     #   type: ollama
+#     #   endpoint: http://localhost:11434
+#   models:
+#     - name: gpt-4o
+#       provider_name: openai
+#       model: gpt-4o
+#       type: language
+#       cost_per_million:
+#         input: 2.50
+#         output: 10.00
+#     # - name: nano
+#     #   provider_name: openai
+#     #   model: gpt-4o-mini
+#     #   type: language
+#     #   cost_per_million: { input: 0.15, output: 0.60 }
+#   purposes:
+#     - name: default
+#       description: General-purpose LLM tasks
+#       models: [gpt-4o]
+#       defaults:
+#         temperature: 0.2
+#         max_tokens: 1024
