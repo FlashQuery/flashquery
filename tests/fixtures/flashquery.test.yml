@@ -27,11 +27,6 @@ mcp:
   port: 3100
   auth_secret: "test-secret-key-12345"
 
-llm:
-  provider: "anthropic"
-  model: "claude-sonnet-4-20250514"
-  api_key: "sk-test"
-
 embedding:
   provider: "none"
   model: "text-embedding-3-small"

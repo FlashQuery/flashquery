@@ -321,6 +321,114 @@ function formatZodErrors(issues: ZodIssue[]): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LLM config normalization & validation (v3.0)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type RawLlmProvider = { name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; api_key?: string };
+type RawLlmModel = {
+  name: string;
+  provider_name: string;
+  model: string;
+  type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
+  cost_per_million: { input: number; output: number };
+};
+type RawLlmPurpose = { name: string; description: string; models: string[]; defaults?: Record<string, unknown> };
+type RawLlm = { providers: RawLlmProvider[]; models: RawLlmModel[]; purposes: RawLlmPurpose[] };
+
+/**
+ * Normalizes all provider/model/purpose names and cross-references to lowercase.
+ * MUST run BEFORE validateLlmConfig so cross-ref checks compare lowercase names.
+ * Mutates the raw Zod-parsed data in place.
+ */
+function normalizeLlmNames(llm: RawLlm): void {
+  for (const p of llm.providers) p.name = p.name.toLowerCase();
+  for (const m of llm.models) {
+    m.name = m.name.toLowerCase();
+    m.provider_name = m.provider_name.toLowerCase();
+  }
+  for (const pu of llm.purposes) {
+    pu.name = pu.name.toLowerCase();
+    pu.models = pu.models.map((n) => n.toLowerCase());
+  }
+}
+
+type LlmValidationError = { layer: 'provider' | 'model' | 'purpose' | 'cross-ref'; name: string; message: string };
+
+/**
+ * Validates LLM config after normalization. Returns an array of errors (empty = valid).
+ * Implements CONF-01 (name format), CONF-02 (uniqueness), CONF-03 (model→provider),
+ * CONF-04 (purpose→model) checks in order.
+ */
+function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
+  const errors: LlmValidationError[] = [];
+  const namePattern = /^[a-z0-9][a-z0-9_-]*$/;
+
+  // CONF-01: name format validation
+  for (const p of llm.providers) {
+    if (!namePattern.test(p.name)) {
+      errors.push({ layer: 'provider', name: p.name, message: `Provider name '${p.name}' must match [a-z0-9][a-z0-9_-]*` });
+    }
+  }
+  for (const m of llm.models) {
+    if (!namePattern.test(m.name)) {
+      errors.push({ layer: 'model', name: m.name, message: `Model name '${m.name}' must match [a-z0-9][a-z0-9_-]*` });
+    }
+  }
+  for (const pu of llm.purposes) {
+    if (!namePattern.test(pu.name)) {
+      errors.push({ layer: 'purpose', name: pu.name, message: `Purpose name '${pu.name}' must match [a-z0-9][a-z0-9_-]*` });
+    }
+  }
+
+  // CONF-02: uniqueness within each list (post-normalization)
+  const providerCount = new Map<string, number>();
+  for (const p of llm.providers) providerCount.set(p.name, (providerCount.get(p.name) ?? 0) + 1);
+  for (const [name, count] of providerCount) {
+    if (count > 1) errors.push({ layer: 'provider', name, message: `Duplicate provider name '${name}' appears ${count} times (case-insensitive)` });
+  }
+
+  const modelCount = new Map<string, number>();
+  for (const m of llm.models) modelCount.set(m.name, (modelCount.get(m.name) ?? 0) + 1);
+  for (const [name, count] of modelCount) {
+    if (count > 1) errors.push({ layer: 'model', name, message: `Duplicate model name '${name}' appears ${count} times (case-insensitive)` });
+  }
+
+  const purposeCount = new Map<string, number>();
+  for (const pu of llm.purposes) purposeCount.set(pu.name, (purposeCount.get(pu.name) ?? 0) + 1);
+  for (const [name, count] of purposeCount) {
+    if (count > 1) errors.push({ layer: 'purpose', name, message: `Duplicate purpose name '${name}' appears ${count} times (case-insensitive)` });
+  }
+
+  // CONF-03: every model.provider_name must resolve to a defined provider name
+  const providerNames = new Set(llm.providers.map((p) => p.name));
+  for (const m of llm.models) {
+    if (!providerNames.has(m.provider_name)) {
+      errors.push({
+        layer: 'cross-ref',
+        name: m.name,
+        message: `model '${m.name}' references unknown provider '${m.provider_name}' — defined providers: [${[...providerNames].join(', ') || '(none)'}]`,
+      });
+    }
+  }
+
+  // CONF-04: every name in purpose.models must resolve to a defined model name
+  const modelNames = new Set(llm.models.map((m) => m.name));
+  for (const pu of llm.purposes) {
+    for (const ref of pu.models) {
+      if (!modelNames.has(ref)) {
+        errors.push({
+          layer: 'cross-ref',
+          name: pu.name,
+          message: `purpose '${pu.name}' references unknown model '${ref}' — defined models: [${[...modelNames].join(', ') || '(none)'}]`,
+        });
+      }
+    }
+  }
+
+  return errors;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // resolveConfigPath
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -413,6 +521,18 @@ function rejectLegacyFields(raw: unknown): void {
         "See the migration guide for details."
     );
   }
+
+  // CONF-06: detect pre-v3.0 flat llm: { provider, model } shape
+  if ('llm' in obj && obj['llm'] !== null && typeof obj['llm'] === 'object' && !Array.isArray(obj['llm'])) {
+    const llm = obj['llm'] as Record<string, unknown>;
+    if ('provider' in llm || 'model' in llm) {
+      throw new Error(
+        "Config error: The 'llm:' section uses the pre-v3.0 flat format (provider/model keys). " +
+        "Migrate to the three-layer format with providers:, models:, and purposes: arrays. " +
+        "See flashquery.example.yml for the new format."
+      );
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -468,6 +588,19 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   if (!result.success) {
     const message = formatZodErrors(result.error.issues as ZodIssue[]);
     throw new Error(message);
+  }
+
+  // 7a. LLM v3.0 — normalize names to lowercase, then run validation that depends on
+  // post-normalization name comparisons (CONF-01..CONF-04, CONF-07).
+  if (result.data.llm) {
+    normalizeLlmNames(result.data.llm as RawLlm);
+    const llmErrors = validateLlmConfig(result.data.llm as RawLlm);
+    if (llmErrors.length > 0) {
+      const message = llmErrors
+        .map((e) => `Config error: [${e.layer}] ${e.message}`)
+        .join('\n');
+      throw new Error(message);
+    }
   }
 
   // 7. Convert snake_case to camelCase
