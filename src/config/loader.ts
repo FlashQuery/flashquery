@@ -636,10 +636,10 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     }
   }
 
-  // 7. Convert snake_case to camelCase
+  // 8. Convert snake_case to camelCase
   const camel = snakeToCamel(result.data) as Record<string, unknown>;
 
-  // 7b. Restore purpose defaults verbatim — these are LLM provider params (temperature,
+  // 8a. Restore purpose defaults verbatim — these are LLM provider params (temperature,
   // max_tokens, etc.) whose key naming is governed by the LLM provider, not by FlashQuery's
   // snake_case-to-camelCase convention. Without this, snakeToCamel would silently rename
   // `max_tokens` -> `maxTokens` and break provider compatibility.
@@ -655,7 +655,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     }
   }
 
-  // 8. Build final config
+  // 9. Build final config
   const instanceData = camel['instance'] as { name: string; id: string; vault: { path: string; markdownExtensions: string[] } };
 
   const config: FlashQueryConfig = {
@@ -663,12 +663,12 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     instance: instanceData,
   };
 
-  // 8.5. Resolve relative vault path to absolute path (relative to config file directory)
+  // 9.5. Resolve relative vault path to absolute path (relative to config file directory)
   if (!isAbsolute(config.instance.vault.path)) {
     config.instance.vault.path = resolve(configDir, config.instance.vault.path);
   }
 
-  // 9. Emit warnings (deferred until after validation — caller logs them)
+  // 10. Emit warnings (deferred until after validation — caller logs them)
   // Store warnings on the config object so the caller (index.ts) can log them
   (config as unknown as Record<string, unknown>)['_deprecationWarnings'] = [
     ...(extensionWarning ? [extensionWarning] : []),
