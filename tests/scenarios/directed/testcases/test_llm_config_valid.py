@@ -106,10 +106,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
     project_dir = Path(args.fqc_dir) if args.fqc_dir else _find_project_dir()
     env = _load_env_file(project_dir) if project_dir else {}
 
-    # Need OPENAI_API_KEY in process env for the server to expand ${OPENAI_API_KEY}
-    # successfully. The server stores the LITERAL ${OPENAI_API_KEY} string in api_key_ref
-    # regardless, but expandEnvVars() in loadConfig still resolves it for runtime use,
-    # and validation will fail later if the variable is unset. Set a placeholder if absent.
+    # OPENAI_API_KEY must be present in the subprocess environment so the server
+    # can resolve ${OPENAI_API_KEY} to an actual value at runtime (used for LLM
+    # calls in Phase 99+). Without it, expandEnvVars leaves the literal
+    # '${OPENAI_API_KEY}' in place, which is valid for startup but useless for
+    # actual LLM calls. Set a placeholder if absent so the test is self-contained.
     if "OPENAI_API_KEY" not in os.environ:
         os.environ["OPENAI_API_KEY"] = env.get("OPENAI_API_KEY") or "sk-test-placeholder-not-used-in-phase-98"
 
