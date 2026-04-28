@@ -172,7 +172,7 @@ export async function syncLlmConfigToDb(config: FlashQueryConfig): Promise<void>
   for (const purpose of config.llm.purposes) {
     if (!insertedPurposes.has(purpose.name)) continue;  // skipped above due to webapp conflict
     for (let position = 0; position < purpose.models.length; position++) {
-      const modelName = purpose.models[position]!;
+      const modelName = purpose.models[position];
       const { error } = await client.from('fqc_llm_purpose_models').insert({
         instance_id: instanceId,
         purpose_name: purpose.name,

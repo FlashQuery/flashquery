@@ -626,8 +626,8 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // 7a. LLM v3.0 — normalize names to lowercase, then run validation that depends on
   // post-normalization name comparisons (CONF-01..CONF-04, CONF-07).
   if (result.data.llm) {
-    normalizeLlmNames(result.data.llm as RawLlm);
-    const llmErrors = validateLlmConfig(result.data.llm as RawLlm);
+    normalizeLlmNames(result.data.llm);
+    const llmErrors = validateLlmConfig(result.data.llm);
     if (llmErrors.length > 0) {
       const message = llmErrors
         .map((e) => `Config error: [${e.layer}] ${e.message}`)
@@ -648,7 +648,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     for (let i = 0; i < camelLlm.purposes.length; i++) {
       const rawDefaults = result.data.llm.purposes[i]?.defaults;
       if (rawDefaults !== undefined) {
-        camelLlm.purposes[i].defaults = JSON.parse(JSON.stringify(rawDefaults));
+        camelLlm.purposes[i].defaults = JSON.parse(JSON.stringify(rawDefaults)) as Record<string, unknown>;
       } else {
         delete camelLlm.purposes[i].defaults;
       }
@@ -703,6 +703,6 @@ export function getDeprecationWarnings(config: FlashQueryConfig): string[] {
  */
 export function getLlmApiKeyRefs(config: FlashQueryConfig): Map<string, string> {
   const map = (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'];
-  if (map instanceof Map) return map;
+  if (map instanceof Map) return map as Map<string, string>;
   return new Map<string, string>();
 }

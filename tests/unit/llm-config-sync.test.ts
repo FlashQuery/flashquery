@@ -17,6 +17,7 @@ function makeMockClient() {
     delete() { current.op = 'delete'; return chain; },
     select() { current.op = 'select'; return chain; },
     eq(col: string, val: unknown) { current.filters.push([col, val]); return chain; },
+    in(col: string, vals: unknown[]) { current.filters.push([col, vals]); return chain; },
     insert(payload: unknown) { recordAndReset('insert', payload); return Promise.resolve({ data: null, error: null }); },
     maybeSingle() { recordAndReset(current.op ?? 'select'); return Promise.resolve({ data: null, error: null }); },
     // Awaiting a delete chain (no maybeSingle) — record on then()
