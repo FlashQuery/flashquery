@@ -39,6 +39,15 @@ vi.mock('../../src/logging/logger.js', () => ({
 import { syncLlmConfigToDb } from '../../src/llm/config-sync.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
+// Helper: attach a pre-built rawLlmApiKeyRefs Map to a test config object so that
+// getLlmApiKeyRefs(config) returns the expected values without going through loadConfig().
+// This mirrors what loadConfig() does at startup (T-98-01: raw ${ENV_VAR} refs captured
+// before env expansion and stored on the config object).
+function withRawApiKeyRefs(config: FlashQueryConfig, refs: Record<string, string>): FlashQueryConfig {
+  (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'] = new Map(Object.entries(refs));
+  return config;
+}
+
 beforeEach(() => {
   supabaseCalls.length = 0;
   vi.clearAllMocks();
@@ -46,27 +55,33 @@ beforeEach(() => {
 
 describe('syncLlmConfigToDb()', () => {
   it('[U-14] inserts providers, models, purposes, and purpose_models rows with source = yaml', async () => {
-    const config: FlashQueryConfig = {
-      instance: { name: 'Test', id: 'i-test-u14', vault: { path: '/tmp/v', markdownExtensions: ['.md'] } },
-      server: { host: 'localhost', port: 3100 },
-      supabase: { url: 'http://localhost', serviceRoleKey: 'k', databaseUrl: 'postgres://x', skipDdl: true },
-      git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
-      mcp: { transport: 'stdio' },
-      locking: { enabled: true, ttlSeconds: 30 },
-      embedding: { provider: 'none', model: '', dimensions: 1536 },
-      logging: { level: 'info', output: 'stdout' },
-      llm: {
-        providers: [
-          { name: 'openai', type: 'openai-compatible', endpoint: 'https://api.openai.com', apiKey: '${OPENAI_API_KEY}' },
-        ],
-        models: [
-          { name: 'gpt-4o', providerName: 'openai', model: 'gpt-4o', type: 'language', costPerMillion: { input: 2.5, output: 10 } },
-        ],
-        purposes: [
-          { name: 'default', description: 'General', models: ['gpt-4o'] },
-        ],
-      },
-    };
+    const config = withRawApiKeyRefs(
+      {
+        instance: { name: 'Test', id: 'i-test-u14', vault: { path: '/tmp/v', markdownExtensions: ['.md'] } },
+        server: { host: 'localhost', port: 3100 },
+        supabase: { url: 'http://localhost', serviceRoleKey: 'k', databaseUrl: 'postgres://x', skipDdl: true },
+        git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
+        mcp: { transport: 'stdio' },
+        locking: { enabled: true, ttlSeconds: 30 },
+        embedding: { provider: 'none', model: '', dimensions: 1536 },
+        logging: { level: 'info', output: 'stdout' },
+        llm: {
+          providers: [
+            // apiKey here would be the RESOLVED value in production; the raw ref is
+            // separately injected via withRawApiKeyRefs below (simulating loadConfig()).
+            { name: 'openai', type: 'openai-compatible', endpoint: 'https://api.openai.com', apiKey: 'sk-resolved-secret' },
+          ],
+          models: [
+            { name: 'gpt-4o', providerName: 'openai', model: 'gpt-4o', type: 'language', costPerMillion: { input: 2.5, output: 10 } },
+          ],
+          purposes: [
+            { name: 'default', description: 'General', models: ['gpt-4o'] },
+          ],
+        },
+      } satisfies FlashQueryConfig,
+      // Simulate what loadConfig() captures BEFORE env expansion (T-98-01):
+      { openai: '${OPENAI_API_KEY}' }
+    );
 
     await syncLlmConfigToDb(config);
 
