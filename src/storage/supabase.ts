@@ -881,12 +881,17 @@ class SupabaseManagerImpl implements SupabaseManager {
         }
       }
 
-      logger.info('Schema verification: all 5 required tables present');
+      logger.info('Schema verification: all 10 required tables present');
       logger.debug('  fqc_memory: verified');
       logger.debug('  fqc_vault: verified');
       logger.debug('  fqc_documents: verified');
       logger.debug('  fqc_plugin_registry: verified');
       logger.debug('  fqc_write_locks: verified');
+      logger.debug('  fqc_llm_providers: verified');
+      logger.debug('  fqc_llm_models: verified');
+      logger.debug('  fqc_llm_purposes: verified');
+      logger.debug('  fqc_llm_purpose_models: verified');
+      logger.debug('  fqc_llm_usage: verified');
       // CLEAN-01, CLEAN-02: fqc_event_log and fqc_routing_rules removed in v1.7
       // CLEAN-01: fqc_projects removed in v1.7 (replaced by path-based location + tag-based categorization)
       logger.info('Supabase: connected');
