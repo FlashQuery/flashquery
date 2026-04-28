@@ -53,16 +53,18 @@ export async function syncLlmConfigToDb(config: FlashQueryConfig): Promise<void>
 
   // ── Step 1: Delete YAML-sourced rows in dependency order ───────────────────
 
-  // purpose_models has no source column. Per planner decision 2: delete ALL rows
-  // for the instance and re-insert from YAML purposes only. Phase 99+ will revisit
-  // when the webapp write path exists.
-  // Phase 99+: revisit when webapp write path exists; consider deleting only yaml-purpose rows
+  // purpose_models has no source column. Delete only rows whose purpose_name matches
+  // a YAML-defined purpose, preserving any webapp-managed purpose-model mappings (DB-03).
   {
-    const { error } = await client
-      .from('fqc_llm_purpose_models')
-      .delete()
-      .eq('instance_id', instanceId);
-    if (error) throw new Error(`LLM sync: delete fqc_llm_purpose_models failed: ${error.message}`);
+    const yamlPurposeNames = config.llm.purposes.map((p) => p.name);
+    if (yamlPurposeNames.length > 0) {
+      const { error } = await client
+        .from('fqc_llm_purpose_models')
+        .delete()
+        .eq('instance_id', instanceId)
+        .in('purpose_name', yamlPurposeNames);
+      if (error) throw new Error(`LLM sync: delete fqc_llm_purpose_models failed: ${error.message}`);
+    }
   }
   // Delete all source: 'yaml' rows for each config table (purposes/models/providers)
   for (const table of ['fqc_llm_purposes', 'fqc_llm_models', 'fqc_llm_providers'] as const) {
