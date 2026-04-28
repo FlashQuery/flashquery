@@ -571,6 +571,39 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // 4. Reject old config formats with clear error messages (v1.7 breaking change)
   rejectLegacyFields(raw);
 
+  // 5b. LLM v3.0: capture raw api_key reference strings BEFORE env expansion so
+  // syncLlmConfigToDb() can store the ${ENV_VAR} literal in api_key_ref (T-98-01:
+  // never persist resolved secrets to Supabase). The map keys are lowercased
+  // provider names to match post-normalization comparisons.
+  const rawLlmApiKeyRefs = new Map<string, string>();
+  if (
+    raw !== null &&
+    typeof raw === 'object' &&
+    !Array.isArray(raw) &&
+    'llm' in (raw as Record<string, unknown>)
+  ) {
+    const rawLlm = (raw as Record<string, unknown>)['llm'];
+    if (rawLlm !== null && typeof rawLlm === 'object' && 'providers' in (rawLlm as Record<string, unknown>)) {
+      const providers = (rawLlm as { providers?: unknown }).providers;
+      if (Array.isArray(providers)) {
+        for (const p of providers) {
+          if (
+            p !== null &&
+            typeof p === 'object' &&
+            'name' in (p as Record<string, unknown>) &&
+            'api_key' in (p as Record<string, unknown>)
+          ) {
+            const name = (p as { name?: unknown }).name;
+            const apiKey = (p as { api_key?: unknown }).api_key;
+            if (typeof name === 'string' && typeof apiKey === 'string') {
+              rawLlmApiKeyRefs.set(name.toLowerCase(), apiKey);
+            }
+          }
+        }
+      }
+    }
+  }
+
   // 5. Load .env from the config file's directory (supplements CWD .env already loaded by
   //    dotenv/config in index.ts — required when the process is spawned by a host like
   //    Claude Desktop that has a different CWD than the config file's location)
@@ -641,6 +674,11 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     ...(extensionWarning ? [extensionWarning] : []),
   ];
 
+  // Attach raw LLM api_key refs (used by syncLlmConfigToDb in src/llm/config-sync.ts).
+  // Stored as a runtime-only Map alongside `_deprecationWarnings`. Not part of the
+  // public FlashQueryConfig type — consumers use getLlmApiKeyRefs(config) below.
+  (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'] = rawLlmApiKeyRefs;
+
   return config;
 }
 
@@ -650,4 +688,21 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 
 export function getDeprecationWarnings(config: FlashQueryConfig): string[] {
   return ((config as unknown as Record<string, unknown>)['_deprecationWarnings'] as string[]) ?? [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getLlmApiKeyRefs — exposes the raw ${ENV_VAR} reference map captured during loadConfig
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a map from lowercased provider name -> raw api_key reference string
+ * (e.g., '${OPENAI_API_KEY}'). Used by syncLlmConfigToDb to populate the
+ * api_key_ref column without leaking resolved secrets to the database.
+ *
+ * Returns an empty Map when no llm: section is configured.
+ */
+export function getLlmApiKeyRefs(config: FlashQueryConfig): Map<string, string> {
+  const map = (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'];
+  if (map instanceof Map) return map;
+  return new Map<string, string>();
 }
