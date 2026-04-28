@@ -78,12 +78,51 @@ const LockingSchema = z
   .strip()
   .prefault({});
 
+// LLM provider/model/purpose schemas (v3.0 — three-layer)
+const ProviderSchema = z
+  .object({
+    name: z.string(),
+    type: z.enum(['openai-compatible', 'ollama']),
+    endpoint: z.string().url('endpoint must be a valid URL'),
+    api_key: z.string().optional(),
+  })
+  .strip();
+
+const ModelCostSchema = z
+  .object({
+    input: z.number().min(0),
+    output: z.number().min(0),
+  })
+  .strip();
+
+const ModelSchema = z
+  .object({
+    name: z.string(),
+    provider_name: z.string(),
+    model: z.string(),
+    type: z.enum(['language', 'reasoning', 'embedding', 'vision', 'code', 'audio', 'guardian']),
+    cost_per_million: ModelCostSchema,
+  })
+  .strip();
+
+// PurposeDefaultsSchema is intentionally permissive — values are LLM provider params
+// (temperature, max_tokens, etc.) and we don't constrain their shape.
+const PurposeDefaultsSchema = z.record(z.string(), z.unknown());
+
+const PurposeSchema = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    models: z.array(z.string()),
+    defaults: PurposeDefaultsSchema.optional(),
+  })
+  .strip();
+
 const LlmSchema = z
   .object({
-    provider: z.string(),
-    model: z.string(),
-    api_key: z.string().optional(),
-    endpoint: z.string().optional(),
+    providers: z.array(ProviderSchema),
+    models: z.array(ModelSchema),
+    purposes: z.array(PurposeSchema),
   })
   .strip()
   .optional();
@@ -142,7 +181,17 @@ export interface FlashQueryConfig {
   git: { autoCommit: boolean; autoPush: boolean; remote: string; branch: string };
   mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
   locking: { enabled: boolean; ttlSeconds: number };
-  llm?: { provider: string; model: string; apiKey?: string; endpoint?: string };
+  llm?: {
+    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string }>;
+    models: Array<{
+      name: string;
+      providerName: string;
+      model: string;
+      type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
+      costPerMillion: { input: number; output: number };
+    }>;
+    purposes: Array<{ name: string; description: string; models: string[]; defaults?: Record<string, unknown> }>;
+  };
   embedding: {
     provider: string;
     model: string;
@@ -240,6 +289,9 @@ const FIELD_HINTS: Record<string, string> = {
   'instance.vault.markdown_extensions': 'Optional: array of file extensions to index (default: [".md"]).',
   'embedding.provider': 'Set to "openai", "openrouter", or "ollama".',
   'embedding.model': 'Set the embedding model name (e.g., "text-embedding-3-small").',
+  'llm.providers': 'LLM providers must be an array of {name, type, endpoint} objects.',
+  'llm.models': 'LLM models must be an array of {name, provider_name, model, type, cost_per_million} objects.',
+  'llm.purposes': 'LLM purposes must be an array of {name, description, models} objects.',
 };
 
 interface ZodIssue {
@@ -420,6 +472,22 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 
   // 7. Convert snake_case to camelCase
   const camel = snakeToCamel(result.data) as Record<string, unknown>;
+
+  // 7b. Restore purpose defaults verbatim — these are LLM provider params (temperature,
+  // max_tokens, etc.) whose key naming is governed by the LLM provider, not by FlashQuery's
+  // snake_case-to-camelCase convention. Without this, snakeToCamel would silently rename
+  // `max_tokens` -> `maxTokens` and break provider compatibility.
+  if (result.data.llm?.purposes && Array.isArray((camel['llm'] as { purposes?: unknown })?.purposes)) {
+    const camelLlm = camel['llm'] as { purposes: Array<{ defaults?: Record<string, unknown> }> };
+    for (let i = 0; i < camelLlm.purposes.length; i++) {
+      const rawDefaults = result.data.llm.purposes[i]?.defaults;
+      if (rawDefaults !== undefined) {
+        camelLlm.purposes[i].defaults = JSON.parse(JSON.stringify(rawDefaults));
+      } else {
+        delete camelLlm.purposes[i].defaults;
+      }
+    }
+  }
 
   // 8. Build final config
   const instanceData = camel['instance'] as { name: string; id: string; vault: { path: string; markdownExtensions: string[] } };
