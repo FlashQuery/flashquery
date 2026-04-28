@@ -313,21 +313,6 @@ class FQCServer:
             "dimensions": 1536,
         }
 
-    # -- Log capture -------------------------------------------------------
-
-    def _capture_logs(self) -> None:
-        """Background thread: read server stderr line by line."""
-        proc = self._process
-        if not proc or not proc.stderr:
-            return
-        for line in iter(proc.stderr.readline, ""):
-            if not line:
-                break
-            stripped = line.rstrip("\n")
-            with self._log_lock:
-                self._logs.append(stripped)
-        # Process ended or stderr closed
-
     # -- Lifecycle ---------------------------------------------------------
 
     def init_git_repo(self) -> None:
