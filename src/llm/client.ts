@@ -267,7 +267,7 @@ export class NullLlmClient implements LlmClient {
 // Until then, downstream imports will see `undefined` if accessed before init.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export let llmClient: LlmClient;
+export let llmClient: LlmClient | undefined;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // initLlm — top-level LLM initialization (D-02, D-03)
