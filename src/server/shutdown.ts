@@ -104,23 +104,17 @@ export class ShutdownCoordinator {
   }
 
   private async drainMcpRequests(): Promise<void> {
-    const _deadline = Date.now() + 10_000; // 10-second timeout (SHUT-06)
-    this.logInfo('MCP sessions draining (timeout=10s)');
-
-    const activeSessionCount = 0; // Placeholder — actual count would come from MCP server
-    if (activeSessionCount > 0) {
-      this.logDebug(`MCP: ${activeSessionCount} active HTTP session(s), closing...`);
-    }
+    // TODO: Implement real session drain when MCP server exposes transport list.
+    // Currently waits a brief moment for any synchronously-queued handlers.
+    // (stdio transport only — no active session tracking available)
+    this.logInfo('MCP sessions: no active session tracking (stdio transport only), continuing...');
 
     // In a full implementation, we would:
     // 1. Get transports from MCP server (stdio + HTTP sessions)
     // 2. Close each one with timeout
     // 3. Wait for pending request handlers to complete
 
-    // For now, we log the intent and wait a brief moment for any in-flight handlers
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    this.logInfo('MCP sessions drained');
   }
 
   private async drainCostWritesStep(): Promise<void> {
