@@ -212,6 +212,19 @@ export class OpenAICompatibleLlmClient implements LlmClient {
         usage: { prompt_tokens: number; completion_tokens: number };
       };
 
+      if (!data.choices || data.choices.length === 0 || !data.choices[0]?.message?.content) {
+        throw new Error(
+          `LLM error: ${provider.name} returned a 200 response with no completion choices. ` +
+          `Raw: ${JSON.stringify(data).slice(0, 200)}`
+        );
+      }
+      if (!data.usage) {
+        throw new Error(
+          `LLM error: ${provider.name} returned a 200 response with no usage field. ` +
+          `Raw: ${JSON.stringify(data).slice(0, 200)}`
+        );
+      }
+
       const latencyMs = Math.round(performance.now() - startTime); // D-10
       logger.debug(
         `LLM: ${provider.name}/${normalizedName} completed in ${latencyMs}ms ` +
