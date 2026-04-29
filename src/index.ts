@@ -34,7 +34,7 @@ import { initSupabase } from './storage/supabase.js';
 import { initVault, cleanStaleTempFiles } from './storage/vault.js';
 import { initGit, GitManagerImpl } from './git/manager.js';
 import { initEmbedding, embeddingProvider, NullEmbeddingProvider } from './embedding/provider.js';
-import { initLlm } from './llm/config-sync.js';
+import { initLlm } from './llm/client.js';
 import { initPlugins, pluginManager } from './plugins/manager.js';
 import { initMCP } from './mcp/server.js';
 import { initializeShutdownHandlers } from './server/shutdown.js';

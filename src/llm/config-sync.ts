@@ -4,25 +4,6 @@ import type { FlashQueryConfig } from '../config/loader.js';
 import { getLlmApiKeyRefs } from '../config/loader.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// initLlm — startup hook called from src/index.ts after initEmbedding
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Top-level LLM init. No-op when no llm: section is configured (CONF-05).
- * Otherwise syncs the YAML-defined config to Supabase config tables.
- *
- * Throws on Supabase failures so startup fails loudly if the DB is unreachable
- * or schema is missing. Phase 99 will add the LLM client wiring on top.
- */
-export async function initLlm(config: FlashQueryConfig): Promise<void> {
-  if (!config.llm) {
-    logger.info('LLM: no llm: section configured — skipping config sync');
-    return;
-  }
-  await syncLlmConfigToDb(config);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // syncLlmConfigToDb — wipe-and-reinsert YAML rows; preserve webapp rows
 // ─────────────────────────────────────────────────────────────────────────────
 
