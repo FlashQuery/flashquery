@@ -77,7 +77,15 @@ function nodeFetch(input: string, init?: RequestInit): Promise<Response> {
             statusText: res.statusMessage ?? '',
             headers: new Headers(res.headers as Record<string, string>),
             text: () => Promise.resolve(text),
-            json: () => Promise.resolve(JSON.parse(text) as unknown),
+            json: () => {
+              try {
+                return Promise.resolve(JSON.parse(text) as unknown);
+              } catch {
+                return Promise.reject(
+                  new Error(`LLM error: response from ${url.hostname} was not valid JSON. Body: ${text.slice(0, 200)}`)
+                );
+              }
+            },
           } as Response);
         });
         res.on('error', reject);
