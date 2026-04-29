@@ -3,6 +3,7 @@ import * as https from 'node:https';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { logger } from '../logging/logger.js';
 import { syncLlmConfigToDb } from './config-sync.js';
+import { PurposeResolver } from './resolver.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Typed error classes — D-02 (Phase 100)
@@ -56,6 +57,20 @@ export interface LlmClient {
     messages: ChatMessage[],
     parameters?: Record<string, unknown>
   ): Promise<LlmCompletionResult>;
+
+  completeByPurpose(
+    purposeName: string,
+    messages: ChatMessage[],
+    parameters?: Record<string, unknown>
+  ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }>;
+
+  getModelForPurpose(
+    purposeName: string
+  ): {
+    modelName: string;
+    providerName: string;
+    config: NonNullable<FlashQueryConfig['llm']>['models'][number];
+  } | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -162,9 +177,13 @@ export function mergeParameters(
 
 export class OpenAICompatibleLlmClient implements LlmClient {
   private config: NonNullable<FlashQueryConfig['llm']>;
+  private resolver: PurposeResolver;
 
   constructor(config: NonNullable<FlashQueryConfig['llm']>) {
     this.config = config;
+    // Bind complete() so the resolver can call it as a function reference
+    // without losing the `this` context.
+    this.resolver = new PurposeResolver(config, this.complete.bind(this));
   }
 
   async complete(
@@ -300,6 +319,25 @@ export class OpenAICompatibleLlmClient implements LlmClient {
       clearTimeout(timeoutId); // avoid keeping the event loop alive
     }
   }
+
+  // Delegates to PurposeResolver — D-01
+  completeByPurpose(
+    purposeName: string,
+    messages: ChatMessage[],
+    parameters?: Record<string, unknown>
+  ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }> {
+    return this.resolver.completeByPurpose(purposeName, messages, parameters);
+  }
+
+  getModelForPurpose(
+    purposeName: string
+  ): {
+    modelName: string;
+    providerName: string;
+    config: NonNullable<FlashQueryConfig['llm']>['models'][number];
+  } | null {
+    return this.resolver.getModelForPurpose(purposeName);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -313,6 +351,29 @@ export class NullLlmClient implements LlmClient {
     _messages: ChatMessage[],
     _parameters?: Record<string, unknown>
   ): Promise<LlmCompletionResult> {
+    throw new Error(
+      'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async completeByPurpose(
+    _purposeName: string,
+    _messages: ChatMessage[],
+    _parameters?: Record<string, unknown>
+  ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }> {
+    throw new Error(
+      'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
+    );
+  }
+
+  getModelForPurpose(
+    _purposeName: string
+  ): {
+    modelName: string;
+    providerName: string;
+    config: NonNullable<FlashQueryConfig['llm']>['models'][number];
+  } | null {
     throw new Error(
       'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
     );

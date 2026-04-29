@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-// @ts-expect-error -- src/llm/resolver.ts will be created in Plan 100-02
 import { PurposeResolver, LlmFallbackError } from '../../src/llm/resolver.js';
 import {
   LlmHttpError,
