@@ -23,10 +23,12 @@ export const MAX_SHUTDOWN_MS = 30_000;
 export class ShutdownCoordinator {
   private isExecuting = false;
   private startTime: number = 0;
+  private config: FlashQueryConfig;
   private httpServer?: http.Server;
   private activeSockets: Set<net.Socket> = new Set();
 
   constructor(config: FlashQueryConfig, httpServer?: http.Server) {
+    this.config = config;
     this.httpServer = httpServer;
 
     // Track active sockets if server exists
