@@ -123,6 +123,21 @@ FlashQuery tools (create_document, move_document, register_plugin, search_docume
 
 ---
 
+## IL — LLM Call Integration
+
+Verifies that the LLM call path (call_model) and LLM usage reporting (get_llm_usage) compose
+correctly end-to-end across the write path (fqc_llm_usage row recording) and read path
+(get_llm_usage aggregation modes).
+
+| ID     | Behavior                                                                                                                                                      | Covered By              | Date Updated | Last Passing |
+|--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|--------------|--------------|
+| IL-01  | call_model resolver=model returns non-error response with metadata envelope (model_name, provider_name, cost_usd, latency_ms)                                 | llm_call_model_basic    | 2026-04-29   |              |
+| IL-02  | call_model resolver=purpose returns non-error response; metadata includes resolved_model_name matching the configured model for that purpose                  | llm_call_model_purpose  | 2026-04-29   |              |
+| IL-03  | Multiple call_model calls sharing a trace_id accumulate distinct rows in fqc_llm_usage; trace_cumulative.total_calls grows monotonically (COST-01)            | llm_cost_accumulation   | 2026-04-29   |              |
+| IL-04  | call_model writes a row, get_llm_usage summary mode returns total_calls >= 1 with by_purpose direct_model_calls present, recent returns model_name (REPT-01, REPT-02 end-to-end) | llm_usage_query         | 2026-04-29   |              |
+
+---
+
 ## How to update this file
 
 When a test passes for the first time, update its row:

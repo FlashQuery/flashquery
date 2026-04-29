@@ -1,0 +1,72 @@
+name: llm_usage_query
+description: >
+  call_model records a row in fqc_llm_usage; get_llm_usage summary mode
+  returns total_calls >= 1 and total_spend_usd >= 0; recent mode returns
+  at least one entry containing model_name. Verifies REPT-01 and REPT-02
+  end-to-end. Covers IL-04.
+coverage: [IL-04]
+
+extra_config:
+  llm:
+    providers:
+      - name: openai
+        type: openai-compatible
+        endpoint: "https://api.openai.com"
+        api_key: "${OPENAI_API_KEY}"
+    models:
+      - name: fast
+        provider_name: openai
+        model: "gpt-4o-mini"
+        type: language
+        cost_per_million:
+          input: 0.15
+          output: 0.6
+    purposes:
+      - name: general
+        description: "General purpose"
+        models: [fast]
+        defaults:
+          temperature: 0.7
+
+steps:
+  - label: "Seed: call_model writes one row to fqc_llm_usage"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply with just the word hello."
+
+  - label: "get_llm_usage summary returns total_calls field"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: summary
+        period: "24h"
+      expect_contains: '"total_calls"'
+
+  - label: "get_llm_usage summary includes top_model_name field"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: summary
+        period: "24h"
+      expect_contains: '"top_model_name"'
+
+  - label: "get_llm_usage recent returns at least one entry referencing model_name"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: recent
+        limit: 5
+      expect_contains: '"model_name"'
+
+  - label: "get_llm_usage by_purpose returns purposes array and direct_model_calls field"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_purpose
+        period: "24h"
+      expect_contains: '"direct_model_calls"'

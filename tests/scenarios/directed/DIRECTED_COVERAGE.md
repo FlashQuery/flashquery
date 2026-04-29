@@ -1158,3 +1158,17 @@ Pre-populates 100 bulk files (non-watched) to force the scan to take ≥2s. Make
 
 **What was fixed:**
 Moved `invalidateReconciliationCache()` to the `.then()` continuation after `runScanOnce()` in both background and sync modes in `scan.ts`. Test scan wait increased from 6s to 30s to accommodate remote Supabase latency for 100-file scans (~25s observed).
+
+## 15. Native LLM Access
+
+Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in milestone v3.0. These tools require `llm:` configuration in `flashquery.yml` and a Supabase connection for cost tracking.
+
+### 15.1 get_llm_usage MCP tool (Phase 103)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-18 | get_llm_usage summary mode returns total_calls, total_spend_usd, avg_cost_per_call_usd, avg_latency_ms, top_purpose, top_model_name, vs_prior_period (REPT-02) | test_get_llm_usage_summary | 2026-04-29 |  |
+| L-19 | get_llm_usage by_purpose excludes _direct rows from purposes array; surfaces them in direct_model_calls (REPT-02 / D-08) | test_get_llm_usage_by_purpose | 2026-04-29 |  |
+| L-20 | get_llm_usage by_model returns per-model entries with pct_of_total_calls, avg_fallback_position, spend_usd, avg_cost_per_call_usd, avg_latency_ms (REPT-02 / D-10, D-11) | test_get_llm_usage_by_model | 2026-04-29 |  |
+| L-21 | get_llm_usage recent returns newest-first entries respecting `limit` parameter; each entry has D-12 fields | test_get_llm_usage_recent | 2026-04-29 |  |
+| L-22 | get_llm_usage `trace_id` filter narrows results to matching calls only (REPT-01) | test_get_llm_usage_trace | 2026-04-29 |  |
