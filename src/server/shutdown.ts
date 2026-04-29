@@ -143,13 +143,18 @@ export class ShutdownCoordinator {
 
     this.logInfo('HTTP server closing (stop accepting new connections)');
 
-    // server.close() stops accepting new connections but does NOT force-close existing ones
-    await new Promise<void>((resolve) => {
-      this.httpServer!.close(() => {
-        this.logDebug('HTTP: server closed');
-        resolve();
-      });
-    });
+    // server.close() stops accepting new connections but does NOT force-close existing ones.
+    // Wrap in Promise.race with 15-second timeout (D-03b) so keep-alive connections cannot
+    // block shutdown indefinitely — forceCloseHttpConnections() (step 4) handles the rest.
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        this.httpServer!.close(() => {
+          this.logDebug('HTTP: server closed');
+          resolve();
+        });
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 15_000)),
+    ]);
   }
 
   private async forceCloseHttpConnections(): Promise<void> {
