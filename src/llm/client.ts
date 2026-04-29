@@ -2,6 +2,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { logger } from '../logging/logger.js';
+import { computeCost, recordLlmUsage } from './cost-tracker.js';
 import { syncLlmConfigToDb } from './config-sync.js';
 import { PurposeResolver } from './resolver.js';
 
@@ -55,13 +56,15 @@ export interface LlmClient {
   complete(
     modelName: string,
     messages: ChatMessage[],
-    parameters?: Record<string, unknown>
+    parameters?: Record<string, unknown>,
+    traceId?: string | null
   ): Promise<LlmCompletionResult>;
 
   completeByPurpose(
     purposeName: string,
     messages: ChatMessage[],
-    parameters?: Record<string, unknown>
+    parameters?: Record<string, unknown>,
+    traceId?: string | null
   ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }>;
 
   getModelForPurpose(
@@ -183,15 +186,25 @@ export function mergeParameters(
 export class OpenAICompatibleLlmClient implements LlmClient {
   private config: NonNullable<FlashQueryConfig['llm']>;
   private resolver: PurposeResolver;
+  private instanceId: string;
 
-  constructor(config: NonNullable<FlashQueryConfig['llm']>) {
+  constructor(config: NonNullable<FlashQueryConfig['llm']>, instanceId: string) {
     this.config = config;
-    // Bind complete() so the resolver can call it as a function reference
-    // without losing the `this` context.
-    this.resolver = new PurposeResolver(config, this.complete.bind(this));
+    this.instanceId = instanceId;
+    // Bind completeHttpOnly so the resolver can call it as a function reference
+    // without losing the `this` context. Using the HTTP-only internal method
+    // prevents double-writing: the resolver never triggers recordLlmUsage;
+    // the outer public complete()/completeByPurpose() handle recording.
+    this.resolver = new PurposeResolver(config, this.completeHttpOnly.bind(this));
   }
 
-  async complete(
+  /**
+   * Internal HTTP-only implementation — no cost tracking.
+   * Used by the PurposeResolver via constructor bind so failed fallback attempts
+   * do not produce cost rows. Only the SUCCESSFUL final attempt is recorded
+   * (by the public complete() or completeByPurpose() wrappers).
+   */
+  private async completeHttpOnly(
     modelName: string,
     messages: ChatMessage[],
     parameters?: Record<string, unknown>
@@ -325,13 +338,61 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     }
   }
 
-  // Delegates to PurposeResolver — D-01
-  completeByPurpose(
+  async complete(
+    modelName: string,
+    messages: ChatMessage[],
+    parameters?: Record<string, unknown>,
+    traceId?: string | null
+  ): Promise<LlmCompletionResult> {
+    const result = await this.completeHttpOnly(modelName, messages, parameters);
+    // D-03/D-07: fire-and-forget cost recording — _direct sentinel for direct model calls.
+    // Per D-03 this call site lives in client.ts (NOT mcp/tools/llm.ts) so all future
+    // internal callers automatically get cost tracking.
+    const model = this.config.models.find((m) => m.name === result.modelName);
+    const costUsd = model
+      ? computeCost(result.inputTokens, result.outputTokens, model.costPerMillion)
+      : 0;
+    recordLlmUsage({
+      instanceId: this.instanceId,
+      purposeName: '_direct',
+      modelName: result.modelName,
+      providerName: result.providerName,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      costUsd,
+      latencyMs: result.latencyMs,
+      fallbackPosition: null,
+      traceId: traceId ?? null,
+    });
+    return result;
+  }
+
+  async completeByPurpose(
     purposeName: string,
     messages: ChatMessage[],
-    parameters?: Record<string, unknown>
+    parameters?: Record<string, unknown>,
+    traceId?: string | null
   ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }> {
-    return this.resolver.completeByPurpose(purposeName, messages, parameters);
+    const result = await this.resolver.completeByPurpose(purposeName, messages, parameters);
+    // D-03: fire-and-forget cost recording — actual purpose name for purpose-resolved calls.
+    // This call site lives in client.ts (per D-03 architectural decision).
+    const model = this.config.models.find((m) => m.name === result.modelName);
+    const costUsd = model
+      ? computeCost(result.inputTokens, result.outputTokens, model.costPerMillion)
+      : 0;
+    recordLlmUsage({
+      instanceId: this.instanceId,
+      purposeName,                       // actual user-supplied name, NOT '_direct'
+      modelName: result.modelName,
+      providerName: result.providerName,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      costUsd,
+      latencyMs: result.latencyMs,
+      fallbackPosition: result.fallbackPosition,  // 1-indexed
+      traceId: traceId ?? null,
+    });
+    return result;
   }
 
   getModelForPurpose(
@@ -354,7 +415,8 @@ export class NullLlmClient implements LlmClient {
   async complete(
     _modelName: string,
     _messages: ChatMessage[],
-    _parameters?: Record<string, unknown>
+    _parameters?: Record<string, unknown>,
+    _traceId?: string | null
   ): Promise<LlmCompletionResult> {
     throw new Error(
       'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
@@ -365,7 +427,8 @@ export class NullLlmClient implements LlmClient {
   async completeByPurpose(
     _purposeName: string,
     _messages: ChatMessage[],
-    _parameters?: Record<string, unknown>
+    _parameters?: Record<string, unknown>,
+    _traceId?: string | null
   ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }> {
     throw new Error(
       'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
@@ -413,7 +476,7 @@ export async function initLlm(config: FlashQueryConfig): Promise<void> {
     logger.info('LLM: not configured');
     return;
   }
-  llmClient = new OpenAICompatibleLlmClient(config.llm);
+  llmClient = new OpenAICompatibleLlmClient(config.llm, config.instance.id);
   await syncLlmConfigToDb(config);
   logger.info(
     `LLM: ${config.llm.providers.length} provider(s), ${config.llm.purposes.length} purpose(s) configured`

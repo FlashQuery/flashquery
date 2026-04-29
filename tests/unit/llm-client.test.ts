@@ -589,6 +589,7 @@ describe('initLlm', () => {
 
     const config = {
       llm: TEST_LLM_CONFIG,
+      instance: { id: 'test-instance-u21' },
     } as unknown as FlashQueryConfig;
 
     await initLlm(config);
