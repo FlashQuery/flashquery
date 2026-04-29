@@ -89,7 +89,10 @@ function makeRow(overrides: Partial<Record<string, unknown>> = {}): Record<strin
 // ─── Lifecycle hooks ─────────────────────────────────────────────────────────
 
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.resetAllMocks();
+  // Re-apply the default implementations after reset (vi.resetAllMocks strips them)
+  selectMock.mockImplementation(() => makeChain());
+  fromMock.mockImplementation(() => ({ select: selectMock }));
   _currentRows = [];
   _currentError = null;
 });
