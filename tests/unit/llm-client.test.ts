@@ -4,6 +4,10 @@ import {
   NullLlmClient,
   initLlm,
   mergeParameters,
+  // @ts-expect-error -- Plan 100-01 will export LlmHttpError from client.ts
+  LlmHttpError,
+  // @ts-expect-error -- Plan 100-01 will export LlmNetworkError from client.ts
+  LlmNetworkError,
   type ChatMessage,
   type LlmCompletionResult,
   type LlmClient,
@@ -40,6 +44,7 @@ interface MockResponseSpec {
   status?: number;
   body?: unknown;
   networkError?: Error;
+  headers?: Record<string, string>;  // ADD — for Retry-After tests (D-04)
 }
 
 let _nextResponse: MockResponseSpec = { status: 200, body: {} };
@@ -80,7 +85,7 @@ function _makeRequester() {
           const res = {
             statusCode: status,
             statusMessage: status === 200 ? 'OK' : String(status),
-            headers: {} as Record<string, string>,
+            headers: spec.headers ?? {} as Record<string, string>,
             on(event: string, handler: (chunk?: Buffer | Error) => void) {
               if (event === 'data') {
                 for (const chunk of chunks) {
@@ -165,6 +170,55 @@ describe('mergeParameters', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LlmHttpError and LlmNetworkError class identity (U-29..U-33)
+// RED tests — Plan 100-01 will implement these classes
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('LlmHttpError', () => {
+  it('U-29: LlmHttpError(msg, 429) sets name="LlmHttpError", status=429, retryAfterMs=undefined, and is instanceof Error', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const err = new LlmHttpError('LLM error: openai rate limit exceeded.', 429);
+    expect(err).toBeInstanceOf(LlmHttpError);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe('LlmHttpError');
+    expect(err.status).toBe(429);
+    expect(err.retryAfterMs).toBeUndefined();
+    expect(err.message).toBe('LLM error: openai rate limit exceeded.');
+  });
+
+  it('U-30: LlmHttpError(msg, 429, 5000) carries retryAfterMs=5000', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const err = new LlmHttpError('msg', 429, 5000);
+    expect(err.retryAfterMs).toBe(5000);
+  });
+
+  it('U-31: LlmHttpError(msg, 401) carries status=401 (arbitrary status code)', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const err = new LlmHttpError('msg', 401);
+    expect(err.status).toBe(401);
+  });
+});
+
+describe('LlmNetworkError', () => {
+  it('U-32: LlmNetworkError(msg) sets name="LlmNetworkError" and is instanceof Error', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const err = new LlmNetworkError('timeout');
+    expect(err).toBeInstanceOf(LlmNetworkError);
+    expect(err).toBeInstanceOf(Error);
+    expect(err.name).toBe('LlmNetworkError');
+    expect(err.message).toBe('timeout');
+  });
+
+  it('U-33: LlmNetworkError(msg, { cause }) preserves the cause field', () => {
+    const underlying = new Error('ECONNREFUSED');
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+    const err = new LlmNetworkError('reach failed', { cause: underlying });
+    expect(err.cause).toBeInstanceOf(Error);
+    expect((err.cause as Error).message).toBe('ECONNREFUSED');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // NullLlmClient
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -236,7 +290,7 @@ describe('OpenAICompatibleLlmClient.complete', () => {
             const res = {
               statusCode: 200,
               statusMessage: 'OK',
-              headers: {} as Record<string, string>,
+              headers: _nextResponse.headers ?? {} as Record<string, string>,
               on(event: string, handler: (chunk?: Buffer) => void) {
                 if (event === 'data') {
                   for (const chunk of chunks) handler(chunk);
@@ -352,7 +406,7 @@ describe('OpenAICompatibleLlmClient.complete', () => {
         const res = {
           statusCode: 200,
           statusMessage: 'OK',
-          headers: {} as Record<string, string>,
+          headers: _nextResponse.headers ?? {} as Record<string, string>,
           on(event: string, handler: (chunk?: Buffer) => void) {
             if (event === 'data') for (const chunk of chunks) handler(chunk);
             else if (event === 'end') setTimeout(() => handler(), 0);
@@ -382,7 +436,7 @@ describe('OpenAICompatibleLlmClient.complete', () => {
         const res = {
           statusCode: 200,
           statusMessage: 'OK',
-          headers: {} as Record<string, string>,
+          headers: _nextResponse.headers ?? {} as Record<string, string>,
           on(event: string, handler: (chunk?: Buffer) => void) {
             if (event === 'data') for (const chunk of chunks) handler(chunk);
             else if (event === 'end') setTimeout(() => handler(), 0);
@@ -415,7 +469,7 @@ describe('OpenAICompatibleLlmClient.complete', () => {
             const res = {
               statusCode: 200,
               statusMessage: 'OK',
-              headers: {} as Record<string, string>,
+              headers: _nextResponse.headers ?? {} as Record<string, string>,
               on(event: string, handler: (chunk?: Buffer) => void) {
                 if (event === 'data') for (const chunk of chunks) handler(chunk);
                 else if (event === 'end') setTimeout(() => handler(), 0);
@@ -457,6 +511,63 @@ describe('OpenAICompatibleLlmClient.complete', () => {
     await expect(client.complete('gpt-4o', SAMPLE_MESSAGES)).rejects.toThrow(
       /LLM error: Could not reach openai API/
     );
+  });
+
+  it('U-34: complete() throws LlmHttpError with status=401 on a 401 response (D-02)', async () => {
+    __setNextResponse({ status: 401, body: { error: 'unauthorized' } });
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    await expect(client.complete('gpt-4o', SAMPLE_MESSAGES)).rejects.toBeInstanceOf(LlmHttpError);
+    __setNextResponse({ status: 401, body: { error: 'unauthorized' } });
+    await expect(client.complete('gpt-4o', SAMPLE_MESSAGES)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it('U-35: complete() throws LlmHttpError with status=429 and retryAfterMs=7000 when provider sends Retry-After: 7 header (D-04)', async () => {
+    __setNextResponse({ status: 429, headers: { 'Retry-After': '7' }, body: { error: 'rate limit' } });
+    await expect(client.complete('gpt-4o', SAMPLE_MESSAGES)).rejects.toMatchObject({
+      status: 429,
+      retryAfterMs: 7000,
+    });
+  });
+
+  it('U-36: complete() throws LlmHttpError with the actual status (e.g., 500) on generic 5xx', async () => {
+    __setNextResponse({ status: 500, body: 'server error' });
+    await expect(client.complete('gpt-4o', SAMPLE_MESSAGES)).rejects.toMatchObject({ status: 500 });
+  });
+
+  it('U-37: complete() throws LlmNetworkError (not plain Error) when timeout fires via AbortError (D-02)', async () => {
+    vi.useFakeTimers();
+
+    // Set up a response that never resolves (simulates hanging server)
+    const httpsMod = await import('node:https');
+    vi.spyOn(httpsMod as typeof httpsMod & { request: unknown }, 'request').mockImplementation(
+      () => {
+        return {
+          on(_event: string, _handler: (err?: Error) => void) {},
+          write(_body: string) {},
+          end() {
+            // Never resolve — simulates no response from server
+          },
+          destroy(_err?: Error) {},
+        } as unknown as ReturnType<typeof httpsMod.request>;
+      }
+    );
+
+    const completePromise = client.complete('gpt-4o', SAMPLE_MESSAGES);
+
+    // Register rejection handler BEFORE advancing timers
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    const assertion = expect(completePromise).rejects.toBeInstanceOf(LlmNetworkError);
+
+    // Advance fake timers past the timeout window (default: 30 seconds)
+    await vi.advanceTimersByTimeAsync(31000);
+
+    await assertion;
+  });
+
+  it('U-38: complete() throws LlmNetworkError when nodeFetch network call rejects (ECONNREFUSED)', async () => {
+    __setNextResponse({ networkError: new Error('ECONNREFUSED') });
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    await expect(client.complete('gpt-4o', SAMPLE_MESSAGES)).rejects.toBeInstanceOf(LlmNetworkError);
   });
 
   it('complete() throws a clear error "LLM error: Model \'foo\' not found in configuration." when modelName does not match any model in config.llm.models', async () => {
