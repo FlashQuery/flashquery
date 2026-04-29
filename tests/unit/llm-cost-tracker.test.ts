@@ -4,6 +4,7 @@
  *           U-35 (write failure logs WARN, does not throw).
  * These tests fail with module-not-found until Plan 102-01 creates src/llm/cost-tracker.ts.
  */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { recordLlmUsage, drainCostWrites, computeCost, type LlmUsageRecord } from '../../src/llm/cost-tracker.js';
 
@@ -16,6 +17,8 @@ const fromMock = vi.fn(() => ({ insert: insertMock }));
 vi.mock('../../src/storage/supabase.js', () => ({
   supabaseManager: { getClient: vi.fn(() => ({ from: fromMock })) },
 }));
+
+// ─── Helper ──────────────────────────────────────────────────────────────────
 
 function buildRecord(overrides: Partial<LlmUsageRecord> = {}): LlmUsageRecord {
   return {
@@ -33,10 +36,13 @@ function buildRecord(overrides: Partial<LlmUsageRecord> = {}): LlmUsageRecord {
   };
 }
 
+// ─── Lifecycle ───────────────────────────────────────────────────────────────
+
 beforeEach(() => {
   vi.clearAllMocks();
   insertMock.mockResolvedValue({ error: null });
 });
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -63,7 +69,7 @@ describe('recordLlmUsage (U-32)', () => {
   });
 });
 
-// ─── U-33: _direct sentinel for resolver=model ────────────────────────────────
+// ─── U-33: _direct sentinel ───────────────────────────────────────────────────
 
 describe('recordLlmUsage _direct sentinel (U-33)', () => {
   it('U-33: purpose_name=_direct and fallback_position=null are persisted as-is', async () => {
@@ -85,6 +91,7 @@ describe('recordLlmUsage fallback_position handling (U-34)', () => {
     await drainCostWrites(1000);
     expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ fallback_position: null }));
   });
+
   it('U-34b: fallback_position=2 persists as integer 2', async () => {
     recordLlmUsage(buildRecord({ fallbackPosition: 2 }));
     await drainCostWrites(1000);
@@ -92,7 +99,7 @@ describe('recordLlmUsage fallback_position handling (U-34)', () => {
   });
 });
 
-// ─── U-35: Supabase error logs WARN, does not throw ──────────────────────────
+// ─── U-35: write-failure isolation ────────────────────────────────────────────
 
 describe('recordLlmUsage write-failure isolation (U-35)', () => {
   it('U-35: insert rejection logs WARN, does NOT throw, and drainCostWrites still resolves', async () => {
@@ -106,14 +113,14 @@ describe('recordLlmUsage write-failure isolation (U-35)', () => {
   });
 });
 
-// ─── computeCost sanity checks ────────────────────────────────────────────────
-// These mirror U-29 pattern; computeCost is relocated to cost-tracker.ts in Phase 102.
+// ─── computeCost (U-29 equivalents — also covered in llm-tool.test.ts) ────────
 
-describe('computeCost (relocated from llm.ts)', () => {
-  it('computeCost(10, 5, { input: 2.5, output: 10 }) returns correct value', () => {
+describe('computeCost', () => {
+  it('U-29-ct: computeCost(10, 5, { input: 2.5, output: 10 }) returns (10*2.5 + 5*10) / 1_000_000', () => {
     expect(computeCost(10, 5, { input: 2.5, output: 10 })).toBeCloseTo((10 * 2.5 + 5 * 10) / 1_000_000, 12);
   });
-  it('computeCost(0, 0, { input: 1, output: 1 }) returns 0', () => {
+
+  it('U-29-ct-b: computeCost(0, 0, { input: 1, output: 1 }) returns 0', () => {
     expect(computeCost(0, 0, { input: 1, output: 1 })).toBe(0);
   });
 });

@@ -14,7 +14,7 @@ vi.mock('../../src/server/shutdown-state.js', () => ({
   getIsShuttingDown: vi.fn(() => false),
 }));
 
-// supabaseManager mock — chainable .from().insert() and .from().select().eq().eq()
+// supabaseManager mock — chainable .from().select().eq().eq() (insert removed — D-06: llm.ts no longer calls .insert() directly)
 const selectEqEqMock = vi.fn().mockResolvedValue({ data: [], error: null });
 const selectEqMock = vi.fn(() => ({ eq: selectEqEqMock }));
 const selectMock = vi.fn(() => ({ eq: selectEqMock }));
