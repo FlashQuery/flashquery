@@ -114,11 +114,16 @@ function nodeFetch(input: string, init?: RequestInit): Promise<Response> {
         res.on('end', () => {
           const text = Buffer.concat(chunks).toString('utf-8');
           const status = res.statusCode ?? 200;
+          const safeHeaders: Record<string, string> = {};
+          for (const [key, value] of Object.entries(res.headers)) {
+            if (value === undefined) continue;
+            safeHeaders[key] = Array.isArray(value) ? value.join(', ') : value;
+          }
           resolve({
             ok: status >= 200 && status < 300,
             status,
             statusText: res.statusMessage ?? '',
-            headers: new Headers(res.headers as Record<string, string>),
+            headers: new Headers(safeHeaders),
             text: () => Promise.resolve(text),
             json: () => {
               try {
@@ -225,7 +230,7 @@ export class OpenAICompatibleLlmClient implements LlmClient {
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ model: model.model, messages, ...mergedParams }), // D-07
+          body: JSON.stringify({ ...mergedParams, model: model.model, messages }), // D-07
           signal: controller.signal,
         });
       } catch (err: unknown) {
