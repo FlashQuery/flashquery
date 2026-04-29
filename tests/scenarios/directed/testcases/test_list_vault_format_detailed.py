@@ -1,23 +1,36 @@
 #!/usr/bin/env python3
 """
-Test: list_vault — detailed format tests: tracked/untracked field order, DB metadata.
+Test: list_vault — detailed format: key-value structure, Size field, ISO 8601 timestamps,
+      directory-before-file ordering with show=all.
+
+Scenario:
+    1. Setup: create tracked document, subdir, and untracked file directly in vault
+    2. F-76: list_vault show=files format=detailed — two entries separated by ---,
+             key-value format confirmed
+    3. F-77: list_vault show=files format=detailed — file entry has Size: field with
+             human-readable value (B/KB/MB/GB)
+    4. F-78: list_vault show=directories format=detailed — entry contains 'Type: directory'
+    5. F-79: list_vault format=detailed — timestamps use ISO 8601 (YYYY-MM-DDThh:mm)
+    6. F-83: list_vault show=all format=detailed — directory entry appears before file entry
+    Cleanup is automatic (filesystem + database) even if the test fails.
 
 Coverage points: F-76, F-77, F-78, F-79, F-83
 
 Modes:
-    Default     Connects to an already-running FQC instance
-    --managed   Starts a dedicated FQC subprocess
+    Default     Connects to an already-running FlashQuery instance (config from flashquery.yml)
+    --managed   Starts a dedicated FlashQuery subprocess for this test, captures its logs,
+                and shuts it down afterwards. Server logs are included in JSON output.
 
 Usage:
-    python test_list_vault_format_detailed.py
-    python test_list_vault_format_detailed.py --managed
-    python test_list_vault_format_detailed.py --managed --json
-    python test_list_vault_format_detailed.py --managed --json --keep
+    python test_list_vault_format_detailed.py                            # existing server
+    python test_list_vault_format_detailed.py --managed                  # managed server
+    python test_list_vault_format_detailed.py --managed --json           # structured JSON with server logs
+    python test_list_vault_format_detailed.py --managed --json --keep    # keep files for debugging
 
 Exit codes:
-    0   PASS
-    2   FAIL
-    3   DIRTY
+    0   PASS    All steps passed and cleanup was clean
+    2   FAIL    One or more test steps failed
+    3   DIRTY   Steps passed but cleanup had errors
 """
 from __future__ import annotations
 
@@ -78,37 +91,38 @@ def run_test(args: argparse.Namespace) -> TestRun:
             timing_ms=int((time.monotonic() - t0) * 1000),
         )
 
-        # ── F-76: tracked file detailed block has expected fields ─────────────
+        # ── F-76: detailed format returns key-value entries separated by --- ──
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="detailed")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_title = "Title:" in result.text
-        has_path = "Path:" in result.text
-        has_fqc_id = "fqc_id:" in result.text or "fq_id:" in result.text
-        passed_f76 = result.ok and has_title and has_path and has_fqc_id
+        # Two files (tracked.md + untracked.md) → must have --- separator between them.
+        has_separator = "---" in result.text
+        has_kv_format = bool(re.search(r"^\w[\w ]+: .+", result.text, re.MULTILINE))
+        passed_f76 = result.ok and has_separator and has_kv_format
 
         run.step(
-            label="F-76: tracked file detailed block has Title:, Path:, fqc_id: fields",
+            label="F-76: detailed format entries separated by --- and use key-value format",
             passed=passed_f76,
-            detail=f"ok={result.ok} has_title={has_title} has_path={has_path} has_fqc_id={has_fqc_id} | {result.text[:400]}",
+            detail=f"ok={result.ok} has_separator={has_separator} has_kv_format={has_kv_format} | {result.text[:400]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-77: untracked file detailed block shows Tracked: false ─────────
+        # ── F-77: file entries include Size field with human-readable value ───
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="detailed")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_tracked_false = "Tracked: false" in result.text
-        passed_f77 = result.ok and has_tracked_false
+        has_size_field = "Size:" in result.text
+        has_size_unit = any(u in result.text for u in [" B", "KB", "MB", "GB"])
+        passed_f77 = result.ok and has_size_field and has_size_unit
 
         run.step(
-            label="F-77: untracked file detailed block shows 'Tracked: false'",
+            label="F-77: file entry has 'Size:' field with human-readable value (B/KB/MB/GB)",
             passed=passed_f77,
-            detail=f"ok={result.ok} has_tracked_false={has_tracked_false} | {result.text[:400]}",
+            detail=f"ok={result.ok} has_size_field={has_size_field} has_size_unit={has_size_unit} | {result.text[:400]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -130,33 +144,40 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-79: multiple entries are separated by '---' ────────────────────
+        # ── F-79: timestamps use ISO 8601 format ─────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("list_vault", path=base_dir, format="detailed")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f79 = result.ok and "---" in result.text
+        # Updated/Created fields use .toISOString() → "YYYY-MM-DDThh:mm:..."
+        has_iso8601 = bool(re.search(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}", result.text))
+        passed_f79 = result.ok and has_iso8601
 
         run.step(
-            label="F-79: detailed format entries are separated by '---' delimiter",
+            label="F-79: detailed format timestamps use ISO 8601 (YYYY-MM-DDThh:mm)",
             passed=passed_f79,
-            detail=f"ok={result.ok} has_separator={'---' in result.text} | {result.text[:400]}",
+            detail=f"ok={result.ok} has_iso8601={has_iso8601} | {result.text[:400]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-83: detailed format has summary line ────────────────────────────
+        # ── F-83: show=all groups directories before files ───────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, format="detailed")
+        result = ctx.client.call_tool("list_vault", path=base_dir, format="detailed", show="all")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f83 = result.ok and "Showing" in result.text
+        # With show="all", source sorts dirs first then files ([...dirs, ...files]).
+        # "Type: directory" appears in the directory entry; "tracked.md" appears in a file entry.
+        dir_pos = result.text.find("Type: directory")
+        file_pos = result.text.find("tracked.md")
+        dirs_before_files = dir_pos != -1 and file_pos != -1 and dir_pos < file_pos
+        passed_f83 = result.ok and dirs_before_files
 
         run.step(
-            label="F-83: detailed format has 'Showing N of N entries' summary line",
+            label="F-83: show=all detailed format — directory entry appears before file entry",
             passed=passed_f83,
-            detail=f"ok={result.ok} has_showing={'Showing' in result.text} | {result.text[-200:]}",
+            detail=f"ok={result.ok} dir_pos={dir_pos} file_pos={file_pos} dirs_before_files={dirs_before_files} | {result.text[:400]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

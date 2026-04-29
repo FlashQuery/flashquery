@@ -1,8 +1,8 @@
 name: multitag_filter
 description: >
   When search_documents is called with multiple tags, it returns documents tagged
-  with ALL the specified tags. This tests that multi-tag filtering works correctly
-  across multiple documents with different tag combinations.
+  with ALL the specified tags (intersection semantics). This tests that multi-tag
+  filtering works correctly across multiple documents with different tag combinations.
 coverage: [IS-08]
 
 steps:
@@ -30,29 +30,64 @@ steps:
     content: "This document is tagged with beta and gamma, but not alpha."
     tags: [mtf-beta, mtf-gamma, mtf-tag]
 
-  - label: "Filter by single tag [mtf-alpha] returns documents with that tag"
+  - label: "Filter by [mtf-alpha] returns doc_ab"
     assert:
       op: search_documents
       args:
         tags: [mtf-alpha]
       expect_contains: "Document With Both Tags"
-      expect_contains: "Document With Alpha and Gamma"
       expect_not_contains: "Document With Beta and Gamma"
 
-  - label: "Filter by single tag [mtf-beta] returns documents with that tag"
+  - label: "Filter by [mtf-alpha] also returns doc_ag"
+    assert:
+      op: search_documents
+      args:
+        tags: [mtf-alpha]
+      expect_contains: "Document With Alpha and Gamma"
+
+  - label: "Filter by [mtf-beta] returns doc_ab"
     assert:
       op: search_documents
       args:
         tags: [mtf-beta]
       expect_contains: "Document With Both Tags"
-      expect_contains: "Document With Beta and Gamma"
       expect_not_contains: "Document With Alpha and Gamma"
 
-  - label: "Filter by single tag [mtf-gamma] returns all three documents"
+  - label: "Filter by [mtf-beta] also returns doc_bg"
+    assert:
+      op: search_documents
+      args:
+        tags: [mtf-beta]
+      expect_contains: "Document With Beta and Gamma"
+
+  - label: "Filter by [mtf-gamma] returns doc_ag"
     assert:
       op: search_documents
       args:
         tags: [mtf-gamma]
       expect_contains: "Document With Alpha and Gamma"
+
+  - label: "Filter by [mtf-gamma] also returns doc_bg"
+    assert:
+      op: search_documents
+      args:
+        tags: [mtf-gamma]
       expect_contains: "Document With Beta and Gamma"
       expect_count_gte: 2
+
+  - label: "Multi-tag filter [mtf-alpha, mtf-beta] with tag_match=all returns doc_ab (IS-08)"
+    assert:
+      op: search_documents
+      args:
+        tags: [mtf-alpha, mtf-beta]
+        tag_match: all
+      expect_contains: "Document With Both Tags"
+      expect_not_contains: "Document With Alpha and Gamma"
+
+  - label: "Multi-tag filter [mtf-alpha, mtf-beta] with tag_match=all excludes doc_bg (IS-08)"
+    assert:
+      op: search_documents
+      args:
+        tags: [mtf-alpha, mtf-beta]
+        tag_match: all
+      expect_not_contains: "Document With Beta and Gamma"

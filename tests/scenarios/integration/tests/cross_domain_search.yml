@@ -1,13 +1,13 @@
 name: cross_domain_search
 description: >
   A document and a memory that share a tag are each discoverable through their
-  respective access paths. The search_all entity_types filter correctly restricts
-  results to documents only. Memory retrieval is tested via list_memories (tag-based).
+  respective access paths. The search_all entity_types=['documents'] filter correctly
+  restricts results to documents only (IS-04). Memory retrieval is verified via
+  list_memories (tag-based).
 
-  Note: Verifying that memories appear alongside documents in a single search_all
-  result set requires embedding configuration (memory semantic search). That behavior
-  is covered by a separate embedding-enabled test.
-coverage: [IS-03, IS-04, IX-01]
+  IS-03 and IX-01 (both entity types returned in a single search_all result set)
+  require embedding configuration and are covered by cross_domain_search_embeddings.
+coverage: [IS-04]
 
 steps:
   - label: "Write a document tagged with the shared topic"

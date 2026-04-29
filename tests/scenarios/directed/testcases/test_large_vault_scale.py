@@ -190,7 +190,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 2: Force file scan to index external files ────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan_result = ctx.client.call_tool("force_file_scan", background=True)
+        scan_result = ctx.client.call_tool("force_file_scan", background=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -214,11 +214,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         initial_count = _extract_count_from_list(list_result.text)
         expected_after_seed = num_external
-        detail = f"Found {initial_count} files, expected ≈{expected_after_seed}"
+        detail = f"Found {initial_count} files, expected {expected_after_seed}"
 
         run.step(
             label="list_vault (after external pre-seed)",
-            passed=(list_result.ok and list_result.status == "pass"),
+            passed=(list_result.ok and initial_count == expected_after_seed),
             detail=detail,
             timing_ms=list_result.timing_ms,
             tool_result=list_result,
@@ -245,6 +245,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 created_docs.append((fqc_id, path, title))
 
         # ── Step 5: Force file scan after creates ────────────────────
+        # background=True: create_document updates DB synchronously, so Step 6's count
+        # assertion is accurate without waiting for scan/embedding completion.
         log_mark = ctx.server.log_position if ctx.server else 0
         scan_result = ctx.client.call_tool("force_file_scan", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -270,11 +272,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         count_after_creates = _extract_count_from_list(list_result.text)
         expected_after_creates = num_external + num_creates
-        detail = f"Found {count_after_creates} files, expected ≈{expected_after_creates}"
+        detail = f"Found {count_after_creates} files, expected {expected_after_creates}"
 
         run.step(
             label="list_vault (after creates)",
-            passed=(list_result.ok and count_after_creates >= expected_after_creates - 1),
+            passed=(list_result.ok and count_after_creates == expected_after_creates),
             detail=detail,
             timing_ms=list_result.timing_ms,
             tool_result=list_result,
@@ -305,7 +307,30 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 server_logs=step_logs,
             )
 
+        # ── Step 7b: Sample get_document to verify update applied ──────────────
+        # update_document with only content= changes the body but not the title.
+        # "updated in-place" is unique to the post-update body — absent from the original.
+        if created_docs and num_updates > 0:
+            sample_fqc_id = created_docs[0][0]
+            log_mark = ctx.server.log_position if ctx.server else 0
+            get_result = ctx.client.call_tool("get_document", identifier=sample_fqc_id)
+            step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+            content_updated = "updated in-place" in get_result.text
+            run.step(
+                label="get_document (SC-01: verify update content reflected)",
+                passed=get_result.ok and content_updated,
+                detail=f"ok={get_result.ok} content_updated={content_updated} | {get_result.text[:200]}",
+                timing_ms=get_result.timing_ms,
+                tool_result=get_result,
+                server_logs=step_logs,
+            )
+
         # ── Step 8: Force file scan after updates ──────────────────
+        # background=True here: update_document already updates the DB and writes disk.
+        # The subsequent search uses tag-based lookup, not scan-dependent content indexing,
+        # so we don't need the scan to complete before asserting.  Re-embedding 6 updated
+        # files via the remote API takes >30 s, which exceeds the HTTP timeout.
         log_mark = ctx.server.log_position if ctx.server else 0
         scan_result = ctx.client.call_tool("force_file_scan", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -332,6 +357,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             ctx.cleanup.track_mcp_document(rel)
 
         # ── Step 10: Force file scan after external injection ────────
+        # background=True: mid-test external files don't affect tag-based search (Step 11)
+        # or archive assertions (Step 12). Final count (Step 13) checks ok only.
         log_mark = ctx.server.log_position if ctx.server else 0
         scan_result = ctx.client.call_tool("force_file_scan", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -356,13 +383,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Should find the created (and updated) documents
-        found_created = search_result.text.count("Created Document")
-        detail = f"search_documents by tag: found {found_created} documents"
+        # Should find exactly num_creates documents — all still active, titles unchanged by update
+        found_created = search_result.text.count("Title: Created Document")
+        detail = f"search_documents by tag: found {found_created}, expected {num_creates}"
 
         run.step(
-            label="search_documents (validation after updates)",
-            passed=(search_result.ok and found_created > 0),
+            label="search_documents (SC-02: exact count of created docs after updates)",
+            passed=(search_result.ok and found_created == num_creates),
             detail=detail,
             timing_ms=search_result.timing_ms,
             tool_result=search_result,
@@ -401,13 +428,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Count total found; should not include archived docs
+        # The first archived doc's title must not appear — if it does, archives are leaking into search
+        archived_title = created_docs[0][2] if created_docs and num_archives > 0 else ""
+        title_excluded = (archived_title not in search_result.text) if archived_title else True
         total_found = search_result.text.count("Title:")
-        detail = f"search_documents after archives: found {total_found} active documents"
+        detail = (
+            f"search_documents after archives: found {total_found} active documents, "
+            f"archived_title={archived_title!r} excluded={title_excluded}"
+        )
 
         run.step(
-            label="search_documents (archived excluded)",
-            passed=(search_result.ok and search_result.status == "pass"),
+            label="search_documents (SC-02: archived doc title absent from results)",
+            passed=(search_result.ok and title_excluded),
             detail=detail,
             timing_ms=search_result.timing_ms,
             tool_result=search_result,

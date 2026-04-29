@@ -76,11 +76,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
 
     unique_phrase = f"flashquery lifecycle beacon {run.run_id}"
-    original_content = (
+    # Content prefix must reliably exceed 200 chars so the sentinel placed after it
+    # is cut off by list_memories (M-10 truncates previews to 200 chars + "...").
+    content_prefix = (
         f"This memory was created by {TEST_NAME} (run {run.run_id}). "
         f"Marker phrase: {unique_phrase}. "
-        f"It verifies the save -> get -> list -> update -> archive cycle."
+        f"It verifies the save -> get -> list -> update -> archive cycle. "
+        f"Additional padding to push the prefix reliably past 200 characters."
     )
+    list_truncation_sentinel = f"TRUNCATED_TAIL_{run.run_id}"
+    original_content = content_prefix + " " + list_truncation_sentinel
     updated_content = (
         f"This memory was UPDATED by {TEST_NAME} (run {run.run_id}). "
         f"Marker phrase: {unique_phrase}. "
@@ -140,10 +145,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Full (un-truncated) content should be returned by get_memory
+        # Full (un-truncated) content should be returned by get_memory;
+        # sentinel appears beyond char 200 so its presence confirms no truncation.
         get_result.expect_contains(unique_phrase)
         get_result.expect_contains(original_id)
         get_result.expect_contains(unique_tag)
+        get_result.expect_contains(list_truncation_sentinel)
 
         run.step(
             label="get_memory (single id) — original version",
@@ -164,6 +171,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         list_result.expect_contains(original_id)
         list_result.expect_contains(unique_tag)
+        # M-10: preview is truncated to 200 chars — sentinel beyond char 200 must be absent
+        list_result.expect_not_contains(list_truncation_sentinel)
 
         run.step(
             label=f"list_memories(tags=['{unique_tag}'])",

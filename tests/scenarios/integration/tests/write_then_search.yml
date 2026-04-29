@@ -39,6 +39,13 @@ steps:
       expect_path: "nature/ocean.md"
       expect_not_contains: "mountain peaks"
 
+  - label: "Document appears in search_documents by title (IS-01)"
+    assert:
+      op: search_documents
+      args:
+        query: "The Ocean at Dawn"
+      expect_contains: "The Ocean at Dawn"
+
   - label: "Memory listable by unique tag"
     assert:
       op: list_memories

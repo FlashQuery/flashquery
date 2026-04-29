@@ -1,10 +1,11 @@
 name: search_memories_only
 description: >
-  Memory retrieval uses list_memories with tag filtering rather than search_all.
-  Verifies that memories created with tags are discoverable via list_memories
-  with the correct tag scope, isolating them from documents. This test covers
-  the memory access path to distinguish it from document search.
+  search_all with entity_types=['memories'] returns only memories and excludes
+  documents (IS-05). Memory content is present in the result; the document written
+  in the same test is absent. Requires embedding configuration because search_all
+  over memories uses semantic vector search; skipped without it.
 coverage: [IS-05]
+deps: [embeddings]
 
 steps:
   - label: "Write a document with specific tag"
@@ -21,24 +22,32 @@ steps:
     content: "Hiking through the redwood forests was a transcendent experience."
     tags: [smo-tag]
 
-  - label: "Document is searchable via search_all"
-    assert:
-      op: search_all
-      args:
-        query: "Ancient Forests"
-      expect_path: "nature/forests.md"
-
-  - label: "Memory is listable via list_memories with same tag"
+  - label: "Memory is listable by tag"
     assert:
       op: list_memories
       args:
         tags: [smo-tag]
       expect_contains: "redwood forests"
-      expect_contains: "transcendent experience"
 
-  - label: "Memory content appears when listing by tag"
+  - label: "Memory listing does not contain document title"
     assert:
       op: list_memories
       args:
         tags: [smo-tag]
+      expect_not_contains: "Ancient Forests and Ecosystems"
+
+  - label: "search_all with entity_types=[memories] returns memory content (IS-05)"
+    assert:
+      op: search_all
+      args:
+        query: "hiking through redwood forests"
+        entity_types: [memories]
+      expect_contains: "redwood forests"
+
+  - label: "search_all with entity_types=[memories] does not return the document (IS-05)"
+    assert:
+      op: search_all
+      args:
+        query: "hiking through redwood forests"
+        entity_types: [memories]
       expect_not_contains: "Ancient Forests and Ecosystems"

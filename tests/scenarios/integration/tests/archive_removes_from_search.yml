@@ -3,7 +3,7 @@ description: >
   Archiving a document removes it from search_all and search_documents, while a memory
   created around the same topic remains fully accessible. Demonstrates that archive is
   scoped correctly and does not affect the memory domain.
-coverage: [IA-01, IA-02, IA-03, IX-02]
+coverage: [IA-01, IA-02, IA-03]
 
 steps:
   - label: "Write a document about sunsets"
