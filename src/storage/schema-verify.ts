@@ -16,7 +16,7 @@ import pg from 'pg';
  */
 export async function tableExists(client: pg.Client, tableName: string): Promise<boolean> {
   const result = await client.query(
-    `SELECT to_regclass(format('public.%I', $1)) IS NOT NULL`,
+    `SELECT to_regclass(format('public.%I', $1::text)) IS NOT NULL`,
     [tableName]
   );
   // PostgreSQL returns the column as '?column?' when unnamed
