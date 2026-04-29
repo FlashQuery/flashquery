@@ -164,7 +164,7 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     try {
       let response: Response;
       try {
-        response = await nodeFetch(`${provider.endpoint}/v1/chat/completions`, {
+        response = await nodeFetch(`${provider.endpoint.replace(/\/$/, '')}/v1/chat/completions`, {
           method: 'POST',
           headers: {
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
