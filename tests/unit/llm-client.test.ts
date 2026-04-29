@@ -300,10 +300,14 @@ describe('OpenAICompatibleLlmClient.complete', () => {
 
     const completePromise = client.complete('gpt-4o', SAMPLE_MESSAGES);
 
+    // Register the rejection handler BEFORE advancing timers so the rejection is
+    // never seen as unhandled (fake timer fires synchronously before microtasks run).
+    const assertion = expect(completePromise).rejects.toThrow(/timeout|timed out|abort/i);
+
     // Advance fake timers past the timeout window (default: 30 seconds)
     await vi.advanceTimersByTimeAsync(31000);
 
-    await expect(completePromise).rejects.toThrow(/timeout|timed out|abort/i);
+    await assertion;
   });
 
   it('U-18: complete() routes through nodeFetch (node:http/node:https), not globalThis.fetch', async () => {
