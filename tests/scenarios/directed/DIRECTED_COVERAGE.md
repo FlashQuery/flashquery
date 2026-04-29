@@ -671,7 +671,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 ---
 
-### test_list_vault_format
+### test_list_vault_format ✓ RESOLVED 2026-04-29
 
 **Behaviors affected**
 - F-71: `list_vault` with `format: "table"` — file Size column shows human-readable size from `formatFileSize`
@@ -699,6 +699,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 - F-80: Add a step that calls `list_vault(path="/")` without any `format` parameter and asserts `"| Name |" in result.text` — proving the table default applies.
 - F-81: Add a step that calls `list_vault(path="/", format="verbose")` (or any invalid format string) and asserts `not result.ok`.
 - F-82: Add a step that calls with both `format="table"` and `show="directories"` and asserts file entries do NOT appear in the table rows (e.g., assert a known `.md` filename is absent).
+
+**Resolution (2026-04-29)**: Added `subdir/deep.md` to setup for F-74 recursive test. Seven steps rewritten: F-71 now asserts `any(u in result.text for u in [" B", "KB", "MB", "GB"])` on a `show="files"` call (real size unit proven); F-73 asserts `"subdir/" in result.text` (trailing slash on directory Name); F-74 makes two calls — non-recursive asserts `"notes.md" in text` and no path prefix, recursive asserts `"subdir/deep.md" in text`; F-75 checks `re.search(r"\d{4}-\d{2}-\d{2}", text)` is truthy AND `re.search(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:", text)` is falsy (no time component); F-80 calls without `format` param and asserts `"| Name |" in result.text`; F-81 calls `format="verbose"` (invalid) and asserts `not result.ok`; F-82 calls `format="table", show="directories"` and asserts `"notes.md" not in result.text` AND `"subdir/" in result.text`. Test passes 10/10 steps.
 
 ---
 
