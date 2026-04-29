@@ -57,6 +57,11 @@ export class ShutdownCoordinator {
       // Step 2: Drain MCP requests
       await this.drainMcpRequests();
 
+      // Step 2.5 (D-10): Drain in-flight LLM cost writes — must run after MCP drain so no
+      // new cost writes can be initiated, and before HTTP close so the ServerCoordinator
+      // has time to settle pending Supabase inserts. 5-second timeout per D-10.
+      await this.drainCostWritesStep();
+
       // Step 3: Close HTTP server
       await this.closeHttpServer();
 
@@ -116,6 +121,18 @@ export class ShutdownCoordinator {
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     this.logInfo('MCP sessions drained');
+  }
+
+  private async drainCostWritesStep(): Promise<void> {
+    // D-10: drain in-flight LLM cost writes before HTTP close. 5s timeout per D-10.
+    this.logInfo('Cost writes draining (timeout=5s)');
+    try {
+      const { drainCostWrites } = await import('../llm/cost-tracker.js');
+      await drainCostWrites(5_000);
+      this.logInfo('Cost writes drained');
+    } catch (err: unknown) {
+      this.logDebug(`Cost: drain timeout or error: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private async closeHttpServer(): Promise<void> {
