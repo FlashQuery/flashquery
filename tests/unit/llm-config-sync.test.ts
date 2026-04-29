@@ -86,10 +86,11 @@ describe('syncLlmConfigToDb()', () => {
 
     await syncLlmConfigToDb(config);
 
-    // Deletes happen in dependency order: purpose_models -> purposes -> models -> providers.
+    // Deletes happen in dependency order: purpose_models (by purpose) -> purpose_models (by model, CR-02) -> purposes -> models -> providers.
     const deletes = supabaseCalls.filter((c) => c.op === 'delete').map((c) => c.table);
     expect(deletes).toEqual([
-      'fqc_llm_purpose_models',
+      'fqc_llm_purpose_models',  // by purpose_name (yaml purpose cleanup)
+      'fqc_llm_purpose_models',  // by model_name (CR-02: prevent dangling FK from webapp purposes)
       'fqc_llm_purposes',
       'fqc_llm_models',
       'fqc_llm_providers',
