@@ -160,7 +160,12 @@ async function fetchRows(
 
 function n(v: string | number | null | undefined): number {
   if (v === null || v === undefined) return 0;
-  return typeof v === 'number' ? v : Number(v);
+  const num = typeof v === 'number' ? v : Number(v);
+  if (!isFinite(num)) {
+    logger.warn(`get_llm_usage: non-finite value in fqc_llm_usage column: ${String(v)}`);
+    return 0;
+  }
+  return num;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -437,7 +442,7 @@ export function registerLlmUsageTools(server: McpServer, config: FlashQueryConfi
         purpose_name: z.string().optional().describe('Filter to a single purpose name (lowercased before query).'),
         model_name: z.string().optional().describe('Filter to a single model alias (lowercased before query).'),
         trace_id: z.string().optional().describe('Filter to a single trace_id.'),
-        limit: z.number().int().positive().optional().describe('recent mode only — max number of entries to return. Default 20.'),
+        limit: z.number().int().positive().max(1000).optional().describe('recent mode only — max number of entries to return. Default 20, max 1000.'),
       },
     },
     async (params) => {
