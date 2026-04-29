@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { computeCost, registerLlmTools } from '../../src/mcp/tools/llm.js';
+import { registerLlmTools } from '../../src/mcp/tools/llm.js';
+import { computeCost } from '../../src/llm/cost-tracker.js';
 import { NullLlmClient, type LlmClient, type LlmCompletionResult } from '../../src/llm/client.js';
 import { LlmFallbackError } from '../../src/llm/resolver.js';
 
@@ -14,11 +15,10 @@ vi.mock('../../src/server/shutdown-state.js', () => ({
 }));
 
 // supabaseManager mock — chainable .from().insert() and .from().select().eq().eq()
-const insertMock = vi.fn().mockResolvedValue({ error: null });
 const selectEqEqMock = vi.fn().mockResolvedValue({ data: [], error: null });
 const selectEqMock = vi.fn(() => ({ eq: selectEqEqMock }));
 const selectMock = vi.fn(() => ({ eq: selectEqMock }));
-const fromMock = vi.fn(() => ({ insert: insertMock, select: selectMock }));
+const fromMock = vi.fn(() => ({ select: selectMock }));
 vi.mock('../../src/storage/supabase.js', () => ({
   supabaseManager: {
     getClient: vi.fn(() => ({ from: fromMock })),
@@ -70,7 +70,6 @@ const SAMPLE_RESULT: LlmCompletionResult = {
 beforeEach(() => {
   vi.clearAllMocks();
   _llmClientValue = undefined;
-  insertMock.mockResolvedValue({ error: null });
   selectEqEqMock.mockResolvedValue({ data: [], error: null });
 });
 
