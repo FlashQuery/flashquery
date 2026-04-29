@@ -2,7 +2,7 @@
 """
 Test: list_vault — show modes, basic filtering, summary line, non-existent path, zero-params.
 
-Coverage points: F-08, F-09, F-10, F-11, F-53, F-54, F-65, F-66, F-68, F-84, F-85, F-86, F-87, F-88, F-89, F-90, F-91
+Coverage points: F-08, F-09, F-10, F-11, F-53, F-54, F-65, F-68, F-84, F-85, F-86, F-87, F-88, F-89, F-90, F-91
 
 Modes:
     Default     Connects to an already-running FQC instance
@@ -21,7 +21,7 @@ Exit codes:
 """
 from __future__ import annotations
 
-COVERAGE = ["F-08", "F-09", "F-10", "F-11", "F-53", "F-54", "F-65", "F-66", "F-68", "F-84", "F-85", "F-86", "F-87", "F-88", "F-89", "F-90", "F-91"]
+COVERAGE = ["F-08", "F-09", "F-10", "F-11", "F-53", "F-54", "F-65", "F-68", "F-84", "F-85", "F-86", "F-87", "F-88", "F-89", "F-90", "F-91"]
 
 import argparse
 import re
@@ -91,10 +91,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
         txt_abs.parent.mkdir(parents=True, exist_ok=True)
         txt_abs.write_text(f"untracked note for {run.run_id}\n")
         ctx.cleanup.track_file(f"{base_dir}/untracked.txt")
+
+        # Create an untracked .md file directly (for F-87 untracked-note assertion)
+        md_untracked_abs = ctx.vault._abs(f"{base_dir}/untracked_note.md")
+        md_untracked_abs.write_text(f"untracked markdown for {run.run_id}\n")
+        ctx.cleanup.track_file(f"{base_dir}/untracked_note.md")
+
         run.step(
-            label="Setup: write untracked.txt directly to vault",
-            passed=txt_abs.is_file(),
-            detail=f"path={base_dir}/untracked.txt",
+            label="Setup: write untracked.txt and untracked_note.md directly to vault",
+            passed=txt_abs.is_file() and md_untracked_abs.is_file(),
+            detail=f"path={base_dir}/untracked.txt, {base_dir}/untracked_note.md",
             timing_ms=int((time.monotonic() - t0) * 1000),
         )
 
@@ -172,77 +178,70 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-53: table format header row present ─────────────────────────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, show="files")
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        passed_f53 = result.ok and "| Name |" in result.text
-
-        run.step(
-            label="F-53: list_vault default format has markdown table header",
-            passed=passed_f53,
-            detail=f"ok={result.ok} has_header={'| Name |' in result.text} | {result.text[:200]}",
-            timing_ms=result.timing_ms,
-            tool_result=result,
-            server_logs=step_logs,
-        )
-
-        # ── F-54: detailed format does NOT contain '| Name |' ─────────────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="detailed")
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        no_table_header = "| Name |" not in result.text
-        has_path_field = "Path:" in result.text
-        passed_f54 = result.ok and no_table_header and has_path_field
-
-        run.step(
-            label="F-54: list_vault format=detailed uses key-value blocks (no table header)",
-            passed=passed_f54,
-            detail=f"ok={result.ok} no_table_header={no_table_header} has_path={has_path_field} | {result.text[:200]}",
-            timing_ms=result.timing_ms,
-            tool_result=result,
-            server_logs=step_logs,
-        )
-
-        # ── F-65: non-recursive name column shows filename only ───────────────
+        # ── F-53: show="files" non-recursive → no directory entry appears ───────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", recursive=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Non-recursive: should show "top.md" not "sub/top.md"
-        has_filename = "top.md" in result.text
-        # "sub/" should not appear in the name column of a non-recursive listing
-        no_path_prefix = "sub/top.md" not in result.text
-        passed_f65 = result.ok and has_filename and no_path_prefix
+        # "| directory |" type column value signals a directory row in the table
+        no_dir_entry = "| directory |" not in result.text
+        has_file_entry = "top.md" in result.text
+        passed_f53 = result.ok and no_dir_entry and has_file_entry
 
         run.step(
-            label="F-65: non-recursive listing shows filename only in Name column",
-            passed=passed_f65,
-            detail=f"ok={result.ok} has_filename={has_filename} no_path_prefix={no_path_prefix} | {result.text[:200]}",
+            label="F-53: show='files' non-recursive returns no directory entries",
+            passed=passed_f53,
+            detail=f"ok={result.ok} no_dir_entry={no_dir_entry} has_file_entry={has_file_entry} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-66: recursive name column shows relative path ───────────────────
+        # ── F-54: show="files" recursive → no directory entries appear ──────────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", recursive=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Recursive: nested.md should show as "sub/nested.md" or at least "nested.md"
-        # The key is that context includes path info for disambiguation
+        # "directory" type column value signals a directory row in the table
+        no_dir_entry = "| directory |" not in result.text
         has_nested = "nested.md" in result.text
-        passed_f66 = result.ok and has_nested
+        has_leaf = "leaf.md" in result.text
+        passed_f54 = result.ok and no_dir_entry and has_nested and has_leaf
 
         run.step(
-            label="F-66: recursive listing shows relative path in Name column",
-            passed=passed_f66,
-            detail=f"ok={result.ok} has_nested={has_nested} | {result.text[:200]}",
+            label="F-54: show='files' recursive returns no directory entries",
+            passed=passed_f54,
+            detail=f"ok={result.ok} no_dir_entry={no_dir_entry} has_nested={has_nested} has_leaf={has_leaf} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
+        )
+
+        # ── F-65: show="folders" is invalid → isError: true ─────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        result = ctx.client.call_tool("list_vault", path=base_dir, show="folders")
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        passed_f65 = not result.ok
+
+        run.step(
+            label="F-65: show='folders' (invalid value) returns isError=true",
+            passed=passed_f65,
+            detail=f"ok={result.ok} (expected False) | {result.text[:300]}",
+            timing_ms=result.timing_ms,
+            tool_result=result,
+            server_logs=step_logs,
+        )
+
+        # ── F-66: DEFERRED — shutdown simulation cannot be done from subprocess ──
+        # Shutdown-state testing requires coordinated subprocess control that is not
+        # available in the directed scenario framework.  This step is NOT a coverage
+        # claim; it passes unconditionally so it does not block the suite.
+        run.step(
+            label="F-66 (DEFERRED): shutdown-state test — not exercised in directed suite",
+            passed=True,
+            detail="Deferred: shutdown simulation requires subprocess control outside this framework",
+            timing_ms=0,
         )
 
         # ── F-68: zero-parameter call → vault root listing ────────────────────
@@ -294,34 +293,36 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-86: zero-param call summary line contains 'in /.' ───────────────
+        # ── F-86: show="all" default returns mixed content (dirs + files) ────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault")
+        result = ctx.client.call_tool("list_vault", path=base_dir)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f86 = result.ok and "in /." in result.text
+        has_dir_entry = "| directory |" in result.text
+        has_file_entry = "top.md" in result.text
+        passed_f86 = result.ok and has_dir_entry and has_file_entry
 
         run.step(
-            label="F-86: zero-param call summary line shows 'in /.'",
+            label="F-86: show='all' default returns mixed content (directory entry AND file entry)",
             passed=passed_f86,
-            detail=f"ok={result.ok} has_root_summary={'in /.' in result.text} | {result.text[:300]}",
+            detail=f"ok={result.ok} has_dir={has_dir_entry} has_file={has_file_entry} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-87: path-specific call summary contains 'in {base_dir}/.' ───────
+        # ── F-87: untracked .md file triggers trailing untracked-files note ─────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("list_vault", path=base_dir)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        expected_summary_path = f"in {base_dir}/."
-        passed_f87 = result.ok and expected_summary_path in result.text
+        has_untracked_note = "untracked file" in result.text.lower()
+        passed_f87 = result.ok and has_untracked_note
 
         run.step(
-            label=f"F-87: path listing summary shows 'in {base_dir}/.'",
+            label="F-87: untracked .md file causes response to include untracked-files note",
             passed=passed_f87,
-            detail=f"ok={result.ok} has_summary={expected_summary_path in result.text} | {result.text[-200:]}",
+            detail=f"ok={result.ok} has_untracked_note={has_untracked_note} | {result.text[-300:]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -344,49 +345,72 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-89: limit=1 with multiple entries → truncation notice ──────────
+        # ── F-89: date_field="created" filters on creation timestamp ─────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, limit=1)
+        result_recent = ctx.client.call_tool(
+            "list_vault", path=base_dir, show="files", recursive=True,
+            date_field="created", after="1d",
+        )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f89 = result.ok and "truncated" in result.text.lower()
+        recent_has_top = result_recent.ok and "top.md" in result_recent.text
+
+        log_mark2 = ctx.server.log_position if ctx.server else 0
+        result_future = ctx.client.call_tool(
+            "list_vault", path=base_dir, show="files", recursive=True,
+            date_field="created", after="2030-01-01",
+        )
+        step_logs2 = ctx.server.logs_since(log_mark2) if ctx.server else None
+
+        future_no_top = result_future.ok and "top.md" not in result_future.text
+        passed_f89 = recent_has_top and future_no_top
 
         run.step(
-            label="F-89: limit=1 with multiple entries shows truncation notice",
+            label="F-89: date_field='created' filters on creation timestamp (after=1d includes; after=2030-01-01 excludes)",
             passed=passed_f89,
-            detail=f"ok={result.ok} truncated={'truncated' in result.text.lower()} | {result.text[:300]}",
-            timing_ms=result.timing_ms,
-            tool_result=result,
+            detail=(
+                f"recent_ok={result_recent.ok} recent_has_top={recent_has_top} "
+                f"future_ok={result_future.ok} future_no_top={future_no_top} | "
+                f"recent={result_recent.text[:150]} | future={result_future.text[:100]}"
+            ),
+            timing_ms=result_recent.timing_ms + result_future.timing_ms,
+            tool_result=result_recent,
             server_logs=step_logs,
         )
 
-        # ── F-90: uppercase extension → case-insensitive match ────────────────
+        # ── F-90: extensions=[".md", ".txt"] → both types appear; dirs unaffected
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, show="files", extensions=[".MD"])
+        result = ctx.client.call_tool(
+            "list_vault", path=base_dir, recursive=False,
+            extensions=[".md", ".txt"],
+        )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f90 = result.ok and "top.md" in result.text
+        has_md = "top.md" in result.text
+        has_txt = "untracked.txt" in result.text
+        has_dir = "| directory |" in result.text
+        passed_f90 = result.ok and has_md and has_txt and has_dir
 
         run.step(
-            label="F-90: uppercase extension .MD matches lowercase .md files (case-insensitive)",
+            label="F-90: extensions=['.md', '.txt'] shows .md files, .txt files, AND directory entries",
             passed=passed_f90,
-            detail=f"ok={result.ok} top_md_found={'top.md' in result.text} | {result.text[:200]}",
+            detail=f"ok={result.ok} has_md={has_md} has_txt={has_txt} has_dir={has_dir} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-91: date_field='created' → sorted listing succeeds ─────────────
+        # ── F-91: path traversal → isError: true ──────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, show="files", recursive=True, date_field="created")
+        result = ctx.client.call_tool("list_vault", path="../../etc")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f91 = result.ok
+        passed_f91 = not result.ok
 
         run.step(
-            label="F-91: date_field=created returns sorted listing without error",
+            label="F-91: path='../../etc' (traversal) returns isError=true",
             passed=passed_f91,
-            detail=f"ok={result.ok} | {result.text[:200]}",
+            detail=f"ok={result.ok} (expected False) | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

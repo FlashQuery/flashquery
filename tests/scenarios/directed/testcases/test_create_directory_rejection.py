@@ -297,12 +297,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("create_directory", paths=123)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f47 = not result.ok  # Zod will reject; exact text may vary
+        has_validation_error = any(kw in result.text.lower() for kw in ["invalid", "type", "expected", "array", "must be", "string"])
+        passed_f47 = not result.ok and has_validation_error
 
         run.step(
             label="F-47: type error (number in paths) is rejected by Zod schema",
             passed=passed_f47,
-            detail=f"ok={result.ok} | {result.text[:200]}",
+            detail=f"ok={result.ok} | has_validation_error={has_validation_error} | {result.text[:200]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

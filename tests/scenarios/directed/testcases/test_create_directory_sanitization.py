@@ -94,16 +94,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # Both illegal chars sanitized → dir becomes "foo  bar" → after collapse → "foo bar"
         sanitized_dir_exists = ctx.vault._abs(f"{base_dir}/foo  bar").is_dir() or ctx.vault._abs(f"{base_dir}/foo bar").is_dir()
-        # Response must mention both replaced chars — replacedChars joined as ":|"
-        colon_reported = '":" replaced' in result.text or 'replaced ":"' in result.text or '":"' in result.text or ':|' in result.text
-        pipe_reported = '"|" replaced' in result.text or 'replaced "|"' in result.text or '"|"' in result.text or ':|' in result.text
-        replaced_both = colon_reported and pipe_reported
-        passed_f34 = result.ok and sanitized_dir_exists and replaced_both
+        # Response must explicitly say "replaced" — ':|' alone is insufficient because the original
+        # path "foo:|bar" echoes back in the "sanitized from" clause, making ':|' always present.
+        replaced_reported = "replaced" in result.text
+        passed_f34 = result.ok and sanitized_dir_exists and replaced_reported
 
         run.step(
             label="F-34: multiple illegal chars in one segment — response reports all replacements",
             passed=passed_f34,
-            detail=f"dir_exists={sanitized_dir_exists} colon_reported={colon_reported} pipe_reported={pipe_reported} | ok={result.ok} | {result.text[:300]}",
+            detail=f"dir_exists={sanitized_dir_exists} replaced_reported={replaced_reported} | ok={result.ok} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

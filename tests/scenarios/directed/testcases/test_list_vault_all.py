@@ -66,6 +66,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if m:
             ctx.cleanup.track_mcp_document(m.group(1).strip())
 
+        # Create a .txt file directly so F-61 can verify extensions filter excludes it
+        txt_abs = ctx.vault._abs(f"{base_dir}/notes.txt")
+        txt_abs.write_text(f"plain text note for {run.run_id}\n")
+        ctx.cleanup.track_file(f"{base_dir}/notes.txt")
+
         # ── F-59: show=all → both directories and file appear ────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("list_vault", path=base_dir, show="all")
@@ -116,12 +121,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # Extensions filter applies to files only; directories always appear
         has_projects = "Projects/" in result.text
         has_readme = "readme.md" in result.text
-        passed_f61 = result.ok and has_projects and has_readme
+        txt_absent = "notes.txt" not in result.text
+        passed_f61 = result.ok and has_projects and has_readme and txt_absent
 
         run.step(
-            label="F-61: show=all with extensions filter — directories still appear",
+            label="F-61: show=all with extensions=[.md] — directories appear, .md appears, .txt excluded",
             passed=passed_f61,
-            detail=f"ok={result.ok} has_projects={has_projects} has_readme={has_readme} | {result.text[:300]}",
+            detail=f"ok={result.ok} has_projects={has_projects} has_readme={has_readme} txt_absent={txt_absent} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
