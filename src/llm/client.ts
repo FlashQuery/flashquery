@@ -94,7 +94,7 @@ function nodeFetch(input: string, init?: RequestInit): Promise<Response> {
 
     // AbortSignal support — reject the promise and destroy the request when the signal fires
     if (init?.signal) {
-      const signal = init.signal as AbortSignal;
+      const signal = init.signal;
       const abortErr = Object.assign(new Error('Aborted'), { name: 'AbortError' });
       if (signal.aborted) {
         reject(abortErr);
@@ -185,11 +185,13 @@ export class OpenAICompatibleLlmClient implements LlmClient {
         const name = (err as { name?: string }).name;
         if (name === 'AbortError') {
           throw new Error(
-            `LLM error: ${provider.name} request exceeded ${timeoutMs}ms timeout.`
+            `LLM error: ${provider.name} request exceeded ${timeoutMs}ms timeout.`,
+            { cause: err }
           );
         }
         throw new Error(
-          `LLM error: Could not reach ${provider.name} API. Check your internet connection.`
+          `LLM error: Could not reach ${provider.name} API. Check your internet connection.`,
+          { cause: err }
         );
       }
 
