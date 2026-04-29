@@ -25,6 +25,19 @@ vi.mock('../../src/storage/supabase.js', () => ({
   },
 }));
 
+// llm/client.js mock — expose a mutable llmClient so tests can swap implementations
+// The mocked module re-exports NullLlmClient for the instanceof check to work.
+let _llmClientValue: LlmClient | undefined = undefined;
+vi.mock('../../src/llm/client.js', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../src/llm/client.js')>();
+  return {
+    ...original,
+    get llmClient() {
+      return _llmClientValue;
+    },
+  };
+});
+
 // ─── Test fixtures ──────────────────────────────────────────────────────────
 
 const TEST_LLM_CONFIG = {
@@ -56,6 +69,7 @@ const SAMPLE_RESULT: LlmCompletionResult = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  _llmClientValue = undefined;
   insertMock.mockResolvedValue({ error: null });
   selectEqEqMock.mockResolvedValue({ data: [], error: null });
 });
@@ -88,10 +102,8 @@ describe('computeCost (U-29)', () => {
 
 describe('call_model handler — unconfigured detection (U-30)', () => {
   it('U-30: when llmClient is a NullLlmClient instance, handler returns isError:true with "LLM is not configured. Add an llm: section to flashquery.yml to use this tool."', async () => {
-    // Inject NullLlmClient as the active client.
-    const clientMod = await import('../../src/llm/client.js');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (clientMod as any).llmClient = new NullLlmClient();
+    // Set active client to NullLlmClient via the module-level variable
+    _llmClientValue = new NullLlmClient();
 
     // Use a registerTool spy to capture the registered handler.
     const handlers = new Map<string, (params: unknown) => Promise<{ isError?: boolean; content: Array<{ text: string }> }>>();
@@ -129,9 +141,7 @@ describe('call_model handler — trace_id envelope shape (U-31)', () => {
       completeByPurpose: vi.fn().mockResolvedValue({ ...SAMPLE_RESULT, purposeName: 'general', fallbackPosition: 1 }),
       getModelForPurpose: vi.fn().mockReturnValue({ modelName: 'fast', providerName: 'openai', config: TEST_LLM_CONFIG.models[0] }),
     };
-    const clientMod = await import('../../src/llm/client.js');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (clientMod as any).llmClient = workingClient;
+    _llmClientValue = workingClient;
 
     const handlers = new Map<string, (params: unknown) => Promise<{ isError?: boolean; content: Array<{ text: string }> }>>();
     const fakeServer = {
@@ -167,9 +177,7 @@ describe('call_model handler — trace_id envelope shape (U-31)', () => {
       completeByPurpose: vi.fn().mockResolvedValue({ ...SAMPLE_RESULT, purposeName: 'general', fallbackPosition: 1 }),
       getModelForPurpose: vi.fn().mockReturnValue({ modelName: 'fast', providerName: 'openai', config: TEST_LLM_CONFIG.models[0] }),
     };
-    const clientMod = await import('../../src/llm/client.js');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (clientMod as any).llmClient = workingClient;
+    _llmClientValue = workingClient;
 
     const handlers = new Map<string, (params: unknown) => Promise<{ isError?: boolean; content: Array<{ text: string }> }>>();
     const fakeServer = {
@@ -201,9 +209,7 @@ describe('call_model handler — trace_id envelope shape (U-31)', () => {
       completeByPurpose: vi.fn().mockResolvedValue({ ...SAMPLE_RESULT, purposeName: 'general', fallbackPosition: 1 }),
       getModelForPurpose: vi.fn().mockReturnValue({ modelName: 'fast', providerName: 'openai', config: TEST_LLM_CONFIG.models[0] }),
     };
-    const clientMod = await import('../../src/llm/client.js');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (clientMod as any).llmClient = workingClient;
+    _llmClientValue = workingClient;
 
     const handlers = new Map<string, (params: unknown) => Promise<{ isError?: boolean; content: Array<{ text: string }> }>>();
     const fakeServer = {
