@@ -21,7 +21,7 @@ import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { supabaseManager } from '../../storage/supabase.js';
-import { llmClient, NullLlmClient, type ChatMessage, type LlmCompletionResult } from '../../llm/client.js';
+import { llmClient, NullLlmClient, type LlmCompletionResult } from '../../llm/client.js';
 import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
 
@@ -126,7 +126,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         if (params.resolver === 'model') {
           result = await client.complete(
             params.name,
-            params.messages as ChatMessage[],
+            params.messages,
             params.parameters,
             params.trace_id ?? null
           );
@@ -134,7 +134,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         } else {
           const purposeResult = await client.completeByPurpose(
             params.name,
-            params.messages as ChatMessage[],
+            params.messages,
             params.parameters,
             params.trace_id ?? null
           );
