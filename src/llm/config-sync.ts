@@ -47,6 +47,20 @@ export async function syncLlmConfigToDb(config: FlashQueryConfig): Promise<void>
       if (error) throw new Error(`LLM sync: delete fqc_llm_purpose_models failed: ${error.message}`);
     }
   }
+  // Also delete purpose_models rows whose model_name refers to any YAML-sourced model,
+  // regardless of whether the purpose itself is yaml- or webapp-managed. This prevents
+  // dangling FK references after the YAML models are deleted below (CR-02).
+  {
+    const yamlModelNames = config.llm.models.map((m) => m.name);
+    if (yamlModelNames.length > 0) {
+      const { error } = await client
+        .from('fqc_llm_purpose_models')
+        .delete()
+        .eq('instance_id', instanceId)
+        .in('model_name', yamlModelNames);
+      if (error) throw new Error(`LLM sync: delete fqc_llm_purpose_models (by model) failed: ${error.message}`);
+    }
+  }
   // Delete all source: 'yaml' rows for each config table (purposes/models/providers)
   for (const table of ['fqc_llm_purposes', 'fqc_llm_models', 'fqc_llm_providers'] as const) {
     const { error } = await client
