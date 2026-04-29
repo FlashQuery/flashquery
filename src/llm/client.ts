@@ -2,6 +2,7 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { logger } from '../logging/logger.js';
+import { syncLlmConfigToDb } from './config-sync.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -256,12 +257,29 @@ export class NullLlmClient implements LlmClient {
 export let llmClient: LlmClient;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// initLlm — Plan 01 stub. Plan 02 replaces this with the real implementation
-// that creates OpenAICompatibleLlmClient or NullLlmClient and calls
-// syncLlmConfigToDb() (D-02, D-03).
+// initLlm — top-level LLM initialization (D-02, D-03)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// eslint-disable-next-line @typescript-eslint/require-await
-export async function initLlm(_config: FlashQueryConfig): Promise<void> {
-  throw new Error('initLlm not yet implemented — Plan 02 wires this.');
+/**
+ * Top-level LLM initialization. Called once at startup from src/index.ts
+ * after initEmbedding(). Assigns the module-level `llmClient` singleton
+ * to either a NullLlmClient (when no llm: section configured — CONF-05)
+ * or an OpenAICompatibleLlmClient (when configured), then syncs the
+ * three-layer config to Supabase.
+ *
+ * Exact log messages are part of the contract — L-03 directed scenario
+ * asserts on the substrings "N provider(s), M purpose(s)" and
+ * "not configured" via the FQC ready banner.
+ */
+export async function initLlm(config: FlashQueryConfig): Promise<void> {
+  if (!config.llm) {
+    llmClient = new NullLlmClient();
+    logger.info('LLM: not configured');
+    return;
+  }
+  llmClient = new OpenAICompatibleLlmClient(config.llm);
+  await syncLlmConfigToDb(config);
+  logger.info(
+    `LLM: ${config.llm.providers.length} provider(s), ${config.llm.purposes.length} purpose(s) configured`
+  );
 }
