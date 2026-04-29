@@ -1,26 +1,18 @@
 /**
- * call_model MCP tool — Phase 101.
+ * call_model MCP tool — Phase 101 (refactored in Phase 102).
  *
  * Registers `call_model` unconditionally so the tool always appears in the
  * MCP tool listing (TOOL-03). When `llm:` is not configured, the handler
  * returns a clean isError response via the `instanceof NullLlmClient` guard
  * (D-04). When configured, the handler dispatches to either
- * `llmClient.complete()` or `llmClient.completeByPurpose()` per `params.resolver`,
- * computes `cost_usd` from `config.llm.models[].costPerMillion`, writes one row
- * to `fqc_llm_usage` synchronously (D-01 — Phase 102 refactors to fire-and-forget),
- * and (when `trace_id` is provided) computes `trace_cumulative` by re-querying
- * the table for all rows with that trace_id (D-02 — insert FIRST so the current
- * call is counted in the totals).
+ * `llmClient.complete()` or `llmClient.completeByPurpose()` per `params.resolver`.
+ * Cost recording is now fire-and-forget in client.ts (D-03/D-06).
+ * trace_cumulative uses query-then-add-in-memory pattern (D-11).
  *
  * Error response variants (D-03):
  *   1. Unconfigured (NullLlmClient guard) — fixed string per requirement.
  *   2. Unknown model/purpose name — formatted with available names list.
  *   3. Chain exhausted (LlmFallbackError) — multi-line with indented attempt detail.
- *
- * Phase 102 will refactor:
- *   - Fire-and-forget DB write with SIGTERM drain (COST-03/04)
- *   - `_direct` sentinel for resolver === 'model' (COST-02)
- *   - Write-failure isolation
  */
 
 import { z } from 'zod';
@@ -31,20 +23,7 @@ import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { llmClient, NullLlmClient, type ChatMessage, type LlmCompletionResult } from '../../llm/client.js';
 import { LlmFallbackError } from '../../llm/resolver.js';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// computeCost — exported for unit testing (U-29).
-// Formula: (inputTokens * costPerMillion.input + outputTokens * costPerMillion.output) / 1_000_000
-// Returns 0 when both rates are 0 (free/local models — MOD-02).
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function computeCost(
-  inputTokens: number,
-  outputTokens: number,
-  costPerMillion: { input: number; output: number }
-): number {
-  return (inputTokens * costPerMillion.input + outputTokens * costPerMillion.output) / 1_000_000;
-}
+import { computeCost } from '../../llm/cost-tracker.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal types — handler-local response envelope shape.
@@ -112,7 +91,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         trace_id: z
           .string()
           .optional()
-          .describe('Optional trace correlation ID. Recorded in fqc_llm_usage and echoed in response with cumulative stats.'),
+          .describe('Optional trace correlation ID. Recorded in the LLM usage table and echoed in response with cumulative stats.'),
       },
     },
     async (params) => {
@@ -145,13 +124,19 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
 
       try {
         if (params.resolver === 'model') {
-          result = await client.complete(params.name, params.messages as ChatMessage[], params.parameters);
+          result = await client.complete(
+            params.name,
+            params.messages as ChatMessage[],
+            params.parameters,
+            params.trace_id ?? null
+          );
           fallbackPosition = null; // explicit null per TOOL-02 / Pitfall 2
         } else {
           const purposeResult = await client.completeByPurpose(
             params.name,
             params.messages as ChatMessage[],
-            params.parameters
+            params.parameters,
+            params.trace_id ?? null
           );
           result = purposeResult;
           fallbackPosition = purposeResult.fallbackPosition; // 1-indexed (Phase 100 D-06)
@@ -196,61 +181,41 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         ? computeCost(result.inputTokens, result.outputTokens, modelConfig.costPerMillion)
         : 0;
 
-      // Step 4: Synchronous fqc_llm_usage insert (D-01 — Phase 102 refactors to fire-and-forget)
-      // Phase 101 writes params.name as purpose_name for both resolvers; Phase 102 introduces _direct sentinel.
+      // Step 4: trace_cumulative (TOOL-05) — D-11 query-then-add-in-memory pattern.
+      // The fire-and-forget recordLlmUsage in client.ts may not have committed yet,
+      // so query existing rows and ALWAYS add the current call's data in-memory.
       const supabase = supabaseManager.getClient();
-      await supabase.from('fqc_llm_usage').insert({
-        instance_id: config.instance.id,
-        purpose_name: params.name,
-        model_name: result.modelName,
-        provider_name: result.providerName,
-        input_tokens: result.inputTokens,
-        output_tokens: result.outputTokens,
-        cost_usd: costUsd,
-        latency_ms: result.latencyMs,
-        fallback_position: fallbackPosition,
-        trace_id: params.trace_id ?? null,
-      });
-
-      // Step 5: trace_cumulative (TOOL-05 / D-02) — query AFTER insert so current row is counted
       let traceCumulative: TraceCumulative | undefined;
       if (params.trace_id) {
-        const { data: traceRows } = await supabase
-          .from('fqc_llm_usage')
-          .select('input_tokens, output_tokens, cost_usd, latency_ms')
-          .eq('instance_id', config.instance.id)
-          .eq('trace_id', params.trace_id);
+        try {
+          const { data: traceRows } = await supabase
+            .from('fqc_llm_usage')
+            .select('input_tokens, output_tokens, cost_usd, latency_ms')
+            .eq('instance_id', config.instance.id)
+            .eq('trace_id', params.trace_id);
 
-        const rows = traceRows ?? [];
-
-        // If the select did not return the just-inserted row (mock or eventual-consistency case),
-        // additively include the current call's data so total_calls >= 1 (D-02 correctness).
-        const selectIncludesCurrent =
-          rows.some(
-            (r) =>
-              Number(r.latency_ms) === result.latencyMs &&
-              Number(r.input_tokens) === result.inputTokens &&
-              Number(r.output_tokens) === result.outputTokens
+          const rows = traceRows ?? [];
+          traceCumulative = {
+            total_calls: rows.length + 1,
+            total_tokens: {
+              input:
+                rows.reduce((s, r) => s + Number(r.input_tokens ?? 0), 0) + result.inputTokens,
+              output:
+                rows.reduce((s, r) => s + Number(r.output_tokens ?? 0), 0) + result.outputTokens,
+            },
+            total_cost_usd:
+              rows.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0) + costUsd,
+            total_latency_ms:
+              rows.reduce((s, r) => s + Number(r.latency_ms ?? 0), 0) + result.latencyMs,
+          };
+        } catch (err: unknown) {
+          logger.warn(
+            `trace_cumulative query failed; omitting from envelope: ${err instanceof Error ? err.message : String(err)}`
           );
-
-        const currentCallContribution = selectIncludesCurrent ? 0 : 1;
-        const currentTokensIn = selectIncludesCurrent ? 0 : result.inputTokens;
-        const currentTokensOut = selectIncludesCurrent ? 0 : result.outputTokens;
-        const currentCost = selectIncludesCurrent ? 0 : costUsd;
-        const currentLatency = selectIncludesCurrent ? 0 : result.latencyMs;
-
-        traceCumulative = {
-          total_calls: rows.length + currentCallContribution,
-          total_tokens: {
-            input: rows.reduce((s, r) => s + Number(r.input_tokens ?? 0), 0) + currentTokensIn,
-            output: rows.reduce((s, r) => s + Number(r.output_tokens ?? 0), 0) + currentTokensOut,
-          },
-          total_cost_usd: rows.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0) + currentCost,
-          total_latency_ms: rows.reduce((s, r) => s + Number(r.latency_ms ?? 0), 0) + currentLatency,
-        };
+        }
       }
 
-      // Step 6: Build response envelope (TOOL-02 / D-02 conditional fields)
+      // Step 5: Build response envelope (TOOL-02 / D-02 conditional fields)
       const metadata: CallModelMetadata = {
         resolver: params.resolver,
         name: params.name,
