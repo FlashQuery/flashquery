@@ -103,9 +103,15 @@ function sleep(ms: number): Promise<void> {
 }
 
 export async function drainCostWrites(timeoutMs: number): Promise<void> {
-  if (_pendingWrites.size === 0) return;
-  await Promise.race([
-    Promise.allSettled([..._pendingWrites]),
-    sleep(timeoutMs),
-  ]);
+  const deadline = Date.now() + timeoutMs;
+  // Loop until all in-flight writes settle or deadline is reached.
+  // Re-snapshotting on each iteration ensures writes added after the initial
+  // snapshot (e.g. by an in-flight handler that fires after the first pass) are
+  // also observed before the process exits.
+  while (_pendingWrites.size > 0 && Date.now() < deadline) {
+    await Promise.race([
+      Promise.allSettled([..._pendingWrites]),
+      sleep(Math.min(200, deadline - Date.now())),
+    ]);
+  }
 }
