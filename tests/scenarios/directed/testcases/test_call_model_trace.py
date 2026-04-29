@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
-from fqc_test_utils import TestContext, TestRun, FQCServer  # noqa: E402
-from fqc_client import _find_project_dir, _load_env_file  # noqa: E402
+from fqc_test_utils import TestRun, FQCServer  # noqa: E402
+from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_call_model_trace"
 COVERAGE = ["L-14", "L-15"]
@@ -90,19 +90,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
         os.environ["OPENAI_API_KEY"] = env.get("OPENAI_API_KEY") or "sk-test-placeholder"
     try:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
-            ctx = TestContext(server)
+            client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
 
             # L-14: First call with trace_id — envelope echoes trace_id, total_calls == 1
-            result_1 = ctx.client.call_tool("call_model", {
+            result_1 = client.call_tool("call_model", **{
                 "resolver": "model",
                 "name": "fast",
                 "messages": [{"role": "user", "content": "What is 1+1?"}],
                 "trace_id": TRACE_ID,
             })
             first_input_tokens = None
-            if result_1 and not result_1.get("isError") and result_1.get("content"):
+            if result_1 and result_1.ok:
                 try:
-                    envelope_1 = json.loads(result_1["content"][0]["text"])
+                    envelope_1 = json.loads(result_1.text)
                     meta_1 = envelope_1.get("metadata", {})
                     cumulative_1 = meta_1.get("trace_cumulative", {})
                     total_calls_1 = cumulative_1.get("total_calls", 0)
@@ -129,15 +129,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 )
 
             # L-15: Second call with same trace_id — total_calls == 2, cumulative tokens grow
-            result_2 = ctx.client.call_tool("call_model", {
+            result_2 = client.call_tool("call_model", **{
                 "resolver": "model",
                 "name": "fast",
                 "messages": [{"role": "user", "content": "What is 2+2?"}],
                 "trace_id": TRACE_ID,
             })
-            if result_2 and not result_2.get("isError") and result_2.get("content"):
+            if result_2 and result_2.ok:
                 try:
-                    envelope_2 = json.loads(result_2["content"][0]["text"])
+                    envelope_2 = json.loads(result_2.text)
                     meta_2 = envelope_2.get("metadata", {})
                     cumulative_2 = meta_2.get("trace_cumulative", {})
                     total_calls_2 = cumulative_2.get("total_calls", 0)

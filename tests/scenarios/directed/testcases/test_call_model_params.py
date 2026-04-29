@@ -19,8 +19,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
-from fqc_test_utils import TestContext, TestRun, FQCServer  # noqa: E402
-from fqc_client import _find_project_dir, _load_env_file  # noqa: E402
+from fqc_test_utils import TestRun, FQCServer  # noqa: E402
+from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_call_model_params"
 COVERAGE = ["L-07", "L-08"]
@@ -87,12 +87,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         os.environ["OPENAI_API_KEY"] = env.get("OPENAI_API_KEY") or "sk-test-placeholder"
     try:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
-            ctx = TestContext(server)
+            client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
 
             # L-07: caller parameters.temperature=0.1 overrides purpose defaults (0.7)
             # The purpose "general" has defaults: {temperature: 0.7}. Caller passes temperature=0.1.
             # Verification: call succeeds end-to-end (deeper param verification is unit-test level).
-            result_l07 = ctx.client.call_tool("call_model", {
+            result_l07 = client.call_tool("call_model", **{
                 "resolver": "purpose",
                 "name": "general",
                 "messages": [{"role": "user", "content": "Say hello"}],
@@ -100,12 +100,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
             })
             run.step(
                 label="L-07: resolver=purpose with parameters.temperature=0.1 override succeeds end-to-end",
-                passed=bool(result_l07 and not result_l07.get("isError")),
+                passed=bool(result_l07 and result_l07.ok),
                 detail=str(result_l07)[:500],
             )
 
             # L-08: messages array with system/user roles relayed correctly
-            result_l08 = ctx.client.call_tool("call_model", {
+            result_l08 = client.call_tool("call_model", **{
                 "resolver": "model",
                 "name": "fast",
                 "messages": [
@@ -115,7 +115,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             })
             run.step(
                 label="L-08: messages array with system/user roles accepted and call succeeds",
-                passed=bool(result_l08 and not result_l08.get("isError")),
+                passed=bool(result_l08 and result_l08.ok),
                 detail=str(result_l08)[:500],
             )
 

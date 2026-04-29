@@ -617,6 +617,10 @@ def run_yaml_test(
     variables: dict[str, dict] = {}  # variable registry: name → {field: value}
     cleanup_errors: list[str] = []   # populated after TestContext exits
 
+    # extra_config from YAML lets individual tests inject llm:, etc. into the
+    # managed server config without requiring a separate server invocation.
+    yaml_extra_config: dict | None = test_def.get("extra_config") or None
+
     try:
         with TestContext(
             test_prefix="_integration",
@@ -629,6 +633,7 @@ def run_yaml_test(
             require_embedding=require_embedding,
             enable_git=getattr(args, "enable_git", False),
             enable_locking=getattr(args, "enable_locking", False),
+            extra_config=yaml_extra_config,
         ) as ctx:
 
             for i, step in enumerate(test_def.get("steps", []), start=1):

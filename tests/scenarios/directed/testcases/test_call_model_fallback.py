@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
-from fqc_test_utils import TestContext, TestRun, FQCServer  # noqa: E402
-from fqc_client import _find_project_dir, _load_env_file  # noqa: E402
+from fqc_test_utils import TestRun, FQCServer  # noqa: E402
+from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_call_model_fallback"
 COVERAGE = ["L-11", "L-12"]
@@ -88,18 +88,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
         os.environ["OPENAI_API_KEY"] = env.get("OPENAI_API_KEY") or "sk-test-placeholder"
     try:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
-            ctx = TestContext(server)
+            client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
 
             # L-11: resolver=purpose with_fallback — broken-primary fails, fast succeeds at position 2
-            result_l11 = ctx.client.call_tool("call_model", {
+            result_l11 = client.call_tool("call_model", **{
                 "resolver": "purpose",
                 "name": "with_fallback",
                 "messages": [{"role": "user", "content": "Say hello"}],
             })
-            passed_l11_basic = bool(result_l11 and not result_l11.get("isError"))
-            if passed_l11_basic and result_l11 and result_l11.get("content"):
+            passed_l11_basic = bool(result_l11 and result_l11.ok)
+            if passed_l11_basic and result_l11:
                 try:
-                    envelope = json.loads(result_l11["content"][0]["text"])
+                    envelope = json.loads(result_l11.text)
                     fallback_pos = envelope.get("metadata", {}).get("fallback_position")
                     run.step(
                         label="L-11: with_fallback purpose — broken-primary fails, fast succeeds at fallback_position >= 2",
@@ -120,17 +120,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 )
 
             # L-12: resolver=purpose all_broken — all models fail, returns LlmFallbackError envelope
-            result_l12 = ctx.client.call_tool("call_model", {
+            result_l12 = client.call_tool("call_model", **{
                 "resolver": "purpose",
                 "name": "all_broken",
                 "messages": [{"role": "user", "content": "Say hello"}],
             })
-            text_l12 = (result_l12.get("content") or [{}])[0].get("text", "") if result_l12 else ""
+            text_l12 = result_l12.text if result_l12 else ""
             run.step(
                 label="L-12: all_broken purpose — isError:true with multi-line chain-exhausted error",
                 passed=bool(
                     result_l12
-                    and result_l12.get("isError") is True
+                    and not result_l12.ok
                     and "call_model failed: purpose 'all_broken'" in text_l12
                     and "models exhausted" in text_l12
                     and "[1] broken-primary" in text_l12

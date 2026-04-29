@@ -20,8 +20,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
-from fqc_test_utils import TestContext, TestRun, FQCServer  # noqa: E402
-from fqc_client import _find_project_dir, _load_env_file  # noqa: E402
+from fqc_test_utils import TestRun, FQCServer  # noqa: E402
+from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_call_model_by_model"
 COVERAGE = ["L-04", "L-06"]
@@ -88,15 +88,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         os.environ["OPENAI_API_KEY"] = env.get("OPENAI_API_KEY") or "sk-test-placeholder"
     try:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
-            ctx = TestContext(server)
+            client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
 
             # L-04: resolver=model with valid name returns non-error result
-            result = ctx.client.call_tool("call_model", {
+            result = client.call_tool("call_model", **{
                 "resolver": "model",
                 "name": "fast",
                 "messages": [{"role": "user", "content": "Say hello in one word"}],
             })
-            passed_l04 = bool(result and not result.get("isError"))
+            passed_l04 = bool(result and result.ok)
             run.step(
                 label="L-04: resolver=model returns isError:false with response text",
                 passed=passed_l04,
@@ -104,9 +104,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
 
             # L-06: envelope shape verification
-            if passed_l04 and result and result.get("content"):
+            if passed_l04 and result:
                 try:
-                    envelope = json.loads(result["content"][0]["text"])
+                    envelope = json.loads(result.text)
                     meta = envelope.get("metadata", {})
                     envelope_ok = (
                         meta.get("resolved_model_name") == "fast"

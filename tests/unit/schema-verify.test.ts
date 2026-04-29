@@ -62,7 +62,7 @@ describe('tableExists', () => {
 
     // Table name is passed as a parameterized argument, not interpolated into SQL
     const callArgs = mockQuery.mock.calls[0];
-    expect(callArgs[0]).toContain("to_regclass(format('public.%I', $1))");
+    expect(callArgs[0]).toContain("to_regclass(format('public.%I', $1::text))");
     expect(callArgs[0]).toContain('IS NOT NULL');
     expect(callArgs[1]).toEqual(['fqc_vault']);
   });
