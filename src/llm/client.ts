@@ -5,6 +5,34 @@ import { logger } from '../logging/logger.js';
 import { syncLlmConfigToDb } from './config-sync.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Typed error classes — D-02 (Phase 100)
+// LlmHttpError: thrown by complete() for any non-OK HTTP response.
+// LlmNetworkError: thrown by complete() for AbortError/connection-refused.
+// The classes carry no logic — error classification (permanent vs transient)
+// and 30,000ms cap on retryAfterMs are policy decisions made by the resolver
+// layer in src/llm/resolver.ts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class LlmHttpError extends Error {
+  readonly status: number;
+  readonly retryAfterMs?: number;
+
+  constructor(message: string, status: number, retryAfterMs?: number) {
+    super(message);
+    this.name = 'LlmHttpError';
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+export class LlmNetworkError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = 'LlmNetworkError';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -184,26 +212,44 @@ export class OpenAICompatibleLlmClient implements LlmClient {
       } catch (err: unknown) {
         const name = (err as { name?: string }).name;
         if (name === 'AbortError') {
-          throw new Error(
+          throw new LlmNetworkError(
             `LLM error: ${provider.name} request exceeded ${timeoutMs}ms timeout.`,
             { cause: err }
           );
         }
-        throw new Error(
+        // Re-throw if already a typed error (e.g., from nested catch — defensive)
+        if (err instanceof LlmHttpError || err instanceof LlmNetworkError) {
+          throw err;
+        }
+        throw new LlmNetworkError(
           `LLM error: Could not reach ${provider.name} API. Check your internet connection.`,
           { cause: err }
         );
       }
 
       if (!response.ok) {
+        // D-04: Parse Retry-After header for 429 responses (in seconds; convert to ms).
+        // The 30,000ms cap is NOT applied here — that is resolver-layer policy.
+        const retryAfterHeader = response.headers.get('Retry-After');
+        let retryAfterMs: number | undefined;
+        if (retryAfterHeader) {
+          const seconds = parseInt(retryAfterHeader, 10);
+          if (!isNaN(seconds) && seconds >= 0) {
+            retryAfterMs = seconds * 1000;
+          }
+        }
+
         if (response.status === 401) {
-          throw new Error(
-            `LLM error: ${provider.name} API returned 401 Unauthorized. Check the API key in flashquery.yml.`
+          throw new LlmHttpError(
+            `LLM error: ${provider.name} API returned 401 Unauthorized. Check the API key in flashquery.yml.`,
+            401
           );
         }
         if (response.status === 429) {
-          throw new Error(
-            `LLM error: ${provider.name} rate limit exceeded. Wait and retry.`
+          throw new LlmHttpError(
+            `LLM error: ${provider.name} rate limit exceeded. Wait and retry.`,
+            429,
+            retryAfterMs
           );
         }
         let errorDetail = '';
@@ -212,8 +258,9 @@ export class OpenAICompatibleLlmClient implements LlmClient {
         } catch {
           /* ignore */
         }
-        throw new Error(
-          `LLM error: ${provider.name} API returned ${response.status}. ${errorDetail}`.trim()
+        throw new LlmHttpError(
+          `LLM error: ${provider.name} API returned ${response.status}. ${errorDetail}`.trim(),
+          response.status
         );
       }
 

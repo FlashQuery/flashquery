@@ -4,9 +4,7 @@ import {
   NullLlmClient,
   initLlm,
   mergeParameters,
-  // @ts-expect-error -- Plan 100-01 will export LlmHttpError from client.ts
   LlmHttpError,
-  // @ts-expect-error -- Plan 100-01 will export LlmNetworkError from client.ts
   LlmNetworkError,
   type ChatMessage,
   type LlmCompletionResult,
