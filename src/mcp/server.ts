@@ -18,6 +18,7 @@ import { registerCompoundTools } from './tools/compound.js';
 import { registerScanTools } from './tools/scan.js';
 import { registerPendingReviewTools } from './tools/pending-review.js';
 import { registerFileTools } from './tools/files.js';
+import { registerLlmTools } from './tools/llm.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 
 // ── HTTP Error Code and Message Mapping (D-04) ──
@@ -451,6 +452,7 @@ function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
   registerScanTools(server, config);
   registerPendingReviewTools(server, config);
   registerFileTools(server, config);
+  registerLlmTools(server, config);
   return server;
 }
 
