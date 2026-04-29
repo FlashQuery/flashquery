@@ -142,7 +142,7 @@ class FQCServer:
     regardless of how the test exits.
     """
 
-    DEFAULT_READY_TIMEOUT = 15  # seconds
+    DEFAULT_READY_TIMEOUT = 60  # seconds — allow time for LLM config sync to remote Supabase
     DEFAULT_SHUTDOWN_TIMEOUT = 35  # 30s FQC grace + 5s buffer
 
     def __init__(
