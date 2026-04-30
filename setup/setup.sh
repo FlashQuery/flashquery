@@ -27,6 +27,7 @@
 #   EMBEDDING_PROVIDER=openai
 #   EMBEDDING_MODEL=text-embedding-3-small
 #   EMBEDDING_API_KEY=sk-...
+#   OPENAI_API_KEY=sk-...
 #   LOG_LEVEL=info
 # ============================================================================
 
@@ -299,6 +300,7 @@ load_env_keys ".env" \
   SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY DATABASE_URL \
   INSTANCE_NAME INSTANCE_ID VAULT_PATH \
   EMBEDDING_PROVIDER EMBEDDING_API_KEY EMBEDDING_MODEL OLLAMA_URL \
+  OPENAI_API_KEY \
   MCP_AUTH_SECRET LOG_LEVEL NODE_ENV
 load_env_keys "docker/.env.docker" \
   POSTGRES_PASSWORD SUPABASE_JWT_SECRET SUPABASE_ANON_KEY LOG_PATH
@@ -315,6 +317,7 @@ if [ -n "$ANSWERS_FILE" ]; then
     SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY DATABASE_URL \
     INSTANCE_NAME INSTANCE_ID VAULT_PATH \
     EMBEDDING_PROVIDER EMBEDDING_API_KEY EMBEDDING_MODEL OLLAMA_URL \
+    OPENAI_API_KEY \
     LOG_LEVEL NODE_ENV
   printf "%b[non-interactive] Using answers file: %s%b\n" "$CYAN" "$ANSWERS_FILE" "$RESET"
 fi
@@ -471,6 +474,27 @@ else
   fi
 fi
 
+# ─── Step 4b: LLM provider key ───────────────────────────────────────────────
+# flashquery.yml ships with the llm: section enabled and OpenAI as the default
+# LLM provider (call_model, and future AI features like projections and
+# auto-tagging). OpenAI embedding users can reuse their embedding key — it is
+# synced automatically. Other providers need a separate OpenAI key here, or can
+# comment out the llm: section in flashquery.yml to disable LLM features.
+if [ "$EMBEDDING_PROVIDER" = "openai" ]; then
+  OPENAI_API_KEY="${EMBEDDING_API_KEY:-}"
+else
+  echo ""
+  echo "--- LLM Provider ---"
+  echo "flashquery.yml ships with OpenAI as the default LLM provider (call_model"
+  echo "and future AI features like projections and auto-tagging)."
+  echo "OpenRouter and Ollama are also supported — edit the llm: section in"
+  echo "flashquery.yml to use a different provider. The commented examples in"
+  echo "the file show how to configure each one."
+  echo "Leave blank if you plan to use a non-OpenAI provider or want to set"
+  echo "it up later."
+  prompt_with_default OPENAI_API_KEY "OpenAI API key (for LLM features)" "${OPENAI_API_KEY:-}"
+fi
+
 # ─── Step 5: Logging ─────────────────────────────────────────────────────────
 echo ""
 echo "--- Logging ---"
@@ -547,11 +571,14 @@ MCP_AUTH_SECRET=${MCP_AUTH_SECRET}
 # Required for disk-verify steps in the scenario test suite
 VAULT_PATH=${VAULT_PATH}
 
-# Required for embedding tests
+# Required for embedding tests AND LLM directed scenarios
 OPENAI_API_KEY=${TEST_OPENAI_API_KEY}
 
 # Optional — only needed for Ollama embedding tests
 OLLAMA_URL=${TEST_OLLAMA_URL}
+
+# Optional — only needed for multi-provider LLM directed scenarios
+# OPENROUTER_API_KEY=
 EOF
   ENV_TEST_WRITTEN=1
 fi
