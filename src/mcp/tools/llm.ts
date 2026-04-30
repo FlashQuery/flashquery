@@ -215,34 +215,41 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       // Step 4: trace_cumulative (TOOL-05) — D-11 query-then-add-in-memory pattern.
       // The fire-and-forget recordLlmUsage in client.ts may not have committed yet,
       // so query existing rows and ALWAYS add the current call's data in-memory.
-      const supabase = supabaseManager.getClient();
       let traceCumulative: TraceCumulative | undefined;
       if (params.trace_id) {
+        let supabase: ReturnType<typeof supabaseManager.getClient> | null = null;
         try {
-          const { data: traceRows } = await supabase
-            .from('fqc_llm_usage')
-            .select('input_tokens, output_tokens, cost_usd, latency_ms')
-            .eq('instance_id', config.instance.id)
-            .eq('trace_id', params.trace_id);
+          supabase = supabaseManager.getClient();
+        } catch {
+          // Supabase not configured — trace_cumulative silently omitted
+        }
+        if (supabase) {
+          try {
+            const { data: traceRows } = await supabase
+              .from('fqc_llm_usage')
+              .select('input_tokens, output_tokens, cost_usd, latency_ms')
+              .eq('instance_id', config.instance.id)
+              .eq('trace_id', params.trace_id);
 
-          const rows = traceRows ?? [];
-          traceCumulative = {
-            total_calls: rows.length + 1,
-            total_tokens: {
-              input:
-                rows.reduce((s, r) => s + Number(r.input_tokens ?? 0), 0) + result.inputTokens,
-              output:
-                rows.reduce((s, r) => s + Number(r.output_tokens ?? 0), 0) + result.outputTokens,
-            },
-            total_cost_usd:
-              rows.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0) + costUsd,
-            total_latency_ms:
-              rows.reduce((s, r) => s + Number(r.latency_ms ?? 0), 0) + result.latencyMs,
-          };
-        } catch (err: unknown) {
-          logger.warn(
-            `trace_cumulative query failed; omitting from envelope: ${err instanceof Error ? err.message : String(err)}`
-          );
+            const rows = traceRows ?? [];
+            traceCumulative = {
+              total_calls: rows.length + 1,
+              total_tokens: {
+                input:
+                  rows.reduce((s, r) => s + Number(r.input_tokens ?? 0), 0) + result.inputTokens,
+                output:
+                  rows.reduce((s, r) => s + Number(r.output_tokens ?? 0), 0) + result.outputTokens,
+              },
+              total_cost_usd:
+                rows.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0) + costUsd,
+              total_latency_ms:
+                rows.reduce((s, r) => s + Number(r.latency_ms ?? 0), 0) + result.latencyMs,
+            };
+          } catch (err: unknown) {
+            logger.warn(
+              `trace_cumulative query failed; omitting from envelope: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
         }
       }
 
