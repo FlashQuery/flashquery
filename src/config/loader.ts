@@ -673,7 +673,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // D-07 (Phase 104): when both `embedding:` and an `embedding` purpose are configured,
   // the purpose system takes precedence and the legacy `embedding:` section is deprecated.
   const embeddingPurposeDeprecationWarning =
-    config.embedding && config.llm?.purposes?.some(p => p.name === 'embedding')
+    config.embedding && config.embedding.provider !== 'none' && config.llm?.purposes?.some(p => p.name === 'embedding')
       ? "The 'embedding:' config section is deprecated when an 'embedding' purpose is defined in 'llm:'. " +
         "The purpose system takes precedence. Remove 'embedding:' from your config to silence this warning."
       : undefined;
