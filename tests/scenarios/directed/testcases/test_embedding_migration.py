@@ -97,8 +97,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
 
             # L-23 step 3: server log contains the routing-through-purpose marker
-            log_lines = server.read_log() if hasattr(server, "read_log") else ""
-            log_text = "\n".join(log_lines) if isinstance(log_lines, list) else str(log_lines)
+            log_lines = server.captured_logs
+            log_text = "\n".join(log_lines)
             routing_logged = "routing through purpose 'embedding'" in log_text
             run.step(
                 "embedding_routing_log_present",
@@ -120,7 +120,7 @@ def main() -> int:
         print("ERROR: --managed mode required", file=sys.stderr)
         return 3
     run = run_test(args)
-    return run.exit_code()
+    return run.exit_code
 
 
 if __name__ == "__main__":
