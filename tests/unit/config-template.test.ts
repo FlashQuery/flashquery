@@ -35,26 +35,52 @@ logging:
 `;
 
 /**
- * Extracts the commented `# llm:` block from a raw YAML string and returns it
- * with one leading `# ` (or `#`) prefix stripped per line, producing a valid
- * YAML fragment. Lines starting with `# # ` (double-commented sub-examples)
- * become `# ` after stripping one prefix, so YAML still treats them as
- * comments — this isolates the default shipping config from the extra examples.
+ * Extracts the LLM block from a raw YAML string and returns a valid YAML
+ * fragment that can be appended to BASE_CONFIG_YAML and parsed by loadConfig().
  *
- * Stops at the first blank line or any non-`#`-prefixed line after the block.
+ * Supports two template shapes:
+ *   - Legacy commented: `# llm:` heading — strips one "# " per line
+ *   - Active defaults (post-106): bare `llm:` heading — passes active lines
+ *     through verbatim; strips "# " from single-commented sub-examples so they
+ *     remain comments in the output (double-commented → stays commented after parse).
+ *
+ * Stops when a top-level YAML key (column-0, non-comment, non-llm) is encountered.
  */
 function extractCommentedLlmBlock(raw: string): string {
   const lines = raw.split('\n');
-  const startIdx = lines.findIndex(l => /^# llm:\s*$/.test(l));
-  if (startIdx === -1) throw new Error('# llm: header not found in template');
+  // Accept either `# llm:` (legacy commented) or `llm:` (post-106 active heading).
+  let startIdx = lines.findIndex(l => /^# llm:\s*$/.test(l));
+  let isCommented = startIdx !== -1;
+  if (!isCommented) {
+    startIdx = lines.findIndex(l => /^llm:\s*$/.test(l));
+  }
+  if (startIdx === -1) throw new Error('llm: header (commented or active) not found in template');
   const out: string[] = [];
   for (let i = startIdx; i < lines.length; i++) {
     const line = lines[i];
-    // Strip ONE leading "# " (preserving deeper "# " for sub-examples that should stay commented)
-    if (line.startsWith('# ')) out.push(line.slice(2));
-    else if (line === '#') out.push('');
-    else if (line.trim() === '') { out.push(''); break; } // blank line ends the block
-    else break;
+    if (isCommented) {
+      // Legacy mode: strip one leading "# " per line.
+      if (line.startsWith('# ')) out.push(line.slice(2));
+      else if (line === '#') out.push('');
+      else if (line.trim() === '') { out.push(''); break; }
+      else break;
+    } else {
+      // Active mode: pass through bare lines verbatim; strip "# " from sub-examples
+      // so that single-commented sub-examples become double-commented after parse
+      // (i.e., they remain comments and don't get included in the parsed config).
+      if (line.length === 0) {
+        // blank line — keep as a separator unless it ends the section
+        out.push('');
+      } else if (line.startsWith('#')) {
+        // Comment line — include verbatim so YAML treats it as a comment.
+        out.push(line);
+      } else if (/^\S/.test(line) && !/^llm:/.test(line) && i !== startIdx) {
+        // A new top-level YAML key (column 0, no leading space) ends the section.
+        break;
+      } else {
+        out.push(line);
+      }
+    }
   }
   return out.join('\n');
 }
@@ -72,8 +98,8 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     try {
       const config = loadConfig(tmpFile);
       expect(config.llm).toBeDefined();
-      // After 105-01: endpoint must include /v1 suffix (D-02). Current template has https://api.openai.com (missing /v1).
-      expect(config.llm?.providers[0].endpoint).toBe('https://api.openai.com/v1');
+      // After Phase 106 B-01 fix: endpoint is the BASE URL (no /v1 suffix); src/llm/client.ts appends /v1/chat/completions itself.
+      expect(config.llm?.providers[0].endpoint).toBe('https://api.openai.com');
     } finally {
       unlinkSync(tmpFile);
       if (prevKey === undefined) delete process.env['OPENAI_API_KEY'];
@@ -121,7 +147,7 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
       // commented after stripping — only the default openai provider is active.
       expect(config.llm?.providers).toHaveLength(1);
       expect(config.llm?.providers[0].name).toBe('openai');
-      expect(config.llm?.providers[0].endpoint).toBe('https://api.openai.com/v1');
+      expect(config.llm?.providers[0].endpoint).toBe('https://api.openai.com');
     } finally {
       unlinkSync(tmpFile);
       if (prevKey === undefined) delete process.env['OPENAI_API_KEY'];
