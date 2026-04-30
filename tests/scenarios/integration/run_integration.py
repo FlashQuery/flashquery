@@ -219,7 +219,7 @@ def _clean_test_tables(project_dir: Path) -> None:
 # Reuse the existing scenario test framework unchanged
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "framework"))
 
-from fqc_client import FQCClient, ToolResult, config_summary
+from fqc_client import FQCClient, ToolResult, _find_project_dir, _load_env_file, config_summary
 from fqc_test_utils import TestContext, TestRun, expectation_detail
 
 
@@ -228,10 +228,29 @@ from fqc_test_utils import TestContext, TestRun, expectation_detail
 # ---------------------------------------------------------------------------
 
 # Valid dep names, matching FQCServer optional capability flags
-_KNOWN_DEPS = {"embeddings", "git", "locking"}
+_KNOWN_DEPS = {"embeddings", "git", "locking", "llm"}
 
 # Substring FQC returns when a memory search is attempted without embeddings
 _NO_EMBEDDINGS_SIGNAL = "semantic embeddings"
+
+
+def _probe_llm(args: argparse.Namespace) -> bool:
+    """Check whether an LLM API key is available in .env.test.
+
+    Used for non-managed mode only — managed mode raises DepNotMet at startup
+    if the key is missing. Returns True (optimistic) if the project dir or key
+    cannot be determined.
+    """
+    try:
+        project_dir = (
+            Path(args.fqc_dir) if getattr(args, "fqc_dir", None) else _find_project_dir()
+        )
+        if not project_dir:
+            return True
+        env = _load_env_file(project_dir)
+        return bool(env.get("OPENAI_API_KEY"))
+    except Exception:
+        return True
 
 
 def _probe_embeddings(args: argparse.Namespace) -> bool:
@@ -598,6 +617,7 @@ def run_yaml_test(
     test_def: dict,
     args: argparse.Namespace,
     require_embedding: bool = False,
+    require_llm: bool = False,
 ) -> TestRun:  # noqa: C901
     """
     Execute a single YAML integration test definition.
@@ -631,6 +651,7 @@ def run_yaml_test(
             managed=args.managed,
             port_range=getattr(args, "port_range", None),
             require_embedding=require_embedding,
+            require_llm=require_llm,
             enable_git=getattr(args, "enable_git", False),
             enable_locking=getattr(args, "enable_locking", False),
             extra_config=yaml_extra_config,
@@ -674,8 +695,11 @@ def run_yaml_test(
         cleanup_errors = ctx.cleanup_errors
 
     except RuntimeError as e:
-        # Managed server couldn't start — check if it's a missing embedding key
+        # Managed server couldn't start — map missing-key errors to DepNotMet so
+        # the caller records a SKIP rather than a hard failure.
         msg = str(e)
+        if "require_llm" in msg or ("OPENAI_API_KEY" in msg and "require_llm" in msg):
+            raise DepNotMet("llm", msg) from e
         if "API key" in msg or "require_embedding" in msg:
             raise DepNotMet("embeddings", msg) from e
         raise  # any other RuntimeError is a real failure
@@ -1236,6 +1260,8 @@ def main() -> None:
                     print(f"  Warning: unknown dep '{dep}'", file=sys.stderr)
                 elif dep == "embeddings" and not _probe_embeddings(args):
                     unmet.append(dep)
+                elif dep == "llm" and not _probe_llm(args):
+                    unmet.append(dep)
 
         if unmet:
             result_obj: TestRun | SkipResult = SkipResult(
@@ -1243,8 +1269,13 @@ def main() -> None:
             )
         else:
             require_embedding = "embeddings" in deps
+            require_llm = "llm" in deps
             try:
-                result_obj = run_yaml_test(test_def, args, require_embedding=require_embedding)
+                result_obj = run_yaml_test(
+                    test_def, args,
+                    require_embedding=require_embedding,
+                    require_llm=require_llm,
+                )
             except DepNotMet as e:
                 result_obj = SkipResult(test_def.get("name", path.stem), [e.dep])
 

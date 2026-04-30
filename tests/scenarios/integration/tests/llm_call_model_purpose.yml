@@ -5,28 +5,7 @@ description: >
   model in the chain succeeded), and non-empty response text. Verifies TOOL-01,
   TOOL-02 for the purpose resolver path end-to-end.
 coverage: [IL-02]
-
-extra_config:
-  llm:
-    providers:
-      - name: openai
-        type: openai-compatible
-        endpoint: "https://api.openai.com"
-        api_key: "${OPENAI_API_KEY}"
-    models:
-      - name: fast
-        provider_name: openai
-        model: "gpt-4o-mini"
-        type: language
-        cost_per_million:
-          input: 0.15
-          output: 0.6
-    purposes:
-      - name: general
-        description: "General purpose"
-        models: [fast]
-        defaults:
-          temperature: 0.7
+deps: [llm]
 
 steps:
   - label: "call_model resolver=purpose returns response containing 'Paris'"

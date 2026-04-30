@@ -5,28 +5,7 @@ description: >
   at least one entry containing model_name. Verifies REPT-01 and REPT-02
   end-to-end. Covers IL-04.
 coverage: [IL-04]
-
-extra_config:
-  llm:
-    providers:
-      - name: openai
-        type: openai-compatible
-        endpoint: "https://api.openai.com"
-        api_key: "${OPENAI_API_KEY}"
-    models:
-      - name: fast
-        provider_name: openai
-        model: "gpt-4o-mini"
-        type: language
-        cost_per_million:
-          input: 0.15
-          output: 0.6
-    purposes:
-      - name: general
-        description: "General purpose"
-        models: [fast]
-        defaults:
-          temperature: 0.7
+deps: [llm]
 
 steps:
   - label: "Seed: call_model writes one row to fqc_llm_usage"

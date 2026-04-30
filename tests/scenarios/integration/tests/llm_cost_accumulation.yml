@@ -5,28 +5,7 @@ description: >
   grows monotonically. Verifies COST-01 (runtime recording) end-to-end and confirms
   fire-and-forget writes are visible to the trace_cumulative query in subsequent calls.
 coverage: [IL-03]
-
-extra_config:
-  llm:
-    providers:
-      - name: openai
-        type: openai-compatible
-        endpoint: "https://api.openai.com"
-        api_key: "${OPENAI_API_KEY}"
-    models:
-      - name: fast
-        provider_name: openai
-        model: "gpt-4o-mini"
-        type: language
-        cost_per_million:
-          input: 0.15
-          output: 0.6
-    purposes:
-      - name: general
-        description: "General purpose"
-        models: [fast]
-        defaults:
-          temperature: 0.7
+deps: [llm]
 
 steps:
   - label: "First call_model with trace_id=il03-trace records and reports total_calls=1"

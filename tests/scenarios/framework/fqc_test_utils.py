@@ -156,6 +156,7 @@ class FQCServer:
         log_level: str = "debug",
         ready_timeout: int | None = None,
         require_embedding: bool = False,
+        require_llm: bool = False,
         enable_locking: bool = False,
         enable_git: bool = False,
         extra_config: dict | None = None,
@@ -176,6 +177,7 @@ class FQCServer:
         self.log_level = log_level
         self.ready_timeout = ready_timeout or self.DEFAULT_READY_TIMEOUT
         self.require_embedding = require_embedding
+        self.require_llm = require_llm
         self.enable_locking = enable_locking
         self.enable_git = enable_git
         self.extra_config = extra_config or {}
@@ -259,10 +261,11 @@ class FQCServer:
             },
         }
 
-        # Deep-merge any caller-supplied extra_config (e.g., directed scenarios that
-        # need to inject an `llm:` block). Top-level keys in extra_config are merged
-        # at the root; nested dict keys are recursively merged; list values are
-        # replaced (not appended).
+        if self.require_llm:
+            config["llm"] = self._resolve_llm_config(env)
+
+        # Deep-merge any caller-supplied extra_config. Top-level keys are merged
+        # at the root; nested dict keys are recursively merged; list values are replaced.
         if self.extra_config:
             config = _deep_merge(config, self.extra_config)
 
@@ -312,6 +315,51 @@ class FQCServer:
             "api_key": api_key,
             "dimensions": 1536,
         }
+
+    # -- LLM config --------------------------------------------------------
+
+    def _resolve_llm_config(self, env: dict[str, str]) -> dict:
+        """Return the llm config block for the generated flashquery.yml.
+
+        Called when require_llm=True. Reads OPENAI_API_KEY from .env.test and
+        builds a standard provider/model/purpose config suitable for call_model
+        tests. Raises RuntimeError if no key is found.
+        """
+        api_key = env.get("OPENAI_API_KEY", "")
+        if not api_key:
+            raise RuntimeError(
+                "FQCServer started with require_llm=True but OPENAI_API_KEY was not "
+                "found in .env.test or .env. Set OPENAI_API_KEY in .env.test and try again."
+            )
+        model_id = env.get("LLM_MODEL", "gpt-4o-mini")
+        return {
+            "providers": [
+                {
+                    "name": "openai",
+                    "type": "openai-compatible",
+                    "endpoint": "https://api.openai.com",
+                    "api_key": api_key,
+                }
+            ],
+            "models": [
+                {
+                    "name": "fast",
+                    "provider_name": "openai",
+                    "model": model_id,
+                    "type": "language",
+                    "cost_per_million": {"input": 0.15, "output": 0.6},
+                }
+            ],
+            "purposes": [
+                {
+                    "name": "general",
+                    "description": "General purpose",
+                    "models": ["fast"],
+                    "defaults": {"temperature": 0.7},
+                }
+            ],
+        }
+
 
     # -- Lifecycle ---------------------------------------------------------
 
@@ -657,6 +705,7 @@ class TestContext:
         log_level: str = "debug",
         ready_timeout: int | None = None,
         require_embedding: bool = False,
+        require_llm: bool = False,
         enable_locking: bool = False,
         enable_git: bool = False,
         extra_config: dict | None = None,
@@ -671,6 +720,7 @@ class TestContext:
         self._log_level = log_level
         self._ready_timeout = ready_timeout
         self._require_embedding = require_embedding
+        self._require_llm = require_llm
         self._enable_locking = enable_locking
         self._enable_git = enable_git
         self.extra_config = extra_config
@@ -694,6 +744,7 @@ class TestContext:
                 log_level=self._log_level,
                 ready_timeout=self._ready_timeout,
                 require_embedding=self._require_embedding,
+                require_llm=self._require_llm,
                 enable_locking=self._enable_locking,
                 enable_git=self._enable_git,
                 extra_config=self.extra_config,
