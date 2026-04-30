@@ -488,11 +488,11 @@ export function registerLlmUsageTools(server: McpServer, config: FlashQueryConfi
           window.from.toISOString();
           window.to.toISOString();
         }
-      } catch {
-        return {
-          content: [{ type: 'text' as const, text: 'Invalid date parameters: from_date or to_date could not be parsed as valid ISO 8601 dates.' }],
-          isError: true,
-        };
+      } catch (err) {
+        const text = err instanceof Error && err.message.includes('from_date')
+          ? err.message
+          : 'Invalid date parameters: from_date or to_date could not be parsed as valid ISO 8601 dates.';
+        return { content: [{ type: 'text' as const, text }], isError: true };
       }
 
       // Step 3: Fetch rows (mode-specific options)

@@ -69,7 +69,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         "Call any configured LLM model directly (resolver='model') or via a named purpose with fallback chain (resolver='purpose'). " +
         "Returns the model's text response plus a diagnostic envelope with provider, token usage, computed cost (USD), and latency. " +
         "When trace_id is provided, the call is recorded with that ID and the response includes cumulative stats across all calls sharing that trace_id. " +
-        "When trace_id is omitted, the response envelope omits both the trace_id and trace_cumulative fields entirely — the keys are absent, not set to null. " +
+        "When trace_id is omitted, the trace_id and trace_cumulative fields are absent from the metadata object entirely — the keys are not present, not null. " +
         "Note: messages are forwarded to the provider as-is — prompt safety is the caller's responsibility.",
       inputSchema: {
         resolver: z.enum(['model', 'purpose']).describe(
