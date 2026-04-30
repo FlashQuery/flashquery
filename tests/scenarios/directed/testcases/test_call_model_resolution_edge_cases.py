@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Test: call_model resolver=purpose returns valid response envelope (L-02).
-Coverage: L-02
+Test: call_model resolution edge cases — uppercase model name and empty-models purpose (L-04, L-07).
+Coverage: L-04, L-07
 Modes:
     --managed   Required (starts dedicated FQC subprocess)
 Usage:
-    python test_call_model_by_purpose.py --managed
+    python test_call_model_resolution_edge_cases.py --managed
 Exit codes:
     0   PASS
     2   FAIL
@@ -23,8 +23,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framewor
 from fqc_test_utils import TestRun, FQCServer  # noqa: E402
 from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
-TEST_NAME = "test_call_model_by_purpose"
-COVERAGE = ["L-02"]
+TEST_NAME = "test_call_model_resolution_edge_cases"
+COVERAGE = ["L-04", "L-07"]
+REQUIRES_MANAGED = True
 
 CONFIGURED_LLM = {
     "llm": {
@@ -35,12 +36,6 @@ CONFIGURED_LLM = {
                 "endpoint": "https://api.openai.com",
                 "api_key": "${OPENAI_API_KEY}",
             },
-            {
-                "name": "broken",
-                "type": "openai-compatible",
-                "endpoint": "http://127.0.0.1:1",
-                "api_key": "sk-broken-placeholder",
-            },
         ],
         "models": [
             {
@@ -49,13 +44,6 @@ CONFIGURED_LLM = {
                 "model": "gpt-4o-mini",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
-            },
-            {
-                "name": "broken-primary",
-                "provider_name": "broken",
-                "model": "anything",
-                "type": "language",
-                "cost_per_million": {"input": 0, "output": 0},
             },
         ],
         "purposes": [
@@ -66,14 +54,9 @@ CONFIGURED_LLM = {
                 "defaults": {"temperature": 0.7},
             },
             {
-                "name": "with_fallback",
-                "description": "Primary broken, fast fallback",
-                "models": ["broken-primary", "fast"],
-            },
-            {
-                "name": "all_broken",
-                "description": "All models unreachable",
-                "models": ["broken-primary"],
+                "name": "empty_purpose",
+                "description": "Purpose with no models assigned",
+                "models": [],
             },
         ],
     }
@@ -90,45 +73,49 @@ def run_test(args: argparse.Namespace) -> TestRun:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
 
-            # L-02: resolver=purpose with valid name returns envelope with correct fields
-            result = client.call_tool("call_model", **{
-                "resolver": "purpose",
-                "name": "general",
+            # L-04: resolver=model with uppercase name "FAST" should resolve to "fast" via case normalization
+            result_l04 = client.call_tool("call_model", **{
+                "resolver": "model",
+                "name": "FAST",
                 "messages": [{"role": "user", "content": "hi"}],
             })
-            passed_basic = bool(result and result.ok)
+            passed_l04 = bool(result_l04 and result_l04.ok)
+            metadata_ok = False
+            detail_l04 = str(result_l04)[:500]
+            if passed_l04 and result_l04:
+                try:
+                    envelope = json.loads(result_l04.text)
+                    meta = envelope.get("metadata", {})
+                    metadata_ok = meta.get("resolved_model_name") == "fast"
+                    passed_l04 = metadata_ok
+                    detail_l04 = f"resolved_model_name={meta.get('resolved_model_name')!r}, ok={result_l04.ok}"
+                except (json.JSONDecodeError, KeyError, TypeError) as exc:
+                    passed_l04 = False
+                    detail_l04 = f"parse error: {exc} — raw: {str(result_l04)[:400]}"
             run.step(
-                label="L-02: resolver=purpose returns isError:false",
-                passed=passed_basic,
-                detail=str(result)[:500],
+                label="L-04: resolver=model name='FAST' (uppercase) resolves to 'fast' — isError:false and metadata.resolved_model_name == 'fast'",
+                passed=passed_l04,
+                detail=detail_l04,
             )
 
-            if passed_basic and result:
-                try:
-                    envelope = json.loads(result.text)
-                    meta = envelope.get("metadata", {})
-                    envelope_ok = (
-                        meta.get("resolver") == "purpose"
-                        and meta.get("fallback_position") == 1
-                        and meta.get("resolved_model_name") == "fast"
-                    )
-                    run.step(
-                        label="L-02: metadata.fallback_position==1 (primary model handled); resolver==purpose, resolved_model_name==fast",
-                        passed=envelope_ok,
-                        detail=str(meta)[:500],
-                    )
-                except (json.JSONDecodeError, KeyError, TypeError) as exc:
-                    run.step(
-                        label="L-02: envelope shape verification",
-                        passed=False,
-                        detail=f"parse error: {exc}",
-                    )
-            else:
-                run.step(
-                    label="L-02: envelope shape (skipped — basic call failed)",
-                    passed=False,
-                    detail="call did not return content to parse",
-                )
+            # L-07: resolver=purpose, name="empty_purpose" (no models assigned) returns isError:true
+            # and response text identifies the purpose name
+            result_l07 = client.call_tool("call_model", **{
+                "resolver": "purpose",
+                "name": "empty_purpose",
+                "messages": [{"role": "user", "content": "hi"}],
+            })
+            text_l07 = result_l07.text if result_l07 else ""
+            passed_l07 = bool(
+                result_l07
+                and not result_l07.ok
+                and "empty_purpose" in text_l07
+            )
+            run.step(
+                label="L-07: resolver=purpose name='empty_purpose' (no models assigned) returns isError:true containing 'empty_purpose'",
+                passed=passed_l07,
+                detail=str(result_l07)[:500],
+            )
 
     except Exception as e:  # noqa: BLE001
         run.step(label="server lifecycle", passed=False, detail=f"exception: {type(e).__name__}: {e}")

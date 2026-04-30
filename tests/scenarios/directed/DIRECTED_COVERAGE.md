@@ -476,6 +476,54 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-62 | Reconciliation does not falsely classify active plugin rows as `deleted` when their `fqc_documents` rows exist but were excluded by a query row-limit cap on candidate discovery (VALIDATED) | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-04-22 |
 | RO-63 | Path 2 (frontmatter type) discovery returns all matching documents even when more than 1,000 documents share the same `ownership_type` (VALIDATED) | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-04-22 |
 
+## 15. LLM Tools
+
+Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery instance configured with at least one provider, one model with non-zero `cost_per_million` rates (e.g. the default `fast` model), and at least one purpose with a non-empty `models:` list (e.g. `general`). A separate purpose with an **empty** `models:` list must also be configured for L-07. Use `resolver=purpose` with the `general` purpose and `resolver=model` with the `fast` model alias as the baseline call targets unless a behavior specifies otherwise.
+
+### 15.1 `call_model` — Metadata Fields
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-01 | `call_model` with `resolver=model` — `metadata.fallback_position` in the response JSON is the value `null` (not absent, not `0`, not `1`) | test_call_model_by_model | 2026-04-30 | |
+| L-02 | `call_model` with `resolver=purpose` where the primary model handles the request — `metadata.fallback_position` is the integer `1` | test_call_model_by_purpose | 2026-04-30 | |
+| L-03 | `call_model` — `metadata.resolver` and `metadata.name` in the response match the exact strings sent in the request (e.g. sending `resolver="purpose"`, `name="general"` → response contains `"resolver": "purpose"` and `"name": "general"`) | test_llm_cost_tracking | 2026-04-30 | |
+
+### 15.2 `call_model` — Resolution and Naming
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-04 | `call_model` with an uppercase model name (e.g. `"FAST"`) resolves to the `fast` model and returns a successful response — case normalization applied at runtime before lookup | test_call_model_resolution_edge_cases | 2026-04-30 | 2026-04-30 |
+| L-05 | `call_model` with an unknown model name (e.g. `"nonexistent-model"`) returns `isError: true`; response text includes the unknown name and a list of available model names | test_call_model_errors | 2026-04-30 | |
+| L-06 | `call_model` with an unknown purpose name (e.g. `"nonexistent-purpose"`) returns `isError: true`; response text includes the unknown name and a list of available purpose names | test_call_model_errors | 2026-04-30 | |
+| L-07 | `call_model` targeting a purpose whose `models:` list is empty returns `isError: true`; response text identifies the purpose name (purpose is defined in config but has no model assigned — the "defined but unassigned" state) | test_call_model_resolution_edge_cases | 2026-04-30 | 2026-04-30 |
+
+### 15.3 `call_model` — Parameter Handling
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-08 | Caller-supplied `parameters` override purpose `defaults` — configure a purpose with `defaults: {temperature: 0.0}`, call it with `parameters: {temperature: 1.0}`, call succeeds and the provider receives `temperature: 1.0` (verified by confirming the call does not error; exact value passthrough may require a provider that echoes parameters, or can be inferred from response variability) | test_call_model_params | 2026-04-30 | |
+| L-09 | Provider-unsupported parameter in `parameters` causes the provider's own error to be returned as-is — response has `isError: true` and the error text originates from the provider (not a FlashQuery-generated wrapper message); use a parameter name the target provider is known to reject (e.g. `"bad_param_xyz": true`) | test_call_model_bad_provider_param | 2026-04-30 | 2026-04-30 |
+
+### 15.4 `call_model` — Cost Tracking Fields
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-10 | `metadata.cost_usd` is greater than `0` after a successful `call_model` to a model configured with non-zero `cost_per_million` input or output rates (verifies the token-count × rate computation returns a non-zero result for a real provider response) | test_call_model_cost_strict | 2026-04-30 | 2026-04-30 |
+| L-11 | `metadata.latency_ms` is a positive integer (> 0) in every successful `call_model` response — verifies the round-trip timer is wired and returns a real measurement, not a zero or null placeholder | test_call_model_cost_strict | 2026-04-30 | 2026-04-30 |
+
+### 15.5 `get_llm_usage` — Filter Parameters
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-12 | `get_llm_usage` `purpose_name` filter — make calls to two distinct purposes (e.g. `general` and a second purpose), then query with `purpose_name=general`; response contains only records for `general` and no records for the second purpose | test_llm_usage_filters | 2026-04-30 | 2026-04-30 |
+| L-13 | `get_llm_usage` `model_name` filter — make calls that resolve to two distinct model aliases, then query with `model_name=<first model>`; response contains only records for that model and no records for the other | test_llm_usage_filters | 2026-04-30 | 2026-04-30 |
+
+### 15.6 `get_llm_usage` — Recent Mode with Limit
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-14 | `get_llm_usage` with `mode=recent` and `limit=N` returns exactly `N` entries when more than `N` records exist — seed `N+1` `call_model` calls, then query with `limit=N`; assert `entries` array length equals exactly `N` (not N+1, not N-1) | test_llm_usage_filters | 2026-04-30 | 2026-04-30 |
+
 ---
 
 ## Coverage Summary
@@ -496,7 +544,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| **Total** | **284** | **280** | **4** |
+| LLM Tools | 14 | 14 | 0 |
+| **Total** | **298** | **294** | **4** |
 
 ---
 
@@ -1079,6 +1128,33 @@ Covers: F-92, F-93, F-94, F-95
 
 ### test_list_vault_fs_resilience
 Covers: F-96, F-97
+
+### test_call_model_by_model
+Covers: L-01
+
+### test_call_model_by_purpose
+Covers: L-02
+
+### test_llm_cost_tracking
+Covers: L-03
+
+### test_call_model_errors
+Covers: L-05, L-06
+
+### test_call_model_params
+Covers: L-08
+
+### test_call_model_resolution_edge_cases
+Covers: L-04, L-07
+
+### test_call_model_bad_provider_param
+Covers: L-09
+
+### test_call_model_cost_strict
+Covers: L-10, L-11
+
+### test_llm_usage_filters
+Covers: L-12, L-13, L-14
 
 ---
 

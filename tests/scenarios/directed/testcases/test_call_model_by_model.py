@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Test: call_model resolver=model returns valid response envelope (L-04, L-06).
-Coverage: L-04, L-06
+Test: call_model resolver=model returns valid response envelope (L-01).
+Coverage: L-01
 Modes:
     --managed   Required (starts dedicated FQC subprocess)
 Usage:
@@ -24,7 +24,7 @@ from fqc_test_utils import TestRun, FQCServer  # noqa: E402
 from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_call_model_by_model"
-COVERAGE = ["L-04", "L-06"]
+COVERAGE = ["L-01"]
 
 CONFIGURED_LLM = {
     "llm": {
@@ -90,21 +90,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
 
-            # L-04: resolver=model with valid name returns non-error result
+            # L-01: resolver=model with valid name returns non-error result
             result = client.call_tool("call_model", **{
                 "resolver": "model",
                 "name": "fast",
                 "messages": [{"role": "user", "content": "Say hello in one word"}],
             })
-            passed_l04 = bool(result and result.ok)
+            passed_l01 = bool(result and result.ok)
             run.step(
-                label="L-04: resolver=model returns isError:false with response text",
-                passed=passed_l04,
+                label="L-01: resolver=model returns isError:false with response text",
+                passed=passed_l01,
                 detail=str(result)[:500],
             )
 
-            # L-06: envelope shape verification
-            if passed_l04 and result:
+            # L-01: envelope shape — fallback_position is null, plus other key fields
+            if passed_l01 and result:
                 try:
                     envelope = json.loads(result.text)
                     meta = envelope.get("metadata", {})
@@ -120,21 +120,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
                         and meta.get("latency_ms", -1) >= 0
                     )
                     run.step(
-                        label="L-06: envelope has resolved_model_name, provider_name, fallback_position=null, tokens, cost_usd, latency_ms",
+                        label="L-01: metadata.fallback_position is null; envelope has resolved_model_name, provider_name, tokens, cost_usd, latency_ms",
                         passed=envelope_ok,
                         detail=str(meta)[:500],
                     )
                 except (json.JSONDecodeError, KeyError, TypeError) as exc:
                     run.step(
-                        label="L-06: envelope shape verification",
+                        label="L-01: envelope shape verification",
                         passed=False,
                         detail=f"parse error: {exc}",
                     )
             else:
                 run.step(
-                    label="L-06: envelope shape (skipped — L-04 failed)",
+                    label="L-01: envelope shape (skipped — basic call failed)",
                     passed=False,
-                    detail="L-04 did not return content to parse",
+                    detail="call did not return content to parse",
                 )
 
     except Exception as e:  # noqa: BLE001

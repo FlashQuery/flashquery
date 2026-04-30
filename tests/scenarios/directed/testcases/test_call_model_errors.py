@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Test: call_model error variants — unknown model, unknown purpose, unconfigured (L-09, L-10, L-13).
-Coverage: L-09, L-10, L-13
+Test: call_model error variants — unknown model, unknown purpose, unconfigured (L-05, L-06).
+Coverage: L-05, L-06
 Modes:
     --managed   Required (starts dedicated FQC subprocess)
 Usage:
@@ -23,7 +23,7 @@ from fqc_test_utils import TestRun, FQCServer  # noqa: E402
 from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_call_model_errors"
-COVERAGE = ["L-09", "L-10", "L-13"]
+COVERAGE = ["L-05", "L-06"]
 
 CONFIGURED_LLM = {
     "llm": {
@@ -89,59 +89,59 @@ def run_test(args: argparse.Namespace) -> TestRun:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
 
-            # L-09: resolver=model, name="unknown-model" returns isError:true with helpful message
-            result_l09 = client.call_tool("call_model", **{
+            # L-05: resolver=model, name="unknown-model" returns isError:true with name + available list
+            result_l05 = client.call_tool("call_model", **{
                 "resolver": "model",
                 "name": "unknown-model",
                 "messages": [{"role": "user", "content": "hello"}],
             })
-            text_l09 = result_l09.text if result_l09 else ""
+            text_l05 = result_l05.text if result_l05 else ""
             run.step(
-                label="L-09: resolver=model name=unknown-model returns isError:true with 'Model ... not found' and 'Available models:'",
+                label="L-05: resolver=model name=unknown-model returns isError:true with 'Model ... not found' and 'Available models:'",
                 passed=bool(
-                    result_l09
-                    and not result_l09.ok
-                    and "Model 'unknown-model' not found" in text_l09
-                    and "Available models:" in text_l09
+                    result_l05
+                    and not result_l05.ok
+                    and "Model 'unknown-model' not found" in text_l05
+                    and "Available models:" in text_l05
                 ),
-                detail=str(result_l09)[:500],
+                detail=str(result_l05)[:500],
             )
 
-            # L-10: resolver=purpose, name="unknown-purpose" returns isError:true with helpful message
-            result_l10 = client.call_tool("call_model", **{
+            # L-06: resolver=purpose, name="unknown-purpose" returns isError:true with name + available list
+            result_l06 = client.call_tool("call_model", **{
                 "resolver": "purpose",
                 "name": "unknown-purpose",
                 "messages": [{"role": "user", "content": "hello"}],
             })
-            text_l10 = result_l10.text if result_l10 else ""
+            text_l06 = result_l06.text if result_l06 else ""
             run.step(
-                label="L-10: resolver=purpose name=unknown-purpose returns isError:true with 'Purpose ... not found' and 'Available purposes:'",
+                label="L-06: resolver=purpose name=unknown-purpose returns isError:true with 'Purpose ... not found' and 'Available purposes:'",
                 passed=bool(
-                    result_l10
-                    and not result_l10.ok
-                    and "Purpose 'unknown-purpose' not found" in text_l10
-                    and "Available purposes:" in text_l10
+                    result_l06
+                    and not result_l06.ok
+                    and "Purpose 'unknown-purpose' not found" in text_l06
+                    and "Available purposes:" in text_l06
                 ),
-                detail=str(result_l10)[:500],
+                detail=str(result_l06)[:500],
             )
 
-        # L-13: FQC started without llm: section → call_model returns clean unconfigured error
+        # unconfigured: FQC started without llm: section → call_model returns clean error
         with FQCServer(fqc_dir=args.fqc_dir, extra_config={}) as server_unconfigured:
             client2 = FQCClient(base_url=server_unconfigured.base_url, auth_secret=server_unconfigured.auth_secret)
-            result_l13 = client2.call_tool("call_model", **{
+            result_unconf = client2.call_tool("call_model", **{
                 "resolver": "model",
                 "name": "fast",
                 "messages": [{"role": "user", "content": "hello"}],
             })
-            text_l13 = result_l13.text if result_l13 else ""
+            text_unconf = result_unconf.text if result_unconf else ""
             run.step(
-                label="L-13: no llm: section → isError:true with 'LLM is not configured. Add an llm: section to flashquery.yml to use this tool.'",
+                label="unconfigured: no llm: section → isError:true with 'LLM is not configured' message",
                 passed=bool(
-                    result_l13
-                    and not result_l13.ok
-                    and text_l13 == "LLM is not configured. Add an llm: section to flashquery.yml to use this tool."
+                    result_unconf
+                    and not result_unconf.ok
+                    and text_unconf == "LLM is not configured. Add an llm: section to flashquery.yml to use this tool."
                 ),
-                detail=str(result_l13)[:500],
+                detail=str(result_unconf)[:500],
             )
 
     except Exception as e:  # noqa: BLE001

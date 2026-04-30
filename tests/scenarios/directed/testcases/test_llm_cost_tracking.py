@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Test: call_model writes correct purpose_name to fqc_llm_usage (L-16, L-17).
-- L-16: resolver=purpose records the actual purpose name in fqc_llm_usage
-- L-17: resolver=model records the reserved sentinel "_direct" in fqc_llm_usage
-Coverage: L-16, L-17
+Test: call_model metadata.resolver and metadata.name echo the request values (L-03).
+- L-03: resolver=purpose call → metadata.resolver=="purpose" and metadata.name=="general"
+- L-03: resolver=model call → metadata.resolver=="model" and metadata.name=="fast"
+Coverage: L-03
 Modes:
     --managed   Required (starts dedicated FQC subprocess)
 Usage:
@@ -26,7 +26,7 @@ from fqc_test_utils import TestRun, FQCServer  # noqa: E402
 from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_llm_cost_tracking"
-COVERAGE = ["L-16", "L-17"]
+COVERAGE = ["L-03"]
 
 CONFIGURED_LLM = {
     "llm": {
@@ -69,8 +69,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=CONFIGURED_LLM) as server:
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
 
-            # L-16: resolver=purpose — envelope.metadata.resolver=='purpose', name=='general'
-            # The DB row should have purpose_name='general' (NOT '_direct').
+            # L-03: resolver=purpose — metadata.resolver and metadata.name echo the request values
             result_purpose = client.call_tool("call_model", **{
                 "resolver": "purpose",
                 "name": "general",
@@ -81,19 +80,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     env_p = json.loads(result_purpose.text)
                     meta_p = env_p.get("metadata", {})
                     run.step(
-                        label="L-16: resolver=purpose envelope.metadata.resolver=='purpose' and name=='general'",
+                        label="L-03 (purpose): metadata.resolver=='purpose' and metadata.name=='general'",
                         passed=bool(meta_p.get("resolver") == "purpose" and meta_p.get("name") == "general"),
                         detail=f"resolver={meta_p.get('resolver')}, name={meta_p.get('name')}",
                     )
                 except (json.JSONDecodeError, KeyError, TypeError) as exc:
-                    run.step(label="L-16: parse error", passed=False, detail=str(exc))
+                    run.step(label="L-03 (purpose): parse error", passed=False, detail=str(exc))
             else:
-                run.step(label="L-16: call failed", passed=False, detail=str(result_purpose)[:500])
+                run.step(label="L-03 (purpose): call failed", passed=False, detail=str(result_purpose)[:500])
 
-            # L-17: resolver=model — envelope.metadata.resolver=='model', name=='fast'
-            # The DB row should have purpose_name='_direct' (the sentinel) — Phase 102 contract.
-            # We assert envelope shape here; the DB-level purpose_name='_direct' is verified
-            # by the integration scenario IL-03 + unit test U-33.
+            # L-03: resolver=model — metadata.resolver and metadata.name echo the request values
             result_model = client.call_tool("call_model", **{
                 "resolver": "model",
                 "name": "fast",
@@ -104,18 +100,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     env_m = json.loads(result_model.text)
                     meta_m = env_m.get("metadata", {})
                     run.step(
-                        label="L-17: resolver=model envelope.metadata.resolver=='model' and fallback_position is null",
+                        label="L-03 (model): metadata.resolver=='model' and metadata.name=='fast'",
                         passed=bool(
                             meta_m.get("resolver") == "model"
                             and meta_m.get("name") == "fast"
-                            and meta_m.get("fallback_position") is None
                         ),
-                        detail=f"resolver={meta_m.get('resolver')}, name={meta_m.get('name')}, fp={meta_m.get('fallback_position')}",
+                        detail=f"resolver={meta_m.get('resolver')}, name={meta_m.get('name')}",
                     )
                 except (json.JSONDecodeError, KeyError, TypeError) as exc:
-                    run.step(label="L-17: parse error", passed=False, detail=str(exc))
+                    run.step(label="L-03 (model): parse error", passed=False, detail=str(exc))
             else:
-                run.step(label="L-17: call failed", passed=False, detail=str(result_model)[:500])
+                run.step(label="L-03 (model): call failed", passed=False, detail=str(result_model)[:500])
 
     except Exception as e:  # noqa: BLE001
         run.step(label="server lifecycle", passed=False, detail=f"exception: {type(e).__name__}: {e}")
