@@ -323,7 +323,9 @@ function aggregateByModel(rows: UsageRow[]): { models: ModelEntry[] } {
     const avg_latency_ms = calls > 0
       ? groupRows.reduce((s, r) => s + n(r.latency_ms), 0) / calls
       : 0;
-    const pct_of_total_calls = totalCalls > 0 ? (calls / totalCalls) * 100 : 0;
+    // Fraction in [0, 1]. Audit success criterion 2 (Phase 106): pct_of_total_calls is
+    // a fraction, not a percentage — callers multiply by 100 themselves when displaying.
+    const pct_of_total_calls = totalCalls > 0 ? calls / totalCalls : 0;
 
     // D-11: avg_fallback_position from non-null values only; null when all are null
     const positionRows = groupRows.filter((r) => r.fallback_position !== null);
