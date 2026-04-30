@@ -670,8 +670,17 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 
   // 10. Emit warnings (deferred until after validation — caller logs them)
   // Store warnings on the config object so the caller (index.ts) can log them
+  // D-07 (Phase 104): when both `embedding:` and an `embedding` purpose are configured,
+  // the purpose system takes precedence and the legacy `embedding:` section is deprecated.
+  const embeddingPurposeDeprecationWarning =
+    config.embedding && config.llm?.purposes?.some(p => p.name === 'embedding')
+      ? "The 'embedding:' config section is deprecated when an 'embedding' purpose is defined in 'llm:'. " +
+        "The purpose system takes precedence. Remove 'embedding:' from your config to silence this warning."
+      : undefined;
+
   (config as unknown as Record<string, unknown>)['_deprecationWarnings'] = [
     ...(extensionWarning ? [extensionWarning] : []),
+    ...(embeddingPurposeDeprecationWarning ? [embeddingPurposeDeprecationWarning] : []),
   ];
 
   // Attach raw LLM api_key refs (used by syncLlmConfigToDb in src/llm/config-sync.ts).
