@@ -1,0 +1,35 @@
+name: llm_direct_model_calls
+description: >
+  call_model with resolver=model records a usage row under the reserved _direct
+  purpose. get_llm_usage by_purpose must show the call in direct_model_calls
+  and produce an empty purposes array — verifying that direct model calls are
+  segregated from purpose-resolved calls. Covers IL-06.
+coverage: [IL-06]
+deps: [llm]
+
+steps:
+  - label: "Seed: one direct model call via resolver=model"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+
+  - label: "by_purpose shows empty purposes array (no purpose-resolved calls)"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_purpose
+        period: "24h"
+      expect_contains: '"purposes": []'
+
+  - label: "by_purpose shows direct_model_calls with calls=1 (call was recorded)"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_purpose
+        period: "24h"
+      expect_contains: '"calls": 1'

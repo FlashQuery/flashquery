@@ -1,0 +1,43 @@
+name: llm_by_model_mode
+description: >
+  get_llm_usage by_model mode returns model-level aggregates including
+  model_name, provider_name, and avg_fallback_position. Uses a resolver=purpose
+  seed so avg_fallback_position is 1 (not null), exercising the computation path.
+  Covers IL-08.
+coverage: [IL-08]
+deps: [llm]
+
+steps:
+  - label: "Seed: call_model resolver=purpose to populate fqc_llm_usage with non-null fallback_position"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+
+  - label: "by_model includes model_name for the fast model"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_model
+        period: "24h"
+      expect_contains: '"model_name": "fast"'
+
+  - label: "by_model includes provider_name field"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_model
+        period: "24h"
+      expect_contains: '"provider_name"'
+
+  - label: "by_model avg_fallback_position is 1 (primary model handled the call)"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_model
+        period: "24h"
+      expect_contains: '"avg_fallback_position": 1'

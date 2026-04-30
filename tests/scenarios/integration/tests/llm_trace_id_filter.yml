@@ -1,0 +1,38 @@
+name: llm_trace_id_filter
+description: >
+  get_llm_usage with a trace_id filter returns only calls belonging to that
+  trace. A second call made without a trace_id must not appear in the filtered
+  result. Verifies trace-based isolation by checking total_calls=1 in summary
+  mode after seeding one traced and one untraced call. Covers IL-07.
+coverage: [IL-07]
+deps: [llm]
+
+steps:
+  - label: "Seed: one call tagged with trace_id=il07-trace"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        trace_id: "il07-trace"
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+
+  - label: "Seed: one untraced call (no trace_id)"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply with just the digit 2."
+
+  - label: "summary filtered by trace_id returns total_calls=1 (untraced call excluded)"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: summary
+        trace_id: "il07-trace"
+      expect_contains: '"total_calls": 1'

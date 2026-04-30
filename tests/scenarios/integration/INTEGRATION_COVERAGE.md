@@ -125,14 +125,21 @@ FlashQuery tools (create_document, move_document, register_plugin, search_docume
 
 ## IL — LLM Call Integration
 
-Verifies that the `call_model` MCP tool resolves models and purposes correctly end-to-end,
-returns well-formed response envelopes, and accurately accumulates per-trace cost metadata.
+Verifies that the LLM call path (`call_model`) and LLM usage reporting (`get_llm_usage`) compose
+correctly end-to-end across the write path (`fqc_llm_usage` row recording) and read path
+(`get_llm_usage` aggregation modes).
 
-| ID     | Behavior                                                                                              | Covered By | Date Updated | Last Passing |
-|--------|-------------------------------------------------------------------------------------------------------|------------|--------------|--------------|
-| IL-01  | call_model with resolver=model returns non-empty response and correct resolver metadata               | llm_call_model_basic         | 2026-04-30   | 2026-04-30   |
-| IL-02  | call_model with resolver=purpose returns non-empty response and correct resolver metadata             | llm_call_model_purpose       | 2026-04-30   | 2026-04-30   |
-| IL-03  | Multiple call_model calls with same trace_id accumulate total_calls monotonically in response metadata | llm_cost_accumulation        | 2026-04-30   | 2026-04-30   |
+| ID     | Behavior                                                                                                                                                      | Covered By              | Date Updated | Last Passing |
+|--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|--------------|--------------|
+| IL-01  | call_model resolver=model returns non-error response with metadata envelope (model_name, provider_name, cost_usd, latency_ms)                                 | llm_call_model_basic         | 2026-04-30   | 2026-04-30   |
+| IL-02  | call_model resolver=purpose returns non-error response; metadata includes resolved_model_name matching the configured model for that purpose                  | llm_call_model_purpose       | 2026-04-30   | 2026-04-30   |
+| IL-03  | Multiple call_model calls sharing a trace_id accumulate distinct rows in fqc_llm_usage; trace_cumulative.total_calls grows monotonically (COST-01)            | llm_cost_accumulation        | 2026-04-30   | 2026-04-30   |
+| IL-04  | call_model writes a row, get_llm_usage summary mode returns total_calls >= 1 with by_purpose direct_model_calls present, recent returns model_name (REPT-01, REPT-02 end-to-end) | llm_usage_query              | 2026-04-30   | 2026-04-30   |
+| IL-05  | call_model resolver=purpose → get_llm_usage by_purpose → named purpose appears in purposes array with calls and primary_model_hit_rate fields                | llm_by_purpose_mode          | 2026-04-30   | 2026-04-30   |
+| IL-06  | call_model resolver=model → get_llm_usage by_purpose → call appears in direct_model_calls; purposes array is empty (resolver=model calls excluded from purposes) | llm_direct_model_calls       | 2026-04-30   | 2026-04-30   |
+| IL-07  | call_model with trace_id + call without trace_id → get_llm_usage summary filtered by trace_id → total_calls=1 (untraced call excluded)                       | llm_trace_id_filter          | 2026-04-30   | 2026-04-30   |
+| IL-08  | call_model → get_llm_usage by_model → models array contains model_name, provider_name, and avg_fallback_position for the called model                         | llm_by_model_mode            | 2026-04-30   | 2026-04-30   |
+| IL-09  | multiple call_model resolver=purpose calls via primary model → get_llm_usage by_purpose → primary_model_hit_rate equals 1                                     | llm_by_purpose_mode          | 2026-04-30   | 2026-04-30   |
 
 ---
 
@@ -266,21 +273,6 @@ returns well-formed response envelopes, and accurately accumulates per-trace cos
 **How to Remedy**: Remove the `scan_vault` step and place assertions immediately after the `append_to_doc` action to test the "immediately available" claim. Add a step that calls `search_all` or `search_documents` with a query matching the appended text and asserts the document is found — this tests the "search reflects appended text" part. Fix the duplicate `expect_contains` keys in the final step by splitting into two assertion steps or using a single combined assertion.
 
 **Resolution (2026-04-29)**: Fixed three issues. (1) Removed the `scan_vault` step — its presence between the append and the first assertion directly contradicted the IC-04 "immediately available without a separate scan" claim. (2) Added a `search_documents` step immediately after the `append_to_doc` action (Step 4) verifying the document is still discoverable by title with no scan in between. (3) Fixed the duplicate `expect_contains` YAML keys in the original final step by splitting into two separate assertion steps — one for the original content and one for the appended content. All 8 steps pass.
-
----
-
-## IL — LLM Call Integration
-
-Verifies that the LLM call path (call_model) and LLM usage reporting (get_llm_usage) compose
-correctly end-to-end across the write path (fqc_llm_usage row recording) and read path
-(get_llm_usage aggregation modes).
-
-| ID     | Behavior                                                                                                                                                      | Covered By              | Date Updated | Last Passing |
-|--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|--------------|--------------|
-| IL-01  | call_model resolver=model returns non-error response with metadata envelope (model_name, provider_name, cost_usd, latency_ms)                                 | llm_call_model_basic         | 2026-04-30   | 2026-04-30   |
-| IL-02  | call_model resolver=purpose returns non-error response; metadata includes resolved_model_name matching the configured model for that purpose                  | llm_call_model_purpose       | 2026-04-30   | 2026-04-30   |
-| IL-03  | Multiple call_model calls sharing a trace_id accumulate distinct rows in fqc_llm_usage; trace_cumulative.total_calls grows monotonically (COST-01)            | llm_cost_accumulation        | 2026-04-30   | 2026-04-30   |
-| IL-04  | call_model writes a row, get_llm_usage summary mode returns total_calls >= 1 with by_purpose direct_model_calls present, recent returns model_name (REPT-01, REPT-02 end-to-end) | llm_usage_query              | 2026-04-30   | 2026-04-30   |
 
 ---
 
