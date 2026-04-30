@@ -289,9 +289,23 @@ if (isMain) {
         logger.info(`  Version:   ${version}`);
         logger.info(`  MCP:       ${mcpLine}`);
         logger.info(`  Supabase:  ${supabaseHost}`);
-        const embeddingStatus = embeddingProvider instanceof NullEmbeddingProvider
-          ? 'Semantic search: DISABLED'
-          : `Semantic search: ENABLED (${config.embedding.provider}/${config.embedding.model})`;
+        // Phase 106 W-01 fix: when embedding.provider:none AND an 'embedding'
+        // LLM purpose is configured, the embedding subsystem routes through
+        // that purpose's first model — show a distinct banner string instead
+        // of "ENABLED (none/)" which was misleading.
+        let embeddingStatus: string;
+        if (embeddingProvider instanceof NullEmbeddingProvider) {
+          embeddingStatus = 'Semantic search: DISABLED';
+        } else if (
+          config.embedding.provider === 'none' &&
+          config.llm?.purposes.some((p) => p.name === 'embedding')
+        ) {
+          const embPurpose = config.llm.purposes.find((p) => p.name === 'embedding')!;
+          const firstModel = embPurpose.models[0] ?? 'unknown';
+          embeddingStatus = `Semantic search: ENABLED (via LLM purpose: ${firstModel})`;
+        } else {
+          embeddingStatus = `Semantic search: ENABLED (${config.embedding.provider}/${config.embedding.model})`;
+        }
         logger.info(`  ${embeddingStatus}`);
         const llmStatus = config.llm
           ? `${config.llm.providers.length} provider(s), ${config.llm.purposes.length} purpose(s)`
