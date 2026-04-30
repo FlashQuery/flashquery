@@ -1168,3 +1168,9 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 | L-20 | get_llm_usage by_model returns per-model entries with pct_of_total_calls, avg_fallback_position, spend_usd, avg_cost_per_call_usd, avg_latency_ms (REPT-02 / D-10, D-11) | test_get_llm_usage_by_model | 2026-04-29 |  |
 | L-21 | get_llm_usage recent returns newest-first entries respecting `limit` parameter; each entry has D-12 fields | test_get_llm_usage_recent | 2026-04-29 |  |
 | L-22 | get_llm_usage `trace_id` filter narrows results to matching calls only (REPT-01) | test_get_llm_usage_trace | 2026-04-29 |  |
+
+### 15.2 Embedding Migration (Phase 104)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-23 | Embedding semantic search works end-to-end when routed through the `embedding` purpose — save_memory + search_memory return results matching the seed entry (EMBED-01) | test_embedding_migration | 2026-04-29 |  |
