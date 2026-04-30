@@ -196,69 +196,72 @@ logging:
 # Naming rules: lowercase a-z 0-9 _ -, must start with [a-z0-9].
 # Names are auto-lowercased at load time, so "Nano" and "nano" collide.
 #
-# NOTE: The 'embedding' purpose is required for FlashQuery's semantic search
-# to work via the LLM system. If you omit 'llm:' entirely, the legacy
-# 'embedding:' section (above) handles semantic search instead.
+# NOTE: The 'embedding' purpose below is required for FlashQuery's semantic
+# search to work via the LLM system. When you enable an 'embedding' purpose
+# here, set `embedding.provider: none` in the legacy `embedding:` section
+# above to suppress the v2.x deprecation warning and avoid running both
+# embedding paths simultaneously. If you omit the 'llm:' section entirely,
+# the legacy `embedding:` section (above) handles semantic search instead.
 
-# llm:
-#   providers:
-#     - name: openai
-#       type: openai-compatible
-#       endpoint: https://api.openai.com/v1
-#       api_key: ${OPENAI_API_KEY}
-#     # - name: openrouter
-#     #   type: openai-compatible
-#     #   endpoint: https://openrouter.ai/api/v1
-#     #   api_key: ${OPENROUTER_API_KEY}
-#     # - name: local-ollama
-#     #   type: ollama
-#     #   endpoint: http://localhost:11434
-#   models:
-#     - name: embeddings
-#       provider_name: openai
-#       model: text-embedding-3-small
-#       type: embedding
-#       cost_per_million:
-#         input: 0.02
-#         output: 0.00
-#
-#     - name: fast
-#       provider_name: openai
-#       model: gpt-5-nano
-#       type: language
-#       cost_per_million:
-#         input: 0.15
-#         output: 0.60
-#     # - name: smart
-#     #   provider_name: openrouter
-#     #   model: anthropic/claude-opus-4-7
-#     #   type: reasoning
-#     #   cost_per_million:
-#     #     input: 15.00
-#     #     output: 75.00
-#   purposes:
-#     - name: embedding
-#       description: |
-#         Generates vector embeddings for all vault content to enable semantic
-#         search. Must be assigned a model of type: embedding. This purpose
-#         must be functional for FlashQuery's core search to work.
-#       models:
-#         - embeddings
-#
-#     - name: general
-#       description: |
-#         General-purpose language model for tasks that do not have a
-#         specialized purpose assigned. Used for testing, ad-hoc queries
-#         via call_model, and as the baseline model for new capabilities
-#         during development.
-#       models:
-#         - fast
-#     # - name: summarization
-#     #   description: |
-#     #     Produces concise summaries of documents for projections and
-#     #     downstream processing.
-#     #   models:
-#     #     - fast
-#     #   defaults:
-#     #     temperature: 0.3
-#     #     max_tokens: 1024
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+      api_key: ${OPENAI_API_KEY}
+    # - name: openrouter
+    #   type: openai-compatible
+    #   endpoint: https://openrouter.ai/api
+    #   api_key: ${OPENROUTER_API_KEY}
+    # - name: local-ollama
+    #   type: ollama
+    #   endpoint: http://localhost:11434
+  models:
+    - name: embeddings
+      provider_name: openai
+      model: text-embedding-3-small
+      type: embedding
+      cost_per_million:
+        input: 0.02
+        output: 0.00
+
+    - name: fast
+      provider_name: openai
+      model: gpt-5-nano
+      type: language
+      cost_per_million:
+        input: 0.15
+        output: 0.60
+    # - name: smart
+    #   provider_name: openrouter
+    #   model: anthropic/claude-opus-4-7
+    #   type: reasoning
+    #   cost_per_million:
+    #     input: 15.00
+    #     output: 75.00
+  purposes:
+    - name: embedding
+      description: |
+        Generates vector embeddings for all vault content to enable semantic
+        search. Must be assigned a model of type: embedding. This purpose
+        must be functional for FlashQuery's core search to work.
+      models:
+        - embeddings
+
+    - name: general
+      description: |
+        General-purpose language model for tasks that do not have a
+        specialized purpose assigned. Used for testing, ad-hoc queries
+        via call_model, and as the baseline model for new capabilities
+        during development.
+      models:
+        - fast
+    # - name: summarization
+    #   description: |
+    #     Produces concise summaries of documents for projections and
+    #     downstream processing.
+    #   models:
+    #     - fast
+    #   defaults:
+    #     temperature: 0.3
+    #     max_tokens: 1024
