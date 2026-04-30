@@ -21,7 +21,7 @@ import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { supabaseManager } from '../../storage/supabase.js';
-import { llmClient, NullLlmClient, type LlmCompletionResult } from '../../llm/client.js';
+import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmCompletionResult } from '../../llm/client.js';
 import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
 
@@ -142,7 +142,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           fallbackPosition = purposeResult.fallbackPosition; // 1-indexed (Phase 100 D-06)
         }
       } catch (err: unknown) {
-        // D-03 variant 3: chain exhausted
+        // D-03 variant 3: chain exhausted (purpose path only)
         if (err instanceof LlmFallbackError) {
           const attemptLines = err.attempts
             .map(
@@ -158,18 +158,48 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           };
         }
 
-        // D-03 variant 2: unknown model/purpose name (plain Error from complete()/completeByPurpose())
-        const llmConf = config.llm;
-        const availableNames =
-          params.resolver === 'model'
-            ? llmConf?.models.map((m) => m.name).join(', ') ?? 'none'
-            : llmConf?.purposes.map((p) => p.name).join(', ') ?? 'none';
-        const kind = params.resolver === 'model' ? 'Model' : 'Purpose';
-        const kindPlural = params.resolver === 'model' ? 'models' : 'purposes';
-        const text = `${kind} '${params.name}' not found. Available ${kindPlural}: ${availableNames}`;
-        logger.error(`call_model failed (${params.resolver} not found): ${params.name}`);
+        // WR-01 fix: typed HTTP/network errors (401, 429, 5xx, timeout, etc.) propagate
+        // verbatim so callers see the real provider error — NOT a misleading
+        // "Model not found" message. Applies to both resolver=model and resolver=purpose
+        // paths (purpose path only sees these on a single-model purpose where the
+        // first attempt fails permanently — no fallback sibling to wrap into LlmFallbackError).
+        if (err instanceof LlmHttpError || err instanceof LlmNetworkError) {
+          const text = `call_model failed: ${err.message}`;
+          logger.error(
+            `call_model failed (${err instanceof LlmHttpError ? `http ${err.status}` : 'network'}): ${params.resolver}/${params.name} — ${err.message}`
+          );
+          return {
+            content: [{ type: 'text' as const, text }],
+            isError: true,
+          };
+        }
+
+        // D-03 variant 2: unknown model/purpose name (plain Error from
+        // complete()/completeByPurpose() — message starts with
+        // "LLM error: Model '...' not found in configuration." per client.ts:216,
+        // or matches the Phase 100 resolver's "Purpose '...' not found" pattern).
+        if (err instanceof Error && /not found(?: in configuration)?\.?$/.test(err.message)) {
+          const llmConf = config.llm;
+          const availableNames =
+            params.resolver === 'model'
+              ? llmConf?.models.map((m) => m.name).join(', ') ?? 'none'
+              : llmConf?.purposes.map((p) => p.name).join(', ') ?? 'none';
+          const kind = params.resolver === 'model' ? 'Model' : 'Purpose';
+          const kindPlural = params.resolver === 'model' ? 'models' : 'purposes';
+          const text = `${kind} '${params.name}' not found. Available ${kindPlural}: ${availableNames}`;
+          logger.error(`call_model failed (${params.resolver} not found): ${params.name}`);
+          return {
+            content: [{ type: 'text' as const, text }],
+            isError: true,
+          };
+        }
+
+        // Anything else (unexpected, non-typed error): surface the message rather
+        // than masking it.
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error(`call_model failed (unexpected): ${params.resolver}/${params.name} — ${message}`);
         return {
-          content: [{ type: 'text' as const, text }],
+          content: [{ type: 'text' as const, text: `call_model failed: ${message}` }],
           isError: true,
         };
       }

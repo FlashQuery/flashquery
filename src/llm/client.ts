@@ -435,6 +435,11 @@ export class NullLlmClient implements LlmClient {
     );
   }
 
+  // Phase 106 fix: honor the LlmClient.getModelForPurpose contract — return null
+  // when no LLM is configured, instead of throwing. The OpenAICompatibleLlmClient
+  // signals "purpose has no models" by also returning null, so callers should
+  // check for null. The previous throw-based behavior was a latent interface
+  // violation flagged in v3.0-MILESTONE-AUDIT.md.
   getModelForPurpose(
     _purposeName: string
   ): {
@@ -442,9 +447,7 @@ export class NullLlmClient implements LlmClient {
     providerName: string;
     config: NonNullable<FlashQueryConfig['llm']>['models'][number];
   } | null {
-    throw new Error(
-      'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
-    );
+    return null;
   }
 }
 
