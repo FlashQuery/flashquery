@@ -563,7 +563,7 @@ export function registerLlmUsageTools(server: McpServer, config: FlashQueryConfi
 
       // params.mode === 'recent'
       const { entries } = shapeRecentEntries(rows);
-      const result = { mode: 'recent' as const, entries };
+      const result = { mode: 'recent' as const, period, entries };
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     }
   );
