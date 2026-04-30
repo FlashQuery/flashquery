@@ -29,7 +29,7 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
     dimensions: number,
     providerName: string
   ) {
-    this.baseUrl = baseUrl;
+    this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.apiKey = apiKey;
     this.dimensions = dimensions;
@@ -89,7 +89,7 @@ export class OllamaProvider implements EmbeddingProvider {
   private dimensions: number;
 
   constructor(baseUrl: string, model: string, dimensions: number) {
-    this.baseUrl = baseUrl;
+    this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.dimensions = dimensions;
   }
@@ -194,8 +194,9 @@ export function initEmbedding(config: FlashQueryConfig, llmClient?: LlmClient): 
   const dimensions = config.embedding.dimensions;
 
   // Purpose path (D-03, D-04, D-05, D-06): check config.llm.purposes FIRST.
-  // Guard with `llmClient` truthiness BEFORE calling getModelForPurpose
-  // (NullLlmClient.getModelForPurpose throws — never invoke it).
+  // Guard with `llmClient` truthiness BEFORE calling getModelForPurpose.
+  // NullLlmClient.getModelForPurpose returns null (Phase 106 fix); the null-guard
+  // at line ~202 handles that case cleanly.
   const hasEmbeddingPurpose = config.llm?.purposes?.some(p => p.name === 'embedding');
   if (hasEmbeddingPurpose && llmClient) {
     const result = llmClient.getModelForPurpose('embedding');
