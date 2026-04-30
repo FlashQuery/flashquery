@@ -1,5 +1,6 @@
 import type { FlashQueryConfig } from '../config/loader.js';
 import { logger } from '../logging/logger.js';
+import type { LlmClient } from '../llm/client.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EmbeddingProvider interface
@@ -189,8 +190,58 @@ export function createEmbeddingProvider(config: FlashQueryConfig['embedding']): 
 
 export let embeddingProvider: EmbeddingProvider;
 
-export function initEmbedding(config: FlashQueryConfig): void {
-  const { provider, model, apiKey, dimensions } = config.embedding;
+export function initEmbedding(config: FlashQueryConfig, llmClient?: LlmClient): void {
+  const dimensions = config.embedding.dimensions;
+
+  // Purpose path (D-03, D-04, D-05, D-06): check config.llm.purposes FIRST.
+  // Guard with `llmClient` truthiness BEFORE calling getModelForPurpose
+  // (NullLlmClient.getModelForPurpose throws — never invoke it).
+  const hasEmbeddingPurpose = config.llm?.purposes?.some(p => p.name === 'embedding');
+  if (hasEmbeddingPurpose && llmClient) {
+    const result = llmClient.getModelForPurpose('embedding');
+    if (!result) {
+      logger.warn(
+        "Embedding purpose 'embedding' has no models in its fallback chain — " +
+        "semantic search DISABLED. Fix: add at least one model with type='embedding' to the embedding purpose."
+      );
+      embeddingProvider = new NullEmbeddingProvider(dimensions);
+      return;
+    }
+    const modelEntry = config.llm!.models.find(m => m.name === result.modelName);
+    if (!modelEntry || modelEntry.type !== 'embedding') {
+      logger.warn(
+        `Embedding purpose 'embedding' resolves to model '${result.modelName}' which has ` +
+        `type='${modelEntry?.type ?? 'unknown'}', not 'embedding' — semantic search DISABLED. ` +
+        `Fix: assign a model with type='embedding' to the embedding purpose.`
+      );
+      embeddingProvider = new NullEmbeddingProvider(dimensions);
+      return;
+    }
+    const providerEntry = config.llm!.providers.find(p => p.name === result.providerName);
+    if (!providerEntry) {
+      logger.warn(
+        `Embedding purpose provider '${result.providerName}' not found — semantic search DISABLED.`
+      );
+      embeddingProvider = new NullEmbeddingProvider(dimensions);
+      return;
+    }
+    if (providerEntry.type === 'ollama') {
+      embeddingProvider = new OllamaProvider(providerEntry.endpoint, modelEntry.model, dimensions);
+    } else {
+      embeddingProvider = new OpenAICompatibleProvider(
+        providerEntry.endpoint,
+        modelEntry.model,
+        providerEntry.apiKey ?? '',
+        dimensions,
+        providerEntry.name
+      );
+    }
+    logger.info(`Embedding: routing through purpose 'embedding' → ${providerEntry.name}/${modelEntry.model}`);
+    return;
+  }
+
+  // Legacy path (unchanged from current implementation): D-05A, D-05B, then createEmbeddingProvider
+  const { provider, model, apiKey } = config.embedding;
 
   // D-05A: Explicit provider="none" — user intentionally disabled embedding
   if (provider === 'none') {
