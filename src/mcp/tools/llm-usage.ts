@@ -91,6 +91,11 @@ function resolveWindow(params: {
     return { from: new Date(params.from_date), to: now };
   }
 
+  // Rule 2.5: to_date without from_date — explicit error; not silently ignored
+  if (params.to_date && !params.from_date) {
+    throw new Error('to_date requires from_date. Provide both for an explicit date range.');
+  }
+
   // Rule 3: period only — relative window
   const period = params.period ?? '7d';   // Rule 4 default
   if (period === 'all') return null;
