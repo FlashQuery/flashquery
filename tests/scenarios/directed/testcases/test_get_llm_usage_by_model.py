@@ -98,7 +98,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                         and "avg_latency_ms" in fast_entry
                         and fast_entry.get("provider_name") == "openai"
                         and fast_entry.get("calls", 0) >= 2
-                        and 0 < fast_entry.get("pct_of_total_calls", 0) <= 100
+                        and 0 < fast_entry.get("pct_of_total_calls", 0) <= 1
                     )
                     run.step(
                         label="L-20: by_model entry has model_name, provider_name, calls, pct_of_total_calls, avg_fallback_position, spend_usd, avg_cost_per_call_usd, avg_latency_ms",
