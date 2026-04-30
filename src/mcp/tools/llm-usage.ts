@@ -109,21 +109,22 @@ function resolveWindow(params: {
 
 // We type as `unknown` because the supabase-js query builder type is private
 // to the SDK; we rely on duck-typing the chainable `.eq()` method signature.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 function applyEntityFilters(query: any, params: { purpose_name?: string; model_name?: string; trace_id?: string }): any {
   if (params.purpose_name) query = query.eq('purpose_name', params.purpose_name.toLowerCase());
   if (params.model_name)   query = query.eq('model_name',   params.model_name.toLowerCase());
   if (params.trace_id)     query = query.eq('trace_id',     params.trace_id);
   return query;
 }
+/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // fetchRows — build and execute the supabase query. Applies window filters,
 // entity filters, and (for recent mode) ordering + limit. Returns rows ?? [].
 // ─────────────────────────────────────────────────────────────────────────────
 
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 async function fetchRows(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   supabase: any,
   instanceId: string,
   window: ResolvedWindow | null,
@@ -153,6 +154,7 @@ async function fetchRows(
   // Pitfall 6: data may be null on empty result sets in some SDK versions
   return { rows: (data as UsageRow[] | null) ?? [], error: null };
 }
+/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Number coercion — BIGINT and NUMERIC come back as strings (Pitfall 2).

@@ -263,7 +263,7 @@ if (isMain) {
         }
         await initGit(config);
         await initLlm(config);
-        initEmbedding(config, llmClient!);
+        initEmbedding(config, llmClient);
         await initPlugins(config);
         const httpServer = await initMCP(config, version, transportOverride);
 
