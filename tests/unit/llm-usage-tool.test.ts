@@ -313,8 +313,8 @@ describe('get_llm_usage by_model — pct_of_total_calls fraction (T-106-01)', ()
   it('T-106-01a: pct_of_total_calls is a fraction in [0, 1] for a 1-of-2 model split (exactly 0.5)', async () => {
     // Seed two rows with distinct models — equal split should produce pct_of_total_calls === 0.5 each.
     _currentRows = [
-      { instance_id: 'test-instance-123', model_name: 'fast', provider_name: 'openai', purpose_name: '_direct', input_tokens: 10, output_tokens: 5, cost_usd: '0.001', latency_ms: 100, fallback_position: 1, called_at: new Date().toISOString() },
-      { instance_id: 'test-instance-123', model_name: 'smart', provider_name: 'openrouter', purpose_name: '_direct', input_tokens: 20, output_tokens: 8, cost_usd: '0.005', latency_ms: 200, fallback_position: 1, called_at: new Date().toISOString() },
+      { instance_id: 'test-instance-123', model_name: 'fast', provider_name: 'openai', purpose_name: '_direct', input_tokens: 10, output_tokens: 5, cost_usd: '0.001', latency_ms: 100, fallback_position: 1, created_at: new Date().toISOString() },
+      { instance_id: 'test-instance-123', model_name: 'smart', provider_name: 'openrouter', purpose_name: '_direct', input_tokens: 20, output_tokens: 8, cost_usd: '0.005', latency_ms: 200, fallback_position: 1, created_at: new Date().toISOString() },
     ];
 
     const handler = getHandler();
@@ -335,7 +335,7 @@ describe('get_llm_usage by_model — pct_of_total_calls fraction (T-106-01)', ()
 
   it('T-106-01b: pct_of_total_calls is exactly 1 for a single-row dataset', async () => {
     _currentRows = [
-      { instance_id: 'test-instance-123', model_name: 'fast', provider_name: 'openai', purpose_name: '_direct', input_tokens: 10, output_tokens: 5, cost_usd: '0.001', latency_ms: 100, fallback_position: 1, called_at: new Date().toISOString() },
+      { instance_id: 'test-instance-123', model_name: 'fast', provider_name: 'openai', purpose_name: '_direct', input_tokens: 10, output_tokens: 5, cost_usd: '0.001', latency_ms: 100, fallback_position: 1, created_at: new Date().toISOString() },
     ];
 
     const handler = getHandler();
