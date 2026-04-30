@@ -227,7 +227,7 @@ llm:
 
     - name: fast
       provider_name: openai
-      model: gpt-5-nano
+      model: gpt-4o-mini
       type: language
       cost_per_million:
         input: 0.15

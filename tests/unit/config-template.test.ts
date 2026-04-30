@@ -155,7 +155,7 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     }
   });
 
-  it('[TMPL-01] flashquery.example.yml has exactly 2 default models: embeddings (text-embedding-3-small, embedding) and fast (gpt-5-nano, language)', () => {
+  it('[TMPL-01] flashquery.example.yml has exactly 2 default models: embeddings (text-embedding-3-small, embedding) and fast (gpt-4o-mini, language)', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
     const rawYaml = readFileSync(examplePath, 'utf-8');
     const llmBlock = extractCommentedLlmBlock(rawYaml);
@@ -177,7 +177,7 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
       // Second model: fast
       const fastModel = config.llm?.models.find(m => m.name === 'fast');
       expect(fastModel).toBeDefined();
-      expect(fastModel?.model).toBe('gpt-5-nano');
+      expect(fastModel?.model).toBe('gpt-4o-mini');
       expect(fastModel?.type).toBe('language');
       expect(fastModel?.costPerMillion.input).toBe(0.15);
       expect(fastModel?.costPerMillion.output).toBe(0.60);
