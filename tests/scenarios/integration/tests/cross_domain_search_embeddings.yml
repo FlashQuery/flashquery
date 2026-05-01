@@ -23,6 +23,9 @@ steps:
     content: "The Andromeda Galaxy is on a collision course with the Milky Way galaxy."
     tags: [cosmos, galaxies, cde-tag]
 
+  - sleep: 3
+    label: "Wait for fire-and-forget embedding to complete"
+
   - label: "search_all returns both document and memory in same result (IS-03)"
     assert:
       op: search_all

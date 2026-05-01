@@ -66,6 +66,12 @@ Step types
              scan_vault         → force_file_scan MCP tool (background=False)
              <any MCP tool>     → called directly; use args: {...}
 
+  sleep:   Pause for N seconds (float). Use to let async server-side operations
+           (e.g. fire-and-forget embedding) complete before asserting on their
+           results. Example:
+             - sleep: 3
+               label: "Wait for embedding to write"
+
   assert:  Call an MCP tool and check the result. Fields:
              op               MCP tool name (e.g. search_documents)
              args             keyword arguments passed to the tool
@@ -634,7 +640,11 @@ def run_yaml_test(
     """
     name = test_def.get("name", "unnamed_test")
     run = TestRun(name)
-    variables: dict[str, dict] = {}  # variable registry: name → {field: value}
+    variables: dict[str, dict] = {
+        # Built-in: ${run.id} — unique 8-char hex suffix, stable across all steps of
+        # one test execution. Use in trace_id / tag values to avoid cross-run collisions.
+        "run": {"id": f"{random.randint(0, 0xFFFFFFFF):08x}"},
+    }
     cleanup_errors: list[str] = []   # populated after TestContext exits
 
     # extra_config from YAML lets individual tests inject llm:, etc. into the
@@ -677,12 +687,19 @@ def run_yaml_test(
                     # Assert failures don't abort — collect the full picture
                     _execute_assert(step, ctx, run, variables)
 
+                elif "sleep" in step:
+                    import time
+                    secs = float(step["sleep"])
+                    label = step.get("label") or f"sleep {secs}s"
+                    time.sleep(secs)
+                    run.step(label=label, passed=True, detail=f"Slept {secs}s", timing_ms=int(secs * 1000))
+
                 else:
                     run.step(
                         label=f"step {i}: unrecognized",
                         passed=False,
                         detail=(
-                            f"Each step must have an 'action' or 'assert' key. "
+                            f"Each step must have an 'action', 'assert', or 'sleep' key. "
                             f"Got: {list(step.keys())}"
                         ),
                         timing_ms=0,

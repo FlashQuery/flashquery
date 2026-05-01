@@ -22,6 +22,9 @@ steps:
     content: "Hiking through the redwood forests was a transcendent experience."
     tags: [smo-tag]
 
+  - sleep: 3
+    label: "Wait for fire-and-forget embedding to complete"
+
   - label: "Memory is listable by tag"
     assert:
       op: list_memories

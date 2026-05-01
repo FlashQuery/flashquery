@@ -8,13 +8,13 @@ coverage: [IL-03]
 deps: [llm]
 
 steps:
-  - label: "First call_model with trace_id=il03-trace records and reports total_calls=1"
+  - label: "First call_model with unique trace_id records and reports total_calls=1"
     assert:
       op: call_model
       args:
         resolver: purpose
         name: general
-        trace_id: "il03-trace"
+        trace_id: "il03-${run.id}"
         messages:
           - role: user
             content: "Reply with just the digit 1."
@@ -26,7 +26,7 @@ steps:
       args:
         resolver: model
         name: fast
-        trace_id: "il03-trace"
+        trace_id: "il03-${run.id}"
         messages:
           - role: user
             content: "Reply with just the digit 2."

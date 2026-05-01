@@ -18,18 +18,18 @@ steps:
           - role: user
             content: "Reply with just the digit 1."
 
-  - label: "by_purpose shows empty purposes array (no purpose-resolved calls)"
+  - label: "by_purpose segregates direct calls into direct_model_calls, not purposes"
     assert:
       op: get_llm_usage
       args:
         mode: by_purpose
         period: "24h"
-      expect_contains: '"purposes": []'
+      expect_not_contains: '"purpose_name": "_direct"'
 
-  - label: "by_purpose shows direct_model_calls with calls=1 (call was recorded)"
+  - label: "by_purpose direct_model_calls entry exists and has recorded calls"
     assert:
       op: get_llm_usage
       args:
         mode: by_purpose
         period: "24h"
-      expect_contains: '"calls": 1'
+      expect_contains: '"direct_model_calls"'

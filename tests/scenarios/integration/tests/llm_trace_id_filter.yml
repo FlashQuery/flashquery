@@ -8,13 +8,13 @@ coverage: [IL-07]
 deps: [llm]
 
 steps:
-  - label: "Seed: one call tagged with trace_id=il07-trace"
+  - label: "Seed: one call tagged with unique trace_id"
     assert:
       op: call_model
       args:
         resolver: purpose
         name: general
-        trace_id: "il07-trace"
+        trace_id: "il07-${run.id}"
         messages:
           - role: user
             content: "Reply with just the digit 1."
@@ -34,5 +34,5 @@ steps:
       op: get_llm_usage
       args:
         mode: summary
-        trace_id: "il07-trace"
+        trace_id: "il07-${run.id}"
       expect_contains: '"total_calls": 1'
