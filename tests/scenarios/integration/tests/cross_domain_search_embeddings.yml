@@ -1,0 +1,44 @@
+name: cross_domain_search_embeddings
+description: >
+  With embedding configuration, search_all returns both documents and memories in
+  the same result set when their content shares the same subject (IS-03). A document
+  and memory sharing a tag are both returned by search_all when filtered by that tag
+  (IX-01). Both items share the proper noun "Andromeda Galaxy" to ensure high semantic
+  similarity against the query. Requires embedding configuration; skipped without it.
+coverage: [IS-03, IX-01]
+deps: [embeddings]
+
+steps:
+  - label: "Write a document about the Andromeda Galaxy"
+    action: vault.write
+    name: galaxy_doc
+    path: "cosmos/andromeda.md"
+    title: "The Andromeda Galaxy"
+    content: "The Andromeda Galaxy is the nearest major galaxy to our Milky Way."
+    tags: [cosmos, galaxies, cde-tag]
+
+  - label: "Write a memory about the Andromeda Galaxy"
+    action: memory.write
+    name: andromeda_mem
+    content: "The Andromeda Galaxy is on a collision course with the Milky Way galaxy."
+    tags: [cosmos, galaxies, cde-tag]
+
+  - sleep: 3
+    label: "Wait for fire-and-forget embedding to complete"
+
+  - label: "search_all returns both document and memory in same result (IS-03)"
+    assert:
+      op: search_all
+      args:
+        query: "Andromeda Galaxy"
+      expect_path: "cosmos/andromeda.md"
+      expect_contains: "Andromeda Galaxy is on a collision course"
+
+  - label: "search_all with shared tag returns both document and memory (IX-01)"
+    assert:
+      op: search_all
+      args:
+        query: "Andromeda Galaxy"
+        tags: [cde-tag]
+      expect_path: "cosmos/andromeda.md"
+      expect_contains: "Andromeda Galaxy is on a collision course"

@@ -73,6 +73,28 @@ from fqc_vault import VaultHelper
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _deep_merge(base: dict, overlay: dict) -> dict:
+    """Recursively merge overlay into a copy of base.
+
+    Behavior:
+      - dict values are recursively merged
+      - list values in overlay REPLACE the base value
+      - scalar values in overlay REPLACE the base value
+      - keys present only in base are preserved
+    """
+    result = dict(base)
+    for key, val in overlay.items():
+        if key in result and isinstance(result[key], dict) and isinstance(val, dict):
+            result[key] = _deep_merge(result[key], val)
+        else:
+            result[key] = val
+    return result
+
+
+# ---------------------------------------------------------------------------
 # FQCServer — managed subprocess with log capture
 # ---------------------------------------------------------------------------
 
@@ -120,7 +142,7 @@ class FQCServer:
     regardless of how the test exits.
     """
 
-    DEFAULT_READY_TIMEOUT = 15  # seconds
+    DEFAULT_READY_TIMEOUT = 60  # seconds — allow time for LLM config sync to remote Supabase
     DEFAULT_SHUTDOWN_TIMEOUT = 35  # 30s FQC grace + 5s buffer
 
     def __init__(
@@ -134,8 +156,10 @@ class FQCServer:
         log_level: str = "debug",
         ready_timeout: int | None = None,
         require_embedding: bool = False,
+        require_llm: bool = False,
         enable_locking: bool = False,
         enable_git: bool = False,
+        extra_config: dict | None = None,
     ) -> None:
         # Resolve the flashquery-core project directory
         dir_hint = fqc_dir or os.environ.get("FQC_DIR")
@@ -153,8 +177,10 @@ class FQCServer:
         self.log_level = log_level
         self.ready_timeout = ready_timeout or self.DEFAULT_READY_TIMEOUT
         self.require_embedding = require_embedding
+        self.require_llm = require_llm
         self.enable_locking = enable_locking
         self.enable_git = enable_git
+        self.extra_config = extra_config or {}
 
         # Vault: use provided path or create a temp directory
         self._owns_vault = vault_path is None
@@ -235,6 +261,14 @@ class FQCServer:
             },
         }
 
+        if self.require_llm:
+            config["llm"] = self._resolve_llm_config(env)
+
+        # Deep-merge any caller-supplied extra_config. Top-level keys are merged
+        # at the root; nested dict keys are recursively merged; list values are replaced.
+        if self.extra_config:
+            config = _deep_merge(config, self.extra_config)
+
         fd, path = tempfile.mkstemp(prefix="fqc-test-config-", suffix=".yml")
         with os.fdopen(fd, "w") as f:
             yaml.dump(config, f, default_flow_style=False, sort_keys=False)
@@ -282,20 +316,50 @@ class FQCServer:
             "dimensions": 1536,
         }
 
-    # -- Log capture -------------------------------------------------------
+    # -- LLM config --------------------------------------------------------
 
-    def _capture_logs(self) -> None:
-        """Background thread: read server stderr line by line."""
-        proc = self._process
-        if not proc or not proc.stderr:
-            return
-        for line in iter(proc.stderr.readline, ""):
-            if not line:
-                break
-            stripped = line.rstrip("\n")
-            with self._log_lock:
-                self._logs.append(stripped)
-        # Process ended or stderr closed
+    def _resolve_llm_config(self, env: dict[str, str]) -> dict:
+        """Return the llm config block for the generated flashquery.yml.
+
+        Called when require_llm=True. Reads OPENAI_API_KEY from .env.test and
+        builds a standard provider/model/purpose config suitable for call_model
+        tests. Raises RuntimeError if no key is found.
+        """
+        api_key = env.get("OPENAI_API_KEY", "")
+        if not api_key:
+            raise RuntimeError(
+                "FQCServer started with require_llm=True but OPENAI_API_KEY was not "
+                "found in .env.test or .env. Set OPENAI_API_KEY in .env.test and try again."
+            )
+        model_id = env.get("LLM_MODEL", "gpt-4o-mini")
+        return {
+            "providers": [
+                {
+                    "name": "openai",
+                    "type": "openai-compatible",
+                    "endpoint": "https://api.openai.com",
+                    "api_key": api_key,
+                }
+            ],
+            "models": [
+                {
+                    "name": "fast",
+                    "provider_name": "openai",
+                    "model": model_id,
+                    "type": "language",
+                    "cost_per_million": {"input": 0.15, "output": 0.6},
+                }
+            ],
+            "purposes": [
+                {
+                    "name": "general",
+                    "description": "General purpose",
+                    "models": ["fast"],
+                    "defaults": {"temperature": 0.7},
+                }
+            ],
+        }
+
 
     # -- Lifecycle ---------------------------------------------------------
 
@@ -641,8 +705,10 @@ class TestContext:
         log_level: str = "debug",
         ready_timeout: int | None = None,
         require_embedding: bool = False,
+        require_llm: bool = False,
         enable_locking: bool = False,
         enable_git: bool = False,
+        extra_config: dict | None = None,
     ) -> None:
         self.test_prefix = test_prefix
         self._fqc_dir = fqc_dir
@@ -654,8 +720,10 @@ class TestContext:
         self._log_level = log_level
         self._ready_timeout = ready_timeout
         self._require_embedding = require_embedding
+        self._require_llm = require_llm
         self._enable_locking = enable_locking
         self._enable_git = enable_git
+        self.extra_config = extra_config
 
         # Initialized in __enter__
         self.client: FQCClient = None  # type: ignore
@@ -676,8 +744,10 @@ class TestContext:
                 log_level=self._log_level,
                 ready_timeout=self._ready_timeout,
                 require_embedding=self._require_embedding,
+                require_llm=self._require_llm,
                 enable_locking=self._enable_locking,
                 enable_git=self._enable_git,
+                extra_config=self.extra_config,
             )
             self.server.start()
 

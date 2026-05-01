@@ -78,12 +78,52 @@ const LockingSchema = z
   .strip()
   .prefault({});
 
+// LLM provider/model/purpose schemas (v3.0 — three-layer)
+const ProviderSchema = z
+  .object({
+    name: z.string(),
+    type: z.enum(['openai-compatible', 'ollama']),
+    endpoint: z.string().url('endpoint must be a valid URL'),
+    api_key: z.string().optional(),
+  })
+  .strip();
+
+const ModelCostSchema = z
+  .object({
+    input: z.number().min(0),
+    output: z.number().min(0),
+  })
+  .strip();
+
+const ModelSchema = z
+  .object({
+    name: z.string(),
+    provider_name: z.string(),
+    model: z.string(),
+    type: z.enum(['language', 'reasoning', 'embedding', 'vision', 'code', 'audio', 'guardian']),
+    dimensions: z.number().optional(),
+    cost_per_million: ModelCostSchema,
+  })
+  .strip();
+
+// PurposeDefaultsSchema is intentionally permissive — values are LLM provider params
+// (temperature, max_tokens, etc.) and we don't constrain their shape.
+const PurposeDefaultsSchema = z.record(z.string(), z.unknown());
+
+const PurposeSchema = z
+  .object({
+    name: z.string(),
+    description: z.string(),
+    models: z.array(z.string()),
+    defaults: PurposeDefaultsSchema.optional(),
+  })
+  .strip();
+
 const LlmSchema = z
   .object({
-    provider: z.string(),
-    model: z.string(),
-    api_key: z.string().optional(),
-    endpoint: z.string().optional(),
+    providers: z.array(ProviderSchema),
+    models: z.array(ModelSchema),
+    purposes: z.array(PurposeSchema),
   })
   .strip()
   .optional();
@@ -118,7 +158,7 @@ const ConfigSchema = z
     git: GitSchema,
     mcp: McpSchema,
     llm: LlmSchema,
-    embedding: EmbeddingSchema,
+    embedding: EmbeddingSchema.optional(),
     logging: LoggingSchema,
     locking: LockingSchema,
   })
@@ -142,8 +182,19 @@ export interface FlashQueryConfig {
   git: { autoCommit: boolean; autoPush: boolean; remote: string; branch: string };
   mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
   locking: { enabled: boolean; ttlSeconds: number };
-  llm?: { provider: string; model: string; apiKey?: string; endpoint?: string };
-  embedding: {
+  llm?: {
+    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string }>;
+    models: Array<{
+      name: string;
+      providerName: string;
+      model: string;
+      type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
+      dimensions?: number;
+      costPerMillion: { input: number; output: number };
+    }>;
+    purposes: Array<{ name: string; description: string; models: string[]; defaults?: Record<string, unknown> }>;
+  };
+  embedding?: {
     provider: string;
     model: string;
     apiKey?: string;
@@ -238,8 +289,9 @@ const FIELD_HINTS: Record<string, string> = {
   'instance.name': 'Add a human-readable name for this instance (e.g., "My Knowledge Base").',
   'instance.vault.path': 'Add the path to your vault directory (e.g., "/Users/name/vault").',
   'instance.vault.markdown_extensions': 'Optional: array of file extensions to index (default: [".md"]).',
-  'embedding.provider': 'Set to "openai", "openrouter", or "ollama".',
-  'embedding.model': 'Set the embedding model name (e.g., "text-embedding-3-small").',
+  'llm.providers': 'LLM providers must be an array of {name, type, endpoint} objects.',
+  'llm.models': 'LLM models must be an array of {name, provider_name, model, type, cost_per_million} objects.',
+  'llm.purposes': 'LLM purposes must be an array of {name, description, models} objects.',
 };
 
 interface ZodIssue {
@@ -266,6 +318,114 @@ function formatZodErrors(issues: ZodIssue[]): string {
   });
 
   return messages.join('\n');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LLM config normalization & validation (v3.0)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type RawLlmProvider = { name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; api_key?: string };
+type RawLlmModel = {
+  name: string;
+  provider_name: string;
+  model: string;
+  type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
+  cost_per_million: { input: number; output: number };
+};
+type RawLlmPurpose = { name: string; description: string; models: string[]; defaults?: Record<string, unknown> };
+type RawLlm = { providers: RawLlmProvider[]; models: RawLlmModel[]; purposes: RawLlmPurpose[] };
+
+/**
+ * Normalizes all provider/model/purpose names and cross-references to lowercase.
+ * MUST run BEFORE validateLlmConfig so cross-ref checks compare lowercase names.
+ * Mutates the raw Zod-parsed data in place.
+ */
+function normalizeLlmNames(llm: RawLlm): void {
+  for (const p of llm.providers) p.name = p.name.toLowerCase();
+  for (const m of llm.models) {
+    m.name = m.name.toLowerCase();
+    m.provider_name = m.provider_name.toLowerCase();
+  }
+  for (const pu of llm.purposes) {
+    pu.name = pu.name.toLowerCase();
+    pu.models = pu.models.map((n) => n.toLowerCase());
+  }
+}
+
+type LlmValidationError = { layer: 'provider' | 'model' | 'purpose' | 'cross-ref'; name: string; message: string };
+
+/**
+ * Validates LLM config after normalization. Returns an array of errors (empty = valid).
+ * Implements CONF-01 (name format), CONF-02 (uniqueness), CONF-03 (model→provider),
+ * CONF-04 (purpose→model) checks in order.
+ */
+function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
+  const errors: LlmValidationError[] = [];
+  const namePattern = /^[a-z0-9][a-z0-9_-]*$/;
+
+  // CONF-01: name format validation
+  for (const p of llm.providers) {
+    if (!namePattern.test(p.name)) {
+      errors.push({ layer: 'provider', name: p.name, message: `Provider name '${p.name}' must match [a-z0-9][a-z0-9_-]*` });
+    }
+  }
+  for (const m of llm.models) {
+    if (!namePattern.test(m.name)) {
+      errors.push({ layer: 'model', name: m.name, message: `Model name '${m.name}' must match [a-z0-9][a-z0-9_-]*` });
+    }
+  }
+  for (const pu of llm.purposes) {
+    if (!namePattern.test(pu.name)) {
+      errors.push({ layer: 'purpose', name: pu.name, message: `Purpose name '${pu.name}' must match [a-z0-9][a-z0-9_-]*` });
+    }
+  }
+
+  // CONF-02: uniqueness within each list (post-normalization)
+  const providerCount = new Map<string, number>();
+  for (const p of llm.providers) providerCount.set(p.name, (providerCount.get(p.name) ?? 0) + 1);
+  for (const [name, count] of providerCount) {
+    if (count > 1) errors.push({ layer: 'provider', name, message: `Duplicate provider name '${name}' appears ${count} times (case-insensitive)` });
+  }
+
+  const modelCount = new Map<string, number>();
+  for (const m of llm.models) modelCount.set(m.name, (modelCount.get(m.name) ?? 0) + 1);
+  for (const [name, count] of modelCount) {
+    if (count > 1) errors.push({ layer: 'model', name, message: `Duplicate model name '${name}' appears ${count} times (case-insensitive)` });
+  }
+
+  const purposeCount = new Map<string, number>();
+  for (const pu of llm.purposes) purposeCount.set(pu.name, (purposeCount.get(pu.name) ?? 0) + 1);
+  for (const [name, count] of purposeCount) {
+    if (count > 1) errors.push({ layer: 'purpose', name, message: `Duplicate purpose name '${name}' appears ${count} times (case-insensitive)` });
+  }
+
+  // CONF-03: every model.provider_name must resolve to a defined provider name
+  const providerNames = new Set(llm.providers.map((p) => p.name));
+  for (const m of llm.models) {
+    if (!providerNames.has(m.provider_name)) {
+      errors.push({
+        layer: 'cross-ref',
+        name: m.name,
+        message: `model '${m.name}' references unknown provider '${m.provider_name}' — defined providers: [${[...providerNames].join(', ') || '(none)'}]`,
+      });
+    }
+  }
+
+  // CONF-04: every name in purpose.models must resolve to a defined model name
+  const modelNames = new Set(llm.models.map((m) => m.name));
+  for (const pu of llm.purposes) {
+    for (const ref of pu.models) {
+      if (!modelNames.has(ref)) {
+        errors.push({
+          layer: 'cross-ref',
+          name: pu.name,
+          message: `purpose '${pu.name}' references unknown model '${ref}' — defined models: [${[...modelNames].join(', ') || '(none)'}]`,
+        });
+      }
+    }
+  }
+
+  return errors;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,6 +521,18 @@ function rejectLegacyFields(raw: unknown): void {
         "See the migration guide for details."
     );
   }
+
+  // CONF-06: detect pre-v3.0 flat llm: { provider, model } shape
+  if ('llm' in obj && obj['llm'] !== null && typeof obj['llm'] === 'object' && !Array.isArray(obj['llm'])) {
+    const llm = obj['llm'] as Record<string, unknown>;
+    if ('provider' in llm || 'model' in llm) {
+      throw new Error(
+        "Config error: The 'llm:' section uses the pre-v3.0 flat format (provider/model keys). " +
+        "Migrate to the three-layer format with providers:, models:, and purposes: arrays. " +
+        "See flashquery.example.yml for the new format."
+      );
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -399,6 +571,39 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // 4. Reject old config formats with clear error messages (v1.7 breaking change)
   rejectLegacyFields(raw);
 
+  // 5b. LLM v3.0: capture raw api_key reference strings BEFORE env expansion so
+  // syncLlmConfigToDb() can store the ${ENV_VAR} literal in api_key_ref (T-98-01:
+  // never persist resolved secrets to Supabase). The map keys are lowercased
+  // provider names to match post-normalization comparisons.
+  const rawLlmApiKeyRefs = new Map<string, string>();
+  if (
+    raw !== null &&
+    typeof raw === 'object' &&
+    !Array.isArray(raw) &&
+    'llm' in (raw as Record<string, unknown>)
+  ) {
+    const rawLlm = (raw as Record<string, unknown>)['llm'];
+    if (rawLlm !== null && typeof rawLlm === 'object' && 'providers' in (rawLlm as Record<string, unknown>)) {
+      const providers = (rawLlm as { providers?: unknown }).providers;
+      if (Array.isArray(providers)) {
+        for (const p of providers) {
+          if (
+            p !== null &&
+            typeof p === 'object' &&
+            'name' in (p as Record<string, unknown>) &&
+            'api_key' in (p as Record<string, unknown>)
+          ) {
+            const name = (p as { name?: unknown }).name;
+            const apiKey = (p as { api_key?: unknown }).api_key;
+            if (typeof name === 'string' && typeof apiKey === 'string') {
+              rawLlmApiKeyRefs.set(name.toLowerCase(), apiKey);
+            }
+          }
+        }
+      }
+    }
+  }
+
   // 5. Load .env from the config file's directory (supplements CWD .env already loaded by
   //    dotenv/config in index.ts — required when the process is spawned by a host like
   //    Claude Desktop that has a different CWD than the config file's location)
@@ -418,10 +623,39 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     throw new Error(message);
   }
 
-  // 7. Convert snake_case to camelCase
+  // 7a. LLM v3.0 — normalize names to lowercase, then run validation that depends on
+  // post-normalization name comparisons (CONF-01..CONF-04, CONF-07).
+  if (result.data.llm) {
+    normalizeLlmNames(result.data.llm);
+    const llmErrors = validateLlmConfig(result.data.llm);
+    if (llmErrors.length > 0) {
+      const message = llmErrors
+        .map((e) => `Config error: [${e.layer}] ${e.message}`)
+        .join('\n');
+      throw new Error(message);
+    }
+  }
+
+  // 8. Convert snake_case to camelCase
   const camel = snakeToCamel(result.data) as Record<string, unknown>;
 
-  // 8. Build final config
+  // 8a. Restore purpose defaults verbatim — these are LLM provider params (temperature,
+  // max_tokens, etc.) whose key naming is governed by the LLM provider, not by FlashQuery's
+  // snake_case-to-camelCase convention. Without this, snakeToCamel would silently rename
+  // `max_tokens` -> `maxTokens` and break provider compatibility.
+  if (result.data.llm?.purposes && Array.isArray((camel['llm'] as { purposes?: unknown })?.purposes)) {
+    const camelLlm = camel['llm'] as { purposes: Array<{ defaults?: Record<string, unknown> }> };
+    for (let i = 0; i < camelLlm.purposes.length; i++) {
+      const rawDefaults = result.data.llm.purposes[i]?.defaults;
+      if (rawDefaults !== undefined) {
+        camelLlm.purposes[i].defaults = JSON.parse(JSON.stringify(rawDefaults)) as Record<string, unknown>;
+      } else {
+        delete camelLlm.purposes[i].defaults;
+      }
+    }
+  }
+
+  // 9. Build final config
   const instanceData = camel['instance'] as { name: string; id: string; vault: { path: string; markdownExtensions: string[] } };
 
   const config: FlashQueryConfig = {
@@ -429,16 +663,20 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     instance: instanceData,
   };
 
-  // 8.5. Resolve relative vault path to absolute path (relative to config file directory)
+  // 9.5. Resolve relative vault path to absolute path (relative to config file directory)
   if (!isAbsolute(config.instance.vault.path)) {
     config.instance.vault.path = resolve(configDir, config.instance.vault.path);
   }
 
-  // 9. Emit warnings (deferred until after validation — caller logs them)
-  // Store warnings on the config object so the caller (index.ts) can log them
+  // 10. Emit warnings (deferred until after validation — caller logs them)
   (config as unknown as Record<string, unknown>)['_deprecationWarnings'] = [
     ...(extensionWarning ? [extensionWarning] : []),
   ];
+
+  // Attach raw LLM api_key refs (used by syncLlmConfigToDb in src/llm/config-sync.ts).
+  // Stored as a runtime-only Map alongside `_deprecationWarnings`. Not part of the
+  // public FlashQueryConfig type — consumers use getLlmApiKeyRefs(config) below.
+  (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'] = rawLlmApiKeyRefs;
 
   return config;
 }
@@ -449,4 +687,21 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 
 export function getDeprecationWarnings(config: FlashQueryConfig): string[] {
   return ((config as unknown as Record<string, unknown>)['_deprecationWarnings'] as string[]) ?? [];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// getLlmApiKeyRefs — exposes the raw ${ENV_VAR} reference map captured during loadConfig
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Returns a map from lowercased provider name -> raw api_key reference string
+ * (e.g., '${OPENAI_API_KEY}'). Used by syncLlmConfigToDb to populate the
+ * api_key_ref column without leaking resolved secrets to the database.
+ *
+ * Returns an empty Map when no llm: section is configured.
+ */
+export function getLlmApiKeyRefs(config: FlashQueryConfig): Map<string, string> {
+  const map = (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'];
+  if (map instanceof Map) return map as Map<string, string>;
+  return new Map<string, string>();
 }

@@ -16,7 +16,8 @@ import pg from 'pg';
  */
 export async function tableExists(client: pg.Client, tableName: string): Promise<boolean> {
   const result = await client.query(
-    `SELECT to_regclass('public.${tableName}') IS NOT NULL`
+    `SELECT to_regclass(format('public.%I', $1::text)) IS NOT NULL`,
+    [tableName]
   );
   // PostgreSQL returns the column as '?column?' when unnamed
   return (result.rows[0] as Record<string, unknown>)['?column?'] === true;
@@ -35,6 +36,11 @@ export async function tableExists(client: pg.Client, tableName: string): Promise
  * - fqc_documents: stores uploaded documents with embeddings
  * - fqc_plugin_registry: tracks installed plugins and schemas
  * - fqc_write_locks: coordinates concurrent write access
+ * - fqc_llm_providers: LLM provider config (Phase 98)
+ * - fqc_llm_models: LLM model config (Phase 98)
+ * - fqc_llm_purposes: LLM purpose config (Phase 98)
+ * - fqc_llm_purpose_models: purpose-to-model mappings (Phase 98)
+ * - fqc_llm_usage: LLM usage telemetry (Phase 98)
  *
  * @param client - A connected pg.Client instance
  * @returns Resolves successfully if all tables exist
@@ -47,6 +53,11 @@ export async function verifySchema(client: pg.Client): Promise<void> {
     'fqc_documents',
     'fqc_plugin_registry',
     'fqc_write_locks',
+    'fqc_llm_providers',
+    'fqc_llm_models',
+    'fqc_llm_purposes',
+    'fqc_llm_purpose_models',
+    'fqc_llm_usage',
   ];
 
   const missingTables: string[] = [];

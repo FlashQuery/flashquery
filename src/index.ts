@@ -34,6 +34,7 @@ import { initSupabase } from './storage/supabase.js';
 import { initVault, cleanStaleTempFiles } from './storage/vault.js';
 import { initGit, GitManagerImpl } from './git/manager.js';
 import { initEmbedding, embeddingProvider, NullEmbeddingProvider } from './embedding/provider.js';
+import { initLlm, llmClient } from './llm/client.js';
 import { initPlugins, pluginManager } from './plugins/manager.js';
 import { initMCP } from './mcp/server.js';
 import { initializeShutdownHandlers } from './server/shutdown.js';
@@ -69,7 +70,7 @@ export async function runScanCommand(configPath: string): Promise<void> {
     initLogger(config);
     await initSupabase(config);
     await initVault(config);
-    initEmbedding(config);
+    initEmbedding(config, undefined);  // scan path: no llmClient initialized; purpose path is skipped
     let folderMappings: Map<string, FolderMapping> = new Map();
     try {
       logger.info('Initializing plugin manifests...');
@@ -261,7 +262,8 @@ if (isMain) {
           // Continue with empty mappings
         }
         await initGit(config);
-        initEmbedding(config);
+        await initLlm(config);
+        initEmbedding(config, llmClient);
         await initPlugins(config);
         const httpServer = await initMCP(config, version, transportOverride);
 
@@ -287,10 +289,25 @@ if (isMain) {
         logger.info(`  Version:   ${version}`);
         logger.info(`  MCP:       ${mcpLine}`);
         logger.info(`  Supabase:  ${supabaseHost}`);
-        const embeddingStatus = embeddingProvider instanceof NullEmbeddingProvider
-          ? 'Semantic search: DISABLED'
-          : `Semantic search: ENABLED (${config.embedding.provider}/${config.embedding.model})`;
+        // Phase 106 W-01 fix: when embedding.provider:none AND an 'embedding'
+        // LLM purpose is configured, the embedding subsystem routes through
+        // that purpose's first model — show a distinct banner string instead
+        // of "ENABLED (none/)" which was misleading.
+        let embeddingStatus: string;
+        if (embeddingProvider instanceof NullEmbeddingProvider) {
+          embeddingStatus = 'Semantic search: DISABLED';
+        } else if (config.llm?.purposes?.some((p) => p.name === 'embedding')) {
+          const embPurpose = config.llm.purposes.find((p) => p.name === 'embedding')!;
+          const firstModel = embPurpose.models[0] ?? 'unknown';
+          embeddingStatus = `Semantic search: ENABLED (via LLM purpose: ${firstModel})`;
+        } else {
+          embeddingStatus = `Semantic search: ENABLED (${config.embedding?.provider}/${config.embedding?.model})`;
+        }
         logger.info(`  ${embeddingStatus}`);
+        const llmStatus = config.llm
+          ? `${config.llm.providers.length} provider(s), ${config.llm.purposes.length} purpose(s)`
+          : 'not configured';
+        logger.info(`  LLM:       ${llmStatus}`);
         logger.info(
           `  Git:       auto_commit=${config.git.autoCommit}, auto_push=${config.git.autoPush}`
         );

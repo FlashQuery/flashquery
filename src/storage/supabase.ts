@@ -5,6 +5,7 @@ import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { verifySchema } from './schema-verify.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
+import { getEmbeddingDimensions } from '../embedding/provider.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // macOS 15+ (Sequoia/Tahoe) Local Network Privacy
@@ -432,6 +433,94 @@ END$$;
 CREATE INDEX IF NOT EXISTS idx_fqc_write_locks_expires ON fqc_write_locks (expires_at);
 
 
+-- ─── Phase 98 (v3.0): LLM three-layer config tables ────────────────────────
+
+-- LLM Config: Providers (PROV-01, PROV-02)
+-- source: 'yaml' (set by syncLlmConfigToDb on each startup) or 'webapp' (preserved across restarts)
+-- api_key_ref stores a literal \${ENV_VAR} reference string, NEVER the resolved secret
+CREATE TABLE IF NOT EXISTS fqc_llm_providers (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  endpoint TEXT NOT NULL,
+  api_key_ref TEXT,
+  source TEXT NOT NULL DEFAULT 'yaml',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(instance_id, name)
+);
+
+-- LLM Config: Models (MOD-01, MOD-02)
+-- cost_per_million_input/output use NUMERIC(10,4): supports rates like $0.0001/1M to $999,999.9999/1M.
+-- Default 0 covers local/free models per MOD-02.
+CREATE TABLE IF NOT EXISTS fqc_llm_models (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  provider_name TEXT NOT NULL,
+  model TEXT NOT NULL,
+  type TEXT NOT NULL,
+  cost_per_million_input NUMERIC(10, 4) NOT NULL DEFAULT 0,
+  cost_per_million_output NUMERIC(10, 4) NOT NULL DEFAULT 0,
+  source TEXT NOT NULL DEFAULT 'yaml',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(instance_id, name)
+);
+CREATE INDEX IF NOT EXISTS idx_llm_models_provider ON fqc_llm_models(instance_id, provider_name);
+
+-- LLM Config: Purposes (PURP-01, PURP-02, PURP-03)
+-- defaults JSONB stores arbitrary LLM provider params (temperature, max_tokens, etc.)
+CREATE TABLE IF NOT EXISTS fqc_llm_purposes (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  defaults JSONB,
+  source TEXT NOT NULL DEFAULT 'yaml',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(instance_id, name)
+);
+
+-- LLM Config: Purpose-Model fallback chain (PURP-01 ordered list)
+-- position is 1-indexed; UNIQUE(instance_id, purpose_name, position) enforces ordering integrity.
+CREATE TABLE IF NOT EXISTS fqc_llm_purpose_models (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  purpose_name TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  position INTEGER NOT NULL,
+  UNIQUE(instance_id, purpose_name, position)
+);
+CREATE INDEX IF NOT EXISTS idx_llm_purpose_models_lookup ON fqc_llm_purpose_models(instance_id, purpose_name);
+
+-- LLM Usage: Cost tracking log (COST-01 — DDL ONLY in Phase 98; recording logic in Phase 102)
+-- Token columns are BIGINT per STATE.md architectural constraint (not INTEGER) — once-shipped types.
+-- cost_usd is NUMERIC(18,10) per STATE.md ("NUMERIC(18,10) for cost_usd") — supports rates as small
+-- as 0.0000000001 USD with up to 99,999,999 USD total.
+CREATE TABLE IF NOT EXISTS fqc_llm_usage (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  purpose_name TEXT NOT NULL,
+  model_name TEXT NOT NULL,
+  provider_name TEXT NOT NULL,
+  input_tokens BIGINT NOT NULL DEFAULT 0,
+  output_tokens BIGINT NOT NULL DEFAULT 0,
+  cost_usd NUMERIC(18, 10) NOT NULL DEFAULT 0,
+  latency_ms INTEGER NOT NULL DEFAULT 0,
+  fallback_position INTEGER,
+  trace_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_instance_created ON fqc_llm_usage(instance_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_instance_purpose ON fqc_llm_usage(instance_id, purpose_name);
+CREATE INDEX IF NOT EXISTS idx_llm_usage_instance_trace ON fqc_llm_usage(instance_id, trace_id);
+
+-- ─── End Phase 98 LLM tables ───────────────────────────────────────────────
+
+
 -- Step 3: Create indexes
 
 CREATE INDEX IF NOT EXISTS idx_fqc_memory_embedding ON fqc_memory USING hnsw (embedding vector_cosine_ops);
@@ -654,7 +743,7 @@ class SupabaseManagerImpl implements SupabaseManager {
 
   async initialize(config: FlashQueryConfig): Promise<void> {
     const { url: supabaseUrl, serviceRoleKey, skipDdl, databaseUrl } = config.supabase;
-    const { dimensions } = config.embedding;
+    const dimensions = getEmbeddingDimensions(config);
 
     const hostname = new URL(supabaseUrl).hostname;
     logger.debug(`Supabase: connecting to ${hostname}...`);
@@ -793,12 +882,17 @@ class SupabaseManagerImpl implements SupabaseManager {
         }
       }
 
-      logger.info('Schema verification: all 5 required tables present');
+      logger.info('Schema verification: all 10 required tables present');
       logger.debug('  fqc_memory: verified');
       logger.debug('  fqc_vault: verified');
       logger.debug('  fqc_documents: verified');
       logger.debug('  fqc_plugin_registry: verified');
       logger.debug('  fqc_write_locks: verified');
+      logger.debug('  fqc_llm_providers: verified');
+      logger.debug('  fqc_llm_models: verified');
+      logger.debug('  fqc_llm_purposes: verified');
+      logger.debug('  fqc_llm_purpose_models: verified');
+      logger.debug('  fqc_llm_usage: verified');
       // CLEAN-01, CLEAN-02: fqc_event_log and fqc_routing_rules removed in v1.7
       // CLEAN-01: fqc_projects removed in v1.7 (replaced by path-based location + tag-based categorization)
       logger.info('Supabase: connected');

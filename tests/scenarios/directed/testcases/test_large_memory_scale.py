@@ -22,15 +22,21 @@ Modes:
                 and shuts it down afterwards. Server logs are included in JSON output.
 
 Configurable scale:
-    --memory-count N            Total memories to create (default: 100)
+    --memory-count N            Total memories to create (default: 1000)
     --update-percentage P       % of memories to update (default: 30)
     --archive-percentage P      % of memories to archive (default: 20)
 
 Usage:
-    python test_large_memory_scale.py --managed                  # 100 memories (default, ~30s)
-    python test_large_memory_scale.py --managed --memory-count 200  # 200 memories (~60s)
-    python test_large_memory_scale.py --managed --memory-count 200 --update-percentage 50  # 200 ops (~90s)
-    python test_large_memory_scale.py --managed --json --keep    # keep files for debugging
+    python test_large_memory_scale.py --managed                       # 1000 memories (default, ~7–10min)
+    python test_large_memory_scale.py --managed --memory-count 100    # 100 memories (quick logic check, ~2min)
+    python test_large_memory_scale.py --managed --memory-count 200 --update-percentage 50
+    python test_large_memory_scale.py --managed --json --keep         # keep data for debugging
+
+Note on remote servers:
+    With a remote (cloud) FlashQuery server, each MCP call has network latency that makes
+    the 1000-memory default very slow (~10min). Use --memory-count 100 for logic validation
+    on remote servers. The 1000-memory run is best reserved for local --managed mode where
+    latency is minimal.
 
 Exit codes:
     0   PASS    All steps passed and cleanup was clean
@@ -93,7 +99,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
 
     # Configurable scale parameters (define near top for easy modification)
-    memory_count = getattr(args, "memory_count", 100)
+    memory_count = getattr(args, "memory_count", 1000)
     update_pct = getattr(args, "update_percentage", 30)
     archive_pct = getattr(args, "archive_percentage", 20)
 
@@ -123,6 +129,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         saved_count = 0
         mem_tag_to_id = {}  # Maps mem tag -> memory_id for search validation
+        first_memory_original_marker = None  # unique marker of memory[0] before update
         for i in range(memory_count):
             log_mark = ctx.server.log_position if ctx.server else 0
             # Generate a unique marker for this memory so we can validate search results
@@ -148,6 +155,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 mem_tag_to_id[mem_tag] = memory_id
                 ctx.cleanup.track_mcp_memory(memory_id)
                 saved_count += 1
+                if i == 0:
+                    first_memory_original_marker = unique_marker
 
             if (i + 1) % 20 == 0:
                 run.step(
@@ -277,9 +286,45 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 server_logs=step_logs,
             )
 
+        # ── Step 5b: Version preservation — old version still retrievable ──
+        # SC-03 requires "versions preserved" — the old version ID must still
+        # be accessible and must return the pre-update content.
+        if created_memory_ids and new_version_ids and first_memory_original_marker:
+            log_mark = ctx.server.log_position if ctx.server else 0
+            old_id = created_memory_ids[0]
+            get_old_result = ctx.client.call_tool(
+                "get_memory",
+                memory_ids=old_id,
+            )
+            step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+            original_present = first_memory_original_marker in get_old_result.text
+            updated_absent = "UPDATED" not in get_old_result.text
+
+            run.step(
+                label="get_memory (SC-03: old version preserved with original content)",
+                passed=(get_old_result.ok and original_present and updated_absent),
+                detail=(
+                    f"ok={get_old_result.ok} "
+                    f"original_marker_present={original_present} "
+                    f"updated_absent={updated_absent} | {get_old_result.text[:300]}"
+                ),
+                timing_ms=get_old_result.timing_ms,
+                tool_result=get_old_result,
+                server_logs=step_logs,
+            )
+
         # ── Step 6: Archive phase (Phase 3) ──────────────────────────────
+        # Archive memories that were NOT updated (start from num_updates index)
+        # so the archive-exclusion assertion is unambiguous — these IDs have
+        # never had a new version created, so they must be absent from the
+        # active list after archiving.
+        archive_start_idx = min(num_updates, len(created_memory_ids))
+        actual_num_archives = min(num_archives, len(created_memory_ids) - archive_start_idx)
         archived_count = 0
-        for i in range(min(num_archives, len(created_memory_ids))):
+        archived_ids = []
+        for j in range(actual_num_archives):
+            i = archive_start_idx + j
             memory_id = created_memory_ids[i]
             log_mark = ctx.server.log_position if ctx.server else 0
             archive_result = ctx.client.call_tool(
@@ -290,10 +335,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
             if archive_result.ok:
                 archived_count += 1
+                archived_ids.append(memory_id)
 
-            if (i + 1) % 10 == 0:
+            if (j + 1) % 10 == 0:
                 run.step(
-                    label=f"archive_memory batch ({i+1}/{min(num_archives, len(created_memory_ids))})",
+                    label=f"archive_memory batch ({j+1}/{actual_num_archives})",
                     passed=archive_result.ok,
                     detail=f"Archived {archived_count} memories...",
                     timing_ms=archive_result.timing_ms,
@@ -301,11 +347,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     server_logs=step_logs,
                 )
 
-        if num_archives % 10 != 0 and num_archives > 0:
+        if actual_num_archives % 10 != 0 and actual_num_archives > 0:
             run.step(
                 label=f"archive_memory final batch",
                 passed=True,
-                detail=f"Total {archived_count}/{min(num_archives, len(created_memory_ids))} archived",
+                detail=f"Total {archived_count}/{actual_num_archives} archived",
             )
 
         # ── Step 7: Validate archives are excluded from list ──────────────
@@ -318,14 +364,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Archived memories should be excluded from list results
-        # (exact count is hard to validate due to version behavior, so just verify the tool works)
-        list_result.expect_contains("Memory ID") if memory_count > 0 else None
+        # Archived memories must be absent from active list results.
+        # Pick the first archived ID (guaranteed to be non-updated) and assert
+        # it does NOT appear anywhere in the list_memories response.
+        sample_archived_id = archived_ids[0] if archived_ids else None
+        archived_excluded = (sample_archived_id not in list_result.text) if sample_archived_id else True
 
         run.step(
             label="list_memories (archived excluded)",
-            passed=(list_result.ok and list_result.status == "pass"),
-            detail=f"Validated list after archiving {archived_count} memories",
+            passed=(list_result.ok and archived_excluded),
+            detail=(
+                f"archived_excluded={archived_excluded} "
+                f"sample_archived_id={sample_archived_id} "
+                f"archived_count={archived_count} | {list_result.text[:300]}"
+            ),
             timing_ms=list_result.timing_ms,
             tool_result=list_result,
             server_logs=step_logs,
@@ -447,8 +499,8 @@ def main() -> None:
     parser.add_argument(
         "--memory-count",
         type=int,
-        default=100,
-        help="Total number of memories to create (default: 100).",
+        default=1000,
+        help="Total number of memories to create (default: 1000).",
     )
     parser.add_argument(
         "--update-percentage",

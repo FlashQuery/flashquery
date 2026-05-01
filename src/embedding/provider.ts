@@ -1,5 +1,6 @@
 import type { FlashQueryConfig } from '../config/loader.js';
 import { logger } from '../logging/logger.js';
+import type { LlmClient } from '../llm/client.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EmbeddingProvider interface
@@ -28,7 +29,7 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
     dimensions: number,
     providerName: string
   ) {
-    this.baseUrl = baseUrl;
+    this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.apiKey = apiKey;
     this.dimensions = dimensions;
@@ -88,7 +89,7 @@ export class OllamaProvider implements EmbeddingProvider {
   private dimensions: number;
 
   constructor(baseUrl: string, model: string, dimensions: number) {
-    this.baseUrl = baseUrl;
+    this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.dimensions = dimensions;
   }
@@ -184,22 +185,92 @@ export function createEmbeddingProvider(config: FlashQueryConfig['embedding']): 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// getEmbeddingDimensions — resolve vector dimensions from LLM or legacy config
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function getEmbeddingDimensions(config: FlashQueryConfig): number {
+  if (config.llm?.purposes) {
+    const embeddingPurpose = config.llm.purposes.find(p => p.name === 'embedding');
+    if (embeddingPurpose?.models[0]) {
+      const modelEntry = config.llm.models?.find(m => m.name === embeddingPurpose.models[0]);
+      if (modelEntry?.dimensions) return modelEntry.dimensions;
+    }
+  }
+  return config.embedding?.dimensions ?? 1536;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Module singleton and init function
 // ─────────────────────────────────────────────────────────────────────────────
 
 export let embeddingProvider: EmbeddingProvider;
 
-export function initEmbedding(config: FlashQueryConfig): void {
-  const { provider, model, apiKey, dimensions } = config.embedding;
+export function initEmbedding(config: FlashQueryConfig, llmClient?: LlmClient): void {
+  const dimensions = getEmbeddingDimensions(config);
 
-  // D-05A: Explicit provider="none" — user intentionally disabled embedding
+  // Purpose path (D-03, D-04, D-05, D-06): check config.llm.purposes FIRST.
+  // Guard with `llmClient` truthiness BEFORE calling getModelForPurpose.
+  // NullLlmClient.getModelForPurpose returns null (Phase 106 fix); the null-guard
+  // at line ~202 handles that case cleanly.
+  const hasEmbeddingPurpose = config.llm?.purposes?.some(p => p.name === 'embedding');
+  if (hasEmbeddingPurpose && llmClient) {
+    const result = llmClient.getModelForPurpose('embedding');
+    if (!result) {
+      logger.warn(
+        "Embedding purpose 'embedding' has no models in its fallback chain — " +
+        "semantic search DISABLED. Fix: add at least one model with type='embedding' to the embedding purpose."
+      );
+      embeddingProvider = new NullEmbeddingProvider(dimensions);
+      return;
+    }
+    const modelEntry = config.llm!.models.find(m => m.name === result.modelName);
+    if (!modelEntry || modelEntry.type !== 'embedding') {
+      logger.warn(
+        `Embedding purpose 'embedding' resolves to model '${result.modelName}' which has ` +
+        `type='${modelEntry?.type ?? 'unknown'}', not 'embedding' — semantic search DISABLED. ` +
+        `Fix: assign a model with type='embedding' to the embedding purpose.`
+      );
+      embeddingProvider = new NullEmbeddingProvider(dimensions);
+      return;
+    }
+    const providerEntry = config.llm!.providers.find(p => p.name === result.providerName);
+    if (!providerEntry) {
+      logger.warn(
+        `Embedding purpose provider '${result.providerName}' not found — semantic search DISABLED.`
+      );
+      embeddingProvider = new NullEmbeddingProvider(dimensions);
+      return;
+    }
+    if (providerEntry.type === 'ollama') {
+      embeddingProvider = new OllamaProvider(providerEntry.endpoint, modelEntry.model, dimensions);
+    } else {
+      embeddingProvider = new OpenAICompatibleProvider(
+        providerEntry.endpoint,
+        modelEntry.model,
+        providerEntry.apiKey ?? '',
+        dimensions,
+        providerEntry.name
+      );
+    }
+    logger.info(`Embedding: routing through purpose 'embedding' → ${providerEntry.name}/${modelEntry.model}`);
+    return;
+  }
+
+  // Legacy path: only reached when no LLM embedding purpose is configured.
+  if (!config.embedding) {
+    embeddingProvider = new NullEmbeddingProvider(dimensions);
+    logger.info('Embedding: DISABLED (no embedding configured)');
+    return;
+  }
+
+  const { provider, model, apiKey } = config.embedding;
+
   if (provider === 'none') {
     embeddingProvider = new NullEmbeddingProvider(dimensions);
     logger.info('Embedding: DISABLED (provider=none)');
     return;
   }
 
-  // D-05B: Provider set but API key missing — warn and degrade gracefully
   if ((provider === 'openai' || provider === 'openrouter') && !apiKey) {
     const providerName = provider === 'openai' ? 'OpenAI' : 'OpenRouter';
     logger.warn(

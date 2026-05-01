@@ -159,11 +159,6 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       VAULT_PATH: /app/vault
       LOG_PATH: /app/logs
-      # Config enum defaults — must match allowed values in src/config/loader.ts.
-      # "none" disables embedding (safe for CI and smoke-test runs without an API key).
-      # "info" is the standard log level. Both can be overridden in .env.docker.
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-none}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       MCP_AUTH_SECRET: ${MCP_AUTH_SECRET:-ci-smoke-test-secret}
     command: start --transport http --config ./flashquery.yaml

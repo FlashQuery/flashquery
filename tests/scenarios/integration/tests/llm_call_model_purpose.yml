@@ -1,0 +1,20 @@
+name: llm_call_model_purpose
+description: >
+  End-to-end call_model with resolver: purpose returns a valid response envelope
+  with metadata.resolver == "purpose", metadata.fallback_position == 1 (first
+  model in the chain succeeded), and non-empty response text. Verifies TOOL-01,
+  TOOL-02 for the purpose resolver path end-to-end.
+coverage: [IL-02]
+deps: [llm]
+
+steps:
+  - label: "call_model resolver=purpose returns response containing 'Paris'"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "What is the capital of France? Reply with just the city name."
+      expect_contains: "Paris"

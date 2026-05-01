@@ -7,5 +7,6 @@ export default defineConfig({
     include: ['tests/unit/**/*.test.ts'],
     globals: true,
     passWithNoTests: true,
+    restoreMocks: true,
   },
 });

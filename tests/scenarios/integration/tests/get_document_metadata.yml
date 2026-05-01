@@ -1,9 +1,11 @@
 name: get_document_metadata
 description: >
-  When retrieving a document via get_document, all expected metadata fields
-  are present in the response: title, path, tags, status, and fqc_id.
-  Verifies that the retrieval surface contract includes complete metadata
-  for downstream tools and workflows.
+  When retrieving a document's metadata, all expected fields are present:
+  title, path, tags, status, and fqc_id. get_doc_outline returns frontmatter
+  fields including fq_title (value), fq_status, fq_tags, and fq_id. search_documents
+  returns Title, Path, and FQC ID in the result listing. Body content is
+  verified via get_document. Covers IX-07: all named metadata fields are
+  accessible through the FlashQuery retrieval surface.
 coverage: [IX-07]
 
 steps:
@@ -15,30 +17,45 @@ steps:
     content: "Key concepts for understanding the system."
     tags: [knowledge, concepts, gdm-tag]
 
-  - label: "Retrieve document by fqc_id"
+  - label: "get_doc_outline returns title value in frontmatter"
     assert:
-      op: get_document
+      op: get_doc_outline
       args:
-        identifier: "${meta_doc.fq_id}"
-      expect_contains: "Key concepts for understanding the system"
+        identifiers: "${meta_doc.fq_id}"
+      expect_contains: "Core Concepts"
 
-  - label: "Retrieve document by path returns same content"
+  - label: "get_doc_outline returns fq_status field name in frontmatter"
     assert:
-      op: get_document
+      op: get_doc_outline
       args:
-        identifier: "${meta_doc.path}"
-      expect_contains: "Key concepts for understanding the system"
+        identifiers: "${meta_doc.fq_id}"
+      expect_contains: "fq_status"
 
-  - label: "Search finds document by tag"
+  - label: "get_doc_outline returns fq_id field name in frontmatter"
+    assert:
+      op: get_doc_outline
+      args:
+        identifiers: "${meta_doc.fq_id}"
+      expect_contains: "fq_id"
+
+  - label: "get_doc_outline returns tag value in frontmatter"
+    assert:
+      op: get_doc_outline
+      args:
+        identifiers: "${meta_doc.fq_id}"
+      expect_contains: "gdm-tag"
+
+  - label: "search_documents returns Title, Path, and FQC ID in result"
     assert:
       op: search_documents
       args:
         tags: [gdm-tag]
       expect_contains: "Core Concepts"
+      expect_path_contains: "knowledge/concepts.md"
 
-  - label: "Tagged search returns document with all tags"
+  - label: "get_document returns body content"
     assert:
-      op: search_documents
+      op: get_document
       args:
-        tags: [knowledge]
-      expect_contains: "Core Concepts"
+        identifier: "${meta_doc.fq_id}"
+      expect_contains: "Key concepts for understanding the system"

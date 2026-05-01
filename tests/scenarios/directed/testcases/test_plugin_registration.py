@@ -12,7 +12,12 @@ Scenario:
     7. Register the same plugin id under a second instance inst_b, create an isolated record (P-15)
     8. Cross-instance isolation: get_record for inst_a's id from inst_b fails and vice versa
     9. Dry-run unregister of inst_a without confirm_destroy — impact shown, data untouched (P-11)
+    9b. Upgrade inst_a to tracking schema (adds document auto-track with template)
+    9c. Create a vault file in the tracked folder and scan to index it
+    9d. search_records triggers reconciliation → auto-tracks file → pending review row created
+    9e. clear_pending_reviews (query mode) — confirms at least one row exists before teardown
     10. Confirmed unregister of inst_a with confirm_destroy=True — tables/data gone (P-12)
+    10b. clear_pending_reviews (query mode) after teardown — asserts "No pending reviews" (P-12)
     11. Verify inst_b still intact (isolation confirmed post-teardown)
     Cleanup: inst_b is torn down with confirm_destroy=True at the end of the test.
 
@@ -130,6 +135,39 @@ def _schema_v3_drop_quantity() -> str:
     )
 
 
+def _schema_v2_with_tracking(folder: str) -> str:
+    """v2 tables + documents section so reconciliation creates pending review rows (P-12)."""
+    return (
+        "plugin:\n"
+        f"  id: {PLUGIN_ID}\n"
+        "  name: Test Registration Plugin\n"
+        "  version: 1.3.0\n"
+        "  description: Scenario-test fixture with document auto-tracking enabled\n"
+        "\n"
+        "tables:\n"
+        "  - name: items\n"
+        "    description: Test items\n"
+        "    columns:\n"
+        "      - name: name\n"
+        "        type: text\n"
+        "        required: true\n"
+        "      - name: quantity\n"
+        "        type: integer\n"
+        "      - name: price\n"
+        "        type: integer\n"
+        "\n"
+        "documents:\n"
+        "  types:\n"
+        "    - id: testreg-doc\n"
+        f"      folder: {folder}\n"
+        "      on_added: auto-track\n"
+        "      track_as: items\n"
+        "      template: \"testreg-review\"\n"
+        "      field_map:\n"
+        "        fq_title: name\n"
+    )
+
+
 def _extract_record_id(text: str) -> str:
     m = _UUID_RE.search(text or "")
     return m.group(0) if m else ""
@@ -146,6 +184,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
     suffix = run.run_id.replace("-", "_")
     inst_a = f"inst_a_{suffix}"
     inst_b = f"inst_b_{suffix}"
+    tracking_folder = f"_test/testreg-{suffix}"
 
     port_range = tuple(args.port_range) if args.port_range else None
 
@@ -487,6 +526,85 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 server_logs=step_logs,
             )
 
+        # ── Steps 9b–9e: Set up pending review rows for P-12 verification ──
+        # Re-register inst_a with a schema that adds document auto-tracking so
+        # reconciliation creates fqc_pending_plugin_review rows.  After the
+        # confirmed unregister below, those rows must be gone.
+        log_mark = ctx.server.log_position if ctx.server else 0
+        reg_tracking = ctx.client.call_tool(
+            "register_plugin",
+            schema_yaml=_schema_v2_with_tracking(tracking_folder),
+            plugin_instance=inst_a,
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+        reg_tracking.expect_contains("1.3.0")
+        run.step(
+            label="register_plugin v1.3 with document tracking (P-12 setup)",
+            passed=(reg_tracking.ok and reg_tracking.status == "pass"),
+            detail=expectation_detail(reg_tracking) or reg_tracking.error or "",
+            timing_ms=reg_tracking.timing_ms,
+            tool_result=reg_tracking,
+            server_logs=step_logs,
+        )
+
+        # Create a vault file in the tracked folder and scan so the scanner
+        # indexes it into fqc_documents before reconciliation runs.
+        ctx.create_file(
+            f"{tracking_folder}/tracked-item.md",
+            title=f"Tracked Item {run.run_id}",
+            body="Fixture for auto-track pending review test.",
+            tags=["fqc-test", run.run_id],
+        )
+        log_mark = ctx.server.log_position if ctx.server else 0
+        scan_r = ctx.scan_vault()
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+        run.step(
+            label="create vault fixture + force_file_scan (P-12 setup)",
+            passed=scan_r.ok,
+            detail=scan_r.error or "",
+            timing_ms=scan_r.timing_ms,
+            tool_result=scan_r,
+            server_logs=step_logs,
+        )
+
+        # search_records triggers reconcilePluginDocuments → auto-tracks the new
+        # vault file → inserts a fqc_pending_plugin_review row (template declared).
+        log_mark = ctx.server.log_position if ctx.server else 0
+        recon_r = ctx.client.call_tool(
+            "search_records",
+            plugin_id=PLUGIN_ID,
+            plugin_instance=inst_a,
+            table="items",
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+        run.step(
+            label="search_records triggers reconciliation → pending review created (P-12 setup)",
+            passed=recon_r.ok,
+            detail=expectation_detail(recon_r) or recon_r.error or "",
+            timing_ms=recon_r.timing_ms,
+            tool_result=recon_r,
+            server_logs=step_logs,
+        )
+
+        # Pre-condition: at least one pending review row must exist before teardown.
+        log_mark = ctx.server.log_position if ctx.server else 0
+        pre_pending = ctx.client.call_tool(
+            "clear_pending_reviews",
+            plugin_id=PLUGIN_ID,
+            plugin_instance=inst_a,
+            fqc_ids=[],
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+        pre_pending.expect_contains(f"Pending reviews for {PLUGIN_ID}")
+        run.step(
+            label="clear_pending_reviews (query) — row exists before unregister (P-12 precondition)",
+            passed=(pre_pending.ok and pre_pending.status == "pass"),
+            detail=expectation_detail(pre_pending) or pre_pending.error or "",
+            timing_ms=pre_pending.timing_ms,
+            tool_result=pre_pending,
+            server_logs=step_logs,
+        )
+
         # ── Step 10: Confirmed unregister inst_a (P-12) ───────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         confirmed = ctx.client.call_tool(
@@ -532,6 +650,27 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 tool_result=gone,
                 server_logs=step_logs,
             )
+
+        # ── Step 10b: fqc_pending_plugin_review rows cleared (P-12) ───
+        # unregister_plugin deletes all fqc_pending_plugin_review rows for the
+        # plugin. Query mode must return "No pending reviews" after teardown.
+        log_mark = ctx.server.log_position if ctx.server else 0
+        post_pending = ctx.client.call_tool(
+            "clear_pending_reviews",
+            plugin_id=PLUGIN_ID,
+            plugin_instance=inst_a,
+            fqc_ids=[],
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+        post_pending.expect_contains(f"No pending reviews for {PLUGIN_ID}")
+        run.step(
+            label="clear_pending_reviews (query) — no rows after confirmed unregister (P-12)",
+            passed=(post_pending.ok and post_pending.status == "pass"),
+            detail=expectation_detail(post_pending) or post_pending.error or "",
+            timing_ms=post_pending.timing_ms,
+            tool_result=post_pending,
+            server_logs=step_logs,
+        )
 
         # ── Step 11: inst_b still intact (isolation post-teardown) ────
         if record_b1_id:

@@ -17,11 +17,6 @@ git:
 mcp:
   transport: "streamable-http"
   port: 3100
-embedding:
-  provider: openai
-  model: "text-embedding-3-small"
-  api_key: "test-openai-key"
-  dimensions: 1536
 logging:
   level: "info"
   output: "stdout"

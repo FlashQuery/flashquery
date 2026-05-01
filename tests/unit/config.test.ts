@@ -86,7 +86,6 @@ logging:
     expect(typeof config.server.port).toBe('number');
     expect(typeof config.git.autoCommit).toBe('boolean');
     expect(typeof config.git.autoPush).toBe('boolean');
-    expect(typeof config.embedding.dimensions).toBe('number');
     expect(Array.isArray(config.instance.vault.markdownExtensions)).toBe(true);
   });
 
@@ -547,6 +546,88 @@ defaults:
     try {
       expect(() => loadConfig(tmpFile)).toThrow(/defaults.*project.*eliminated in v1\.7/i);
       expect(() => loadConfig(tmpFile)).toThrow(/tags/i);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  // ── D-07: embedding dual-config deprecation warning (Phase 104) ────────────
+
+  const MINIMAL_LLM_YAML = `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+      api_key: sk-test
+  models:
+    - name: embed-model
+      provider_name: openai
+      model: text-embedding-3-small
+      type: embedding
+      cost_per_million:
+        input: 0
+        output: 0
+  purposes:
+    - name: embedding
+      description: Embedding purpose
+      models: [embed-model]
+`;
+
+  const MINIMAL_BASE_YAML = `
+instance:
+  id: "d07-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+`;
+
+  it('D-07a: no error or warning when legacy embedding: coexists with llm.purposes embedding (embedding: is ignored)', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-d07a-${Date.now()}.yml`);
+    writeFileSync(tmpFile, MINIMAL_BASE_YAML + `
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+` + MINIMAL_LLM_YAML);
+    try {
+      const config = loadConfig(tmpFile);
+      const warnings = getDeprecationWarnings(config);
+      expect(warnings.some(w => w.includes("'embedding:' config section is deprecated"))).toBe(false);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('D-07b: no deprecation warning when embedding.provider=none AND llm.purposes contains embedding (migrated user)', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-d07b-${Date.now()}.yml`);
+    writeFileSync(tmpFile, MINIMAL_BASE_YAML + `
+embedding:
+  provider: none
+  model: text-embedding-3-small
+` + MINIMAL_LLM_YAML);
+    try {
+      const config = loadConfig(tmpFile);
+      const warnings = getDeprecationWarnings(config);
+      expect(warnings.some(w => w.includes("'embedding:' config section is deprecated"))).toBe(false);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('D-07c: no D-07 deprecation warning when embedding: is set but llm has no embedding purpose', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-d07c-${Date.now()}.yml`);
+    writeFileSync(tmpFile, MINIMAL_BASE_YAML + `
+embedding:
+  provider: openai
+  model: text-embedding-3-small
+`);
+    try {
+      const config = loadConfig(tmpFile);
+      const warnings = getDeprecationWarnings(config);
+      expect(warnings.some(w => w.includes("'embedding:' config section is deprecated"))).toBe(false);
     } finally {
       unlinkSync(tmpFile);
     }

@@ -1,0 +1,20 @@
+name: llm_call_model_basic
+description: >
+  End-to-end call_model with resolver: model returns a valid response envelope
+  with metadata.resolver == "model", metadata.fallback_position == null, and
+  non-empty response text. Verifies TOOL-01, TOOL-02 for the model resolver path
+  end-to-end through the integration test runner.
+coverage: [IL-01]
+deps: [llm]
+
+steps:
+  - label: "call_model resolver=model returns response containing '4'"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "What is 2+2? Reply with just the digit."
+      expect_contains: "4"

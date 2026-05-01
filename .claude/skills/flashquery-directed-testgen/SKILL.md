@@ -687,6 +687,7 @@ Common tools and their key parameters:
 - **Tags are normalized:** Lowercased, trimmed, deduplicated by FlashQuery.
 - **Archived entities are excluded from search** but can still be retrieved by direct ID.
 - **Plugin tests need a schema:** Write a YAML schema string and pass it to register_plugin via `schema_yaml`.
+- **Fire-and-forget writes require a sleep before the next query.** Some operations write to the database asynchronously — the tool returns success immediately but the row commits in the background. When you write a test that seeds data through one of these operations and then queries it, you **must** add `time.sleep(3)` between the seed and the query, or the test will pass against local Supabase (sub-millisecond writes) and fail against cloud Supabase (network latency exposes the race). Operations that are fire-and-forget: `call_model` (writes `fqc_llm_usage` rows after the LLM response returns), `save_memory` embedding path (the memory row is written synchronously but the vector is committed asynchronously). When in doubt, add the sleep — 3 seconds is conservative and costs little. Also use `>= N` rather than `== N` when asserting on counts of seeded rows, since the period filter may include rows from other tests in the same run.
 
 ## Phase 4: Validate Before Running
 
@@ -815,6 +816,7 @@ When the failure looks like FlashQuery is the problem, stop the debug loop immed
 Common fixable failure patterns:
 
 - **"No documents found"** after MCP create: Add `force_file_scan(background=False)` or `time.sleep(0.5)`.
+- **Query returns fewer rows than seeded (e.g. `calls=1` when 2 were seeded, or `found=False` right after a save):** Fire-and-forget race — the DB write hasn't committed yet. Add `time.sleep(3)` between the last seed call and the first query that depends on it. This failure typically appears on cloud Supabase and is invisible on local Docker Supabase. See "Important Behavioral Notes" above for the full list of fire-and-forget operations.
 - **"Not found in vault"** on disk verification: Ensure `vault_path=getattr(args, "vault_path", None)` is passed to TestContext.
 - **Expected text not found**: Read the actual FlashQuery response in the report first — if the format genuinely differs from what the test expects, adjust the assertion. If FlashQuery is returning wrong content, that's a defect.
 - **Tool returned error**: Check for invalid parameters or missing required fields in the test.

@@ -698,7 +698,7 @@ def run_suite(args: argparse.Namespace) -> int:
     if server_mode == "managed" and shared_server is not None:
         try:
             result_code = subprocess.run(
-                ["python3", "tests/scenarios/dbtools/clean_test_tables.py"],
+                [sys.executable, "tests/scenarios/dbtools/clean_test_tables.py"],
                 cwd=str(_PROJECT_ROOT),
                 capture_output=True,
                 text=True,
@@ -706,7 +706,7 @@ def run_suite(args: argparse.Namespace) -> int:
             )
             if result_code.returncode != 0:
                 print(
-                    f"  Warning: initial table cleanup failed: {result_code.stderr.strip()}",
+                    f"  Warning: initial table cleanup failed: {result_code.stderr.strip() or result_code.stdout.strip()}",
                     file=sys.stderr
                 )
         except Exception as e:
@@ -788,7 +788,7 @@ def run_suite(args: argparse.Namespace) -> int:
         if server_mode == "managed" and shared_server is not None:
             try:
                 result_code = subprocess.run(
-                    ["python3", "tests/scenarios/dbtools/clean_test_tables.py"],
+                    [sys.executable, "tests/scenarios/dbtools/clean_test_tables.py"],
                     cwd=str(_PROJECT_ROOT),
                     capture_output=True,
                     text=True,
@@ -796,7 +796,7 @@ def run_suite(args: argparse.Namespace) -> int:
                 )
                 if result_code.returncode != 0:
                     print(
-                        f"  Warning: table cleanup failed: {result_code.stderr.strip()}",
+                        f"  Warning: table cleanup failed: {result_code.stderr.strip() or result_code.stdout.strip()}",
                         file=sys.stderr
                     )
             except Exception as e:

@@ -4,12 +4,13 @@ Test: save_memory with plugin_scope — fuzzy-matched plugin scope association (
 
 Scenario:
     1. Register a test plugin with a short distinct ID
-    2. Save a memory with plugin_scope set to the exact plugin ID (exact match is
-       a valid degenerate case of fuzzy matching — similarity(x, x) = 1.0 > 0.8)
-    3. Verify the save succeeded with a memory ID and no "not found" warning
-    4. Save a second memory with no plugin_scope — verify it defaults to Global
-    5. Retrieve both memories by ID (get_memory) and confirm they are accessible
-    6. Cleanup: archive both memories, unregister the plugin (confirm_destroy=True)
+    2. Save a memory with plugin_scope set to the exact plugin ID (exact match baseline)
+    3. Save a memory with plugin_scope set to plugin_id + "z" — a near-match that triggers
+       fuzzy resolution (trigram similarity ~0.82 > threshold 0.8). Response must contain
+       "auto-corrected" and the resolved plugin_id, proving the fuzzy path fired.
+    4. Save a third memory with no plugin_scope — verify it defaults to Global
+    5. Retrieve all memories by ID (get_memory) and confirm they are accessible
+    6. Cleanup: archive all memories, unregister the plugin (confirm_destroy=True)
 
 Coverage points: M-15
 
@@ -99,9 +100,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
     plugin_id = f"mscope{run.run_id}"
     schema_yaml = _build_plugin_schema_yaml(plugin_id)
 
+    # Appending one char to plugin_id gives trigram similarity ~0.82 (> threshold 0.8),
+    # reliably triggering auto-correction regardless of run_id content.
+    fuzzy_scope = plugin_id + "z"
+
     scoped_content = (
         f"Plugin-scoped memory created by {TEST_NAME} (run {run.run_id}). "
         f"This memory is associated with plugin '{plugin_id}'."
+    )
+    fuzzy_content = (
+        f"Fuzzy-scoped memory created by {TEST_NAME} (run {run.run_id}). "
+        f"Scope input was '{fuzzy_scope}' — should auto-correct to '{plugin_id}'."
     )
     global_content = (
         f"Global memory created by {TEST_NAME} (run {run.run_id}). "
@@ -111,6 +120,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
     port_range = tuple(args.port_range) if args.port_range else None
 
     scoped_memory_id: str = ""
+    fuzzy_memory_id: str = ""
     global_memory_id: str = ""
     plugin_registered = False
 
@@ -194,6 +204,39 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     ctx.cleanup_errors.append(f"Cleanup unregister_plugin failed: {e}")
             return run
 
+        # ── Step 2b: Save memory with FUZZY plugin_scope (core M-15) ──
+        # fuzzy_scope = plugin_id + "z": similarity ~0.82 > threshold 0.8.
+        # The response must name the resolved plugin and say "auto-corrected",
+        # proving the fuzzy path fired rather than falling back to global.
+        log_mark = ctx.server.log_position if ctx.server else 0
+        fuzzy_save_result = ctx.client.call_tool(
+            "save_memory",
+            content=fuzzy_content,
+            tags=["fqc-test", f"scope-test-{run.run_id}"],
+            plugin_scope=fuzzy_scope,
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        fuzzy_memory_id = _extract_memory_id(fuzzy_save_result.text)
+        if fuzzy_memory_id:
+            ctx.cleanup.track_mcp_memory(fuzzy_memory_id)
+        fuzzy_save_result.expect_contains("Memory saved")
+        fuzzy_save_result.expect_contains("auto-corrected")
+        fuzzy_save_result.expect_contains(plugin_id)
+
+        run.step(
+            label=f"save_memory fuzzy plugin_scope='{fuzzy_scope}' → resolves to '{plugin_id}' (M-15)",
+            passed=(
+                fuzzy_save_result.ok
+                and fuzzy_save_result.status == "pass"
+                and bool(fuzzy_memory_id)
+            ),
+            detail=expectation_detail(fuzzy_save_result) or fuzzy_save_result.error or "",
+            timing_ms=fuzzy_save_result.timing_ms,
+            tool_result=fuzzy_save_result,
+            server_logs=step_logs,
+        )
+
         # ── Step 3: Save memory WITHOUT plugin_scope (global baseline) ─
         log_mark = ctx.server.log_position if ctx.server else 0
         global_save_result = ctx.client.call_tool(
@@ -269,6 +312,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Best-effort cleanup: archive memories ────────────────────
         for mid, label in [
             (scoped_memory_id, "scoped"),
+            (fuzzy_memory_id, "fuzzy"),
             (global_memory_id, "global"),
         ]:
             if not mid:

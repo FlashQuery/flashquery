@@ -7,6 +7,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-01
+
+This release adds native LLM calling and cost tracking to FlashQuery. Skills and agents
+can now invoke language models directly through MCP, with every call logged to a usage
+table that reports token counts, latency, USD cost, and call volume aggregated by model
+or purpose.
+
+### Added
+- `call_model` MCP tool — sends a message array to any configured LLM model or purpose
+  and returns the text response with a diagnostic envelope containing token counts,
+  computed cost, and latency. Supports a `trace_id` parameter to correlate calls across
+  a multi-step skill run and accumulate cumulative totals in the response envelope.
+- `get_llm_usage` MCP tool — queries `fqc_llm_usage` and returns aggregated statistics
+  in four modes: `summary` (totals and period cost), `recent` (last N calls with
+  individual costs), `by_purpose` (per-purpose call counts and primary-model hit rates),
+  and `by_model` (per-model usage and average fallback position). Supports filtering by
+  `trace_id`, `purpose_name`, `model_name`, and date range.
+- Three-layer LLM configuration (`llm.providers`, `llm.models`, `llm.purposes`) in
+  `flashquery.yml` with per-purpose fallback model chains, per-call parameter defaults,
+  and automatic DB sync on startup via five new `fqc_llm_*` tables.
+- Purpose resolver with multi-model fallback chain — when a purpose's primary model
+  fails, the resolver tries successive fallbacks in order and records the fallback
+  position in the response envelope.
+- `fqc_llm_usage` table for persistent cost and token-count tracking; writes are queued
+  in memory and flushed asynchronously to avoid blocking tool responses, with a drain
+  step in the graceful shutdown sequence to prevent data loss on exit.
+- `OPENAI_API_KEY` promoted to an active, documented entry in `.env.example`;
+  `OPENROUTER_API_KEY` added to `.env.test.example`.
+
+### Changed
+- Embedding is now configured through the `llm:` system as an `embedding`-typed purpose,
+  replacing the legacy top-level `embedding:` section. Existing `embedding:` configs are
+  accepted with a deprecation warning when an `llm:` embedding purpose is also present.
+  `flashquery.example.yml` has been updated to the three-layer format.
+- `EMBEDDING_PROVIDER` and `EMBEDDING_MODEL` environment variables removed from
+  `docker-compose.yml` — embedding is now configured in `flashquery.yml` via the `llm:`
+  section. Users of the bundled Docker stack who relied on these variables should migrate
+  to the `llm:` config format.
+- Startup banner now reports `Semantic search: ENABLED (via LLM purpose: <model>)` when
+  embedding is routed through an LLM purpose.
+
+### Fixed
+- Setup script (`setup.sh`) now populates `OPENAI_API_KEY` alongside Supabase
+  credentials so LLM features are available immediately after first-run setup.
+- Trailing slash stripped from provider base URLs (embedding and LLM clients) to prevent
+  double-slash path errors when constructing API endpoints.
+- Example config endpoints in `flashquery.example.yml` no longer include a `/v1` suffix
+  — the SDK appends it automatically, so including it produced invalid double-slash URLs.
+- `get_llm_usage` `recent` mode now includes the `period` field in the response envelope.
+- `get_llm_usage` raises an explicit error when `to_date` is provided without `from_date`
+  rather than silently ignoring the filter.
+- `get_llm_usage` `pct_of_total_calls` corrected to return a fraction in `[0, 1]` rather
+  than a percentage in `[0, 100]`.
+
 ## [1.1.1] - 2026-04-25
 
 ### Fixed
@@ -85,7 +139,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/FlashQuery/flashquery/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/FlashQuery/flashquery/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/FlashQuery/flashquery/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/FlashQuery/flashquery/releases/tag/v1.0.0

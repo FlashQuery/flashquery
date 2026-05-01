@@ -49,7 +49,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
     ) as ctx:
         ctx.cleanup.track_dir(base_dir)
 
-        # ── Setup: create a tracked document and a subdirectory ───────────────
+        # ── Setup: create a tracked document, a subdirectory, and a nested file ─
         ctx.client.call_tool("create_directory", paths=f"{base_dir}/subdir")
 
         notes_result = ctx.client.call_tool(
@@ -60,9 +60,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tags=["fqc-test", run.run_id],
         )
 
-        m = re.search(r"FQC ID:\s*(\S+)", notes_result.text)
-        if m:
-            ctx.cleanup.track_mcp_document(m.group(1).strip())
+        # Create a file inside subdir so F-74 can verify recursive relative-path names
+        deep_result = ctx.client.call_tool(
+            "create_document",
+            title=f"Deep {run.run_id}",
+            content="Nested file.",
+            path=f"{base_dir}/subdir/deep.md",
+            tags=["fqc-test", run.run_id],
+        )
+
+        for r in (notes_result, deep_result):
+            m = re.search(r"FQC ID:\s*(\S+)", r.text)
+            if m:
+                ctx.cleanup.track_mcp_document(m.group(1).strip())
 
         # ── F-69: table format has markdown table header ───────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
@@ -96,20 +106,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-71: non-recursive Name column shows filename only ───────────────
+        # ── F-71: file Size column shows human-readable size (e.g. "260 B") ────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, format="table")
+        result = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="table")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_notes = "notes.md" in result.text
-        # base_dir prefix should not appear in Name column
-        no_path_prefix = f"{base_dir}/notes.md" not in result.text
-        passed_f71 = result.ok and has_notes and no_path_prefix
+        has_size_unit = any(u in result.text for u in [" B", "KB", "MB", "GB"])
+        passed_f71 = result.ok and has_size_unit
 
         run.step(
-            label="F-71: non-recursive Name column shows filename only (not full path)",
+            label="F-71: file Size column shows human-readable size (e.g. '260 B')",
             passed=passed_f71,
-            detail=f"ok={result.ok} has_notes={has_notes} no_path_prefix={no_path_prefix} | {result.text[:300]}",
+            detail=f"ok={result.ok} has_size_unit={has_size_unit} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -131,72 +139,75 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-73: file Size column shows real size (not '0 bytes') ───────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="table")
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        # The file has content so should have non-zero size
-        # Look for a size value in the table — just ensure notes.md row is present
-        # and the table contains a size column with actual data
-        has_notes = "notes.md" in result.text
-        # We can't easily check for "0 bytes" absence without knowing exact format
-        # Just verify the file is listed and ok
-        passed_f73 = result.ok and has_notes
-
-        run.step(
-            label="F-73: file Size column shows real size for content-bearing file",
-            passed=passed_f73,
-            detail=f"ok={result.ok} has_notes={has_notes} | {result.text[:300]}",
-            timing_ms=result.timing_ms,
-            tool_result=result,
-            server_logs=step_logs,
-        )
-
-        # ── F-74: Created and Updated columns show YYYY- date pattern ─────────
+        # ── F-73: directory Name column trails with "/" ───────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("list_vault", path=base_dir, format="table")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        import re as _re
-        has_year = bool(_re.search(r"20\d\d-", result.text))
-        passed_f74 = result.ok and has_year
+        # The Name column for a directory row must end with "/" (e.g., "| subdir/ |")
+        has_trailing_slash = "subdir/" in result.text
+        passed_f73 = result.ok and has_trailing_slash
 
         run.step(
-            label="F-74: Created/Updated columns contain YYYY- format dates",
-            passed=passed_f74,
-            detail=f"ok={result.ok} has_year={has_year} | {result.text[:300]}",
+            label="F-73: directory Name column trails with '/' (e.g. 'subdir/')",
+            passed=passed_f73,
+            detail=f"ok={result.ok} has_trailing_slash={has_trailing_slash} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-75: date values are not '1970-01-01' for tracked files ─────────
+        # ── F-74: non-recursive Name shows filename only; recursive shows relative path ─
+        # Non-recursive: notes.md appears as "notes.md", not as a path-prefixed form
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="table")
+        result_nr = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="table", recursive=False)
+        # Recursive: subdir/deep.md must appear with its relative path
+        result_r = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="table", recursive=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        no_epoch = "1970-01-01" not in result.text
-        passed_f75 = result.ok and no_epoch
+        nr_filename_only = "notes.md" in result_nr.text and f"{base_dir}/notes.md" not in result_nr.text
+        r_relative_path = "subdir/deep.md" in result_r.text
+        passed_f74 = result_nr.ok and result_r.ok and nr_filename_only and r_relative_path
 
         run.step(
-            label="F-75: date columns do not show epoch date 1970-01-01 for tracked files",
+            label="F-74: non-recursive Name shows filename only; recursive Name shows relative path",
+            passed=passed_f74,
+            detail=f"ok_nr={result_nr.ok} nr_filename_only={nr_filename_only} ok_r={result_r.ok} r_relative_path={r_relative_path} | nr={result_nr.text[:150]} | r={result_r.text[:150]}",
+            timing_ms=result_nr.timing_ms + result_r.timing_ms,
+            tool_result=result_r,
+            server_logs=step_logs,
+        )
+
+        # ── F-75: dates use YYYY-MM-DD format — no time component ────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        result = ctx.client.call_tool("list_vault", path=base_dir, format="table")
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        # Must match full YYYY-MM-DD pattern
+        has_full_date = bool(re.search(r"\d{4}-\d{2}-\d{2}", result.text))
+        # Must NOT have a time component immediately after the date
+        has_time_component = bool(re.search(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:", result.text))
+        passed_f75 = result.ok and has_full_date and not has_time_component
+
+        run.step(
+            label="F-75: dates use YYYY-MM-DD format with no time component",
             passed=passed_f75,
-            detail=f"ok={result.ok} no_epoch={no_epoch} | {result.text[:300]}",
+            detail=f"ok={result.ok} has_full_date={has_full_date} has_time_component={has_time_component} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-80: date_field='created' → table format returned ────────────────
+        # ── F-80: no format parameter → defaults to table format ─────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, format="table", date_field="created")
+        # Call WITHOUT format param — default should produce a table
+        result = ctx.client.call_tool("list_vault", path=base_dir)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f80 = result.ok and "| Name |" in result.text
 
         run.step(
-            label="F-80: date_field=created returns table format successfully",
+            label="F-80: no format param → defaults to table (| Name | header present)",
             passed=passed_f80,
             detail=f"ok={result.ok} has_header={'| Name |' in result.text} | {result.text[:200]}",
             timing_ms=result.timing_ms,
@@ -204,15 +215,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-81: date_field='updated' → succeeds ────────────────────────────
+        # ── F-81: invalid format value → isError: true ───────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, format="table", date_field="updated")
+        result = ctx.client.call_tool("list_vault", path=base_dir, format="verbose")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f81 = result.ok
+        passed_f81 = not result.ok
 
         run.step(
-            label="F-81: date_field=updated returns listing successfully",
+            label="F-81: invalid format='verbose' returns isError: true",
             passed=passed_f81,
             detail=f"ok={result.ok} | {result.text[:200]}",
             timing_ms=result.timing_ms,
@@ -220,17 +231,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-82: summary line present at end ────────────────────────────────
+        # ── F-82: format=table + show=directories → only directory rows ───────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, format="table")
+        result = ctx.client.call_tool("list_vault", path=base_dir, format="table", show="directories")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f82 = result.ok and "Showing" in result.text
+        # notes.md is a file — it must NOT appear in a directories-only listing
+        notes_absent = "notes.md" not in result.text
+        dirs_present = "subdir/" in result.text
+        passed_f82 = result.ok and notes_absent and dirs_present
 
         run.step(
-            label="F-82: table format has 'Showing N of N entries' summary line",
+            label="F-82: format=table + show=directories — only directory rows (notes.md absent)",
             passed=passed_f82,
-            detail=f"ok={result.ok} has_showing={'Showing' in result.text} | {result.text[-200:]}",
+            detail=f"ok={result.ok} notes_absent={notes_absent} dirs_present={dirs_present} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

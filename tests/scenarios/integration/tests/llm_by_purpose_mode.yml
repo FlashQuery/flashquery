@@ -1,0 +1,45 @@
+name: llm_by_purpose_mode
+description: >
+  Two call_model resolver=purpose calls populate fqc_llm_usage; get_llm_usage
+  by_purpose surfaces the named purpose in the purposes array (not in
+  direct_model_calls), and primary_model_hit_rate equals 1 when every call
+  was handled by the primary model. Covers IL-05 and IL-09.
+coverage: [IL-05, IL-09]
+deps: [llm]
+
+steps:
+  - label: "Seed: first purpose-resolved call"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+
+  - label: "Seed: second purpose-resolved call"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply with just the digit 2."
+
+  - label: "by_purpose includes general in purposes array"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_purpose
+        period: "24h"
+      expect_contains: '"purpose_name": "general"'
+
+  - label: "by_purpose includes primary_model_hit_rate of 1 (all calls via primary)"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_purpose
+        period: "24h"
+      expect_contains: '"primary_model_hit_rate": 1'

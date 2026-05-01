@@ -269,6 +269,54 @@ Common fixable failure patterns:
 - **"Not found in vault" on disk verification** — `vault_path=getattr(args, "vault_path", None)` was omitted from the `TestContext` construction.
 - **Expected text not found** — read the actual FlashQuery response in the report first. If the format genuinely differs from what the test expected, adjust the assertion. If FlashQuery is returning wrong content, that's a defect.
 
+## Async writes and environment timing
+
+Some FlashQuery operations write to the database asynchronously — the tool returns success immediately and the row is committed in the background. Tests that seed data through one of these operations and then query immediately can produce false failures: the query runs before the write lands.
+
+**Operations that are fire-and-forget:**
+
+- `call_model` — usage rows in `fqc_llm_usage` are written after the LLM response returns, not before.
+- `save_memory` (embedding path) — the memory row itself is written synchronously, but the embedding vector is generated and stored asynchronously afterward. A `search_memory` call that relies on vector similarity can return empty results if it runs before the embedding commits.
+
+**Why this only surfaces on cloud Supabase:**
+
+When Supabase runs locally in Docker, the async write completes in under a millisecond — tests that seed and immediately query pass reliably. Against a cloud-hosted Supabase instance, the network round-trip to the database adds enough latency that the background write often hasn't landed by the time the next tool call runs. The same test, same code, different observable timing.
+
+This means tests that pass consistently on Linux (local Docker) can fail intermittently or consistently on macOS (cloud Supabase), and vice versa. When you see a test that appears flaky only on one environment, a fire-and-forget race is a likely explanation.
+
+**The fix: sleep between seed and query.**
+
+Add `time.sleep(3)` between the last seeding call and the first assertion that depends on that data. Three seconds is conservative — the write usually commits in well under one second even against a remote Supabase — but provides enough margin for slow network days without making the test noticeably slower.
+
+```python
+import time
+
+# Seed two LLM usage rows
+for i in range(2):
+    client.call_tool("call_model", ...)
+
+# fqc_llm_usage writes are fire-and-forget; give them time to commit
+time.sleep(3)
+
+# Now safe to query
+result = client.call_tool("get_llm_usage", mode="summary", ...)
+```
+
+For embedding writes specifically, 3 seconds is usually enough but you may want to push to 5 if the embedding provider is slow:
+
+```python
+ctx.client.call_tool("save_memory", content="...")
+
+# Embedding vector is written asynchronously after save_memory returns
+time.sleep(3)
+
+result = ctx.client.call_tool("search_memory", query="...")
+```
+
+**Use `>=` assertions, not `==`, when counting seeded rows.**
+
+Even with a sleep, the period filter in usage queries (`period: "24h"`) includes rows from other tests in the same run. Assert `total_calls >= N` rather than `total_calls == N` so the test is resilient to extra rows from parallel or prior tests in the same session.
+
 ## What not to do
 
 A few firm rules that keep scenario tests useful over time:

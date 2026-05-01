@@ -1,23 +1,31 @@
 #!/usr/bin/env python3
 """
-Test: list_vault — parameter validation tests: invalid date, bad show enum, path not found.
+Test: list_vault — Zod schema validation rejects invalid parameter types and values.
+
+Scenario:
+    1. F-92: list_vault with extensions="md" (string, not array) — rejected
+    2. F-93: list_vault with limit=0 (must be positive integer) — rejected
+    3. F-94: list_vault with limit=-5 (must be positive integer) — rejected
+    4. F-95: list_vault with date_field="modified" (not "updated" or "created") — rejected
+    No filesystem setup required. Cleanup is automatic.
 
 Coverage points: F-92, F-93, F-94, F-95
 
 Modes:
-    Default     Connects to an already-running FQC instance
-    --managed   Starts a dedicated FQC subprocess
+    Default     Connects to an already-running FlashQuery instance (config from flashquery.yml)
+    --managed   Starts a dedicated FlashQuery subprocess for this test, captures its logs,
+                and shuts it down afterwards. Server logs are included in JSON output.
 
 Usage:
-    python test_list_vault_param_validation.py
-    python test_list_vault_param_validation.py --managed
-    python test_list_vault_param_validation.py --managed --json
-    python test_list_vault_param_validation.py --managed --json --keep
+    python test_list_vault_param_validation.py                            # existing server
+    python test_list_vault_param_validation.py --managed                  # managed server
+    python test_list_vault_param_validation.py --managed --json           # structured JSON with server logs
+    python test_list_vault_param_validation.py --managed --json --keep    # keep files for debugging
 
 Exit codes:
-    0   PASS
-    2   FAIL
-    3   DIRTY
+    0   PASS    All steps passed and cleanup was clean
+    2   FAIL    One or more test steps failed
+    3   DIRTY   Steps passed but cleanup had errors
 """
 from __future__ import annotations
 
@@ -35,7 +43,6 @@ TEST_NAME = "test_list_vault_param_validation"
 
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
-    base_dir = f"_test/{run.run_id}"
     port_range = tuple(args.port_range) if args.port_range else None
 
     with TestContext(
@@ -46,79 +53,78 @@ def run_test(args: argparse.Namespace) -> TestRun:
         managed=args.managed,
         port_range=port_range,
     ) as ctx:
-        ctx.cleanup.track_dir(base_dir)
 
-        # Create base_dir so F-95 can test with an existing dir
-        ctx.client.call_tool("create_directory", paths=base_dir)
-
-        # ── F-92: invalid 'after' date string → isError + message ─────────────
+        # ── F-92: extensions as bare string (not array) → rejected ────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", after="not-a-date")
+        result = ctx.client.call_tool("list_vault", path="/", extensions="md")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f92 = (
-            not result.ok
-            and "Invalid date format" in result.text
-            and "YYYY-MM-DD" in result.text
+        has_validation_error = any(
+            kw in result.text.lower() for kw in ["invalid", "expected", "must be", "enum"]
         )
+        passed_f92 = not result.ok and has_validation_error
 
         run.step(
-            label="F-92: invalid 'after' value returns isError with date format hint",
+            label="F-92: extensions='md' (string not array) rejected with validation error",
             passed=passed_f92,
-            detail=f"ok={result.ok} has_invalid_msg={'Invalid date format' in result.text} has_yyyy={'YYYY-MM-DD' in result.text} | {result.text[:300]}",
+            detail=f"ok={result.ok} has_validation_error={has_validation_error} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-93: invalid 'before' date string → isError + message ────────────
+        # ── F-93: limit=0 → rejected (must be positive integer) ──────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", before="also-bad")
+        result = ctx.client.call_tool("list_vault", path="/", limit=0)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f93 = not result.ok and "Invalid date format" in result.text
+        has_validation_error = any(
+            kw in result.text.lower() for kw in ["invalid", "expected", "must be", "enum"]
+        )
+        passed_f93 = not result.ok and has_validation_error
 
         run.step(
-            label="F-93: invalid 'before' value returns isError with date format hint",
+            label="F-93: limit=0 rejected with validation error (must be positive integer)",
             passed=passed_f93,
-            detail=f"ok={result.ok} has_invalid_msg={'Invalid date format' in result.text} | {result.text[:300]}",
+            detail=f"ok={result.ok} has_validation_error={has_validation_error} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-94: non-existent path → isError ────────────────────────────────
+        # ── F-94: limit=-5 → rejected (must be positive integer) ─────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path="_definitely_nonexistent_xyzzy_path_")
+        result = ctx.client.call_tool("list_vault", path="/", limit=-5)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        not_found_msg = (
-            "not found" in result.text.lower()
-            or "path not found" in result.text.lower()
-            or "does not exist" in result.text.lower()
+        has_validation_error = any(
+            kw in result.text.lower() for kw in ["invalid", "expected", "must be", "enum"]
         )
-        passed_f94 = not result.ok and not_found_msg
+        passed_f94 = not result.ok and has_validation_error
 
         run.step(
-            label="F-94: non-existent path returns isError with 'not found' message",
+            label="F-94: limit=-5 rejected with validation error (must be positive integer)",
             passed=passed_f94,
-            detail=f"ok={result.ok} not_found_msg={not_found_msg} | {result.text[:300]}",
+            detail=f"ok={result.ok} has_validation_error={has_validation_error} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
         )
 
-        # ── F-95: recursive=True with existing dir → ok ───────────────────────
+        # ── F-95: date_field="modified" → rejected (not "updated" or "created")
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("list_vault", path=base_dir, recursive=True)
+        result = ctx.client.call_tool("list_vault", path="/", date_field="modified")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f95 = result.ok
+        has_validation_error = any(
+            kw in result.text.lower() for kw in ["invalid", "expected", "must be", "enum"]
+        )
+        passed_f95 = not result.ok and has_validation_error
 
         run.step(
-            label="F-95: recursive=True with existing directory returns ok",
+            label="F-95: date_field='modified' rejected (must be 'updated' or 'created')",
             passed=passed_f95,
-            detail=f"ok={result.ok} | {result.text[:200]}",
+            detail=f"ok={result.ok} has_validation_error={has_validation_error} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -140,7 +146,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Test: list_vault parameter validation — invalid date, bad path.",
+        description="Test: list_vault — Zod schema rejects invalid extensions, limit, and date_field values.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

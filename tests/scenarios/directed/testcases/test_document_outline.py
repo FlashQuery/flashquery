@@ -307,6 +307,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         outline_batch.expect_contains(title_a)
         outline_batch.expect_contains(title_b)
+        # FQC IDs are DB-assigned UUIDs — their presence proves DB metadata was returned
+        if fqc_id_a:
+            outline_batch.expect_contains(fqc_id_a)
+        if fqc_id_b:
+            outline_batch.expect_contains(fqc_id_b)
 
         run.step(
             label="get_doc_outline batch identifiers=[A, B] (O-06)",

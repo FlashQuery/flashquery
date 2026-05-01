@@ -147,25 +147,6 @@ mcp:
   token_lifetime: 24
 
 
-# ─── Embedding Provider ─────────────────────────────────────────────────────
-# Controls semantic search. Provider and model come from the .env file so
-# they can vary per install; dimensions is fixed by the model family.
-
-embedding:
-  provider: "${EMBEDDING_PROVIDER}"
-  model: "${EMBEDDING_MODEL}"
-  api_key: "${EMBEDDING_API_KEY}"
-  # endpoint is only used when provider is "ollama". Set OLLAMA_URL in .env
-  # to point at a remote Ollama instance; defaults to http://localhost:11434.
-  endpoint: "${OLLAMA_URL}"
-
-  # Embedding vector dimensions. Must match your chosen model:
-  #   OpenAI text-embedding-3-small:   1536
-  #   OpenAI text-embedding-3-large:   3072
-  #   Nomic nomic-embed-text:          768
-  # If you change models, update this value — the database index depends on it.
-  dimensions: 1536
-
 
 # ─── Locking ────────────────────────────────────────────────────────────────
 # Coordinates concurrent writes across multiple FlashQuery instances that
@@ -189,11 +170,81 @@ logging:
 
 
 # ─── LLM (optional) ─────────────────────────────────────────────────────────
-# Internal LLM access for features that need it. Most installations don't
-# need this section — leave commented out unless a feature you're using
-# explicitly requires it. If you enable it, the api_key belongs in .env.
+# Three-layer LLM config (v3.0+): providers + models + purposes.
+# Entire section is OPTIONAL — comment out or delete to disable LLM features.
+# See REQUIREMENTS.md (PROV-01..PURP-03, CONF-01..CONF-07) for the full spec.
 #
-# llm:
-#   provider: "anthropic"
-#   model: "claude-sonnet-4-20250514"
-#   api_key: "${LLM_API_KEY}"
+# Naming rules: lowercase a-z 0-9 _ -, must start with [a-z0-9].
+# Names are auto-lowercased at load time, so "Nano" and "nano" collide.
+#
+# NOTE: The 'embedding' purpose below is required for FlashQuery's semantic
+# search. Assign it a model of type: embedding with a dimensions: value that
+# matches your chosen embedding model. Omit the entire llm: section to disable
+# all LLM features including semantic search.
+
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+      api_key: ${OPENAI_API_KEY}
+    # - name: openrouter
+    #   type: openai-compatible
+    #   endpoint: https://openrouter.ai/api
+    #   api_key: ${OPENROUTER_API_KEY}
+    # - name: local-ollama
+    #   type: ollama
+    #   endpoint: http://localhost:11434
+  models:
+    - name: embeddings
+      provider_name: openai
+      model: text-embedding-3-small
+      type: embedding
+      # Embedding vector dimensions — must match the model:
+      #   text-embedding-3-small: 1536 | text-embedding-3-large: 3072
+      #   nomic-embed-text: 768
+      dimensions: 1536
+      cost_per_million:
+        input: 0.02
+        output: 0.00
+
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million:
+        input: 0.15
+        output: 0.60
+    # - name: smart
+    #   provider_name: openrouter
+    #   model: anthropic/claude-opus-4-7
+    #   type: reasoning
+    #   cost_per_million:
+    #     input: 15.00
+    #     output: 75.00
+  purposes:
+    - name: embedding
+      description: |
+        Generates vector embeddings for all vault content to enable semantic
+        search. Must be assigned a model of type: embedding. This purpose
+        must be functional for FlashQuery's core search to work.
+      models:
+        - embeddings
+
+    - name: general
+      description: |
+        General-purpose language model for tasks that do not have a
+        specialized purpose assigned. Used for testing, ad-hoc queries
+        via call_model, and as the baseline model for new capabilities
+        during development.
+      models:
+        - fast
+    # - name: summarization
+    #   description: |
+    #     Produces concise summaries of documents for projections and
+    #     downstream processing.
+    #   models:
+    #     - fast
+    #   defaults:
+    #     temperature: 0.3
+    #     max_tokens: 1024

@@ -1,0 +1,33 @@
+name: llm_cost_accumulation
+description: >
+  Multiple call_model invocations sharing the same trace_id accumulate distinct
+  rows in fqc_llm_usage. Each subsequent call's metadata.trace_cumulative.total_calls
+  grows monotonically. Verifies COST-01 (runtime recording) end-to-end and confirms
+  fire-and-forget writes are visible to the trace_cumulative query in subsequent calls.
+coverage: [IL-03]
+deps: [llm]
+
+steps:
+  - label: "First call_model with unique trace_id records and reports total_calls=1"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        trace_id: "il03-${run.id}"
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+      expect_contains: '"total_calls":1'
+
+  - label: "Second call_model with same trace_id reports total_calls=2"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        trace_id: "il03-${run.id}"
+        messages:
+          - role: user
+            content: "Reply with just the digit 2."
+      expect_contains: '"total_calls":2'

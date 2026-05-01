@@ -2,7 +2,7 @@
 """
 Test: create_directory — special cases (dot-prefixed directory creation, F-51 list_vault integration, F-52 deferred).
 
-Coverage points: F-50, F-51, F-52
+Coverage points: F-50, F-51
 
 Modes:
     Default     Connects to an already-running FQC instance (config from flashquery.yml)
@@ -23,7 +23,7 @@ Exit codes:
 from __future__ import annotations
 
 
-COVERAGE = ["F-50", "F-51", "F-52"]
+COVERAGE = ["F-50", "F-51"]
 
 import argparse
 import sys
@@ -102,13 +102,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # F-52: shutdown check rejects create_directory when server is shutting down
-        # DEFERRED to unit test — cannot mock in-process getIsShuttingDown() from a subprocess test.
-        # See: tests/unit/files-tools.test.ts (F-52 unit test)
+        # ── F-52: shutdown check — deferred to unit test ─────────────────────
+        # Cannot simulate in-process shutdown state from a subprocess-based directed
+        # test. Covered by tests/unit/files-tools.test.ts instead.
         run.step(
-            label="F-52: shutdown check (SKIPPED — tested in tests/unit/files-tools.test.ts)",
+            label="F-52: shutdown check — DEFERRED (cannot mock in-process state from subprocess)",
             passed=True,
-            detail="Cannot mock in-process shutdown state from directed test framework. See unit test.",
+            detail="Not a coverage claim. See tests/unit/files-tools.test.ts for this behavior.",
             timing_ms=0,
         )
 

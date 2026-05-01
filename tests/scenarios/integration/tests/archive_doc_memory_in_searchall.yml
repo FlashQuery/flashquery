@@ -1,0 +1,53 @@
+name: archive_doc_memory_in_searchall
+description: >
+  After archiving a document, a memory on the same topic remains discoverable
+  via search_all with entity_types=['memories']. Verifies that archive is scoped
+  to documents only and does not affect memory visibility in cross-domain search.
+  Requires embeddings — search_all with entity_types=['memories'] depends on the
+  embedding provider and returns isError without one.
+coverage: [IX-02]
+deps: [embeddings]
+
+steps:
+  - label: "Write a document about ocean tides"
+    action: vault.write
+    name: tides_doc
+    path: "journal/ocean-tides.md"
+    title: "Ocean Tides at Dusk"
+    content: "The rhythmic pull of tidal water across the sand flats at dusk is hypnotic."
+    tags: [nature, ix02-tag]
+
+  - label: "Write a memory about ocean tides"
+    action: memory.write
+    name: tides_mem
+    content: "Ocean tides at dusk are calming — the water recedes slowly and the air cools."
+    tags: [nature, ix02-tag]
+
+  - label: "Before archive: document is findable in search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Ocean Tides at Dusk"
+        entity_types: [documents]
+      expect_path: "journal/ocean-tides.md"
+
+  - label: "Archive the document"
+    action: archive_document
+    args:
+      identifiers: "${tides_doc.fq_id}"
+
+  - label: "After archive: document is absent from search_all"
+    assert:
+      op: search_all
+      args:
+        query: "Ocean Tides at Dusk"
+        entity_types: [documents]
+      expect_not_contains: "ocean-tides.md"
+
+  - label: "After archive: memory still appears in search_all with entity_types=['memories']"
+    assert:
+      op: search_all
+      args:
+        query: "ocean tides dusk calming"
+        entity_types: [memories]
+      expect_contains: "Ocean tides"

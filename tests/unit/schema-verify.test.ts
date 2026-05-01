@@ -60,10 +60,11 @@ describe('tableExists', () => {
 
     await tableExists(mockClient, 'fqc_vault');
 
-    // Check that the SQL query contains the correct table name and pattern
+    // Table name is passed as a parameterized argument, not interpolated into SQL
     const callArgs = mockQuery.mock.calls[0];
-    expect(callArgs[0]).toContain("to_regclass('public.fqc_vault')");
+    expect(callArgs[0]).toContain("to_regclass(format('public.%I', $1::text))");
     expect(callArgs[0]).toContain('IS NOT NULL');
+    expect(callArgs[1]).toEqual(['fqc_vault']);
   });
 
   it('throws error if query fails', async () => {
@@ -78,15 +79,15 @@ describe('tableExists', () => {
       rows: [{ '?column?': true }],
     });
 
-    // Check that different table names are passed correctly to the query
+    // Table name is passed as a parameterized argument (callArgs[1]), not in the SQL string
     await tableExists(mockClient, 'fqc_documents');
     let callArgs = mockQuery.mock.calls[0];
-    expect(callArgs[0]).toContain('fqc_documents');
+    expect(callArgs[1]).toEqual(['fqc_documents']);
 
     mockQuery.mockClear();
     await tableExists(mockClient, 'fqc_plugin_registry');
     callArgs = mockQuery.mock.calls[0];
-    expect(callArgs[0]).toContain('fqc_plugin_registry');
+    expect(callArgs[1]).toEqual(['fqc_plugin_registry']);
   });
 });
 
@@ -102,7 +103,7 @@ describe('verifySchema', () => {
     mockClient = { query: mockQuery } as unknown as pg.Client;
   });
 
-  it('verifies all 5 required tables exist', async () => {
+  it('verifies all 10 required tables exist', async () => {
     // All tables exist
     mockQuery.mockResolvedValue({
       rows: [{ '?column?': true }],
@@ -111,8 +112,8 @@ describe('verifySchema', () => {
     // Should not throw
     await expect(verifySchema(mockClient)).resolves.toBeUndefined();
 
-    // Verify that tableExists was called 5 times (once per table)
-    expect(mockQuery).toHaveBeenCalledTimes(5);
+    // Verify that tableExists was called 10 times (once per table)
+    expect(mockQuery).toHaveBeenCalledTimes(10);
   });
 
   it('throws error listing missing tables when one table is missing', async () => {
@@ -153,11 +154,11 @@ describe('verifySchema', () => {
     });
 
     await expect(verifySchema(mockClient)).rejects.toThrow(
-      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_plugin_registry, fqc_write_locks]'
+      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_plugin_registry, fqc_write_locks, fqc_llm_providers, fqc_llm_models, fqc_llm_purposes, fqc_llm_purpose_models, fqc_llm_usage]'
     );
 
-    // All 5 tables should be checked
-    expect(mockQuery).toHaveBeenCalledTimes(5);
+    // All 10 tables should be checked
+    expect(mockQuery).toHaveBeenCalledTimes(10);
   });
 
   it('checks tables in the correct order', async () => {
@@ -173,12 +174,17 @@ describe('verifySchema', () => {
       'fqc_documents',
       'fqc_plugin_registry',
       'fqc_write_locks',
+      'fqc_llm_providers',
+      'fqc_llm_models',
+      'fqc_llm_purposes',
+      'fqc_llm_purpose_models',
+      'fqc_llm_usage',
     ];
 
-    // Verify each call checks the right table
+    // Table name is passed as a parameterized argument (callArgs[1]), not in the SQL string
     expectedTables.forEach((table, index) => {
       const callArgs = mockQuery.mock.calls[index];
-      expect(callArgs[0]).toContain(`to_regclass('public.${table}')`);
+      expect(callArgs[1]).toEqual([table]);
     });
   });
 });

@@ -27,12 +27,6 @@ git:
   remote: origin
   branch: main
 
-embedding:
-  provider: none
-  apiKey: ''
-  model: ''
-  dimensions: 1536
-
 logging:
   level: info
   output: file

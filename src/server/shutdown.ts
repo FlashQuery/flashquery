@@ -23,10 +23,12 @@ export const MAX_SHUTDOWN_MS = 30_000;
 export class ShutdownCoordinator {
   private isExecuting = false;
   private startTime: number = 0;
+  private config: FlashQueryConfig;
   private httpServer?: http.Server;
   private activeSockets: Set<net.Socket> = new Set();
 
   constructor(config: FlashQueryConfig, httpServer?: http.Server) {
+    this.config = config;
     this.httpServer = httpServer;
 
     // Track active sockets if server exists
@@ -56,6 +58,11 @@ export class ShutdownCoordinator {
 
       // Step 2: Drain MCP requests
       await this.drainMcpRequests();
+
+      // Step 2.5 (D-10): Drain in-flight LLM cost writes — must run after MCP drain so no
+      // new cost writes can be initiated, and before HTTP close so the ServerCoordinator
+      // has time to settle pending Supabase inserts. 5-second timeout per D-10.
+      await this.drainCostWritesStep();
 
       // Step 3: Close HTTP server
       await this.closeHttpServer();
@@ -99,23 +106,29 @@ export class ShutdownCoordinator {
   }
 
   private async drainMcpRequests(): Promise<void> {
-    const _deadline = Date.now() + 10_000; // 10-second timeout (SHUT-06)
-    this.logInfo('MCP sessions draining (timeout=10s)');
-
-    const activeSessionCount = 0; // Placeholder — actual count would come from MCP server
-    if (activeSessionCount > 0) {
-      this.logDebug(`MCP: ${activeSessionCount} active HTTP session(s), closing...`);
-    }
+    // TODO: Implement real session drain when MCP server exposes transport list.
+    // Currently waits a brief moment for any synchronously-queued handlers.
+    // (stdio transport only — no active session tracking available)
+    this.logInfo('MCP sessions: no active session tracking (stdio transport only), continuing...');
 
     // In a full implementation, we would:
     // 1. Get transports from MCP server (stdio + HTTP sessions)
     // 2. Close each one with timeout
     // 3. Wait for pending request handlers to complete
 
-    // For now, we log the intent and wait a brief moment for any in-flight handlers
     await new Promise((resolve) => setTimeout(resolve, 100));
+  }
 
-    this.logInfo('MCP sessions drained');
+  private async drainCostWritesStep(): Promise<void> {
+    // D-10: drain in-flight LLM cost writes before HTTP close. 5s timeout per D-10.
+    this.logInfo('Cost writes draining (timeout=5s)');
+    try {
+      const { drainCostWrites } = await import('../llm/cost-tracker.js');
+      await drainCostWrites(5_000);
+      this.logInfo('Cost writes drained');
+    } catch (err: unknown) {
+      this.logDebug(`Cost: drain timeout or error: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   private async closeHttpServer(): Promise<void> {
@@ -126,13 +139,18 @@ export class ShutdownCoordinator {
 
     this.logInfo('HTTP server closing (stop accepting new connections)');
 
-    // server.close() stops accepting new connections but does NOT force-close existing ones
-    await new Promise<void>((resolve) => {
-      this.httpServer!.close(() => {
-        this.logDebug('HTTP: server closed');
-        resolve();
-      });
-    });
+    // server.close() stops accepting new connections but does NOT force-close existing ones.
+    // Wrap in Promise.race with 15-second timeout (D-03b) so keep-alive connections cannot
+    // block shutdown indefinitely — forceCloseHttpConnections() (step 4) handles the rest.
+    await Promise.race([
+      new Promise<void>((resolve) => {
+        this.httpServer!.close(() => {
+          this.logDebug('HTTP: server closed');
+          resolve();
+        });
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, 15_000)),
+    ]);
   }
 
   private async forceCloseHttpConnections(): Promise<void> {

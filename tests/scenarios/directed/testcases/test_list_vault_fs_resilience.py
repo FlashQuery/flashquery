@@ -1,27 +1,38 @@
 #!/usr/bin/env python3
 """
-Test: list_vault — filesystem resilience tests: permission denied, stat failure.
+Test: list_vault — filesystem resilience: accessible entries still returned when the vault
+      contains inaccessible or stat-failing entries.
+
+Scenario:
+    1. F-96: Create accessible/ (with note.txt) and restricted/ (chmod 000). Call list_vault
+             recursive. Assert result.ok AND note.txt appears — accessible entries returned
+             despite permission-denied subdirectory.
+    2. F-97: Create readable.md (normal file) and broken.md (broken symlink → /nonexistent).
+             Call list_vault. Assert result.ok AND readable.md appears — readable files returned
+             despite the broken symlink causing a stat error.
+    Cleanup is automatic (filesystem + database) even if the test fails.
 
 Coverage points: F-96, F-97
 
 Modes:
-    Default     Connects to an already-running FQC instance
-    --managed   Starts a dedicated FQC subprocess
+    Default     Connects to an already-running FlashQuery instance (config from flashquery.yml)
+    --managed   Starts a dedicated FlashQuery subprocess for this test, captures its logs,
+                and shuts it down afterwards. Server logs are included in JSON output.
 
 Usage:
-    python test_list_vault_fs_resilience.py
-    python test_list_vault_fs_resilience.py --managed
-    python test_list_vault_fs_resilience.py --managed --json
-    python test_list_vault_fs_resilience.py --managed --json --keep
+    python test_list_vault_fs_resilience.py                            # existing server
+    python test_list_vault_fs_resilience.py --managed                  # managed server
+    python test_list_vault_fs_resilience.py --managed --json           # structured JSON with server logs
+    python test_list_vault_fs_resilience.py --managed --json --keep    # keep files for debugging
 
 Exit codes:
-    0   PASS
-    2   FAIL
-    3   DIRTY
+    0   PASS    All steps passed and cleanup was clean
+    2   FAIL    One or more test steps failed
+    3   DIRTY   Steps passed but cleanup had errors
 
 Note:
-    F-96 and F-97 require non-root execution for chmod 000 to have effect.
-    These tests are automatically skipped when running as root (os.getuid() == 0).
+    F-96 requires non-root execution for chmod 000 to have effect.
+    The test is automatically skipped when running as root (os.getuid() == 0).
 """
 from __future__ import annotations
 
@@ -29,7 +40,6 @@ COVERAGE = ["F-96", "F-97"]
 
 import argparse
 import os
-import re
 import sys
 from pathlib import Path
 
@@ -79,16 +89,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
             os.chmod(restricted_abs, 0o000)
 
             log_mark = ctx.server.log_position if ctx.server else 0
-            result = ctx.client.call_tool("list_vault", path=base_dir, show="directories", recursive=True)
+            # Default show="all" recursive — accessible/ and its contents must appear
+            result = ctx.client.call_tool("list_vault", path=base_dir, recursive=True)
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-            # Permission on restricted/ should not cause isError — handled gracefully
-            passed_f96 = result.ok
+            # note.txt is inside accessible/ — if it appears, the tool returned partial results
+            # rather than failing silently or returning empty despite restricted/ being denied
+            accessible_shown = "note.txt" in result.text or "accessible" in result.text
+            passed_f96 = result.ok and accessible_shown
 
             run.step(
-                label="F-96: chmod 000 subdirectory does not cause isError in listing",
+                label="F-96: accessible entries appear in response despite permission-denied subdirectory",
                 passed=passed_f96,
-                detail=f"ok={result.ok} | {result.text[:300]}",
+                detail=f"ok={result.ok} accessible_shown={accessible_shown} | {result.text[:300]}",
                 timing_ms=result.timing_ms,
                 tool_result=result,
                 server_logs=step_logs,
@@ -100,43 +113,44 @@ def run_test(args: argparse.Namespace) -> TestRun:
             except Exception:
                 pass
 
-        # ── F-97: chmod 000 on a file — listing still ok ─────────────────────
-        testfile_result = ctx.client.call_tool(
-            "create_document",
-            title=f"Restricted File {run.run_id}",
-            content="This file will be chmod 000.",
-            path=f"{base_dir}/testfile.md",
-            tags=["fqc-test", run.run_id],
-        )
+        # ── F-97: broken symlink (stat error) — readable files still appear ────
+        # A broken symlink reliably triggers a stat() failure when the filesystem
+        # walker follows it: the link exists in the directory but its target does not.
+        # chmod 000 does not cause stat() failures on most Unix systems (the OS can
+        # still return file metadata without read permission), so it would not exercise
+        # this code path.
+        readable_abs = ctx.vault._abs(f"{base_dir}/readable.md")
+        readable_abs.parent.mkdir(parents=True, exist_ok=True)
+        readable_abs.write_text(f"# Readable\n\nAccessible file for {run.run_id}.\n")
+        ctx.cleanup.track_file(f"{base_dir}/readable.md")
 
-        m = re.search(r"FQC ID:\s*(\S+)", testfile_result.text)
-        if m:
-            ctx.cleanup.track_mcp_document(m.group(1).strip())
-
-        testfile_abs = ctx.vault._abs(f"{base_dir}/testfile.md")
+        broken_abs = ctx.vault._abs(f"{base_dir}/broken.md")
+        os.symlink("/nonexistent/target_fqc_test", str(broken_abs))
+        # Don't use ctx.cleanup.track_file for the broken symlink — vault cleanup follows
+        # symlinks when resolving paths, and the absolute target triggers path-traversal
+        # protection. Use os.unlink() directly in the finally block instead.
 
         try:
-            os.chmod(testfile_abs, 0o000)
-
             log_mark = ctx.server.log_position if ctx.server else 0
             result = ctx.client.call_tool("list_vault", path=base_dir, show="files")
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-            # stat failure on individual file should not crash the whole listing
-            passed_f97 = result.ok
+            # readable.md must appear; broken.md must not cause isError
+            readable_shown = "readable" in result.text
+            passed_f97 = result.ok and readable_shown
 
             run.step(
-                label="F-97: chmod 000 file does not cause isError — stat failure handled gracefully",
+                label="F-97: readable files appear in response despite broken symlink causing stat error",
                 passed=passed_f97,
-                detail=f"ok={result.ok} | {result.text[:300]}",
+                detail=f"ok={result.ok} readable_shown={readable_shown} | {result.text[:300]}",
                 timing_ms=result.timing_ms,
                 tool_result=result,
                 server_logs=step_logs,
             )
         finally:
-            # Restore permissions so cleanup can remove the file
+            # Remove the symlink itself (os.unlink does not follow symlinks)
             try:
-                os.chmod(testfile_abs, 0o644)
+                os.unlink(str(broken_abs))
             except Exception:
                 pass
 

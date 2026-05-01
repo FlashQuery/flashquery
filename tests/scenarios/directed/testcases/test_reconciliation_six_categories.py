@@ -8,25 +8,26 @@ Scenario:
     auto-tracking via a record tool call, set up state transitions, wait past the
     staleness window, and verify each document appears in exactly one category.
 
-    States exercised:
+    States exercised (first reconciliation pass — Steps 10–11):
         added          — file in watched folder, no plugin row
         modified       — plugin row exists, file content changed since last_seen_updated_at
         deleted        — plugin row exists, file deleted (scanner marks it missing)
         disassociated  — plugin row exists, fq_owner rewritten to a foreign plugin id
                          (scanner updates ownership_plugin_id → mismatch triggers disassociated)
 
+    States exercised (second reconciliation pass — Steps 15–17):
+        resurrected    — archived plugin row (from first pass) + active fqc_doc (file restored
+                         to disk + scanned before second pass)
+        unchanged      — docs that had sync-fields applied in first pass now have
+                         last_seen_updated_at == updated_at; confirmed via server debug log
+
     States not exercised:
-        unchanged      — excluded because after auto-tracking all docs have
-                         updated_at > last_seen_updated_at (ownership_plugin_id update bumps it).
-                         A second reconciliation would mark them all 'modified' first, and a
-                         third pass would finally reach 'unchanged' — requiring 60s+ of waits.
-        resurrected    — requires an archived plugin row + active fqc_doc; complex multi-step.
         moved          — requires the doc to leave the watched folder while keeping its plugin row.
 
-    Key invariant asserted:
-        After one record tool call, every expected document appears in exactly one
-        category of the reconciliation summary and counts are consistent.
-        A second immediate call (within staleness window) reports no new actions.
+    Key invariants asserted:
+        Pass 1 (Step 11): added/deleted/disassociated categories are present with correct counts.
+        Pass 2 (Step 17): resurrected appears in response text; unchanged > 0 in debug log;
+          debug log captured and >= 5 rows classified (exactly-one sanity).
 
 Coverage points: RO-02
 
@@ -145,6 +146,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
     path_modified      = f"{folder}/modified_doc.md"
     path_deleted       = f"{folder}/deleted_doc.md"
     path_disassociated = f"{folder}/disassociated_doc.md"
+    path_resurrected   = f"{folder}/resurrected_doc.md"
     path_added         = f"{folder}/added_doc.md"
 
     # Always use a dedicated managed server for a clean DB state
@@ -188,6 +190,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             (path_modified,      "Modified Doc"),
             (path_deleted,       "Deleted Doc"),
             (path_disassociated, "Disassociated Doc"),
+            (path_resurrected,   "Resurrected Doc"),
         ]:
             ctx.create_file(
                 fname,
@@ -200,9 +203,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         ctx.cleanup.track_dir("_test_recon6")
 
         run.step(
-            label="create 4 docs in watched folder (no fq_owner — will be 'added')",
+            label="create 5 docs in watched folder (no fq_owner — will be 'added')",
             passed=True,
-            detail=f"Files created: {path_unchanged}, {path_modified}, {path_deleted}, {path_disassociated}",
+            detail=(
+                f"Files created: {path_unchanged}, {path_modified}, {path_deleted}, "
+                f"{path_disassociated}, {path_resurrected}"
+            ),
         )
 
         # ── Step 3: Scan → index all 4 docs into fqc_documents ───────
@@ -240,7 +246,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         prime_result.expect_contains("Auto-tracked")
         run.step(
-            label="search_records (prime) — auto-tracks all 4 docs (4 'added')",
+            label="search_records (prime) — auto-tracks all 5 docs (5 'added')",
             passed=(prime_result.ok and prime_result.status == "pass"),
             detail=expectation_detail(prime_result) or prime_result.error or "",
             timing_ms=prime_result.timing_ms,
@@ -310,26 +316,34 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             return run
 
-        # ── 5c: 'deleted' — physically delete the file from disk ─────────────
+        # ── 5c: 'deleted' + 'resurrected' setup — physically delete both from disk ──
+        # deleted_doc: will be classified 'deleted' in main recon and stay archived.
+        # resurrected_doc: will be classified 'deleted' in main recon (plugin row archived),
+        #   then restored to disk before the second recon pass → classified 'resurrected'.
         t0 = time.monotonic()
         try:
-            abs_deleted = ctx.vault.vault_root / path_deleted
-            existed = abs_deleted.is_file()
+            abs_deleted    = ctx.vault.vault_root / path_deleted
+            abs_resurrected = ctx.vault.vault_root / path_resurrected
+
+            del_existed = abs_deleted.is_file()
             abs_deleted.unlink()
-            gone = not abs_deleted.is_file()
+            del_gone = not abs_deleted.is_file()
+
+            res_existed = abs_resurrected.is_file()
+            abs_resurrected.unlink()
+            res_gone = not abs_resurrected.is_file()
 
             elapsed = int((time.monotonic() - t0) * 1000)
             checks = {
-                "file existed before delete": existed,
-                "file absent after delete": gone,
+                "deleted_doc existed before delete": del_existed,
+                "deleted_doc absent after delete": del_gone,
+                "resurrected_doc existed before delete": res_existed,
+                "resurrected_doc absent after delete": res_gone,
             }
             all_ok = all(checks.values())
-            detail = ""
-            if not all_ok:
-                failed = [k for k, v in checks.items() if not v]
-                detail = f"Failed: {', '.join(failed)}"
+            detail = "" if all_ok else f"Failed: {', '.join(k for k, v in checks.items() if not v)}"
             run.step(
-                label="unlink deleted_doc from disk — set up 'deleted' state",
+                label="unlink deleted_doc + resurrected_doc — set up 'deleted' states (resurrected_doc will be restored later)",
                 passed=all_ok,
                 detail=detail,
                 timing_ms=elapsed,
@@ -339,7 +353,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="unlink deleted_doc from disk — set up 'deleted' state",
+                label="unlink deleted_doc + resurrected_doc — set up 'deleted' states",
                 passed=False,
                 detail=f"Exception: {e}",
                 timing_ms=elapsed,
@@ -428,13 +442,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # At this point (staleness expired):
         #   - added_doc:        in fqc_documents (active), no plugin row → 'added'
         #   - unchanged_doc:    plugin row (active), updated_at > last_seen_updated_at
-        #                       (from post-auto-track fqc_documents.updated_at bump) → 'modified'
-        #                       NOTE: 'unchanged' is unreachable in this test due to the
-        #                       auto-track ownership_plugin_id bump inherently making updated_at >
-        #                       last_seen_updated_at; we accept 'modified' for unchanged_doc
-        #   - modified_doc:     plugin row (active), updated content → 'modified'
-        #   - deleted_doc:      plugin row (active), fqc_documents.status='missing' → 'deleted'
-        #   - disassociated_doc: plugin row (active), ownership_plugin_id='other_plugin' → 'disassociated'
+        #                       (from post-auto-track bump) → 'modified' → sync-fields applied
+        #   - modified_doc:     plugin row (active), updated content → 'modified' → sync-fields
+        #   - deleted_doc:      plugin row (active), fqc_documents.status='missing' → 'deleted' → row archived
+        #   - disassociated_doc: plugin row (active), ownership_plugin_id='other_plugin' → 'disassociated' → archived
+        #   - resurrected_doc:  plugin row (active), fqc_documents.status='missing' → 'deleted' → row archived
+        #                       (resurrected_doc is restored to disk AFTER this pass so its row is archived here)
         log_mark = ctx.server.log_position if ctx.server else 0
         main_result = ctx.client.call_tool(
             "create_record",
@@ -477,15 +490,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if added_count < 1:
             detail_parts.append(f"'Auto-tracked' missing or count=0 (got {added_count})")
 
-        # (b) 'deleted' + 'disassociated' → "Archived" present with count >= 2
-        # Both deleted and disassociated are handled by the same "archived" action path.
+        # (b) 'deleted' + 'disassociated' + 'resurrected_as_deleted' → "Archived" present with count >= 3
+        # deleted_doc, disassociated_doc, and resurrected_doc (also deleted from disk) all
+        # produce an "archive plugin row" action. resurrected_doc's row will be un-archived
+        # in the second pass when the file is restored.
         m_archived = re.search(r"Archived (\d+) record", recon_summary)
         archived_count = int(m_archived.group(1)) if m_archived else 0
-        checks["archived count >= 2 (deleted + disassociated)"] = archived_count >= 2
-        if archived_count < 2:
+        checks["archived count >= 3 (deleted + disassociated + resurrected_as_deleted)"] = archived_count >= 3
+        if archived_count < 3:
             detail_parts.append(
-                f"Expected 'Archived >= 2' (deleted+disassociated), got {archived_count}. "
-                f"This may mean disassociated setup failed (scanner didn't update ownership_plugin_id)."
+                f"Expected 'Archived >= 3' (deleted+disassociated+resurrected_as_deleted), got {archived_count}. "
+                f"This may mean disassociated setup or resurrected_doc deletion failed."
             )
 
         # (c) Mutual exclusivity: auto-tracked count == 1 (only added_doc has no plugin row)
@@ -544,6 +559,160 @@ def run_test(args: argparse.Namespace) -> TestRun:
             timing_ms=second_result.timing_ms,
             tool_result=second_result,
             server_logs=step_logs,
+        )
+
+        # ── Steps 13–17: Second reconciliation pass — 'resurrected' + 'unchanged' ──
+
+        # Step 13: Restore resurrected_doc to disk.
+        # Its plugin row was archived in the main recon ('deleted' action). Writing it
+        # back to disk makes fqc_doc.status = 'active' after the next scan.
+        t0 = time.monotonic()
+        try:
+            abs_resurrected = ctx.vault.vault_root / path_resurrected
+            abs_resurrected.parent.mkdir(parents=True, exist_ok=True)
+            abs_resurrected.write_text(
+                f"# Resurrected Doc\n\nRestored by {TEST_NAME} (run {run.run_id[:8]}).\n"
+            )
+            restored = abs_resurrected.is_file()
+            elapsed = int((time.monotonic() - t0) * 1000)
+            run.step(
+                label="restore resurrected_doc to disk — prepare for 'resurrected' classification",
+                passed=restored,
+                detail="" if restored else "File not found after write",
+                timing_ms=elapsed,
+            )
+            if not restored:
+                return run
+        except Exception as e:
+            elapsed = int((time.monotonic() - t0) * 1000)
+            run.step(
+                label="restore resurrected_doc to disk",
+                passed=False,
+                detail=f"Exception: {e}",
+                timing_ms=elapsed,
+            )
+            return run
+
+        # Step 14: Scan — scanner sees resurrected_doc as present → fqc_doc.status = 'active'
+        log_mark = ctx.server.log_position if ctx.server else 0
+        scan_restore = ctx.scan_vault()
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+        run.step(
+            label="force_file_scan — index resurrected_doc as active in fqc_documents",
+            passed=scan_restore.ok,
+            detail=scan_restore.error or "",
+            timing_ms=scan_restore.timing_ms,
+            tool_result=scan_restore,
+            server_logs=step_logs,
+        )
+        if not scan_restore.ok:
+            return run
+
+        # Step 15: Wait 32s so the main recon's staleness window expires before second pass
+        t0 = time.monotonic()
+        time.sleep(32)
+        elapsed = int((time.monotonic() - t0) * 1000)
+        run.step(
+            label="wait 32s past staleness window — before second reconciliation pass",
+            passed=True,
+            detail=f"Slept {elapsed}ms",
+            timing_ms=elapsed,
+        )
+
+        # Step 16: Second reconciliation pass.
+        # Expected classifications:
+        #   resurrected_doc:  archived row + active fqc_doc → 'resurrected' (un-archived)
+        #   disassociated_doc: archived row + active fqc_doc → 'resurrected' (fq_owner still "other_plugin" but row archived)
+        #   unchanged_doc:    active row, sync-fields ran in pass 1 → last_seen_updated_at ≈ updated_at → 'unchanged'
+        #   modified_doc:     active row, sync-fields ran in pass 1 → 'unchanged'
+        #   added_doc:        active row, recently auto-tracked → may be 'unchanged' or 'modified'
+        #   deleted_doc:      archived row + missing fqc_doc → falls through all rules → 'unchanged'
+        log_mark = ctx.server.log_position if ctx.server else 0
+        recon2_result = ctx.client.call_tool(
+            "search_records",
+            plugin_id=PLUGIN_ID,
+            plugin_instance=instance_name,
+            table="notes",
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        run.step(
+            label="search_records (second pass) — triggers second reconciliation classification",
+            passed=recon2_result.ok,
+            detail=recon2_result.error or "",
+            timing_ms=recon2_result.timing_ms,
+            tool_result=recon2_result,
+            server_logs=step_logs,
+        )
+        if not recon2_result.ok:
+            return run
+
+        # Step 17: Verify 'resurrected', 'unchanged', and exactly-one constraint.
+        t0 = time.monotonic()
+        recon2_summary = _extract_recon_summary(recon2_result.text)
+
+        # (a) 'resurrected' must appear in formatted response text (count > 0)
+        # resurrected_doc + disassociated_doc both have archived rows + active fqc_docs → 2 resurrected
+        m_resurrected = re.search(r"Resurrected (\d+) record", recon2_summary)
+        resurrected_count = int(m_resurrected.group(1)) if m_resurrected else 0
+        resurrected_present = resurrected_count >= 1
+
+        # (b) 'unchanged' must appear in server debug log (not in formatted response text)
+        # The [RECON] debug line: "added=N resurrected=N ... unchanged=N"
+        logs_text = "\n".join(step_logs) if isinstance(step_logs, list) else (step_logs or "")
+        m_log = re.search(
+            r"\[RECON\] \S+ — added=(\d+) resurrected=(\d+) deleted=(\d+)"
+            r" disassociated=(\d+) moved=(\d+) modified=(\d+) unchanged=(\d+)",
+            logs_text,
+        )
+        if m_log:
+            log_counts = [int(x) for x in m_log.groups()]
+            unchanged_count = log_counts[6]
+            total_classified = sum(log_counts)
+        else:
+            log_counts = []
+            unchanged_count = -1
+            total_classified = -1
+
+        unchanged_present = unchanged_count >= 1
+
+        # (c) Exactly-one sanity: debug log captured and at least 5 rows classified.
+        # We can't assert an exact sum because test-setup rows (e.g. sentinel created
+        # by create_record) add extra plugin entries beyond the 5 scenario docs.
+        exactly_one = (m_log is not None and total_classified >= 5)
+
+        checks2: dict[str, bool] = {
+            "RO-02: 'resurrected' category present (>= 1) in second pass": resurrected_present,
+            "RO-02: 'unchanged' count > 0 in server debug log": unchanged_present,
+            "RO-02: debug log captured and >= 5 rows classified": exactly_one,
+        }
+
+        all_ok2 = all(checks2.values())
+
+        detail2_parts = []
+        if not resurrected_present:
+            detail2_parts.append(f"'Resurrected' absent or count=0 (got {resurrected_count}) — file restore or scan may have failed")
+        if not unchanged_present:
+            detail2_parts.append(
+                f"'unchanged' count={unchanged_count} in debug log — "
+                f"{'log line not captured' if unchanged_count == -1 else 'all docs still modified'}"
+            )
+        if not exactly_one:
+            detail2_parts.append(
+                f"debug log not captured or too few rows: total_classified={total_classified} "
+                f"(counts={log_counts})"
+            )
+        detail2_parts.append(
+            f"resurrected={resurrected_count} unchanged={unchanged_count} "
+            f"total_classified={total_classified} | recon_summary={recon2_summary!r}"
+        )
+
+        elapsed = int((time.monotonic() - t0) * 1000)
+        run.step(
+            label="RO-02: second pass — 'resurrected' present, 'unchanged' > 0, >= 5 rows classified",
+            passed=all_ok2,
+            detail=" | ".join(detail2_parts),
+            timing_ms=elapsed,
         )
 
         # ── Cleanup: unregister plugin ────────────────────────────────

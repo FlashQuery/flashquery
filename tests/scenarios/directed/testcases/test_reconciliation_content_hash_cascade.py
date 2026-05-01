@@ -23,11 +23,12 @@ Scenario:
        (search_records)
     5. Verify plugin row was created (search_records response)
     6. Verify fq_owner/fq_type written to file on disk (read via ctx.vault)
-    7. Run force_file_scan again (sync) — RO-69: scanner re-examines file; if RO-67 is
-       correct the hash already matches and no updated_at bump occurs
+    7. Run force_file_scan again (sync) — give scanner a chance to re-examine file
+   7b. RO-67: assert scanner debug log shows 'file unchanged' for our file — confirms
+       content_hash was updated to the post-write state by auto-track
     8. Wait past the 30s reconciliation staleness window
-    9. Trigger second reconciliation — RO-67/RO-68 correct: doc is 'unchanged', NOT 'modified'
-   10. Assert second reconciliation does NOT classify the document as 'modified'
+    9. Trigger second reconciliation
+   10. RO-68+RO-69: assert second reconciliation does NOT classify document as 'modified'
     Cleanup is automatic (filesystem + database) even if the test fails.
 
 Coverage points: RO-67, RO-68, RO-69
@@ -319,30 +320,44 @@ def run_test(args: argparse.Namespace) -> TestRun:
             return run
 
         # ── Step 7: RO-69 — force_file_scan #2 (the critical scanner pass) ───
-        # This is the key differentiator from RO-54 (covered by test_reconciliation_multi_table).
         # We explicitly give the scanner a chance to re-examine the file after auto-track
         # wrote to it. If RO-67 is correct (content_hash updated to post-write state),
-        # the scanner will see hash match → no updated_at bump → RO-69 passes.
-        # If RO-67 is wrong (hash still reflects pre-write content), the scanner sees
-        # hash mismatch → bumps updated_at → last_seen_updated_at < updated_at → next
-        # reconciliation sees 'modified' (the PIR-02 bug).
+        # the scanner finds the hash in its DB index and logs "scan: file unchanged: <path>".
+        # If RO-67 is wrong, the hash is absent → scanner re-detects the write as a
+        # modification → bumps updated_at → RO-68 / PIR-02 bug path.
         log_mark = ctx.server.log_position if ctx.server else 0
         scan2_result = ctx.scan_vault()
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+        scan2_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
-            label="force_file_scan #2 (sync) — RO-69: scanner re-examines post-frontmatter-write file",
+            label="force_file_scan #2 (sync) — scanner re-examines post-frontmatter-write file",
             passed=scan2_result.ok,
-            detail=(
-                (scan2_result.error or "")
-                + " | If RO-67 correct: hash matches → no updated_at bump; if wrong: hash mismatch → bump → PIR-02"
-            ),
+            detail=scan2_result.error or "",
             timing_ms=scan2_result.timing_ms,
             tool_result=scan2_result,
-            server_logs=step_logs,
+            server_logs=scan2_logs,
         )
         if not scan2_result.ok:
             return run
+
+        # ── Step 7b: RO-67 — scanner must log 'file unchanged' for our doc ────
+        # scanner.ts line 496: logger.debug(`scan: file unchanged: ${relativePath} ...`)
+        # This is emitted when hashToRow.get(H) resolves — i.e., the DB already holds
+        # the post-write hash (auto-track updated content_hash correctly → RO-67 OK).
+        # If the message is absent, the hash was stale and the scanner bumped updated_at.
+        t0 = time.monotonic()
+        scan2_logs_text = "\n".join(scan2_logs) if isinstance(scan2_logs, list) else (scan2_logs or "")
+        file_unchanged_logged = f"scan: file unchanged: {watched_file_path}" in scan2_logs_text
+        run.step(
+            label="RO-67: scanner logged 'file unchanged' for our file — content_hash updated by auto-track",
+            passed=file_unchanged_logged,
+            detail=(
+                f"path={watched_file_path!r} found in scan2 debug log: {file_unchanged_logged}"
+                + ("" if file_unchanged_logged else
+                   " — DEFECT: content_hash not updated after auto-track write (RO-67 failed)")
+            ),
+            timing_ms=int((time.monotonic() - t0) * 1000),
+        )
 
         # ── Step 8: Wait past the 30s reconciliation staleness window ─────────
         t0 = time.monotonic()
@@ -401,8 +416,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         recon2_records = _extract_records(recon2_result.text)
 
         checks_cascade = {
-            "RO-67+RO-68+RO-69: no 'Synced fields on N modified' in second reconcile summary": not summary_has_synced_modified,
-            "RO-67+RO-68+RO-69: no 'Synced fields' activity (frontmatter write hash accounted for)": not summary_has_any_synced,
+            "RO-68+RO-69: no 'Synced fields on N modified' in second reconcile summary": not summary_has_synced_modified,
+            "RO-68+RO-69: no 'Synced fields' activity — last_seen_updated_at matched post-write state": not summary_has_any_synced,
             "plugin row still present after second reconcile": len(recon2_records) > 0,
         }
         all_ok_cascade = all(checks_cascade.values())
@@ -412,8 +427,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail_parts.append(f"Failed: {', '.join(failed)}")
             if summary_has_any_synced:
                 detail_parts.append(
-                    "DEFECT (PIR-02): auto-track frontmatter write was re-detected as user "
-                    "modification — content_hash or last_seen_updated_at not updated post-write"
+                    "DEFECT (PIR-02): last_seen_updated_at not set to post-write updated_at "
+                    "(RO-68 failed) — reconciler sees stale timestamp and reports 'modified'"
                 )
         detail_parts.append(
             f"recon2_records={len(recon2_records)}, "
@@ -422,7 +437,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
 
         run.step(
-            label="RO-67+RO-68+RO-69: second reconcile shows no spurious 'modified' — hash cascade correct",
+            label="RO-68+RO-69: second reconcile no 'modified' — last_seen_updated_at matched post-write state",
             passed=all_ok_cascade,
             detail=" | ".join(detail_parts),
             timing_ms=int((time.monotonic() - t0) * 1000),
