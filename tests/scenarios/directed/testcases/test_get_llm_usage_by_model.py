@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
@@ -73,6 +74,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "name": "fast",
                     "messages": [{"role": "user", "content": f"Reply with just the digit {i + 1}."}],
                 })
+
+            # fqc_llm_usage writes are fire-and-forget; give them time to commit before querying
+            time.sleep(3)
 
             # L-20: by_model returns per-model stats including pct_of_total_calls and avg_fallback_position
             result = client.call_tool("get_llm_usage", **{

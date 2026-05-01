@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
@@ -78,6 +79,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 "name": "fast",
                 "messages": [{"role": "user", "content": "Reply with just the digit 2."}],
             })
+
+            # fqc_llm_usage writes are fire-and-forget; give them time to commit before querying
+            time.sleep(3)
 
             # L-19: by_purpose separates _direct into direct_model_calls; purposes array contains 'general' but NOT '_direct'
             result = client.call_tool("get_llm_usage", **{

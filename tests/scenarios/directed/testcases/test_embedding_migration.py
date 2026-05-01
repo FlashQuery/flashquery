@@ -14,9 +14,9 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
@@ -79,16 +79,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 detail=f"save_result.ok={save_result.ok if save_result else None}",
             )
 
+            # Embedding writes are fire-and-forget; give the vector commit time to land
+            time.sleep(3)
+
             # L-23 step 2: search_memory finds the seed entry by semantic query
             search_result = client.call_tool("search_memory", **{
                 "query": "phase 104 L-23 unique marker",
                 "limit": 5,
             })
             search_ok = bool(search_result and search_result.ok)
-            search_text = ""
-            if search_result and search_result.ok:
-                # FQCClient response: combined text content from MCP envelope
-                search_text = json.dumps(search_result.data) if hasattr(search_result, "data") else str(search_result)
+            search_text = search_result.text if (search_result and search_result.ok) else ""
             found_seed = "abc123xyz" in search_text
             run.step(
                 "search_memory_returns_seed",

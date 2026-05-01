@@ -206,7 +206,7 @@ def _clean_test_tables(project_dir: Path) -> None:
     """
     try:
         result = subprocess.run(
-            ["python3", "tests/scenarios/dbtools/clean_test_tables.py"],
+            [sys.executable, "tests/scenarios/dbtools/clean_test_tables.py"],
             cwd=str(project_dir),
             capture_output=True,
             text=True,
