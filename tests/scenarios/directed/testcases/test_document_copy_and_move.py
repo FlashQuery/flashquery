@@ -241,7 +241,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 )
             # Additionally verify copy content via MCP get_document
             copy_identifier = copy_fqc_id or copy_created_path
-            get_copy_result = ctx.client.call_tool("get_document", identifier=copy_identifier)
+            get_copy_result = ctx.client.call_tool("get_document", identifiers=copy_identifier)
             content_matches = "Original Content" in get_copy_result.text and run.run_id in get_copy_result.text
             if not content_matches:
                 all_ok = False
@@ -282,7 +282,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     f"title={orig_doc_check.title!r}, fqc_id={orig_doc_check.fqc_id!r}"
                 )
             # Also verify content via MCP
-            get_orig_result = ctx.client.call_tool("get_document", identifier=identifier_orig)
+            get_orig_result = ctx.client.call_tool("get_document", identifiers=identifier_orig)
             content_ok = "Original Content" in get_orig_result.text
             if not content_ok:
                 all_ok = False
@@ -417,7 +417,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             # MCP should find the document at the new path (ok response = found)
             get_moved_result = ctx.client.call_tool(
                 "get_document",
-                identifier=move_new_path,
+                identifiers=move_new_path,
             )
             mcp_found = get_moved_result.ok
             elapsed = int((time.monotonic() - t0) * 1000)

@@ -38,6 +38,7 @@ from __future__ import annotations
 COVERAGE = ["D-06", "D-07", "X-02", "X-03"]
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -151,7 +152,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         get_by_path_result = ctx.client.call_tool(
             "get_document",
-            identifier=vault_relative_path,
+            identifiers=vault_relative_path,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -171,7 +172,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         get_by_filename_result = ctx.client.call_tool(
             "get_document",
-            identifier=filename_only,
+            identifiers=filename_only,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -187,13 +188,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── Step 5: Verify both resolutions returned the same document ─
-        # get_document returns the document body, not key-value metadata.
-        # We confirm both calls resolved to the same document by verifying
-        # they contain identical distinguishing content (the unique run_id
-        # embedded in the body) and that the vault-relative-path response
-        # is non-empty. The fqc_id consistency is already guaranteed by
-        # create_document having produced a single document at that path.
+        # ── Step 5: Verify both resolutions resolved to the same document ─
+        # get_document now returns a JSON envelope. The `identifier` field in
+        # each envelope reflects the input identifier used in the request, so
+        # the two envelopes will legitimately differ there. We compare fq_id
+        # (the canonical document identity) and the body content instead.
         path_has_content = (
             get_by_path_result.ok
             and run.run_id in get_by_path_result.text
@@ -202,22 +201,34 @@ def run_test(args: argparse.Namespace) -> TestRun:
             get_by_filename_result.ok
             and run.run_id in get_by_filename_result.text
         )
-        # Both responses should contain exactly the same body text
-        content_identical = (
-            path_has_content
-            and filename_has_content
-            and get_by_path_result.text.strip() == get_by_filename_result.text.strip()
-        )
+        # Parse envelopes and compare fq_id (canonical identity)
+        same_fq_id = False
+        fq_id_detail = ""
+        try:
+            env_path = json.loads(get_by_path_result.text)
+            env_file = json.loads(get_by_filename_result.text)
+            fq_id_path = env_path.get("fq_id") or env_path.get("fqc_id")
+            fq_id_file = env_file.get("fq_id") or env_file.get("fqc_id")
+            if fq_id_path and fq_id_file and fq_id_path == fq_id_file:
+                same_fq_id = True
+            else:
+                fq_id_detail = f"fq_id_path={fq_id_path!r} fq_id_file={fq_id_file!r}"
+        except Exception as exc:
+            fq_id_detail = f"JSON parse error: {exc}"
+
+        same_doc = path_has_content and filename_has_content and same_fq_id
         detail = ""
-        if not content_identical:
+        if not same_doc:
             detail = (
                 f"path_has_content={path_has_content}, "
                 f"filename_has_content={filename_has_content}, "
-                f"content_identical={content_identical}"
+                f"same_fq_id={same_fq_id}"
             )
+            if fq_id_detail:
+                detail += f" | {fq_id_detail}"
         run.step(
-            label="Both resolutions returned identical document content (same fqc_id implied)",
-            passed=content_identical,
+            label="Both resolutions returned same document (same fq_id, both bodies contain run_id)",
+            passed=same_doc,
             detail=detail,
         )
 

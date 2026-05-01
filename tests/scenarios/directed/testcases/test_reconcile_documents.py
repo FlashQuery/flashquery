@@ -207,7 +207,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         read_id_dry = fqc_id_dry or created_path_dry
 
         log_mark = ctx.server.log_position if ctx.server else 0
-        get_dry_before = ctx.client.call_tool("get_document", identifier=read_id_dry)
+        get_dry_before = ctx.client.call_tool("get_document", identifiers=read_id_dry)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         get_dry_before.expect_contains("Dry Run Test")
@@ -251,7 +251,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 5: Verify dry-run doc still retrievable after dry run
         log_mark = ctx.server.log_position if ctx.server else 0
-        get_dry_after = ctx.client.call_tool("get_document", identifier=read_id_dry)
+        get_dry_after = ctx.client.call_tool("get_document", identifiers=read_id_dry)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         get_dry_after.expect_contains("Dry Run Test")
@@ -393,7 +393,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         read_id_moved = fqc_id_moved or path_moved_dest
 
         log_mark = ctx.server.log_position if ctx.server else 0
-        get_moved_after = ctx.client.call_tool("get_document", identifier=read_id_moved)
+        get_moved_after = ctx.client.call_tool("get_document", identifiers=read_id_moved)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         get_moved_after.expect_contains("Moved File Test")
@@ -533,13 +533,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         read_id_gone = fqc_id_gone or created_path_gone
 
         log_mark = ctx.server.log_position if ctx.server else 0
-        get_gone_after = ctx.client.call_tool("get_document", identifier=read_id_gone)
+        get_gone_after = ctx.client.call_tool("get_document", identifiers=read_id_gone)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         gone_text = get_gone_after.text.lower()
-        # Acceptable: archived status in response, or a clear error/not-found
+        # Acceptable: archived status in response, or a clear error/not-found.
+        # JSON envelopes use underscore ("document_not_found") and "No document found".
         get_archived_signal = any(kw in gone_text for kw in [
-            "archived", "not found", "missing", "gone", "no longer", "deleted",
+            "archived", "not found", "not_found", "no document found", "missing",
+            "gone", "no longer", "deleted", "document_not_found",
         ])
         # Unacceptable: active document returned as if nothing happened
         silently_active = (
