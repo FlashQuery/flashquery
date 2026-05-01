@@ -43,6 +43,28 @@ Core CRUD operations on vault documents via MCP.
 | D-24 | search_documents does not surface stale hits for manually-deleted files before reconcile (or marks them clearly) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-04-16 |
 | D-25 | User-defined custom frontmatter fields survive update_document (updating title, body, or tags leaves unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
 | D-26 | User-defined custom frontmatter fields survive archive_document (archiving only changes status; all other fields preserved) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
+| D-27 | get_document default response returns JSON envelope with body field (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-01 |
+| D-28 | get_document include=["frontmatter"] returns frontmatter projection in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-01 |
+| D-29 | get_document include=["headings"] returns headings array with level, text, char_offset (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-01 |
+| D-30 | get_document include=["body","frontmatter","headings"] returns all three fields in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-01 |
+| D-31 | get_document with sections returns extracted_sections array; body field absent (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-31a | get_document multi-section returns extracted_sections in document order, not request order (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-31b | get_document sections repeat-name shorthand ("Action Items#2") selects second occurrence (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-31c | get_document sections interleaved repeated headings each select their own occurrence independently (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-31d | get_document extracted_sections separator uses a blank line between adjacent sections (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-31e | get_document multi-section with one no_match and one insufficient_occurrences both appear in missing_sections (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-01 |
+| D-31f | get_document section_not_found error envelope includes available_headings list (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-01 |
+| D-32 | get_document sections matching is case-insensitive (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-33 | get_document sections with numeric start anchor ("3. Foo") selects correct section (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-33a | get_document sections numeric-anchor edge cases (numeric prefix longer/shorter than actual heading) (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-34 | get_document size.chars in metadata envelope equals full document body length (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-34a | get_document include_nested=False excludes subheadings from extracted section (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-01 |
+| D-35 | get_document with non-existent identifier returns document_not_found error envelope with isError=true (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-01 |
+| D-46 | get_document with sections + occurrence=N returns invalid_parameter_combination error (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-01 |
+| D-47 | get_document title fallback when fq_title missing — uses file basename (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-01 |
+| D-48 | get_document title coercion when fq_title is a number — returns string representation (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-01 |
+| D-49 | get_document title trim when fq_title has leading/trailing whitespace — returns trimmed string (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-01 |
+| D-50 | get_document title when frontmatter completely absent — returns file basename (deferred: requires raw vault write) | — | 2026-05-01 | — |
 
 ## 2. Document Content Operations
 
@@ -77,12 +99,16 @@ Verifying structural introspection of documents.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| O-01 | Get outline of single document returns heading hierarchy (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-02 | Get outline respects max_depth parameter (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-03 | Get outline shows linked files (resolved) (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-04 | Get outline shows unresolved links marked as such (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-05 | Get outline with exclude_headings returns frontmatter only (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-06 | Batch outline (array of identifiers) returns DB metadata (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-29 |
+| O-01 | Get outline of single document returns heading hierarchy (SUPERSEDED: get_doc_outline removed in Phase 107; heading extraction covered by D-29, O-07) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-02 | Get outline respects max_depth parameter (SUPERSEDED: max_depth now covered by O-07 in consolidated get_document) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-03 | Get outline shows linked files (resolved) (SUPERSEDED: link resolution not exposed in Phase 107 consolidated get_document) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-04 | Get outline shows unresolved links marked as such (SUPERSEDED: same as O-03) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-05 | Get outline with exclude_headings returns frontmatter only (SUPERSEDED: standalone frontmatter include covered by D-28) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-06 | Batch outline (array of identifiers) returns DB metadata (SUPERSEDED: batch mode removed; single-doc envelope with all three includes covered by D-30) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-29 |
+| O-07 | get_document headings include level, text, and char_offset fields; max_depth filters by heading level (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-01 |
+| O-08 | get_document headings includes all occurrences of duplicate heading names with distinct char_offset (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-01 |
+| O-09 | error envelope available_headings lists all headings in the document (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-01 |
+| O-10 | occurrence parameter out of range (>= actual count) returns occurrence_out_of_range error (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-01 |
 
 ## 4. Search — Documents
 
