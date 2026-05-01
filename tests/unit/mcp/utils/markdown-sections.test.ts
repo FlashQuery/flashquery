@@ -115,9 +115,9 @@ describe('markdown-sections utilities', () => {
       expect(() => findHeadingOccurrence(headings, 'Config', 0)).toThrow();
     });
 
-    it('is case-sensitive', () => {
+    it('is case-insensitive (GDOC-06)', () => {
       const headings = [{ level: 2, text: 'Configuration', line: 3 }];
-      expect(findHeadingOccurrence(headings, 'configuration', 1)).toBeNull();
+      expect(findHeadingOccurrence(headings, 'configuration', 1)).not.toBeNull();
     });
   });
 
