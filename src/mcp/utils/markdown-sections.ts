@@ -16,11 +16,52 @@ export interface Heading {
 }
 
 /**
+ * Two-rule matching strategy for section headings (GDOC-06)
+ * Rule 1 (text query): case-insensitive substring match anywhere in heading text
+ * Rule 2 (numeric query — starts with digit): anchored to start of heading text;
+ *        the next character after the matched prefix must NOT be a digit, so
+ *        `"12"` matches `"12. Appendix"` (next char `.` is not a digit) but NOT
+ *        `"120. Other"` (next char `0` is a digit).
+ */
+function headingMatchesQuery(headingText: string, query: string): boolean {
+  if (query.length === 0) return false;
+  const headingLower = headingText.toLowerCase();
+  const queryLower = query.toLowerCase();
+  if (/^\d/.test(query)) {
+    if (!headingLower.startsWith(queryLower)) return false;
+    // Only apply the digit-continuation guard when the query ENDS with a digit.
+    // This prevents "12" matching "120. Other" (next char "0" is a digit → reject),
+    // but allows "3." to match both "3. Scope" and "3.1 Details" (query ends with ".",
+    // not a digit — no need for the guard; startsWith is sufficient).
+    if (/\d$/.test(query)) {
+      const nextChar = headingLower.charAt(queryLower.length);
+      if (nextChar !== '' && /\d/.test(nextChar)) return false;
+    }
+    return true;
+  }
+  return headingLower.includes(queryLower);
+}
+
+/**
+ * Multi-section extraction result (GDOC-08, GDOC-09)
+ * Used by extractMultipleSections to aggregate matches and per-distinct-name errors.
+ */
+export interface MultiSectionResult {
+  matches: Array<{ heading: string; content: string; chars: number }>;
+  errors: Array<{
+    query: string;
+    reason: 'no_match' | 'insufficient_occurrences';
+    requested_count?: number;
+    found_count?: number;
+  }>;
+}
+
+/**
  * Extract a section from markdown content by heading name
  * Includes the heading line in the response
  *
  * @param content Full markdown content (body only, no frontmatter)
- * @param headingName Name of heading to extract (case-sensitive)
+ * @param headingName Name of heading to extract (case-insensitive substring for text, start-anchor for numeric)
  * @param includeSubheadings If true, include all nested content; if false, stop at first subheading
  * @param occurrence Which occurrence if heading appears multiple times (1-indexed, default: 1)
  * @returns Object with section content (including heading line) and metadata
@@ -38,7 +79,7 @@ export function extractSection(
   // Find the target heading
   const targetHeading = findHeadingOccurrence(headings, headingName, occurrence);
   if (!targetHeading) {
-    const total = headings.filter((h) => h.text === headingName).length;
+    const total = headings.filter((h) => headingMatchesQuery(h.text, headingName)).length;
     if (total > 1) {
       throw new Error(
         `Heading "${headingName}" appears ${total} times; specify occurrence parameter (1-${total}) to select which one`
@@ -55,7 +96,7 @@ export function extractSection(
   const section = sectionLines.join('\n');
 
   // Count total occurrences of this heading name
-  const totalOccurrences = headings.filter((h) => h.text === headingName).length;
+  const totalOccurrences = headings.filter((h) => headingMatchesQuery(h.text, headingName)).length;
 
   return {
     section,
@@ -69,7 +110,7 @@ export function extractSection(
  * Find the Nth occurrence of a heading in the headings array
  *
  * @param headings Array of headings from extractHeadings()
- * @param name Heading text to search for (case-sensitive)
+ * @param name Heading text to search for (case-insensitive substrate for text, start-anchor for numeric)
  * @param occurrence Which occurrence (1-indexed)
  * @returns The heading object if found, null if occurrence is beyond total count
  * @throws Error if occurrence < 1
@@ -85,7 +126,7 @@ export function findHeadingOccurrence(
 
   let count = 0;
   for (const heading of headings) {
-    if (heading.text === name) {
+    if (headingMatchesQuery(heading.text, name)) {
       count++;
       if (count === occurrence) {
         return heading;
@@ -151,7 +192,7 @@ export function getSectionBoundaries(
   let headingIndex = -1;
   let count = 0;
   for (let i = 0; i < headings.length; i++) {
-    if (headings[i].text === headingName) {
+    if (headingMatchesQuery(headings[i].text, headingName)) {
       count++;
       if (count === occurrence) {
         headingIndex = i;
@@ -255,7 +296,7 @@ export function insertAtPosition(
   const targetHeading = findHeadingOccurrence(headings, anchorHeading, occurrence);
 
   if (!targetHeading) {
-    const total = headings.filter((h) => h.text === anchorHeading).length;
+    const total = headings.filter((h) => headingMatchesQuery(h.text, anchorHeading)).length;
     if (total > 1) {
       throw new Error(
         `Heading "${anchorHeading}" appears ${total} times; specify occurrence parameter (1-${total}) to select which one`
@@ -268,7 +309,7 @@ export function insertAtPosition(
   let headingIndex = -1;
   let count = 0;
   for (let i = 0; i < headings.length; i++) {
-    if (headings[i].text === anchorHeading) {
+    if (headingMatchesQuery(headings[i].text, anchorHeading)) {
       count++;
       if (count === occurrence) {
         headingIndex = i;
@@ -341,4 +382,107 @@ export function buildSectionResponse(
   response += formatKeyValueEntry('total_occurrences', totalOccurrences);
 
   return response;
+}
+
+/**
+ * Extract multiple sections from a document in input order with per-distinct-name
+ * occurrence semantics (GDOC-08, GDOC-09).
+ *
+ * - Repeating a name N times in `queries` returns the 1st through Nth sequential
+ *   matches of that name in document order.
+ * - Errors are aggregated per DISTINCT query name (one error per name, not per slot).
+ * - On any error, returns matches: [] (fail-fast) — the caller checks errors.length === 0
+ *   before using the matches.
+ *
+ * @param content Full markdown body (no frontmatter)
+ * @param queries Heading names to extract; input order is preserved in result.matches
+ * @param options.includeNested When true (default), include nested subheading content
+ *                              under each matched heading
+ */
+export function extractMultipleSections(
+  content: string,
+  queries: string[],
+  options: { includeNested?: boolean }
+): MultiSectionResult {
+  const includeNested = options.includeNested ?? true;
+  const headings = extractHeadings(content);
+
+  // Step 1: build per-distinct-name match index in document order.
+  const distinctNames = Array.from(new Set(queries));
+  const matchIndexByName = new Map<string, number[]>();
+  for (const name of distinctNames) {
+    const indices: number[] = [];
+    for (let i = 0; i < headings.length; i++) {
+      if (headingMatchesQuery(headings[i].text, name)) indices.push(i);
+    }
+    matchIndexByName.set(name, indices);
+  }
+
+  // Step 2: count requested-per-name (max requested occurrence number per name).
+  const requestedCountByName = new Map<string, number>();
+  for (const q of queries) {
+    requestedCountByName.set(q, (requestedCountByName.get(q) ?? 0) + 1);
+  }
+
+  // Step 3: aggregate errors per distinct name.
+  const errors: MultiSectionResult['errors'] = [];
+  for (const [name, requested] of requestedCountByName) {
+    const found = matchIndexByName.get(name)?.length ?? 0;
+    if (found === 0) {
+      errors.push({ query: name, reason: 'no_match' });
+    } else if (found < requested) {
+      errors.push({
+        query: name,
+        reason: 'insufficient_occurrences',
+        requested_count: requested,
+        found_count: found,
+      });
+    }
+  }
+  // Order errors by first appearance of the name in queries (deterministic for tests).
+  errors.sort((a, b) => queries.indexOf(a.query) - queries.indexOf(b.query));
+
+  if (errors.length > 0) {
+    return { matches: [], errors };
+  }
+
+  // Step 4: build matches in input order using sequential occurrence per name.
+  const slotOccurrenceByName = new Map<string, number>();
+  const matches: MultiSectionResult['matches'] = [];
+  for (const name of queries) {
+    const slot = (slotOccurrenceByName.get(name) ?? 0) + 1;
+    slotOccurrenceByName.set(name, slot);
+    const boundaries = getSectionBoundaries(content, name, includeNested, slot);
+    // Resolve the actual matched heading text (preserves original casing).
+    const matchedHeading = findHeadingOccurrence(headings, name, slot);
+    const headingText = matchedHeading ? matchedHeading.text : name;
+    matches.push({
+      heading: headingText,
+      content: boundaries.content,
+      chars: boundaries.content.length,
+    });
+  }
+  return { matches, errors: [] };
+}
+
+/**
+ * Compute the character count of one section without returning its full content.
+ * Used by buildHeadingEntries to populate the per-heading `chars` field (GDOC-05).
+ *
+ * @returns Character count of the section content (heading line through next
+ *          same-or-higher heading per includeSubheadings rules); 0 when the
+ *          heading is not found (does not throw — callers can pre-check existence).
+ */
+export function computeSectionChars(
+  content: string,
+  headingName: string,
+  includeSubheadings: boolean = true,
+  occurrence: number = 1
+): number {
+  try {
+    const boundaries = getSectionBoundaries(content, headingName, includeSubheadings, occurrence);
+    return boundaries.content.length;
+  } catch {
+    return 0;
+  }
 }
