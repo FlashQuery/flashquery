@@ -19,13 +19,21 @@ import { scanMutex } from '../../services/scanner.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
   formatKeyValueEntry,
-  formatBatchSeparator,
   formatEmptyResults,
   joinBatchEntries,
   shouldShowProgress,
   progressMessage,
 } from '../utils/response-formats.js';
-import { extractSection, buildSectionResponse } from '../utils/markdown-sections.js';
+import {
+  buildMetadataEnvelope,
+  buildHeadingEntries,
+  buildExtractedSections,
+  assembleMultiSectionBody,
+  buildConsolidatedResponse,
+  validateParameterCombinations,
+} from '../utils/document-output.js';
+import { extractHeadings } from '../utils/markdown-utils.js';
+import { extractSection, extractMultipleSections, findHeadingOccurrence } from '../utils/markdown-sections.js';
 import { pluginManager, getFolderClaimsMap } from '../../plugins/manager.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 
@@ -523,117 +531,107 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
     }
   );
 
-  // ─── Tool 2: get_document (DOC-03, SPEC-01) ──────────────────────────────────
+  // ─── Tool 2: get_document (consolidated — Phase 107) ─────────────────────
 
   server.registerTool(
     'get_document',
     {
-      description: 'Read a document\'s body content by path, fqc_id, or filename. Returns the full markdown body (without frontmatter). To read only specific sections instead of the full body, pass a sections array with heading names — this is far more token-efficient for large documents. For document structure and frontmatter without body content, use get_doc_outline instead.',
+      description:
+        'Read a document and return a structured JSON envelope. The envelope always contains identifier, title, path, fq_id, modified, and size.chars. Use the include parameter to also receive: "body" (full markdown body or extracted sections), "frontmatter" (complete YAML block as JSON object — every field, including user-defined custom fields), or "headings" (heading list with per-heading character counts). Default include is ["body"]. Use sections to extract specific sections by heading name (case-insensitive substring; queries starting with a digit are anchored to the heading start, so "3" matches "3. Scope" but not "13. Conversations"). Multi-element sections returns sections in input order separated by a blank line; repeating a name N times returns the 1st through Nth matches. Use max_depth (1-6) to limit heading levels in the headings list. The output is a JSON string in content[0].text.',
       inputSchema: {
-        identifier: z
-          .string()
-          .describe(
-            'Document identifier — accepts any of: (1) vault-relative path (e.g., "clients/acme/notes.md"), (2) fqc_id UUID, or (3) filename (e.g., "notes.md")'
-          ),
-        sections: z
-          .array(z.string())
+        identifiers: z.string().describe(
+          'Document identifier — vault-relative path (e.g., "Meetings/standup.md"), fq_id UUID, or filename. Phase 107 accepts a single string; array batch is added in Phase 108.'
+        ),
+        include: z.array(z.enum(['body', 'frontmatter', 'headings']))
           .optional()
-          .describe('Optional: array of heading names to extract (e.g., ["Configuration", "Examples"]. Omit to get full document.'),
-        include_subheadings: z
-          .boolean()
-          .optional()
-          .default(true)
-          .describe('If true (default), include all nested content under heading until next same-or-higher heading. If false, stop at first subheading.'),
-        occurrence: z
-          .number()
-          .optional()
-          .default(1)
-          .describe('Which occurrence of heading if multiple have same name (1-indexed, default: 1)'),
+          .default(['body'])
+          .describe('Which fields to include in the response. Any combination of "body", "frontmatter", "headings". Default: ["body"].'),
+        sections: z.array(z.string()).optional().describe(
+          'Optional: heading names to extract (case-insensitive substring). Requires "body" in include. Multi-element returns sections in input order separated by blank lines; repeating a name N times returns the 1st through Nth matches.'
+        ),
+        include_nested: z.boolean().optional().default(true).describe(
+          'When extracting sections, include nested subsection content (default: true). When false, stop at the first subheading.'
+        ),
+        occurrence: z.number().optional().default(1).describe(
+          'Which occurrence of a heading when name appears multiple times (1-indexed, default: 1). Valid only when sections has exactly one element.'
+        ),
+        max_depth: z.number().min(1).max(6).optional().default(6).describe(
+          'Maximum heading depth to include when include contains "headings" (1-6, default: 6 — all levels).'
+        ),
       },
     },
-    async ({ identifier, sections, include_subheadings, occurrence: occurrenceParam }) => {
-      // D-02b: Check shutdown flag immediately
+    async ({ identifiers, include, sections, include_nested, occurrence: occurrenceParam, max_depth }) => {
       if (getIsShuttingDown()) {
         return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
+          content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed' }],
+          isError: true,
+        };
+      }
+      const occurrence = occurrenceParam ?? 1;
+      const effectiveInclude: Array<'body' | 'frontmatter' | 'headings'> = include && include.length > 0 ? include : ['body'];
+      const sectionsList = sections ?? [];
+      const effectiveMaxDepth = max_depth ?? 6;
+
+      const paramError = validateParameterCombinations({
+        include: [...effectiveInclude],
+        sections: sectionsList,
+        occurrence,
+      });
+      if (paramError !== null) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(paramError) }],
           isError: true,
         };
       }
 
-      // WR-01: Explicit occurrence fallback to ensure it's never undefined
-      const occurrence = occurrenceParam ?? 1;
+      if (Array.isArray(identifiers)) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              error: 'batch_not_supported_in_phase_107',
+              message: 'Array identifiers will be supported in a future phase; pass a single string identifier.',
+            }),
+          }],
+          isError: true,
+        };
+      }
 
       try {
-        // Resolve identifier (UUID / path / filename) to a canonical path
-        const resolved = await resolveDocumentIdentifier(
-          config,
-          supabaseManager.getClient(),
-          identifier,
-          logger
-        );
-
-        // Read file to get current content for hashing
+        const resolved = await resolveDocumentIdentifier(config, supabaseManager.getClient(), identifiers, logger);
         const rawContent = await readFile(resolved.absPath, 'utf-8');
         const parsed = matter(rawContent);
-
-        // Compute hash of the existing file content for targetedScan
         const contentHash = computeHash(rawContent);
-
-        // Call targetedScan to ensure identity provisioning (replacing ensureProvisioned)
-        const preScan = await targetedScan(
-          config,
-          supabaseManager.getClient(),
-          resolved,
-          contentHash,
-          logger
-        );
-
+        const preScan = await targetedScan(config, supabaseManager.getClient(), resolved, contentHash, logger);
         const relativePath = preScan.relativePath;
-        const _absPath = preScan.absPath;
         const fqcId = preScan.capturedFrontmatter.fqcId;
-
-        // Read raw file — use for both hashing and content display
         const { data, content } = parsed;
 
         logger.info(`get_document: read ${relativePath}`);
 
-        // Stale hash check — background re-embed if content changed since last read
+        // Background re-embed (preserved from prior implementation)
         if (fqcId) {
-          const docTitle = typeof data[FM.TITLE] === 'string' ? data[FM.TITLE] as string : relativePath;
+          const docTitle = typeof data[FM.TITLE] === 'string' ? (data[FM.TITLE] as string) : relativePath;
           const now = new Date().toISOString();
-
           const { data: row } = await supabaseManager
             .getClient()
             .from('fqc_documents')
             .select('content_hash')
             .eq('id', fqcId)
             .single();
-
           if (row && (row).content_hash !== contentHash) {
-            logger.debug(
-              `get_document: stale hash detected for ${relativePath} — queuing background re-embed`
-            );
+            logger.debug(`get_document: stale hash detected for ${relativePath} — queuing background re-embed`);
             void (
-              supabaseManager
-                .getClient()
+              supabaseManager.getClient()
                 .from('fqc_documents')
                 .update({ content_hash: contentHash, updated_at: now })
                 .eq('id', fqcId) as unknown as Promise<unknown>
             )
               .then(() => embeddingProvider.embed(`${docTitle}\n\n${content}`))
               .then((vector) =>
-                supabaseManager
-                  .getClient()
+                supabaseManager.getClient()
                   .from('fqc_documents')
-                  .update({
-                    embedding: JSON.stringify(vector),
-                    updated_at: new Date().toISOString(),
-                  })
+                  .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
                   .eq('id', fqcId)
               )
               .catch((err) =>
@@ -644,72 +642,104 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           }
         }
 
-        // SPEC-01: Handle optional sections parameter
-        let responseText = content;
+        const envelope = buildMetadataEnvelope(identifiers, preScan, data, content);
 
-        if (sections && sections.length > 0) {
-          // Extract requested sections
-          const sectionResponses: string[] = [];
-          const missingHeadings: string[] = [];
+        let responseBody: string | undefined;
+        let extractedSections: Array<{ heading: string; chars: number }> | undefined;
+        let frontmatterField: Record<string, unknown> | undefined;
+        let headingsField: Array<{ level: number; text: string; chars: number }> | undefined;
 
-          for (const sectionName of sections) {
+        if (effectiveInclude.includes('body')) {
+          if (sectionsList.length === 1) {
             try {
-              const extracted = extractSection(content, sectionName, include_subheadings, occurrence);
-              const formatted = buildSectionResponse(
-                { level: 0, text: sectionName, line: extracted.lineNumber },
-                extracted.section,
-                extracted.lineNumber,
-                extracted.occurrence,
-                extracted.totalOccurrences
-              );
-              sectionResponses.push(formatted);
-            } catch (err) {
-              if (err instanceof Error && err.message.includes('not found')) {
-                missingHeadings.push(sectionName);
-              } else {
-                throw err;
+              const extracted = extractSection(content, sectionsList[0], include_nested, occurrence);
+              responseBody = extracted.section;
+              const allHeadings = extractHeadings(content);
+              const matchedHeading = findHeadingOccurrence(allHeadings, sectionsList[0], occurrence);
+              const matchedText = matchedHeading ? matchedHeading.text : sectionsList[0];
+              extractedSections = [{ heading: matchedText, chars: extracted.section.length }];
+            } catch (extractErr) {
+              const msg = extractErr instanceof Error ? extractErr.message : String(extractErr);
+              const allHeadings = extractHeadings(content);
+              const availableHeadings = allHeadings.map((h) => h.text);
+              const isOccurrenceErr = msg.toLowerCase().includes('appears') || msg.toLowerCase().includes('occurrence');
+              const reason: 'no_match' | 'insufficient_occurrences' = isOccurrenceErr ? 'insufficient_occurrences' : 'no_match';
+              let foundCount: number | undefined;
+              if (reason === 'insufficient_occurrences') {
+                const m = /appears (\d+) times/.exec(msg);
+                if (m) foundCount = parseInt(m[1], 10);
               }
+              const errorEnvelope: Record<string, unknown> = {
+                error: 'section_not_found',
+                message: reason === 'no_match'
+                  ? `No heading matching '${sectionsList[0]}' found in document`
+                  : `Heading '${sectionsList[0]}' has fewer occurrences than requested`,
+                identifier: identifiers,
+                missing_sections: [
+                  reason === 'insufficient_occurrences'
+                    ? { query: sectionsList[0], reason, requested_count: occurrence, ...(foundCount !== undefined ? { found_count: foundCount } : {}) }
+                    : { query: sectionsList[0], reason },
+                ],
+                available_headings: availableHeadings,
+              };
+              return {
+                content: [{ type: 'text' as const, text: JSON.stringify(errorEnvelope) }],
+                isError: true,
+              };
             }
+          } else if (sectionsList.length > 1) {
+            const result = extractMultipleSections(content, sectionsList, { includeNested: include_nested });
+            if (result.errors.length > 0) {
+              const allHeadings = extractHeadings(content);
+              const errorEnvelope = {
+                error: 'section_not_found',
+                message: `Requested sections could not be fully resolved: ${result.errors.length} ${result.errors.length === 1 ? 'failure' : 'failures'}`,
+                identifier: identifiers,
+                missing_sections: result.errors,
+                available_headings: allHeadings.map((h) => h.text),
+              };
+              return {
+                content: [{ type: 'text' as const, text: JSON.stringify(errorEnvelope) }],
+                isError: true,
+              };
+            }
+            responseBody = assembleMultiSectionBody(result.matches);
+            extractedSections = buildExtractedSections(result.matches);
+          } else {
+            responseBody = content;
           }
-
-          if (missingHeadings.length > 0) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Sections not found: ${missingHeadings.join(', ')}. Available sections: check document structure.`,
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          responseText = sectionResponses.join('\n' + formatBatchSeparator() + '\n');
         }
 
-        // Return content only (MOD-02 — no frontmatter in response)
-        // Return metadata in structured fields instead of injecting notes into content (SPEC-08)
+        if (effectiveInclude.includes('frontmatter')) {
+          frontmatterField = data;
+        }
+
+        if (effectiveInclude.includes('headings')) {
+          headingsField = buildHeadingEntries(content, effectiveMaxDepth);
+        }
+
+        const final = buildConsolidatedResponse(envelope, [...effectiveInclude], {
+          body: responseBody,
+          extractedSections,
+          frontmatter: frontmatterField,
+          headings: headingsField,
+        });
+
         return {
-          content: [{ type: 'text' as const, text: responseText }],
-          metadata: {
-            path: relativePath,
-            changed: !!preScan.stalePathNote,
-          },
+          content: [{ type: 'text' as const, text: JSON.stringify(final) }],
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_document failed: ${msg}`);
-
-        // Distinguish "not found" errors from other errors (T-60b-04: prevents info leakage)
-        const isNotFound = msg.toLowerCase().includes('not found') ||
-                           msg.toLowerCase().includes('missing') ||
-                           msg.toLowerCase().includes('enoent');
-        const userMsg = isNotFound
-          ? `Document not found: ${identifier}. Check the path, UUID, or filename and try again.`
-          : `Error reading document: ${msg}`;
-
+        const isNotFound =
+          msg.toLowerCase().includes('not found') ||
+          msg.toLowerCase().includes('missing') ||
+          msg.toLowerCase().includes('enoent');
+        const errorEnvelope = isNotFound
+          ? { error: 'document_not_found', message: `No document found for identifier: ${identifiers}`, identifier: identifiers }
+          : { error: 'read_error', message: `Error reading document: ${msg}` };
         return {
-          content: [{ type: 'text' as const, text: userMsg }],
+          content: [{ type: 'text' as const, text: JSON.stringify(errorEnvelope) }],
           isError: true,
         };
       }
