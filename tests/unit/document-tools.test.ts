@@ -677,19 +677,29 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Personal/Journal/My Document.md' }) as {
+    const result = await handler({ identifiers: 'Personal/Journal/My Document.md' }) as {
       content: Array<{ type: string; text: string }>;
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
     expect(fsPromises.readFile).toHaveBeenCalled();
-    // MOD-02: response returns content only, not frontmatter
-    expect(result.content[0].text).toContain('Hello');
-    expect(result.content[0].text).toContain('document body');
+    // Phase 107: response is a JSON envelope; body field contains content without frontmatter
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toContain('Hello');
+    expect(env.body).toContain('document body');
+    // Envelope completeness check — always-present fields
+    expect(env).toMatchObject({
+      identifier: expect.any(String),
+      title: expect.any(String),
+      path: expect.any(String),
+      fq_id: expect.any(String),
+      modified: expect.any(String),
+      size: { chars: expect.any(Number) },
+    });
   });
 
-  it('returns isError: true when file does not exist (ENOENT → Document not found message)', async () => {
+  it('returns isError: true when file does not exist (ENOENT → document_not_found error)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -697,15 +707,16 @@ describe('get_document', () => {
     vi.mocked(fsPromises.readFile).mockRejectedValueOnce(new Error("ENOENT: no such file or directory, open '/tmp/test-vault/nonexistent.md'"));
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'nonexistent.md' }) as {
+    const result = await handler({ identifiers: 'nonexistent.md' }) as {
       content: Array<{ type: string; text: string }>;
       isError?: boolean;
     };
 
     expect(result.isError).toBe(true);
-    // ENOENT is a "not found" error — should return specific Document not found message
-    expect(result.content[0].text).toContain('Document not found');
-    expect(result.content[0].text).toContain('nonexistent.md');
+    // Phase 107: error is a JSON envelope with error code
+    const err = JSON.parse(result.content[0].text);
+    expect(err.error).toBe('document_not_found');
+    expect(err.message).toContain('nonexistent.md');
   });
 
   it('returns document content without mentioning embedding status', async () => {
@@ -727,11 +738,12 @@ describe('get_document', () => {
     } as unknown as ReturnType<typeof supabaseManager.getClient>);
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Personal/My Doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'Personal/My Doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
-    // MOD-02: returns content only, no ## Content header
-    expect(result.content[0].text).toContain('Hello world');
+    // Phase 107: response is a JSON envelope; body field contains the content
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toContain('Hello world');
     expect(result.content[0].text).not.toContain('stale');
     expect(result.content[0].text).not.toContain('embedding');
     // Hash matched — no re-embed triggered
@@ -760,20 +772,20 @@ describe('get_document', () => {
     } as unknown as ReturnType<typeof supabaseManager.getClient>);
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Personal/Changed Doc.md' }) as {
+    const result = await handler({ identifiers: 'Personal/Changed Doc.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     // Response should be successful (get_document returns content even with stale hash)
     expect(result).toBeDefined();
     expect((result as Record<string, unknown>).content).toBeDefined();
-    // Content should be the actual file body
-    expect((result.content as Array<{ text: string }>)[0].text).toContain('Updated content');
+    // Phase 107: body field contains the actual file body
+    const env = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+    expect(env.body).toContain('Updated content');
   });
 
-  it('calls resolveDocumentIdentifier and ensureProvisioned with the identifier', async () => {
+  it('calls resolveDocumentIdentifier and targetedScan with the identifier', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -783,7 +795,7 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'docs/test.md' }) as { isError?: boolean };
+    const result = await handler({ identifiers: 'docs/test.md' }) as { isError?: boolean };
 
     expect(result.isError).toBeUndefined();
     expect(resolveDocumentModule.resolveDocumentIdentifier).toHaveBeenCalledWith(
@@ -802,14 +814,15 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'legacy/old.md' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'legacy/old.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
-    // MOD-02: content only
-    expect(result.content[0].text).toContain('Provisioned body');
+    // Phase 107: JSON envelope; body field contains the content
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toContain('Provisioned body');
   });
 
-  it('returns metadata.changed when resolver reports stale path (SPEC-08)', async () => {
+  it('returns envelope.path reflecting resolved path when resolver reports stale path (Phase 107)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -832,19 +845,18 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'old/path.md' }) as {
+    const result = await handler({ identifiers: 'old/path.md' }) as {
       content: Array<{ text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
-    // SPEC-08: content is verbatim, no note injection
-    expect(result.content[0].text).toBe('Content at new location');
-    expect(result.content[0].text).not.toContain('Document was moved');
-    // SPEC-08: metadata conveys path change
-    expect(result.metadata?.changed).toBe(true);
-    expect(result.metadata?.path).toBe('new/path.md');
+    // Phase 107: JSON envelope — body field is verbatim content, no note injection
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toContain('Content at new location');
+    expect(env.body).not.toContain('Document was moved');
+    // Phase 107: path in the envelope reflects the resolved (current) path
+    expect(env.path).toBe('new/path.md');
   });
 
   it('returns isError when resolveDocumentIdentifier throws "not found" error', async () => {
@@ -857,15 +869,16 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'nonexistent/doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'nonexistent/doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(true);
-    // "not found" in error message → Document not found user message
-    expect(result.content[0].text).toContain('Document not found');
-    expect(result.content[0].text).toContain('nonexistent/doc.md');
+    // Phase 107: JSON error envelope with error code
+    const err = JSON.parse(result.content[0].text);
+    expect(err.error).toBe('document_not_found');
+    expect(err.message).toContain('nonexistent/doc.md');
   });
 
-  it('returns isError with generic message when non-not-found error occurs', async () => {
+  it('returns isError with read_error when non-not-found error occurs', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -875,15 +888,16 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'vault/.obsidian' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'vault/.obsidian' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(true);
-    // Non-"not found" error → generic "Error reading document" message
-    expect(result.content[0].text).toContain('Error reading document');
-    expect(result.content[0].text).toContain('Permission denied');
+    // Phase 107: Non-"not found" error → JSON envelope with read_error code
+    const err = JSON.parse(result.content[0].text);
+    expect(err.error).toBe('read_error');
+    expect(err.message).toContain('Permission denied');
   });
 
-  it('Case 3c: vault file missing + NO DB row found → falls through to ENOENT error as before', async () => {
+  it('Case 3c: vault file missing + NO DB row found → falls through to document_not_found error', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -908,17 +922,18 @@ describe('get_document', () => {
     vi.mocked(fsPromises.readFile).mockRejectedValueOnce(new Error("ENOENT: no such file or directory, open '/tmp/test-vault/Work/Ghost Doc.md'"));
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Work/Ghost Doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'Work/Ghost Doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(true);
-    // ENOENT is a "not found" class error → Document not found message
-    expect(result.content[0].text).toContain('Document not found');
-    expect(result.content[0].text).toContain('Work/Ghost Doc.md');
+    // Phase 107: ENOENT is a "not found" class error → JSON envelope with document_not_found code
+    const err = JSON.parse(result.content[0].text);
+    expect(err.error).toBe('document_not_found');
+    expect(err.message).toContain('Work/Ghost Doc.md');
   });
 
-  // ─── SPEC-08: get_document metadata response format ───────────────────────
+  // ─── Phase 107: get_document JSON envelope format ─────────────────────────
 
-  it('SPEC-08: returns metadata field with path and changed properties', async () => {
+  it('Phase 107: returns JSON envelope with path in envelope (no separate metadata field)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -941,19 +956,20 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Work/Note.md' }) as {
+    const result = await handler({ identifiers: 'Work/Note.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
-    expect(result.metadata).toBeDefined();
-    expect(result.metadata?.path).toBe('Work/Note.md');
-    expect(result.metadata?.changed).toBe(false);
+    // Phase 107: metadata is in the JSON envelope, not a separate 'metadata' top-level field
+    const env = JSON.parse(result.content[0].text);
+    expect(env.path).toBe('Work/Note.md');
+    expect(env.identifier).toBeDefined();
+    expect(env.title).toBeDefined();
   });
 
-  it('SPEC-08: metadata.changed is true when stale path detected', async () => {
+  it('Phase 107: envelope.path reflects resolved path when stale path detected', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -976,18 +992,17 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'old/path.md' }) as {
+    const result = await handler({ identifiers: 'old/path.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
-    expect(result.metadata?.changed).toBe(true);
-    expect(result.metadata?.path).toBe('new/path.md');
+    const env = JSON.parse(result.content[0].text);
+    expect(env.path).toBe('new/path.md');
   });
 
-  it('SPEC-08: content is verbatim (no note injection)', async () => {
+  it('Phase 107: body field is verbatim content (no note injection)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -1012,20 +1027,19 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Work/Note.md' }) as {
+    const result = await handler({ identifiers: 'Work/Note.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toBe(expectedContent);
-    expect(result.content[0].text).not.toContain('---');
-    expect(result.content[0].text).not.toContain('Note:');
-    expect(result.content[0].text).not.toContain('Path changed');
+    // Phase 107: body is verbatim content, no note injection
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toBe(expectedContent);
+    expect(env.body).not.toContain('Path changed');
   });
 
-  it('SPEC-08: stale path still triggers background re-embed', async () => {
+  it('Phase 107: envelope path is returned (background re-embed path is irrelevant to response shape)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -1050,15 +1064,14 @@ describe('get_document', () => {
     vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Work/Note.md' }) as {
+    const result = await handler({ identifiers: 'Work/Note.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
-    // Verify that response includes metadata field
-    expect(result.metadata).toBeDefined();
-    expect(result.metadata?.path).toBe('Work/Note.md');
+    // Phase 107: path is in the JSON envelope
+    const env = JSON.parse(result.content[0].text);
+    expect(env.path).toBe('Work/Note.md');
   });
 
   // ─── SPEC-18: content_hash removal in write paths ──────────────────────────

@@ -8,7 +8,7 @@ import { HAS_SUPABASE } from '../helpers/test-env.js';
 /**
  * Integration tests for Phase 62: Response Format Standardization
  *
- * These tests verify that response formats across get_doc_outline, get_memory,
+ * These tests verify that response formats across get_memory,
  * search_memory, and list_memories follow the established conventions:
  * - Key-value pair format (Label: value)
  * - --- (three dash) separators for batch entries
@@ -80,8 +80,7 @@ describe.skipIf(!HAS_SUPABASE)('Integration: Response Format Standardization (re
     it.todo('get_memory batch mode: --- separators, key-value pairs');
     it.todo('search_memory: --- separators, no numbered lists');
     it.todo('list_memories: --- separators, content truncation, no numbering');
-    it.todo('get_doc_outline single mode: structured metadata, no [level N] annotations');
-    it.todo('get_doc_outline batch mode: --- separators, progress message >100 docs');
+    // Note: get_doc_outline removed in Phase 107; use get_document with include: ['headings']
   });
 
   describe('Batch response format: All use --- separator consistently', () => {
@@ -92,24 +91,24 @@ describe.skipIf(!HAS_SUPABASE)('Integration: Response Format Standardization (re
 
   describe('Edge cases: Empty results, unresolved links, missing IDs', () => {
     it.todo('empty search returns: No [entity] found.');
-    it.todo('get_doc_outline: unresolved wikilinks marked with Status: unresolved');
+    // Note: get_doc_outline removed in Phase 107
     it.todo('get_memory batch: missing IDs reported as "Not found: id1, id2"');
   });
 
-  describe('Progress messaging: get_memory, get_doc_outline for >100 records', () => {
+  describe('Progress messaging: get_memory for >100 records', () => {
     it.todo('batch >100: response starts with "Processing N documents — this may take a moment."');
     it.todo('batch <100: no progress message');
   });
 
   describe('Concurrent format changes: No crosstalk between tools', () => {
     it.todo('parallel get_memory + search_memory requests use correct format');
-    it.todo('parallel get_doc_outline + list_memories use correct separators');
+    // Note: get_doc_outline removed in Phase 107
   });
 
   describe('Field consistency: Same fields across similar tools', () => {
     it.todo('search_memory and list_memories both include: Memory ID, Content, Tags, Created');
     it.todo('get_memory batch and single mode both include: Memory ID, Tags, Created, Updated');
-    it.todo('get_doc_outline single and batch modes both include: Path, Title, FQC ID, Tags, Status');
+    // Note: get_doc_outline removed in Phase 107; get_document JSON envelope covers this
   });
 });
 

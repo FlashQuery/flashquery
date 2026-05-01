@@ -60,10 +60,11 @@ describe('MCP Tool Descriptions (SPEC-17)', () => {
   it('Document tools should have distinct descriptions', () => {
     // Document tools: create_document, get_document, update_document, archive_document,
     // search_documents, reconcile_documents, copy_document, move_document
+    // Note: get_doc_outline was removed in Phase 107
 
     const descriptions = [
       'Create a new markdown document',
-      'Read a document\'s body content',
+      'Read a document and return a structured JSON envelope',
       'Overwrite an existing document\'s',
       'Archive one or more documents',
       'Search vault documents by',
@@ -126,9 +127,9 @@ describe('MCP Tool Descriptions (SPEC-17)', () => {
 
   it('Sibling document tools should clearly distinguish', () => {
     // Verify that sibling tools have different key keywords in descriptions
+    // Note: get_doc_outline was removed in Phase 107; use get_document include param instead
     const toolKeywords: Record<string, string[]> = {
-      get_document: ['body content', 'sections'],
-      get_doc_outline: ['structure', 'frontmatter', 'heading hierarchy'],
+      get_document: ['structured JSON envelope', 'include'],
       search_documents: ['search', 'tags', 'ranked results'],
       get_briefing: ['summary', 'grouped by type'],
       search_all: ['both documents and memories', 'unified'],
@@ -166,10 +167,11 @@ describe('MCP Tool Descriptions (SPEC-17)', () => {
   it('Tool description character limits should be respected', () => {
     // Product doc specifies descriptions should be under 300 characters
     // This is a documentation test to track character limits
+    // Note: get_doc_outline was removed in Phase 107
 
     const descriptions = [
       'Create a new markdown document in the vault. Provide a title (required), optional tags for categorization, optional body content, and an optional vault-relative path to control where it\'s saved (e.g. "clients/acme/notes.md"). Defaults to vault root if no path is given. Returns the new document\'s fqc_id, path, and metadata. Use this when the user wants to start a new document, note, record, or page.',
-      'Read a document\'s body content by path, fqc_id, or filename. Returns the full markdown body (without frontmatter). To read only specific sections instead of the full body, pass a sections array with heading names — this is far more token-efficient for large documents. For document structure and frontmatter without body content, use get_doc_outline instead.',
+      'Read a document and return a structured JSON envelope. The envelope always contains identifier, title, path, fq_id, modified, and size.chars. Use the include parameter to also receive body, frontmatter, or headings.',
     ];
 
     for (const desc of descriptions) {
