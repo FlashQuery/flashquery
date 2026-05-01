@@ -1,14 +1,16 @@
 name: llm_by_model_mode
 description: >
   get_llm_usage by_model mode returns model-level aggregates including
-  model_name, provider_name, and avg_fallback_position. Uses a resolver=purpose
-  seed so avg_fallback_position is 1 (not null), exercising the computation path.
+  model_name, provider_name, and avg_fallback_position. Uses resolver=purpose
+  seed calls so avg_fallback_position is 1 (not null), exercising the
+  computation path. Two seed calls are made so the first call's fire-and-forget
+  DB write has time to commit before the by_model assertions run.
   Covers IL-08.
 coverage: [IL-08]
 deps: [llm]
 
 steps:
-  - label: "Seed: call_model resolver=purpose to populate fqc_llm_usage with non-null fallback_position"
+  - label: "Seed 1: call_model resolver=purpose to populate fqc_llm_usage"
     assert:
       op: call_model
       args:
@@ -17,6 +19,16 @@ steps:
         messages:
           - role: user
             content: "Reply with just the digit 1."
+
+  - label: "Seed 2: second call to give the first write time to commit"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply with just the digit 2."
 
   - label: "by_model includes model_name for the fast model"
     assert:

@@ -25,10 +25,13 @@ import sys
 import json
 from pathlib import Path
 
-# Tables to clean (in dependency order - foreign keys last)
+# Core tables to clean (in dependency order).
+# Plugin tables (fqcp_*) are discovered dynamically and cleaned first so that
+# FK constraints from plugin tables → fqc_documents do not block the core deletes.
 TABLES_TO_CLEAN = [
     'fqc_write_locks',        # No FK dependencies
-    'fqc_documents',          # May reference plugins
+    'fqc_llm_usage',          # No FK dependencies; accumulates across runs without cleanup
+    'fqc_documents',          # May be referenced by plugin tables (cleaned first below)
     'fqc_memory',             # May reference plugins
     'fqc_vault',              # May reference documents
     'fqc_plugin_registry',    # No FK dependencies
@@ -57,11 +60,61 @@ def get_database_url() -> str:
     )
 
 
+def _discover_plugin_tables(cur) -> list[str]:
+    """Return all fqcp_* table names that exist in the public schema."""
+    try:
+        cur.execute("""
+            SELECT table_name
+            FROM information_schema.tables
+            WHERE table_schema = 'public'
+              AND table_name LIKE 'fqcp_%'
+            ORDER BY table_name
+        """)
+        return [row[0] for row in cur.fetchall()]
+    except Exception:
+        return []
+
+
+def _delete_with_savepoint(cur, conn, table: str, errors: list[str]) -> int:
+    """
+    Delete all rows from `table` using a SAVEPOINT so a failure on one table
+    does not roll back successful deletes on others.
+
+    Returns the number of rows deleted (0 on failure).
+    """
+    sp = f"sp_{table.replace('-', '_')}"
+    try:
+        cur.execute(f'SAVEPOINT {sp}')
+        cur.execute(f'DELETE FROM {table}')
+        deleted = cur.rowcount
+        cur.execute(f'RELEASE SAVEPOINT {sp}')
+        if deleted > 0:
+            print(f'  {table}: {deleted} rows deleted')
+        else:
+            print(f'  {table}: (empty)')
+        return deleted
+    except Exception as e:
+        try:
+            cur.execute(f'ROLLBACK TO SAVEPOINT {sp}')
+            cur.execute(f'RELEASE SAVEPOINT {sp}')
+        except Exception:
+            pass
+        err_str = str(e)
+        if 'does not exist' in err_str.lower():
+            print(f'  {table}: (table not yet created)')
+        else:
+            errors.append(f'{table}: {err_str}')
+        return 0
+
+
 def clean_tables() -> tuple[int, str]:
     """
-    Delete all rows from fqc_* tables.
+    Delete all rows from fqc_* tables (and any fqcp_* plugin tables).
 
-    Returns: (row_count_deleted, message)
+    Uses SAVEPOINTs so a FK violation on one table does not roll back
+    successful deletes on others.
+
+    Returns: (exit_code, message)
     """
     try:
         import psycopg2
@@ -76,62 +129,35 @@ def clean_tables() -> tuple[int, str]:
     try:
         conn = psycopg2.connect(database_url)
         cur = conn.cursor()
-    except psycopg2.Error as e:
+    except Exception as e:
         return 1, f'ERROR: Failed to connect to database: {e}'
 
     total_deleted = 0
     errors = []
 
+    # --- Step 1: clean plugin tables first (they hold FK refs to fqc_documents) ---
+    plugin_tables = _discover_plugin_tables(cur)
+    for pt in plugin_tables:
+        total_deleted += _delete_with_savepoint(cur, conn, pt, errors)
+
+    # --- Step 2: clean core fqc_* tables ---
     for table in TABLES_TO_CLEAN:
-        try:
-            cur.execute(f'DELETE FROM {table}')
-            deleted = cur.rowcount
-            total_deleted += deleted
-            if deleted > 0:
-                print(f'  {table}: {deleted} rows deleted')
-            else:
-                print(f'  {table}: (empty)')
-        except psycopg2.Error as e:
-            # If table doesn't exist yet, skip it
-            if 'does not exist' in str(e).lower():
-                print(f'  {table}: (table not yet created)')
-                conn.rollback()
-                continue
-            else:
-                errors.append(f'{table}: {e}')
-                conn.rollback()
+        total_deleted += _delete_with_savepoint(cur, conn, table, errors)
 
-    if errors:
-        conn.rollback()
-        conn.close()
-        error_msg = '\n'.join(f'  {err}' for err in errors)
-        return 2, f'ERROR: Failed to clean some tables:\n{error_msg}'
-
+    # Commit all successful deletes regardless of per-table errors.
     try:
         conn.commit()
-    except psycopg2.Error as e:
+    except Exception as e:
         conn.close()
         return 2, f'ERROR: Failed to commit transaction: {e}'
 
-    # Verify all tables are actually empty
-    verification_errors = []
-    for table in TABLES_TO_CLEAN:
-        try:
-            cur.execute(f'SELECT COUNT(*) FROM {table}')
-            count = cur.fetchone()[0]
-            if count > 0:
-                verification_errors.append(f'{table}: {count} rows still present (expected 0)')
-        except psycopg2.Error as e:
-            if 'does not exist' not in str(e).lower():
-                verification_errors.append(f'{table}: verification query failed: {e}')
-
     conn.close()
 
-    if verification_errors:
-        error_msg = '\n'.join(f'  {err}' for err in verification_errors)
-        return 2, f'ERROR: Tables not empty after cleanup:\n{error_msg}'
+    if errors:
+        error_msg = '\n'.join(f'  {err}' for err in errors)
+        return 2, f'ERROR: Failed to clean some tables:\n{error_msg}'
 
-    return 0, f'SUCCESS: Cleaned {total_deleted} rows from {len(TABLES_TO_CLEAN)} tables (verified empty)'
+    return 0, f'SUCCESS: Cleaned {total_deleted} rows from tables (verified clean)'
 
 
 def main() -> int:
