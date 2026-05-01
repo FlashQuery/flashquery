@@ -524,6 +524,13 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 |----|----------|------------|--------------|--------------|
 | L-14 | `get_llm_usage` with `mode=recent` and `limit=N` returns exactly `N` entries when more than `N` records exist — seed `N+1` `call_model` calls, then query with `limit=N`; assert `entries` array length equals exactly `N` (not N+1, not N-1) | test_llm_usage_filters | 2026-04-30 | 2026-04-30 |
 
+### 15.7 `call_model` — Trace ID and Cumulative Totals
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-15 | `call_model` with a `trace_id` — `metadata.trace_id` in the response JSON echoes the supplied trace_id exactly, and `metadata.trace_cumulative.total_calls` equals `1` after the first call with that trace_id | test_call_model_trace | 2026-05-01 | 2026-05-01 |
+| L-16 | `call_model` called twice with the same `trace_id` — `metadata.trace_cumulative.total_calls` equals `2` after the second call, and `metadata.trace_cumulative.total_tokens.input` is strictly greater than the input tokens of the first call alone | test_call_model_trace | 2026-05-01 | 2026-05-01 |
+
 ---
 
 ## Coverage Summary

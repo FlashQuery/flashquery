@@ -7,7 +7,9 @@
  * (D-04). When configured, the handler dispatches to either
  * `llmClient.complete()` or `llmClient.completeByPurpose()` per `params.resolver`.
  * Cost recording is now fire-and-forget in client.ts (D-03/D-06).
- * trace_cumulative uses query-then-add-in-memory pattern (D-11).
+ * trace_cumulative uses pre-snapshot pattern (D-11): existing rows are queried
+ * BEFORE the LLM call so the current call's fire-and-forget row cannot appear
+ * in the snapshot, eliminating the double-count race.
  *
  * Error response variants (D-03):
  *   1. Unconfigured (NullLlmClient guard) — fixed string per requirement.
@@ -119,6 +121,37 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         };
       }
 
+      // Step 1b: trace pre-snapshot (D-11 fix) — query existing trace rows BEFORE
+      // dispatching to the LLM. This ensures the current call's fire-and-forget
+      // recordLlmUsage row (written by client.ts after the HTTP call returns) cannot
+      // appear in this snapshot. Querying after the LLM call races with the
+      // fire-and-forget insert and causes double-counting (total_calls=3 after 2 calls).
+      // The pre-snapshot is null when trace_id is absent or Supabase is unavailable.
+      type TraceRow = { input_tokens: number | null; output_tokens: number | null; cost_usd: number | null; latency_ms: number | null };
+      let tracePreSnapshot: TraceRow[] | null = null;
+      if (params.trace_id) {
+        let supabase: ReturnType<typeof supabaseManager.getClient> | null = null;
+        try {
+          supabase = supabaseManager.getClient();
+        } catch {
+          // Supabase not configured — trace_cumulative will be silently omitted
+        }
+        if (supabase) {
+          try {
+            const { data } = await supabase
+              .from('fqc_llm_usage')
+              .select('input_tokens, output_tokens, cost_usd, latency_ms')
+              .eq('instance_id', config.instance.id)
+              .eq('trace_id', params.trace_id);
+            tracePreSnapshot = data ?? [];
+          } catch (err: unknown) {
+            logger.warn(
+              `trace pre-snapshot query failed; trace_cumulative will be omitted: ${err instanceof Error ? err.message : String(err)}`
+            );
+          }
+        }
+      }
+
       // Step 2: Dispatch by resolver
       let result: LlmCompletionResult;
       let fallbackPosition: number | null;
@@ -212,45 +245,27 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         ? computeCost(result.inputTokens, result.outputTokens, modelConfig.costPerMillion)
         : 0;
 
-      // Step 4: trace_cumulative (TOOL-05) — D-11 query-then-add-in-memory pattern.
-      // The fire-and-forget recordLlmUsage in client.ts may not have committed yet,
-      // so query existing rows and ALWAYS add the current call's data in-memory.
+      // Step 4: trace_cumulative (TOOL-05) — build from the pre-snapshot taken before
+      // the LLM call (Step 1b). The pre-snapshot contains only rows from prior calls,
+      // so we always add the current call's data in-memory to get the correct totals.
+      // This avoids the race where client.ts's fire-and-forget write commits between
+      // the LLM call and a post-call query, causing the current call to be counted twice.
       let traceCumulative: TraceCumulative | undefined;
-      if (params.trace_id) {
-        let supabase: ReturnType<typeof supabaseManager.getClient> | null = null;
-        try {
-          supabase = supabaseManager.getClient();
-        } catch {
-          // Supabase not configured — trace_cumulative silently omitted
-        }
-        if (supabase) {
-          try {
-            const { data: traceRows } = await supabase
-              .from('fqc_llm_usage')
-              .select('input_tokens, output_tokens, cost_usd, latency_ms')
-              .eq('instance_id', config.instance.id)
-              .eq('trace_id', params.trace_id);
-
-            const rows = traceRows ?? [];
-            traceCumulative = {
-              total_calls: rows.length + 1,
-              total_tokens: {
-                input:
-                  rows.reduce((s, r) => s + Number(r.input_tokens ?? 0), 0) + result.inputTokens,
-                output:
-                  rows.reduce((s, r) => s + Number(r.output_tokens ?? 0), 0) + result.outputTokens,
-              },
-              total_cost_usd:
-                rows.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0) + costUsd,
-              total_latency_ms:
-                rows.reduce((s, r) => s + Number(r.latency_ms ?? 0), 0) + result.latencyMs,
-            };
-          } catch (err: unknown) {
-            logger.warn(
-              `trace_cumulative query failed; omitting from envelope: ${err instanceof Error ? err.message : String(err)}`
-            );
-          }
-        }
+      if (params.trace_id && tracePreSnapshot !== null) {
+        const rows = tracePreSnapshot;
+        traceCumulative = {
+          total_calls: rows.length + 1,
+          total_tokens: {
+            input:
+              rows.reduce((s, r) => s + Number(r.input_tokens ?? 0), 0) + result.inputTokens,
+            output:
+              rows.reduce((s, r) => s + Number(r.output_tokens ?? 0), 0) + result.outputTokens,
+          },
+          total_cost_usd:
+            rows.reduce((s, r) => s + Number(r.cost_usd ?? 0), 0) + costUsd,
+          total_latency_ms:
+            rows.reduce((s, r) => s + Number(r.latency_ms ?? 0), 0) + result.latencyMs,
+        };
       }
 
       // Step 5: Build response envelope (TOOL-02 / D-02 conditional fields)

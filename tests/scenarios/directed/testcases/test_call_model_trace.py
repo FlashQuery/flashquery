@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Test: call_model trace_id echoed in envelope, cumulative totals across calls (L-14, L-15).
-Coverage: L-14, L-15
+Test: call_model trace_id echoed in envelope, cumulative totals across calls (L-15, L-16).
+Coverage: L-15, L-16
 Modes:
     --managed   Required (starts dedicated FQC subprocess)
 Usage:
@@ -24,7 +24,7 @@ from fqc_test_utils import TestRun, FQCServer  # noqa: E402
 from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_call_model_trace"
-COVERAGE = ["L-14", "L-15"]
+COVERAGE = ["L-15", "L-16"]
 
 CONFIGURED_LLM = {
     "llm": {
