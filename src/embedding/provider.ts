@@ -185,13 +185,28 @@ export function createEmbeddingProvider(config: FlashQueryConfig['embedding']): 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// getEmbeddingDimensions — resolve vector dimensions from LLM or legacy config
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function getEmbeddingDimensions(config: FlashQueryConfig): number {
+  if (config.llm?.purposes) {
+    const embeddingPurpose = config.llm.purposes.find(p => p.name === 'embedding');
+    if (embeddingPurpose?.models[0]) {
+      const modelEntry = config.llm.models?.find(m => m.name === embeddingPurpose.models[0]);
+      if (modelEntry?.dimensions) return modelEntry.dimensions;
+    }
+  }
+  return config.embedding?.dimensions ?? 1536;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Module singleton and init function
 // ─────────────────────────────────────────────────────────────────────────────
 
 export let embeddingProvider: EmbeddingProvider;
 
 export function initEmbedding(config: FlashQueryConfig, llmClient?: LlmClient): void {
-  const dimensions = config.embedding.dimensions;
+  const dimensions = getEmbeddingDimensions(config);
 
   // Purpose path (D-03, D-04, D-05, D-06): check config.llm.purposes FIRST.
   // Guard with `llmClient` truthiness BEFORE calling getModelForPurpose.
@@ -241,17 +256,21 @@ export function initEmbedding(config: FlashQueryConfig, llmClient?: LlmClient): 
     return;
   }
 
-  // Legacy path (unchanged from current implementation): D-05A, D-05B, then createEmbeddingProvider
+  // Legacy path: only reached when no LLM embedding purpose is configured.
+  if (!config.embedding) {
+    embeddingProvider = new NullEmbeddingProvider(dimensions);
+    logger.info('Embedding: DISABLED (no embedding configured)');
+    return;
+  }
+
   const { provider, model, apiKey } = config.embedding;
 
-  // D-05A: Explicit provider="none" — user intentionally disabled embedding
   if (provider === 'none') {
     embeddingProvider = new NullEmbeddingProvider(dimensions);
     logger.info('Embedding: DISABLED (provider=none)');
     return;
   }
 
-  // D-05B: Provider set but API key missing — warn and degrade gracefully
   if ((provider === 'openai' || provider === 'openrouter') && !apiKey) {
     const providerName = provider === 'openai' ? 'OpenAI' : 'OpenRouter';
     logger.warn(

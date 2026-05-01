@@ -5,6 +5,7 @@ import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { verifySchema } from './schema-verify.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
+import { getEmbeddingDimensions } from '../embedding/provider.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // macOS 15+ (Sequoia/Tahoe) Local Network Privacy
@@ -742,7 +743,7 @@ class SupabaseManagerImpl implements SupabaseManager {
 
   async initialize(config: FlashQueryConfig): Promise<void> {
     const { url: supabaseUrl, serviceRoleKey, skipDdl, databaseUrl } = config.supabase;
-    const { dimensions } = config.embedding;
+    const dimensions = getEmbeddingDimensions(config);
 
     const hostname = new URL(supabaseUrl).hostname;
     logger.debug(`Supabase: connecting to ${hostname}...`);

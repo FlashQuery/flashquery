@@ -147,25 +147,6 @@ mcp:
   token_lifetime: 24
 
 
-# ─── Embedding Provider ─────────────────────────────────────────────────────
-# Controls semantic search. Provider and model come from the .env file so
-# they can vary per install; dimensions is fixed by the model family.
-
-embedding:
-  provider: "${EMBEDDING_PROVIDER}"
-  model: "${EMBEDDING_MODEL}"
-  api_key: "${EMBEDDING_API_KEY}"
-  # endpoint is only used when provider is "ollama". Set OLLAMA_URL in .env
-  # to point at a remote Ollama instance; defaults to http://localhost:11434.
-  endpoint: "${OLLAMA_URL}"
-
-  # Embedding vector dimensions. Must match your chosen model:
-  #   OpenAI text-embedding-3-small:   1536
-  #   OpenAI text-embedding-3-large:   3072
-  #   Nomic nomic-embed-text:          768
-  # If you change models, update this value — the database index depends on it.
-  dimensions: 1536
-
 
 # ─── Locking ────────────────────────────────────────────────────────────────
 # Coordinates concurrent writes across multiple FlashQuery instances that
@@ -197,11 +178,9 @@ logging:
 # Names are auto-lowercased at load time, so "Nano" and "nano" collide.
 #
 # NOTE: The 'embedding' purpose below is required for FlashQuery's semantic
-# search to work via the LLM system. When you enable an 'embedding' purpose
-# here, set `embedding.provider: none` in the legacy `embedding:` section
-# above to suppress the v2.x deprecation warning and avoid running both
-# embedding paths simultaneously. If you omit the 'llm:' section entirely,
-# the legacy `embedding:` section (above) handles semantic search instead.
+# search. Assign it a model of type: embedding with a dimensions: value that
+# matches your chosen embedding model. Omit the entire llm: section to disable
+# all LLM features including semantic search.
 
 llm:
   providers:
@@ -221,6 +200,10 @@ llm:
       provider_name: openai
       model: text-embedding-3-small
       type: embedding
+      # Embedding vector dimensions — must match the model:
+      #   text-embedding-3-small: 1536 | text-embedding-3-large: 3072
+      #   nomic-embed-text: 768
+      dimensions: 1536
       cost_per_million:
         input: 0.02
         output: 0.00

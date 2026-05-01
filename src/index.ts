@@ -296,15 +296,12 @@ if (isMain) {
         let embeddingStatus: string;
         if (embeddingProvider instanceof NullEmbeddingProvider) {
           embeddingStatus = 'Semantic search: DISABLED';
-        } else if (
-          config.embedding.provider === 'none' &&
-          config.llm?.purposes.some((p) => p.name === 'embedding')
-        ) {
+        } else if (config.llm?.purposes?.some((p) => p.name === 'embedding')) {
           const embPurpose = config.llm.purposes.find((p) => p.name === 'embedding')!;
           const firstModel = embPurpose.models[0] ?? 'unknown';
           embeddingStatus = `Semantic search: ENABLED (via LLM purpose: ${firstModel})`;
         } else {
-          embeddingStatus = `Semantic search: ENABLED (${config.embedding.provider}/${config.embedding.model})`;
+          embeddingStatus = `Semantic search: ENABLED (${config.embedding?.provider}/${config.embedding?.model})`;
         }
         logger.info(`  ${embeddingStatus}`);
         const llmStatus = config.llm

@@ -13,6 +13,7 @@ import {
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
+import { getEmbeddingDimensions } from '../../embedding/provider.js';
 import { createPgClientIPv4 } from '../../utils/pg-client.js';
 import { compareSchemaVersions, analyzeSchemaChanges } from '../../utils/schema-migration.js';
 import { reloadManifests } from '../../services/manifest-loader.js';
@@ -182,7 +183,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                     const newTable = schema.tables.find((t) => t.name === change.table);
                     if (newTable) {
                       const fullTableName = resolveTableName(schema.plugin.id, instanceName, newTable.name);
-                      const ddl = buildPluginTableDDL(fullTableName, newTable, config.embedding.dimensions);
+                      const ddl = buildPluginTableDDL(fullTableName, newTable, getEmbeddingDimensions(config));
                       await pgClient.query(ddl);
                     }
                   } else if (change.type === 'column_added') {
@@ -267,7 +268,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           await pgClient.connect();
           for (const table of schema.tables) {
             const fullTableName = resolveTableName(schema.plugin.id, instanceName, table.name);
-            const ddl = buildPluginTableDDL(fullTableName, table, config.embedding.dimensions);
+            const ddl = buildPluginTableDDL(fullTableName, table, getEmbeddingDimensions(config));
             await pgClient.query(ddl);
             createdTables.push(fullTableName);
           }

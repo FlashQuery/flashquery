@@ -27,12 +27,6 @@ mcp:
   port: 3100
   auth_secret: "test-secret-key-12345"
 
-embedding:
-  provider: "none"
-  model: "text-embedding-3-small"
-  api_key: ""
-  dimensions: 1536
-
 logging:
   level: "debug"
   output: "stdout"

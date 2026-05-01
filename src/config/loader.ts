@@ -101,6 +101,7 @@ const ModelSchema = z
     provider_name: z.string(),
     model: z.string(),
     type: z.enum(['language', 'reasoning', 'embedding', 'vision', 'code', 'audio', 'guardian']),
+    dimensions: z.number().optional(),
     cost_per_million: ModelCostSchema,
   })
   .strip();
@@ -157,7 +158,7 @@ const ConfigSchema = z
     git: GitSchema,
     mcp: McpSchema,
     llm: LlmSchema,
-    embedding: EmbeddingSchema,
+    embedding: EmbeddingSchema.optional(),
     logging: LoggingSchema,
     locking: LockingSchema,
   })
@@ -188,11 +189,12 @@ export interface FlashQueryConfig {
       providerName: string;
       model: string;
       type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
+      dimensions?: number;
       costPerMillion: { input: number; output: number };
     }>;
     purposes: Array<{ name: string; description: string; models: string[]; defaults?: Record<string, unknown> }>;
   };
-  embedding: {
+  embedding?: {
     provider: string;
     model: string;
     apiKey?: string;
@@ -287,8 +289,6 @@ const FIELD_HINTS: Record<string, string> = {
   'instance.name': 'Add a human-readable name for this instance (e.g., "My Knowledge Base").',
   'instance.vault.path': 'Add the path to your vault directory (e.g., "/Users/name/vault").',
   'instance.vault.markdown_extensions': 'Optional: array of file extensions to index (default: [".md"]).',
-  'embedding.provider': 'Set to "openai", "openrouter", or "ollama".',
-  'embedding.model': 'Set the embedding model name (e.g., "text-embedding-3-small").',
   'llm.providers': 'LLM providers must be an array of {name, type, endpoint} objects.',
   'llm.models': 'LLM models must be an array of {name, provider_name, model, type, cost_per_million} objects.',
   'llm.purposes': 'LLM purposes must be an array of {name, description, models} objects.',
@@ -669,18 +669,8 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   }
 
   // 10. Emit warnings (deferred until after validation — caller logs them)
-  // Store warnings on the config object so the caller (index.ts) can log them
-  // D-07 (Phase 104): when both `embedding:` and an `embedding` purpose are configured,
-  // the purpose system takes precedence and the legacy `embedding:` section is deprecated.
-  const embeddingPurposeDeprecationWarning =
-    config.embedding && config.embedding.provider !== 'none' && config.llm?.purposes?.some(p => p.name === 'embedding')
-      ? "The 'embedding:' config section is deprecated when an 'embedding' purpose is defined in 'llm:'. " +
-        "The purpose system takes precedence. Remove 'embedding:' from your config to silence this warning."
-      : undefined;
-
   (config as unknown as Record<string, unknown>)['_deprecationWarnings'] = [
     ...(extensionWarning ? [extensionWarning] : []),
-    ...(embeddingPurposeDeprecationWarning ? [embeddingPurposeDeprecationWarning] : []),
   ];
 
   // Attach raw LLM api_key refs (used by syncLlmConfigToDb in src/llm/config-sync.ts).

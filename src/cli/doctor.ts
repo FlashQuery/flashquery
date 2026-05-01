@@ -93,12 +93,12 @@ async function checkEmbeddingApiKey(config: FlashQueryConfig): Promise<CheckResu
     return { name: 'Embedding API key', passed: true };
   } catch (err) {
     const keyHint =
-      config.embedding.provider === 'openai' ? 'OPENAI_API_KEY' : 'the embedding API key';
+      config.embedding?.provider === 'openai' ? 'OPENAI_API_KEY' : 'the embedding API key';
     return {
       name: 'Embedding API key',
       passed: false,
       issue: err instanceof Error ? err.message : String(err),
-      fix: `Set ${keyHint} in .env or embedding.api_key in flashquery.yaml`,
+      fix: `Set ${keyHint} in .env or configure the 'embedding' purpose in the llm: section of flashquery.yml`,
     };
   }
 }

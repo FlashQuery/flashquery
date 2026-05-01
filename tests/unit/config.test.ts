@@ -86,7 +86,6 @@ logging:
     expect(typeof config.server.port).toBe('number');
     expect(typeof config.git.autoCommit).toBe('boolean');
     expect(typeof config.git.autoPush).toBe('boolean');
-    expect(typeof config.embedding.dimensions).toBe('number');
     expect(Array.isArray(config.instance.vault.markdownExtensions)).toBe(true);
   });
 
@@ -586,7 +585,7 @@ supabase:
   database_url: "postgresql://localhost/db"
 `;
 
-  it('D-07a: emits deprecation warning when embedding: (provider≠none) AND llm.purposes contains embedding', () => {
+  it('D-07a: no error or warning when legacy embedding: coexists with llm.purposes embedding (embedding: is ignored)', () => {
     const tmpFile = join(tmpdir(), `fqc-test-d07a-${Date.now()}.yml`);
     writeFileSync(tmpFile, MINIMAL_BASE_YAML + `
 embedding:
@@ -596,7 +595,7 @@ embedding:
     try {
       const config = loadConfig(tmpFile);
       const warnings = getDeprecationWarnings(config);
-      expect(warnings.some(w => w.includes("'embedding:' config section is deprecated"))).toBe(true);
+      expect(warnings.some(w => w.includes("'embedding:' config section is deprecated"))).toBe(false);
     } finally {
       unlinkSync(tmpFile);
     }
