@@ -262,6 +262,18 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     archivedDuplicateIds.add(archiveId); // Prevent SCAN-04 from overwriting 'archived' with 'missing'
   }
 
+  // Load archived rows so IDC-04 can detect archived-UUID collisions without a blind INSERT
+  const { data: archivedDocs } = await (supabase
+    .from('fqc_documents')
+    .select('id, path, content_hash, status, updated_at')
+    .eq('instance_id', instanceId)
+    .eq('status', 'archived') as unknown as Promise<{ data: DbRow[] | null; error: unknown }>);
+
+  const archivedIdToRow = new Map<string, DbRow>();
+  for (const row of archivedDocs ?? []) {
+    archivedIdToRow.set(row.id, row);
+  }
+
   // ── MAIN PASS: hash-first file identity resolution ────────────────────────
   //
   // HASH-FIRST FILE IDENTITY DECISION TREE
@@ -740,8 +752,24 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
           // Y is only non-undefined when isValidUuid(rawY) already passed (line 281)
           // UUID validation already occurred above — only uniqueness check needed here
           if (Y !== undefined && !idToRow.has(Y)) {
+            // Archived-UUID case: file's fq_id points to an archived DB row.
+            // Preserve archived status — update path/hash if changed, but do not reactivate
+            // and do not count as new (the file was always tracked, just archived).
+            if (archivedIdToRow.has(Y)) {
+              const archivedRow = archivedIdToRow.get(Y)!;
+              if (archivedRow.path !== relativePath || archivedRow.content_hash !== H) {
+                await supabase
+                  .from('fqc_documents')
+                  .update({ path: relativePath, content_hash: H, updated_at: now })
+                  .eq('id', Y);
+              }
+              seenFqcIds.add(Y);
+              logger.info(`[IDC-04] file retains archived status: "${relativePath}" (fqc_id=${Y})`);
+              continue;
+            }
+
             // D-01: Insert new DB row with file's existing foreign UUID, no frontmatter rewrite
-            await supabase.from('fqc_documents').insert({
+            const { error: insertError } = await supabase.from('fqc_documents').insert({
               id: Y,
               instance_id: instanceId,
               path: relativePath,
@@ -753,6 +781,10 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               ownership_plugin_id: fqcOwner,
               ownership_type: fqcType,
             });
+            if (insertError) {
+              logger.error(`[IDC-04] INSERT failed for UUID ${Y}: ${insertError.message}`);
+              continue;
+            }
             seenFqcIds.add(Y);
             newFiles++;
             logger.info(`[IDC-04] adopted foreign UUID: "${relativePath}" (fqc_id=${Y})`);

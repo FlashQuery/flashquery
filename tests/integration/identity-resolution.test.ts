@@ -219,6 +219,70 @@ describe.skipIf(SKIP)('Phase 37: Identity Resolution', () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
+  // SC1b: Archived UUID on disk — stable across repeated scans (IDC-04 fix)
+  // ───────────────────────────────────────────────────────────────────────────
+
+  describe('SC1b: Archived UUID on disk', () => {
+    it('does not count file as new and preserves archived status across repeated scans', async () => {
+      const archivedUuid = uuidv4();
+      const testPath = 'archived-doc.md';
+      const createdAt = new Date().toISOString();
+
+      // 1. Insert an archived row directly into the DB
+      const supabase = supabaseManager.getClient();
+      const { error: insertErr } = await supabase.from('fqc_documents').insert({
+        id: archivedUuid,
+        instance_id: INSTANCE_ID,
+        path: testPath,
+        title: 'Archived Document',
+        status: 'archived',
+        content_hash: 'placeholder-hash',
+        created_at: createdAt,
+        updated_at: createdAt,
+      });
+      expect(insertErr).toBeNull();
+
+      // 2. Write a vault file whose fq_id points to that archived row
+      await writeVaultFile(vaultPath, testPath, {
+        fq_id: archivedUuid,
+        title: 'Archived Document',
+        status: 'active',
+        tags: [],
+        created: createdAt,
+        updated: createdAt,
+      }, '# Archived Document\n\nThis file has an archived UUID.');
+
+      // 3. First scan — should not count it as new
+      const result1 = await runScanOnce(config);
+      expect(result1.newFiles).toBe(0);
+
+      // 4. DB row must still be archived
+      const { data: row1 } = await supabase
+        .from('fqc_documents')
+        .select('id, status')
+        .eq('id', archivedUuid)
+        .eq('instance_id', INSTANCE_ID)
+        .maybeSingle();
+      expect((row1 as Record<string, unknown> | null)?.status).toBe('archived');
+
+      // 5. Second scan — must be stable (same result, not reported as new again)
+      const result2 = await runScanOnce(config);
+      expect(result2.newFiles).toBe(0);
+
+      // 6. DB row still archived, no duplicates created
+      const { data: allRows } = await supabase
+        .from('fqc_documents')
+        .select('id, status')
+        .eq('instance_id', INSTANCE_ID);
+      const rowsForUuid = (allRows ?? []).filter(
+        (r: Record<string, unknown>) => r.id === archivedUuid
+      );
+      expect(rowsForUuid.length).toBe(1);
+      expect(rowsForUuid[0].status).toBe('archived');
+    });
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // SC2: Path-based fallback and reconnection (INF-04)
   // ───────────────────────────────────────────────────────────────────────────
 
