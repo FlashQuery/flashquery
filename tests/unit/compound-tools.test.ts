@@ -1722,6 +1722,11 @@ describe('get_doc_outline batch mode', () => {
     config = makeConfig();
     registerCompoundTools(mockServer.server, config);
 
+    // Default readFile: returns a minimal markdown doc so matter() can parse it
+    vi.mocked(fsPromises.readFile).mockResolvedValue(
+      '---\nfq_title: Doc A\nfq_status: active\n---\n\nBody text.' as unknown as Buffer
+    );
+
     // Default: resolves to a doc with fqcId
     vi.mocked(resolveDocumentModule.resolveDocumentIdentifier).mockResolvedValue({
       absPath: '/mock-vault/notes/doc-a.md',

@@ -1028,10 +1028,10 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           };
         }
 
-        // Array → DB-based batch metadata (core fields only, no disk I/O per doc)
-        // Per OUTLINE-02/OUTLINE-03: resolve+targetedScan per id, then batch DB query via .in()
+        // Array → batch metadata: resolve+targetedScan per id, then batch DB query via .in()
+        // Per OUTLINE-02/OUTLINE-03: file content from readFile is reused to parse custom frontmatter.
         const resolvedDocs: Array<
-          | { input: string; resolved: Awaited<ReturnType<typeof targetedScan>> }
+          | { input: string; resolved: Awaited<ReturnType<typeof targetedScan>>; parsedFrontmatter: Record<string, unknown> }
           | { input: string; error: string }
         > = [];
 
@@ -1041,7 +1041,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             const raw = await readFile(resolved.absPath, 'utf-8');
             const contentHash = computeHash(raw);
             const preScan = await targetedScan(config, supabase, resolved, contentHash, logger);
-            resolvedDocs.push({ input: id, resolved: preScan });
+            const parsedFrontmatter = matter(raw).data;
+            resolvedDocs.push({ input: id, resolved: preScan, parsedFrontmatter });
           } catch (itemErr) {
             const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
             resolvedDocs.push({ input: id, error: msg });
@@ -1050,7 +1051,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Collect all fqcIds for a single DB batch query
         const validDocs = resolvedDocs.filter(
-          (d): d is { input: string; resolved: Awaited<ReturnType<typeof targetedScan>> } =>
+          (d): d is { input: string; resolved: Awaited<ReturnType<typeof targetedScan>>; parsedFrontmatter: Record<string, unknown> } =>
             !('error' in d) && d.resolved.fqcId !== null
         );
         const fqcIds = validDocs.map((d) => d.resolved.capturedFrontmatter.fqcId);
@@ -1104,13 +1105,23 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             blocks.push(errorBlock);
             continue;
           }
-          const docBlock = [
+          // Standard DB fields
+          const standardLines = [
             formatKeyValueEntry('Path', row.path),
             formatKeyValueEntry('Title', row.title),
             formatKeyValueEntry('FQC ID', row.id),
             formatKeyValueEntry('Tags', row.tags),
             formatKeyValueEntry('Status', row.status),
-          ].join('\n');
+          ];
+          // Custom frontmatter: any key not managed by FlashQuery (fq_* fields)
+          const fqManagedKeys = new Set(Object.values(FM));
+          const customLines: string[] = [];
+          for (const [key, value] of Object.entries(doc.parsedFrontmatter)) {
+            if (!fqManagedKeys.has(key as typeof FM[keyof typeof FM])) {
+              customLines.push(formatKeyValueEntry(key, value));
+            }
+          }
+          const docBlock = [...standardLines, ...customLines].join('\n');
           blocks.push(docBlock);
         }
 

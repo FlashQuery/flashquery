@@ -330,6 +330,53 @@ describe('create_directory handler', () => {
     // mkdir should NOT have been called
     expect(vi.mocked(mkdir)).not.toHaveBeenCalled();
   });
+
+  // ── Test 10: JSON array string input is parsed and creates each directory ───────
+
+  it('JSON array string: valid JSON array string is parsed and each path is created (DIR-JSON-01)', async () => {
+    vi.mocked(mkdir).mockResolvedValue(undefined);
+
+    const result = await callCreateDirectory({ paths: '["Roadmap/Features", "Reference/Product"]' });
+
+    expect(result.isError).toBeFalsy();
+    // Both paths should be created
+    expect(vi.mocked(mkdir)).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(mkdir)).toHaveBeenCalledWith(
+      expect.stringContaining('Roadmap'),
+      { recursive: true }
+    );
+    expect(vi.mocked(mkdir)).toHaveBeenCalledWith(
+      expect.stringContaining('Reference'),
+      { recursive: true }
+    );
+  });
+
+  // ── Test 11: malformed JSON array string returns parse error ─────────────────────
+
+  it('JSON array string malformed: returns isError:true with descriptive parse error (DIR-JSON-02)', async () => {
+    const result = await callCreateDirectory({ paths: '["Roadmap/Features", "Reference/Product"' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('JSON array');
+  });
+
+  // ── Test 12: JSON array string with non-string elements is rejected ──────────────
+
+  it('JSON array string non-string elements: returns isError:true (DIR-JSON-03)', async () => {
+    const result = await callCreateDirectory({ paths: '[1, 2, 3]' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('string array');
+  });
+
+  // ── Test 13: plain string starting with '[' that isn't JSON is rejected ──────────
+
+  it('Plain string starting with "[" that is not JSON: returns isError:true (DIR-JSON-04)', async () => {
+    const result = await callCreateDirectory({ paths: '[not json' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('JSON array');
+  });
 });
 
 // ─── list_vault handler tests ─────────────────────────────────────────────────
