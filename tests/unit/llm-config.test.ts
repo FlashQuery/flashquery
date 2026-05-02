@@ -479,3 +479,188 @@ llm:
     }
   });
 });
+
+describe('loadConfig() — DISC-05 optional model fields', () => {
+  it('[U-DISC-05-01] parses a model declaring all three optional fields (description, context_window, capabilities)', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-01-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      description: "A fast small model for routine tasks"
+      context_window: 131072
+      capabilities: ["tools", "vision"]
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].description).toBe('A fast small model for routine tasks');
+      expect(config.llm?.models[0].contextWindow).toBe(131072);
+      expect(config.llm?.models[0].capabilities).toEqual(['tools', 'vision']);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[U-DISC-05-02] omits all three optional fields when not declared (undefined, NOT null/empty)', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-02-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].description).toBeUndefined();
+      expect(config.llm?.models[0].contextWindow).toBeUndefined();
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[U-DISC-05-03] preserves capabilities: [] (declared empty array, NOT undefined)', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-03-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      capabilities: []
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].capabilities).toEqual([]);
+      expect(config.llm?.models[0].capabilities).not.toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[U-DISC-05-04] declaring description only leaves context_window and capabilities undefined', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-04-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      description: "Just description"
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].description).toBe('Just description');
+      expect(config.llm?.models[0].contextWindow).toBeUndefined();
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[U-DISC-05-05] rejects context_window: -1 and 0 and 1.5 at parse time (positive integer constraint)', () => {
+    const buildYaml = (cw: string) => BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      context_window: ${cw}
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    for (const bad of ['-1', '0', '1.5']) {
+      const tmpFile = join(tmpdir(), `fqc-disc05-05-${bad}-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+      writeFileSync(tmpFile, buildYaml(bad));
+      try {
+        expect(() => loadConfig(tmpFile)).toThrow();
+      } finally {
+        unlinkSync(tmpFile);
+      }
+    }
+  });
+
+  it('[U-DISC-05-06] passes custom capability strings through unchanged (no validation of values)', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-06-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      capabilities: ["tools", "custom-thing-no-validation", "vision-experimental"]
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].capabilities).toEqual(['tools', 'custom-thing-no-validation', 'vision-experimental']);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+});
