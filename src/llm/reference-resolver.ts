@@ -105,6 +105,16 @@ export function parseReferences(
       } else {
         identifier = inner;
       }
+      // REFS-08: empty identifier ({{ref:}} or {{id:}}) is semantically invalid —
+      // reject immediately at parse time with a clear error rather than letting an
+      // empty string propagate to resolveAndBuildDocument and produce an opaque failure.
+      if (!identifier) {
+        return {
+          error: 'invalid_reference_syntax' as const,
+          ref: placeholder,
+          reason: 'identifier is empty',
+        };
+      }
       results.push({ placeholder, ref, identifierType, identifier, section, pointer, messageIndex: msgIdx });
     }
   }
