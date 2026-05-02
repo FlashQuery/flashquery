@@ -331,9 +331,13 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           relativePath = path;
 
           // Guard: reject path traversal attempts (../../etc/passwd patterns)
+          // Uses resolve+relative pattern (same as copy_document) which is robust to
+          // trailing slashes on vaultRoot and avoids normalize+startsWith+sep pitfall (WR-01).
           const absolutePath = join(vaultRoot, relativePath);
-          const normalized = normalize(absolutePath);
-          if (!normalized.startsWith(vaultRoot + sep) && normalized !== vaultRoot) {
+          const resolvedAbs = resolve(absolutePath);
+          const resolvedVault = resolve(vaultRoot);
+          const relToVault = relative(resolvedVault, resolvedAbs);
+          if (relToVault.startsWith('..') || relToVault === '..') {
             return {
               content: [{ type: 'text' as const, text: `Error: path escapes vault root.` }],
               isError: true,
