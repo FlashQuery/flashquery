@@ -31,6 +31,8 @@ import {
   assembleMultiSectionBody,
   buildConsolidatedResponse,
   validateParameterCombinations,
+  traverseFollowRef,
+  type FollowedRefResult,
 } from '../utils/document-output.js';
 import { extractHeadings } from '../utils/markdown-utils.js';
 import { extractSection, extractMultipleSections, findHeadingOccurrence } from '../utils/markdown-sections.js';
@@ -535,16 +537,334 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
     }
   );
 
+  // ─── DocumentRequestError (Phase 108) ───────────────────────────────────────
+
+  /** Errors thrown from resolveOneElement that should map to MCP isError:true responses with custom envelopes. */
+  class DocumentRequestError extends Error {
+    constructor(public envelope: Record<string, unknown>) {
+      super(typeof envelope.message === 'string' ? envelope.message : 'document request failed');
+      this.name = 'DocumentRequestError';
+    }
+  }
+
+  // ─── resolveOneElement (Phase 108) ───────────────────────────────────────────
+
+  /**
+   * Resolve one document identifier through the full Phase 107 pipeline and return
+   * a JSON-stringifiable result object. Used by both single-string and batch paths.
+   * When followRef is provided, the source document's frontmatter is traversed and
+   * the target document is read and returned nested under followed_ref.
+   * Throws DocumentRequestError for custom error envelopes (section_not_found, follow_ref_*).
+   * Throws generic Error for identifier resolution / read failures (document_not_found / read_error).
+   */
+  async function resolveOneElement(
+    identifier: string,
+    options: {
+      effectiveInclude: Array<'body' | 'frontmatter' | 'headings'>;
+      sectionsList: string[];
+      effectiveIncludeNested: boolean;
+      occurrence: number;
+      effectiveMaxDepth: number;
+      followRef: string | undefined;
+    },
+    deps: {
+      config: FlashQueryConfig;
+      supabaseManager: typeof supabaseManager;
+      embeddingProvider: typeof embeddingProvider;
+      logger: typeof logger;
+    }
+  ): Promise<Record<string, unknown>> {
+    const { effectiveInclude, sectionsList, effectiveIncludeNested, occurrence, effectiveMaxDepth, followRef } = options;
+    const { config: cfg, supabaseManager: sm, embeddingProvider: ep, logger: log } = deps;
+
+    const resolved = await resolveDocumentIdentifier(cfg, sm.getClient(), identifier, log);
+    const rawContent = await readFile(resolved.absPath, 'utf-8');
+    const parsed = matter(rawContent);
+    const contentHash = computeHash(rawContent);
+
+    // CR-02: Only call targetedScan when hash has changed or no existing DB row
+    let preScan: Awaited<ReturnType<typeof targetedScan>>;
+    const { data: hashRow } = await sm
+      .getClient()
+      .from('fqc_documents')
+      .select('content_hash, id')
+      .eq('id', resolved.fqcId ?? '')
+      .maybeSingle();
+    if (!hashRow || hashRow.content_hash !== contentHash) {
+      preScan = await targetedScan(cfg, sm.getClient(), resolved, contentHash, log);
+    } else {
+      preScan = {
+        ...resolved,
+        fqcId: hashRow.id,
+        capturedFrontmatter: {
+          fqcId: hashRow.id,
+          created: (parsed.data[FM.CREATED] as string) || new Date().toISOString(),
+          status: (parsed.data[FM.STATUS] as string) || 'active',
+          contentHash,
+        },
+      };
+    }
+
+    const relativePath = preScan.relativePath;
+    const fqcId = preScan.capturedFrontmatter.fqcId;
+    const { data, content } = parsed;
+
+    log.info(`get_document: read ${relativePath}`);
+
+    // Background re-embed when hash is stale
+    if (fqcId && (!hashRow || hashRow.content_hash !== contentHash)) {
+      const docTitle = typeof data[FM.TITLE] === 'string' ? (data[FM.TITLE] as string) : relativePath;
+      const now = new Date().toISOString();
+      log.debug(`get_document: stale hash detected for ${relativePath} — queuing background re-embed`);
+      void (async () => {
+        try {
+          const { error: hashErr } = await sm.getClient()
+            .from('fqc_documents')
+            .update({ content_hash: contentHash, updated_at: now })
+            .eq('id', fqcId);
+          if (hashErr) {
+            log.warn(`get_document: hash update failed for ${relativePath}: ${hashErr.message}`);
+            return;
+          }
+          const vector = await ep.embed(`${docTitle}\n\n${content}`);
+          await sm.getClient()
+            .from('fqc_documents')
+            .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
+            .eq('id', fqcId);
+        } catch (err) {
+          log.warn(`get_document: background re-embed failed: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      })();
+    }
+
+    const envelope = buildMetadataEnvelope(identifier, preScan, data, content);
+
+    // ── follow_ref branch (FREF-01, FREF-02, FREF-03) ──────────────────────────
+    if (followRef) {
+      // ── Pre-resolution: traverse the source frontmatter ──────────────────────
+      const traversal = traverseFollowRef(data, followRef);
+      if (traversal.kind === 'path_not_found') {
+        throw new DocumentRequestError({
+          error: 'follow_ref_path_not_found',
+          message: `Reference path '${followRef}' not found in frontmatter of '${identifier}' (failed at segment '${traversal.failed_at}')`,
+          identifier,
+          reference: followRef,
+          traversal: {
+            resolved: traversal.resolved,
+            failed_at: traversal.failed_at,
+            available_keys: traversal.available_keys,
+          },
+        });
+      }
+      if (traversal.kind === 'invalid_type') {
+        throw new DocumentRequestError({
+          error: 'follow_ref_invalid_type',
+          message: `Reference path '${followRef}' resolved to a ${traversal.found_type}, expected a string identifier`,
+          identifier,
+          reference: followRef,
+          found_type: traversal.found_type,
+          found_value_preview: traversal.found_value_preview,
+        });
+      }
+      // traversal.kind === 'value' — resolve the target identifier
+      const targetIdentifier: string = traversal.value;
+      let targetResolved: Awaited<ReturnType<typeof resolveDocumentIdentifier>>;
+      try {
+        targetResolved = await resolveDocumentIdentifier(cfg, sm.getClient(), targetIdentifier, log);
+      } catch (resolveErr) {
+        const m = resolveErr instanceof Error ? resolveErr.message : String(resolveErr);
+        throw new DocumentRequestError({
+          error: 'follow_ref_target_not_found',
+          message: `follow_ref target '${targetIdentifier}' (from ${followRef} in '${identifier}') not found in vault: ${m}`,
+          identifier,
+          reference: followRef,
+          resolved_value: targetIdentifier,
+          resolution_method: 'unknown', // Per CONTEXT.md Deferred Ideas: hardcoded acceptable in v1
+        });
+      }
+
+      // ── Read target (READ-ONLY: do NOT call targetedScan — see Pitfall 1) ────
+      const targetRaw = await readFile(targetResolved.absPath, 'utf-8');
+      const targetParsed = matter(targetRaw);
+      const targetData = targetParsed.data;
+      const targetContent = targetParsed.content;
+      const targetFqId = typeof targetData[FM.ID] === 'string' ? (targetData[FM.ID] as string) : null;
+      const targetModified = typeof targetData[FM.UPDATED] === 'string'
+        ? (targetData[FM.UPDATED] as string)
+        : new Date().toISOString();
+
+      // ── Build followed_ref base envelope ─────────────────────────────────────
+      const followedRef: Record<string, unknown> = {
+        reference: followRef,
+        resolved_to: targetResolved.relativePath,
+        resolved_fq_id: targetFqId, // explicitly null when missing — never omit (CONTEXT.md)
+        modified: targetModified,
+        size: { chars: targetContent.length },
+      };
+
+      // ── Apply include to TARGET (FREF-02) ────────────────────────────────────
+      if (effectiveInclude.includes('body')) {
+        if (sectionsList.length === 1) {
+          try {
+            const extracted = extractSection(targetContent, sectionsList[0], effectiveIncludeNested, occurrence);
+            const allHeadings = extractHeadings(targetContent);
+            const matchedHeading = findHeadingOccurrence(allHeadings, sectionsList[0], occurrence);
+            const matchedText = matchedHeading ? matchedHeading.text : sectionsList[0];
+            followedRef.body = extracted.section;
+            followedRef.extracted_sections = [{ heading: matchedText, chars: extracted.section.length }];
+          } catch (extractErr) {
+            const msg = extractErr instanceof Error ? extractErr.message : String(extractErr);
+            const allHeadings = extractHeadings(targetContent);
+            const availableHeadings = allHeadings.map((h) => h.text);
+            const isOccurrenceErr = msg.toLowerCase().includes('appears') || msg.toLowerCase().includes('occurrence');
+            const reason: 'no_match' | 'insufficient_occurrences' = isOccurrenceErr ? 'insufficient_occurrences' : 'no_match';
+            let foundCount: number | undefined;
+            if (reason === 'insufficient_occurrences') {
+              const m = /appears (\d+) times/.exec(msg);
+              if (m) foundCount = parseInt(m[1], 10);
+            }
+            // POST-RESOLUTION error: nest under followed_ref (FREF-03)
+            throw new DocumentRequestError({
+              error: 'section_not_found',
+              message: reason === 'no_match'
+                ? `No heading matching '${sectionsList[0]}' found in follow_ref target '${targetResolved.relativePath}'`
+                : `Heading '${sectionsList[0]}' has fewer occurrences than requested in follow_ref target '${targetResolved.relativePath}'`,
+              identifier, // SOURCE identifier at top level
+              followed_ref: {
+                reference: followRef,
+                resolved_to: targetResolved.relativePath,
+                resolved_fq_id: targetFqId,
+                missing_sections: [
+                  reason === 'insufficient_occurrences'
+                    ? { query: sectionsList[0], reason, requested_count: occurrence, ...(foundCount !== undefined ? { found_count: foundCount } : {}) }
+                    : { query: sectionsList[0], reason },
+                ],
+                available_headings: availableHeadings,
+              },
+            });
+          }
+        } else if (sectionsList.length > 1) {
+          const result = extractMultipleSections(targetContent, sectionsList, { includeNested: effectiveIncludeNested });
+          if (result.errors.length > 0) {
+            const allHeadings = extractHeadings(targetContent);
+            throw new DocumentRequestError({
+              error: 'section_not_found',
+              message: `Requested sections could not be fully resolved in follow_ref target '${targetResolved.relativePath}': ${result.errors.length} ${result.errors.length === 1 ? 'failure' : 'failures'}`,
+              identifier,
+              followed_ref: {
+                reference: followRef,
+                resolved_to: targetResolved.relativePath,
+                resolved_fq_id: targetFqId,
+                missing_sections: result.errors,
+                available_headings: allHeadings.map((h) => h.text),
+              },
+            });
+          }
+          followedRef.body = assembleMultiSectionBody(result.matches);
+          followedRef.extracted_sections = buildExtractedSections(result.matches);
+        } else {
+          followedRef.body = targetContent;
+        }
+      }
+      if (effectiveInclude.includes('frontmatter')) {
+        followedRef.frontmatter = targetData;
+      }
+      if (effectiveInclude.includes('headings')) {
+        followedRef.headings = buildHeadingEntries(targetContent, effectiveMaxDepth);
+      }
+
+      // ── Return source envelope + followed_ref nested; NO top-level body ───────
+      return { ...envelope, followed_ref: followedRef };
+    }
+
+    // ── No follow_ref: source-content branch ─────────────────────────────────────
+    let responseBody: string | undefined;
+    let extractedSections: Array<{ heading: string; chars: number }> | undefined;
+    let frontmatterField: Record<string, unknown> | undefined;
+    let headingsField: Array<{ level: number; text: string; chars: number }> | undefined;
+
+    if (effectiveInclude.includes('body')) {
+      if (sectionsList.length === 1) {
+        try {
+          const extracted = extractSection(content, sectionsList[0], effectiveIncludeNested, occurrence);
+          responseBody = extracted.section;
+          const allHeadings = extractHeadings(content);
+          const matchedHeading = findHeadingOccurrence(allHeadings, sectionsList[0], occurrence);
+          const matchedText = matchedHeading ? matchedHeading.text : sectionsList[0];
+          extractedSections = [{ heading: matchedText, chars: extracted.section.length }];
+        } catch (extractErr) {
+          const msg = extractErr instanceof Error ? extractErr.message : String(extractErr);
+          const allHeadings = extractHeadings(content);
+          const availableHeadings = allHeadings.map((h) => h.text);
+          const isOccurrenceErr = msg.toLowerCase().includes('appears') || msg.toLowerCase().includes('occurrence');
+          const reason: 'no_match' | 'insufficient_occurrences' = isOccurrenceErr ? 'insufficient_occurrences' : 'no_match';
+          let foundCount: number | undefined;
+          if (reason === 'insufficient_occurrences') {
+            const m = /appears (\d+) times/.exec(msg);
+            if (m) foundCount = parseInt(m[1], 10);
+          }
+          throw new DocumentRequestError({
+            error: 'section_not_found',
+            message: reason === 'no_match'
+              ? `No heading matching '${sectionsList[0]}' found in document`
+              : `Heading '${sectionsList[0]}' has fewer occurrences than requested`,
+            identifier,
+            missing_sections: [
+              reason === 'insufficient_occurrences'
+                ? { query: sectionsList[0], reason, requested_count: occurrence, ...(foundCount !== undefined ? { found_count: foundCount } : {}) }
+                : { query: sectionsList[0], reason },
+            ],
+            available_headings: availableHeadings,
+          });
+        }
+      } else if (sectionsList.length > 1) {
+        const result = extractMultipleSections(content, sectionsList, { includeNested: effectiveIncludeNested });
+        if (result.errors.length > 0) {
+          const allHeadings = extractHeadings(content);
+          throw new DocumentRequestError({
+            error: 'section_not_found',
+            message: `Requested sections could not be fully resolved: ${result.errors.length} ${result.errors.length === 1 ? 'failure' : 'failures'}`,
+            identifier,
+            missing_sections: result.errors,
+            available_headings: allHeadings.map((h) => h.text),
+          });
+        }
+        responseBody = assembleMultiSectionBody(result.matches);
+        extractedSections = buildExtractedSections(result.matches);
+      } else {
+        responseBody = content;
+      }
+    }
+
+    if (effectiveInclude.includes('frontmatter')) {
+      frontmatterField = data;
+    }
+
+    if (effectiveInclude.includes('headings')) {
+      headingsField = buildHeadingEntries(content, effectiveMaxDepth);
+    }
+
+    return buildConsolidatedResponse(envelope, [...effectiveInclude], {
+      body: responseBody,
+      extractedSections,
+      frontmatter: frontmatterField,
+      headings: headingsField,
+    });
+  }
+
   // ─── Tool 2: get_document (consolidated — Phase 107) ─────────────────────
 
   server.registerTool(
     'get_document',
     {
       description:
-        'Read a document and return a structured JSON envelope. The envelope always contains identifier, title, path, fq_id, modified, and size.chars. Use the include parameter to also receive: "body" (full markdown body or extracted sections), "frontmatter" (complete YAML block as JSON object — every field, including user-defined custom fields), or "headings" (heading list with per-heading character counts). Default include is ["body"]. Use sections to extract specific sections by heading name (case-insensitive substring; queries starting with a digit are anchored to the heading start, so "3" matches "3. Scope" but not "13. Conversations"). Multi-element sections returns sections in input order separated by a blank line; repeating a name N times returns the 1st through Nth matches. Use max_depth (1-6) to limit heading levels in the headings list. The output is a JSON string in content[0].text.',
+        'Read one or more documents and return a structured JSON envelope. The envelope always contains identifier, title, path, fq_id, modified, and size.chars. Identifiers may be a single string or an array (string[]) for batch retrieval; array input returns an array response with per-element success or error objects (the call itself never fails for partial errors). Use the include parameter to also receive: "body" (full markdown body or extracted sections), "frontmatter" (complete YAML block as JSON object — every field, including user-defined custom fields), or "headings" (heading list with per-heading character counts). Default include is ["body"]. Use sections to extract specific sections by heading name (case-insensitive substring; queries starting with a digit are anchored to the heading start, so "3" matches "3. Scope" but not "13. Conversations"). Multi-element sections returns sections in input order separated by a blank line; repeating a name N times returns the 1st through Nth matches. Use max_depth (1-6) to limit heading levels in the headings list. Use follow_ref (a dot-separated path into the source document\'s frontmatter, e.g. "supersedes" or "projections.summary") to dereference a frontmatter pointer; the target document\'s content is returned nested under "followed_ref" and all body/frontmatter/headings/sections options apply to the target. The output is a JSON string in content[0].text.',
       inputSchema: {
-        identifiers: z.string().describe(
-          'Document identifier — vault-relative path (e.g., "Meetings/standup.md"), fq_id UUID, or filename. Phase 107 accepts a single string; array batch is added in Phase 108.'
+        identifiers: z.union([z.string(), z.array(z.string())]).describe(
+          'Document identifier(s). Single string or array for batch retrieval. ' +
+          'Each element may be a vault-relative path, fq_id UUID, or filename. ' +
+          'Array input always returns an array response with per-element success or error objects (the MCP call never fails on partial errors). ' +
+          'String input returns a flat object response (backward compatible with Phase 107).'
         ),
         include: z.array(z.enum(['body', 'frontmatter', 'headings']))
           .optional()
@@ -562,9 +882,16 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         max_depth: z.number().min(1).max(6).optional().default(6).describe(
           'Maximum heading depth to include when include contains "headings" (1-6, default: 6 — all levels).'
         ),
+        follow_ref: z.string().optional().describe(
+          'Optional dot-separated path into the source document\'s frontmatter (e.g., "supersedes" or "projections.summary"). ' +
+          'The string value at that path is resolved as a document identifier; the target document\'s content is returned ' +
+          'nested under "followed_ref" in the response. When used, body/frontmatter/headings/sections/occurrence/max_depth/include_nested ' +
+          'apply to the TARGET document. Pre-resolution errors (path missing, wrong type, target not found) are returned at the top level. ' +
+          'Post-resolution errors (section not found, occurrence out of range) are nested under "followed_ref".'
+        ),
       },
     },
-    async ({ identifiers, include, sections, include_nested, occurrence: occurrenceParam, max_depth }) => {
+    async ({ identifiers, include, sections, include_nested, occurrence: occurrenceParam, max_depth, follow_ref: followRef }) => {
       if (getIsShuttingDown()) {
         return {
           content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed' }],
@@ -590,170 +917,62 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         };
       }
 
+      // Build the per-element options bundle once
+      const elementOptions = {
+        effectiveInclude: [...effectiveInclude] as Array<'body' | 'frontmatter' | 'headings'>,
+        sectionsList,
+        effectiveIncludeNested,
+        occurrence,
+        effectiveMaxDepth,
+        followRef,
+      };
+      const deps = { config, supabaseManager, embeddingProvider, logger };
+
       if (Array.isArray(identifiers)) {
+        // FREF-04 / FREF-05: batch — per-element partial failure; outer call never isError
+        const results = await Promise.all(
+          identifiers.map(async (id) => {
+            try {
+              return await resolveOneElement(id, elementOptions, deps);
+            } catch (err) {
+              if (err instanceof DocumentRequestError) {
+                // section_not_found / follow_ref_*_error etc. — embed envelope at this position
+                return err.envelope;
+              }
+              const msg = err instanceof Error ? err.message : String(err);
+              const isNotFound =
+                msg.toLowerCase().includes('not found') ||
+                msg.toLowerCase().includes('missing') ||
+                msg.toLowerCase().includes('enoent');
+              return {
+                error: isNotFound ? 'document_not_found' : 'read_error',
+                message: isNotFound
+                  ? `No document found for identifier: ${id}`
+                  : `Error reading document: ${msg}`,
+                identifier: id,
+              };
+            }
+          })
+        );
         return {
-          content: [{
-            type: 'text' as const,
-            text: JSON.stringify({
-              error: 'batch_not_supported_in_phase_107',
-              message: 'Array identifiers will be supported in a future phase; pass a single string identifier.',
-            }),
-          }],
-          isError: true,
+          content: [{ type: 'text' as const, text: JSON.stringify(results) }],
+          // NOTE: NO isError — array output embeds per-element errors
         };
       }
 
+      // Single-string path — backward-compatible flat object response
       try {
-        const resolved = await resolveDocumentIdentifier(config, supabaseManager.getClient(), identifiers, logger);
-        const rawContent = await readFile(resolved.absPath, 'utf-8');
-        const parsed = matter(rawContent);
-        const contentHash = computeHash(rawContent);
-
-        // CR-02: Only call targetedScan (a DB write path) when the content hash has changed
-        // or there is no existing DB row. For unchanged documents, skip the write entirely.
-        let preScan: Awaited<ReturnType<typeof targetedScan>>;
-        const { data: hashRow } = await supabaseManager
-          .getClient()
-          .from('fqc_documents')
-          .select('content_hash, id')
-          .eq('id', resolved.fqcId ?? '')
-          .maybeSingle();
-        if (!hashRow || hashRow.content_hash !== contentHash) {
-          // Hash changed or no DB row — run full scan (may write frontmatter / upsert DB row)
-          preScan = await targetedScan(config, supabaseManager.getClient(), resolved, contentHash, logger);
-        } else {
-          // Hash unchanged — skip DB write, construct preScan from resolved document
-          preScan = {
-            ...resolved,
-            fqcId: hashRow.id,
-            capturedFrontmatter: {
-              fqcId: hashRow.id,
-              created: (parsed.data[FM.CREATED] as string) || new Date().toISOString(),
-              status: (parsed.data[FM.STATUS] as string) || 'active',
-              contentHash,
-            },
-          };
-        }
-
-        const relativePath = preScan.relativePath;
-        const fqcId = preScan.capturedFrontmatter.fqcId;
-        const { data, content } = parsed;
-
-        logger.info(`get_document: read ${relativePath}`);
-
-        // Background re-embed when hash is stale (only reached when targetedScan ran above)
-        if (fqcId && (!hashRow || hashRow.content_hash !== contentHash)) {
-          const docTitle = typeof data[FM.TITLE] === 'string' ? (data[FM.TITLE] as string) : relativePath;
-          const now = new Date().toISOString();
-          logger.debug(`get_document: stale hash detected for ${relativePath} — queuing background re-embed`);
-          void (async () => {
-            try {
-              const { error: hashErr } = await supabaseManager.getClient()
-                .from('fqc_documents')
-                .update({ content_hash: contentHash, updated_at: now })
-                .eq('id', fqcId);
-              if (hashErr) {
-                logger.warn(`get_document: hash update failed for ${relativePath}: ${hashErr.message}`);
-                return; // don't embed if hash write failed
-              }
-              const vector = await embeddingProvider.embed(`${docTitle}\n\n${content}`);
-              await supabaseManager.getClient()
-                .from('fqc_documents')
-                .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                .eq('id', fqcId);
-            } catch (err) {
-              logger.warn(`get_document: background re-embed failed: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          })();
-        }
-
-        const envelope = buildMetadataEnvelope(identifiers, preScan, data, content);
-
-        let responseBody: string | undefined;
-        let extractedSections: Array<{ heading: string; chars: number }> | undefined;
-        let frontmatterField: Record<string, unknown> | undefined;
-        let headingsField: Array<{ level: number; text: string; chars: number }> | undefined;
-
-        if (effectiveInclude.includes('body')) {
-          if (sectionsList.length === 1) {
-            try {
-              const extracted = extractSection(content, sectionsList[0], effectiveIncludeNested, occurrence);
-              responseBody = extracted.section;
-              const allHeadings = extractHeadings(content);
-              const matchedHeading = findHeadingOccurrence(allHeadings, sectionsList[0], occurrence);
-              const matchedText = matchedHeading ? matchedHeading.text : sectionsList[0];
-              extractedSections = [{ heading: matchedText, chars: extracted.section.length }];
-            } catch (extractErr) {
-              const msg = extractErr instanceof Error ? extractErr.message : String(extractErr);
-              const allHeadings = extractHeadings(content);
-              const availableHeadings = allHeadings.map((h) => h.text);
-              const isOccurrenceErr = msg.toLowerCase().includes('appears') || msg.toLowerCase().includes('occurrence');
-              const reason: 'no_match' | 'insufficient_occurrences' = isOccurrenceErr ? 'insufficient_occurrences' : 'no_match';
-              let foundCount: number | undefined;
-              if (reason === 'insufficient_occurrences') {
-                const m = /appears (\d+) times/.exec(msg);
-                if (m) foundCount = parseInt(m[1], 10);
-              }
-              const errorEnvelope: Record<string, unknown> = {
-                error: 'section_not_found',
-                message: reason === 'no_match'
-                  ? `No heading matching '${sectionsList[0]}' found in document`
-                  : `Heading '${sectionsList[0]}' has fewer occurrences than requested`,
-                identifier: identifiers,
-                missing_sections: [
-                  reason === 'insufficient_occurrences'
-                    ? { query: sectionsList[0], reason, requested_count: occurrence, ...(foundCount !== undefined ? { found_count: foundCount } : {}) }
-                    : { query: sectionsList[0], reason },
-                ],
-                available_headings: availableHeadings,
-              };
-              return {
-                content: [{ type: 'text' as const, text: JSON.stringify(errorEnvelope) }],
-                isError: true,
-              };
-            }
-          } else if (sectionsList.length > 1) {
-            const result = extractMultipleSections(content, sectionsList, { includeNested: effectiveIncludeNested });
-            if (result.errors.length > 0) {
-              const allHeadings = extractHeadings(content);
-              const errorEnvelope = {
-                error: 'section_not_found',
-                message: `Requested sections could not be fully resolved: ${result.errors.length} ${result.errors.length === 1 ? 'failure' : 'failures'}`,
-                identifier: identifiers,
-                missing_sections: result.errors,
-                available_headings: allHeadings.map((h) => h.text),
-              };
-              return {
-                content: [{ type: 'text' as const, text: JSON.stringify(errorEnvelope) }],
-                isError: true,
-              };
-            }
-            responseBody = assembleMultiSectionBody(result.matches);
-            extractedSections = buildExtractedSections(result.matches);
-          } else {
-            responseBody = content;
-          }
-        }
-
-        if (effectiveInclude.includes('frontmatter')) {
-          frontmatterField = data;
-        }
-
-        if (effectiveInclude.includes('headings')) {
-          headingsField = buildHeadingEntries(content, effectiveMaxDepth);
-        }
-
-        const final = buildConsolidatedResponse(envelope, [...effectiveInclude], {
-          body: responseBody,
-          extractedSections,
-          frontmatter: frontmatterField,
-          headings: headingsField,
-        });
-
+        const result = await resolveOneElement(identifiers, elementOptions, deps);
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(final) }],
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         };
       } catch (err) {
+        if (err instanceof DocumentRequestError) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify(err.envelope) }],
+            isError: true,
+          };
+        }
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_document failed: ${msg}`);
         const isNotFound =
