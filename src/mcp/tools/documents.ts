@@ -575,6 +575,8 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
       const effectiveInclude: Array<'body' | 'frontmatter' | 'headings'> = include && include.length > 0 ? include : ['body'];
       const sectionsList = sections ?? [];
       const effectiveMaxDepth = max_depth ?? 6;
+      // WR-02: explicit fallback in case MCP SDK strips the Zod .default(true)
+      const effectiveIncludeNested = include_nested ?? true;
 
       const paramError = validateParameterCombinations({
         include: [...effectiveInclude],
@@ -675,7 +677,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         if (effectiveInclude.includes('body')) {
           if (sectionsList.length === 1) {
             try {
-              const extracted = extractSection(content, sectionsList[0], include_nested, occurrence);
+              const extracted = extractSection(content, sectionsList[0], effectiveIncludeNested, occurrence);
               responseBody = extracted.section;
               const allHeadings = extractHeadings(content);
               const matchedHeading = findHeadingOccurrence(allHeadings, sectionsList[0], occurrence);
@@ -711,7 +713,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               };
             }
           } else if (sectionsList.length > 1) {
-            const result = extractMultipleSections(content, sectionsList, { includeNested: include_nested });
+            const result = extractMultipleSections(content, sectionsList, { includeNested: effectiveIncludeNested });
             if (result.errors.length > 0) {
               const allHeadings = extractHeadings(content);
               const errorEnvelope = {
