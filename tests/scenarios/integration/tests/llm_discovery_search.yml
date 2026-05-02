@@ -1,0 +1,74 @@
+name: llm_discovery_search
+description: >
+  call_model with resolver: search and parameters.query returns the documented response
+  shape {query: ..., results: {purposes: [...], models: [...]}}. Case-insensitive
+  substring match runs over name and description of both purposes and models. A query
+  with no matches still returns both arrays (empty, not omitted). A request without
+  parameters.query returns isError with the documented message. Covers DISC-03 success
+  + zero-match + missing-query paths end-to-end (IL-19, IL-20).
+coverage: [IL-19, IL-20]
+deps: [llm]
+
+steps:
+  - label: "search returns query field echoed back (DISC-03 response shape) — IL-19"
+    assert:
+      op: call_model
+      args:
+        resolver: search
+        parameters:
+          query: "fast"
+      expect_contains: '"query"'
+
+  - label: "search returns results.purposes key (always present, even if empty) — IL-19"
+    assert:
+      op: call_model
+      args:
+        resolver: search
+        parameters:
+          query: "fast"
+      expect_contains: '"purposes"'
+
+  - label: "search returns results.models key (always present) — IL-19"
+    assert:
+      op: call_model
+      args:
+        resolver: search
+        parameters:
+          query: "fast"
+      expect_contains: '"models"'
+
+  - label: "search with case-mismatched query still matches (case-insensitive substring) — IL-19"
+    assert:
+      op: call_model
+      args:
+        resolver: search
+        parameters:
+          query: "FAST"
+      expect_contains: '"query"'
+
+  - label: "search with no-match query still returns the results object with both arrays — IL-19"
+    assert:
+      op: call_model
+      args:
+        resolver: search
+        parameters:
+          query: "zzzz-nonexistent-token-zzzz"
+      expect_contains: '"results"'
+
+  - label: "search with no parameters.query returns isError with documented message (DISC-03) — IL-20"
+    assert:
+      op: call_model
+      args:
+        resolver: search
+      expect_contains: "search requires parameters.query"
+      expect_error: true
+
+  - label: "search with empty-string parameters.query returns isError (DISC-03) — IL-20"
+    assert:
+      op: call_model
+      args:
+        resolver: search
+        parameters:
+          query: ""
+      expect_contains: "search requires parameters.query"
+      expect_error: true
