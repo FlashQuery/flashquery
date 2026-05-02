@@ -994,7 +994,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           msg.toLowerCase().includes('enoent');
         const errorEnvelope = isNotFound
           ? { error: 'document_not_found', message: `No document found for identifier: ${identifiers}`, identifier: identifiers }
-          : { error: 'read_error', message: `Error reading document: ${msg}` };
+          : { error: 'read_error', message: `Error reading document: ${msg}`, identifier: identifiers };
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(errorEnvelope) }],
           isError: true,
