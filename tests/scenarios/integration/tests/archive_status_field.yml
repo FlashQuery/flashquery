@@ -31,7 +31,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${draft_doc.fq_id}"
+        identifiers: "${draft_doc.fq_id}"
       expect_contains: "This is a draft that will be archived"
 
   - label: "Archived document has status='archived' in frontmatter via get_document include=[frontmatter]"

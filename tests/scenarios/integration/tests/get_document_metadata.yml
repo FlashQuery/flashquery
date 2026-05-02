@@ -61,5 +61,5 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${meta_doc.fq_id}"
+        identifiers: "${meta_doc.fq_id}"
       expect_contains: "Key concepts for understanding the system"
