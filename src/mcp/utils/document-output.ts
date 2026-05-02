@@ -28,6 +28,20 @@ export interface DocumentEnvelope {
   headings?: Array<{ level: number; text: string; chars: number }>;
 }
 
+/** Shape of the followed_ref object nested in source envelope on follow_ref success. */
+export interface FollowedRefResult {
+  reference: string;
+  resolved_to: string;
+  resolved_fq_id: string | null;
+  modified: string;
+  size: { chars: number };
+  // Conditional per include:
+  body?: string;
+  extracted_sections?: Array<{ heading: string; chars: number }>;
+  frontmatter?: Record<string, unknown>;
+  headings?: Array<{ level: number; text: string; chars: number }>;
+}
+
 /**
  * Resolve the display title for a document (GDOC-03).
  * Returns trimmed fq_title when present and non-empty; falls back to filename basename
@@ -211,4 +225,65 @@ export function validateParameterCombinations(input: {
   }
 
   return null;
+}
+
+/** Result of walking a dot-separated path through a frontmatter object (FREF-01, FREF-03). */
+export type TraversalResult =
+  | { kind: 'value'; value: string }
+  | { kind: 'path_not_found'; resolved: string[]; failed_at: string; available_keys: string[] }
+  | { kind: 'invalid_type'; found_type: string; found_value_preview: string };
+
+/**
+ * Walk a dot-separated path through a frontmatter object.
+ *
+ * - Returns { kind: 'value' } when the path resolves to a string value.
+ * - Returns { kind: 'path_not_found' } when any segment is missing or a non-object is encountered mid-path.
+ * - Returns { kind: 'invalid_type' } when the resolved value is not a string.
+ *
+ * Arrays are distinguished from objects in `found_type` ('array' vs 'object').
+ * Per CONTEXT.md (FREF-01): segments are object keys only — never file-system paths.
+ *
+ * Security note (T-108-01): segments produced by refPath.split('.') are used EXCLUSIVELY
+ * as object keys (`seg in obj`, `obj[seg]`). They are NEVER passed to path.resolve(),
+ * fs.readFile(), or any file-system primitive.
+ */
+export function traverseFollowRef(
+  frontmatter: Record<string, unknown>,
+  refPath: string
+): TraversalResult {
+  const segments = refPath.split('.');
+  let current: unknown = frontmatter;
+  const resolved: string[] = [];
+
+  for (const seg of segments) {
+    if (typeof current !== 'object' || current === null || !(seg in (current as object))) {
+      return {
+        kind: 'path_not_found',
+        resolved,
+        failed_at: seg,
+        available_keys:
+          typeof current === 'object' && current !== null
+            ? Object.keys(current as object)
+            : [],
+      };
+    }
+    resolved.push(seg);
+    current = (current as Record<string, unknown>)[seg];
+  }
+
+  if (typeof current !== 'string') {
+    const t = Array.isArray(current) ? 'array' : typeof current;
+    let preview: string;
+    try {
+      preview = JSON.stringify(current)?.slice(0, 100) ?? String(current);
+    } catch {
+      preview = String(current);
+    }
+    return {
+      kind: 'invalid_type',
+      found_type: t,
+      found_value_preview: preview,
+    };
+  }
+  return { kind: 'value', value: current };
 }
