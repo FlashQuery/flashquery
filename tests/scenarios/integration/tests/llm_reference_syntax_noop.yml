@@ -1,0 +1,30 @@
+name: llm_reference_syntax_noop
+description: >
+  call_model with no {{ref:...}} or {{id:...}} patterns in messages forwards
+  messages unchanged and OMITS injected_references and prompt_chars from
+  the response envelope (REFS-07 backward compatibility).
+coverage: [IL-14]
+deps: [llm]
+
+steps:
+  - label: "call_model without references returns response without injected_references key"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "What is 1+1? Reply with just the digit."
+      expect_not_contains: "injected_references"
+
+  - label: "call_model without references returns response without prompt_chars key"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "What is 1+1? Reply with just the digit."
+      expect_not_contains: "prompt_chars"

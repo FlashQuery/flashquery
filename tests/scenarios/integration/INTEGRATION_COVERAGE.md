@@ -140,6 +140,11 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 | IL-07  | call_model with trace_id + call without trace_id → get_llm_usage summary filtered by trace_id → total_calls=1 (untraced call excluded)                       | llm_trace_id_filter          | 2026-05-01   | 2026-05-01   |
 | IL-08  | call_model → get_llm_usage by_model → models array contains model_name, provider_name, and avg_fallback_position for the called model                         | llm_by_model_mode            | 2026-05-01   | 2026-05-01   |
 | IL-09  | multiple call_model resolver=purpose calls via primary model → get_llm_usage by_purpose → primary_model_hit_rate equals 1                                     | llm_by_purpose_mode          | 2026-05-01   | 2026-05-01   |
+| IL-10  | call_model with {{ref:path}} placeholder injects document body before LLM dispatch; response metadata includes injected_references[] and prompt_chars (REFS-01, REFS-03, REFS-04, REFS-05) (PENDING) | llm_reference_syntax_basic   | 2026-05-02   | -            |
+| IL-11  | call_model with {{ref:path#Section}} injects only the named section's content (REFS-01 section operator) (PENDING)                                                | llm_reference_syntax_section | 2026-05-02   | -            |
+| IL-12  | call_model with {{ref:path->pointer}} dereferences frontmatter pointer; response metadata includes resolved_to (REFS-01, REFS-04) (PENDING)                       | llm_reference_syntax_pointer | 2026-05-02   | -            |
+| IL-13  | call_model with unresolvable {{ref:...}} returns isError + reference_resolution_failed; no LLM call made (REFS-06) (PENDING)                                       | llm_reference_syntax_fail    | 2026-05-02   | -            |
+| IL-14  | call_model without any {{ref:...}} or {{id:...}} patterns omits injected_references and prompt_chars from response (REFS-07 backward compat) (PENDING)             | llm_reference_syntax_noop    | 2026-05-02   | -            |
 
 ---
 

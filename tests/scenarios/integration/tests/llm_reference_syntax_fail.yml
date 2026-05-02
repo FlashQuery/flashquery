@@ -1,0 +1,31 @@
+name: llm_reference_syntax_fail
+description: >
+  call_model with an unresolvable {{ref:...}} returns reference_resolution_failed
+  with failed_references[] and does NOT make an LLM call (REFS-06).
+coverage: [IL-13]
+deps: [llm]
+
+steps:
+  - label: "call_model with nonexistent reference returns isError + reference_resolution_failed"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Nonexistent/ghost.md}} Tell me about it."
+      expect_contains: "reference_resolution_failed"
+      expect_error: true
+
+  - label: "Failure response lists failed_references with reason"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Nonexistent/ghost.md}} Tell me about it."
+      expect_contains: "failed_references"
+      expect_error: true
