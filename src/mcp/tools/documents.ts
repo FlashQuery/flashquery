@@ -895,7 +895,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         max_depth: z.number().min(1).max(6).optional().default(6).describe(
           'Maximum heading depth to include when include contains "headings" (1-6, default: 6 — all levels).'
         ),
-        follow_ref: z.string().optional().describe(
+        follow_ref: z.string().min(1).optional().describe(
           'Optional dot-separated path into the source document\'s frontmatter (e.g., "supersedes" or "projections.summary"). ' +
           'The string value at that path is resolved as a document identifier; the target document\'s content is returned ' +
           'nested under "followed_ref" in the response. When used, body/frontmatter/headings/sections/occurrence/max_depth/include_nested ' +
