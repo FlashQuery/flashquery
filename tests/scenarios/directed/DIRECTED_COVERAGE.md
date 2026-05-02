@@ -64,7 +64,23 @@ Core CRUD operations on vault documents via MCP.
 | D-47 | get_document title fallback when fq_title missing — uses file basename (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
 | D-48 | get_document title coercion when fq_title is a number — returns string representation (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
 | D-49 | get_document title trim when fq_title has leading/trailing whitespace — returns trimmed string (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
-| D-50 | get_document title when frontmatter completely absent — returns file basename (deferred: requires raw vault write) | — | 2026-05-01 | — |
+| D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-51 | get_document with array identifiers returns array output; each element succeeds independently (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-02 |
+| D-52 | get_document batch partial failure — one identifier not found returns error object at position; other succeeds; MCP response is not isError (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-02 |
+| D-53 | get_document with follow_ref returns source envelope + followed_ref nested object with resolved target content (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-54 | get_document follow_ref + include: ["headings"] returns headings in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-55 | get_document follow_ref + include: ["frontmatter","headings"] returns both in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-56 | get_document follow_ref + sections extracts sections from target document, returned in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-57 | get_document follow_ref pre-resolution error: follow_ref_path_not_found when frontmatter path does not exist (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-58 | get_document follow_ref pre-resolution error: follow_ref_invalid_type when frontmatter value is not a string (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-59 | get_document follow_ref pre-resolution error: follow_ref_target_not_found when resolved path does not exist in vault (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-60 | get_document batch + follow_ref: per-element partial failure semantics apply (one element missing pointer returns per-element error; other succeeds) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39a | get_document follow_ref + sections without "body" in include -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with nested followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 
 ## 2. Document Content Operations
 
