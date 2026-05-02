@@ -1225,6 +1225,177 @@ describe('get_document', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Tests: get_document — batch array path (WR-03)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('get_document batch array path', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+        update: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            then: vi.fn().mockResolvedValue({ error: null }),
+          }),
+        }),
+      }),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
+  });
+
+  it('[U-BATCH-01] both identifiers succeed: response is a JSON array with no isError', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc1.md',
+        relativePath: 'Doc1.md',
+        fqcId: 'uuid-doc1',
+        resolvedVia: 'path' as const,
+      })
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc2.md',
+        relativePath: 'Doc2.md',
+        fqcId: 'uuid-doc2',
+        resolvedVia: 'path' as const,
+      });
+
+    vi.mocked(fsPromises.readFile)
+      .mockResolvedValueOnce('---\nfq_title: Document One\nfq_id: uuid-doc1\nfq_status: active\n---\nBody one.' as unknown as Buffer)
+      .mockResolvedValueOnce('---\nfq_title: Document Two\nfq_id: uuid-doc2\nfq_status: active\n---\nBody two.' as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    const result = await handler({ identifiers: ['Doc1.md', 'Doc2.md'] }) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    // Batch outer response: no isError
+    expect(result.isError).toBeUndefined();
+    const results = JSON.parse(result.content[0].text);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveLength(2);
+    // Each element is a document envelope
+    expect(results[0].error).toBeUndefined();
+    expect(results[1].error).toBeUndefined();
+    expect(results[0].identifier).toBeDefined();
+    expect(results[1].identifier).toBeDefined();
+    expect(results[0].body).toBeDefined();
+    expect(results[1].body).toBeDefined();
+  });
+
+  it('[U-BATCH-02] one identifier not found: per-element error at correct position, other element succeeds, no outer isError', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc1.md',
+        relativePath: 'Doc1.md',
+        fqcId: 'uuid-doc1',
+        resolvedVia: 'path' as const,
+      })
+      .mockRejectedValueOnce(new Error('ENOENT: no such file or directory'));
+
+    vi.mocked(fsPromises.readFile).mockResolvedValueOnce(
+      '---\nfq_title: Document One\nfq_id: uuid-doc1\nfq_status: active\n---\nBody one.' as unknown as Buffer
+    );
+
+    const handler = getHandler('get_document');
+    const result = await handler({ identifiers: ['Doc1.md', 'missing.md'] }) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    // Outer response: no isError even with partial failure
+    expect(result.isError).toBeUndefined();
+    const results = JSON.parse(result.content[0].text);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveLength(2);
+    // Position 0 succeeds
+    expect(results[0].error).toBeUndefined();
+    expect(results[0].identifier).toBeDefined();
+    // Position 1 has per-element error with correct identifier
+    expect(results[1].error).toBe('document_not_found');
+    expect(results[1].identifier).toBe('missing.md');
+  });
+
+  it('[U-BATCH-03] DocumentRequestError embedded per-element in batch mode', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    // Both docs resolve and read, but first has a section that doesn't exist
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc1.md',
+        relativePath: 'Doc1.md',
+        fqcId: 'uuid-doc1',
+        resolvedVia: 'path' as const,
+      })
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc2.md',
+        relativePath: 'Doc2.md',
+        fqcId: 'uuid-doc2',
+        resolvedVia: 'path' as const,
+      });
+
+    vi.mocked(fsPromises.readFile)
+      .mockResolvedValueOnce('---\nfq_title: Document One\nfq_id: uuid-doc1\nfq_status: active\n---\nNo headings here.' as unknown as Buffer)
+      .mockResolvedValueOnce('---\nfq_title: Document Two\nfq_id: uuid-doc2\nfq_status: active\n---\nBody two.' as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    // Request section that doesn't exist in Doc1
+    const result = await handler({ identifiers: ['Doc1.md', 'Doc2.md'], sections: ['NonExistent'] }) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    // Outer response: no isError — errors embedded per-element
+    expect(result.isError).toBeUndefined();
+    const results = JSON.parse(result.content[0].text);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveLength(2);
+    // Position 0: section_not_found embedded at element level
+    expect(results[0].error).toBe('section_not_found');
+    expect(results[0].identifier).toBe('Doc1.md');
+    // Position 1: also section_not_found (same section requested for both)
+    expect(results[1].error).toBe('section_not_found');
+    expect(results[1].identifier).toBe('Doc2.md');
+  });
+
+  it('[U-BATCH-04] generic non-not-found error produces read_error with identifier per element', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockRejectedValueOnce(new Error('Permission denied'));
+
+    const handler = getHandler('get_document');
+    const result = await handler({ identifiers: ['locked.md'] }) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.isError).toBeUndefined();
+    const results = JSON.parse(result.content[0].text);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results[0].error).toBe('read_error');
+    expect(results[0].identifier).toBe('locked.md');
+    expect(results[0].message).toContain('Permission denied');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Tests: search_documents
 // ─────────────────────────────────────────────────────────────────────────────
 
