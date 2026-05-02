@@ -1,11 +1,11 @@
 name: get_document_metadata
 description: >
   When retrieving a document's metadata, all expected fields are present:
-  title, path, tags, status, and fqc_id. get_doc_outline returns frontmatter
-  fields including fq_title (value), fq_status, fq_tags, and fq_id. search_documents
-  returns Title, Path, and FQC ID in the result listing. Body content is
-  verified via get_document. Covers IX-07: all named metadata fields are
-  accessible through the FlashQuery retrieval surface.
+  title, path, tags, status, and fqc_id. get_document with include: [frontmatter]
+  returns the full frontmatter block including fq_title (value), fq_status, fq_tags,
+  and fq_id. search_documents returns Title, Path, and FQC ID in the result listing.
+  Body content is verified via get_document. Covers IX-07: all named metadata
+  fields are accessible through the FlashQuery retrieval surface.
 coverage: [IX-07]
 
 steps:
@@ -17,32 +17,36 @@ steps:
     content: "Key concepts for understanding the system."
     tags: [knowledge, concepts, gdm-tag]
 
-  - label: "get_doc_outline returns title value in frontmatter"
+  - label: "get_document include=[frontmatter] returns title value"
     assert:
-      op: get_doc_outline
+      op: get_document
       args:
         identifiers: "${meta_doc.fq_id}"
+        include: ["frontmatter"]
       expect_contains: "Core Concepts"
 
-  - label: "get_doc_outline returns fq_status field name in frontmatter"
+  - label: "get_document include=[frontmatter] returns fq_status field name"
     assert:
-      op: get_doc_outline
+      op: get_document
       args:
         identifiers: "${meta_doc.fq_id}"
+        include: ["frontmatter"]
       expect_contains: "fq_status"
 
-  - label: "get_doc_outline returns fq_id field name in frontmatter"
+  - label: "get_document include=[frontmatter] returns fq_id field name"
     assert:
-      op: get_doc_outline
+      op: get_document
       args:
         identifiers: "${meta_doc.fq_id}"
+        include: ["frontmatter"]
       expect_contains: "fq_id"
 
-  - label: "get_doc_outline returns tag value in frontmatter"
+  - label: "get_document include=[frontmatter] returns tag value"
     assert:
-      op: get_doc_outline
+      op: get_document
       args:
         identifiers: "${meta_doc.fq_id}"
+        include: ["frontmatter"]
       expect_contains: "gdm-tag"
 
   - label: "search_documents returns Title, Path, and FQC ID in result"
