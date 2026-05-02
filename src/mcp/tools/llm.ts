@@ -82,15 +82,21 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
     {
       description:
         "Call any configured LLM model directly (resolver='model') or via a named purpose with fallback chain (resolver='purpose'). " +
+        "Discovery resolvers (resolver='list_models'/'list_purposes'/'search') return configuration data with no LLM call — name and messages are not required for these. " +
+        "For 'search', supply parameters.query as the search string (case-insensitive substring match on name and description). " +
         "Returns the model's text response plus a diagnostic envelope with provider, token usage, computed cost (USD), and latency. " +
         "When trace_id is provided, the call is recorded with that ID and the response includes cumulative stats across all calls sharing that trace_id. " +
         "When trace_id is omitted, the trace_id and trace_cumulative fields are absent from the metadata object entirely — the keys are not present, not null. " +
         "Note: messages are forwarded to the provider as-is — prompt safety is the caller's responsibility.",
       inputSchema: {
-        resolver: z.enum(['model', 'purpose']).describe(
-          "'model' to call a specific model alias directly; 'purpose' to walk a named purpose's fallback chain."
+        resolver: z.enum(['model', 'purpose', 'list_models', 'list_purposes', 'search']).describe(
+          "'model' to call a specific model alias directly; 'purpose' to walk a named purpose's fallback chain. " +
+          "'list_models' / 'list_purposes' / 'search' return configuration data without making an LLM call (no messages required)."
         ),
-        name: z.string().describe('Model alias (when resolver=model) or purpose name (when resolver=purpose).'),
+        name: z.string().optional().describe(
+          'Model alias (when resolver=model) or purpose name (when resolver=purpose). ' +
+          'Ignored for discovery resolvers (list_models/list_purposes/search).'
+        ),
         messages: z
           .array(
             z.object({
@@ -98,8 +104,8 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
               content: z.string(),
             })
           )
-          .min(1)
-          .describe('OpenAI-style messages array (must contain at least one message).'),
+          .optional()
+          .describe('OpenAI-style messages array. Required for resolver=model/purpose. Ignored for discovery resolvers.'),
         parameters: z
           .record(z.string(), z.unknown())
           .optional()
@@ -134,12 +140,134 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         };
       }
 
+      // Step 1.1: Discovery resolver dispatch (DISC-01, DISC-02, DISC-03, DISC-05)
+      // Must run BEFORE Step 1.5 (reference resolution) — discovery has no messages
+      // and parseReferences(undefined) would crash. These resolvers read config only,
+      // make no LLM call, and return JSON directly (NOT CallModelEnvelope).
+      // DISC-06: missing llm: → already returned by Step 1 NullLlmClient guard above.
+      // configured-but-empty → these branches naturally return empty arrays.
+      if (
+        params.resolver === 'list_models' ||
+        params.resolver === 'list_purposes' ||
+        params.resolver === 'search'
+      ) {
+        const llmConf = config.llm;
+        const cfgModels = llmConf?.models ?? [];
+        const cfgPurposes = llmConf?.purposes ?? [];
+
+        // Project a model config entry to the discovery response shape.
+        // Field mapping: providerName -> provider, model -> model_id, costPerMillion.* -> input/output_cost_per_million.
+        // Optional fields use !== undefined (NOT truthiness) so capabilities: [] is preserved.
+        const modelToResponse = (m: typeof cfgModels[number]): Record<string, unknown> => {
+          const entry: Record<string, unknown> = {
+            name: m.name,
+            provider: m.providerName,
+            model_id: m.model,
+            input_cost_per_million: m.costPerMillion.input,
+            output_cost_per_million: m.costPerMillion.output,
+          };
+          if (m.description !== undefined) entry['description'] = m.description;
+          if (m.contextWindow !== undefined) entry['context_window'] = m.contextWindow;
+          if (m.capabilities !== undefined) entry['capabilities'] = m.capabilities;
+          return entry;
+        };
+
+        // Build a name->model lookup once for purpose primary-model cost lookup.
+        const modelsByName = new Map<string, typeof cfgModels[number]>();
+        for (const m of cfgModels) modelsByName.set(m.name, m);
+
+        // Project a purpose config entry to the discovery response shape.
+        // Cost rates come from the primary model (models[0]); 0/0 if missing or empty list.
+        const purposeToResponse = (p: typeof cfgPurposes[number]): Record<string, unknown> => {
+          const primaryName = p.models[0];
+          const primary = primaryName ? modelsByName.get(primaryName) : undefined;
+          const entry: Record<string, unknown> = {
+            name: p.name,
+            description: p.description,
+            models: p.models,
+            input_cost_per_million: primary?.costPerMillion.input ?? 0,
+            output_cost_per_million: primary?.costPerMillion.output ?? 0,
+          };
+          if (p.defaults !== undefined) entry['defaults'] = p.defaults;
+          return entry;
+        };
+
+        if (params.resolver === 'list_models') {
+          const models = cfgModels.map(modelToResponse);
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ models }) }] };
+        }
+
+        if (params.resolver === 'list_purposes') {
+          const purposes = cfgPurposes.map(purposeToResponse);
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ purposes }) }] };
+        }
+
+        // params.resolver === 'search'
+        const queryRaw = params.parameters?.['query'];
+        if (typeof queryRaw !== 'string' || queryRaw === '') {
+          return {
+            content: [{ type: 'text' as const, text: 'search requires parameters.query (non-empty string)' }],
+            isError: true,
+          };
+        }
+        const q = queryRaw.toLowerCase();
+        const matchedModels = cfgModels
+          .filter((m) =>
+            m.name.toLowerCase().includes(q) ||
+            (m.description ?? '').toLowerCase().includes(q)
+          )
+          .map(modelToResponse);
+        const matchedPurposes = cfgPurposes
+          .filter((p) =>
+            p.name.toLowerCase().includes(q) ||
+            p.description.toLowerCase().includes(q)
+          )
+          .map(purposeToResponse);
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: JSON.stringify({
+                query: queryRaw,
+                results: { purposes: matchedPurposes, models: matchedModels },
+              }),
+            },
+          ],
+        };
+      }
+
+      // Step 1.2: Body-level guard for model/purpose resolvers (DISC-04)
+      // After making name/messages optional in the schema, we must enforce their
+      // presence here for the LLM-dispatch path. Reference resolution (Step 1.5)
+      // and Step 2 dispatch both assume messages is a non-empty array.
+      if (params.resolver === 'model' || params.resolver === 'purpose') {
+        if (typeof params.name !== 'string' || params.name.length === 0) {
+          return {
+            content: [{ type: 'text' as const, text: "name is required for resolver='model' or resolver='purpose'" }],
+            isError: true,
+          };
+        }
+        if (!params.messages || params.messages.length === 0) {
+          return {
+            content: [{ type: 'text' as const, text: "messages is required (non-empty array) for resolver='model' or resolver='purpose'" }],
+            isError: true,
+          };
+        }
+      }
+      // After Step 1.2, we know name and resolver are defined for model/purpose paths.
+      // TypeScript's control flow analysis cannot narrow across the guard block, so we
+      // alias here for the LLM-dispatch path. Discovery paths already returned above.
+      const resolvedName = (params.name ?? '') as string;
+      const resolvedResolver = params.resolver as 'model' | 'purpose';
+
       // Step 1.5: Reference resolution (REFS-01 through REFS-07)
       // Scans message content for {{ref:...}} and {{id:...}} placeholders, resolves each
       // via resolveAndBuildDocument (reused from get_document), and replaces inline before
       // dispatching to the LLM. Fail-fast: if any reference fails, no LLM call is made.
       // No-op when no patterns present (REFS-07 backward compat).
-      const parsed = parseReferences(params.messages);
+      // Type narrowing: Step 1.2 guarantees messages is defined for model/purpose path.
+      const messagesForRefs = params.messages ?? [];
+      const parsed = parseReferences(messagesForRefs);
       if ('error' in parsed) {
         // REFS-02: # and -> mutually exclusive — parse error → immediate fail (no LLM call)
         return {
@@ -150,7 +278,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           isError: true,
         };
       }
-      let hydratedMessages: typeof params.messages = params.messages;
+      let hydratedMessages: typeof messagesForRefs = messagesForRefs;
       let injectionMetadata: InjectionMetadata | undefined;
       if (parsed.length > 0) {
         const resolved = await resolveReferences(parsed, config, supabaseManager, embeddingProvider, logger);
@@ -166,7 +294,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           };
         }
         const resolvedRefs = resolved as ResolvedRef[];
-        hydratedMessages = hydrateMessages(params.messages, resolvedRefs) as typeof params.messages;
+        hydratedMessages = hydrateMessages(messagesForRefs, resolvedRefs) as typeof messagesForRefs;
         injectionMetadata = {
           injectedReferences: buildInjectedReferences(resolvedRefs),
           promptChars: computePromptChars(hydratedMessages),
@@ -209,9 +337,9 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       let fallbackPosition: number | null;
 
       try {
-        if (params.resolver === 'model') {
+        if (resolvedResolver === 'model') {
           result = await client.complete(
-            params.name,
+            resolvedName,
             hydratedMessages,
             params.parameters,
             params.trace_id ?? null
@@ -219,7 +347,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           fallbackPosition = null; // explicit null per TOOL-02 / Pitfall 2
         } else {
           const purposeResult = await client.completeByPurpose(
-            params.name,
+            resolvedName,
             hydratedMessages,
             params.parameters,
             params.trace_id ?? null
@@ -252,7 +380,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         if (err instanceof LlmHttpError || err instanceof LlmNetworkError) {
           const text = `call_model failed: ${err.message}`;
           logger.error(
-            `call_model failed (${err instanceof LlmHttpError ? `http ${err.status}` : 'network'}): ${params.resolver}/${params.name} — ${err.message}`
+            `call_model failed (${err instanceof LlmHttpError ? `http ${err.status}` : 'network'}): ${resolvedResolver}/${resolvedName} — ${err.message}`
           );
           return {
             content: [{ type: 'text' as const, text }],
@@ -267,13 +395,13 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         if (err instanceof Error && /not found(?: in configuration)?\.?$/.test(err.message)) {
           const llmConf = config.llm;
           const availableNames =
-            params.resolver === 'model'
+            resolvedResolver === 'model'
               ? llmConf?.models.map((m) => m.name).join(', ') ?? 'none'
               : llmConf?.purposes.map((p) => p.name).join(', ') ?? 'none';
-          const kind = params.resolver === 'model' ? 'Model' : 'Purpose';
-          const kindPlural = params.resolver === 'model' ? 'models' : 'purposes';
-          const text = `${kind} '${params.name}' not found. Available ${kindPlural}: ${availableNames}`;
-          logger.error(`call_model failed (${params.resolver} not found): ${params.name}`);
+          const kind = resolvedResolver === 'model' ? 'Model' : 'Purpose';
+          const kindPlural = resolvedResolver === 'model' ? 'models' : 'purposes';
+          const text = `${kind} '${resolvedName}' not found. Available ${kindPlural}: ${availableNames}`;
+          logger.error(`call_model failed (${resolvedResolver} not found): ${resolvedName}`);
           return {
             content: [{ type: 'text' as const, text }],
             isError: true,
@@ -283,7 +411,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         // Anything else (unexpected, non-typed error): surface the message rather
         // than masking it.
         const message = err instanceof Error ? err.message : String(err);
-        logger.error(`call_model failed (unexpected): ${params.resolver}/${params.name} — ${message}`);
+        logger.error(`call_model failed (unexpected): ${resolvedResolver}/${resolvedName} — ${message}`);
         return {
           content: [{ type: 'text' as const, text: `call_model failed: ${message}` }],
           isError: true,
@@ -322,8 +450,8 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
 
       // Step 5: Build response envelope (TOOL-02 / D-02 conditional fields)
       const metadata: CallModelMetadata = {
-        resolver: params.resolver,
-        name: params.name,
+        resolver: resolvedResolver,
+        name: resolvedName,
         resolved_model_name: result.modelName,
         provider_name: result.providerName,
         fallback_position: fallbackPosition,
@@ -351,7 +479,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       };
 
       logger.info(
-        `call_model: ${params.resolver}/${params.name} -> ${result.modelName}@${result.providerName} (${result.inputTokens}+${result.outputTokens} tokens, ${result.latencyMs}ms, $${costUsd.toFixed(8)})`
+        `call_model: ${resolvedResolver}/${resolvedName} -> ${result.modelName}@${result.providerName} (${result.inputTokens}+${result.outputTokens} tokens, ${result.latencyMs}ms, $${costUsd.toFixed(8)})`
       );
 
       // Note: success returns omit `isError` entirely (not false) — matches files.ts pattern.
