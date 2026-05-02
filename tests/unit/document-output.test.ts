@@ -5,6 +5,7 @@ import {
   buildHeadingEntries,
   buildConsolidatedResponse,
   validateParameterCombinations,
+  traverseFollowRef,
 } from '../../src/mcp/utils/document-output.js';
 import { FM } from '../../src/constants/frontmatter-fields.js';
 
@@ -352,5 +353,68 @@ describe('validateParameterCombinations (Error 9)', () => {
       // occurrence defaults to 1 — valid for multi-section
     });
     expect(result).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// describe: traverseFollowRef (FREF-01, FREF-03)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('traverseFollowRef (FREF-01, FREF-03)', () => {
+  it('[U-FR-01] returns { kind: "value" } when path resolves to a string', () => {
+    const fm = { projections: { summary: 'Meetings/.projections/standup-s12-summary.md' } };
+    const result = traverseFollowRef(fm, 'projections.summary');
+    expect(result.kind).toBe('value');
+    if (result.kind === 'value') expect(result.value).toBe('Meetings/.projections/standup-s12-summary.md');
+  });
+
+  it('[U-FR-02] returns { kind: "path_not_found" } when path segment is missing', () => {
+    const fm = { type: 'meeting-notes' };
+    const result = traverseFollowRef(fm, 'projections.summary');
+    expect(result.kind).toBe('path_not_found');
+    if (result.kind === 'path_not_found') {
+      expect(result.failed_at).toBe('projections');
+      expect(result.resolved).toEqual([]);
+      expect(result.available_keys).toContain('type');
+    }
+  });
+
+  it('[U-FR-03] returns { kind: "path_not_found" } with partial resolved path', () => {
+    const fm = { projections: { action_items: 'some/path.md' } };
+    const result = traverseFollowRef(fm, 'projections.summary');
+    expect(result.kind).toBe('path_not_found');
+    if (result.kind === 'path_not_found') {
+      expect(result.resolved).toEqual(['projections']);
+      expect(result.failed_at).toBe('summary');
+      expect(result.available_keys).toContain('action_items');
+    }
+  });
+
+  it('[U-FR-04] returns { kind: "invalid_type" } when value is a number', () => {
+    const fm = { projections: { summary: 42 } };
+    const result = traverseFollowRef(fm, 'projections.summary');
+    expect(result.kind).toBe('invalid_type');
+    if (result.kind === 'invalid_type') expect(result.found_type).toBe('number');
+  });
+
+  it('[U-FR-05] returns { kind: "invalid_type", found_type: "array" } when value is an array', () => {
+    const fm = { links: ['a.md', 'b.md'] };
+    const result = traverseFollowRef(fm, 'links');
+    expect(result.kind).toBe('invalid_type');
+    if (result.kind === 'invalid_type') expect(result.found_type).toBe('array');
+  });
+
+  it('[U-FR-06] returns { kind: "invalid_type" } when value is an object (not string)', () => {
+    const fm = { projections: { summary: { nested: 'deep' } } };
+    const result = traverseFollowRef(fm, 'projections.summary');
+    expect(result.kind).toBe('invalid_type');
+    if (result.kind === 'invalid_type') expect(result.found_type).toBe('object');
+  });
+
+  it('[U-FR-07] single-segment path resolves correctly', () => {
+    const fm = { supersedes: 'old-doc.md' };
+    const result = traverseFollowRef(fm, 'supersedes');
+    expect(result.kind).toBe('value');
+    if (result.kind === 'value') expect(result.value).toBe('old-doc.md');
   });
 });
