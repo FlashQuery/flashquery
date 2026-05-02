@@ -21,7 +21,7 @@ steps:
 
           # Trailer
           This is the trailer. It should NOT be injected.
-      expect_contains: "created"
+      expect_contains: "FQC ID"
 
   - label: "call_model with {{ref:path#Target Section}} sees only the target section"
     assert:

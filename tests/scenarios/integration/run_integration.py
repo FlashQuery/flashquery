@@ -410,8 +410,15 @@ def _evaluate_assertions(
     """
     Apply all expect_* keys in assert_spec to result.
     Records one step on run. Returns True if every check passes.
+
+    expect_error: true — asserts the tool returned isError. The step passes
+    when the tool errors as expected; fails when it succeeds unexpectedly.
+    expect_contains and expect_not_contains are still evaluated against the
+    error response text when expect_error is true.
     """
-    if not result.ok:
+    expect_error = bool(assert_spec.get("expect_error", False))
+
+    if not result.ok and not expect_error:
         run.step(
             label=label,
             passed=False,
@@ -420,6 +427,19 @@ def _evaluate_assertions(
             tool_result=result,
         )
         return False
+
+    if result.ok and expect_error:
+        run.step(
+            label=label,
+            passed=False,
+            detail=f"Expected tool error but tool succeeded: {result.text[:300]}",
+            timing_ms=result.timing_ms,
+            tool_result=result,
+        )
+        return False
+
+    # Both normal success (ok=True, expect_error=False) and expected error
+    # (ok=False, expect_error=True) reach here — evaluate content assertions.
 
     if "expect_contains" in assert_spec:
         result.expect_contains(str(assert_spec["expect_contains"]))

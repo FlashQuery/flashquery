@@ -14,7 +14,7 @@ steps:
         title: "Ref Target"
         path: "Test/ref-target.md"
         content: "Target body — the magic word is BANANA."
-      expect_contains: "created"
+      expect_contains: "FQC ID"
 
   - label: "Setup: create the source document with a frontmatter pointer to the target"
     assert:
@@ -27,7 +27,7 @@ steps:
           fq_target_ref: "Test/ref-target.md"
           ---
           Source body — should NOT be injected when using ->.
-      expect_contains: "created"
+      expect_contains: "FQC ID"
 
   - label: "call_model with {{ref:source->fq_target_ref}} dereferences and injects target body"
     assert:

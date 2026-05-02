@@ -15,7 +15,7 @@ steps:
         title: "Ref Inject Basic"
         path: "Test/ref-inject-basic.md"
         content: "The answer to the test question is forty-two."
-      expect_contains: "created"
+      expect_contains: "FQC ID"
 
   - label: "call_model resolves {{ref:...}} and the LLM sees the injected body"
     assert:
