@@ -256,14 +256,18 @@ export function traverseFollowRef(
   const resolved: string[] = [];
 
   for (const seg of segments) {
-    if (typeof current !== 'object' || current === null || !(seg in (current as object))) {
+    if (
+      typeof current !== 'object' ||
+      current === null ||
+      !Object.prototype.hasOwnProperty.call(current, seg)
+    ) {
       return {
         kind: 'path_not_found',
         resolved,
         failed_at: seg,
         available_keys:
           typeof current === 'object' && current !== null
-            ? Object.keys(current as object)
+            ? Object.keys(current as object)  // Object.keys already excludes inherited props
             : [],
       };
     }
