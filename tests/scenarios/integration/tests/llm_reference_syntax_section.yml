@@ -10,6 +10,7 @@ steps:
     assert:
       op: create_document
       args:
+        title: "Ref Inject Section"
         path: "Test/ref-inject-section.md"
         content: |
           # Overview

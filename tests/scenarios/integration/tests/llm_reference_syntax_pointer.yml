@@ -11,6 +11,7 @@ steps:
     assert:
       op: create_document
       args:
+        title: "Ref Target"
         path: "Test/ref-target.md"
         content: "Target body — the magic word is BANANA."
       expect_contains: "created"
@@ -19,6 +20,7 @@ steps:
     assert:
       op: create_document
       args:
+        title: "Ref Source"
         path: "Test/ref-source.md"
         content: |
           ---
