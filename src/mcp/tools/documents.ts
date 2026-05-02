@@ -684,7 +684,20 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
       }
 
       // ── Read target (READ-ONLY: do NOT call targetedScan — see Pitfall 1) ────
-      const targetRaw = await readFile(targetResolved.absPath, 'utf-8');
+      let targetRaw: string;
+      try {
+        targetRaw = await readFile(targetResolved.absPath, 'utf-8');
+      } catch (readErr) {
+        const m = readErr instanceof Error ? readErr.message : String(readErr);
+        throw new DocumentRequestError({
+          error: 'follow_ref_target_not_found',
+          message: `follow_ref target '${targetIdentifier}' resolved but could not be read: ${m}`,
+          identifier,
+          reference: followRef,
+          resolved_value: targetIdentifier,
+          resolution_method: 'unknown',
+        });
+      }
       const targetParsed = matter(targetRaw);
       const targetData = targetParsed.data;
       const targetContent = targetParsed.content;
