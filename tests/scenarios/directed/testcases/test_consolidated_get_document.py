@@ -698,6 +698,8 @@ def main() -> None:
                          help="Emit structured JSON to stdout.")
     parser.add_argument("--keep", action="store_true",
                          help="Retain test files for debugging (skip cleanup).")
+    parser.add_argument("--vault-path", type=str, default=None,
+                         help="Override vault path for managed server.")
 
     args = parser.parse_args()
     run = run_test(args)
