@@ -103,6 +103,9 @@ const ModelSchema = z
     type: z.enum(['language', 'reasoning', 'embedding', 'vision', 'code', 'audio', 'guardian']),
     dimensions: z.number().optional(),
     cost_per_million: ModelCostSchema,
+    description: z.string().optional(),
+    context_window: z.number().int().positive().optional(),
+    capabilities: z.array(z.string()).optional(),
   })
   .strip();
 
@@ -191,6 +194,9 @@ export interface FlashQueryConfig {
       type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
       dimensions?: number;
       costPerMillion: { input: number; output: number };
+      description?: string;
+      contextWindow?: number;
+      capabilities?: string[];
     }>;
     purposes: Array<{ name: string; description: string; models: string[]; defaults?: Record<string, unknown> }>;
   };
