@@ -654,7 +654,7 @@ describe('get_document', () => {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: null, error: null }),
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
           }),
         }),
         update: vi.fn().mockReturnValue({
@@ -731,7 +731,7 @@ describe('get_document', () => {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { content_hash: 'mock-sha256-hash-abc123' }, error: null }),
+            maybeSingle: vi.fn().mockResolvedValue({ data: { content_hash: 'mock-sha256-hash-abc123' }, error: null }),
           }),
         }),
       }),
@@ -764,7 +764,7 @@ describe('get_document', () => {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { content_hash: 'old-hash-different' }, error: null }),
+            maybeSingle: vi.fn().mockResolvedValue({ data: { content_hash: 'old-hash-different' }, error: null }),
           }),
         }),
         update: mockUpdate,
