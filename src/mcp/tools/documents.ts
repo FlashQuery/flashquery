@@ -1044,11 +1044,12 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             archivedFm[FM.ID] = preScan.capturedFrontmatter.fqcId;
 
             // Write archived status to vault (VAULT-FIRST)
+            const archivedTitle = archivedFm[FM.TITLE];
             await vaultManager.writeMarkdown(
               relativePath,
               archivedFm,
               parsed.content,
-              { gitAction: 'update', gitTitle: typeof archivedFm[FM.TITLE] === 'string' ? archivedFm[FM.TITLE] : relativePath }
+              { gitAction: 'update', gitTitle: typeof archivedTitle === 'string' ? archivedTitle : relativePath }
             );
 
             // Step 3: Update Supabase fqc_documents
