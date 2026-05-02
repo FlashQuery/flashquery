@@ -34,9 +34,10 @@ steps:
         identifier: "${draft_doc.fq_id}"
       expect_contains: "This is a draft that will be archived"
 
-  - label: "Archived document has status='archived' in frontmatter via get_doc_outline"
+  - label: "Archived document has status='archived' in frontmatter via get_document include=[frontmatter]"
     assert:
-      op: get_doc_outline
+      op: get_document
       args:
         identifiers: "${draft_doc.fq_id}"
+        include: ["frontmatter"]
       expect_contains: "archived"

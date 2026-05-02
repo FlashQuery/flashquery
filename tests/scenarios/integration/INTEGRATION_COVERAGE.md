@@ -207,7 +207,7 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 
 **How to Remedy**: Add an assertion step after the archive action that calls `get_document` and includes `expect_contains: "archived"` (or `expect_contains: "status: archived"` if the response format uses that form). This directly verifies that the status field is correctly reflected in the retrieval response.
 
-**Resolution (2026-04-29)**: Added a `get_doc_outline` assert step (Step 5) that retrieves the archived document's frontmatter and asserts `expect_contains: "archived"`. Since `get_document` returns only body content (no frontmatter, per MOD-02), `get_doc_outline` is the correct tool for verifying the `fq_status` field — it reads the frontmatter directly from the vault file, which `archive_document` updates to `fq_status: "archived"`. Replaced the near-duplicate second `get_document` step with this more targeted assertion. All 5 steps pass.
+**Resolution (2026-04-29, updated 2026-05-02)**: Added a frontmatter-retrieval assert step (Step 5) that checks `expect_contains: "archived"`. Originally used the now-removed outline tool; migrated in Phase 108 to `op: get_document` with `args: { identifiers, include: ["frontmatter"] }` — the consolidated `get_document` tool returns frontmatter when `include: ["frontmatter"]` is specified. `expect_contains: "archived"` is preserved unchanged. All 5 steps pass.
 
 ---
 
@@ -233,7 +233,7 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 
 **How to Remedy**: Add assertions to the `get_document` steps that check for the presence of each required metadata field. For example: `expect_contains: "Core Concepts"` (title), `expect_contains: "gdm-tag"` (tag), `expect_contains: "active"` (status), and `expect_path_contains: "knowledge/concepts.md"` (path). For fqc_id, assert that a UUID-like string matching `${meta_doc.fq_id}` appears in the response (or assert `expect_contains: "FQC ID:"` as a field label check).
 
-**Resolution (2026-04-29)**: Rewrote the test to verify all 5 named metadata fields using the correct tool for each. Since `get_document` returns only body content (no frontmatter), four `get_doc_outline` assert steps were added — one each for the title value ("Core Concepts"), the `fq_status` field key, the `fq_id` field key, and the tag value ("gdm-tag"). A `search_documents` step verifies the path appears in results (`expect_path_contains: "knowledge/concepts.md"`) alongside the title. A final `get_document` step confirms body content. All 7 steps pass.
+**Resolution (2026-04-29, updated 2026-05-02)**: Rewrote the test to verify all 5 named metadata fields. Originally used four frontmatter-outline assert steps (since `get_document` returned only body content at the time); migrated in Phase 108 to `op: get_document` with `args: { identifiers, include: ["frontmatter"] }` — the consolidated tool now returns frontmatter when `include: ["frontmatter"]` is specified. A `search_documents` step verifies the path appears in results (`expect_path_contains: "knowledge/concepts.md"`) alongside the title. A final `get_document` step confirms body content. All `expect_contains` strings (Core Concepts, fq_status, fq_id, gdm-tag) preserved unchanged. All 7 steps pass.
 
 ---
 
