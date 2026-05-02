@@ -249,6 +249,10 @@ function loadEnvFileSilently(envPath: string): void {
     if (eqIdx === -1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
     let value = trimmed.slice(eqIdx + 1).trim();
+    const commentIdx = value.indexOf(' #');
+    if (commentIdx !== -1) {
+      value = value.slice(0, commentIdx).trim();
+    }
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"))

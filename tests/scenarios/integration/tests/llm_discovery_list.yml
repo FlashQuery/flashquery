@@ -17,6 +17,13 @@ steps:
         resolver: list_models
       expect_contains: '"models"'
 
+  - label: "list_models response includes type field on each model entry (WR-03 fix) — IL-15"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"type"'
+
   - label: "list_models response includes provider field on each model entry (DISC-01 field mapping) — IL-15"
     assert:
       op: call_model

@@ -161,6 +161,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         const modelToResponse = (m: typeof cfgModels[number]): Record<string, unknown> => {
           const entry: Record<string, unknown> = {
             name: m.name,
+            type: m.type,
             provider: m.providerName,
             model_id: m.model,
             input_cost_per_million: m.costPerMillion.input,
@@ -314,7 +315,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         try {
           supabase = supabaseManager.getClient();
         } catch {
-          // Supabase not configured — trace_cumulative will be silently omitted
+          logger.warn('trace pre-snapshot skipped: Supabase not configured; trace_cumulative will be omitted');
         }
         if (supabase) {
           try {

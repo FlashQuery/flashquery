@@ -530,6 +530,7 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     expect(body.models).toHaveLength(3);
     expect(body.models[0]).toMatchObject({
       name: 'fast',
+      type: 'language',
       provider: 'openai',
       model_id: 'gpt-4o-mini',
       input_cost_per_million: 0.15,
@@ -618,8 +619,9 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
 
   it('[U-DISC-08] search with no purpose match returns purposes: [] (empty array, not omitted)', async () => {
     const handler = captureCallModelHandler(DISC_CONFIG);
-    // 'fast' is in model name 'fast' and model description 'Fast small model'
-    // but does NOT appear in any purpose name or description
+    // 'fast' appears in model name 'fast' and description 'Fast small model',
+    // but neither purpose name nor purpose description contains the substring 'fast',
+    // so purposes result must be empty (purpose.models arrays are not searched).
     const res = await handler({ resolver: 'search', parameters: { query: 'fast' } });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const body = JSON.parse(res.content[0].text) as any;
