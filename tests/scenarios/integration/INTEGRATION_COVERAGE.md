@@ -38,7 +38,7 @@ content unaffected.
 | IA-04  | Archive memory → absent from search_memories (VALIDATED)                          | archive_memory               | 2026-05-01   | 2026-05-01   |
 | IA-05  | Archive memory → document with same topic still searchable (VALIDATED)            | archive_memory               | 2026-05-01   | 2026-05-01   |
 | IA-06  | Archive one of several tagged documents → others remain discoverable (VALIDATED)  | archive_partial_set          | 2026-05-01   | 2026-05-01   |
-| IA-07  | Archive document → get_document reflects status='archived' (VALIDATED)            | archive_status_field         | 2026-05-01   | 2026-05-01   |
+| IA-07  | Archive document → get_document reflects status='archived' (VALIDATED)            | archive_status_field         | 2026-05-02   | 2026-05-02   |
 | IA-08  | Create and archive document in nested vault path → remains correctly archived and retrievable (VALIDATED) | archive_nested_path          | 2026-05-01   | 2026-05-01   |
 
 ---
@@ -55,7 +55,7 @@ Verifies behaviors that span more than one FlashQuery domain (documents, memorie
 | IX-04  | Create document, get_document by fqc_id → returns correct content (VALIDATED)           | document_retrieval_by_id     | 2026-05-01   | 2026-05-01   |
 | IX-05  | Create document with tags, apply_tags to add more → all tags searchable (VALIDATED)     | apply_tags_composition       | 2026-05-01   | 2026-05-01   |
 | IX-06  | Get document by vault-relative path → returns same content as fqc_id retrieval (VALIDATED) | get_document_by_path         | 2026-05-01   | 2026-05-01   |
-| IX-07  | Get document returns all metadata fields (title, tags, status, fqc_id, path) (VALIDATED) | get_document_metadata        | 2026-05-01   | 2026-05-01   |
+| IX-07  | Get document returns all metadata fields (title, tags, status, fqc_id, path) (VALIDATED) | get_document_metadata        | 2026-05-02   | 2026-05-02   |
 | IX-08  | Create multiple documents, update each, retrieve all → each returns updated state (VALIDATED) | concurrent_updates           | 2026-05-01   | 2026-05-01   |
 
 ---
