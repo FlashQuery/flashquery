@@ -258,8 +258,8 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       // After Step 1.2, we know name and resolver are defined for model/purpose paths.
       // TypeScript's control flow analysis cannot narrow across the guard block, so we
       // alias here for the LLM-dispatch path. Discovery paths already returned above.
-      const resolvedName = (params.name ?? '') as string;
-      const resolvedResolver = params.resolver as 'model' | 'purpose';
+      const resolvedName = params.name ?? '';
+      const resolvedResolver = params.resolver;
 
       // Step 1.5: Reference resolution (REFS-01 through REFS-07)
       // Scans message content for {{ref:...}} and {{id:...}} placeholders, resolves each
