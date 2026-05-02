@@ -184,49 +184,53 @@ def run_test(args: argparse.Namespace) -> TestRun:
         #       (raw vault write — no fq_title, no frontmatter at all)
         # ─────────────────────────────────────────────────────────────
         path_raw = f"_test/{TEST_NAME}_{run.run_id}_no_fm.md"
-        raw_abs = (
-            os.path.join(str(ctx.server.vault_path), path_raw)
-            if ctx.server
-            else os.path.join(str(args.vault_path), path_raw)
-        )
-        os.makedirs(os.path.dirname(raw_abs), exist_ok=True)
-        with open(raw_abs, "w", encoding="utf-8") as f:
-            f.write("# Just a body\n\nNo frontmatter here.\n")
-        ctx.cleanup.track_file(path_raw)
-
-        log_mark = ctx.server.log_position if ctx.server else 0
-        d50_result = ctx.client.call_tool("get_document", identifiers=path_raw, include=["body"])
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        d50_passed = False
-        d50_detail = ""
-        if d50_result.ok:
-            try:
-                env = json.loads(d50_result.text)
-                expected_basename = Path(path_raw).stem
-                checks = {
-                    "envelope has title": "title" in env,
-                    "title equals filename basename": env.get("title") == expected_basename,
-                    "title is non-empty string": isinstance(env.get("title"), str) and len(env.get("title", "")) > 0,
-                    "envelope has body": "body" in env,
-                }
-                d50_passed = all(checks.values())
-                if not d50_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d50_detail = f"Failed: {', '.join(failed)}. env keys={list(env.keys())}"
-            except Exception as e:
-                d50_detail = f"JSON parse error: {e}"
+        raw_vault = str(ctx.server.vault_path) if ctx.server else args.vault_path
+        if not raw_vault:
+            run.step(
+                label=f"D-50: title fallback when frontmatter absent — skipped (no vault_path in unmanaged mode)",
+                passed=True,
+                detail="Pass --vault-path to enable this step in unmanaged mode.",
+            )
         else:
-            d50_detail = f"Expected ok=True, got isError. text={d50_result.text[:200]}"
+            raw_abs = os.path.join(raw_vault, path_raw)
+            os.makedirs(os.path.dirname(raw_abs), exist_ok=True)
+            with open(raw_abs, "w", encoding="utf-8") as f:
+                f.write("# Just a body\n\nNo frontmatter here.\n")
+            ctx.cleanup.track_file(path_raw)
 
-        run.step(
-            label=f"D-50: title fallback when frontmatter absent (basename='{Path(path_raw).stem}')",
-            passed=d50_passed,
-            detail=d50_detail,
-            timing_ms=d50_result.timing_ms,
-            tool_result=d50_result,
-            server_logs=step_logs,
-        )
+            log_mark = ctx.server.log_position if ctx.server else 0
+            d50_result = ctx.client.call_tool("get_document", identifiers=path_raw, include=["body"])
+            step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+            d50_passed = False
+            d50_detail = ""
+            if d50_result.ok:
+                try:
+                    env = json.loads(d50_result.text)
+                    expected_basename = Path(path_raw).stem
+                    checks = {
+                        "envelope has title": "title" in env,
+                        "title equals filename basename": env.get("title") == expected_basename,
+                        "title is non-empty string": isinstance(env.get("title"), str) and len(env.get("title", "")) > 0,
+                        "envelope has body": "body" in env,
+                    }
+                    d50_passed = all(checks.values())
+                    if not d50_passed:
+                        failed = [k for k, v in checks.items() if not v]
+                        d50_detail = f"Failed: {', '.join(failed)}. env keys={list(env.keys())}"
+                except Exception as e:
+                    d50_detail = f"JSON parse error: {e}"
+            else:
+                d50_detail = f"Expected ok=True, got isError. text={d50_result.text[:200]}"
+
+            run.step(
+                label=f"D-50: title fallback when frontmatter absent (basename='{Path(path_raw).stem}')",
+                passed=d50_passed,
+                detail=d50_detail,
+                timing_ms=d50_result.timing_ms,
+                tool_result=d50_result,
+                server_logs=step_logs,
+            )
 
         # ─────────────────────────────────────────────────────────────
         # D-53: follow_ref basic success — source envelope + followed_ref nested
