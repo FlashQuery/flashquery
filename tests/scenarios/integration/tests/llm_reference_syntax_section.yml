@@ -1,0 +1,34 @@
+name: llm_reference_syntax_section
+description: >
+  call_model with {{ref:path#Section}} extracts only the named section
+  and injects it before LLM dispatch (REFS-01 section operator).
+coverage: [IL-11]
+deps: [llm]
+
+steps:
+  - label: "Setup: create a multi-section test document"
+    assert:
+      op: create_document
+      args:
+        path: "Test/ref-inject-section.md"
+        content: |
+          # Overview
+          This is the overview section. It should NOT be injected.
+
+          # Target Section
+          The secret code is alpha-bravo-charlie.
+
+          # Trailer
+          This is the trailer. It should NOT be injected.
+      expect_contains: "created"
+
+  - label: "call_model with {{ref:path#Target Section}} sees only the target section"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Test/ref-inject-section.md#Target Section}} What is the secret code? Reply with just the code."
+      expect_contains: "alpha-bravo-charlie"

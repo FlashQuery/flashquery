@@ -1,0 +1,50 @@
+name: llm_reference_syntax_basic
+description: >
+  call_model with {{ref:path}} placeholder in user message resolves the
+  document body and injects it inline before dispatching to the LLM.
+  Response metadata includes injected_references[] and prompt_chars
+  (REFS-01, REFS-03, REFS-04, REFS-05).
+coverage: [IL-10]
+deps: [llm]
+
+steps:
+  - label: "Setup: create a test document with a known fact"
+    assert:
+      op: create_document
+      args:
+        path: "Test/ref-inject-basic.md"
+        content: "The answer to the test question is forty-two."
+      expect_contains: "created"
+
+  - label: "call_model resolves {{ref:...}} and the LLM sees the injected body"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Test/ref-inject-basic.md}} What number does the document mention? Reply with just the digits."
+      expect_contains: "42"
+
+  - label: "Response metadata contains injected_references"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Test/ref-inject-basic.md}} Summarize in three words or fewer."
+      expect_contains: '"injected_references"'
+
+  - label: "Response metadata contains prompt_chars"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Test/ref-inject-basic.md}} Reply OK."
+      expect_contains: '"prompt_chars"'
