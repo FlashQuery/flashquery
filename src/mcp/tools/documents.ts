@@ -602,44 +602,63 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const rawContent = await readFile(resolved.absPath, 'utf-8');
         const parsed = matter(rawContent);
         const contentHash = computeHash(rawContent);
-        const preScan = await targetedScan(config, supabaseManager.getClient(), resolved, contentHash, logger);
+
+        // CR-02: Only call targetedScan (a DB write path) when the content hash has changed
+        // or there is no existing DB row. For unchanged documents, skip the write entirely.
+        let preScan: Awaited<ReturnType<typeof targetedScan>>;
+        const { data: hashRow } = await supabaseManager
+          .getClient()
+          .from('fqc_documents')
+          .select('content_hash, id')
+          .eq('id', resolved.fqcId ?? '')
+          .maybeSingle();
+        if (!hashRow || hashRow.content_hash !== contentHash) {
+          // Hash changed or no DB row — run full scan (may write frontmatter / upsert DB row)
+          preScan = await targetedScan(config, supabaseManager.getClient(), resolved, contentHash, logger);
+        } else {
+          // Hash unchanged — skip DB write, construct preScan from resolved document
+          preScan = {
+            ...resolved,
+            fqcId: hashRow.id,
+            capturedFrontmatter: {
+              fqcId: hashRow.id,
+              created: (parsed.data[FM.CREATED] as string) || new Date().toISOString(),
+              status: (parsed.data[FM.STATUS] as string) || 'active',
+              contentHash,
+            },
+          };
+        }
+
         const relativePath = preScan.relativePath;
         const fqcId = preScan.capturedFrontmatter.fqcId;
         const { data, content } = parsed;
 
         logger.info(`get_document: read ${relativePath}`);
 
-        // Background re-embed (preserved from prior implementation)
-        if (fqcId) {
+        // Background re-embed when hash is stale (only reached when targetedScan ran above)
+        if (fqcId && (!hashRow || hashRow.content_hash !== contentHash)) {
           const docTitle = typeof data[FM.TITLE] === 'string' ? (data[FM.TITLE] as string) : relativePath;
           const now = new Date().toISOString();
-          const { data: row } = await supabaseManager
-            .getClient()
-            .from('fqc_documents')
-            .select('content_hash')
-            .eq('id', fqcId)
-            .single();
-          if (row && (row).content_hash !== contentHash) {
-            logger.debug(`get_document: stale hash detected for ${relativePath} — queuing background re-embed`);
-            void (
-              supabaseManager.getClient()
+          logger.debug(`get_document: stale hash detected for ${relativePath} — queuing background re-embed`);
+          void (async () => {
+            try {
+              const { error: hashErr } = await supabaseManager.getClient()
                 .from('fqc_documents')
                 .update({ content_hash: contentHash, updated_at: now })
-                .eq('id', fqcId) as unknown as Promise<unknown>
-            )
-              .then(() => embeddingProvider.embed(`${docTitle}\n\n${content}`))
-              .then((vector) =>
-                supabaseManager.getClient()
-                  .from('fqc_documents')
-                  .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                  .eq('id', fqcId)
-              )
-              .catch((err) =>
-                logger.warn(
-                  `get_document: background re-embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
-                )
-              );
-          }
+                .eq('id', fqcId);
+              if (hashErr) {
+                logger.warn(`get_document: hash update failed for ${relativePath}: ${hashErr.message}`);
+                return; // don't embed if hash write failed
+              }
+              const vector = await embeddingProvider.embed(`${docTitle}\n\n${content}`);
+              await supabaseManager.getClient()
+                .from('fqc_documents')
+                .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
+                .eq('id', fqcId);
+            } catch (err) {
+              logger.warn(`get_document: background re-embed failed: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          })();
         }
 
         const envelope = buildMetadataEnvelope(identifiers, preScan, data, content);
