@@ -1,0 +1,81 @@
+name: llm_discovery_list
+description: >
+  call_model with resolver: list_models returns a JSON object {models: [...]} where each
+  configured model has name, provider, model_id, input_cost_per_million, and
+  output_cost_per_million. call_model with resolver: list_purposes returns {purposes: [...]}
+  with cost rates from the primary model. Both resolvers can be called WITHOUT name and
+  WITHOUT messages — DISC-04 makes those optional for discovery. Covers DISC-01, DISC-02,
+  DISC-04 end-to-end through the MCP transport layer.
+coverage: [IL-15, IL-16, IL-17, IL-18]
+deps: [llm]
+
+steps:
+  - label: "list_models returns a JSON object with the models key (DISC-01) — IL-15"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"models"'
+
+  - label: "list_models response includes provider field on each model entry (DISC-01 field mapping) — IL-15"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"provider"'
+
+  - label: "list_models response includes model_id field (config 'model' renamed to 'model_id' per locked decision) — IL-16"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"model_id"'
+
+  - label: "list_models response includes the configured 'fast' model alias — IL-16"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"fast"'
+
+  - label: "list_models response includes input_cost_per_million field (DISC-01) — IL-16"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"input_cost_per_million"'
+
+  - label: "list_models response includes output_cost_per_million field (DISC-01) — IL-16"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"output_cost_per_million"'
+
+  - label: "list_purposes returns a JSON object with the purposes key (DISC-02) — IL-17"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"purposes"'
+
+  - label: "list_purposes response includes input_cost_per_million from primary model (DISC-02 cost lookup) — IL-17"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"input_cost_per_million"'
+
+  - label: "list_models can be called with NO name and NO messages without error (DISC-04) — IL-18"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_not_contains: '"isError":true'
+
+  - label: "list_purposes can be called with NO name and NO messages without error (DISC-04) — IL-18"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_not_contains: '"isError":true'
