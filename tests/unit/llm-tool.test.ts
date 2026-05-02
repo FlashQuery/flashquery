@@ -451,3 +451,226 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
     );
   });
 });
+
+// ─── U-DISC-01..13: discovery resolvers + body guard ────────────────────────
+
+const DISC_LLM_CONFIG = {
+  providers: [
+    { name: 'openai', type: 'openai-compatible' as const, endpoint: 'https://api.openai.com', apiKey: 'sk-test' },
+  ],
+  models: [
+    {
+      name: 'fast',
+      providerName: 'openai',
+      model: 'gpt-4o-mini',
+      type: 'language' as const,
+      costPerMillion: { input: 0.15, output: 0.6 },
+      description: 'Fast small model',
+      contextWindow: 131072,
+      capabilities: ['tools', 'vision'],
+    },
+    {
+      name: 'bare',
+      providerName: 'openai',
+      model: 'gpt-4o',
+      type: 'language' as const,
+      costPerMillion: { input: 2.5, output: 10.0 },
+      // description/contextWindow/capabilities all absent
+    },
+    {
+      name: 'empty-caps',
+      providerName: 'openai',
+      model: 'gpt-3.5-turbo',
+      type: 'language' as const,
+      costPerMillion: { input: 0.5, output: 1.5 },
+      capabilities: [],
+    },
+  ],
+  purposes: [
+    {
+      name: 'general',
+      description: 'General-purpose chat',
+      models: ['fast', 'bare'],
+      defaults: { temperature: 0.7 },
+    },
+    {
+      name: 'minimal',
+      description: 'Minimal purpose with no defaults',
+      models: ['bare'],
+      // defaults absent
+    },
+  ],
+};
+
+const DISC_CONFIG = {
+  instance: { id: 'test-instance-disc', name: 'Test', vault: { path: '/tmp/vault', markdownExtensions: ['.md'] } },
+  llm: DISC_LLM_CONFIG,
+} as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+
+function makeNonNullClient(): LlmClient {
+  return {
+    complete: vi.fn(),
+    completeByPurpose: vi.fn(),
+    getModelForPurpose: vi.fn(),
+  } as unknown as LlmClient;
+}
+
+describe('call_model handler — discovery resolvers (U-DISC)', () => {
+  beforeEach(() => {
+    _llmClientValue = makeNonNullClient();
+  });
+
+  it('[U-DISC-01] resolver=list_models returns {models: [...]} with required fields per model', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_models' });
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    expect(Array.isArray(body.models)).toBe(true);
+    expect(body.models).toHaveLength(3);
+    expect(body.models[0]).toMatchObject({
+      name: 'fast',
+      provider: 'openai',
+      model_id: 'gpt-4o-mini',
+      input_cost_per_million: 0.15,
+      output_cost_per_million: 0.6,
+    });
+  });
+
+  it('[U-DISC-02] list_models includes declared optional fields description/context_window/capabilities verbatim', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_models' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fast = body.models.find((m: any) => m.name === 'fast');
+    expect(fast.description).toBe('Fast small model');
+    expect(fast.context_window).toBe(131072);
+    expect(fast.capabilities).toEqual(['tools', 'vision']);
+  });
+
+  it('[U-DISC-03] list_models OMITS optional fields when undeclared (the keys are absent, not present-with-undefined)', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_models' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const bare = body.models.find((m: any) => m.name === 'bare');
+    expect('description' in bare).toBe(false);
+    expect('context_window' in bare).toBe(false);
+    expect('capabilities' in bare).toBe(false);
+  });
+
+  it('[U-DISC-04] list_models PRESERVES capabilities: [] (declared empty array, not omitted)', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_models' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const empty = body.models.find((m: any) => m.name === 'empty-caps');
+    expect('capabilities' in empty).toBe(true);
+    expect(empty.capabilities).toEqual([]);
+  });
+
+  it('[U-DISC-05] list_purposes returns {purposes: [...]} with cost rates from the primary model (models[0])', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_purposes' });
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    expect(body.purposes).toHaveLength(2);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const general = body.purposes.find((p: any) => p.name === 'general');
+    expect(general).toMatchObject({
+      name: 'general',
+      description: 'General-purpose chat',
+      models: ['fast', 'bare'],
+      input_cost_per_million: 0.15,   // from primary model 'fast'
+      output_cost_per_million: 0.6,   // from primary model 'fast'
+    });
+  });
+
+  it('[U-DISC-06] list_purposes includes defaults only when declared in config', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_purposes' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const general = body.purposes.find((p: any) => p.name === 'general');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const minimal = body.purposes.find((p: any) => p.name === 'minimal');
+    expect(general.defaults).toEqual({ temperature: 0.7 });
+    expect('defaults' in minimal).toBe(false);
+  });
+
+  it('[U-DISC-07] search with parameters.query case-insensitive matches model name (substring)', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'search', parameters: { query: 'FAST' } });
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    expect(body.query).toBe('FAST');
+    expect(body.results).toHaveProperty('purposes');
+    expect(body.results).toHaveProperty('models');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect(body.results.models.find((m: any) => m.name === 'fast')).toBeTruthy();
+  });
+
+  it('[U-DISC-08] search with no purpose match returns purposes: [] (empty array, not omitted)', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    // 'fast' is in model name 'fast' and model description 'Fast small model'
+    // but does NOT appear in any purpose name or description
+    const res = await handler({ resolver: 'search', parameters: { query: 'fast' } });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    expect(Array.isArray(body.results.purposes)).toBe(true);
+    expect(body.results.purposes).toEqual([]);
+    expect(Array.isArray(body.results.models)).toBe(true);
+    expect(body.results.models.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('[U-DISC-09] search with no parameters.query returns isError with the documented message', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'search' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe('search requires parameters.query (non-empty string)');
+  });
+
+  it('[U-DISC-10] search with parameters.query: "" (empty string) returns isError', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'search', parameters: { query: '' } });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe('search requires parameters.query (non-empty string)');
+  });
+
+  it('[U-DISC-11] resolver=model with missing name returns isError "name is required..."', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'model', messages: [{ role: 'user', content: 'hi' }] });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe("name is required for resolver='model' or resolver='purpose'");
+  });
+
+  it('[U-DISC-12] resolver=purpose with missing messages returns isError "messages is required..."', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'purpose', name: 'general' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe("messages is required (non-empty array) for resolver='model' or resolver='purpose'");
+  });
+
+  it('[U-DISC-13] resolver=list_models WITHOUT name and WITHOUT messages succeeds (DISC-04)', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_models' });
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    expect(Array.isArray(body.models)).toBe(true);
+  });
+
+  it('[U-DISC-13b] resolver=list_models with NullLlmClient inherits the unconfigured guard (DISC-06)', async () => {
+    _llmClientValue = new NullLlmClient();
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_models' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe('LLM is not configured. Add an llm: section to flashquery.yml to use this tool.');
+  });
+});
