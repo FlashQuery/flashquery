@@ -639,9 +639,145 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
     const envelope = buildMetadataEnvelope(identifier, preScan, data, content);
 
-    // TODO(Task 2): follow_ref branch
+    // ── follow_ref branch (FREF-01, FREF-02, FREF-03) ──────────────────────────
+    if (followRef) {
+      // ── Pre-resolution: traverse the source frontmatter ──────────────────────
+      const traversal = traverseFollowRef(data, followRef);
+      if (traversal.kind === 'path_not_found') {
+        throw new DocumentRequestError({
+          error: 'follow_ref_path_not_found',
+          message: `Reference path '${followRef}' not found in frontmatter of '${identifier}' (failed at segment '${traversal.failed_at}')`,
+          identifier,
+          reference: followRef,
+          traversal: {
+            resolved: traversal.resolved,
+            failed_at: traversal.failed_at,
+            available_keys: traversal.available_keys,
+          },
+        });
+      }
+      if (traversal.kind === 'invalid_type') {
+        throw new DocumentRequestError({
+          error: 'follow_ref_invalid_type',
+          message: `Reference path '${followRef}' resolved to a ${traversal.found_type}, expected a string identifier`,
+          identifier,
+          reference: followRef,
+          found_type: traversal.found_type,
+          found_value_preview: traversal.found_value_preview,
+        });
+      }
+      // traversal.kind === 'value' — resolve the target identifier
+      const targetIdentifier: string = traversal.value;
+      let targetResolved: Awaited<ReturnType<typeof resolveDocumentIdentifier>>;
+      try {
+        targetResolved = await resolveDocumentIdentifier(cfg, sm.getClient(), targetIdentifier, log);
+      } catch (resolveErr) {
+        const m = resolveErr instanceof Error ? resolveErr.message : String(resolveErr);
+        throw new DocumentRequestError({
+          error: 'follow_ref_target_not_found',
+          message: `follow_ref target '${targetIdentifier}' (from ${followRef} in '${identifier}') not found in vault: ${m}`,
+          identifier,
+          reference: followRef,
+          resolved_value: targetIdentifier,
+          resolution_method: 'unknown', // Per CONTEXT.md Deferred Ideas: hardcoded acceptable in v1
+        });
+      }
 
-    // ── No follow_ref: source-content branch ───────────────────────────────────
+      // ── Read target (READ-ONLY: do NOT call targetedScan — see Pitfall 1) ────
+      const targetRaw = await readFile(targetResolved.absPath, 'utf-8');
+      const targetParsed = matter(targetRaw);
+      const targetData = targetParsed.data;
+      const targetContent = targetParsed.content;
+      const targetFqId = typeof targetData[FM.ID] === 'string' ? (targetData[FM.ID] as string) : null;
+      const targetModified = typeof targetData[FM.UPDATED] === 'string'
+        ? (targetData[FM.UPDATED] as string)
+        : new Date().toISOString();
+
+      // ── Build followed_ref base envelope ─────────────────────────────────────
+      const followedRef: Record<string, unknown> = {
+        reference: followRef,
+        resolved_to: targetResolved.relativePath,
+        resolved_fq_id: targetFqId, // explicitly null when missing — never omit (CONTEXT.md)
+        modified: targetModified,
+        size: { chars: targetContent.length },
+      };
+
+      // ── Apply include to TARGET (FREF-02) ────────────────────────────────────
+      if (effectiveInclude.includes('body')) {
+        if (sectionsList.length === 1) {
+          try {
+            const extracted = extractSection(targetContent, sectionsList[0], effectiveIncludeNested, occurrence);
+            const allHeadings = extractHeadings(targetContent);
+            const matchedHeading = findHeadingOccurrence(allHeadings, sectionsList[0], occurrence);
+            const matchedText = matchedHeading ? matchedHeading.text : sectionsList[0];
+            followedRef.body = extracted.section;
+            followedRef.extracted_sections = [{ heading: matchedText, chars: extracted.section.length }];
+          } catch (extractErr) {
+            const msg = extractErr instanceof Error ? extractErr.message : String(extractErr);
+            const allHeadings = extractHeadings(targetContent);
+            const availableHeadings = allHeadings.map((h) => h.text);
+            const isOccurrenceErr = msg.toLowerCase().includes('appears') || msg.toLowerCase().includes('occurrence');
+            const reason: 'no_match' | 'insufficient_occurrences' = isOccurrenceErr ? 'insufficient_occurrences' : 'no_match';
+            let foundCount: number | undefined;
+            if (reason === 'insufficient_occurrences') {
+              const m = /appears (\d+) times/.exec(msg);
+              if (m) foundCount = parseInt(m[1], 10);
+            }
+            // POST-RESOLUTION error: nest under followed_ref (FREF-03)
+            throw new DocumentRequestError({
+              error: 'section_not_found',
+              message: reason === 'no_match'
+                ? `No heading matching '${sectionsList[0]}' found in follow_ref target '${targetResolved.relativePath}'`
+                : `Heading '${sectionsList[0]}' has fewer occurrences than requested in follow_ref target '${targetResolved.relativePath}'`,
+              identifier, // SOURCE identifier at top level
+              followed_ref: {
+                reference: followRef,
+                resolved_to: targetResolved.relativePath,
+                resolved_fq_id: targetFqId,
+                missing_sections: [
+                  reason === 'insufficient_occurrences'
+                    ? { query: sectionsList[0], reason, requested_count: occurrence, ...(foundCount !== undefined ? { found_count: foundCount } : {}) }
+                    : { query: sectionsList[0], reason },
+                ],
+                available_headings: availableHeadings,
+              },
+            });
+          }
+        } else if (sectionsList.length > 1) {
+          const result = extractMultipleSections(targetContent, sectionsList, { includeNested: effectiveIncludeNested });
+          if (result.errors.length > 0) {
+            const allHeadings = extractHeadings(targetContent);
+            throw new DocumentRequestError({
+              error: 'section_not_found',
+              message: `Requested sections could not be fully resolved in follow_ref target '${targetResolved.relativePath}': ${result.errors.length} ${result.errors.length === 1 ? 'failure' : 'failures'}`,
+              identifier,
+              followed_ref: {
+                reference: followRef,
+                resolved_to: targetResolved.relativePath,
+                resolved_fq_id: targetFqId,
+                missing_sections: result.errors,
+                available_headings: allHeadings.map((h) => h.text),
+              },
+            });
+          }
+          followedRef.body = assembleMultiSectionBody(result.matches);
+          followedRef.extracted_sections = buildExtractedSections(result.matches);
+        } else {
+          followedRef.body = targetContent;
+        }
+      }
+      if (effectiveInclude.includes('frontmatter')) {
+        followedRef.frontmatter = targetData;
+      }
+      if (effectiveInclude.includes('headings')) {
+        followedRef.headings = buildHeadingEntries(targetContent, effectiveMaxDepth);
+      }
+
+      // ── Return source envelope + followed_ref nested; NO top-level body ───────
+      return { ...envelope, followed_ref: followedRef };
+    }
+
+    // ── No follow_ref: source-content branch ─────────────────────────────────────
     let responseBody: string | undefined;
     let extractedSections: Array<{ heading: string; chars: number }> | undefined;
     let frontmatterField: Record<string, unknown> | undefined;

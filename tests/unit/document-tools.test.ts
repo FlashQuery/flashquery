@@ -2153,3 +2153,233 @@ describe('search_documents tag_match (TAGMATCH-01, TAGMATCH-06)', () => {
     }));
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests: get_document follow_ref handler branch (FREF-01, FREF-03)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('get_document follow_ref handler branch (FREF-01, FREF-03)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default Supabase mock: no existing row (forces targetedScan path)
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+        update: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            then: vi.fn().mockResolvedValue({ error: null }),
+          }),
+        }),
+      }),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
+    // Default targetedScan mock: returns a valid preScan object for the source doc
+    vi.mocked(resolveDocumentModule.targetedScan).mockImplementation(
+      async (_config: unknown, _supabase: unknown, resolved: unknown) => ({
+        ...(resolved as Record<string, unknown>),
+        capturedFrontmatter: {
+          fqcId: 'some-uuid',
+          created: new Date().toISOString(),
+          status: 'active',
+          contentHash: 'mock-sha256-hash-abc123',
+        },
+        stalePathNote: undefined,
+      })
+    );
+  });
+
+  it('[U-FR-08] follow_ref success: source envelope + nested followed_ref object; no top-level body', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    // Source document has projections.summary frontmatter pointing to the target
+    const sourceRaw = [
+      '---',
+      'fq_title: Source Document',
+      'fq_id: source-uuid-1234',
+      'fq_updated: 2026-05-01T00:00:00.000Z',
+      'projections:',
+      '  summary: Meetings/.projections/standup-s12-summary.md',
+      '---',
+      '# Source Body',
+      'This is the source document.',
+    ].join('\n');
+
+    // Target document — plain markdown, no fq_id in frontmatter
+    const targetRaw = [
+      '---',
+      'fq_title: Target Summary',
+      'fq_updated: 2026-05-01T12:00:00.000Z',
+      '---',
+      '# Summary',
+      'This is the target document content.',
+    ].join('\n');
+
+    // First resolveDocumentIdentifier call (source), second call (target)
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/source.md',
+        relativePath: 'source.md',
+        fqcId: 'source-uuid-1234',
+        resolvedVia: 'path' as const,
+      })
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Meetings/.projections/standup-s12-summary.md',
+        relativePath: 'Meetings/.projections/standup-s12-summary.md',
+        fqcId: null,
+        resolvedVia: 'path' as const,
+      });
+
+    // First readFile call (source), second call (target)
+    vi.mocked(fsPromises.readFile)
+      .mockResolvedValueOnce(sourceRaw as unknown as Buffer)
+      .mockResolvedValueOnce(targetRaw as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    const result = await handler({
+      identifiers: 'source.md',
+      follow_ref: 'projections.summary',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    const env = JSON.parse(result.content[0].text);
+
+    // Source envelope fields should be present
+    expect(env.identifier).toBe('source.md');
+    expect(env.title).toBe('Source Document');
+    expect(env.path).toBe('source.md');
+
+    // followed_ref must be present and contain target details
+    expect(env.followed_ref).toBeDefined();
+    expect(env.followed_ref.reference).toBe('projections.summary');
+    expect(env.followed_ref.resolved_to).toBe('Meetings/.projections/standup-s12-summary.md');
+    expect(env.followed_ref.size).toBeDefined();
+    expect(env.followed_ref.size.chars).toBeGreaterThan(0);
+
+    // No top-level body field when follow_ref is in use (body lives inside followed_ref)
+    expect(env.body).toBeUndefined();
+    // Body lives inside followed_ref
+    expect(env.followed_ref.body).toBeDefined();
+    expect(env.followed_ref.body).toContain('target document content');
+  });
+
+  it('[U-FR-09] follow_ref_path_not_found is flat (pre-resolution): no followed_ref key in error envelope', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    // Source document has NO projections key in frontmatter
+    const sourceRaw = [
+      '---',
+      'fq_title: Simple Document',
+      'fq_id: simple-uuid-5678',
+      'type: meeting-notes',
+      '---',
+      '# Simple Body',
+      'No projections frontmatter here.',
+    ].join('\n');
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier).mockResolvedValueOnce({
+      absPath: '/tmp/test-vault/simple.md',
+      relativePath: 'simple.md',
+      fqcId: 'simple-uuid-5678',
+      resolvedVia: 'path' as const,
+    });
+
+    vi.mocked(fsPromises.readFile).mockResolvedValueOnce(sourceRaw as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    const result = await handler({
+      identifiers: 'simple.md',
+      follow_ref: 'projections.summary',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    // Pre-resolution error: isError must be true
+    expect(result.isError).toBe(true);
+    const env = JSON.parse(result.content[0].text);
+
+    // Error envelope is flat (no followed_ref key)
+    expect(env.error).toBe('follow_ref_path_not_found');
+    expect(env.identifier).toBe('simple.md');
+    expect(env.reference).toBe('projections.summary');
+    expect(env.traversal).toBeDefined();
+    expect(env.traversal.failed_at).toBe('projections');
+
+    // CRITICAL: no followed_ref key — pre-resolution errors stay at top level
+    expect(env.followed_ref).toBeUndefined();
+  });
+
+  it('[U-FR-10] section_not_found on target nests under followed_ref (post-resolution)', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    // Source document with projections.summary pointing to a target
+    const sourceRaw = [
+      '---',
+      'fq_title: Source With Ref',
+      'fq_id: source-ref-uuid',
+      'projections:',
+      '  summary: target-doc.md',
+      '---',
+      '# Source Body',
+    ].join('\n');
+
+    // Target document — has no NonExistentSection heading
+    const targetRaw = [
+      '---',
+      'fq_title: Target Doc',
+      '---',
+      '# Introduction',
+      'Target content with only an Introduction section.',
+    ].join('\n');
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/source-with-ref.md',
+        relativePath: 'source-with-ref.md',
+        fqcId: 'source-ref-uuid',
+        resolvedVia: 'path' as const,
+      })
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/target-doc.md',
+        relativePath: 'target-doc.md',
+        fqcId: null,
+        resolvedVia: 'path' as const,
+      });
+
+    vi.mocked(fsPromises.readFile)
+      .mockResolvedValueOnce(sourceRaw as unknown as Buffer)
+      .mockResolvedValueOnce(targetRaw as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    const result = await handler({
+      identifiers: 'source-with-ref.md',
+      follow_ref: 'projections.summary',
+      sections: ['NonExistentSection'],
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    // Post-resolution error: isError must be true
+    expect(result.isError).toBe(true);
+    const env = JSON.parse(result.content[0].text);
+
+    // Top-level error fields
+    expect(env.error).toBe('section_not_found');
+    expect(env.identifier).toBe('source-with-ref.md'); // SOURCE identifier at top level
+
+    // CRITICAL: nested under followed_ref (post-resolution nesting)
+    expect(env.followed_ref).toBeDefined();
+    expect(env.followed_ref.reference).toBe('projections.summary');
+    expect(env.followed_ref.resolved_to).toBe('target-doc.md');
+    expect(env.followed_ref.missing_sections).toBeDefined();
+    expect(env.followed_ref.missing_sections.length).toBeGreaterThan(0);
+
+    // No top-level missing_sections (only nested under followed_ref)
+    expect(env.missing_sections).toBeUndefined();
+  });
+});
