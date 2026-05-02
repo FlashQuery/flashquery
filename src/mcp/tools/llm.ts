@@ -26,6 +26,17 @@ import { supabaseManager } from '../../storage/supabase.js';
 import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmCompletionResult } from '../../llm/client.js';
 import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
+import { embeddingProvider } from '../../embedding/provider.js';
+import {
+  parseReferences,
+  resolveReferences,
+  hydrateMessages,
+  buildInjectedReferences,
+  computePromptChars,
+  type InjectionMetadata,
+  type FailedRef,
+  type ResolvedRef,
+} from '../../llm/reference-resolver.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal types — handler-local response envelope shape.
@@ -49,6 +60,8 @@ interface CallModelMetadata {
   latency_ms: number;
   trace_id?: string;
   trace_cumulative?: TraceCumulative;
+  injected_references?: Array<{ ref: string; chars: number; resolved_to?: string }>;
+  prompt_chars?: number;
 }
 
 interface CallModelEnvelope {
@@ -121,6 +134,45 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         };
       }
 
+      // Step 1.5: Reference resolution (REFS-01 through REFS-07)
+      // Scans message content for {{ref:...}} and {{id:...}} placeholders, resolves each
+      // via resolveAndBuildDocument (reused from get_document), and replaces inline before
+      // dispatching to the LLM. Fail-fast: if any reference fails, no LLM call is made.
+      // No-op when no patterns present (REFS-07 backward compat).
+      const parsed = parseReferences(params.messages);
+      if ('error' in parsed) {
+        // REFS-02: # and -> mutually exclusive — parse error → immediate fail (no LLM call)
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({
+            error: 'reference_resolution_failed',
+            failed_references: [{ ref: parsed.ref, reason: parsed.reason }],
+          }) }],
+          isError: true,
+        };
+      }
+      let hydratedMessages: typeof params.messages = params.messages;
+      let injectionMetadata: InjectionMetadata | undefined;
+      if (parsed.length > 0) {
+        const resolved = await resolveReferences(parsed, config, supabaseManager, embeddingProvider, logger);
+        const failures = resolved.filter((r): r is FailedRef => 'reason' in r && !('content' in r));
+        if (failures.length > 0) {
+          // REFS-06: any failure → return reference_resolution_failed; NO LLM call made
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify({
+              error: 'reference_resolution_failed',
+              failed_references: failures.map((f) => ({ ref: f.ref, reason: f.reason })),
+            }) }],
+            isError: true,
+          };
+        }
+        const resolvedRefs = resolved as ResolvedRef[];
+        hydratedMessages = hydrateMessages(params.messages, resolvedRefs) as typeof params.messages;
+        injectionMetadata = {
+          injectedReferences: buildInjectedReferences(resolvedRefs),
+          promptChars: computePromptChars(hydratedMessages),
+        };
+      }
+
       // Step 1b: trace pre-snapshot (D-11 fix) — query existing trace rows BEFORE
       // dispatching to the LLM. This ensures the current call's fire-and-forget
       // recordLlmUsage row (written by client.ts after the HTTP call returns) cannot
@@ -160,7 +212,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         if (params.resolver === 'model') {
           result = await client.complete(
             params.name,
-            params.messages,
+            hydratedMessages,
             params.parameters,
             params.trace_id ?? null
           );
@@ -168,7 +220,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         } else {
           const purposeResult = await client.completeByPurpose(
             params.name,
-            params.messages,
+            hydratedMessages,
             params.parameters,
             params.trace_id ?? null
           );
@@ -285,6 +337,12 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       if (params.trace_id) {
         metadata.trace_id = params.trace_id;
         metadata.trace_cumulative = traceCumulative;
+      }
+
+      // Phase 109 REFS-04, REFS-05: only add when references were resolved (D-02-style conditional pattern)
+      if (injectionMetadata) {
+        metadata.injected_references = injectionMetadata.injectedReferences;
+        metadata.prompt_chars = injectionMetadata.promptChars;
       }
 
       const envelope: CallModelEnvelope = {
