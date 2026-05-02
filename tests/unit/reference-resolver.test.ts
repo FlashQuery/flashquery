@@ -177,7 +177,7 @@ describe('hydrateMessages (REFS-03 partial)', () => {
   it('[U-RR-11] replaces placeholder with resolved content inline', () => {
     const messages = [{ role: 'user', content: 'Body: {{ref:doc.md}} end.' }];
     const resolved: ResolvedRef[] = [
-      { placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', content: 'HELLO', chars: 5, messageIndex: 0 },
+      { kind: 'resolved', placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', content: 'HELLO', chars: 5, messageIndex: 0 },
     ];
     const out = hydrateMessages(messages, resolved);
     expect(out[0].content).toBe('Body: HELLO end.');
@@ -187,7 +187,7 @@ describe('hydrateMessages (REFS-03 partial)', () => {
     const messages = [{ role: 'user', content: '{{ref:doc.md}}' }];
     const original = messages[0].content;
     const resolved: ResolvedRef[] = [
-      { placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', content: 'X', chars: 1, messageIndex: 0 },
+      { kind: 'resolved', placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', content: 'X', chars: 1, messageIndex: 0 },
     ];
     const out = hydrateMessages(messages, resolved);
     expect(messages[0].content).toBe(original);
@@ -200,6 +200,7 @@ describe('hydrateMessages (REFS-03 partial)', () => {
     const messages = [{ role: 'user', content: 'A: {{ref:a.md}} B: {{ref:b.md}}' }];
     const resolved: ResolvedRef[] = [
       {
+        kind: 'resolved',
         placeholder: '{{ref:a.md}}',
         ref: '{{ref:a.md}}',
         content: '[from a.md, contains literal {{ref:b.md}}]',
@@ -207,6 +208,7 @@ describe('hydrateMessages (REFS-03 partial)', () => {
         messageIndex: 0,
       },
       {
+        kind: 'resolved',
         placeholder: '{{ref:b.md}}',
         ref: '{{ref:b.md}}',
         content: '[from b.md]',
@@ -226,8 +228,9 @@ describe('hydrateMessages (REFS-03 partial)', () => {
 describe('buildInjectedReferences (REFS-04)', () => {
   it('[U-RR-14] omits resolved_to when undefined; includes it when set', () => {
     const resolved: ResolvedRef[] = [
-      { placeholder: '{{ref:a.md}}', ref: '{{ref:a.md}}', content: 'X', chars: 1, messageIndex: 0 },
+      { kind: 'resolved', placeholder: '{{ref:a.md}}', ref: '{{ref:a.md}}', content: 'X', chars: 1, messageIndex: 0 },
       {
+        kind: 'resolved',
         placeholder: '{{ref:b.md->p}}',
         ref: '{{ref:b.md->p}}',
         content: 'Y',

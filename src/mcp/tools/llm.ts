@@ -154,7 +154,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       let injectionMetadata: InjectionMetadata | undefined;
       if (parsed.length > 0) {
         const resolved = await resolveReferences(parsed, config, supabaseManager, embeddingProvider, logger);
-        const failures = resolved.filter((r): r is FailedRef => 'reason' in r && !('content' in r));
+        const failures = resolved.filter((r): r is FailedRef => r.kind === 'failed');
         if (failures.length > 0) {
           // REFS-06: any failure → return reference_resolution_failed; NO LLM call made
           return {

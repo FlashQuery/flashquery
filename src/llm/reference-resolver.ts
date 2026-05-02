@@ -36,6 +36,7 @@ export interface ParseRefError {
 }
 
 export interface ResolvedRef {
+  kind: 'resolved';          // discriminant — guards against misclassification as FailedRef
   placeholder: string;       // original full placeholder for hydrateMessages string-replace
   ref: string;               // WITH delimiters (for injected_references[].ref): "{{ref:Research/doc.md#Open Questions}}"
   content: string;           // body text to inject (may be empty string)
@@ -45,6 +46,7 @@ export interface ResolvedRef {
 }
 
 export interface FailedRef {
+  kind: 'failed';            // discriminant — enables reliable type guard without duck-typing
   ref: string;               // WITH delimiters (for failed_references[].ref): "{{ref:missing.md}}"
   reason: string;            // human-readable error from resolveAndBuildDocument
 }
@@ -151,6 +153,7 @@ export async function resolveReferences(
         content = (result.body as string | undefined) ?? '';
       }
       const out: ResolvedRef = {
+        kind: 'resolved',
         placeholder: p.placeholder,
         ref: p.ref,
         content,
@@ -170,7 +173,7 @@ export async function resolveReferences(
       } else {
         reason = String(err);
       }
-      return { ref: p.ref, reason };
+      return { kind: 'failed' as const, ref: p.ref, reason };
     }
   }));
 }

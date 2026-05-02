@@ -316,7 +316,7 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
   it('[U-RR-INT-02] references resolved → handler dispatches with hydrated messages, metadata includes injected_references and prompt_chars', async () => {
     // Arrange
     const parsedRef = { placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', identifierType: 'ref' as const, identifier: 'doc.md', messageIndex: 0 };
-    const resolvedRef = { placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', content: 'BODY', chars: 4, messageIndex: 0 };
+    const resolvedRef = { kind: 'resolved' as const, placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', content: 'BODY', chars: 4, messageIndex: 0 };
     vi.mocked(parseReferences).mockReturnValue([parsedRef]);
     vi.mocked(resolveReferences).mockResolvedValue([resolvedRef]);
     vi.mocked(hydrateMessages).mockReturnValue([{ role: 'user', content: 'BODY rest' }]);
@@ -355,7 +355,7 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
 
   it('[U-RR-INT-03] resolveReferences returns FailedRef → handler returns reference_resolution_failed, no LLM call made (REFS-06)', async () => {
     const parsedRef = { placeholder: '{{ref:missing.md}}', ref: '{{ref:missing.md}}', identifierType: 'ref' as const, identifier: 'missing.md', messageIndex: 0 };
-    const failedRef = { ref: '{{ref:missing.md}}', reason: 'Document not found: missing.md' };
+    const failedRef = { kind: 'failed' as const, ref: '{{ref:missing.md}}', reason: 'Document not found: missing.md' };
     vi.mocked(parseReferences).mockReturnValue([parsedRef]);
     vi.mocked(resolveReferences).mockResolvedValue([failedRef]);
 
@@ -418,7 +418,7 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
 
   it('[U-RR-INT-05] resolver=purpose dispatches via completeByPurpose with hydrated messages', async () => {
     const parsedRef = { placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', identifierType: 'ref' as const, identifier: 'doc.md', messageIndex: 0 };
-    const resolvedRef = { placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', content: 'X', chars: 1, messageIndex: 0 };
+    const resolvedRef = { kind: 'resolved' as const, placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', content: 'X', chars: 1, messageIndex: 0 };
     vi.mocked(parseReferences).mockReturnValue([parsedRef]);
     vi.mocked(resolveReferences).mockResolvedValue([resolvedRef]);
     vi.mocked(hydrateMessages).mockReturnValue([{ role: 'user', content: 'X' }]);
