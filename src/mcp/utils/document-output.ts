@@ -64,6 +64,7 @@ export function resolveTitle(
 ): string {
   const raw = frontmatter[FM.TITLE];
   if (raw !== null && raw !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
     const coerced = typeof raw === 'string' ? raw : String(raw);
     const trimmed = coerced.trim();
     if (trimmed.length > 0) return trimmed;
@@ -278,7 +279,7 @@ export function traverseFollowRef(
         failed_at: seg,
         available_keys:
           typeof current === 'object' && current !== null
-            ? Object.keys(current as object)  // Object.keys already excludes inherited props
+            ? Object.keys(current)  // Object.keys already excludes inherited props
             : [],
       };
     }
@@ -363,9 +364,9 @@ export async function resolveAndBuildDocument(
   } else {
     preScan = {
       ...resolved,
-      fqcId: hashRow.id,
+      fqcId: hashRow.id as string,
       capturedFrontmatter: {
-        fqcId: hashRow.id,
+        fqcId: hashRow.id as string,
         created: (parsed.data[FM.CREATED] as string) || new Date().toISOString(),
         status: (parsed.data[FM.STATUS] as string) || 'active',
         contentHash,

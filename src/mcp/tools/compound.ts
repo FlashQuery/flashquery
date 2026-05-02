@@ -18,8 +18,6 @@ import { vaultManager } from '../../storage/vault.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
   formatKeyValueEntry,
-  shouldShowProgress,
-  progressMessage,
   joinBatchEntries,
   formatEmptyResults,
 } from '../utils/response-formats.js';

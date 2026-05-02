@@ -25,19 +25,10 @@ import {
   progressMessage,
 } from '../utils/response-formats.js';
 import {
-  buildMetadataEnvelope,
-  buildHeadingEntries,
-  buildExtractedSections,
-  assembleMultiSectionBody,
-  buildConsolidatedResponse,
   validateParameterCombinations,
-  traverseFollowRef,
   resolveAndBuildDocument,
   DocumentRequestError,
-  type FollowedRefResult,
 } from '../utils/document-output.js';
-import { extractHeadings } from '../utils/markdown-utils.js';
-import { extractSection, extractMultipleSections, findHeadingOccurrence } from '../utils/markdown-sections.js';
 import { pluginManager, getFolderClaimsMap } from '../../plugins/manager.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 
