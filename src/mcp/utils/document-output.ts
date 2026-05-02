@@ -12,7 +12,7 @@
 
 import path from 'node:path';
 import { FM } from '../../constants/frontmatter-fields.js';
-import { extractHeadings, filterHeadingsByDepth } from './markdown-utils.js';
+import { extractHeadings } from './markdown-utils.js';
 import { computeSectionChars } from './markdown-sections.js';
 
 export interface DocumentEnvelope {
@@ -89,22 +89,17 @@ export function buildHeadingEntries(
   maxDepth: number
 ): Array<{ level: number; text: string; chars: number }> {
   const allHeadings = extractHeadings(content);
-  const filtered = filterHeadingsByDepth(allHeadings, maxDepth);
   // Track occurrence-by-name across the FULL heading list so chars are accurate
-  // even when filterHeadingsByDepth drops some entries.
+  // even when deep headings are dropped by the maxDepth filter.
   const occurrenceByName = new Map<string, number>();
   const result: Array<{ level: number; text: string; chars: number }> = [];
   for (const heading of allHeadings) {
-    const occ = (occurrenceByName.get(heading.text) ?? 0) + 1;
-    occurrenceByName.set(heading.text, occ);
+    const normKey = heading.text.toLowerCase();
+    const occ = (occurrenceByName.get(normKey) ?? 0) + 1;
+    occurrenceByName.set(normKey, occ);
     if (heading.level > maxDepth) continue;
     const chars = computeSectionChars(content, heading.text, true, occ);
     result.push({ level: heading.level, text: heading.text, chars });
-  }
-  // filtered length should equal result length — defensive parity check.
-  if (result.length !== filtered.length) {
-    // Should not happen — both filter on h.level <= maxDepth.
-    // Return result anyway; chars are always populated.
   }
   return result;
 }
