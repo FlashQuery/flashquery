@@ -79,7 +79,7 @@ Core CRUD operations on vault documents via MCP.
 | D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39e | get_document follow_ref + sections + occurrence out of range -> section_not_found with reason insufficient_occurrences, nested under followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | pending Phase 111 |
 | D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 
 ## 2. Document Content Operations
