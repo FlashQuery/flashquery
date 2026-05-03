@@ -1,0 +1,67 @@
+name: llm_discovery_then_call
+description: >
+  Discovery -> call_model round-trip. Verifies that names returned by list_models
+  and list_purposes are usable as `name` in subsequent call_model invocations
+  via resolver=model and resolver=purpose. Covers IL-16 (list_models -> call by
+  model name) and IL-17 (list_purposes -> call by purpose name).
+coverage: [IL-16, IL-17]
+deps: [llm]
+
+steps:
+  - label: "IL-16 step 1: list_models returns the configured 'fast' model in models[]"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"fast"'
+
+  - label: "IL-16 step 2: call_model with resolver=model and name=fast succeeds (returns no isError)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "Reply with the single word: OK"
+      expect_not_contains: '"isError":true'
+
+  - label: "IL-16 step 3: call_model response includes resolved_model_name=fast (round-trip integrity)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "Reply OK"
+      expect_contains: '"resolved_model_name"'
+
+  - label: "IL-17 step 1: list_purposes returns the configured 'general' purpose in purposes[]"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"general"'
+
+  - label: "IL-17 step 2: call_model with resolver=purpose and name=general succeeds"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply OK"
+      expect_not_contains: '"isError":true'
+
+  - label: "IL-17 step 3: call_model response via purpose includes resolved_model_name (round-trip integrity)"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply OK"
+      expect_contains: '"resolved_model_name"'
