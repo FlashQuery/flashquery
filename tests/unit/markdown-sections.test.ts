@@ -3,6 +3,7 @@ import {
   extractSection,
   findHeadingOccurrence,
   extractMultipleSections,
+  SectionExtractError,
   type MultiSectionResult,
 } from '../../src/mcp/utils/markdown-sections.js';
 import { extractHeadings } from '../../src/mcp/utils/markdown-utils.js';
@@ -153,9 +154,22 @@ describe('U-06 single-section no match', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('U-07 occurrence out of range', () => {
-  it('[U-07] extractSection throws when occurrence exceeds total headings with that name', () => {
-    // Content has only 2 "Action Items" headings; requesting occurrence=3 should throw
-    expect(() => extractSection(MULTI_SECTION_FIXTURE, 'Action Items', true, 3)).toThrow();
+  it('[U-07] extractSection throws SectionExtractError(kind="occurrence_out_of_range") on overflow', () => {
+    // Content has only 2 "Action Items" headings; requesting occurrence=3 should throw a typed
+    // SectionExtractError so the wrapper in document-output.ts can emit the spec-correct
+    // occurrence_out_of_range error code (verification report Correction 1).
+    let thrown: unknown = null;
+    try {
+      extractSection(MULTI_SECTION_FIXTURE, 'Action Items', true, 3);
+    } catch (e) {
+      thrown = e;
+    }
+    expect(thrown).not.toBeNull();
+    expect(thrown).toBeInstanceOf(SectionExtractError);
+    const typed = thrown as SectionExtractError;
+    expect(typed.kind).toBe('occurrence_out_of_range');
+    expect(typed.matched.length).toBe(2);
+    expect(typed.requestedOccurrence).toBe(3);
   });
 });
 

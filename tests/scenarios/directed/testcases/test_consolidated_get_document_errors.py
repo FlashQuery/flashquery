@@ -227,13 +227,30 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 env = json.loads(d31e_result.text)
                 missing = env.get("missing_sections", [])
                 foo_entry = next((m for m in missing if m.get("query") == "Foo"), None)
-                ai_insufficient = next((m for m in missing if m.get("reason") == "insufficient_occurrences"), None)
+                ai_insufficient = next(
+                    (m for m in missing if m.get("query") == "Action Items"
+                     and m.get("reason") == "insufficient_occurrences"),
+                    None,
+                )
+                available = env.get("available_headings")
                 checks = {
                     "error == section_not_found": env.get("error") == "section_not_found",
-                    "missing_sections present": len(missing) >= 1,
-                    "Foo entry with no_match": foo_entry is not None and foo_entry.get("reason") == "no_match",
-                    "Action Items insufficient_occurrences entry": ai_insufficient is not None,
-                    "available_headings present": bool(env.get("available_headings")),
+                    # OQ #12 / Pitfall 5: aggregate per-query — exactly 2 entries (Foo + Action Items)
+                    "missing_sections has exactly 2 entries": len(missing) == 2,
+                    "Foo entry has reason no_match":
+                        foo_entry is not None and foo_entry.get("reason") == "no_match",
+                    "Foo entry has no requested_count":
+                        foo_entry is not None and "requested_count" not in foo_entry,
+                    "Foo entry has no found_count":
+                        foo_entry is not None and "found_count" not in foo_entry,
+                    "Action Items entry has insufficient_occurrences": ai_insufficient is not None,
+                    "Action Items entry requested_count == 3":
+                        ai_insufficient is not None and ai_insufficient.get("requested_count") == 3,
+                    "Action Items entry found_count == 2":
+                        ai_insufficient is not None and ai_insufficient.get("found_count") == 2,
+                    "available_headings is non-empty list":
+                        isinstance(available, list) and len(available) > 0,
+                    "identifier present": "identifier" in env,
                 }
                 d31e_passed = all(checks.values())
                 if not d31e_passed:
@@ -359,19 +376,22 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not o10_result.ok:
             try:
                 env = json.loads(o10_result.text)
-                missing = env.get("missing_sections", [])
-                first_missing = missing[0] if missing else {}
+                matched = env.get("matched_headings", [])
                 checks = {
-                    "error == section_not_found": env.get("error") == "section_not_found",
-                    "missing_sections present": len(missing) >= 1,
-                    "reason == insufficient_occurrences": first_missing.get("reason") == "insufficient_occurrences",
-                    "requested_count == 5": first_missing.get("requested_count") == 5,
-                    "found_count == 2": first_missing.get("found_count") == 2,
+                    "error == occurrence_out_of_range": env.get("error") == "occurrence_out_of_range",
+                    "query == 'Action Items'": env.get("query") == "Action Items",
+                    "matches_found == 2": env.get("matches_found") == 2,
+                    "matched_headings is list of 2": isinstance(matched, list) and len(matched) == 2,
+                    "matched_headings includes '3. Action Items'": any("3. Action Items" in h for h in matched),
+                    "matched_headings includes '4. Action Items'": any("4. Action Items" in h for h in matched),
+                    "requested_occurrence == 5": env.get("requested_occurrence") == 5,
+                    "no missing_sections key": "missing_sections" not in env,
+                    "identifier present": "identifier" in env,
                 }
                 o10_passed = all(checks.values())
                 if not o10_passed:
                     failed = [k for k, v in checks.items() if not v]
-                    o10_detail = f"Failed: {', '.join(failed)}. first_missing={first_missing!r}"
+                    o10_detail = f"Failed: {', '.join(failed)}. env={env!r}"
             except Exception as e:
                 o10_detail = f"JSON parse error: {e}. raw={o10_result.text[:200]}"
         else:

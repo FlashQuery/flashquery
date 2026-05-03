@@ -541,8 +541,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     actual_title = env.get("title", "")
                     expected_basename = Path(path_no_fq_title).stem
                     checks = {
-                        "title equals file basename": actual_title == expected_basename,
+                        "title is string": isinstance(actual_title, str),
+                        f"title == basename {expected_basename!r} (OQ #13)":
+                            actual_title == expected_basename,
                         "title is non-empty": bool(actual_title.strip()),
+                        "title does NOT contain folder separator": "/" not in actual_title,
+                        "title does NOT contain .md extension": not actual_title.endswith(".md"),
+                        "title does NOT include _test prefix": "_test" not in actual_title,
                     }
                     d47_passed = all(checks.values())
                     if not d47_passed:
