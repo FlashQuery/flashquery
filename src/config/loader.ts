@@ -85,6 +85,9 @@ const ProviderSchema = z
     type: z.enum(['openai-compatible', 'ollama']),
     endpoint: z.string().url('endpoint must be a valid URL'),
     api_key: z.string().optional(),
+    // DISC-01 / Verification Correction 3: optional flag surfaced in list_models discovery.
+    // Auto-derived from `type: ollama` in the response layer when not explicitly declared.
+    local: z.boolean().optional(),
   })
   .strip();
 
@@ -186,7 +189,7 @@ export interface FlashQueryConfig {
   mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
   locking: { enabled: boolean; ttlSeconds: number };
   llm?: {
-    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string }>;
+    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean }>;
     models: Array<{
       name: string;
       providerName: string;
@@ -334,7 +337,7 @@ function formatZodErrors(issues: ZodIssue[]): string {
 // LLM config normalization & validation (v3.0)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type RawLlmProvider = { name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; api_key?: string };
+type RawLlmProvider = { name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; api_key?: string; local?: boolean };
 type RawLlmModel = {
   name: string;
   provider_name: string;
