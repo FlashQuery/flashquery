@@ -250,4 +250,25 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     // OPENAI_API_KEY must still be present (D-10 — not regressed)
     expect(content).toMatch(/^OPENAI_API_KEY=/m);
   });
+
+  it('[DISC-05] flashquery.example.yml shows optional discovery fields on model entries and local on commented Ollama provider', () => {
+    // Correction 4: flashquery.example.yml must annotate the new optional discovery fields
+    // so users know they exist when copying the template (DISC-05, dev plan §6.4.1).
+    const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
+    const content = readFileSync(examplePath, 'utf-8');
+
+    // model entries must show context_window, capabilities, and description fields
+    expect(content).toMatch(/context_window:/);
+    expect(content).toMatch(/capabilities:/);
+    // description: field on at least one model entry
+    // (purposes already have description:, so we check the models section specifically)
+    const modelsSection = content.slice(content.indexOf('\n  models:'));
+    expect(modelsSection).toMatch(/description:/);
+
+    // The commented-out Ollama provider block must include local: true
+    expect(content).toMatch(/local:\s*true/);
+
+    // Comment explaining these fields are surfaced via list_models discovery
+    expect(content).toMatch(/list_models/);
+  });
 });
