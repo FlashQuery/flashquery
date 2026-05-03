@@ -87,6 +87,12 @@ const ProviderSchema = z
     api_key: z.string().optional(),
     // DISC-01 / Verification Correction 3: optional flag surfaced in list_models discovery.
     // Auto-derived from `type: ollama` in the response layer when not explicitly declared.
+    // NOTE: this is a *provider-level* field (not model-level). As of 2026-05-03 it is read
+    // from YAML and emitted only by the `list_models` discovery projection in
+    // src/mcp/tools/llm.ts — it does NOT influence routing, cost computation, recursion,
+    // fallback chains, or any other behavior. It is purely caller-facing metadata for
+    // external LLMs doing routing decisions. If you add a behavioral use of this flag,
+    // update this note and src/mcp/tools/llm.ts:165 accordingly.
     local: z.boolean().optional(),
   })
   .strip();

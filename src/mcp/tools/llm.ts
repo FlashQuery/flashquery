@@ -164,6 +164,12 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         // Optional fields use !== undefined (NOT truthiness) so capabilities: [] is preserved.
         // `local` is auto-derived: explicit provider.local: true overrides; otherwise type === 'ollama'
         // implies local: true; non-Ollama providers without explicit declaration OMIT the key.
+        // NOTE: `provider.local` is a *provider-level* config field (declared on the provider entry
+        // in flashquery.yml, NOT on the model entry). As of 2026-05-03 it is read here and ONLY
+        // here — it has no influence on routing, cost computation, recursion, fallback chains, or
+        // any other FlashQuery behavior. It is purely caller-facing metadata for external LLMs
+        // doing routing decisions. If you add a behavioral use of this flag, update this note and
+        // src/config/loader.ts:90 accordingly. See also DIRECTED_COVERAGE.md L-66a/b/c.
         const modelToResponse = (m: typeof cfgModels[number]): Record<string, unknown> => {
           const entry: Record<string, unknown> = {
             name: m.name,
