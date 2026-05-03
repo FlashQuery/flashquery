@@ -1,0 +1,138 @@
+name: pointer_mutation_propagates
+description: >
+  Pointer mutation propagates to subsequent dereferences. After update_doc_header
+  re-points a frontmatter pointer from target A to target B, the next
+  call_model {{ref:source->pointer}} injects B's body, not A's. Verifies
+  both top-level pointer keys (e.g. fq_target_ref) and nested pointer keys
+  (projections.summary). The resolver does not hold a stale pointer view.
+  Covers IX-13.
+coverage: [IX-13]
+deps: [llm]
+
+steps:
+  # ─── Setup targets ────────────────────────────────────────────────
+
+  - label: "Setup: target A — body contains marker A-13"
+    action: vault.write
+    name: target_a
+    path: "Test/ix13/target-a.md"
+    title: "IX-13 Target A"
+    content: "Target A body — marker is MARK-A-13."
+    tags: [ix13-tag]
+
+  - label: "Setup: target B — body contains marker B-13"
+    action: vault.write
+    name: target_b
+    path: "Test/ix13/target-b.md"
+    title: "IX-13 Target B"
+    content: "Target B body — marker is MARK-B-13."
+    tags: [ix13-tag]
+
+  # ─── Top-level pointer: fq_target_ref ─────────────────────────────
+
+  - label: "Setup: source-top with top-level pointer fq_target_ref → target A"
+    action: vault.write
+    name: source_top
+    path: "Test/ix13/source-top.md"
+    title: "IX-13 Source Top"
+    content: "Source body — pointed by top-level key."
+    tags: [ix13-tag]
+    frontmatter:
+      fq_target_ref: "_integration/Test/ix13/target-a.md"
+
+  - label: "Top-level: call_model {{ref:source->fq_target_ref}} injects target A body (MARK-A-13)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix13/source-top.md->fq_target_ref}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "MARK-A-13"
+
+  - label: "Top-level: re-point fq_target_ref to target B via update_doc_header"
+    action: update_doc_header
+    args:
+      identifier: "${source_top.fq_id}"
+      updates:
+        fq_target_ref: "_integration/Test/ix13/target-b.md"
+
+  - label: "Top-level: next call_model dereference now injects target B body (MARK-B-13)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix13/source-top.md->fq_target_ref}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "MARK-B-13"
+
+  - label: "Top-level: stale target A marker no longer leaks after mutation"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix13/source-top.md->fq_target_ref}} Does the document contain the literal string MARK-A-13? Reply YES or NO."
+      expect_not_contains: "YES"
+
+  # ─── Nested pointer: projections.summary ──────────────────────────
+
+  - label: "Setup: source-nested with nested pointer projections.summary → target A"
+    action: vault.write
+    name: source_nested
+    path: "Test/ix13/source-nested.md"
+    title: "IX-13 Source Nested"
+    content: "Source body — pointed by nested projections key."
+    tags: [ix13-tag]
+    frontmatter:
+      projections:
+        summary: "_integration/Test/ix13/target-a.md"
+
+  - label: "Nested: call_model {{ref:source->projections.summary}} injects target A body (MARK-A-13)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix13/source-nested.md->projections.summary}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "MARK-A-13"
+
+  - label: "Nested: re-point projections.summary to target B (whole projections object replaced)"
+    # update_doc_header is a top-level field editor — to mutate a nested key
+    # we replace the whole projections object. This is the canonical pattern
+    # for nested pointer mutation under the catch-all frontmatter editor.
+    action: update_doc_header
+    args:
+      identifier: "${source_nested.fq_id}"
+      updates:
+        projections:
+          summary: "_integration/Test/ix13/target-b.md"
+
+  - label: "Nested: next call_model dereference now injects target B body (MARK-B-13)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix13/source-nested.md->projections.summary}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "MARK-B-13"
+
+  - label: "Nested: stale target A marker no longer leaks after mutation"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix13/source-nested.md->projections.summary}} Does the document contain the literal string MARK-A-13? Reply YES or NO."
+      expect_not_contains: "YES"

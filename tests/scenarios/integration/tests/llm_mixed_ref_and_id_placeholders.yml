@@ -1,0 +1,105 @@
+name: llm_mixed_ref_and_id_placeholders
+description: >
+  Mixed placeholder resolution. A single user message containing BOTH
+  {{ref:path}} and {{id:<uuid>}} placeholders resolves both: the
+  injected_references[] array reports two entries (one path-typed, one
+  id-typed) in input order, and prompt_chars reflects the combined
+  resolved prompt size. Both bodies reach the LLM. Verifies that the
+  resolver handles heterogeneous placeholders in a single call without
+  one shadowing the other.
+  Covers IL-25.
+coverage: [IL-25]
+deps: [llm]
+
+steps:
+  - label: "Setup: doc A — referenced by path, marker is PATHMARK-25"
+    action: vault.write
+    name: doc_a
+    path: "Test/il25/path-ref.md"
+    title: "IL-25 Path Ref"
+    content: "Doc A body — the path marker is PATHMARK-25."
+    tags: [il25-tag]
+
+  - label: "Setup: doc B — referenced by id, marker is IDMARK-25"
+    action: vault.write
+    name: doc_b
+    path: "Test/il25/id-ref.md"
+    title: "IL-25 ID Ref"
+    content: "Doc B body — the id marker is IDMARK-25."
+    tags: [il25-tag]
+
+  - label: "Mixed: both bodies are injected — LLM sees PATHMARK-25"
+    # Single message contains both a {{ref:path}} and a {{id:<uuid>}}.
+    # Both resolution paths must succeed; the LLM should be able to echo
+    # both markers in the same response.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} List both marker tokens (PATHMARK-25 and IDMARK-25) in the documents, separated by a comma."
+      expect_contains: "PATHMARK-25"
+
+  - label: "Mixed: same call — LLM also sees IDMARK-25"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} List both marker tokens (PATHMARK-25 and IDMARK-25) in the documents, separated by a comma."
+      expect_contains: "IDMARK-25"
+
+  - label: "Metadata: injected_references[] entry for the {{ref:path}} placeholder is reported"
+    # The path-typed entry's ref field echoes the literal {{ref:path}}
+    # placeholder including delimiters (per L-24 directed test contract).
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_contains: "{{ref:_integration/Test/il25/path-ref.md}}"
+
+  - label: "Metadata: injected_references[] entry for the {{id:<uuid>}} placeholder is reported"
+    # Variable substitution does not apply to expect_contains, so we cannot
+    # assert on the exact UUID. Instead assert on the literal "{{id:" prefix
+    # — its presence in the response text proves an id-typed entry's ref
+    # field echoed the placeholder (per L-27 directed test contract: the
+    # ref field carries the full placeholder including delimiters).
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_contains: "{{id:"
+
+  - label: "Metadata: prompt_chars is present (combined resolved prompt)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_contains: '"prompt_chars"'
+
+  - label: "Metadata: response is not an error — neither placeholder failed to resolve"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_not_contains: "reference_resolution_failed"

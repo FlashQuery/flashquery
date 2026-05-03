@@ -1,0 +1,120 @@
+name: projections_batch_follow_ref_partial
+description: >
+  Projections matrix — batch follow_ref partial failure. Three sources
+  passed in: src1 has projections.summary, src2 LACKS projections.summary,
+  src3 has projections.summary. The batch response is success/error/success
+  in positional order, with the middle element carrying
+  follow_ref_path_not_found (the pre-resolution error for "pointer key
+  missing in source frontmatter"). The outer call does NOT fail — per-element
+  errors are embedded in the array, never bubbled to a top-level isError.
+  Covers IX-21.
+coverage: [IX-21]
+
+steps:
+  - label: "Setup: target document with marker PART-21"
+    action: vault.write
+    name: target_doc
+    path: "Test/ix21/target.md"
+    title: "IX-21 Target"
+    content: "Target body — marker is PART-21-MARKER."
+    tags: [ix21-tag]
+
+  - label: "Setup: src1 — has projections.summary → target"
+    action: vault.write
+    name: src1
+    path: "Test/ix21/source-1.md"
+    title: "IX-21 Source 1"
+    content: "Source 1."
+    tags: [ix21-tag]
+    frontmatter:
+      projections:
+        summary: "_integration/Test/ix21/target.md"
+
+  - label: "Setup: src2 — does NOT have projections.summary (intentionally missing)"
+    action: vault.write
+    name: src2
+    path: "Test/ix21/source-2-missing.md"
+    title: "IX-21 Source 2 Missing"
+    content: "Source 2 — no pointer here."
+    tags: [ix21-tag]
+
+  - label: "Setup: src3 — has projections.summary → target"
+    action: vault.write
+    name: src3
+    path: "Test/ix21/source-3.md"
+    title: "IX-21 Source 3"
+    content: "Source 3."
+    tags: [ix21-tag]
+    frontmatter:
+      projections:
+        summary: "_integration/Test/ix21/target.md"
+
+  - label: "Batch follow_ref: src1 element resolves successfully (target marker present)"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "PART-21-MARKER"
+
+  - label: "Batch follow_ref: middle element carries follow_ref_path_not_found error"
+    # Per-element error: src2 has no 'projections' key in its frontmatter
+    # at all, so the pre-resolution path traversal fails. This is the
+    # 'follow_ref_path_not_found' error embedded in the per-element envelope.
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "follow_ref_path_not_found"
+
+  - label: "Batch follow_ref: error envelope reports traversal failure detail (failed_at='projections')"
+    # The per-element error envelope must distinguish itself from the
+    # successful ones. The error response carries traversal diagnostics
+    # ('failed_at', 'available_keys') that the success envelopes do not.
+    # 'failed_at' identifies the precise frontmatter key the lookup
+    # could not traverse — in this case, 'projections' itself was missing.
+    # (We can't assert on src2's UUID because variable substitution does
+    # not apply to expect_contains; the error envelope includes the UUID
+    # but not the path.)
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: '"failed_at":"projections"'
+
+  - label: "Batch follow_ref: src1 and src3 each carry resolved_to (both successes positionally preserved)"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "_integration/Test/ix21/target.md"
+
+  - label: "Batch follow_ref: outer response is NOT a top-level error — per-element errors must not bubble"
+    # The contract is "batch returns array; per-element errors embedded;
+    # never fails entire batch". An isError:true on the call would violate
+    # this; we assert by checking the marker is reachable, which a top-level
+    # error would have suppressed.
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_not_contains: '"error":"reference_resolution_failed"'

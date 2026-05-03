@@ -1,0 +1,81 @@
+name: projections_fq_id_typed_target
+description: >
+  Projections matrix — fq_id-typed target value. When source has
+  projections.key_entities=<target-uuid> (a UUID string), call_model
+  {{ref:source->projections.key_entities}} resolves via the fq_id branch
+  (the value classifies as fq_id by UUID shape), looks up the target by
+  UUID, and injects the target body. Verifies the resolution_method='fq_id'
+  branch on a successful target lookup.
+  Covers IX-16.
+coverage: [IX-16]
+deps: [llm]
+
+steps:
+  - label: "Setup: target document with a unique marker (KE-16)"
+    action: vault.write
+    name: target_doc
+    path: "Test/ix16/target.md"
+    title: "IX-16 Target"
+    content: "Target body — the key entity marker is KE-16-MARKER."
+    tags: [ix16-tag]
+
+  - label: "Setup: source document with projections.key_entities pointing to the target's UUID"
+    # Substitution into a frontmatter dict value — ${target_doc.fq_id} is the
+    # UUID returned by vault.write for the target. classifyResolutionMethod()
+    # treats UUID-shaped strings as fq_id-typed, taking the fq_id branch.
+    action: vault.write
+    name: source_doc
+    path: "Test/ix16/source.md"
+    title: "IX-16 Source"
+    content: "Source body — must NOT be injected when -> is used."
+    tags: [ix16-tag]
+    frontmatter:
+      projections:
+        key_entities: "${target_doc.fq_id}"
+
+  - label: "call_model with {{ref:source->projections.key_entities}} resolves via fq_id branch and injects target body"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix16/source.md->projections.key_entities}} What key entity marker appears in the document? Reply with just the marker."
+      expect_contains: "KE-16-MARKER"
+
+  - label: "Response metadata: resolved_to is the target's vault path (not the UUID)"
+    # The fq_id branch resolves the UUID to the target document and reports
+    # the resolved path in injected_references[].resolved_to. The path is
+    # the human-readable identifier even when the pointer value was a UUID.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix16/source.md->projections.key_entities}} Reply OK."
+      expect_contains: '"resolved_to":"_integration/Test/ix16/target.md"'
+
+  - label: "Response carries injected_references metadata"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix16/source.md->projections.key_entities}} Reply OK."
+      expect_contains: '"injected_references"'
+
+  - label: "Source body must not leak — only target body is injected via -> dereference"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix16/source.md->projections.key_entities}} Does the document contain the literal string 'must NOT be injected'? Reply YES or NO."
+      expect_not_contains: "YES"

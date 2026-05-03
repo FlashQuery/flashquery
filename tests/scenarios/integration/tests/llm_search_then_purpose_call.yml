@@ -1,0 +1,82 @@
+name: llm_search_then_purpose_call
+description: >
+  Discovery → delegate closure via search. call_model resolver=search with
+  parameters.query="general" returns matching purposes (the configured
+  'general' purpose). The caller picks purposes[].name from the search
+  result, then issues call_model resolver=purpose name=<picked-name> with
+  a real LLM message — the call succeeds and writes a fqc_llm_usage row.
+  get_llm_usage filtered by the test's trace_id confirms the row landed.
+  Verifies the round-trip: a name returned by search is a valid name to
+  delegate to.
+  Covers IL-24.
+coverage: [IL-24]
+deps: [llm]
+
+steps:
+  - label: "Discovery: call_model resolver=search with query='general' surfaces a configured purpose"
+    # The flashquery.yml fixture defines a 'general' purpose. resolver=search
+    # is case-insensitive substring match on name and description, so 'general'
+    # must match the 'general' purpose by name.
+    assert:
+      op: call_model
+      args:
+        resolver: search
+        parameters:
+          query: "general"
+      expect_contains: '"purposes"'
+
+  - label: "Discovery: 'general' purpose name appears in the search results"
+    assert:
+      op: call_model
+      args:
+        resolver: search
+        parameters:
+          query: "general"
+      expect_contains: '"name":"general"'
+
+  - label: "Discovery: response wraps results under {results: {purposes, models}}"
+    assert:
+      op: call_model
+      args:
+        resolver: search
+        parameters:
+          query: "general"
+      expect_contains: '"results"'
+
+  - label: "Delegate: call_model resolver=purpose with the discovered name succeeds and reports resolved_model_name"
+    # Pick the 'general' purpose surfaced by the search step and delegate.
+    # Successful purpose-resolved call returns a metadata envelope with
+    # resolved_model_name (the resolved primary model for the purpose).
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        trace_id: "il24-${run.id}"
+        messages:
+          - role: user
+            content: "Reply with one word: OK."
+      expect_contains: '"resolved_model_name":"fast"'
+
+  - label: "Closure: get_llm_usage filtered by this trace_id reports total_calls of at least 1"
+    # period='all' avoids the period.to=now() race against fire-and-forget
+    # writes (same approach as IL-21). The trace_id filter scopes the
+    # query strictly to the IL-24 delegate call.
+    assert:
+      op: get_llm_usage
+      args:
+        mode: summary
+        period: all
+        trace_id: "il24-${run.id}"
+      expect_contains: '"total_calls"'
+
+  - label: "Closure: by_purpose mode shows the 'general' purpose was used for this trace"
+    # The by_purpose response uses the field name 'purpose_name' (not 'name')
+    # to identify each purpose entry — confirmed by the actual response shape.
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_purpose
+        period: all
+        trace_id: "il24-${run.id}"
+      expect_contains: '"purpose_name": "general"'

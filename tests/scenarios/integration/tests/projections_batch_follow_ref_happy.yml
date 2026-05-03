@@ -1,0 +1,137 @@
+name: projections_batch_follow_ref_happy
+description: >
+  Projections matrix — batch follow_ref happy path. get_document with
+  identifiers=[src1, src2, src3] and follow_ref="projections.summary"
+  returns an array of three success envelopes, each carrying its own
+  followed_ref.body matching the corresponding target's body in
+  positional order. Verifies batch follow_ref preserves array order and
+  resolves each pointer independently.
+  Covers IX-20.
+coverage: [IX-20]
+
+steps:
+  - label: "Setup: target 1 with marker T1-20"
+    action: vault.write
+    name: target1
+    path: "Test/ix20/target-1.md"
+    title: "IX-20 Target 1"
+    content: "Target 1 — marker is BATCH-1-MARK."
+    tags: [ix20-tag]
+
+  - label: "Setup: target 2 with marker T2-20"
+    action: vault.write
+    name: target2
+    path: "Test/ix20/target-2.md"
+    title: "IX-20 Target 2"
+    content: "Target 2 — marker is BATCH-2-MARK."
+    tags: [ix20-tag]
+
+  - label: "Setup: target 3 with marker T3-20"
+    action: vault.write
+    name: target3
+    path: "Test/ix20/target-3.md"
+    title: "IX-20 Target 3"
+    content: "Target 3 — marker is BATCH-3-MARK."
+    tags: [ix20-tag]
+
+  - label: "Setup: source 1 → target 1"
+    action: vault.write
+    name: src1
+    path: "Test/ix20/source-1.md"
+    title: "IX-20 Source 1"
+    content: "Source 1."
+    tags: [ix20-tag]
+    frontmatter:
+      projections:
+        summary: "_integration/Test/ix20/target-1.md"
+
+  - label: "Setup: source 2 → target 2"
+    action: vault.write
+    name: src2
+    path: "Test/ix20/source-2.md"
+    title: "IX-20 Source 2"
+    content: "Source 2."
+    tags: [ix20-tag]
+    frontmatter:
+      projections:
+        summary: "_integration/Test/ix20/target-2.md"
+
+  - label: "Setup: source 3 → target 3"
+    action: vault.write
+    name: src3
+    path: "Test/ix20/source-3.md"
+    title: "IX-20 Source 3"
+    content: "Source 3."
+    tags: [ix20-tag]
+    frontmatter:
+      projections:
+        summary: "_integration/Test/ix20/target-3.md"
+
+  - label: "Batch follow_ref: response includes target 1's marker"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "BATCH-1-MARK"
+
+  - label: "Batch follow_ref: response includes target 2's marker"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "BATCH-2-MARK"
+
+  - label: "Batch follow_ref: response includes target 3's marker"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "BATCH-3-MARK"
+
+  - label: "Batch follow_ref: each element carries followed_ref envelope (response has ≥3 occurrences)"
+    # Each of the three success elements should have its own followed_ref
+    # envelope with resolved_to. We assert the resolved_to for each target
+    # path appears, confirming positional resolution succeeded for all three.
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "_integration/Test/ix20/target-1.md"
+
+  - label: "Batch follow_ref: target-2 resolved_to present"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "_integration/Test/ix20/target-2.md"
+
+  - label: "Batch follow_ref: target-3 resolved_to present"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${src1.fq_id}"
+          - "${src2.fq_id}"
+          - "${src3.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "_integration/Test/ix20/target-3.md"

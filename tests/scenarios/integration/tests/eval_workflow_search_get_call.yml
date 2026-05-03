@@ -1,0 +1,132 @@
+name: eval_workflow_search_get_call
+description: >
+  End-to-end evaluation workflow integration:
+    1) search_documents discovers candidate documents by tag,
+    2) batch get_document with include=["frontmatter","headings"] returns
+       per-document headings + frontmatter for chooser logic,
+    3) call_model with {{ref:<chosen-path>#<chosen-section>}} resolves the
+       targeted section and the LLM sees only that section's body.
+  Verifies the full search → inspect → reference-and-call chain that
+  evaluation harnesses depend on. The chosen target document has a marker
+  string only in one specific section; correct section scoping means the
+  LLM sees that marker, and the markers from the other sections do NOT leak.
+  Covers IX-09.
+coverage: [IX-09]
+deps: [llm]
+
+steps:
+  - label: "Setup: write candidate doc A with three sections (each carries a unique marker)"
+    action: vault.write
+    name: cand_a
+    path: "Test/eval-workflow/candidate-a.md"
+    title: "Eval Candidate Alpha"
+    content: |
+      # Overview
+      Marker for Overview is OVR-A.
+
+      # Findings
+      Marker for Findings is FND-A.
+
+      # Recommendations
+      Marker for Recommendations is REC-A.
+    tags: [ix09-tag]
+
+  - label: "Setup: write candidate doc B (a distractor with a different title)"
+    action: vault.write
+    name: cand_b
+    path: "Test/eval-workflow/candidate-b.md"
+    title: "Eval Candidate Beta"
+    content: |
+      # Overview
+      Marker for Overview is OVR-B.
+
+      # Findings
+      Marker for Findings is FND-B.
+    tags: [ix09-tag]
+
+  - label: "Step 1: search_documents by tag returns both candidates"
+    assert:
+      op: search_documents
+      args:
+        tags: [ix09-tag]
+      expect_contains: "Eval Candidate Alpha"
+
+  - label: "Step 1b: search_documents result also includes the distractor"
+    assert:
+      op: search_documents
+      args:
+        tags: [ix09-tag]
+      expect_contains: "Eval Candidate Beta"
+
+  - label: "Step 2: batch get_document with include=[frontmatter,headings] returns headings for both"
+    # Batch get_document with two identifiers — verifies we can inspect both
+    # docs in a single call. Findings heading is what the workflow will pick
+    # for the section reference in step 3.
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${cand_a.fq_id}"
+          - "${cand_b.fq_id}"
+        include: ["frontmatter", "headings"]
+      expect_contains: "Findings"
+
+  - label: "Step 2b: batch response includes both candidate titles via frontmatter"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${cand_a.fq_id}"
+          - "${cand_b.fq_id}"
+        include: ["frontmatter", "headings"]
+      expect_contains: "Eval Candidate Alpha"
+
+  - label: "Step 2c: batch response includes the second candidate as well"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${cand_a.fq_id}"
+          - "${cand_b.fq_id}"
+        include: ["frontmatter", "headings"]
+      expect_contains: "Eval Candidate Beta"
+
+  - label: "Step 3: call_model with {{ref:cand_a.md#Findings}} sees only the Findings marker"
+    # The model should see FND-A (Findings marker for Alpha). It must NOT see
+    # OVR-A or REC-A because section-scoping limits injection to the named
+    # section only. Asking the model to echo the marker confirms section
+    # extraction reached the LLM correctly.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/eval-workflow/candidate-a.md#Findings}} What marker token appears in the section? Reply with just the token."
+      expect_contains: "FND-A"
+
+  - label: "Step 3b: response metadata reports injected_references for the chosen section"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/eval-workflow/candidate-a.md#Findings}} Reply OK."
+      expect_contains: '"injected_references"'
+
+  - label: "Step 3c: section scoping holds — Overview marker is NOT injected"
+    # Negative assertion: with section=Findings, OVR-A (the Overview marker)
+    # must not appear in the response. If section extraction were broken and
+    # the full body were injected, the model could report OVR-A here.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/eval-workflow/candidate-a.md#Findings}} Does the section contain the literal string OVR-A? Reply YES or NO."
+      expect_not_contains: "YES"
