@@ -42,7 +42,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${draft_doc.fq_id}"
+        identifiers: "${draft_doc.fq_id}"
       expect_contains: "microservices"
 
   - label: "Old content is no longer in search results"
@@ -57,5 +57,5 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${draft_doc.fq_id}"
+        identifiers: "${draft_doc.fq_id}"
       expect_not_contains: "old approach"

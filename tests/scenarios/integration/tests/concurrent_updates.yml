@@ -53,7 +53,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${doc_a.fq_id}"
+        identifiers: "${doc_a.fq_id}"
       expect_contains: "Updated content for A"
       expect_not_contains: "Original content for A"
 
@@ -61,7 +61,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${doc_b.fq_id}"
+        identifiers: "${doc_b.fq_id}"
       expect_contains: "Updated content for B"
       expect_not_contains: "Original content for B"
 
@@ -69,7 +69,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${doc_c.fq_id}"
+        identifiers: "${doc_c.fq_id}"
       expect_contains: "Updated content for C"
       expect_not_contains: "Original content for C"
 
@@ -77,12 +77,12 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${doc_a.fq_id}"
+        identifiers: "${doc_a.fq_id}"
       expect_not_contains: "Updated content for B"
 
   - label: "Verify B does not contain C's updated content"
     assert:
       op: get_document
       args:
-        identifier: "${doc_b.fq_id}"
+        identifiers: "${doc_b.fq_id}"
       expect_not_contains: "Updated content for C"

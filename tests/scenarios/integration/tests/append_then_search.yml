@@ -36,7 +36,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${fieldnotes_doc.fq_id}"
+        identifiers: "${fieldnotes_doc.fq_id}"
       expect_contains: "bioluminescence patterns near the tidal pools"
 
   - label: "Document is still discoverable by title after append"
@@ -50,7 +50,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${fieldnotes_doc.fq_id}"
+        identifiers: "${fieldnotes_doc.fq_id}"
       expect_contains: "morning low-tide window"
 
   - label: "search_documents finds document by title after append (exercises search_documents API)"

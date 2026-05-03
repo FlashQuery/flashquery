@@ -332,8 +332,8 @@ CREATE TABLE IF NOT EXISTS fqc_documents (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Phase 32: description column for batch outline metadata (MOD-03 §3c, OUTLINE-05)
-ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS description TEXT DEFAULT NULL;
+-- Phase 32: description column added here, but dropped in Phase 69 (SPEC-19) — omitted to prevent
+-- add/drop cycle that exhausts PostgreSQL's 1600 attnum slots over repeated test runs.
 
 -- Phase 39: needs_frontmatter_repair flag for TSA-01 (read-only background scan)
 ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS needs_frontmatter_repair BOOLEAN DEFAULT FALSE;
