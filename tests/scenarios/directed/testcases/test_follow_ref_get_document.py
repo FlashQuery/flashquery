@@ -1,7 +1,13 @@
 #!/usr/bin/env python3
 """
 Test: get_document follow_ref — frontmatter pointer dereference, error nesting,
-title-fallback uniformity (D-50), and combined batch + follow_ref.
+title-fallback (source-only, D-50), and combined batch + follow_ref.
+
+TC2-M1 fix: docstring renamed from "title-fallback uniformity (D-50)" to
+"title-fallback (source-only, D-50)" — D-50 here only exercises the source
+document's title fallback. The §4.5 followed_ref response shape does not
+include a title field, so a follow_ref-target companion is not implementable
+without a spec change. See verification doc TC2-M1 for context.
 
 Coverage points: D-50, D-53, D-54, D-55, D-56, D-57, D-58, D-59, D-60,
                  D-39a, D-39b, D-39c, D-39d, D-39e, D-39f
@@ -40,6 +46,14 @@ COVERAGE = [
     "D-39d",
     "D-39e",
     "D-39f",
+    # Phase 2 coverage gaps closed in this file (Priority 4 remediation pass)
+    "D-61",  # Gap 1: UUID-typed follow_ref pointer (success)
+    "D-62",  # Gap 2: resolution_method == 'filename' on follow_ref_target_not_found
+    "D-63",  # Gap 3: resolution_method == 'fq_id' on follow_ref_target_not_found
+    "D-64",  # Gap 4: batch + follow_ref 3-element interleaving (success/failure/success)
+    "D-65",  # Gap 5: follow_ref + multi-section section_not_found (nested)
+    "D-66",  # Gap 6: follow_ref + multi-section partial-failure aggregation (OQ #12)
+    "D-67",  # Gap 7: pre-resolution batch error variants (invalid_type + target_not_found)
 ]
 
 import argparse
@@ -48,6 +62,7 @@ import os
 import re
 import sys
 import time
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
@@ -164,6 +179,55 @@ def run_test(args: argparse.Namespace) -> TestRun:
             body="## Y\n\nbody",
             tags=["fref"],
             extra_frontmatter={"projections": {"summary": "_test/does_not_exist_at_all.md"}},
+        )
+
+        # ── Phase 2 Gap fixtures (D-61 through D-67) ──────────────────
+        # Phase 2 Gap 1 / D-61: target with a known fq_id so a source can
+        # reference it via UUID-typed follow_ref pointer (Example 11).
+        known_target_uuid = str(uuid.uuid4())
+        target_known_id_path = ctx.create_file(
+            f"_test/{TEST_NAME}_{run.run_id}_target_known_id.md",
+            title="Target With Known UUID",
+            body=TARGET_BODY,
+            tags=["fref"],
+            fqc_id=known_target_uuid,
+        )
+
+        # Phase 2 Gap 1 / D-61: source whose projections.summary is the
+        # target's UUID (string). follow_ref must resolve via fq_id branch.
+        source_uuid_path = ctx.create_file(
+            f"_test/{TEST_NAME}_{run.run_id}_source_uuid.md",
+            title="Source With UUID Pointer",
+            body=SOURCE_BODY,
+            tags=["fref"],
+            extra_frontmatter={"projections": {"summary": known_target_uuid}},
+        )
+
+        # Phase 2 Gap 2 / D-62: source whose projections.summary is a bare
+        # filename (no '/', no markdown extension) that doesn't match
+        # anything in the vault. Used to assert resolution_method ==
+        # 'filename' on follow_ref_target_not_found. Note: post-Deviation 5,
+        # values ending in any configured markdown extension classify as
+        # 'path', so the value must be extension-less to hit 'filename'.
+        bad_filename_value = "definitely_not_a_real_filename_basename"
+        bad_filename_source_path = ctx.create_file(
+            f"_test/{TEST_NAME}_{run.run_id}_source_badfilename.md",
+            title="Source Pointing To Bad Filename",
+            body="## X\n\nbody",
+            tags=["fref"],
+            extra_frontmatter={"projections": {"summary": bad_filename_value}},
+        )
+
+        # Phase 2 Gap 3 / D-63: source whose projections.summary is a
+        # UUID-shaped string that does not match any document. Used to assert
+        # resolution_method == 'fq_id' on follow_ref_target_not_found.
+        bad_uuid_value = str(uuid.uuid4())
+        bad_uuid_source_path = ctx.create_file(
+            f"_test/{TEST_NAME}_{run.run_id}_source_baduuid.md",
+            title="Source Pointing To Bad UUID",
+            body="## X\n\nbody",
+            tags=["fref"],
+            extra_frontmatter={"projections": {"summary": bad_uuid_value}},
         )
 
         # ── Force scan ────────────────────────────────────────────────
@@ -440,6 +504,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             try:
                 env = json.loads(d57_result.text)
                 traversal = env.get("traversal", {})
+                avail = traversal.get("available_keys") if isinstance(traversal, dict) else None
                 checks = {
                     "error == follow_ref_path_not_found": env.get("error") == "follow_ref_path_not_found",
                     "identifier present at top level": "identifier" in env,
@@ -453,6 +518,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "traversal has available_keys list (TC2-W4)":
                         isinstance(traversal, dict)
                         and isinstance(traversal.get("available_keys"), list),
+                    # Phase 2 Gap 8: available_keys content assertions.
+                    # simple_path's frontmatter has fq_title (set via title=)
+                    # but no `projections` key — so the failure is at the
+                    # top level and available_keys must list the keys present
+                    # at that level.
+                    "available_keys is non-empty (Phase 2 Gap 8)":
+                        isinstance(avail, list) and len(avail) > 0,
+                    "available_keys contains 'fq_title' (Phase 2 Gap 8)":
+                        isinstance(avail, list) and "fq_title" in avail,
+                    "available_keys does NOT contain 'projections' (Phase 2 Gap 8)":
+                        isinstance(avail, list) and "projections" not in avail,
+                    "traversal.failed_at == 'projections' (Phase 2 Gap 8)":
+                        isinstance(traversal, dict)
+                        and traversal.get("failed_at") == "projections",
                 }
                 d57_passed = all(checks.values())
                 if not d57_passed:
@@ -721,12 +800,52 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 fr = env.get("followed_ref", {})
                 body = fr.get("body", "")
                 extracted = fr.get("extracted_sections", [])
+                # TC2-M2: input-order assembly + per-position correlation per
+                # §4.5 Example 7b. The repeat-name shorthand
+                # sections=["Action Items", "Action Items"] must yield two
+                # extracted_sections entries in input order, and the joined
+                # body must show "First item" (1st occurrence) BEFORE
+                # "Third item" (2nd occurrence).
+                first_idx = body.find("First item")
+                third_idx = body.find("Third item")
+                # Per-entry shape: each extracted_sections entry has
+                # { heading, chars } where heading text is "Action Items".
+                entries_have_shape = all(
+                    isinstance(e, dict) and isinstance(e.get("heading"), str)
+                    and isinstance(e.get("chars"), int) and e.get("chars", 0) > 0
+                    for e in extracted
+                )
+                heading_correlation = (
+                    len(extracted) == 2
+                    and "Action Items" in extracted[0].get("heading", "")
+                    and "Action Items" in extracted[1].get("heading", "")
+                )
+                # Aggregate-chars invariant per §4.5 Example 7b: when N
+                # sections are joined with the canonical "\n\n" separator,
+                # sum(extracted[i].chars) + 2*(N-1) == len(body).
+                sum_chars = sum(e.get("chars", 0) for e in extracted)
+                aggregate_invariant = (
+                    len(extracted) == 0
+                    or sum_chars + 2 * (len(extracted) - 1) == len(body)
+                )
                 checks = {
                     "has followed_ref": "followed_ref" in env,
                     "followed_ref has body": "body" in fr,
                     "body contains First item": "First item" in body,
                     "body contains Third item": "Third item" in body,
                     "extracted_sections has 2 elements": len(extracted) == 2,
+                    # TC2-M2: input-order — 1st-occurrence content precedes 2nd
+                    "input-order: First item before Third item (TC2-M2)":
+                        0 <= first_idx < third_idx,
+                    # TC2-M2: per-entry shape (heading + chars int > 0)
+                    "extracted_sections entries have heading + chars (TC2-M2)":
+                        entries_have_shape,
+                    # TC2-M2: per-position correlation — both headings are Action Items
+                    "extracted_sections per-position heading correlation (TC2-M2)":
+                        heading_correlation,
+                    # TC2-M2: aggregate-chars invariant (sum + 2*(N-1) == len(body))
+                    "extracted_sections aggregate-chars invariant (TC2-M2)":
+                        aggregate_invariant,
                 }
                 d39c_passed = all(checks.values())
                 if not d39c_passed:
@@ -738,7 +857,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             d39c_detail = f"Expected ok=True, got isError. text={d39c_result.text[:200]}"
 
         run.step(
-            label="D-39c: follow_ref + multi-element sections (valid) -> sections extracted from target",
+            label="D-39c: follow_ref + multi-element sections (valid) — input-order assembly + per-position correlation per §4.5 Example 7b",
             passed=d39c_passed,
             detail=d39c_detail,
             timing_ms=d39c_result.timing_ms,
@@ -889,6 +1008,403 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail=d39f_detail,
             timing_ms=d39f_result.timing_ms,
             tool_result=d39f_result,
+            server_logs=step_logs,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # D-61 (Phase 2 Gap 1): UUID-typed follow_ref pointer (Example 11)
+        # source_uuid_path has projections.summary = known_target_uuid.
+        # follow_ref must resolve the UUID to the target document.
+        # ─────────────────────────────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        d61_result = ctx.client.call_tool(
+            "get_document",
+            identifiers=source_uuid_path,
+            follow_ref="projections.summary",
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        d61_passed = False
+        d61_detail = ""
+        if d61_result.ok:
+            try:
+                env = json.loads(d61_result.text)
+                fr = env.get("followed_ref", {})
+                checks = {
+                    "ok (success path)": d61_result.ok,
+                    "has followed_ref": "followed_ref" in env,
+                    "followed_ref.reference == 'projections.summary'":
+                        fr.get("reference") == "projections.summary",
+                    "followed_ref.resolved_fq_id == known UUID":
+                        fr.get("resolved_fq_id") == known_target_uuid,
+                    "followed_ref.resolved_to is the target's path":
+                        fr.get("resolved_to") == target_known_id_path,
+                    "followed_ref has body content from target":
+                        "Target summary content" in fr.get("body", ""),
+                }
+                d61_passed = all(checks.values())
+                if not d61_passed:
+                    failed = [k for k, v in checks.items() if not v]
+                    d61_detail = f"Failed: {', '.join(failed)}. fr={fr!r}"
+            except Exception as e:
+                d61_detail = f"JSON parse error: {e}"
+        else:
+            d61_detail = f"Expected ok=True, got isError. text={d61_result.text[:200]}"
+
+        run.step(
+            label="D-61: follow_ref via UUID-typed pointer (Phase 2 Gap 1, §4.5 Example 11)",
+            passed=d61_passed,
+            detail=d61_detail,
+            timing_ms=d61_result.timing_ms,
+            tool_result=d61_result,
+            server_logs=step_logs,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # D-62 (Phase 2 Gap 2): resolution_method == 'filename' on
+        # follow_ref_target_not_found. Source's projections.summary is a
+        # bare filename that doesn't match any document.
+        # ─────────────────────────────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        d62_result = ctx.client.call_tool(
+            "get_document",
+            identifiers=bad_filename_source_path,
+            follow_ref="projections.summary",
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        d62_passed = False
+        d62_detail = ""
+        if not d62_result.ok:
+            try:
+                env = json.loads(d62_result.text)
+                checks = {
+                    "error == follow_ref_target_not_found":
+                        env.get("error") == "follow_ref_target_not_found",
+                    "resolution_method == 'filename' (Phase 2 Gap 2)":
+                        env.get("resolution_method") == "filename",
+                    "resolved_value matches the bad filename":
+                        env.get("resolved_value") == bad_filename_value,
+                    "reference == 'projections.summary'":
+                        env.get("reference") == "projections.summary",
+                    "identifier present at top level": "identifier" in env,
+                    "NO followed_ref key": "followed_ref" not in env,
+                }
+                d62_passed = all(checks.values())
+                if not d62_passed:
+                    failed = [k for k, v in checks.items() if not v]
+                    d62_detail = f"Failed: {', '.join(failed)}. env={env!r}"
+            except Exception as e:
+                d62_detail = f"JSON parse error: {e}"
+        else:
+            d62_detail = f"Expected isError=True but got ok. text={d62_result.text[:200]}"
+
+        run.step(
+            label="D-62: follow_ref_target_not_found with resolution_method='filename' (Phase 2 Gap 2)",
+            passed=d62_passed,
+            detail=d62_detail,
+            timing_ms=d62_result.timing_ms,
+            tool_result=d62_result,
+            server_logs=step_logs,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # D-63 (Phase 2 Gap 3): resolution_method == 'fq_id' on
+        # follow_ref_target_not_found. Source's projections.summary is a
+        # UUID-shaped string that does not match any document.
+        # ─────────────────────────────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        d63_result = ctx.client.call_tool(
+            "get_document",
+            identifiers=bad_uuid_source_path,
+            follow_ref="projections.summary",
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        d63_passed = False
+        d63_detail = ""
+        if not d63_result.ok:
+            try:
+                env = json.loads(d63_result.text)
+                checks = {
+                    "error == follow_ref_target_not_found":
+                        env.get("error") == "follow_ref_target_not_found",
+                    "resolution_method == 'fq_id' (Phase 2 Gap 3)":
+                        env.get("resolution_method") == "fq_id",
+                    "resolved_value matches the bad UUID":
+                        env.get("resolved_value") == bad_uuid_value,
+                    "reference == 'projections.summary'":
+                        env.get("reference") == "projections.summary",
+                    "identifier present at top level": "identifier" in env,
+                    "NO followed_ref key": "followed_ref" not in env,
+                }
+                d63_passed = all(checks.values())
+                if not d63_passed:
+                    failed = [k for k, v in checks.items() if not v]
+                    d63_detail = f"Failed: {', '.join(failed)}. env={env!r}"
+            except Exception as e:
+                d63_detail = f"JSON parse error: {e}"
+        else:
+            d63_detail = f"Expected isError=True but got ok. text={d63_result.text[:200]}"
+
+        run.step(
+            label="D-63: follow_ref_target_not_found with resolution_method='fq_id' (Phase 2 Gap 3)",
+            passed=d63_passed,
+            detail=d63_detail,
+            timing_ms=d63_result.timing_ms,
+            tool_result=d63_result,
+            server_logs=step_logs,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # D-64 (Phase 2 Gap 4): batch + follow_ref 3-element interleaving
+        # — success / failure / success — per spec Example 7 batch shape.
+        # Asserts positional correspondence across all three positions.
+        # ─────────────────────────────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        d64_result = ctx.client.call_tool(
+            "get_document",
+            identifiers=[source_path, simple_path, source_uuid_path],
+            follow_ref="projections.summary",
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        d64_passed = False
+        d64_detail = ""
+        if d64_result.ok:
+            try:
+                results = json.loads(d64_result.text)
+                checks = {
+                    "ok (batch never isError)": d64_result.ok,
+                    "response is list of 3": isinstance(results, list) and len(results) == 3,
+                    "results[0] success — has followed_ref":
+                        isinstance(results, list) and len(results) > 0
+                        and "followed_ref" in results[0],
+                    "results[0].followed_ref.resolved_to == target_path (positional)":
+                        isinstance(results, list) and len(results) > 0
+                        and results[0].get("followed_ref", {}).get("resolved_to") == target_path,
+                    "results[1] failure — error == follow_ref_path_not_found":
+                        isinstance(results, list) and len(results) > 1
+                        and results[1].get("error") == "follow_ref_path_not_found",
+                    "results[1] has identifier (positional)":
+                        isinstance(results, list) and len(results) > 1
+                        and "identifier" in results[1],
+                    "results[2] success — has followed_ref":
+                        isinstance(results, list) and len(results) > 2
+                        and "followed_ref" in results[2],
+                    "results[2].followed_ref.resolved_fq_id == known UUID (positional)":
+                        isinstance(results, list) and len(results) > 2
+                        and results[2].get("followed_ref", {}).get("resolved_fq_id") == known_target_uuid,
+                }
+                d64_passed = all(checks.values())
+                if not d64_passed:
+                    failed = [k for k, v in checks.items() if not v]
+                    d64_detail = (
+                        f"Failed: {', '.join(failed)}. "
+                        f"len={len(results) if isinstance(results, list) else 'N/A'}"
+                    )
+            except Exception as e:
+                d64_detail = f"JSON parse error: {e}"
+        else:
+            d64_detail = f"Expected ok=True (batch never isError) but got error. text={d64_result.text[:200]}"
+
+        run.step(
+            label="D-64: batch + follow_ref 3-element interleaving (success/failure/success) (Phase 2 Gap 4)",
+            passed=d64_passed,
+            detail=d64_detail,
+            timing_ms=d64_result.timing_ms,
+            tool_result=d64_result,
+            server_logs=step_logs,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # D-65 (Phase 2 Gap 5): follow_ref + multi-section section_not_found
+        # nested under followed_ref. TARGET_BODY does not contain
+        # "GhostA" or "GhostB", so missing_sections has 2 entries.
+        # ─────────────────────────────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        d65_result = ctx.client.call_tool(
+            "get_document",
+            identifiers=source_path,
+            follow_ref="projections.summary",
+            sections=["GhostA", "GhostB"],
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        d65_passed = False
+        d65_detail = ""
+        if not d65_result.ok:
+            try:
+                env = json.loads(d65_result.text)
+                fr = env.get("followed_ref", {})
+                missing = fr.get("missing_sections", [])
+                ghosta = next((m for m in missing if m.get("query") == "GhostA"), None)
+                ghostb = next((m for m in missing if m.get("query") == "GhostB"), None)
+                checks = {
+                    "error == section_not_found":
+                        env.get("error") == "section_not_found",
+                    "followed_ref present (post-resolution nesting)":
+                        "followed_ref" in env,
+                    "followed_ref.missing_sections has exactly 2 entries":
+                        len(missing) == 2,
+                    "GhostA entry exists with reason no_match":
+                        ghosta is not None and ghosta.get("reason") == "no_match",
+                    "GhostB entry exists with reason no_match":
+                        ghostb is not None and ghostb.get("reason") == "no_match",
+                    "followed_ref.available_headings is non-empty":
+                        isinstance(fr.get("available_headings"), list)
+                        and len(fr.get("available_headings", [])) > 0,
+                    "available_headings contains target's 'Summary'":
+                        any("Summary" in h for h in fr.get("available_headings", [])),
+                }
+                d65_passed = all(checks.values())
+                if not d65_passed:
+                    failed = [k for k, v in checks.items() if not v]
+                    d65_detail = f"Failed: {', '.join(failed)}. fr={fr!r}"
+            except Exception as e:
+                d65_detail = f"JSON parse error: {e}"
+        else:
+            d65_detail = f"Expected isError=True but got ok. text={d65_result.text[:200]}"
+
+        run.step(
+            label="D-65: follow_ref + multi-section section_not_found nested under followed_ref (Phase 2 Gap 5)",
+            passed=d65_passed,
+            detail=d65_detail,
+            timing_ms=d65_result.timing_ms,
+            tool_result=d65_result,
+            server_logs=step_logs,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # D-66 (Phase 2 Gap 6): follow_ref + multi-section partial-failure
+        # aggregation per OQ #12. TARGET_BODY has 2 "Action Items" sections.
+        # Request 3 occurrences of Action Items + a non-existent Foo →
+        # missing_sections must aggregate to exactly 2 entries:
+        #   - Foo: no_match (no count fields)
+        #   - Action Items: insufficient_occurrences (requested_count=3, found_count=2)
+        # ─────────────────────────────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        d66_result = ctx.client.call_tool(
+            "get_document",
+            identifiers=source_path,
+            follow_ref="projections.summary",
+            sections=["Foo", "Action Items", "Action Items", "Action Items"],
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        d66_passed = False
+        d66_detail = ""
+        if not d66_result.ok:
+            try:
+                env = json.loads(d66_result.text)
+                fr = env.get("followed_ref", {})
+                missing = fr.get("missing_sections", [])
+                foo = next((m for m in missing if m.get("query") == "Foo"), None)
+                ai = next(
+                    (m for m in missing
+                     if m.get("query") == "Action Items"
+                     and m.get("reason") == "insufficient_occurrences"),
+                    None,
+                )
+                checks = {
+                    "error == section_not_found":
+                        env.get("error") == "section_not_found",
+                    "followed_ref present (post-resolution nesting)":
+                        "followed_ref" in env,
+                    "followed_ref.missing_sections has exactly 2 entries (OQ #12)":
+                        len(missing) == 2,
+                    "Foo entry has reason no_match":
+                        foo is not None and foo.get("reason") == "no_match",
+                    "Foo entry has no requested_count":
+                        foo is not None and "requested_count" not in foo,
+                    "Foo entry has no found_count":
+                        foo is not None and "found_count" not in foo,
+                    "Action Items entry: insufficient_occurrences":
+                        ai is not None,
+                    "Action Items entry: requested_count == 3":
+                        ai is not None and ai.get("requested_count") == 3,
+                    "Action Items entry: found_count == 2":
+                        ai is not None and ai.get("found_count") == 2,
+                }
+                d66_passed = all(checks.values())
+                if not d66_passed:
+                    failed = [k for k, v in checks.items() if not v]
+                    d66_detail = f"Failed: {', '.join(failed)}. missing={missing!r}"
+            except Exception as e:
+                d66_detail = f"JSON parse error: {e}"
+        else:
+            d66_detail = f"Expected isError=True but got ok. text={d66_result.text[:200]}"
+
+        run.step(
+            label="D-66: follow_ref + multi-section partial-failure aggregation (OQ #12) (Phase 2 Gap 6)",
+            passed=d66_passed,
+            detail=d66_detail,
+            timing_ms=d66_result.timing_ms,
+            tool_result=d66_result,
+            server_logs=step_logs,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # D-67 (Phase 2 Gap 7): batch + follow_ref pre-resolution error
+        # variants. invalid_path → follow_ref_invalid_type (frontmatter
+        # value is integer 42); bad_target_path → follow_ref_target_not_found
+        # (frontmatter path doesn't exist).
+        # ─────────────────────────────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        d67_result = ctx.client.call_tool(
+            "get_document",
+            identifiers=[invalid_path, bad_target_path],
+            follow_ref="projections.summary",
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        d67_passed = False
+        d67_detail = ""
+        if d67_result.ok:
+            try:
+                results = json.loads(d67_result.text)
+                checks = {
+                    "ok (batch never isError)": d67_result.ok,
+                    "response is list of 2":
+                        isinstance(results, list) and len(results) == 2,
+                    "results[0].error == follow_ref_invalid_type":
+                        isinstance(results, list) and len(results) > 0
+                        and results[0].get("error") == "follow_ref_invalid_type",
+                    "results[0] has found_value_preview":
+                        isinstance(results, list) and len(results) > 0
+                        and "found_value_preview" in results[0],
+                    "results[0] has identifier (positional)":
+                        isinstance(results, list) and len(results) > 0
+                        and "identifier" in results[0],
+                    "results[1].error == follow_ref_target_not_found":
+                        isinstance(results, list) and len(results) > 1
+                        and results[1].get("error") == "follow_ref_target_not_found",
+                    "results[1] has resolution_method":
+                        isinstance(results, list) and len(results) > 1
+                        and "resolution_method" in results[1],
+                    "results[1] has identifier (positional)":
+                        isinstance(results, list) and len(results) > 1
+                        and "identifier" in results[1],
+                    "neither result has followed_ref":
+                        isinstance(results, list) and len(results) == 2
+                        and "followed_ref" not in results[0]
+                        and "followed_ref" not in results[1],
+                }
+                d67_passed = all(checks.values())
+                if not d67_passed:
+                    failed = [k for k, v in checks.items() if not v]
+                    d67_detail = f"Failed: {', '.join(failed)}. results={results!r}"
+            except Exception as e:
+                d67_detail = f"JSON parse error: {e}"
+        else:
+            d67_detail = f"Expected ok=True (batch never isError) but got error. text={d67_result.text[:200]}"
+
+        run.step(
+            label="D-67: batch + follow_ref pre-resolution error variants (invalid_type + target_not_found) (Phase 2 Gap 7)",
+            passed=d67_passed,
+            detail=d67_detail,
+            timing_ms=d67_result.timing_ms,
+            tool_result=d67_result,
             server_logs=step_logs,
         )
 

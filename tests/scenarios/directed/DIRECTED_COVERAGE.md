@@ -76,6 +76,13 @@ Core CRUD operations on vault documents via MCP.
 | D-58 | get_document follow_ref pre-resolution error: follow_ref_invalid_type when frontmatter value is not a string (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-59 | get_document follow_ref pre-resolution error: follow_ref_target_not_found when resolved path does not exist in vault (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-60 | get_document batch + follow_ref: per-element partial failure semantics apply (one element missing pointer returns per-element error; other succeeds) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-61 | get_document follow_ref via UUID-typed pointer (Example 11) — projections.summary is a UUID string; resolves via fq_id branch (Phase 2 Gap 1) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
+| D-62 | get_document follow_ref_target_not_found with bare-filename pointer asserts resolution_method == 'filename' (Phase 2 Gap 2) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
+| D-63 | get_document follow_ref_target_not_found with UUID pointer asserts resolution_method == 'fq_id' (Phase 2 Gap 3) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
+| D-64 | get_document batch + follow_ref with 3-element success/failure/success interleaving — positional correspondence holds across all positions (Phase 2 Gap 4) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
+| D-65 | get_document follow_ref + multi-section section_not_found nested under followed_ref (Phase 2 Gap 5) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
+| D-66 | get_document follow_ref + multi-section partial-failure aggregation per OQ #12 — exactly 2 entries (no_match + insufficient_occurrences with requested_count/found_count) (Phase 2 Gap 6) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
+| D-67 | get_document batch + follow_ref pre-resolution error variants (follow_ref_invalid_type + follow_ref_target_not_found per element) (Phase 2 Gap 7) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
 | D-39a | get_document follow_ref + sections without "body" in include -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
