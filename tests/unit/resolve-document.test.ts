@@ -245,9 +245,9 @@ describe('resolveDocumentIdentifier', () => {
     ).rejects.toThrow('Document not found: "missing/doc.md"');
   });
 
-  // ── Filename resolution ────────────────────────────────────────────────────
+  // ── Path resolution: bare ".md" identifier (per spec §6 — ends ".md" → path) ─
 
-  it('bare filename found at vault root — returns resolvedVia=filename', async () => {
+  it('bare ".md" identifier at vault root — routes via path branch (resolvedVia=path)', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(true);
     const supabase = makeSupabaseMock();
 
@@ -258,12 +258,31 @@ describe('resolveDocumentIdentifier', () => {
       logger
     );
 
-    expect(result.resolvedVia).toBe('filename');
+    expect(result.resolvedVia).toBe('path');
     expect(result.absPath).toBe('/mock-vault/my-note.md');
     expect(result.relativePath).toBe('my-note.md');
   });
 
-  it('bare filename found in vault scan — single match — returns resolvedVia=filename', async () => {
+  it('bare ".md" identifier not at vault root — does NOT fall through to filename scan', async () => {
+    // Per spec §6, identifiers ending with ".md" are routed through the path branch only.
+    // Filename scan is reserved for non-".md", non-"/", non-UUID identifiers.
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(listMarkdownFiles).mockResolvedValue(['subfolder/my-note.md', 'other/doc.md']);
+    const supabase = makeSupabaseMock({ data: null, error: { message: 'not found' } });
+
+    await expect(
+      resolveDocumentIdentifier(config, supabase as never, 'my-note.md', logger)
+    ).rejects.toThrow('Document not found: "my-note.md"');
+  });
+
+  // ── Filename resolution (no "/" and no configured markdown extension) ─────
+  //
+  // Per spec §6, filename scan applies to identifiers that are not UUIDs, do
+  // not contain "/", and do not carry a configured markdown extension. For
+  // these inputs, the resolver appends each configured extension and matches
+  // against vault entries (so "standup" can resolve to "Meetings/standup.md").
+
+  it('bare filename (no extension) — single match in vault scan — returns resolvedVia=filename', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(listMarkdownFiles).mockResolvedValue(['subfolder/my-note.md', 'other/doc.md']);
     const supabase = makeSupabaseMock();
@@ -271,7 +290,7 @@ describe('resolveDocumentIdentifier', () => {
     const result = await resolveDocumentIdentifier(
       config,
       supabase as never,
-      'my-note.md',
+      'my-note',
       logger
     );
 
@@ -280,7 +299,24 @@ describe('resolveDocumentIdentifier', () => {
     expect(result.fqcId).toBeNull();
   });
 
-  it('bare filename matches 2+ files — throws disambiguation error listing all matches', async () => {
+  it('bare filename (no extension) — exact match at vault root — returns resolvedVia=filename', async () => {
+    // existsSync returns true for the appended-extension candidate "/mock-vault/standup.md"
+    vi.mocked(fs.existsSync).mockReturnValue(true);
+    const supabase = makeSupabaseMock();
+
+    const result = await resolveDocumentIdentifier(
+      config,
+      supabase as never,
+      'standup',
+      logger
+    );
+
+    expect(result.resolvedVia).toBe('filename');
+    expect(result.absPath).toBe('/mock-vault/standup.md');
+    expect(result.relativePath).toBe('standup.md');
+  });
+
+  it('bare filename (no extension) matches 2+ files — throws disambiguation error listing all matches', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(listMarkdownFiles).mockResolvedValue([
       'folder-a/my-note.md',
@@ -289,18 +325,36 @@ describe('resolveDocumentIdentifier', () => {
     const supabase = makeSupabaseMock();
 
     await expect(
-      resolveDocumentIdentifier(config, supabase as never, 'my-note.md', logger)
-    ).rejects.toThrow('Ambiguous filename "my-note.md" matches 2 files');
+      resolveDocumentIdentifier(config, supabase as never, 'my-note', logger)
+    ).rejects.toThrow('Ambiguous filename "my-note" matches 2 files');
   });
 
-  it('bare filename not found anywhere — throws Document not found', async () => {
+  it('bare filename (no extension) not found anywhere — throws Document not found', async () => {
     vi.mocked(fs.existsSync).mockReturnValue(false);
     vi.mocked(listMarkdownFiles).mockResolvedValue(['other/doc.md', 'another/file.md']);
     const supabase = makeSupabaseMock();
 
     await expect(
-      resolveDocumentIdentifier(config, supabase as never, 'nonexistent.md', logger)
-    ).rejects.toThrow('Document not found: "nonexistent.md"');
+      resolveDocumentIdentifier(config, supabase as never, 'nonexistent', logger)
+    ).rejects.toThrow('Document not found: "nonexistent"');
+  });
+
+  it('bare filename — honors configured markdown extensions (.markdown)', async () => {
+    const customConfig = makeConfig();
+    customConfig.instance.vault.markdownExtensions = ['.md', '.markdown'];
+    vi.mocked(fs.existsSync).mockReturnValue(false);
+    vi.mocked(listMarkdownFiles).mockResolvedValue(['notes/changelog.markdown']);
+    const supabase = makeSupabaseMock();
+
+    const result = await resolveDocumentIdentifier(
+      customConfig,
+      supabase as never,
+      'changelog',
+      logger
+    );
+
+    expect(result.resolvedVia).toBe('filename');
+    expect(result.relativePath).toBe('notes/changelog.markdown');
   });
 });
 

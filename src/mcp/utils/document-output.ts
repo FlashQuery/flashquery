@@ -59,15 +59,23 @@ export interface FollowedRefResult {
  * Mirrors the §6.6 detection rule used internally by resolve-document.ts.
  *
  * - UUID shape → 'fq_id'
- * - Contains `/` OR ends `.md` (case-insensitive) → 'path'
+ * - Contains `/` OR ends with any configured markdown extension (case-insensitive) → 'path'
  * - Else → 'filename'
+ *
+ * `markdownExtensions` comes from `config.instance.vault.markdownExtensions` so the
+ * classifier and resolver agree on the same configured set (no hardcoded `.md`).
  *
  * Verification Correction 5 (Phase 111): replaces hard-coded 'unknown' in
  * follow_ref_target_not_found responses with the spec-correct classification.
  */
-export function classifyResolutionMethod(s: string): 'fq_id' | 'path' | 'filename' {
+export function classifyResolutionMethod(
+  s: string,
+  markdownExtensions: string[]
+): 'fq_id' | 'path' | 'filename' {
   if (isValidUuid(s)) return 'fq_id';
-  if (s.includes('/') || s.toLowerCase().endsWith('.md')) return 'path';
+  const lower = s.toLowerCase();
+  const hasMarkdownExt = markdownExtensions.some((ext) => lower.endsWith(ext.toLowerCase()));
+  if (s.includes('/') || hasMarkdownExt) return 'path';
   return 'filename';
 }
 
@@ -473,7 +481,7 @@ export async function resolveAndBuildDocument(
         identifier,
         reference: followRef,
         resolved_value: targetIdentifier,
-        resolution_method: classifyResolutionMethod(targetIdentifier),
+        resolution_method: classifyResolutionMethod(targetIdentifier, cfg.instance.vault.markdownExtensions),
       });
     }
 
@@ -489,7 +497,7 @@ export async function resolveAndBuildDocument(
         identifier,
         reference: followRef,
         resolved_value: targetIdentifier,
-        resolution_method: classifyResolutionMethod(targetIdentifier),
+        resolution_method: classifyResolutionMethod(targetIdentifier, cfg.instance.vault.markdownExtensions),
       });
     }
     const targetParsed = matter(targetRaw);

@@ -425,40 +425,51 @@ describe('traverseFollowRef (FREF-01, FREF-03)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('classifyResolutionMethod (Correction 5 — §6.6 classification)', () => {
+  const exts = ['.md'];
+
   it('[U-CRM-01] returns "fq_id" for a valid v4 UUID identifier', () => {
     // Real v4 UUID (validate() + version() === 4)
-    expect(classifyResolutionMethod('56b43343-262a-4377-8418-61f558c398c6')).toBe('fq_id');
+    expect(classifyResolutionMethod('56b43343-262a-4377-8418-61f558c398c6', exts)).toBe('fq_id');
   });
 
   it('[U-CRM-02] returns "fq_id" for a second valid v4 UUID', () => {
-    expect(classifyResolutionMethod('f0772de2-6819-49ae-afef-8e34db834f78')).toBe('fq_id');
+    expect(classifyResolutionMethod('f0772de2-6819-49ae-afef-8e34db834f78', exts)).toBe('fq_id');
   });
 
   it('[U-CRM-03] returns "path" for identifier containing "/"', () => {
-    expect(classifyResolutionMethod('_test/does_not_exist_at_all.md')).toBe('path');
+    expect(classifyResolutionMethod('_test/does_not_exist_at_all.md', exts)).toBe('path');
   });
 
   it('[U-CRM-04] returns "path" for deeply nested path identifier', () => {
-    expect(classifyResolutionMethod('Projects/2026/Q2/planning.md')).toBe('path');
+    expect(classifyResolutionMethod('Projects/2026/Q2/planning.md', exts)).toBe('path');
   });
 
   it('[U-CRM-05] returns "path" for bare .md identifier (§6.6 endsWith rule)', () => {
-    expect(classifyResolutionMethod('foo.md')).toBe('path');
+    expect(classifyResolutionMethod('foo.md', exts)).toBe('path');
   });
 
   it('[U-CRM-06] returns "path" for .MD suffix (case-insensitive)', () => {
-    expect(classifyResolutionMethod('README.MD')).toBe('path');
+    expect(classifyResolutionMethod('README.MD', exts)).toBe('path');
   });
 
   it('[U-CRM-07] returns "filename" for bare identifier without "/" or ".md"', () => {
-    expect(classifyResolutionMethod('my-document')).toBe('filename');
+    expect(classifyResolutionMethod('my-document', exts)).toBe('filename');
   });
 
   it('[U-CRM-08] returns "filename" for identifier with other extensions', () => {
-    expect(classifyResolutionMethod('notes.txt')).toBe('filename');
+    expect(classifyResolutionMethod('notes.txt', exts)).toBe('filename');
   });
 
   it('[U-CRM-09] returns "filename" for short non-UUID, non-path identifier', () => {
-    expect(classifyResolutionMethod('standup-notes')).toBe('filename');
+    expect(classifyResolutionMethod('standup-notes', exts)).toBe('filename');
+  });
+
+  it('[U-CRM-10] honors configured markdown extensions — ".markdown" routes to "path"', () => {
+    expect(classifyResolutionMethod('notes.markdown', ['.md', '.markdown'])).toBe('path');
+  });
+
+  it('[U-CRM-11] does NOT route ".md" to "path" when extension is not configured', () => {
+    // If config disables .md (hypothetical), classifier must follow config, not hardcoded rule.
+    expect(classifyResolutionMethod('notes.md', ['.markdown'])).toBe('filename');
   });
 });
