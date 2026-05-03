@@ -339,6 +339,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "error == invalid_parameter_combination": env.get("error") == "invalid_parameter_combination",
                     "details.conflict == occurrence_with_multi_section": details.get("conflict") == "occurrence_with_multi_section",
                     "no identifier field (pre-I/O error)": "identifier" not in env,
+                    "details.sections_count == 2 (TC1-W13)":
+                        details.get("sections_count") == 2,
+                    "details.occurrence == 2 (TC1-W13)":
+                        details.get("occurrence") == 2,
                 }
                 d46_passed = all(checks.values())
                 if not d46_passed:

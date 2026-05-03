@@ -274,6 +274,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "body contains heading": "## 1. Progress Updates" in env.get("body", ""),
                     "no frontmatter key": "frontmatter" not in env,
                     "no headings key": "headings" not in env,
+                    "size.chars equals len(body) (TC1-W8)":
+                        env.get("size", {}).get("chars") == len(env.get("body", "")),
                 }
                 d27_passed = all(checks.values())
                 if not d27_passed:
@@ -317,6 +319,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "no body key": "body" not in env,
                     "no headings key": "headings" not in env,
                     "envelope fields present": "title" in env and "path" in env and "fq_id" in env,
+                    "frontmatter has type (TC1-W7)":
+                        "type" in (env.get("frontmatter") or {}),
+                    "frontmatter has sprint (TC1-W7)":
+                        "sprint" in (env.get("frontmatter") or {}),
+                    "frontmatter has team (TC1-W7)":
+                        "team" in (env.get("frontmatter") or {}),
                 }
                 d28_passed = all(checks.values())
                 if not d28_passed:
@@ -365,6 +373,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "all have level/text/chars": all_valid,
                     "no body key": "body" not in env,
                     "no frontmatter key": "frontmatter" not in env,
+                    "all heading.chars > 0 (TC1-W6)":
+                        all(h.get("chars", 0) > 0 for h in headings),
+                    "all heading.level in {1..6} (TC1-W6)":
+                        all(1 <= h.get("level", 0) <= 6 for h in headings),
                 }
                 d29_passed = all(checks.values())
                 if not d29_passed:

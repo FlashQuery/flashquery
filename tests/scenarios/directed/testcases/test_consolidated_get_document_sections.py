@@ -593,6 +593,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "extracted_sections length 2": len(extracted) == 2,
                     "first heading is 3. Action Items": "3. Action Items" in extracted[0].get("heading", "") if len(extracted) > 0 else False,
                     "second heading is 4. Action Items": "4. Action Items" in extracted[1].get("heading", "") if len(extracted) > 1 else False,
+                    "aggregate chars invariant: sum(chars) + 2*(N-1) == len(body) (TC1-W10)":
+                        sum(s.get("chars", 0) for s in extracted)
+                        + 2 * max(0, len(extracted) - 1)
+                        == len(env.get("body", "")),
                 }
                 d31b_passed = all(checks.values())
                 if not d31b_passed:
