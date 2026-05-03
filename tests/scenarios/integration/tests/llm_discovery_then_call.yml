@@ -8,12 +8,12 @@ coverage: [IL-16, IL-17]
 deps: [llm]
 
 steps:
-  - label: "IL-16 step 1: list_models returns the configured 'fast' model in models[]"
+  - label: "IL-16 step 1: list_models returns the configured 'fast' model with its name field bound to 'fast' (TC4-W5: value-bound, not bare)"
     assert:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"fast"'
+      expect_contains: '"name":"fast"'
 
   - label: "IL-16 step 2: call_model with resolver=model and name=fast succeeds (returns no isError)"
     assert:
@@ -26,7 +26,7 @@ steps:
             content: "Reply with the single word: OK"
       expect_not_contains: '"isError":true'
 
-  - label: "IL-16 step 3: call_model response includes resolved_model_name=fast (round-trip integrity)"
+  - label: "IL-16 step 3: call_model response includes resolved_model_name=fast (round-trip integrity, TC4-W5: value-bound)"
     assert:
       op: call_model
       args:
@@ -35,14 +35,14 @@ steps:
         messages:
           - role: user
             content: "Reply OK"
-      expect_contains: '"resolved_model_name"'
+      expect_contains: '"resolved_model_name":"fast"'
 
-  - label: "IL-17 step 1: list_purposes returns the configured 'general' purpose in purposes[]"
+  - label: "IL-17 step 1: list_purposes returns the configured 'general' purpose with its name field bound to 'general' (TC4-W5: value-bound, not bare)"
     assert:
       op: call_model
       args:
         resolver: list_purposes
-      expect_contains: '"general"'
+      expect_contains: '"name":"general"'
 
   - label: "IL-17 step 2: call_model with resolver=purpose and name=general succeeds"
     assert:
@@ -55,7 +55,7 @@ steps:
             content: "Reply OK"
       expect_not_contains: '"isError":true'
 
-  - label: "IL-17 step 3: call_model response via purpose includes resolved_model_name (round-trip integrity)"
+  - label: "IL-17 step 3: call_model response via purpose includes resolved_model_name=fast — purpose 'general' resolves to its primary model alias 'fast' (round-trip integrity, TC4-W5: value-bound)"
     assert:
       op: call_model
       args:
@@ -64,4 +64,4 @@ steps:
         messages:
           - role: user
             content: "Reply OK"
-      expect_contains: '"resolved_model_name"'
+      expect_contains: '"resolved_model_name":"fast"'

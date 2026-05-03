@@ -551,6 +551,53 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
       null
     );
   });
+
+  it('[U-RR-INT-06] resolveReferences returns 2+ FailedRef → handler aggregates ALL failures in failed_references[], no LLM call (Phase 3 Gap 1, REFS-06, OQ #7)', async () => {
+    // Phase 3 Gap 1: handler-level companion to the [U-RR-19] resolver test
+    // and the L-31a directed step. The fail-fast contract (REFS-06) requires
+    // the handler to surface EVERY failed reference in a single response —
+    // not just the first — so the AI consumer sees all problems at once
+    // rather than fixing them one-at-a-time across retries. A handler that
+    // returned only failed[0] (or coalesced into a single entry) would pass
+    // [U-RR-INT-03] but silently break two-failure aggregation.
+    const parsedRefs = [
+      { placeholder: '{{ref:missing/a.md}}', ref: '{{ref:missing/a.md}}', identifierType: 'ref' as const, identifier: 'missing/a.md', messageIndex: 0 },
+      { placeholder: '{{ref:b.md#Ghost}}', ref: '{{ref:b.md#Ghost}}', identifierType: 'ref' as const, identifier: 'b.md', section: 'Ghost', messageIndex: 0 },
+    ];
+    const failedRefs = [
+      { kind: 'failed' as const, ref: '{{ref:missing/a.md}}', reason: 'Document not found: missing/a.md' },
+      { kind: 'failed' as const, ref: '{{ref:b.md#Ghost}}', reason: "No heading matching 'Ghost' found in document" },
+    ];
+    vi.mocked(parseReferences).mockReturnValue(parsedRefs);
+    vi.mocked(resolveReferences).mockResolvedValue(failedRefs);
+
+    const completeMock = vi.fn();
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const res = await handler({
+      resolver: 'model',
+      name: 'fast',
+      messages: [{ role: 'user', content: '{{ref:missing/a.md}} and {{ref:b.md#Ghost}}' }],
+    });
+
+    expect(res.isError).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    expect(body.error).toBe('reference_resolution_failed');
+    // Both failures present, in input order (positional correspondence with parsedRefs)
+    expect(body.failed_references).toEqual([
+      { ref: '{{ref:missing/a.md}}', reason: 'Document not found: missing/a.md' },
+      { ref: '{{ref:b.md#Ghost}}', reason: "No heading matching 'Ghost' found in document" },
+    ]);
+    // CRITICAL: client.complete must NOT have been called (REFS-06 fail-fast)
+    expect(completeMock).not.toHaveBeenCalled();
+    expect(hydrateMessages).not.toHaveBeenCalled();
+  });
 });
 
 // ─── U-DISC-01..13: discovery resolvers + body guard ────────────────────────
