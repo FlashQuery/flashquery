@@ -25,7 +25,7 @@ from fqc_test_utils import TestRun, FQCServer  # noqa: E402
 from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_call_model_ref_errors"
-COVERAGE = ["L-30", "L-31", "L-32"]
+COVERAGE = ["L-30", "L-31", "L-31a", "L-32"]
 
 CONFIGURED_LLM = {
     "llm": {
@@ -56,7 +56,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run_id = _uuid.uuid4().hex[:8]
 
             valid_path = f"_test/{TEST_NAME}_{run_id}_valid.md"
-            client.call_tool("create_document", path=valid_path, content="valid content")
+            # NOTE: create_document requires `title`. Prior versions of this
+            # test omitted it, which caused the call to fail silently with
+            # -32602 input validation; the file was never actually created,
+            # and L-31 degenerated into a 2-failure case (valid_path also
+            # not found) instead of the intended 1-valid + 1-invalid mix.
+            client.call_tool(
+                "create_document",
+                path=valid_path,
+                title="L-31 valid fixture",
+                content="valid content",
+            )
+            # Force a sync scan so valid_path is indexed before L-31 / L-31a
+            # reference it.
+            client.call_tool("force_file_scan", background=False)
 
             # L-30: nonexistent reference → reference_resolution_failed
             ghost_ref = "Nonexistent/ghost_no_such_doc.md"
@@ -99,10 +112,49 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 # Fail-fast: NO injected_references on a failed call
                 "no injected_references key": "injected_references" not in resp,
                 "no tokens key (no LLM dispatch)": "tokens" not in resp,
+                # Phase 3 Gap 6: the valid ref MUST NOT appear in
+                # failed_references[]. Only refs that actually failed to
+                # resolve belong there. Without this negative assertion the
+                # test couldn't tell apart "fail-fast bundled all refs as
+                # failures" from the spec-correct "fail-fast surfaces only
+                # the actually-failed refs".
+                "valid ref NOT in failed_references (Phase 3 Gap 6)":
+                    not any(valid_path in (f.get("ref") or "") for f in failed),
             }
             run.step(label="L-31: one valid + one invalid → fail-fast no LLM dispatch",
                      passed=all(checks.values()),
                      detail=f"checks={checks}",
+                     timing_ms=r.timing_ms, tool_result=r)
+
+            # L-31a (Phase 3 Gap 1, OQ #7): two-failure aggregation —
+            # BOTH bad refs must appear in failed_references[]. The fail-fast
+            # behaviour does not collapse the array to a single entry.
+            ghost_ref_a = "Nonexistent/ghost_a.md"
+            ghost_ref_b = "Nonexistent/ghost_b.md"
+            r = client.call_tool(
+                "call_model", resolver="model", name="fast",
+                messages=[
+                    {"role": "user",
+                     "content": f"a: {{{{ref:{ghost_ref_a}}}}} b: {{{{ref:{ghost_ref_b}}}}}"},
+                ],
+            )
+            resp = json.loads(r.text) if r.text else {}
+            failed = resp.get("failed_references", [])
+            checks = {
+                "isError true": (not r.ok),
+                "error == reference_resolution_failed":
+                    resp.get("error") == "reference_resolution_failed",
+                "failed_references contains ghost_a":
+                    any(ghost_ref_a in (f.get("ref") or "") for f in failed),
+                "failed_references contains ghost_b":
+                    any(ghost_ref_b in (f.get("ref") or "") for f in failed),
+                "failed_references has at least 2 entries (aggregation)":
+                    isinstance(failed, list) and len(failed) >= 2,
+                "no injected_references key": "injected_references" not in resp,
+            }
+            run.step(label="L-31a: two-failure aggregation — both bad refs in failed_references[] (Phase 3 Gap 1)",
+                     passed=all(checks.values()),
+                     detail=f"checks={checks}, failed_count={len(failed) if isinstance(failed, list) else 'N/A'}",
                      timing_ms=r.timing_ms, tool_result=r)
 
             # L-32: pointer-missing → reference_resolution_failed, reason mentions pointer

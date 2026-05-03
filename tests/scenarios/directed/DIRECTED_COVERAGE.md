@@ -595,7 +595,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-28 | call_model with multiple references across messages — all resolved, injected_references[] lists each in order | test_call_model_multi_ref | 2026-05-03 | pending Phase 111 |
 | L-29 | injected_references entry for -> dereference includes resolved_to (path-only refs do NOT) | test_call_model_references | 2026-05-03 | pending Phase 111 |
 | L-30 | call_model with {{ref:nonexistent.md}} returns reference_resolution_failed | test_call_model_ref_errors | 2026-05-03 | pending Phase 111 |
-| L-31 | call_model with one valid + one invalid reference fails entire call (fail-fast, no LLM dispatch) | test_call_model_ref_errors | 2026-05-03 | pending Phase 111 |
+| L-31 | call_model with one valid + one invalid reference fails entire call (fail-fast, no LLM dispatch); valid ref absent from failed_references[] (Phase 3 Gap 6) (VALIDATED) | test_call_model_ref_errors | 2026-05-03 | 2026-05-03 |
+| L-31a | call_model with TWO invalid references aggregates both into failed_references[] (Phase 3 Gap 1, OQ #7) (VALIDATED) | test_call_model_ref_errors | 2026-05-03 | 2026-05-03 |
 | L-32 | call_model with {{ref:path->missing.pointer}} returns reference_resolution_failed with pointer-specific reason | test_call_model_ref_errors | 2026-05-03 | pending Phase 111 |
 | L-33 | call_model with no reference patterns is forwarded byte-for-byte unchanged; no injected_references / prompt_chars in response | test_call_model_references | 2026-05-03 | pending Phase 111 |
 | L-33a | injected_references[].chars is integer matching resolved content length exactly | test_call_model_references | 2026-05-03 | pending Phase 111 |

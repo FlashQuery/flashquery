@@ -53,3 +53,32 @@ steps:
             content: "{{ref:Nonexistent/ghost.md}} Tell me about it."
       expect_contains: '"reason"'
       expect_error: true
+
+  - label: "Phase 3 Gap 1a: two-failure aggregation — both bad refs in failed_references[] (OQ #7)"
+    # Phase 3 Gap 1 (HIGH PRIORITY): when two references fail in the same
+    # call, BOTH must appear in failed_references[]. This is the YAML-level
+    # companion to the [U-RR-19] unit test and the L-31a directed step.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Nonexistent/ghost_one.md}} and {{ref:Nonexistent/ghost_two.md}} please."
+      expect_contains: '"{{ref:Nonexistent/ghost_one.md}}"'
+      expect_error: true
+
+  - label: "Phase 3 Gap 1b: two-failure aggregation — second bad ref also in failed_references[]"
+    # Split because the YAML harness only honours one expect_contains per
+    # assertion; this sibling step locks in the second placeholder.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Nonexistent/ghost_one.md}} and {{ref:Nonexistent/ghost_two.md}} please."
+      expect_contains: '"{{ref:Nonexistent/ghost_two.md}}"'
+      expect_error: true
