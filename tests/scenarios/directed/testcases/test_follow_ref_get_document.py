@@ -257,6 +257,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "followed_ref.resolved_to is target path": fr.get("resolved_to") == target_path,
                     "followed_ref has size.chars": "size" in fr,
                     "no top-level body": "body" not in env,
+                    "fr.size.chars is int (TC2-W2)":
+                        isinstance(fr.get("size", {}).get("chars"), int),
+                    "fr has resolved_fq_id (TC2-W2)": "resolved_fq_id" in fr,
+                    "fr has modified (TC2-W2)": "modified" in fr,
+                    "fr has body (TC2-W2)": "body" in fr,
+                    "no top-level frontmatter (TC2-W2)": "frontmatter" not in env,
+                    "no top-level headings (TC2-W2)": "headings" not in env,
                 }
                 d53_passed = all(checks.values())
                 if not d53_passed:
@@ -303,6 +310,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "first heading has text": "text" in headings[0] if headings else False,
                     "first heading has chars": "chars" in headings[0] if headings else False,
                     "no top-level body": "body" not in env,
+                    "body NOT in fr (nested — TC2-W3)": "body" not in fr,
                 }
                 d54_passed = all(checks.values())
                 if not d54_passed:
@@ -347,6 +355,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "frontmatter fq_title == 'Target Summary'": fm.get("fq_title") == "Target Summary",
                     "followed_ref has headings": "headings" in fr,
                     "headings is non-empty": isinstance(fr.get("headings"), list) and len(fr.get("headings", [])) > 0,
+                    "body NOT in fr (nested — TC2-W3)": "body" not in fr,
                 }
                 d55_passed = all(checks.values())
                 if not d55_passed:
@@ -430,12 +439,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not d57_result.ok:
             try:
                 env = json.loads(d57_result.text)
+                traversal = env.get("traversal", {})
                 checks = {
                     "error == follow_ref_path_not_found": env.get("error") == "follow_ref_path_not_found",
                     "identifier present at top level": "identifier" in env,
                     "reference present at top level": "reference" in env,
                     "traversal present at top level": "traversal" in env,
                     "NO followed_ref key (pre-resolution = not nested)": "followed_ref" not in env,
+                    "traversal has resolved (TC2-W4)":
+                        isinstance(traversal, dict) and "resolved" in traversal,
+                    "traversal has failed_at (TC2-W4)":
+                        isinstance(traversal, dict) and "failed_at" in traversal,
+                    "traversal has available_keys list (TC2-W4)":
+                        isinstance(traversal, dict)
+                        and isinstance(traversal.get("available_keys"), list),
                 }
                 d57_passed = all(checks.values())
                 if not d57_passed:
@@ -479,6 +496,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "reference present at top level": "reference" in env,
                     "found_value_preview present": "found_value_preview" in env,
                     "NO followed_ref key": "followed_ref" not in env,
+                    "found_value_preview contains '42' (TC2-W5)":
+                        "42" in str(env.get("found_value_preview", "")),
                 }
                 d58_passed = all(checks.values())
                 if not d58_passed:
@@ -572,6 +591,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "element 1 has error (path not found for simple doc)": "error" in results[1],
                     "element 1 error type is follow_ref_path_not_found": results[1].get("error") == "follow_ref_path_not_found",
                     "element 1 has identifier field": "identifier" in results[1],
+                    "results[0].followed_ref.resolved_to == target_path (TC2-W6)":
+                        len(results) > 0
+                        and results[0].get("followed_ref", {}).get("resolved_to") == target_path,
+                    "results[1].error == follow_ref_path_not_found (TC2-W6)":
+                        len(results) > 1
+                        and results[1].get("error") == "follow_ref_path_not_found",
+                    "results[1] has traversal (TC2-W6)":
+                        len(results) > 1 and "traversal" in results[1],
+                    "results[1].reference == 'projections.summary' (TC2-W6)":
+                        len(results) > 1 and results[1].get("reference") == "projections.summary",
                 }
                 d60_passed = all(checks.values())
                 if not d60_passed:

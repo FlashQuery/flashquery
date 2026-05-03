@@ -228,6 +228,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "element 1 has error key": "error" in results[1],
                     "element 1 error is document_not_found": results[1].get("error") == "document_not_found",
                     "element 1 has identifier field": "identifier" in results[1],
+                    "results[0].identifier == ident_a (TC2-W1 positional)":
+                        len(results) > 0 and results[0].get("identifier") == ident_a,
+                    "results[1].identifier matches the missing path (TC2-W1)":
+                        len(results) > 1 and results[1].get("identifier") == nonexistent,
+                    "results[1] has 'message' field (TC2-W1)":
+                        len(results) > 1 and "message" in results[1],
                 }
                 d52_passed = all(checks.values())
                 if not d52_passed:
