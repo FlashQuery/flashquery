@@ -155,9 +155,15 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         const cfgModels = llmConf?.models ?? [];
         const cfgPurposes = llmConf?.purposes ?? [];
 
+        // Build a provider lookup map ONCE so modelToResponse can derive the `local` flag
+        // (Verification Correction 3 — Option A: auto-derive). Map key = provider name.
+        const providersByName = new Map((llmConf?.providers ?? []).map((p) => [p.name, p]));
+
         // Project a model config entry to the discovery response shape.
         // Field mapping: providerName -> provider, model -> model_id, costPerMillion.* -> input/output_cost_per_million.
         // Optional fields use !== undefined (NOT truthiness) so capabilities: [] is preserved.
+        // `local` is auto-derived: explicit provider.local: true overrides; otherwise type === 'ollama'
+        // implies local: true; non-Ollama providers without explicit declaration OMIT the key.
         const modelToResponse = (m: typeof cfgModels[number]): Record<string, unknown> => {
           const entry: Record<string, unknown> = {
             name: m.name,
@@ -170,6 +176,13 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           if (m.description !== undefined) entry['description'] = m.description;
           if (m.contextWindow !== undefined) entry['context_window'] = m.contextWindow;
           if (m.capabilities !== undefined) entry['capabilities'] = m.capabilities;
+          // Auto-derive `local` per spec §8.3 example + dev plan §6.4.1.
+          const prov = providersByName.get(m.providerName);
+          if (prov?.local === true) {
+            entry['local'] = true;
+          } else if (prov?.type === 'ollama') {
+            entry['local'] = true;
+          }
           return entry;
         };
 
