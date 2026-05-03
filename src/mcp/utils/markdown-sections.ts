@@ -121,7 +121,13 @@ export function extractSection(
     );
   }
 
-  // Calculate section boundaries
+  // Calculate section boundaries.
+  // NOTE: This causes a second call to extractHeadings() and findHeadingOccurrence()
+  // (WR-05). getSectionBoundaries() is a public API used by extractMultipleSections
+  // and computeSectionChars; refactoring to share the targetHeading already found
+  // above would require changing the public signature and propagating the change to
+  // all callers. Kept as-is intentionally — the double traversal is O(H) per call
+  // and not performance-critical for typical document sizes.
   const boundaries = getSectionBoundaries(content, headingName, includeSubheadings, occurrence);
 
   // Extract section content (from startLine to endLine, inclusive, lines are 0-indexed in array)
@@ -241,8 +247,16 @@ export function getSectionBoundaries(
   // Start line is the heading line (1-indexed)
   const startLine = targetHeading.line;
 
-  // Determine end line
-  let endLine = lines.length; // Default to last line
+  // Determine end line.
+  // Trim the trailing empty string that content.split('\n') produces when the file
+  // ends with a newline — e.g. "a\nb\n".split('\n') → ["a","b",""] (length 3, but
+  // last visible line is 2). Without this adjustment, the section content includes
+  // a trailing empty element, making sectionContent.length one byte larger than the
+  // visible content — causing chars-count mismatches between computeSectionChars and
+  // extractSection (CR-01).
+  let endLine = (lines.length > 0 && lines[lines.length - 1] === '')
+    ? lines.length - 1
+    : lines.length;
 
   if (includeSubheadings) {
     // Include all nested content until next same-or-higher-level heading

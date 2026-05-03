@@ -106,7 +106,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
                      timing_ms=r.timing_ms, tool_result=r)
 
             # L-32: pointer-missing → reference_resolution_failed, reason mentions pointer
-            # Create a source doc with frontmatter that does NOT have the requested pointer
+            # Create a source doc with frontmatter that does NOT have the requested pointer.
+            # Uses a raw vault write (not create_document) to avoid the fq_id round-trip.
+            # The file is explicitly removed before the with-block exits so the scanner
+            # does not leave a stale vault entry across test runs (WR-03).
             src_path = f"_test/{TEST_NAME}_{run_id}_src.md"
             p = server.vault_path / src_path
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -135,6 +138,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
                      passed=all(checks.values()),
                      detail=f"checks={checks}, reason={reason_text!r}",
                      timing_ms=r.timing_ms, tool_result=r)
+
+            # Cleanup: remove the raw-written file before the FQCServer exits.
+            # FQCServer deletes the whole temp vault on __exit__ (filesystem is cleaned),
+            # but removing the file now and re-scanning prevents stale DB entries from
+            # accumulating in Supabase when the vault is shared or reused (WR-03).
+            if p.exists():
+                p.unlink(missing_ok=True)
+                # Remove the parent dir if empty
+                try:
+                    p.parent.rmdir()
+                except OSError:
+                    pass  # Not empty — other test files may be present
 
     except Exception as e:  # noqa: BLE001
         run.step(label="Test crashed", passed=False, detail=f"exception: {type(e).__name__}: {e}")

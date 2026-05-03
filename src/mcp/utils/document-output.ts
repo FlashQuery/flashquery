@@ -380,6 +380,13 @@ export async function resolveAndBuildDocument(
   if (!hashRow || hashRow.content_hash !== contentHash) {
     preScan = await targetedScan(cfg, sm.getClient(), resolved, contentHash, log);
   } else {
+    // Cache-hit path: content hash matches the stored DB row — no targetedScan needed.
+    // `created` and `status` are sourced from the on-disk frontmatter (not the DB row)
+    // because the hashRow select only fetches content_hash and id. This is intentional:
+    // when the hash matches, the frontmatter on disk is authoritative. Fallbacks
+    // (new Date() / 'active') apply only when the frontmatter fields are absent —
+    // manual edits that remove fq_created or fq_status produce conservative defaults
+    // rather than a read failure (WR-04: documented intent).
     preScan = {
       ...resolved,
       fqcId: hashRow.id as string,

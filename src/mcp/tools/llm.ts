@@ -272,6 +272,9 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       // TypeScript's control flow analysis cannot narrow across the guard block, so we
       // alias here for the LLM-dispatch path. Discovery paths already returned above.
       const resolvedName = params.name ?? '';
+      // WR-06: TypeScript narrows params.resolver to 'model' | 'purpose' here via
+      // control-flow analysis after Step 1.1's exhaustive early returns for all
+      // discovery resolver values. No cast needed.
       const resolvedResolver = params.resolver;
 
       // Step 1.5: Reference resolution (REFS-01 through REFS-07)
@@ -478,7 +481,20 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       // (setting to undefined still leaves the key present in the object; we need key absent)
       if (params.trace_id) {
         metadata.trace_id = params.trace_id;
-        metadata.trace_cumulative = traceCumulative;
+        if (traceCumulative !== undefined) {
+          // Normal path: Supabase pre-snapshot succeeded; traceCumulative includes prior calls.
+          metadata.trace_cumulative = traceCumulative;
+        } else {
+          // Fallback: Supabase unavailable (tracePreSnapshot was null) — populate from
+          // current-call data only (CR-02). This ensures trace_cumulative is always present
+          // when trace_id is supplied, maintaining the documented behavior contract.
+          metadata.trace_cumulative = {
+            total_calls: 1,
+            total_tokens: { input: result.inputTokens, output: result.outputTokens },
+            total_cost_usd: costUsd,
+            total_latency_ms: result.latencyMs,
+          };
+        }
       }
 
       // Phase 109 REFS-04, REFS-05: only add when references were resolved (D-02-style conditional pattern)

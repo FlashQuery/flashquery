@@ -252,14 +252,20 @@ function loadEnvFileSilently(envPath: string): void {
     if (eqIdx === -1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
     let value = trimmed.slice(eqIdx + 1).trim();
-    const commentIdx = value.indexOf(' #');
-    if (commentIdx !== -1) {
-      value = value.slice(0, commentIdx).trim();
-    }
-    if (
+    // Only strip inline comments from unquoted values (WR-01).
+    // Standard .env convention: quoted values are treated verbatim — a password like
+    // "hunter2 # not a comment" must not be truncated. Check for surrounding quotes
+    // BEFORE applying the inline comment strip so quoted values pass through intact.
+    const isQuoted =
       (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
+      (value.startsWith("'") && value.endsWith("'"));
+    if (!isQuoted) {
+      const commentIdx = value.indexOf(' #');
+      if (commentIdx !== -1) {
+        value = value.slice(0, commentIdx).trim();
+      }
+    }
+    if (isQuoted) {
       value = value.slice(1, -1);
     }
     if (!(key in process.env)) {
