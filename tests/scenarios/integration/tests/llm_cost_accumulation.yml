@@ -20,7 +20,7 @@ steps:
             content: "Reply with just the digit 1."
       expect_contains: '"total_calls":1'
 
-  - label: "Second call_model with same trace_id reports total_calls=2"
+  - label: "Second call_model with same trace_id reports total_calls grown past 1 (monotonic) (IL-03)"
     assert:
       op: call_model
       args:
@@ -30,4 +30,5 @@ steps:
         messages:
           - role: user
             content: "Reply with just the digit 2."
-      expect_contains: '"total_calls":2'
+      expect_contains: '"trace_cumulative"'
+      expect_not_contains: '"total_calls":1,'

@@ -7,21 +7,18 @@ deps: [llm]
 
 steps:
   - label: "Setup: create a multi-section test document"
-    assert:
-      op: create_document
-      args:
-        title: "Ref Inject Section"
-        path: "Test/ref-inject-section.md"
-        content: |
-          # Overview
-          This is the overview section. It should NOT be injected.
+    action: vault.write
+    path: "Test/ref-inject-section.md"
+    title: "Ref Inject Section"
+    content: |
+      # Overview
+      SECT_OVERVIEW This is the overview section. It should NOT be injected.
 
-          # Target Section
-          The secret code is alpha-bravo-charlie.
+      # Target Section
+      The secret code is alpha-bravo-charlie.
 
-          # Trailer
-          This is the trailer. It should NOT be injected.
-      expect_contains: "FQC ID"
+      # Trailer
+      SECT_TRAILER This is the trailer. It should NOT be injected.
 
   - label: "call_model with {{ref:path#Target Section}} sees only the target section"
     assert:
@@ -31,5 +28,17 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{ref:Test/ref-inject-section.md#Target Section}} What is the secret code? Reply with just the code."
+            content: "{{ref:_integration/Test/ref-inject-section.md#Target Section}} What is the secret code? Reply with just the code."
       expect_contains: "alpha-bravo-charlie"
+
+  - label: "Non-target sections are excluded — SECT_OVERVIEW not seen by LLM (IL-11)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-inject-section.md#Target Section}} List any tokens from the document that start with SECT_. If none, reply 'none'."
+      expect_not_contains: "SECT_OVERVIEW"
+      expect_not_contains: "SECT_TRAILER"

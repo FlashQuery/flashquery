@@ -8,26 +8,20 @@ deps: [llm]
 
 steps:
   - label: "Setup: create the target document"
-    assert:
-      op: create_document
-      args:
-        title: "Ref Target"
-        path: "Test/ref-target.md"
-        content: "Target body — the magic word is BANANA."
-      expect_contains: "FQC ID"
+    action: vault.write
+    path: "Test/ref-target.md"
+    title: "Ref Target"
+    content: "Target body — the magic word is BANANA."
 
   - label: "Setup: create the source document with a frontmatter pointer to the target"
-    assert:
-      op: create_document
-      args:
-        title: "Ref Source"
-        path: "Test/ref-source.md"
-        content: |
-          ---
-          fq_target_ref: "Test/ref-target.md"
-          ---
-          Source body — should NOT be injected when using ->.
-      expect_contains: "FQC ID"
+    action: vault.write
+    path: "Test/ref-source.md"
+    title: "Ref Source"
+    content: |
+      ---
+      fq_target_ref: "_integration/Test/ref-target.md"
+      ---
+      Source body — should NOT be injected when using ->.
 
   - label: "call_model with {{ref:source->fq_target_ref}} dereferences and injects target body"
     assert:
@@ -37,7 +31,7 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{ref:Test/ref-source.md->fq_target_ref}} What word appears in the document? Reply with just the word in uppercase."
+            content: "{{ref:_integration/Test/ref-source.md->fq_target_ref}} What word appears in the document? Reply with just the word in uppercase."
       expect_contains: "BANANA"
 
   - label: "Response metadata includes resolved_to for -> dereference"
@@ -48,5 +42,5 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{ref:Test/ref-source.md->fq_target_ref}} Reply OK."
+            content: "{{ref:_integration/Test/ref-source.md->fq_target_ref}} Reply OK."
       expect_contains: '"resolved_to"'

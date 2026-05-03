@@ -44,16 +44,16 @@ steps:
         resolver: search
         parameters:
           query: "FAST"
-      expect_contains: '"query"'
+      expect_contains: '"name":"fast"'
 
-  - label: "search with no-match query still returns the results object with both arrays — IL-19"
+  - label: "search with no-match query still returns the results object with both arrays empty — IL-19"
     assert:
       op: call_model
       args:
         resolver: search
         parameters:
           query: "zzzz-nonexistent-token-zzzz"
-      expect_contains: '"results"'
+      expect_contains: '"purposes":[],"models":[]'
 
   - label: "search with no parameters.query returns isError with documented message (DISC-03) — IL-20"
     assert:

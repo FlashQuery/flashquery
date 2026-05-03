@@ -18,3 +18,47 @@ steps:
           - role: user
             content: "What is 2+2? Reply with just the digit."
       expect_contains: "4"
+
+  - label: "Response metadata includes resolved_model_name (IL-01)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+      expect_contains: '"resolved_model_name"'
+
+  - label: "Response metadata includes provider_name (IL-01)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+      expect_contains: '"provider_name"'
+
+  - label: "Response metadata includes cost_usd (IL-01)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+      expect_contains: '"cost_usd"'
+
+  - label: "Response metadata includes latency_ms (IL-01)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+      expect_contains: '"latency_ms"'

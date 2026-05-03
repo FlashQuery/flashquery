@@ -9,13 +9,10 @@ deps: [llm]
 
 steps:
   - label: "Setup: create a test document with a known fact"
-    assert:
-      op: create_document
-      args:
-        title: "Ref Inject Basic"
-        path: "Test/ref-inject-basic.md"
-        content: "The answer to the test question is forty-two."
-      expect_contains: "FQC ID"
+    action: vault.write
+    path: "Test/ref-inject-basic.md"
+    title: "Ref Inject Basic"
+    content: "The answer to the test question is forty-two."
 
   - label: "call_model resolves {{ref:...}} and the LLM sees the injected body"
     assert:
@@ -25,7 +22,7 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{ref:Test/ref-inject-basic.md}} What number does the document mention? Reply with just the digits."
+            content: "{{ref:_integration/Test/ref-inject-basic.md}} What number does the document mention? Reply with just the digits."
       expect_contains: "42"
 
   - label: "Response metadata contains injected_references"
@@ -36,7 +33,7 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{ref:Test/ref-inject-basic.md}} Summarize in three words or fewer."
+            content: "{{ref:_integration/Test/ref-inject-basic.md}} Summarize in three words or fewer."
       expect_contains: '"injected_references"'
 
   - label: "Response metadata contains prompt_chars"
@@ -47,5 +44,5 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{ref:Test/ref-inject-basic.md}} Reply OK."
+            content: "{{ref:_integration/Test/ref-inject-basic.md}} Reply OK."
       expect_contains: '"prompt_chars"'

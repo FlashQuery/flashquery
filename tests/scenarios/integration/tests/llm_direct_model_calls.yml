@@ -33,3 +33,11 @@ steps:
         mode: by_purpose
         period: "24h"
       expect_contains: '"direct_model_calls"'
+
+  - label: "by_purpose purposes array is empty (direct calls are not purpose-resolved) (IL-06)"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: by_purpose
+        period: "24h"
+      expect_contains: '"purposes": []'
