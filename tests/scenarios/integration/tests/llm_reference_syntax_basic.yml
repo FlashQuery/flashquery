@@ -68,3 +68,18 @@ steps:
           - role: user
             content: "{{ref:_integration/Test/ref-inject-basic.md}} Reply OK."
       expect_contains: '"{{ref:_integration/Test/ref-inject-basic.md}}"'
+
+  - label: "TC3-W4 companion: path-only refs OMIT resolved_to in injected_references[]"
+    # Path-only refs ({{ref:path}}, no -> operator) must NOT carry the
+    # resolved_to key in the response metadata — only -> dereferences do
+    # (§5.4). Without this negative assertion the pointer.yml positive
+    # check alone could pass even if resolved_to leaked into every entry.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-inject-basic.md}} Reply OK."
+      expect_not_contains: '"resolved_to"'

@@ -31,7 +31,7 @@ steps:
             content: "{{ref:_integration/Test/ref-inject-section.md#Target Section}} What is the secret code? Reply with just the code."
       expect_contains: "alpha-bravo-charlie"
 
-  - label: "Non-target sections are excluded — SECT_OVERVIEW not seen by LLM (IL-11)"
+  - label: "Non-target overview section is excluded — SECT_OVERVIEW not seen by LLM (IL-11)"
     assert:
       op: call_model
       args:
@@ -41,4 +41,32 @@ steps:
           - role: user
             content: "{{ref:_integration/Test/ref-inject-section.md#Target Section}} List any tokens from the document that start with SECT_. If none, reply 'none'."
       expect_not_contains: "SECT_OVERVIEW"
+
+  - label: "Non-target trailer section is excluded — SECT_TRAILER not seen by LLM (IL-11)"
+    # Split out from the prior step because the YAML schema only honours
+    # one expect_not_contains per assertion; the second key was being
+    # silently dropped during parsing.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-inject-section.md#Target Section}} List any tokens from the document that start with SECT_. If none, reply 'none'."
       expect_not_contains: "SECT_TRAILER"
+
+  - label: "TC3-W4 companion: section-only refs OMIT resolved_to in injected_references[]"
+    # Section-only refs ({{ref:path#Section}}, no -> operator) must NOT
+    # carry the resolved_to key in the response metadata — only ->
+    # dereferences do (§5.4). Mirrors the basic.yml companion check for
+    # path-only refs to lock down the rule across all non-arrow ref forms.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-inject-section.md#Target Section}} Reply OK."
+      expect_not_contains: '"resolved_to"'

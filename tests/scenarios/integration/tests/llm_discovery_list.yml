@@ -6,16 +6,21 @@ description: >
   with cost rates from the primary model. Both resolvers can be called WITHOUT name and
   WITHOUT messages — DISC-04 makes those optional for discovery. Covers DISC-01, DISC-02,
   DISC-04 end-to-end through the MCP transport layer.
+
+  TC4-W5: every step that previously used a bare-key substring assertion has been
+  upgraded to a value-bound substring (e.g. '"name":"fast"' instead of '"fast"',
+  '"input_cost_per_million":0.15' instead of '"input_cost_per_million"'). Bare-key
+  matching could not distinguish a present-but-empty value from the spec'd value.
 coverage: [IL-15, IL-16, IL-17, IL-18]
 deps: [llm]
 
 steps:
-  - label: "list_models returns a JSON object with the models key (DISC-01) — IL-15"
+  - label: "TC4-W5/DISC-01: list_models response shape — models is a non-empty JSON array — IL-15"
     assert:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"models"'
+      expect_contains: '"models":[{'
 
   - label: "[KNOWN-DEVIATION] list_models emits implementation-only `type` field — see Deviation 8 in CMR Verification report. Tracking, not contract."
     assert:
@@ -24,63 +29,116 @@ steps:
         resolver: list_models
       expect_contains: '"type"'
 
-  - label: "list_models response includes provider field on each model entry (DISC-01 field mapping) — IL-15"
+  - label: "TC4-W5/DISC-01: list_models entry — provider field carries the configured provider name (not just key presence) — IL-15"
     assert:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"provider"'
+      expect_contains: '"provider":"openai"'
 
-  - label: "list_models response includes model_id field (config 'model' renamed to 'model_id' per locked decision) — IL-16"
+  - label: "TC4-W5/DISC-01: list_models entry — model_id is the underlying API model id (config 'model' renamed to 'model_id') — IL-16"
     assert:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"model_id"'
+      expect_contains: '"model_id":"gpt-4o-mini"'
 
-  - label: "list_models response includes the configured 'fast' model alias — IL-16"
+  - label: "TC4-W5/DISC-01: list_models entry — name field carries the configured alias 'fast' — IL-16"
     assert:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"fast"'
+      expect_contains: '"name":"fast"'
 
-  - label: "list_models response includes input_cost_per_million field (DISC-01) — IL-16"
+  - label: "TC4-W5/DISC-01: list_models entry — input_cost_per_million carries the configured numeric rate — IL-16"
     assert:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"input_cost_per_million"'
+      expect_contains: '"input_cost_per_million":0.15'
 
-  - label: "list_models response includes output_cost_per_million field (DISC-01) — IL-16"
+  - label: "TC4-W5/DISC-01: list_models entry — output_cost_per_million carries the configured numeric rate — IL-16"
     assert:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"output_cost_per_million"'
+      expect_contains: '"output_cost_per_million":0.6'
 
-  - label: "list_purposes returns a JSON object with the purposes key (DISC-02) — IL-17"
+  - label: "TC4-W5/DISC-01: list_models entry — capabilities field carries the configured array verbatim (locks down OQ #16 preserve-when-declared) — IL-15"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"capabilities":["tools","vision"]'
+
+  - label: "TC4-W5/DISC-01: list_models entry — description field carries the configured string verbatim — IL-15"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"description":"Fast, cheap small model for routine tasks"'
+
+  - label: "TC4-W5/DISC-01: list_models entry — context_window carries the configured numeric value — IL-15"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"context_window":128000'
+
+  - label: "TC4-W5/DISC-01: list_models entry — local: true is set on Ollama-backed models (Verification Correction 3) — IL-15"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"local":true'
+
+  - label: "TC4-W5/DISC-01: list_models — embeddings model has NO capabilities field (omit-when-undeclared per OQ #16). Substring '\"capabilities\":[]' must not appear, since embeddings never declared one — IL-15"
+    # The embeddings model is declared with no capabilities key; per OQ #16 it
+    # must be OMITTED entirely from the response (not present-with-empty-array,
+    # not present-with-null). This step would have passed the prior bare-key
+    # check even if every model had `capabilities: []` injected as a default.
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_not_contains: '"name":"embeddings","provider":"openai","model_id":"text-embedding-3-small","type":"embedding","input_cost_per_million":0.02,"output_cost_per_million":0,"capabilities"'
+
+  - label: "TC4-W5/DISC-02: list_purposes response shape — purposes is a non-empty JSON array — IL-17"
     assert:
       op: call_model
       args:
         resolver: list_purposes
-      expect_contains: '"purposes"'
+      expect_contains: '"purposes":[{'
 
-  - label: "list_purposes response includes input_cost_per_million from primary model (DISC-02 cost lookup) — IL-17"
+  - label: "TC4-W5/DISC-02: list_purposes — input_cost_per_million carries the rate FROM the primary model (general → fast → 0.15) — IL-17"
     assert:
       op: call_model
       args:
         resolver: list_purposes
-      expect_contains: '"input_cost_per_million"'
+      expect_contains: '"input_cost_per_million":0.15'
 
-  - label: "list_models can be called with NO name and NO messages without error (DISC-04) — IL-18"
+  - label: "TC4-W5/DISC-02: list_purposes — output_cost_per_million carries the rate FROM the primary model (general → fast → 0.6) — IL-17"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"output_cost_per_million":0.6'
+
+  - label: "TC4-W5/DISC-02: list_purposes — purpose 'general' is present with its name field as a value-bound substring — IL-17"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"name":"general"'
+
+  - label: "DISC-04: list_models can be called with NO name and NO messages without error — IL-18"
     assert:
       op: call_model
       args:
         resolver: list_models
       expect_not_contains: '"isError":true'
 
-  - label: "list_purposes can be called with NO name and NO messages without error (DISC-04) — IL-18"
+  - label: "DISC-04: list_purposes can be called with NO name and NO messages without error — IL-18"
     assert:
       op: call_model
       args:
