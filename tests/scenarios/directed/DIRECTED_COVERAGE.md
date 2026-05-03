@@ -61,6 +61,7 @@ Core CRUD operations on vault documents via MCP.
 | D-34a | get_document include_nested=False excludes subheadings from extracted section (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-02 |
 | D-35 | get_document with non-existent identifier returns document_not_found error envelope with isError=true (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-02 |
 | D-46 | get_document with sections + occurrence=N returns invalid_parameter_combination error (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-02 |
+| D-46a | get_document with sections=[X] + include=['headings'] (no body) returns invalid_parameter_combination error with details.conflict='sections_without_body' (Phase 1 Gap 1) (VALIDATED) | test_consolidated_get_document_errors | 2026-05-03 | 2026-05-03 |
 | D-47 | get_document title fallback when fq_title missing — uses file basename (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
 | D-48 | get_document title coercion when fq_title is a number — returns string representation (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
 | D-49 | get_document title trim when fq_title has leading/trailing whitespace — returns trimmed string (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
@@ -122,6 +123,7 @@ Verifying structural introspection of documents.
 | O-05 | Get outline with exclude_headings returns frontmatter only (SUPERSEDED: standalone frontmatter include covered by D-28) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
 | O-06 | Batch outline (array of identifiers) returns DB metadata (SUPERSEDED: batch mode removed; single-doc envelope with all three includes covered by D-30) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-29 |
 | O-07 | get_document headings include level, text, and chars fields; max_depth filters by heading level (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
+| O-11 | get_document include=['headings'] with max_depth=1 boundary — only H1 headings; H2/H3 excluded (Phase 1 Gap 6) (VALIDATED) | test_consolidated_get_document | 2026-05-03 | 2026-05-03 |
 | O-08 | get_document headings includes all occurrences of duplicate heading names with distinct chars values (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
 | O-09 | error envelope available_headings lists all headings in the document (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-02 |
 | O-10 | occurrence parameter out of range (>= actual count) returns section_not_found with reason insufficient_occurrences in missing_sections (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-02 |

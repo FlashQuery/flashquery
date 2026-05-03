@@ -27,7 +27,7 @@ Exit codes:
 """
 from __future__ import annotations
 
-COVERAGE = ["D-27", "D-28", "D-29", "D-30", "O-07", "O-08", "D-47", "D-48", "D-49"]
+COVERAGE = ["D-27", "D-28", "D-29", "D-30", "O-07", "O-11", "O-08", "D-47", "D-48", "D-49"]
 
 import argparse
 import json
@@ -325,6 +325,28 @@ def run_test(args: argparse.Namespace) -> TestRun:
                         "sprint" in (env.get("frontmatter") or {}),
                     "frontmatter has team (TC1-W7)":
                         "team" in (env.get("frontmatter") or {}),
+                    # TC1-W7 follow-up: projections.action_items value matches the
+                    # UUID-shaped string seeded in DEMO_FRONTMATTER_EXTRA. The prior
+                    # round only covered projections.summary; the spec contract is
+                    # "include:['frontmatter'] returns ALL custom fields", which
+                    # includes nested entries like projections.action_items.
+                    "projections.action_items matches (TC1-W7)":
+                        projections.get("action_items") == "7f8e9d0c-1234-5678-9abc-def012345678",
+                    # TC1-W7 follow-up: confirm fq_* canonical fields round-trip
+                    # into the frontmatter response. create_document populates
+                    # fq_id, fq_title, fq_status, fq_created, fq_updated; all
+                    # five must be present and non-empty in the response so the
+                    # AI consumer can reference them in follow-up calls.
+                    "frontmatter has fq_id (TC1-W7)":
+                        bool((env.get("frontmatter") or {}).get("fq_id")),
+                    "frontmatter has fq_title (TC1-W7)":
+                        bool((env.get("frontmatter") or {}).get("fq_title")),
+                    "frontmatter has fq_status (TC1-W7)":
+                        bool((env.get("frontmatter") or {}).get("fq_status")),
+                    "frontmatter has fq_created (TC1-W7)":
+                        bool((env.get("frontmatter") or {}).get("fq_created")),
+                    "frontmatter has fq_updated (TC1-W7)":
+                        bool((env.get("frontmatter") or {}).get("fq_updated")),
                 }
                 d28_passed = all(checks.values())
                 if not d28_passed:
@@ -480,6 +502,55 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail=o07_detail,
             timing_ms=o07_result.timing_ms,
             tool_result=o07_result,
+            server_logs=step_logs,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # O-11 (Phase 1 Gap 6): max_depth=1 boundary — only H1 headings;
+        # all H2/H3 headings must be excluded. The demo doc has no H1,
+        # so headings list must be empty (or contain only H1s if any).
+        # ─────────────────────────────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        o11_result = ctx.client.call_tool(
+            "get_document",
+            identifiers=ident_a,
+            include=["headings"],
+            max_depth=1,
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        o11_passed = False
+        o11_detail = ""
+        if o11_result.ok:
+            try:
+                env = json.loads(o11_result.text)
+                headings = env.get("headings", [])
+                levels = [h.get("level") for h in headings]
+                texts  = [h.get("text", "") for h in headings]
+                # Demo doc has no H1, so headings must be empty.
+                # All H2 ("## 1. Progress Updates", etc.) and H3 ("### 1.1. Native LLM Access")
+                # must be excluded.
+                checks = {
+                    "headings is empty (no H1 in demo doc)": len(headings) == 0,
+                    "no level > 1": all(lvl is None or lvl <= 1 for lvl in levels),
+                    "H2 '1. Progress Updates' absent": not any("1. Progress Updates" in t for t in texts),
+                    "H3 '1.1. Native LLM Access' absent": not any("1.1. Native LLM Access" in t for t in texts),
+                }
+                o11_passed = all(checks.values())
+                if not o11_passed:
+                    failed = [k for k, v in checks.items() if not v]
+                    o11_detail = f"Failed checks: {', '.join(failed)}. levels={levels} texts={texts}"
+            except Exception as e:
+                o11_detail = f"JSON parse error: {e}"
+        else:
+            o11_detail = o11_result.error or o11_result.text[:200]
+
+        run.step(
+            label="O-11: max_depth=1 boundary — only H1 headings (Phase 1 Gap 6)",
+            passed=o11_passed,
+            detail=o11_detail,
+            timing_ms=o11_result.timing_ms,
+            tool_result=o11_result,
             server_logs=step_logs,
         )
 

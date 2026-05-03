@@ -29,7 +29,7 @@ Exit codes:
 """
 from __future__ import annotations
 
-COVERAGE = ["D-35", "D-31e", "D-31f", "D-46", "O-09", "O-10"]
+COVERAGE = ["D-35", "D-31e", "D-31f", "D-46", "D-46a", "O-09", "O-10"]
 
 import argparse
 import json
@@ -184,9 +184,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not d35_result.ok:
             try:
                 env = json.loads(d35_result.text)
+                msg = env.get("message", "")
                 checks = {
                     "error == document_not_found": env.get("error") == "document_not_found",
                     "identifier present": "identifier" in env,
+                    # Phase 1 Gap 7: Error 1 envelope `message` field present
+                    "message field present": "message" in env,
+                    # Phase 1 Gap 10: message informativeness — must be a non-empty
+                    # string that references the offending identifier so AI consumers
+                    # can present a useful error to the user.
+                    "message is non-empty string": isinstance(msg, str) and len(msg.strip()) > 0,
+                    "message references the missing identifier (informativeness)":
+                        isinstance(msg, str) and "nonexistent-1234" in msg,
                 }
                 d35_passed = all(checks.values())
                 if not d35_passed:
@@ -287,22 +296,55 @@ def run_test(args: argparse.Namespace) -> TestRun:
             try:
                 env = json.loads(o09_result.text)
                 available = env.get("available_headings", [])
-                # Demo doc has exactly 6 headings: "1. Progress Updates",
-                # "1.1. Native LLM Access", "2. Blockers", "3. Action Items",
-                # "4. Action Items", "5. Notes"
+                msg = env.get("message", "")
+                # Demo doc has exactly 6 headings in document order:
+                # 0: "1. Progress Updates"
+                # 1: "1.1. Native LLM Access"
+                # 2: "2. Blockers"
+                # 3: "3. Action Items"
+                # 4: "4. Action Items"
+                # 5: "5. Notes"
+                missing = env.get("missing_sections", [])
+                first_missing = missing[0] if missing else {}
                 checks = {
                     "error == section_not_found": env.get("error") == "section_not_found",
+                    # Phase 1 Gap 9: offending query is surfaced in the error envelope.
+                    # Spec §4.5 Field Reference describes a top-level `query` for the
+                    # single-section case; the implementation captures it per-entry in
+                    # `missing_sections[].query` (the multi-section fail-fast shape is
+                    # used uniformly). Either form satisfies the AI-consumability intent
+                    # — accept whichever is present so the test closes the coverage gap
+                    # without locking in either shape over the other.
+                    "offending query 'NonExistentHeading' surfaced":
+                        env.get("query") == "NonExistentHeading"
+                        or first_missing.get("query") == "NonExistentHeading",
                     "available_headings lists all 6 headings": isinstance(available, list) and len(available) == 6,
                     "available_headings includes progress": any("Progress" in a for a in available),
                     "available_headings includes native llm access": any("Native LLM Access" in a for a in available),
                     "available_headings includes blockers": any("Blockers" in a for a in available),
                     "available_headings includes action items": any("Action Items" in a for a in available),
                     "available_headings includes notes": any("Notes" in a for a in available),
+                    # Phase 1 Gap 4: ordering is document order — first entry is the
+                    # first heading (Progress Updates), last is the last (Notes).
+                    "available_headings[0] is first doc heading (Progress)":
+                        isinstance(available, list) and len(available) >= 1
+                        and "Progress" in available[0],
+                    "available_headings[1] is nested H3 (Native LLM Access)":
+                        isinstance(available, list) and len(available) >= 2
+                        and "Native LLM Access" in available[1],
+                    "available_headings[5] is last doc heading (Notes)":
+                        isinstance(available, list) and len(available) >= 6
+                        and "Notes" in available[5],
+                    # Phase 1 Gap 10: message informativeness — must reference
+                    # the offending query.
+                    "message is non-empty string": isinstance(msg, str) and len(msg.strip()) > 0,
+                    "message references 'NonExistentHeading'":
+                        isinstance(msg, str) and "NonExistentHeading" in msg,
                 }
                 o09_passed = all(checks.values())
                 if not o09_passed:
                     failed = [k for k, v in checks.items() if not v]
-                    o09_detail = f"Failed: {', '.join(failed)}. available={available!r}"
+                    o09_detail = f"Failed: {', '.join(failed)}. available={available!r} env={env!r}"
             except Exception as e:
                 o09_detail = f"JSON parse error: {e}. raw={o09_result.text[:200]}"
         else:
@@ -359,6 +401,54 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail=d46_detail,
             timing_ms=d46_result.timing_ms,
             tool_result=d46_result,
+            server_logs=step_logs,
+        )
+
+        # ─────────────────────────────────────────────────────────────
+        # D-46a (Phase 1 Gap 1): invalid_parameter_combination sub-case A
+        # — sections requested with include that omits body.
+        # Spec §4.5 Error 9: requesting sections=[X] with include=['headings']
+        # (i.e. no 'body' in include) is a parameter conflict because
+        # extracted_sections content lives in the body.
+        # ─────────────────────────────────────────────────────────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        d46a_result = ctx.client.call_tool(
+            "get_document",
+            identifiers=ident_standup,
+            sections=["Blockers"],
+            include=["headings"],
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        d46a_passed = False
+        d46a_detail = ""
+        if not d46a_result.ok:
+            try:
+                env = json.loads(d46a_result.text)
+                details = env.get("details", {})
+                checks = {
+                    "error == invalid_parameter_combination":
+                        env.get("error") == "invalid_parameter_combination",
+                    "details.conflict == sections_without_body":
+                        details.get("conflict") == "sections_without_body",
+                    "no identifier field (pre-I/O error)":
+                        "identifier" not in env,
+                }
+                d46a_passed = all(checks.values())
+                if not d46a_passed:
+                    failed = [k for k, v in checks.items() if not v]
+                    d46a_detail = f"Failed: {', '.join(failed)}. env={env!r}"
+            except Exception as e:
+                d46a_detail = f"JSON parse error: {e}. raw={d46a_result.text[:200]}"
+        else:
+            d46a_detail = f"Expected isError but got ok=True. text={d46a_result.text[:200]}"
+
+        run.step(
+            label="D-46a: invalid_parameter_combination (sections without body in include) (Phase 1 Gap 1)",
+            passed=d46a_passed,
+            detail=d46a_detail,
+            timing_ms=d46a_result.timing_ms,
+            tool_result=d46a_result,
             server_logs=step_logs,
         )
 
