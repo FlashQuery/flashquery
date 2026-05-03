@@ -188,14 +188,14 @@ llm:
       type: openai-compatible
       endpoint: https://api.openai.com
       api_key: ${OPENAI_API_KEY}
+    - name: local-ollama
+      type: ollama
+      endpoint: http://localhost:11434
+      local: true                       # marks provider as local — surfaced as `local: true` in list_models discovery
     # - name: openrouter
     #   type: openai-compatible
     #   endpoint: https://openrouter.ai/api
     #   api_key: ${OPENROUTER_API_KEY}
-    # - name: local-ollama
-    #   type: ollama
-    #   endpoint: http://localhost:11434
-    #   local: true                       # marks provider as local — surfaced as `local: true` in list_models discovery
   models:
     - name: embeddings
       provider_name: openai

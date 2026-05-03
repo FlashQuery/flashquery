@@ -132,7 +132,7 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     }
   });
 
-  it('[TMPL-01] flashquery.example.yml has exactly 1 active provider (openai) with correct endpoint', () => {
+  it('[TMPL-01] flashquery.example.yml has 2 active providers — openai (default) and local-ollama (local: true demonstration per Verification Correction 4)', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
     const rawYaml = readFileSync(examplePath, 'utf-8');
     const llmBlock = extractCommentedLlmBlock(rawYaml);
@@ -143,11 +143,21 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     writeFileSync(tmpFile, combined);
     try {
       const config = loadConfig(tmpFile);
-      // The helper strips ONE "# " per line, so double-commented "# # " lines remain
-      // commented after stripping — only the default openai provider is active.
-      expect(config.llm?.providers).toHaveLength(1);
-      expect(config.llm?.providers[0].name).toBe('openai');
-      expect(config.llm?.providers[0].endpoint).toBe('https://api.openai.com');
+      // Verification Correction 4: live (uncommented) provider with `local: true`
+      // is required so the config example demonstrates the field — not just shows
+      // it inside a commented-out block.
+      expect(config.llm?.providers).toHaveLength(2);
+
+      const openai = config.llm?.providers.find((p) => p.name === 'openai');
+      expect(openai).toBeDefined();
+      expect(openai?.endpoint).toBe('https://api.openai.com');
+      expect(openai?.local).toBeUndefined();
+
+      const ollama = config.llm?.providers.find((p) => p.name === 'local-ollama');
+      expect(ollama).toBeDefined();
+      expect(ollama?.type).toBe('ollama');
+      expect(ollama?.endpoint).toBe('http://localhost:11434');
+      expect(ollama?.local).toBe(true);
     } finally {
       unlinkSync(tmpFile);
       if (prevKey === undefined) delete process.env['OPENAI_API_KEY'];
