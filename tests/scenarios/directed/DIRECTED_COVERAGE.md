@@ -573,6 +573,28 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-15 | `call_model` with a `trace_id` — `metadata.trace_id` in the response JSON echoes the supplied trace_id exactly, and `metadata.trace_cumulative.total_calls` equals `1` after the first call with that trace_id | test_call_model_trace | 2026-05-01 | 2026-05-01 |
 | L-16 | `call_model` called twice with the same `trace_id` — `metadata.trace_cumulative.total_calls` equals `2` after the second call, and `metadata.trace_cumulative.total_tokens.input` is strictly greater than the input tokens of the first call alone | test_call_model_trace | 2026-05-01 | 2026-05-01 |
 
+### 15.8 `call_model` — Reference Syntax (Phase 109/111)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-24 | call_model with {{ref:path}} resolves and forwards full body; injected_references[0] has ref=full placeholder + chars=body length | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-25 | call_model with {{ref:path#Section}} resolves section only; injected_references chars matches section length | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-26 | call_model with {{ref:path->pointer}} dereferences frontmatter pointer; injected_references entry has resolved_to and chars equals target body length | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-27 | call_model with {{id:uuid}} resolves full body via fq_id lookup | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-27a | call_model with {{id:uuid#Section}} resolves fq_id + section extraction | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-27b | call_model with {{id:uuid->pointer}} resolves fq_id + frontmatter pointer dereference | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-28 | call_model with multiple references across messages — all resolved, injected_references[] lists each in order | test_call_model_multi_ref | 2026-05-03 | pending Phase 111 |
+| L-29 | injected_references entry for -> dereference includes resolved_to (path-only refs do NOT) | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-30 | call_model with {{ref:nonexistent.md}} returns reference_resolution_failed | test_call_model_ref_errors | 2026-05-03 | pending Phase 111 |
+| L-31 | call_model with one valid + one invalid reference fails entire call (fail-fast, no LLM dispatch) | test_call_model_ref_errors | 2026-05-03 | pending Phase 111 |
+| L-32 | call_model with {{ref:path->missing.pointer}} returns reference_resolution_failed with pointer-specific reason | test_call_model_ref_errors | 2026-05-03 | pending Phase 111 |
+| L-33 | call_model with no reference patterns is forwarded byte-for-byte unchanged; no injected_references / prompt_chars in response | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-33a | injected_references[].chars is integer matching resolved content length exactly | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-33b | response metadata includes top-level prompt_chars integer | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-33c | sum(injected_references[].chars) <= prompt_chars invariant | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-33d | tokens.input/output and cost_usd unchanged shape from no-reference baseline | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-33e | injected_references[] entries do NOT contain a tokens field (negative assertion) | test_call_model_references | 2026-05-03 | pending Phase 111 |
+
 ---
 
 ## Coverage Summary
@@ -1204,6 +1226,15 @@ Covers: L-10, L-11
 
 ### test_llm_usage_filters
 Covers: L-12, L-13, L-14
+
+### test_call_model_references
+Covers: L-24, L-25, L-26, L-27, L-27a, L-27b, L-29, L-33, L-33a, L-33b, L-33c, L-33d, L-33e
+
+### test_call_model_multi_ref
+Covers: L-28
+
+### test_call_model_ref_errors
+Covers: L-30, L-31, L-32
 
 ---
 
