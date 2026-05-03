@@ -265,8 +265,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 body = env.get("body", "")
                 extracted = env.get("extracted_sections", [])
                 checks = {
-                    "body starts with blockers heading": "Blockers" in body,
+                    "body contains blockers heading": "Blockers" in body,
                     "body does not contain progress": "Progress Updates" not in body,
+                    "extracted_sections present": "extracted_sections" in env,
                     "extracted_sections length 1": len(extracted) == 1,
                     "extracted[0].heading contains Blockers": "Blockers" in extracted[0].get("heading", "") if extracted else False,
                     "extracted[0].chars == len(body)": extracted[0].get("chars", -1) == len(body) if extracted else False,
@@ -407,9 +408,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             except Exception:
                 d33a_steps.append(("3.2 parse", False))
         else:
-            # Section "3.2" matching is optional — may not be supported as numeric anchor
-            # Accept as pass if it returns an error (implementation may vary)
-            d33a_steps.append(("3.2 section request", True))  # grace — may not be strict anchor
+            d33a_steps.append(("3.2 request", False))
 
         # Test 3: sections=["3D"] should match "3D Modeling" (digit-alpha, not strict numeric)
         log_mark = ctx.server.log_position if ctx.server else 0
@@ -427,9 +426,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             except Exception:
                 d33a_steps.append(("3D parse", False))
         else:
-            # 3D Modeling would be matched as substring regardless of numeric anchor rule
-            # If the call fails with section_not_found, that's also informative
-            d33a_steps.append(("3D section lookup", True))  # grace
+            d33a_steps.append(("3D request", False))
 
         all_d33a = all(v for _, v in d33a_steps)
         d33a_detail = "" if all_d33a else "; ".join(f"{k}={'PASS' if v else 'FAIL'}" for k, v in d33a_steps)
@@ -675,27 +672,28 @@ def run_test(args: argparse.Namespace) -> TestRun:
             try:
                 env = json.loads(d31d_result.text)
                 body = env.get("body", "")
-                # Count blank-line separators (double newlines between sections)
-                # The assembler joins sections with '\n\n'
-                # Count occurrences of '\n\n' that separate content blocks
-                # For 3 sections joined by '\n\n', there are exactly 2 separators
-                separator_count = body.count("\n\n")
-                # N=3 sections → N-1=2 separators minimum
+                extracted = env.get("extracted_sections", [])
+                # The assembler joins section content (which includes each heading line)
+                # with '\n\n'.  Between adjacent sections the body contains '\n\n## '
+                # (blank line + level-2 heading of the next section).
+                # For N=3 sections there are exactly N-1=2 such junctions.
+                junction_count = body.count("\n\n## ")
                 checks = {
                     "body non-empty": len(body) > 0,
-                    "separator count >= 2": separator_count >= 2,
+                    "extracted_sections length 3": len(extracted) == 3,
+                    "exactly 2 section junctions (\\n\\n## )": junction_count == 2,
                 }
                 d31d_passed = all(checks.values())
                 if not d31d_passed:
                     failed = [k for k, v in checks.items() if not v]
-                    d31d_detail = f"Failed: {', '.join(failed)}. separator_count={separator_count}"
+                    d31d_detail = f"Failed: {', '.join(failed)}. junction_count={junction_count}"
             except Exception as e:
                 d31d_detail = f"JSON parse error: {e}"
         else:
             d31d_detail = d31d_result.error or d31d_result.text[:200]
 
         run.step(
-            label="D-31d: blank-line separator count = N-1 for N=3 sections",
+            label="D-31d: blank-line separator between sections — exactly N-1=2 junctions for N=3 sections",
             passed=d31d_passed,
             detail=d31d_detail,
             timing_ms=d31d_result.timing_ms,

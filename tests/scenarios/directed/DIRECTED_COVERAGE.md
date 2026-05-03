@@ -45,11 +45,11 @@ Core CRUD operations on vault documents via MCP.
 | D-26 | User-defined custom frontmatter fields survive archive_document (archiving only changes status; all other fields preserved) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
 | D-27 | get_document default response returns JSON envelope with body field (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
 | D-28 | get_document include=["frontmatter"] returns frontmatter projection in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
-| D-29 | get_document include=["headings"] returns headings array with level, text, char_offset (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
+| D-29 | get_document include=["headings"] returns headings array with level, text, chars (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
 | D-30 | get_document include=["body","frontmatter","headings"] returns all three fields in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
-| D-31 | get_document with sections returns extracted_sections array; body field absent (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-02 |
-| D-31a | get_document multi-section returns extracted_sections in document order, not request order (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-02 |
-| D-31b | get_document sections repeat-name shorthand ("Action Items#2") selects second occurrence (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-02 |
+| D-31 | get_document with sections returns extracted_sections metadata array alongside body (body contains assembled section content, not full document) (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-02 |
+| D-31a | get_document multi-section returns extracted_sections in input (request) order, not document order (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-02 |
+| D-31b | get_document sections repeat-name: repeating a name N times returns its 1st..Nth occurrences; each repeated entry selects the next sequential match (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-02 |
 | D-31c | get_document sections interleaved repeated headings each select their own occurrence independently (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-02 |
 | D-31d | get_document extracted_sections separator uses a blank line between adjacent sections (VALIDATED) | test_consolidated_get_document_sections | 2026-05-01 | 2026-05-02 |
 | D-31e | get_document multi-section with one no_match and one insufficient_occurrences both appear in missing_sections (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-02 |
@@ -79,7 +79,7 @@ Core CRUD operations on vault documents via MCP.
 | D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with nested followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39e | get_document follow_ref + sections + occurrence out of range -> section_not_found with reason insufficient_occurrences, nested under followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 
 ## 2. Document Content Operations
@@ -121,10 +121,10 @@ Verifying structural introspection of documents.
 | O-04 | Get outline shows unresolved links marked as such (SUPERSEDED: same as O-03) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
 | O-05 | Get outline with exclude_headings returns frontmatter only (SUPERSEDED: standalone frontmatter include covered by D-28) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
 | O-06 | Batch outline (array of identifiers) returns DB metadata (SUPERSEDED: batch mode removed; single-doc envelope with all three includes covered by D-30) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-29 |
-| O-07 | get_document headings include level, text, and char_offset fields; max_depth filters by heading level (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
-| O-08 | get_document headings includes all occurrences of duplicate heading names with distinct char_offset (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
+| O-07 | get_document headings include level, text, and chars fields; max_depth filters by heading level (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
+| O-08 | get_document headings includes all occurrences of duplicate heading names with distinct chars values (VALIDATED) | test_consolidated_get_document | 2026-05-01 | 2026-05-02 |
 | O-09 | error envelope available_headings lists all headings in the document (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-02 |
-| O-10 | occurrence parameter out of range (>= actual count) returns occurrence_out_of_range error (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-02 |
+| O-10 | occurrence parameter out of range (>= actual count) returns section_not_found with reason insufficient_occurrences in missing_sections (VALIDATED) | test_consolidated_get_document_errors | 2026-05-01 | 2026-05-02 |
 
 ## 4. Search — Documents
 

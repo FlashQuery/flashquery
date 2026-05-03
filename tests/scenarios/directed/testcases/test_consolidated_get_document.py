@@ -7,7 +7,7 @@ Scenario:
     JSON envelope returned by get_document across include variants, heading depth,
     duplicate headings, and title fallback behavior.
 
-Coverage points: D-27, D-28, D-29, D-30, O-07, O-08, D-47, D-48, D-49, D-50
+Coverage points: D-27, D-28, D-29, D-30, O-07, O-08, D-47, D-48, D-49
 
 Modes:
     Default     Connects to an already-running FQC instance (config from flashquery.yml)
@@ -27,13 +27,15 @@ Exit codes:
 """
 from __future__ import annotations
 
-COVERAGE = ["D-27", "D-28", "D-29", "D-30", "O-07", "O-08", "D-47", "D-48", "D-49", "D-50"]
+COVERAGE = ["D-27", "D-28", "D-29", "D-30", "O-07", "O-08", "D-47", "D-48", "D-49"]
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
@@ -113,6 +115,18 @@ def _track_created(ctx: TestContext, result_text: str, fallback_path: str) -> tu
     return created_fqc_id, created_path
 
 
+def _write_raw_vault_file(raw_vault: str, rel_path: str, content: str, ctx: TestContext) -> None:
+    """Write a raw markdown file into the vault and register it for cleanup."""
+    abs_path = os.path.join(raw_vault, rel_path)
+    os.makedirs(os.path.dirname(abs_path), exist_ok=True)
+    with open(abs_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    ctx.cleanup.track_file(rel_path)
+    parts = Path(rel_path).parts
+    for i in range(1, len(parts)):
+        ctx.cleanup.track_dir(str(Path(*parts[:i])))
+
+
 # ---------------------------------------------------------------------------
 # Test implementation
 # ---------------------------------------------------------------------------
@@ -121,9 +135,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
 
     path_a = f"_test/{TEST_NAME}_{run.run_id}_standup.md"
-    path_b = f"_test/{TEST_NAME}_{run.run_id}_sprint_review.md"
-    path_c = f"_test/{TEST_NAME}_{run.run_id}_numeric_title.md"
-    path_d = f"_test/{TEST_NAME}_{run.run_id}_whitespace_title.md"
+    path_no_fq_title   = f"_test/{TEST_NAME}_{run.run_id}_no_fq_title.md"
+    path_numeric_title = f"_test/{TEST_NAME}_{run.run_id}_numeric_title.md"
+    path_padded_title  = f"_test/{TEST_NAME}_{run.run_id}_padded_title.md"
 
     port_range = tuple(args.port_range) if args.port_range else None
 
@@ -167,82 +181,58 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         ident_a = fqc_id_a or created_path_a
 
-        # ── Setup: Create document B (no fq_title — for D-47) ────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        create_b = ctx.client.call_tool(
-            "create_document",
-            title="sprint-review",
-            content="Sprint review content.",
-            path=path_b,
-            tags=["fqc-test"],
-        )
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+        # ── Setup: Write raw vault fixtures for D-47, D-48, D-49 ─────
+        # These tests require specific frontmatter states not achievable via
+        # create_document (which always sets fq_title from the title param).
+        # Requires vault access — skipped gracefully when not available.
+        raw_vault = str(ctx.server.vault_path) if ctx.server else getattr(args, "vault_path", None)
+        now_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
-        fqc_id_b, created_path_b = _track_created(ctx, create_b.text, path_b)
+        if raw_vault:
+            # D-47: frontmatter with other fields but NO fq_title
+            _write_raw_vault_file(raw_vault, path_no_fq_title, (
+                f"---\n"
+                f"fq_status: active\n"
+                f"fq_tags: []\n"
+                f"fq_created: {now_iso}\n"
+                f"fq_updated: {now_iso}\n"
+                f"fq_id: {uuid.uuid4()}\n"
+                f"---\n\n"
+                f"No fq_title content.\n"
+            ), ctx)
+
+            # D-48: fq_title stored as YAML integer (no quotes) to test String() coercion
+            _write_raw_vault_file(raw_vault, path_numeric_title, (
+                f"---\n"
+                f"fq_title: 42\n"
+                f"fq_status: active\n"
+                f"fq_tags: []\n"
+                f"fq_created: {now_iso}\n"
+                f"fq_updated: {now_iso}\n"
+                f"fq_id: {uuid.uuid4()}\n"
+                f"---\n\n"
+                f"Numeric fq_title document.\n"
+            ), ctx)
+
+            # D-49: fq_title with leading/trailing whitespace to test trim logic
+            _write_raw_vault_file(raw_vault, path_padded_title, (
+                f"---\n"
+                f"fq_title: \"  Padded Title  \"\n"
+                f"fq_status: active\n"
+                f"fq_tags: []\n"
+                f"fq_created: {now_iso}\n"
+                f"fq_updated: {now_iso}\n"
+                f"fq_id: {uuid.uuid4()}\n"
+                f"---\n\n"
+                f"Padded title document.\n"
+            ), ctx)
 
         run.step(
-            label="Setup: create_document B (no fq_title — D-47 baseline)",
-            passed=create_b.ok,
-            detail=create_b.error or "",
-            timing_ms=create_b.timing_ms,
-            tool_result=create_b,
-            server_logs=step_logs,
+            label="Setup: write raw vault fixtures for D-47/D-48/D-49",
+            passed=bool(raw_vault),
+            detail="" if raw_vault else "skipped — no vault_path; title-fallback steps will be skipped",
+            timing_ms=0,
         )
-
-        ident_b = fqc_id_b or created_path_b
-
-        # ── Setup: Create document C (fq_title: numeric 42 — D-49) ──
-        log_mark = ctx.server.log_position if ctx.server else 0
-        create_c = ctx.client.call_tool(
-            "create_document",
-            title="42",
-            content="Numeric title document.",
-            path=path_c,
-            tags=["fqc-test"],
-        )
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        fqc_id_c, created_path_c = _track_created(ctx, create_c.text, path_c)
-
-        run.step(
-            label="Setup: create_document C (fq_title: 42 — D-49 coercion)",
-            passed=create_c.ok,
-            detail=create_c.error or "",
-            timing_ms=create_c.timing_ms,
-            tool_result=create_c,
-            server_logs=step_logs,
-        )
-
-        ident_c = fqc_id_c or created_path_c
-
-        # ── Setup: Create document D (fq_title: whitespace-only — D-48) ──
-        log_mark = ctx.server.log_position if ctx.server else 0
-        # Note: FQC title field is the actual fq_title in frontmatter.
-        # To get whitespace-only fq_title we create with a minimal title and
-        # then pass the path-based basename as the expected fallback.
-        # The create_document call with title="  " may be sanitized by the tool,
-        # so we use a single space title and verify the envelope falls back to basename.
-        create_d = ctx.client.call_tool(
-            "create_document",
-            title="   ",
-            content="Whitespace title document.",
-            path=path_d,
-            tags=["fqc-test"],
-        )
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        fqc_id_d, created_path_d = _track_created(ctx, create_d.text, path_d)
-        # D is created even if title trimming means create_document adjusts it
-        run.step(
-            label="Setup: create_document D (whitespace title — D-48 baseline)",
-            passed=create_d.ok,
-            detail=create_d.error or "",
-            timing_ms=create_d.timing_ms,
-            tool_result=create_d,
-            server_logs=step_logs,
-        )
-
-        ident_d = fqc_id_d or created_path_d
 
         # ── Force scan to ensure all docs are indexed ────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
@@ -453,15 +443,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
             try:
                 env = json.loads(o07_result.text)
                 headings = env.get("headings", [])
-                has_level3 = any(h.get("level", 0) > 2 for h in headings)
+                levels = [h.get("level") for h in headings]
+                texts  = [h.get("text", "") for h in headings]
+                has_level3 = any(lvl > 2 for lvl in levels if lvl is not None)
+                # Demo doc has "### 1.1. Native LLM Access" (level 3) — must be absent
+                has_level3_text = any("1.1. Native LLM Access" in t for t in texts)
                 checks = {
                     "has headings": len(headings) > 0,
                     "no level > 2": not has_level3,
+                    "level-3 heading absent": not has_level3_text,
                 }
                 o07_passed = all(checks.values())
                 if not o07_passed:
                     failed = [k for k, v in checks.items() if not v]
-                    levels = [h.get("level") for h in headings]
                     o07_detail = f"Failed checks: {', '.join(failed)}. levels={levels}"
             except Exception as e:
                 o07_detail = f"JSON parse error: {e}"
@@ -469,7 +463,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             o07_detail = o07_result.error or o07_result.text[:200]
 
         run.step(
-            label="O-07: max_depth=2 omits level 3+ headings",
+            label="O-07: max_depth=2 omits level 3+ headings; level-3 heading confirmed absent",
             passed=o07_passed,
             detail=o07_detail,
             timing_ms=o07_result.timing_ms,
@@ -478,7 +472,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
 
         # ─────────────────────────────────────────────────────────────
-        # O-08: duplicate heading names both appear with correct chars
+        # O-08: duplicate heading names both appear with distinct chars values
         # ─────────────────────────────────────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         o08_result = ctx.client.call_tool(
@@ -496,10 +490,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 headings = env.get("headings", [])
                 # The demo doc has "3. Action Items" and "4. Action Items"
                 action_items = [h for h in headings if "Action Items" in h.get("text", "")]
-                both_positive_chars = all(h.get("chars", 0) > 0 for h in action_items)
+                chars_vals = [h.get("chars", 0) for h in action_items]
                 checks = {
                     "two Action Items headings": len(action_items) >= 2,
-                    "both have chars > 0": both_positive_chars,
+                    "both have chars > 0": all(c > 0 for c in chars_vals),
+                    "chars values are distinct": len(set(chars_vals)) == len(chars_vals),
                 }
                 o08_passed = all(checks.values())
                 if not o08_passed:
@@ -511,7 +506,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             o08_detail = o08_result.error or o08_result.text[:200]
 
         run.step(
-            label="O-08: duplicate heading names both appear with correct chars",
+            label="O-08: duplicate heading names both appear with distinct chars values",
             passed=o08_passed,
             detail=o08_detail,
             timing_ms=o08_result.timing_ms,
@@ -522,136 +517,150 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ─────────────────────────────────────────────────────────────
         # D-47: title fallback to basename when fq_title absent
         # ─────────────────────────────────────────────────────────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        d47_result = ctx.client.call_tool(
-            "get_document",
-            identifiers=ident_b,
-        )
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        d47_passed = False
-        d47_detail = ""
-        if d47_result.ok:
-            try:
-                env = json.loads(d47_result.text)
-                actual_title = env.get("title", "")
-                # The path is _test/{TEST_NAME}_{run_id}_sprint_review.md
-                # so basename without ext would be the filename stem
-                # The create_document call above uses title="sprint-review" which IS the fq_title,
-                # so we just verify the title is non-empty and reasonable
-                # For a true "no fq_title" test we check: title == "sprint-review" (set at create time)
-                checks = {
-                    "title non-empty": bool(actual_title.strip()),
-                    "title is string": isinstance(actual_title, str),
-                }
-                d47_passed = all(checks.values())
-                if not d47_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d47_detail = f"Failed checks: {', '.join(failed)}. title={actual_title!r}"
-            except Exception as e:
-                d47_detail = f"JSON parse error: {e}"
+        if not raw_vault:
+            t0 = time.monotonic()
+            run.step(
+                label="D-47: title fallback when fq_title absent — SKIPPED (no vault_path in unmanaged mode)",
+                passed=True,
+                detail="Requires vault write access to create a file without fq_title; use --managed.",
+                timing_ms=int((time.monotonic() - t0) * 1000),
+            )
         else:
-            d47_detail = d47_result.error or d47_result.text[:200]
+            log_mark = ctx.server.log_position if ctx.server else 0
+            d47_result = ctx.client.call_tool(
+                "get_document",
+                identifiers=path_no_fq_title,
+            )
+            step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        run.step(
-            label="D-47: title fallback — get_document returns non-empty title",
-            passed=d47_passed,
-            detail=d47_detail,
-            timing_ms=d47_result.timing_ms,
-            tool_result=d47_result,
-            server_logs=step_logs,
-        )
+            d47_passed = False
+            d47_detail = ""
+            if d47_result.ok:
+                try:
+                    env = json.loads(d47_result.text)
+                    actual_title = env.get("title", "")
+                    expected_basename = Path(path_no_fq_title).stem
+                    checks = {
+                        "title equals file basename": actual_title == expected_basename,
+                        "title is non-empty": bool(actual_title.strip()),
+                    }
+                    d47_passed = all(checks.values())
+                    if not d47_passed:
+                        failed = [k for k, v in checks.items() if not v]
+                        d47_detail = (
+                            f"Failed: {', '.join(failed)}. "
+                            f"actual={actual_title!r}, expected={expected_basename!r}"
+                        )
+                except Exception as e:
+                    d47_detail = f"JSON parse error: {e}"
+            else:
+                d47_detail = d47_result.error or d47_result.text[:200]
+
+            run.step(
+                label=f"D-47: title fallback when fq_title absent — returns basename '{Path(path_no_fq_title).stem}'",
+                passed=d47_passed,
+                detail=d47_detail,
+                timing_ms=d47_result.timing_ms,
+                tool_result=d47_result,
+                server_logs=step_logs,
+            )
 
         # ─────────────────────────────────────────────────────────────
-        # D-48: title fallback when fq_title is empty/whitespace
+        # D-48: title coercion — fq_title stored as YAML integer 42
         # ─────────────────────────────────────────────────────────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        d48_result = ctx.client.call_tool(
-            "get_document",
-            identifiers=ident_d,
-        )
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        d48_passed = False
-        d48_detail = ""
-        if d48_result.ok:
-            try:
-                env = json.loads(d48_result.text)
-                actual_title = env.get("title", "")
-                # When fq_title is whitespace-only, title should fall back to filename basename
-                # (not whitespace or empty)
-                checks = {
-                    "title non-empty after trim": bool(actual_title.strip()),
-                    "title is not pure whitespace": actual_title.strip() != "",
-                }
-                d48_passed = all(checks.values())
-                if not d48_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d48_detail = f"Failed checks: {', '.join(failed)}. title={actual_title!r}"
-            except Exception as e:
-                d48_detail = f"JSON parse error: {e}"
+        if not raw_vault:
+            t0 = time.monotonic()
+            run.step(
+                label="D-48: title coercion when fq_title is a number — SKIPPED (no vault_path)",
+                passed=True,
+                detail="Requires vault write access to store fq_title as YAML integer; use --managed.",
+                timing_ms=int((time.monotonic() - t0) * 1000),
+            )
         else:
-            # If create_d failed earlier this step will also fail — that's expected
-            d48_detail = d48_result.error or d48_result.text[:200]
+            log_mark = ctx.server.log_position if ctx.server else 0
+            d48_result = ctx.client.call_tool(
+                "get_document",
+                identifiers=path_numeric_title,
+            )
+            step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        run.step(
-            label="D-48: title fallback when fq_title is empty/whitespace — returns basename",
-            passed=d48_passed,
-            detail=d48_detail,
-            timing_ms=d48_result.timing_ms,
-            tool_result=d48_result,
-            server_logs=step_logs,
-        )
+            d48_passed = False
+            d48_detail = ""
+            if d48_result.ok:
+                try:
+                    env = json.loads(d48_result.text)
+                    actual_title = env.get("title", "")
+                    # fq_title was stored as YAML integer 42; envelope.title must be the string "42"
+                    checks = {
+                        "title is string type": isinstance(actual_title, str),
+                        "title is '42'": actual_title == "42",
+                    }
+                    d48_passed = all(checks.values())
+                    if not d48_passed:
+                        failed = [k for k, v in checks.items() if not v]
+                        d48_detail = f"Failed: {', '.join(failed)}. title={actual_title!r} type={type(actual_title).__name__}"
+                except Exception as e:
+                    d48_detail = f"JSON parse error: {e}"
+            else:
+                d48_detail = d48_result.error or d48_result.text[:200]
+
+            run.step(
+                label="D-48: title coercion — fq_title integer 42 coerced to string '42'",
+                passed=d48_passed,
+                detail=d48_detail,
+                timing_ms=d48_result.timing_ms,
+                tool_result=d48_result,
+                server_logs=step_logs,
+            )
 
         # ─────────────────────────────────────────────────────────────
-        # D-49: title coerces non-string fq_title via String(...)
+        # D-49: title trim — fq_title with leading/trailing whitespace
         # ─────────────────────────────────────────────────────────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        d49_result = ctx.client.call_tool(
-            "get_document",
-            identifiers=ident_c,
-        )
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        d49_passed = False
-        d49_detail = ""
-        if d49_result.ok:
-            try:
-                env = json.loads(d49_result.text)
-                actual_title = env.get("title", "")
-                # fq_title was set to 42 (a YAML number); envelope.title should be "42"
-                checks = {
-                    "title is string": isinstance(actual_title, str),
-                    "title is '42'": actual_title == "42",
-                }
-                d49_passed = all(checks.values())
-                if not d49_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d49_detail = f"Failed checks: {', '.join(failed)}. title={actual_title!r}"
-            except Exception as e:
-                d49_detail = f"JSON parse error: {e}"
+        if not raw_vault:
+            t0 = time.monotonic()
+            run.step(
+                label="D-49: title trim when fq_title has whitespace — SKIPPED (no vault_path)",
+                passed=True,
+                detail="Requires vault write access to store fq_title with whitespace; use --managed.",
+                timing_ms=int((time.monotonic() - t0) * 1000),
+            )
         else:
-            d49_detail = d49_result.error or d49_result.text[:200]
+            log_mark = ctx.server.log_position if ctx.server else 0
+            d49_result = ctx.client.call_tool(
+                "get_document",
+                identifiers=path_padded_title,
+            )
+            step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        run.step(
-            label="D-49: title coerces non-string fq_title to '42'",
-            passed=d49_passed,
-            detail=d49_detail,
-            timing_ms=d49_result.timing_ms,
-            tool_result=d49_result,
-            server_logs=step_logs,
-        )
+            d49_passed = False
+            d49_detail = ""
+            if d49_result.ok:
+                try:
+                    env = json.loads(d49_result.text)
+                    actual_title = env.get("title", "")
+                    # fq_title stored as "  Padded Title  "; must be trimmed to "Padded Title"
+                    checks = {
+                        "title is 'Padded Title'": actual_title == "Padded Title",
+                        "no leading whitespace": actual_title == actual_title.lstrip(),
+                        "no trailing whitespace": actual_title == actual_title.rstrip(),
+                    }
+                    d49_passed = all(checks.values())
+                    if not d49_passed:
+                        failed = [k for k, v in checks.items() if not v]
+                        d49_detail = f"Failed: {', '.join(failed)}. title={actual_title!r}"
+                except Exception as e:
+                    d49_detail = f"JSON parse error: {e}"
+            else:
+                d49_detail = d49_result.error or d49_result.text[:200]
 
-        # ─────────────────────────────────────────────────────────────
-        # D-50: followed_ref title fallback — DEFERRED (Phase 108)
-        # ─────────────────────────────────────────────────────────────
-        t0 = time.monotonic()
-        run.step(
-            label="D-50: followed_ref title fallback — SKIPPED (deferred to Phase 108)",
-            passed=True,
-            detail="follow_ref is a Phase 108 feature; D-50 intentionally skipped here.",
-            timing_ms=int((time.monotonic() - t0) * 1000),
-        )
+            run.step(
+                label="D-49: title trim — fq_title '  Padded Title  ' trimmed to 'Padded Title'",
+                passed=d49_passed,
+                detail=d49_detail,
+                timing_ms=d49_result.timing_ms,
+                tool_result=d49_result,
+                server_logs=step_logs,
+            )
 
         # ── Optionally retain files for debugging ─────────────────────
         if args.keep:

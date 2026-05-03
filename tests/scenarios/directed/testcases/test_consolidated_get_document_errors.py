@@ -270,14 +270,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             try:
                 env = json.loads(o09_result.text)
                 available = env.get("available_headings", [])
-                # Demo doc has at least: "1. Progress Updates", "2. Blockers",
-                #   "3. Action Items", "4. Action Items", "5. Notes"
-                expected_headings = ["Progress Updates", "Blockers", "Action Items", "Notes"]
-                found_expected = [h for h in expected_headings if any(h in a for a in available)]
+                # Demo doc has exactly 6 headings: "1. Progress Updates",
+                # "1.1. Native LLM Access", "2. Blockers", "3. Action Items",
+                # "4. Action Items", "5. Notes"
                 checks = {
                     "error == section_not_found": env.get("error") == "section_not_found",
-                    "available_headings is non-empty list": isinstance(available, list) and len(available) > 0,
+                    "available_headings lists all 6 headings": isinstance(available, list) and len(available) == 6,
                     "available_headings includes progress": any("Progress" in a for a in available),
+                    "available_headings includes native llm access": any("Native LLM Access" in a for a in available),
                     "available_headings includes blockers": any("Blockers" in a for a in available),
                     "available_headings includes action items": any("Action Items" in a for a in available),
                     "available_headings includes notes": any("Notes" in a for a in available),
