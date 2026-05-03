@@ -528,9 +528,11 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     const body = JSON.parse(res.content[0].text) as any;
     expect(Array.isArray(body.models)).toBe(true);
     expect(body.models).toHaveLength(3);
+    // Spec §8.3 contract fields ONLY. The implementation also emits `type` —
+    // see Verification Deviation 8. We DO NOT assert `type` here so that if a
+    // future fix removes it to align with spec, this contract test still passes.
     expect(body.models[0]).toMatchObject({
       name: 'fast',
-      type: 'language',
       provider: 'openai',
       model_id: 'gpt-4o-mini',
       input_cost_per_million: 0.15,
