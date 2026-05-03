@@ -516,9 +516,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
             try:
                 env = json.loads(d59_result.text)
                 checks = {
-                    "error == follow_ref_target_not_found": env.get("error") == "follow_ref_target_not_found",
-                    "resolved_value in env": "resolved_value" in env,
-                    "resolution_method in env": "resolution_method" in env,
+                    "error == follow_ref_target_not_found":
+                        env.get("error") == "follow_ref_target_not_found",
+                    # Per Verification Correction 5 + Deviation 5: resolution_method is now classified
+                    # from the targetIdentifier string, not hard-coded to 'unknown'.
+                    "resolution_method == 'path'":
+                        env.get("resolution_method") == "path",
+                    "resolved_value matches the bad path":
+                        env.get("resolved_value") == "_test/does_not_exist_at_all.md",
+                    "reference == 'projections.summary'":
+                        env.get("reference") == "projections.summary",
+                    "identifier present at top level": "identifier" in env,
                     "NO followed_ref key": "followed_ref" not in env,
                 }
                 d59_passed = all(checks.values())
@@ -776,18 +784,30 @@ def run_test(args: argparse.Namespace) -> TestRun:
             try:
                 env = json.loads(d39e_result.text)
                 fr = env.get("followed_ref", {})
-                missing = fr.get("missing_sections", [])
-                first_missing = missing[0] if missing else {}
                 checks = {
-                    "error == section_not_found": env.get("error") == "section_not_found",
-                    "followed_ref key present": "followed_ref" in env,
-                    "followed_ref.missing_sections present": "missing_sections" in fr,
-                    "reason == insufficient_occurrences": first_missing.get("reason") == "insufficient_occurrences",
+                    # Per spec §4.5 Error 3 follow_ref variant + OQ #17 (post-resolution nesting)
+                    "error == occurrence_out_of_range":
+                        env.get("error") == "occurrence_out_of_range",
+                    "identifier present at top level (source)": "identifier" in env,
+                    "followed_ref key present (post-resolution nesting)":
+                        "followed_ref" in env,
+                    "followed_ref.reference present": "reference" in fr,
+                    "followed_ref.resolved_to present": "resolved_to" in fr,
+                    "followed_ref.resolved_fq_id present": "resolved_fq_id" in fr,
+                    "followed_ref.query == 'Action Items'":
+                        fr.get("query") == "Action Items",
+                    "followed_ref.matches_found == 2": fr.get("matches_found") == 2,
+                    "followed_ref.matched_headings is list":
+                        isinstance(fr.get("matched_headings"), list),
+                    "followed_ref.requested_occurrence == 99":
+                        fr.get("requested_occurrence") == 99,
+                    "no missing_sections key under followed_ref":
+                        "missing_sections" not in fr,
                 }
                 d39e_passed = all(checks.values())
                 if not d39e_passed:
                     failed = [k for k, v in checks.items() if not v]
-                    d39e_detail = f"Failed: {', '.join(failed)}. first_missing={first_missing!r}"
+                    d39e_detail = f"Failed: {', '.join(failed)}. fr={fr!r}"
             except Exception as e:
                 d39e_detail = f"JSON parse error: {e}"
         else:
