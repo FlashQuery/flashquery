@@ -6,6 +6,7 @@ import {
   buildConsolidatedResponse,
   validateParameterCombinations,
   traverseFollowRef,
+  classifyResolutionMethod,
 } from '../../src/mcp/utils/document-output.js';
 import { FM } from '../../src/constants/frontmatter-fields.js';
 
@@ -416,5 +417,47 @@ describe('traverseFollowRef (FREF-01, FREF-03)', () => {
     const result = traverseFollowRef(fm, 'supersedes');
     expect(result.kind).toBe('value');
     if (result.kind === 'value') expect(result.value).toBe('old-doc.md');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// describe: classifyResolutionMethod (Verification Correction 5, Phase 111)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('classifyResolutionMethod (Correction 5 — §6.6 classification)', () => {
+  it('[U-CRM-01] returns "fq_id" for a valid UUID-shaped identifier', () => {
+    expect(classifyResolutionMethod('a1b2c3d4-5678-9abc-def0-123456789abc')).toBe('fq_id');
+  });
+
+  it('[U-CRM-02] returns "fq_id" for all-numeric-segment UUID (variant)', () => {
+    expect(classifyResolutionMethod('00000000-0000-0000-0000-000000000000')).toBe('fq_id');
+  });
+
+  it('[U-CRM-03] returns "path" for identifier containing "/"', () => {
+    expect(classifyResolutionMethod('_test/does_not_exist_at_all.md')).toBe('path');
+  });
+
+  it('[U-CRM-04] returns "path" for deeply nested path identifier', () => {
+    expect(classifyResolutionMethod('Projects/2026/Q2/planning.md')).toBe('path');
+  });
+
+  it('[U-CRM-05] returns "path" for bare .md identifier (§6.6 endsWith rule)', () => {
+    expect(classifyResolutionMethod('foo.md')).toBe('path');
+  });
+
+  it('[U-CRM-06] returns "path" for .MD suffix (case-insensitive)', () => {
+    expect(classifyResolutionMethod('README.MD')).toBe('path');
+  });
+
+  it('[U-CRM-07] returns "filename" for bare identifier without "/" or ".md"', () => {
+    expect(classifyResolutionMethod('my-document')).toBe('filename');
+  });
+
+  it('[U-CRM-08] returns "filename" for identifier with other extensions', () => {
+    expect(classifyResolutionMethod('notes.txt')).toBe('filename');
+  });
+
+  it('[U-CRM-09] returns "filename" for short non-UUID, non-path identifier', () => {
+    expect(classifyResolutionMethod('standup-notes')).toBe('filename');
   });
 });
