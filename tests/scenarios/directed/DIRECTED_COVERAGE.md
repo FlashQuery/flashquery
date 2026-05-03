@@ -595,6 +595,27 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-33d | tokens.input/output and cost_usd unchanged shape from no-reference baseline | test_call_model_references | 2026-05-03 | pending Phase 111 |
 | L-33e | injected_references[] entries do NOT contain a tokens field (negative assertion) | test_call_model_references | 2026-05-03 | pending Phase 111 |
 
+### 15.9 Discovery Resolvers (Phase 111)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-39 | search resolver without parameters.query → clear error | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
+| L-39a | resolver=model without name → schema validation error | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
+| L-39b | resolver=purpose without name → schema validation error | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
+| L-39c | resolver=list_models with no llm: section → llm_not_configured | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
+| L-39d | resolver=list_purposes with no llm: section → llm_not_configured | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
+| L-39e | resolver=search with no llm: section → llm_not_configured (guard before param validation) | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
+| L-39f | configured-but-empty models[] returns {models: []} (NOT llm_not_configured) | test_discovery_resolvers | 2026-05-03 | pending Phase 111 |
+| L-39g | configured-but-empty purposes[] returns {purposes: []} | test_discovery_resolvers | 2026-05-03 | pending Phase 111 |
+| L-39h | call_model with no args (only resolver) returns model list | test_discovery_resolvers | 2026-05-03 | pending Phase 111 |
+| L-39i | declared capabilities array returned verbatim | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
+| L-39j | declared-empty capabilities preserved (NOT omitted) | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
+| L-39k | undeclared capabilities/context_window/description OMITTED from response | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
+| L-39l | context_window value preserved when declared; key omitted when not | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
+| L-39m | custom capability strings pass through verbatim (no taxonomy validation) | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
+| L-39n | description present when declared, omitted when not | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
+| L-39o | search response entries follow same omit-when-undeclared rule as list_models | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
+
 ---
 
 ## Coverage Summary
