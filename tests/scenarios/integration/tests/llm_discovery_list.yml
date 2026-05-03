@@ -17,7 +17,7 @@ steps:
         resolver: list_models
       expect_contains: '"models"'
 
-  - label: "list_models response includes type field on each model entry (WR-03 fix) — IL-15"
+  - label: "[KNOWN-DEVIATION] list_models emits implementation-only `type` field — see Deviation 8 in CMR Verification report. Tracking, not contract."
     assert:
       op: call_model
       args:
