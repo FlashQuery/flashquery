@@ -425,12 +425,13 @@ describe('traverseFollowRef (FREF-01, FREF-03)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('classifyResolutionMethod (Correction 5 — §6.6 classification)', () => {
-  it('[U-CRM-01] returns "fq_id" for a valid UUID-shaped identifier', () => {
-    expect(classifyResolutionMethod('a1b2c3d4-5678-9abc-def0-123456789abc')).toBe('fq_id');
+  it('[U-CRM-01] returns "fq_id" for a valid v4 UUID identifier', () => {
+    // Real v4 UUID (validate() + version() === 4)
+    expect(classifyResolutionMethod('56b43343-262a-4377-8418-61f558c398c6')).toBe('fq_id');
   });
 
-  it('[U-CRM-02] returns "fq_id" for all-numeric-segment UUID (variant)', () => {
-    expect(classifyResolutionMethod('00000000-0000-0000-0000-000000000000')).toBe('fq_id');
+  it('[U-CRM-02] returns "fq_id" for a second valid v4 UUID', () => {
+    expect(classifyResolutionMethod('f0772de2-6819-49ae-afef-8e34db834f78')).toBe('fq_id');
   });
 
   it('[U-CRM-03] returns "path" for identifier containing "/"', () => {

@@ -25,6 +25,7 @@ import type { embeddingProvider } from '../../embedding/provider.js';
 import type { logger } from '../../logging/logger.js';
 import { extractHeadings } from './markdown-utils.js';
 import { computeSectionChars, extractSection, extractMultipleSections, findHeadingOccurrence, SectionExtractError } from './markdown-sections.js';
+import { isValidUuid } from '../../utils/uuid.js';
 
 export interface DocumentEnvelope {
   identifier: string;
@@ -51,6 +52,23 @@ export interface FollowedRefResult {
   extracted_sections?: Array<{ heading: string; chars: number }>;
   frontmatter?: Record<string, unknown>;
   headings?: Array<{ level: number; text: string; chars: number }>;
+}
+
+/**
+ * Classify how a follow_ref target identifier would be resolved by resolveDocumentIdentifier.
+ * Mirrors the §6.6 detection rule used internally by resolve-document.ts.
+ *
+ * - UUID shape → 'fq_id'
+ * - Contains `/` OR ends `.md` (case-insensitive) → 'path'
+ * - Else → 'filename'
+ *
+ * Verification Correction 5 (Phase 111): replaces hard-coded 'unknown' in
+ * follow_ref_target_not_found responses with the spec-correct classification.
+ */
+export function classifyResolutionMethod(s: string): 'fq_id' | 'path' | 'filename' {
+  if (isValidUuid(s)) return 'fq_id';
+  if (s.includes('/') || s.toLowerCase().endsWith('.md')) return 'path';
+  return 'filename';
 }
 
 /**
@@ -448,7 +466,7 @@ export async function resolveAndBuildDocument(
         identifier,
         reference: followRef,
         resolved_value: targetIdentifier,
-        resolution_method: 'unknown', // Per CONTEXT.md Deferred Ideas: hardcoded acceptable in v1
+        resolution_method: classifyResolutionMethod(targetIdentifier),
       });
     }
 
@@ -464,7 +482,7 @@ export async function resolveAndBuildDocument(
         identifier,
         reference: followRef,
         resolved_value: targetIdentifier,
-        resolution_method: 'unknown',
+        resolution_method: classifyResolutionMethod(targetIdentifier),
       });
     }
     const targetParsed = matter(targetRaw);
