@@ -58,6 +58,15 @@ interface UsageRow {
 interface ResolvedWindow {
   from: Date;
   to: Date;
+  /**
+   * True when `to` is Node's wall-clock `new Date()` (period-derived) rather
+   * than a user-supplied explicit to_date. Used by fetchRows to skip the .lte
+   * upper-bound filter for trace_id-scoped queries (race fix: the usage row's
+   * created_at is set by Postgres NOW() at INSERT commit time, which can be
+   * 50–300 ms past Node's new Date() captured at handler entry, causing the
+   * row to be excluded from the window even though it was just written).
+   */
+  toIsUpperBoundOpen?: boolean;
 }
 
 interface PeriodEcho {
@@ -77,18 +86,20 @@ function resolveWindow(params: {
 }): ResolvedWindow | null {
   const now = new Date();
 
-  // Rule 1: from_date + to_date — explicit range; overrides period
+  // Rule 1: from_date + to_date — explicit range; overrides period.
+  // toIsUpperBoundOpen=false: the upper bound is user-supplied, not now().
   if (params.from_date && params.to_date) {
     const from = new Date(params.from_date);
     // Pitfall 3: end-of-day inclusive for to_date
     const to = new Date(params.to_date);
     to.setUTCHours(23, 59, 59, 999);
-    return { from, to };
+    return { from, to, toIsUpperBoundOpen: false };
   }
 
-  // Rule 2: from_date only — through now
+  // Rule 2: from_date only — through now.
+  // toIsUpperBoundOpen=true: `to` is now(), the race window applies.
   if (params.from_date) {
-    return { from: new Date(params.from_date), to: now };
+    return { from: new Date(params.from_date), to: now, toIsUpperBoundOpen: true };
   }
 
   // Rule 2.5: to_date without from_date — explicit error; not silently ignored
@@ -96,14 +107,15 @@ function resolveWindow(params: {
     throw new Error('to_date requires from_date. Provide both for an explicit date range.');
   }
 
-  // Rule 3: period only — relative window
+  // Rule 3: period only — relative window.
+  // toIsUpperBoundOpen=true: `to` is now(), the race window applies.
   const period = params.period ?? '7d';   // Rule 4 default
   if (period === 'all') return null;
   const ms =
     period === '24h' ? 86_400_000 :
     period === '7d'  ? 7 * 86_400_000 :
                        30 * 86_400_000;
-  return { from: new Date(now.getTime() - ms), to: now };
+  return { from: new Date(now.getTime() - ms), to: now, toIsUpperBoundOpen: true };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,6 +138,12 @@ function applyEntityFilters(query: any, params: { purpose_name?: string; model_n
 // ─────────────────────────────────────────────────────────────────────────────
 // fetchRows — build and execute the supabase query. Applies window filters,
 // entity filters, and (for recent mode) ordering + limit. Returns rows ?? [].
+//
+// omitUpperBound: when true, the .lte('created_at', window.to) filter is
+// skipped. Used for trace_id-scoped queries where window.to is Node's
+// wall-clock new Date() and the row's created_at is Postgres NOW() at commit
+// time — which can be 50–300 ms later, causing the row to fall outside the
+// window even though it was just written by the preceding call_model call.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
@@ -134,7 +152,7 @@ async function fetchRows(
   instanceId: string,
   window: ResolvedWindow | null,
   filters: { purpose_name?: string; model_name?: string; trace_id?: string },
-  options?: { orderDescByCreatedAt?: boolean; limit?: number }
+  options?: { orderDescByCreatedAt?: boolean; limit?: number; omitUpperBound?: boolean }
 ): Promise<{ rows: UsageRow[]; error: { message: string } | null }> {
   let query = supabase
     .from('fqc_llm_usage')
@@ -143,7 +161,9 @@ async function fetchRows(
 
   if (window) {
     query = query.gte('created_at', window.from.toISOString());
-    query = query.lte('created_at', window.to.toISOString());
+    if (!options?.omitUpperBound) {
+      query = query.lte('created_at', window.to.toISOString());
+    }
   }
   query = applyEntityFilters(query, filters);
 
@@ -402,6 +422,8 @@ async function computePriorPeriodDeltas(
   const windowMs = currentWindow.to.getTime() - currentWindow.from.getTime();
   const priorTo = new Date(currentWindow.from.getTime() - 1);   // 1ms before current.from
   const priorFrom = new Date(priorTo.getTime() - windowMs);
+  // Prior period always uses an explicit closed upper bound (priorTo is a computed
+  // fixed point, not now()) so omitUpperBound is not set here.
   const { rows: priorRows, error } = await fetchRows(
     supabase,
     instanceId,
@@ -501,9 +523,24 @@ export function registerLlmUsageTools(server: McpServer, config: FlashQueryConfi
         model_name: params.model_name,
         trace_id: params.trace_id,
       };
-      const fetchOptions = params.mode === 'recent'
-        ? { orderDescByCreatedAt: true, limit: params.limit ?? 20 }
-        : undefined;
+
+      // Race fix: when a trace_id filter is active and the window upper bound is
+      // Node's wall-clock now() (toIsUpperBoundOpen=true), omit the .lte filter.
+      // The usage row's created_at is set by Postgres NOW() at INSERT commit time,
+      // which is the completion of a fire-and-forget write that happens after the
+      // call_model response has already been sent. In observed runs the row's
+      // created_at lands 50–300 ms past Node's new Date(), putting it outside the
+      // default 7d window and returning total_calls=0. When trace_id is provided
+      // the query is already scoped to a specific trace; the open upper bound does
+      // not risk pulling in future rows from other traces.
+      const traceUpper = !!(params.trace_id && window?.toIsUpperBoundOpen);
+      const fetchOptions =
+        params.mode === 'recent'
+          ? { orderDescByCreatedAt: true, limit: params.limit ?? 20, omitUpperBound: traceUpper }
+          : traceUpper
+            ? { omitUpperBound: true }
+            : undefined;
+
       const { rows, error } = await fetchRows(
         supabase,
         config.instance.id,
