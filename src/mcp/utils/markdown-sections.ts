@@ -67,6 +67,26 @@ export interface MultiSectionResult {
  * @returns Object with section content (including heading line) and metadata
  * @throws Error if heading not found or multiple matches without occurrence
  */
+/**
+ * Typed error thrown by extractSection so the wrapper in document-output.ts can
+ * distinguish "no match" (→ section_not_found) from "occurrence overflow"
+ * (→ occurrence_out_of_range, per spec §4.5 Error 3).
+ *
+ * Verification report Correction 1 (Phase 111): this class replaces generic Error
+ * throws so the caller can branch on .kind without parsing exception messages.
+ */
+export class SectionExtractError extends Error {
+  constructor(
+    public kind: 'no_match' | 'occurrence_out_of_range',
+    public matched: Array<{ level: number; text: string; line: number }>,
+    public requestedOccurrence: number,
+    message: string
+  ) {
+    super(message);
+    this.name = 'SectionExtractError';
+  }
+}
+
 export function extractSection(
   content: string,
   headingName: string,
@@ -77,15 +97,28 @@ export function extractSection(
   const lines = content.split('\n');
 
   // Find the target heading
+  const matched = headings.filter((h) => headingMatchesQuery(h.text, headingName));
   const targetHeading = findHeadingOccurrence(headings, headingName, occurrence);
   if (!targetHeading) {
-    const total = headings.filter((h) => headingMatchesQuery(h.text, headingName)).length;
-    if (total > 1) {
-      throw new Error(
-        `Heading "${headingName}" appears ${total} times; specify occurrence parameter (1-${total}) to select which one`
+    if (matched.length === 0) {
+      // Truly no match — wrapper emits section_not_found with reason: no_match
+      throw new SectionExtractError(
+        'no_match',
+        [],
+        occurrence,
+        `Heading "${headingName}" not found in document`
       );
     }
-    throw new Error(`Heading "${headingName}" not found in document`);
+    // One or more matches exist but the requested occurrence exceeds the match count.
+    // This branch covers BOTH the "appears N times, occurrence > N" case AND the
+    // edge case the verification report calls out: 1 match + occurrence >= 2 (which
+    // previously misclassified as no_match because total > 1 was false).
+    throw new SectionExtractError(
+      'occurrence_out_of_range',
+      matched,
+      occurrence,
+      `Query "${headingName}" matched ${matched.length} heading${matched.length === 1 ? '' : 's'}, but occurrence ${occurrence} was requested`
+    );
   }
 
   // Calculate section boundaries
@@ -96,7 +129,7 @@ export function extractSection(
   const section = sectionLines.join('\n');
 
   // Count total occurrences of this heading name
-  const totalOccurrences = headings.filter((h) => headingMatchesQuery(h.text, headingName)).length;
+  const totalOccurrences = matched.length;
 
   return {
     section,

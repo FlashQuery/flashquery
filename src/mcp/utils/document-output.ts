@@ -24,7 +24,7 @@ import type { supabaseManager } from '../../storage/supabase.js';
 import type { embeddingProvider } from '../../embedding/provider.js';
 import type { logger } from '../../logging/logger.js';
 import { extractHeadings } from './markdown-utils.js';
-import { computeSectionChars, extractSection, extractMultipleSections, findHeadingOccurrence } from './markdown-sections.js';
+import { computeSectionChars, extractSection, extractMultipleSections, findHeadingOccurrence, SectionExtractError } from './markdown-sections.js';
 
 export interface DocumentEnvelope {
   identifier: string;
@@ -495,32 +495,35 @@ export async function resolveAndBuildDocument(
           followedRef.body = extracted.section;
           followedRef.extracted_sections = [{ heading: matchedText, chars: extracted.section.length }];
         } catch (extractErr) {
-          const msg = extractErr instanceof Error ? extractErr.message : String(extractErr);
           const allHeadings = extractHeadings(targetContent);
           const availableHeadings = allHeadings.map((h) => h.text);
-          const isOccurrenceErr = msg.toLowerCase().includes('appears') || msg.toLowerCase().includes('occurrence');
-          const reason: 'no_match' | 'insufficient_occurrences' = isOccurrenceErr ? 'insufficient_occurrences' : 'no_match';
-          let foundCount: number | undefined;
-          if (reason === 'insufficient_occurrences') {
-            const m = /appears (\d+) times/.exec(msg);
-            if (m) foundCount = parseInt(m[1], 10);
+          // Spec §4.5 Error 3 follow_ref variant + OQ #17: nest occurrence_out_of_range under followed_ref
+          if (extractErr instanceof SectionExtractError && extractErr.kind === 'occurrence_out_of_range') {
+            throw new DocumentRequestError({
+              error: 'occurrence_out_of_range',
+              message: `Query '${sectionsList[0]}' matched ${extractErr.matched.length} heading${extractErr.matched.length === 1 ? '' : 's'} in follow_ref target '${targetResolved.relativePath}', but occurrence ${occurrence} was requested`,
+              identifier, // SOURCE identifier at top level
+              followed_ref: {
+                reference: followRef,
+                resolved_to: targetResolved.relativePath,
+                resolved_fq_id: targetFqId,
+                query: sectionsList[0],
+                matches_found: extractErr.matched.length,
+                matched_headings: extractErr.matched.map((h) => h.text),
+                requested_occurrence: occurrence,
+              },
+            });
           }
-          // POST-RESOLUTION error: nest under followed_ref (FREF-03)
+          // no_match (or non-typed Error fallback) → section_not_found nested under followed_ref
           throw new DocumentRequestError({
             error: 'section_not_found',
-            message: reason === 'no_match'
-              ? `No heading matching '${sectionsList[0]}' found in follow_ref target '${targetResolved.relativePath}'`
-              : `Heading '${sectionsList[0]}' has fewer occurrences than requested in follow_ref target '${targetResolved.relativePath}'`,
+            message: `No heading matching '${sectionsList[0]}' found in follow_ref target '${targetResolved.relativePath}'`,
             identifier, // SOURCE identifier at top level
             followed_ref: {
               reference: followRef,
               resolved_to: targetResolved.relativePath,
               resolved_fq_id: targetFqId,
-              missing_sections: [
-                reason === 'insufficient_occurrences'
-                  ? { query: sectionsList[0], reason, requested_count: occurrence, ...(foundCount !== undefined ? { found_count: foundCount } : {}) }
-                  : { query: sectionsList[0], reason },
-              ],
+              missing_sections: [{ query: sectionsList[0], reason: 'no_match' }],
               available_headings: availableHeadings,
             },
           });
@@ -575,27 +578,26 @@ export async function resolveAndBuildDocument(
         const matchedText = matchedHeading ? matchedHeading.text : sectionsList[0];
         extractedSections = [{ heading: matchedText, chars: extracted.section.length }];
       } catch (extractErr) {
-        const msg = extractErr instanceof Error ? extractErr.message : String(extractErr);
         const allHeadings = extractHeadings(content);
         const availableHeadings = allHeadings.map((h) => h.text);
-        const isOccurrenceErr = msg.toLowerCase().includes('appears') || msg.toLowerCase().includes('occurrence');
-        const reason: 'no_match' | 'insufficient_occurrences' = isOccurrenceErr ? 'insufficient_occurrences' : 'no_match';
-        let foundCount: number | undefined;
-        if (reason === 'insufficient_occurrences') {
-          const m = /appears (\d+) times/.exec(msg);
-          if (m) foundCount = parseInt(m[1], 10);
+        // Spec §4.5 Error 3: occurrence_out_of_range is a distinct error code
+        if (extractErr instanceof SectionExtractError && extractErr.kind === 'occurrence_out_of_range') {
+          throw new DocumentRequestError({
+            error: 'occurrence_out_of_range',
+            message: `Query '${sectionsList[0]}' matched ${extractErr.matched.length} heading${extractErr.matched.length === 1 ? '' : 's'}, but occurrence ${occurrence} was requested`,
+            identifier,
+            query: sectionsList[0],
+            matches_found: extractErr.matched.length,
+            matched_headings: extractErr.matched.map((h) => h.text),
+            requested_occurrence: occurrence,
+          });
         }
+        // no_match (or non-typed Error fallback) → section_not_found with one-element missing_sections
         throw new DocumentRequestError({
           error: 'section_not_found',
-          message: reason === 'no_match'
-            ? `No heading matching '${sectionsList[0]}' found in document`
-            : `Heading '${sectionsList[0]}' has fewer occurrences than requested`,
+          message: `No heading matching '${sectionsList[0]}' found in document`,
           identifier,
-          missing_sections: [
-            reason === 'insufficient_occurrences'
-              ? { query: sectionsList[0], reason, requested_count: occurrence, ...(foundCount !== undefined ? { found_count: foundCount } : {}) }
-              : { query: sectionsList[0], reason },
-          ],
+          missing_sections: [{ query: sectionsList[0], reason: 'no_match' }],
           available_headings: availableHeadings,
         });
       }
