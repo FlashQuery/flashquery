@@ -617,7 +617,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-39e | resolver=search with no llm: section → llm_not_configured (guard before param validation) | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
 | L-39f | configured-but-empty models[] returns {models: []} (NOT llm_not_configured) | test_discovery_resolvers | 2026-05-03 | pending Phase 111 |
 | L-39g | configured-but-empty purposes[] returns {purposes: []} | test_discovery_resolvers | 2026-05-03 | pending Phase 111 |
-| L-39h | call_model with no args (only resolver) returns model list | test_discovery_resolvers | 2026-05-03 | pending Phase 111 |
+| L-39h | call_model with no args (only resolver) returns model list (VALIDATED) | test_discovery_resolvers | 2026-05-03 | 2026-05-03 |
+| L-39h_purposes | call_model({resolver: "list_purposes"}) with no args returns populated purposes[] (uniformity with list_models) (Phase 4 Gap 9) (VALIDATED) | test_discovery_resolvers | 2026-05-03 | 2026-05-03 |
 | L-39i | declared capabilities array returned verbatim | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
 | L-39j | declared-empty capabilities preserved (NOT omitted) | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
 | L-39k | undeclared capabilities/context_window/description OMITTED from response | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |

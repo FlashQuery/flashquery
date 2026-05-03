@@ -19,7 +19,7 @@ from fqc_test_utils import TestRun, FQCServer  # noqa: E402
 from fqc_client import FQCClient, _find_project_dir, _load_env_file  # noqa: E402
 
 TEST_NAME = "test_discovery_resolvers"
-COVERAGE = ["L-39f", "L-39g", "L-39h"]
+COVERAGE = ["L-39f", "L-39g", "L-39h", "L-39h_purposes"]
 
 EMPTY_MODELS_LLM = {
     "llm": {
@@ -100,6 +100,23 @@ def _check_no_args_list(client: FQCClient) -> tuple[bool, str]:
     return ok, f"body={body!r}"
 
 
+def _check_no_args_list_purposes(client: FQCClient) -> tuple[bool, str]:
+    # Phase 4 Gap 9: parallel to _check_no_args_list but for the
+    # list_purposes resolver. Call call_model with ONLY resolver — no
+    # messages, no name, no parameters — and verify the populated
+    # purposes[] is returned (uniformity with list_models).
+    r = client.call_tool("call_model", resolver="list_purposes")
+    if not r.ok:
+        return False, f"isError true. text={r.text[:200]}"
+    try:
+        body = json.loads(r.text)
+    except Exception as e:
+        return False, f"JSON parse error: {e}"
+    purposes = body.get("purposes")
+    ok = isinstance(purposes, list) and len(purposes) >= 1
+    return ok, f"body={body!r}"
+
+
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     project_dir = Path(args.fqc_dir) if args.fqc_dir else _find_project_dir()
@@ -127,6 +144,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
             ok, detail = _check_no_args_list(client)
             run.step(label="L-39h: no-args list_models returns populated list",
+                     passed=ok, detail=detail)
+
+            # Phase 4 Gap 9: parallel coverage for list_purposes — same
+            # populated config, but invoke the list_purposes resolver with
+            # no args. The spec requires uniformity across resolvers; without
+            # this parallel a regression that handled no-args correctly for
+            # list_models but not list_purposes would not be caught.
+            ok, detail = _check_no_args_list_purposes(client)
+            run.step(label="L-39h_purposes: no-args list_purposes returns populated list (Phase 4 Gap 9)",
                      passed=ok, detail=detail)
 
     except Exception as e:
