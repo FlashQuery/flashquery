@@ -29,3 +29,27 @@ steps:
             content: "{{ref:Nonexistent/ghost.md}} Tell me about it."
       expect_contains: "failed_references"
       expect_error: true
+
+  - label: "TC3-W6a: failed_references entry.ref is the full placeholder string"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Nonexistent/ghost.md}} Tell me about it."
+      expect_contains: '"{{ref:Nonexistent/ghost.md}}"'
+      expect_error: true
+
+  - label: "TC3-W6b: failed_references entry has reason field"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:Nonexistent/ghost.md}} Tell me about it."
+      expect_contains: '"reason"'
+      expect_error: true

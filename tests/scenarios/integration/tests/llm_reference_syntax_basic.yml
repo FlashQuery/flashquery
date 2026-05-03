@@ -46,3 +46,25 @@ steps:
           - role: user
             content: "{{ref:_integration/Test/ref-inject-basic.md}} Reply OK."
       expect_contains: '"prompt_chars"'
+
+  - label: "TC3-W5a: injected_references entry uses 'chars' (not 'tokens')"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-inject-basic.md}} Reply OK."
+      expect_contains: '"chars"'
+
+  - label: "TC3-W5b: injected_references entry.ref is the full placeholder string"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-inject-basic.md}} Reply OK."
+      expect_contains: '"{{ref:_integration/Test/ref-inject-basic.md}}"'

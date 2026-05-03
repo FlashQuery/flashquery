@@ -44,3 +44,14 @@ steps:
           - role: user
             content: "{{ref:_integration/Test/ref-source.md->fq_target_ref}} Reply OK."
       expect_contains: '"resolved_to"'
+
+  - label: "TC3-W4: resolved_to has the concrete dereferenced path (value, not just key)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-source.md->fq_target_ref}} Reply OK."
+      expect_contains: '"resolved_to":"_integration/Test/ref-target.md"'
