@@ -686,6 +686,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "body non-empty": len(body) > 0,
                     "extracted_sections length 3": len(extracted) == 3,
                     "exactly 2 section junctions (\\n\\n## )": junction_count == 2,
+                    # TC1-W11: precise aggregate-chars invariant — added for
+                    # symmetry with D-31b. The body equals the concatenation of
+                    # each section's content (whose `chars` is content.length)
+                    # joined by a single "\n\n" between adjacent sections, so
+                    # len(body) == sum(chars) + 2*(N-1).
+                    "aggregate chars invariant: sum(chars) + 2*(N-1) == len(body) (TC1-W11)":
+                        sum(s.get("chars", 0) for s in extracted)
+                        + 2 * max(0, len(extracted) - 1)
+                        == len(body),
                 }
                 d31d_passed = all(checks.values())
                 if not d31d_passed:
