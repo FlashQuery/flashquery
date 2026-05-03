@@ -457,6 +457,7 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
 const DISC_LLM_CONFIG = {
   providers: [
     { name: 'openai', type: 'openai-compatible' as const, endpoint: 'https://api.openai.com', apiKey: 'sk-test' },
+    { name: 'local-ollama', type: 'ollama' as const, endpoint: 'http://localhost:11434' },
   ],
   models: [
     {
@@ -484,6 +485,13 @@ const DISC_LLM_CONFIG = {
       type: 'language' as const,
       costPerMillion: { input: 0.5, output: 1.5 },
       capabilities: [],
+    },
+    {
+      name: 'local',
+      providerName: 'local-ollama',
+      model: 'llama3.2:latest',
+      type: 'language' as const,
+      costPerMillion: { input: 0, output: 0 },
     },
   ],
   purposes: [
@@ -527,7 +535,7 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const body = JSON.parse(res.content[0].text) as any;
     expect(Array.isArray(body.models)).toBe(true);
-    expect(body.models).toHaveLength(3);
+    expect(body.models).toHaveLength(4);
     // Spec §8.3 contract fields ONLY. The implementation also emits `type` —
     // see Verification Deviation 8. We DO NOT assert `type` here so that if a
     // future fix removes it to align with spec, this contract test still passes.
@@ -538,6 +546,23 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
       input_cost_per_million: 0.15,
       output_cost_per_million: 0.6,
     });
+  });
+
+  it('[U-DISC-NEW] list_models marks Ollama-backed models with local: true and OMITS the key for non-Ollama models (Verification Correction 3)', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_models' });
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const localEntry = body.models.find((m: any) => m.name === 'local');
+    expect(localEntry).toBeDefined();
+    expect(localEntry.local).toBe(true);
+    // Non-Ollama-backed models MUST omit the `local` key (no null, no false default).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const fast = body.models.find((m: any) => m.name === 'fast');
+    expect(fast).toBeDefined();
+    expect('local' in fast).toBe(false);
   });
 
   it('[U-DISC-02] list_models includes declared optional fields description/context_window/capabilities verbatim', async () => {
