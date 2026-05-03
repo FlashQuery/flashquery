@@ -74,7 +74,7 @@ describe('headingMatchesQuery (via findHeadingOccurrence) — GDOC-06', () => {
     expect(result?.text).toBe('12. Appendix');
   });
 
-  it('[U-05a] dot-hierarchy anchor "3." matches "3. Scope" and "3.1 Details" but NOT "30. Whatever"', () => {
+  it('[U-05a] dot-hierarchy anchor "3." matches "3. Scope" and "3.1 Details" but NOT "30. Whatever" (TC1-W5 negative assertion)', () => {
     const scopeHeadings = [
       { level: 2, text: '3. Scope', line: 1 },
       { level: 2, text: '3.1 Details', line: 5 },
@@ -88,6 +88,10 @@ describe('headingMatchesQuery (via findHeadingOccurrence) — GDOC-06', () => {
     const resultSecond = findHeadingOccurrence(scopeHeadings, '3.', 2);
     expect(resultSecond).not.toBeNull();
     expect(resultSecond?.text).toBe('3.1 Details');
+    // TC1-W5: the test name claims "but NOT '30. Whatever'" — assert it.
+    // Asking for a 3rd occurrence of "3." must return null because
+    // "30. Whatever" is digit-prefix anchored to "30", not "3.".
+    expect(findHeadingOccurrence(scopeHeadings, '3.', 3)).toBeNull();
   });
 
   it('[U-05a] digit-prefix "3D Modeling" anchors to start — matches headings starting with "3d"', () => {
@@ -180,7 +184,7 @@ describe('U-07 occurrence out of range', () => {
 describe('extractMultipleSections (GDOC-08, GDOC-09)', () => {
   // NOTE: All tests in this block FAIL today — extractMultipleSections does not exist yet
 
-  it('[U-08j] input order preserved; sequential repeats return successive occurrences', () => {
+  it('[U-08j] input order preserved; sequential repeats return successive occurrences (TC1-W4 strict equality)', () => {
     // queries: Blockers, Action Items (1st), Action Items (2nd)
     const result: MultiSectionResult = extractMultipleSections(
       MULTI_SECTION_FIXTURE,
@@ -191,12 +195,14 @@ describe('extractMultipleSections (GDOC-08, GDOC-09)', () => {
     expect(result.errors).toHaveLength(0);
     expect(result.matches).toHaveLength(3);
 
-    // matches[0] should be Blockers
-    expect(result.matches[0].heading.toLowerCase()).toContain('blockers');
-
-    // matches[1] and matches[2] should be the two Action Items
-    expect(result.matches[1].heading.toLowerCase()).toContain('action items');
-    expect(result.matches[2].heading.toLowerCase()).toContain('action items');
+    // TC1-W4: strict equality on heading text — the prior fuzzy
+    // .toLowerCase().toContain('action items') check would have passed
+    // even if both Action Items matches resolved to the same occurrence.
+    // The fixture has '## 3. Action Items' and '## 4. Action Items' —
+    // the multi-section helper must return them in input order.
+    expect(result.matches[0].heading).toBe('2. Blockers');
+    expect(result.matches[1].heading).toBe('3. Action Items');
+    expect(result.matches[2].heading).toBe('4. Action Items');
 
     // They should NOT be the same content (different occurrences)
     expect(result.matches[1].content).not.toBe(result.matches[2].content);
@@ -227,15 +233,24 @@ describe('extractMultipleSections (GDOC-08, GDOC-09)', () => {
     expect(result.errors).toHaveLength(0);
     expect(result.matches).toHaveLength(3);
 
+    // TC1-W4: strict equality on heading text in input-order positions —
+    // ensures we got the actual 1st A, 1st B, 2nd A and not a re-shuffle.
+    expect(result.matches[0].heading).toBe('A');
+    expect(result.matches[1].heading).toBe('B');
+    expect(result.matches[2].heading).toBe('A');
+
     // matches[0] = 1st A
     expect(result.matches[0].content).toContain('First A content');
     // matches[1] = 1st B
     expect(result.matches[1].content).toContain('B content');
     // matches[2] = 2nd A
     expect(result.matches[2].content).toContain('Second A content');
+
+    // Both A matches must have different content (different occurrences)
+    expect(result.matches[0].content).not.toBe(result.matches[2].content);
   });
 
-  it('[U-08l] each match has content string (not pre-joined) and chars equals content.length', () => {
+  it('[U-08l] each match has content string (not pre-joined) and chars equals content.length (TC1-W3 aggregate invariant)', () => {
     const result: MultiSectionResult = extractMultipleSections(
       MULTI_SECTION_FIXTURE,
       ['Blockers', 'Notes'],
@@ -248,9 +263,17 @@ describe('extractMultipleSections (GDOC-08, GDOC-09)', () => {
     // Each match must have a content string (not pre-joined array)
     for (const match of result.matches) {
       expect(typeof match.content).toBe('string');
-      // chars must equal content.length
+      // chars must equal content.length (per-match invariant)
       expect(match.chars).toBe(match.content.length);
     }
+
+    // TC1-W3: spec aggregate invariant — when matches are joined with the
+    // canonical "\n\n" separator (2 chars between each pair), the joined body
+    // length must equal sum(chars) + 2*(N-1). Per-match equality alone does
+    // not lock down the join-by-blank-line contract from §4.5 Example 7b.
+    const joined = result.matches.map((m) => m.content).join('\n\n');
+    const sumChars = result.matches.reduce((acc, m) => acc + m.chars, 0);
+    expect(sumChars + 2 * (result.matches.length - 1)).toBe(joined.length);
   });
 
   it('[U-08m] all-fail no_match: both Foo and Bar return errors with reason:no_match', () => {
@@ -311,7 +334,7 @@ describe('extractMultipleSections (GDOC-08, GDOC-09)', () => {
     expect(actionError!.found_count).toBe(2);
   });
 
-  it('[U-08l] char-count check: every successful match has chars equal to content.length', () => {
+  it('[U-08l] char-count check: every successful match has chars equal to content.length, and the joined-body aggregate invariant holds (TC1-W3)', () => {
     const result: MultiSectionResult = extractMultipleSections(
       MULTI_SECTION_FIXTURE,
       ['Blockers', 'Notes'],
@@ -321,6 +344,14 @@ describe('extractMultipleSections (GDOC-08, GDOC-09)', () => {
     for (const match of result.matches) {
       expect(match.chars).toBe(match.content.length);
     }
+
+    // TC1-W3 second instance: aggregate invariant
+    // sum(chars) + 2*(N-1) === joined-body length, with the canonical "\n\n"
+    // separator. This locks down both the chars-correctness and the
+    // joining-contract simultaneously.
+    const joined = result.matches.map((m) => m.content).join('\n\n');
+    const sumChars = result.matches.reduce((acc, m) => acc + m.chars, 0);
+    expect(sumChars + 2 * (result.matches.length - 1)).toBe(joined.length);
   });
 });
 

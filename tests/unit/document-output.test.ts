@@ -45,9 +45,13 @@ describe('resolveTitle (GDOC-03)', () => {
     expect(result).toBe('Sprint 12');
   });
 
-  it('[U-08c] falls back to basename without extension when fq_title is absent', () => {
+  it('[U-08c] falls back to basename without extension when fq_title is absent (TC1-W1: basename-not-path negative assertions)', () => {
     const result = resolveTitle({}, 'Meetings/standup.md');
     expect(result).toBe('standup');
+    // TC1-W1: explicitly assert the result is NOT the full path or any folder segment
+    expect(result).not.toContain('/');
+    expect(result).not.toContain('Meetings');
+    expect(result).not.toContain('.md');
   });
 
   it('[U-08d] falls back to basename when fq_title is empty string', () => {
@@ -105,7 +109,15 @@ describe('buildMetadataEnvelope (GDOC-02, GDOC-07)', () => {
     expect(envelope.size.chars).toBe(FIXTURE_BODY.length);
   });
 
-  it('[U-01b] size.chars reflects FULL body length (GDOC-07) even when sections would be extracted later', () => {
+  it('[U-01b] size.chars echoes the body argument passed in (pure pass-through; TC1-W2 cosmetic rename)', () => {
+    // TC1-W2: this unit test ONLY verifies that buildMetadataEnvelope copies
+    // body.length into size.chars without modification. It does NOT exercise
+    // section-extraction overrides — that GDOC-07 invariant is covered at the
+    // integration level (see directed test D-27 TC1-W8 in
+    // test_consolidated_get_document.py and the section-extraction integration
+    // tests). Renamed from "size.chars reflects FULL body length even when
+    // sections would be extracted later" because the prior name implied
+    // extraction was tested here, which it is not.
     const longBody = 'a'.repeat(680);
     const envelope = buildMetadataEnvelope(
       FIXTURE_IDENTIFIER,
@@ -113,8 +125,7 @@ describe('buildMetadataEnvelope (GDOC-02, GDOC-07)', () => {
       FIXTURE_FRONTMATTER,
       longBody
     );
-    // size.chars must be 680 — the full body length, not any extracted subset
-    expect(envelope.size.chars).toBe(680);
+    expect(envelope.size.chars).toBe(longBody.length);
   });
 
   it('[U-01c] falls back to a current ISO timestamp when fq_updated is absent', () => {

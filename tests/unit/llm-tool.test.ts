@@ -313,6 +313,107 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
     );
   });
 
+  it('[U-RR-INT-02b] caller-array-not-mutated invariant — handler does NOT mutate the caller-supplied messages array even when references ARE present (TC3-M2)', async () => {
+    // TC3-M2: [U-RR-INT-01] verifies the no-op path forwards the caller's
+    // messages array unchanged, but does NOT cover the hydrated path. This
+    // test passes a frozen messages array containing a reference; the
+    // handler must dispatch with a NEW (hydrated) array and leave the
+    // original untouched. We freeze the array AND its message objects so
+    // any in-place mutation (including .content reassignment) would throw.
+    const parsedRef = { placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', identifierType: 'ref' as const, identifier: 'doc.md', messageIndex: 0 };
+    const resolvedRef = { kind: 'resolved' as const, placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', content: 'BODY', chars: 4, messageIndex: 0 };
+    vi.mocked(parseReferences).mockReturnValue([parsedRef]);
+    vi.mocked(resolveReferences).mockResolvedValue([resolvedRef]);
+    vi.mocked(hydrateMessages).mockReturnValue([{ role: 'user', content: 'BODY' }]);
+    vi.mocked(buildInjectedReferences).mockReturnValue([{ ref: '{{ref:doc.md}}', chars: 4 }]);
+    vi.mocked(computePromptChars).mockReturnValue(4);
+
+    const completeMock = vi.fn().mockResolvedValue(SAMPLE_RESULT);
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+
+    const originalMessage = Object.freeze({ role: 'user' as const, content: '{{ref:doc.md}}' });
+    const originalArray = Object.freeze([originalMessage]);
+    const captured = originalArray;
+
+    // Act: the call must succeed without throwing on the frozen array.
+    const res = await handler({
+      resolver: 'model',
+      name: 'fast',
+      messages: originalArray,
+    });
+
+    expect(res.isError).toBeUndefined();
+    // Caller-array invariants: same length, same identity, same message text.
+    expect(captured).toBe(originalArray);
+    expect(captured).toHaveLength(1);
+    expect(captured[0]).toBe(originalMessage);
+    expect(captured[0].content).toBe('{{ref:doc.md}}');
+    // The dispatched array must be the HYDRATED one, not the caller's.
+    const dispatched = completeMock.mock.calls[0][1] as Array<{ role: string; content: string }>;
+    expect(dispatched).not.toBe(originalArray);
+    expect(dispatched[0].content).toBe('BODY');
+  });
+
+  it('[U-RR-INT-02-invariant] prompt_chars and injected_references[].chars track the REAL sum-of-content-lengths invariant (TC3-W2 un-mocked helpers)', async () => {
+    // TC3-W2: the handler-level [U-RR-INT-02] test mocks all four
+    // reference-resolver helpers, so it cannot verify the actual REFS-05
+    // invariant (prompt_chars >= sum(injected_references[i].chars)). Here
+    // we import the REAL helpers via vi.importActual and exercise them on
+    // realistic hydrated fixtures, locking down the invariant
+    // independently of the handler wiring.
+    const real = await vi.importActual<typeof import('../../src/llm/reference-resolver.js')>(
+      '../../src/llm/reference-resolver.js'
+    );
+
+    const hydratedMessages = [
+      { role: 'system', content: 'You are a helpful assistant.' }, // 29
+      { role: 'user', content: 'BODY-A and also BODY-B-EXTRA after.' }, // 35
+    ];
+    const resolvedFixture = [
+      {
+        kind: 'resolved' as const,
+        placeholder: '{{ref:a.md}}',
+        ref: '{{ref:a.md}}',
+        content: 'BODY-A',
+        chars: 6,
+        messageIndex: 1,
+      },
+      {
+        kind: 'resolved' as const,
+        placeholder: '{{ref:b.md}}',
+        ref: '{{ref:b.md}}',
+        content: 'BODY-B-EXTRA',
+        chars: 12,
+        messageIndex: 1,
+      },
+    ];
+
+    const promptChars = real.computePromptChars(hydratedMessages);
+    const injected = real.buildInjectedReferences(resolvedFixture);
+
+    // Real invariant 1: prompt_chars equals the sum of message-content lengths.
+    const expectedSum = hydratedMessages.reduce((acc, m) => acc + m.content.length, 0);
+    expect(promptChars).toBe(expectedSum);
+
+    // Real invariant 2: each injected_references[].chars is a non-negative integer
+    // that equals the matching ResolvedRef.content.length, NOT a token count.
+    expect(injected).toHaveLength(2);
+    expect(injected[0]).toMatchObject({ ref: '{{ref:a.md}}', chars: 6 });
+    expect(injected[1]).toMatchObject({ ref: '{{ref:b.md}}', chars: 12 });
+    expect(injected[0].chars).toBe(resolvedFixture[0].content.length);
+    expect(injected[1].chars).toBe(resolvedFixture[1].content.length);
+
+    // Real invariant 3 (REFS-05): prompt_chars >= sum(injected[i].chars).
+    const sumInjected = injected.reduce((acc, e) => acc + e.chars, 0);
+    expect(promptChars).toBeGreaterThanOrEqual(sumInjected);
+  });
+
   it('[U-RR-INT-02] references resolved → handler dispatches with hydrated messages, metadata includes injected_references and prompt_chars', async () => {
     // Arrange
     const parsedRef = { placeholder: '{{ref:doc.md}}', ref: '{{ref:doc.md}}', identifierType: 'ref' as const, identifier: 'doc.md', messageIndex: 0 };
@@ -618,6 +719,45 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     });
   });
 
+  it('[U-DISC-05b] list_purposes cost rates come from the PRIMARY model (models[0]), not aggregated — swapping order changes the rates (TC4-W1)', async () => {
+    // TC4-W1: [U-DISC-05] passes implicitly because the primary's cost
+    // rates happen to be the lowest, so even an aggregator that picked
+    // min/max could pass the same assertions. Here we run the same
+    // resolver against a config whose `general` purpose lists models in
+    // the opposite order — `bare` first, then `fast`. The primary-model
+    // rule (§8.3) says the response must reflect `bare`'s cost rates
+    // (2.5 / 10.0), not `fast`'s (0.15 / 0.6) and not an aggregate.
+    const SWAPPED_LLM_CONFIG = {
+      ...DISC_LLM_CONFIG,
+      purposes: [
+        // bare is now models[0] — primary
+        { name: 'general', description: 'General-purpose chat', models: ['bare', 'fast'], defaults: { temperature: 0.7 } },
+        { name: 'minimal', description: 'Minimal purpose with no defaults', models: ['bare'] },
+      ],
+    };
+    const SWAPPED_CONFIG = {
+      instance: { id: 'test-instance-disc-swap', name: 'Test', vault: { path: '/tmp/vault', markdownExtensions: ['.md'] } },
+      llm: SWAPPED_LLM_CONFIG,
+    } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+
+    const handler = captureCallModelHandler(SWAPPED_CONFIG);
+    const res = await handler({ resolver: 'list_purposes' });
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const general = body.purposes.find((p: any) => p.name === 'general');
+    expect(general).toMatchObject({
+      name: 'general',
+      models: ['bare', 'fast'],
+      input_cost_per_million: 2.5,   // from new primary model 'bare'
+      output_cost_per_million: 10.0, // from new primary model 'bare'
+    });
+    // Negative assertion: must NOT be the original primary's rates.
+    expect(general.input_cost_per_million).not.toBe(0.15);
+    expect(general.output_cost_per_million).not.toBe(0.6);
+  });
+
   it('[U-DISC-06] list_purposes includes defaults only when declared in config', async () => {
     const handler = captureCallModelHandler(DISC_CONFIG);
     const res = await handler({ resolver: 'list_purposes' });
@@ -631,7 +771,7 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     expect('defaults' in minimal).toBe(false);
   });
 
-  it('[U-DISC-07] search with parameters.query case-insensitive matches model name (substring)', async () => {
+  it('[U-DISC-07] search with parameters.query case-insensitive matches model name (substring) — full per-entry shape locked down (TC4-W2)', async () => {
     const handler = captureCallModelHandler(DISC_CONFIG);
     const res = await handler({ resolver: 'search', parameters: { query: 'FAST' } });
     expect(res.isError).toBeUndefined();
@@ -641,10 +781,25 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     expect(body.results).toHaveProperty('purposes');
     expect(body.results).toHaveProperty('models');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    expect(body.results.models.find((m: any) => m.name === 'fast')).toBeTruthy();
+    const matched = body.results.models.find((m: any) => m.name === 'fast');
+    expect(matched).toBeTruthy();
+    // TC4-W2: the prior `.toBeTruthy()` only proved presence — it would
+    // have passed even if the entry shape diverged from list_models.
+    // §8.3 requires search.results.models[i] to carry the same fields
+    // as list_models. Lock down the full shape for the matched entry.
+    expect(matched).toMatchObject({
+      name: 'fast',
+      provider: 'openai',
+      model_id: 'gpt-4o-mini',
+      input_cost_per_million: 0.15,
+      output_cost_per_million: 0.6,
+      description: 'Fast small model',
+      context_window: 131072,
+      capabilities: ['tools', 'vision'],
+    });
   });
 
-  it('[U-DISC-08] search with no purpose match returns purposes: [] (empty array, not omitted)', async () => {
+  it('[U-DISC-08] search does NOT match against purpose.models[] (only name and description) — TC4-M1 rename', async () => {
     const handler = captureCallModelHandler(DISC_CONFIG);
     // 'fast' appears in model name 'fast' and description 'Fast small model',
     // but neither purpose name nor purpose description contains the substring 'fast',
@@ -701,5 +856,75 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     const res = await handler({ resolver: 'list_models' });
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toBe('LLM is not configured. Add an llm: section to flashquery.yml to use this tool.');
+  });
+
+  it('[U-DISC-13c] resolver=list_purposes with NullLlmClient inherits the unconfigured guard (TC4-W4 — §8.5 + OQ #15 uniformity)', async () => {
+    // TC4-W4: §8.5 + OQ #15 require all five resolver values to share
+    // the same NullLlmClient guard behaviour. Only list_models had a
+    // unit test ([U-DISC-13b]); list_purposes was covered only at the
+    // directed level. Lock it down here at the unit level.
+    _llmClientValue = new NullLlmClient();
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'list_purposes' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe('LLM is not configured. Add an llm: section to flashquery.yml to use this tool.');
+  });
+
+  it('[U-DISC-13d] resolver=search with NullLlmClient inherits the unconfigured guard (TC4-W4 — §8.5 + OQ #15 uniformity)', async () => {
+    // TC4-W4 second variant: same uniformity rule for the search resolver.
+    _llmClientValue = new NullLlmClient();
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const res = await handler({ resolver: 'search', parameters: { query: 'fast' } });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toBe('LLM is not configured. Add an llm: section to flashquery.yml to use this tool.');
+  });
+
+  it('[U-DISC-13e] discovery resolvers IGNORE messages when provided — no LLM call is made (TC4-W3, OQ #6)', async () => {
+    // TC4-W3: [U-DISC-13] only proves discovery succeeds when messages
+    // are OMITTED — it doesn't exercise the "ignore-when-provided" half
+    // of OQ #6. Here we pass a populated messages array AND name (which
+    // would normally route to model dispatch) but with resolver=list_models;
+    // the handler must answer the discovery query and never invoke the
+    // LLM client's complete*/getModelForPurpose methods.
+    const completeMock = vi.fn();
+    const completeByPurposeMock = vi.fn();
+    const getModelForPurposeMock = vi.fn();
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: getModelForPurposeMock,
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(DISC_CONFIG);
+
+    for (const resolver of ['list_models', 'list_purposes'] as const) {
+      const res = await handler({
+        resolver,
+        name: 'fast',
+        messages: [{ role: 'user', content: 'should be ignored' }],
+      });
+      expect(res.isError).toBeUndefined();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const body = JSON.parse(res.content[0].text) as any;
+      if (resolver === 'list_models') {
+        expect(Array.isArray(body.models)).toBe(true);
+      } else {
+        expect(Array.isArray(body.purposes)).toBe(true);
+      }
+    }
+    // search (which requires parameters.query) — same rule, but messages
+    // must still be ignored alongside parameters.
+    const searchRes = await handler({
+      resolver: 'search',
+      parameters: { query: 'fast' },
+      name: 'fast',
+      messages: [{ role: 'user', content: 'should be ignored' }],
+    });
+    expect(searchRes.isError).toBeUndefined();
+
+    // CRITICAL: not a single LLM dispatch may have happened.
+    expect(completeMock).not.toHaveBeenCalled();
+    expect(completeByPurposeMock).not.toHaveBeenCalled();
+    expect(getModelForPurposeMock).not.toHaveBeenCalled();
   });
 });
