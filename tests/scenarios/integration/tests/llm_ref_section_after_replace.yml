@@ -1,0 +1,67 @@
+name: llm_ref_section_after_replace
+description: >
+  Section-scoped reference resolution stays coherent across section mutations.
+  After vault.write of a multi-section document, call_model
+  {{ref:doc.md#Target Section}} returns the original section body. After
+  replace_doc_section rewrites that section, the next call_model
+  {{ref:doc.md#Target Section}} returns the new section body without leaking
+  the original content (IX-11).
+coverage: [IX-11]
+deps: [llm]
+
+steps:
+  - label: "Setup: write multi-section document with a Target Section containing CODE-RED"
+    action: vault.write
+    name: section_doc
+    path: "Test/ref-section-replace.md"
+    title: "Ref Section Replace"
+    content: |
+      # Overview
+      Overview body — should never appear.
+
+      # Target Section
+      The section secret is CODE-RED.
+
+      # Trailer
+      Trailer body — should never appear.
+    tags: [ix11-tag]
+
+  - label: "call_model {{ref:doc.md#Target Section}} sees original section (CODE-RED)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-section-replace.md#Target Section}} What is the section secret? Reply with just the secret."
+      expect_contains: "CODE-RED"
+
+  - label: "Replace the Target Section body with new content (CODE-BLUE)"
+    action: replace_doc_section
+    args:
+      identifier: "${section_doc.fq_id}"
+      heading: "Target Section"
+      content: "The section secret is CODE-BLUE."
+
+  - label: "call_model {{ref:doc.md#Target Section}} now sees the new section (CODE-BLUE)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-section-replace.md#Target Section}} What is the section secret? Reply with just the secret."
+      expect_contains: "CODE-BLUE"
+
+  - label: "Original section content (CODE-RED) is gone — resolver does not serve stale section"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-section-replace.md#Target Section}} Does the section contain the literal string CODE-RED? Reply YES or NO."
+      expect_not_contains: "YES"

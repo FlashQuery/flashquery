@@ -1,0 +1,82 @@
+name: llm_ref_writes_usage_row
+description: >
+  call_model with {{ref:...}} writes a fqc_llm_usage row reflecting the
+  resolved (post-injection) prompt. Two such calls sharing a trace_id are
+  later visible to get_llm_usage(mode=summary, trace_id=...) as
+  total_calls=2, and to mode=recent with the called model_name. Closes the
+  IL-21 write→read loop end-to-end (IL-21).
+
+  Note on shape: get_llm_usage summary defaults to period='7d' which sets
+  period.to from Node's new Date() at handler entry. The fire-and-forget
+  fqc_llm_usage write completes after the call_model response returns,
+  with the row's created_at coming from Postgres now() — typically a few
+  hundred ms past Node's clock. That race makes "{{ref}} call → summary
+  immediately after" return total_calls=0 even though the row exists.
+  This test passes period='all' so the window has no upper bound, which
+  eliminates the race for the trace_id-scoped query while still proving
+  IL-21's write→read loop. The second {{ref}} call also doubles as a
+  trace_cumulative server-side check that the first call's row was
+  committed.
+coverage: [IL-21]
+deps: [llm]
+
+steps:
+  - label: "Setup: write a small reference document"
+    action: vault.write
+    path: "Test/ref-usage-row.md"
+    title: "Ref Usage Row"
+    content: "USAGE-ROW-MARKER"
+    tags: [il21-tag]
+
+  - label: "First call_model with {{ref:...}} + unique trace_id — response carries prompt_chars"
+    # Asserts the resolved prompt was actually assembled and dispatched —
+    # prompt_chars is only emitted on the {{ref}} success path, so this
+    # also confirms the resolution branch was taken (not a passthrough).
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        trace_id: "il21-${run.id}"
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-usage-row.md}} Reply OK."
+      expect_contains: '"prompt_chars"'
+
+  - label: "Second call_model with {{ref:...}} + same trace_id — trace_cumulative.total_calls grows past 1"
+    # Server-side cumulative check, immune to the period.to clock-skew
+    # race. If the first call's row had not been written, total_calls
+    # would still be 1 here — so this is the tightest possible
+    # confirmation that the {{ref}} write path actually persists a row.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        trace_id: "il21-${run.id}"
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-usage-row.md}} Reply OK."
+      expect_contains: '"trace_cumulative"'
+      expect_not_contains: '"total_calls":1,'
+
+  - label: "get_llm_usage summary filtered by trace_id (period='all') — both {{ref}} calls visible (total_calls=2)"
+    # Closes IL-21's read-side loop: the rows written by {{ref}} calls
+    # must be discoverable via get_llm_usage. period='all' sidesteps the
+    # period.to=now() race against fire-and-forget Postgres timestamps;
+    # the trace_id filter still scopes the assertion to this test.
+    assert:
+      op: get_llm_usage
+      args:
+        mode: summary
+        period: all
+        trace_id: "il21-${run.id}"
+      expect_contains: '"total_calls": 2'
+
+  - label: "get_llm_usage recent mode for the trace surfaces the called model_name"
+    assert:
+      op: get_llm_usage
+      args:
+        mode: recent
+        trace_id: "il21-${run.id}"
+      expect_contains: '"model_name"'
