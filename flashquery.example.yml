@@ -195,6 +195,7 @@ llm:
     # - name: local-ollama
     #   type: ollama
     #   endpoint: http://localhost:11434
+    #   local: true                       # marks provider as local — surfaced as `local: true` in list_models discovery
   models:
     - name: embeddings
       provider_name: openai
@@ -215,6 +216,11 @@ llm:
       cost_per_million:
         input: 0.15
         output: 0.60
+      # Optional discovery metadata — surfaced via call_model resolver=list_models (DISC-05).
+      # Omit any field to omit it from the response (omit-when-undeclared per OQ #16).
+      description: "Fast, cheap small model for routine tasks"
+      context_window: 128000
+      capabilities: ["tools", "vision"]
     # - name: smart
     #   provider_name: openrouter
     #   model: anthropic/claude-opus-4-7
