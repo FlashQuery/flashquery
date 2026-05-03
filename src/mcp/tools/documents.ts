@@ -166,9 +166,10 @@ export async function reconcileMissingRow(
   vaultRoot: string,
   fqcId: string,
   oldPath: string,
-  supabase: ReturnType<typeof supabaseManager.getClient>
+  supabase: ReturnType<typeof supabaseManager.getClient>,
+  extensions: string[] = ['.md']
 ): Promise<string | null> {
-  const allFiles = await listMarkdownFiles(vaultRoot, ['.md']);
+  const allFiles = await listMarkdownFiles(vaultRoot, extensions);
   let newPath: string | null = null;
   for (const candidate of allFiles) {
     try {
@@ -243,7 +244,7 @@ export async function searchDocumentsSemantic(
   for (const r of rawResults) {
     if (!existsSync(join(vaultRoot, r.path))) {
       try {
-        const newPath = await reconcileMissingRow(vaultRoot, r.id, r.path, supabase);
+        const newPath = await reconcileMissingRow(vaultRoot, r.id, r.path, supabase, config.instance.vault.markdownExtensions);
         if (newPath) r.path = newPath;
       } catch (err) {
         logger.warn(
@@ -1103,7 +1104,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
           // Run filesystem scan
           const vaultRoot = config.instance.vault.path;
-          const files = await listMarkdownFiles(vaultRoot, ['.md']);
+          const files = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
           const metaResults = await Promise.all(files.map((f) => parseDocMeta(vaultRoot, f)));
           const allMeta = metaResults.filter((m): m is DocMeta => m !== null);
           let fsFiltered = allMeta.filter(
@@ -1173,7 +1174,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const vaultRoot = config.instance.vault.path;
 
         // Scan entire vault (filter on frontmatter project field, not directory prefix)
-        const files = await listMarkdownFiles(vaultRoot, ['.md']);
+        const files = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
 
         // Parse frontmatter for each file, skip malformed files
         const metaResults = await Promise.all(files.map((f) => parseDocMeta(vaultRoot, f)));
@@ -1551,7 +1552,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         );
 
         // Build a vault-wide fqc_id index once (expensive but necessary for bulk reconcile)
-        const allFiles = await listMarkdownFiles(vaultRoot, ['.md']);
+        const allFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
         const fqcIdIndex = new Map<string, string>(); // fqc_id → relativePath
         for (const file of allFiles) {
           try {

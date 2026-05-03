@@ -139,7 +139,7 @@ export async function resolveDocumentIdentifier(
       const fqcId = dbRow.id;
 
       // Scan vault for file with matching fqc_id frontmatter
-      const allFiles = await listMarkdownFiles(vaultRoot, ['.md']);
+      const allFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
       let newPath: string | null = null;
       for (const candidate of allFiles) {
         try {
@@ -193,7 +193,7 @@ export async function resolveDocumentIdentifier(
   }
 
   // Scan vault for files ending with /{identifier} or equal to identifier
-  const allFiles = await listMarkdownFiles(vaultRoot, ['.md']);
+  const allFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
   const matches = allFiles.filter(
     (f) => f === identifier || f.endsWith(`/${identifier}`)
   );

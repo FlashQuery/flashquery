@@ -919,7 +919,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               // Supplement with filesystem title/path search for newly-created documents
               // that may not yet have embeddings (fire-and-forget embed still in progress).
               const vaultRoot = config.instance.vault.path;
-              const fsFiles = await listMarkdownFiles(vaultRoot, ['.md']);
+              const fsFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
               const fsMeta = (await Promise.all(fsFiles.map((f) => parseDocMeta(vaultRoot, f))))
                 .filter((m): m is DocMeta => m !== null)
                 .filter((m) => m.status !== 'archived' && !semanticPaths.has(m.relativePath));
@@ -967,7 +967,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           if (!embeddingAvailable) {
             // Filesystem fallback (D-04)
             const vaultRoot = config.instance.vault.path;
-            const files = await listMarkdownFiles(vaultRoot, ['.md']);
+            const files = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
             const metaResults = await Promise.all(files.map((f) => parseDocMeta(vaultRoot, f)));
             const allMeta = metaResults.filter((m): m is DocMeta => m !== null);
             let filtered = allMeta.filter((meta) => meta.status !== 'archived');
