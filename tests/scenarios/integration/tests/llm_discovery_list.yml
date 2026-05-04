@@ -14,6 +14,63 @@ description: >
 coverage: [IL-15, IL-16, IL-17, IL-18]
 deps: [llm]
 
+# Self-contained discovery fixture. The runner's default --managed llm config (see
+# tests/scenarios/framework/fqc_test_utils.py:_resolve_llm_config) declares only the
+# required model fields, so the optional fields (description, context_window,
+# capabilities) and the auto-derived `local` flag would be omitted from the response —
+# correct per OQ #16, but it would mean steps 8-11 below could never land. extra_config
+# is deep-merged into the generated config (lists replace, dicts recurse) before the
+# managed server starts, giving this test a fixture that exercises the full
+# preserve-when-declared contract plus Verification Correction 3 (auto-derive
+# local: true from provider.type === 'ollama').
+extra_config:
+  llm:
+    providers:
+      - name: openai
+        type: openai-compatible
+        endpoint: https://api.openai.com
+        api_key: ${OPENAI_API_KEY}
+      - name: local-ollama
+        type: ollama
+        endpoint: http://localhost:11434
+    models:
+      - name: embeddings
+        provider_name: openai
+        model: text-embedding-3-small
+        type: embedding
+        dimensions: 1536
+        cost_per_million:
+          input: 0.02
+          output: 0.00
+      - name: fast
+        provider_name: openai
+        model: gpt-4o-mini
+        type: language
+        cost_per_million:
+          input: 0.15
+          output: 0.60
+        description: "Fast, cheap small model for routine tasks"
+        context_window: 128000
+        capabilities: ["tools", "vision"]
+      - name: local
+        provider_name: local-ollama
+        model: llama3.2:latest
+        type: language
+        cost_per_million:
+          input: 0
+          output: 0
+    purposes:
+      - name: embedding
+        description: "Generates vector embeddings for semantic search"
+        models:
+          - embeddings
+      - name: general
+        description: "General purpose"
+        models:
+          - fast
+        defaults:
+          temperature: 0.7
+
 steps:
   - label: "TC4-W5/DISC-01: list_models response shape — models is a non-empty JSON array — IL-15"
     assert:
@@ -85,12 +142,12 @@ steps:
         resolver: list_models
       expect_contains: '"context_window":128000'
 
-  - label: "TC4-W5/DISC-01: list_models entry — local: true is set on Ollama-backed models (Verification Correction 3) — IL-15"
+  - label: "TC4-W5/DISC-01: list_models entry — local: true is auto-derived for Ollama-backed models (Dev Plan §6.4.1 + Verification Correction 3, Option A). The local-ollama provider does NOT declare `local: true` explicitly; the flag must come from the provider.type === 'ollama' auto-derive path in src/mcp/tools/llm.ts:189 — IL-15"
     assert:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"local":true'
+      expect_contains: '"name":"local","type":"language","provider":"local-ollama","model_id":"llama3.2:latest","input_cost_per_million":0,"output_cost_per_million":0,"local":true'
 
   - label: "TC4-W5/DISC-01: list_models — embeddings model has NO capabilities field (omit-when-undeclared per OQ #16). Substring '\"capabilities\":[]' must not appear, since embeddings never declared one — IL-15"
     # The embeddings model is declared with no capabilities key; per OQ #16 it
