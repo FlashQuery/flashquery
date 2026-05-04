@@ -61,11 +61,34 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
             path_a = f"_test/{TEST_NAME}_{run_id}_doc_a.md"
             body_a = "Document A content."
-            client.call_tool("create_document", path=path_a, content=body_a)
+            create_a = client.call_tool(
+                "create_document",
+                title=f"{TEST_NAME} doc_a {run_id}",
+                path=path_a,
+                content=body_a,
+            )
+            if not create_a.ok:
+                run.step(label="Setup doc_a", passed=False,
+                         detail=create_a.error or create_a.text[:200])
+                return run
 
             path_b = f"_test/{TEST_NAME}_{run_id}_doc_b.md"
             body_b = "Document B content."
-            client.call_tool("create_document", path=path_b, content=body_b)
+            create_b = client.call_tool(
+                "create_document",
+                title=f"{TEST_NAME} doc_b {run_id}",
+                path=path_b,
+                content=body_b,
+            )
+            if not create_b.ok:
+                run.step(label="Setup doc_b", passed=False,
+                         detail=create_b.error or create_b.text[:200])
+                return run
+
+            # FQC strips frontmatter when resolving references and returns the body
+            # with a normalized trailing newline. Expected chars = len(body) + 1.
+            chars_a = len(body_a) + 1
+            chars_b = len(body_b) + 1
 
             # L-28: two references — one per message
             r = client.call_tool(
@@ -78,7 +101,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 ],
             )
             resp = json.loads(r.text) if r.ok else {}
-            injected = resp.get("injected_references", [])
+            metadata = resp.get("metadata", {}) if isinstance(resp, dict) else {}
+            injected = metadata.get("injected_references", [])
             checks = {
                 "ok": r.ok,
                 "injected has 2 entries":
@@ -87,10 +111,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     injected and injected[0].get("ref") == f"{{{{ref:{path_a}}}}}",
                 "second entry refs path_b":
                     len(injected) > 1 and injected[1].get("ref") == f"{{{{ref:{path_b}}}}}",
-                "first chars matches body_a":
-                    injected and injected[0].get("chars") == len(body_a),
-                "second chars matches body_b":
-                    len(injected) > 1 and injected[1].get("chars") == len(body_b),
+                "first chars matches on-disk body_a":
+                    injected and injected[0].get("chars") == chars_a,
+                "second chars matches on-disk body_b":
+                    len(injected) > 1 and injected[1].get("chars") == chars_b,
             }
             run.step(
                 label="L-28: multiple references across messages all resolved",

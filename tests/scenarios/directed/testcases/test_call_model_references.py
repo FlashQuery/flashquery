@@ -88,7 +88,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
                          detail=create_body.error or create_body.text[:200])
                 return run
             body_fq_id = _extract_fq_id(create_body.text)
-            run.step(label="Setup: body doc created", passed=True, detail="")
+            # FQC strips frontmatter when resolving references and returns the body
+            # with a normalized trailing newline. Expected chars = len(body) + 1.
+            body_chars = len(body_text) + 1
+            run.step(label="Setup: body doc created", passed=True,
+                     detail=f"body_chars={body_chars}")
 
             # ── Setup: doc with section for L-25, L-27a ─────────────────
             sec_path = f"_test/{TEST_NAME}_{run_id}_section.md"
@@ -118,6 +122,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 run.step(label="Setup target doc", passed=False,
                          detail=create_target.error or create_target.text[:200])
                 return run
+            # Same trailing-newline-normalization convention as body_chars above.
+            target_chars = len(target_body) + 1
 
             source_path = f"_test/{TEST_NAME}_{run_id}_source.md"
             # Add frontmatter pointer via raw vault write — frontmatter must include
@@ -155,8 +161,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 "injected_references is list of 1": isinstance(injected, list) and len(injected) == 1,
                 "entry.ref is full placeholder":
                     injected[0].get("ref") == f"{{{{ref:{body_path}}}}}" if injected else False,
-                "entry.chars equals body length":
-                    injected[0].get("chars") == len(body_text) if injected else False,
+                "entry.chars equals on-disk body length":
+                    injected[0].get("chars") == body_chars if injected else False,
                 "entry has no 'tokens' field (L-33e)":
                     injected and "tokens" not in injected[0],
             }
@@ -204,8 +210,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     injected and "resolved_to" in injected[0],
                 "resolved_to value contains target_path basename":
                     injected and target_path in (injected[0].get("resolved_to") or ""),
-                "entry chars == target body length":
-                    injected and injected[0].get("chars") == len(target_body),
+                "entry chars == on-disk target body length":
+                    injected and injected[0].get("chars") == target_chars,
             }
             run.step(label="L-26 + L-29: pointer deref + resolved_to present",
                      passed=all(checks.values()),
@@ -227,7 +233,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     isinstance(injected, list) and len(injected) == 1,
                 "entry.ref is full placeholder":
                     injected and injected[0].get("ref") == f"{{{{id:{body_fq_id}}}}}",
-                "chars matches body": injected and injected[0].get("chars") == len(body_text),
+                "chars matches on-disk body": injected and injected[0].get("chars") == body_chars,
             }
             run.step(label="L-27: {{id:uuid}} resolves full body",
                      passed=all(checks.values()),

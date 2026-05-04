@@ -87,7 +87,7 @@ Core CRUD operations on vault documents via MCP.
 | D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 | D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | pending Phase 111 |
+| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
 | D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 
 ## 2. Document Content Operations
@@ -589,31 +589,31 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 |----|----------|------------|--------------|--------------|
 | L-15 | `call_model` with a `trace_id` — `metadata.trace_id` in the response JSON echoes the supplied trace_id exactly, and `metadata.trace_cumulative.total_calls` equals `1` after the first call with that trace_id | test_call_model_trace | 2026-05-01 | 2026-05-01 |
 | L-16 | `call_model` called twice with the same `trace_id` — `metadata.trace_cumulative.total_calls` equals `2` after the second call, and `metadata.trace_cumulative.total_tokens.input` is strictly greater than the input tokens of the first call alone | test_call_model_trace | 2026-05-01 | 2026-05-01 |
-| L-47 | `metadata.trace_cumulative.total_cost_usd` exact arithmetic across multiple calls. Make 3 sequential `call_model` calls with the same `trace_id=T`, capturing each response's `metadata.cost_usd` (call them `c1`, `c2`, `c3`). On the 3rd response, assert `metadata.trace_cumulative.total_cost_usd` equals `c1 + c2 + c3` within absolute tolerance ±1e-9. Tightens L-16 (which only asserts strict-greater monotonicity) to exact arithmetic equality — catches a regression that double-counts the latest call (e.g. snapshot+latest both summed) or drops a row. | — | 2026-05-03 |  |
-| L-48 | `metadata.trace_cumulative.total_tokens.input` and `metadata.trace_cumulative.total_tokens.output` exact integer sums. After 3 sequential `call_model` calls with the same `trace_id=T`, capturing each response's `metadata.tokens_used.input` and `.output`, assert on the 3rd response that `metadata.trace_cumulative.total_tokens.input === sum of the three per-call inputs` AND `metadata.trace_cumulative.total_tokens.output === sum of the three per-call outputs` (strict integer `===`, no tolerance — token counts are integers). | — | 2026-05-03 |  |
+| L-47 | `metadata.trace_cumulative.total_cost_usd` exact arithmetic across multiple calls. Make 3 sequential `call_model` calls with the same `trace_id=T`, capturing each response's `metadata.cost_usd` (call them `c1`, `c2`, `c3`). On the 3rd response, assert `metadata.trace_cumulative.total_cost_usd` equals `c1 + c2 + c3` within absolute tolerance ±1e-9. Tightens L-16 (which only asserts strict-greater monotonicity) to exact arithmetic equality — catches a regression that double-counts the latest call (e.g. snapshot+latest both summed) or drops a row. | test_call_model_trace_arithmetic | 2026-05-03 | 2026-05-03 |
+| L-48 | `metadata.trace_cumulative.total_tokens.input` and `metadata.trace_cumulative.total_tokens.output` exact integer sums. After 3 sequential `call_model` calls with the same `trace_id=T`, capturing each response's `metadata.tokens_used.input` and `.output`, assert on the 3rd response that `metadata.trace_cumulative.total_tokens.input === sum of the three per-call inputs` AND `metadata.trace_cumulative.total_tokens.output === sum of the three per-call outputs` (strict integer `===`, no tolerance — token counts are integers). | test_call_model_trace_arithmetic | 2026-05-03 | 2026-05-03 |
 
 ### 15.8 `call_model` — Reference Syntax (Phase 109/111)
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-24 | call_model with {{ref:path}} resolves and forwards full body; injected_references[0] has ref=full placeholder + chars=body length | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-25 | call_model with {{ref:path#Section}} resolves section only; injected_references chars matches section length | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-26 | call_model with {{ref:path->pointer}} dereferences frontmatter pointer; injected_references entry has resolved_to and chars equals target body length | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-27 | call_model with {{id:uuid}} resolves full body via fq_id lookup | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-27a | call_model with {{id:uuid#Section}} resolves fq_id + section extraction | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-27b | call_model with {{id:uuid->pointer}} resolves fq_id + frontmatter pointer dereference | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-28 | call_model with multiple references across messages — all resolved, injected_references[] lists each in order | test_call_model_multi_ref | 2026-05-03 | pending Phase 111 |
-| L-29 | injected_references entry for -> dereference includes resolved_to (path-only refs do NOT) | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-30 | call_model with {{ref:nonexistent.md}} returns reference_resolution_failed | test_call_model_ref_errors | 2026-05-03 | pending Phase 111 |
+| L-24 | call_model with {{ref:path}} resolves and forwards full body; injected_references[0] has ref=full placeholder + chars=body length | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-25 | call_model with {{ref:path#Section}} resolves section only; injected_references chars matches section length | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-26 | call_model with {{ref:path->pointer}} dereferences frontmatter pointer; injected_references entry has resolved_to and chars equals target body length | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-27 | call_model with {{id:uuid}} resolves full body via fq_id lookup | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-27a | call_model with {{id:uuid#Section}} resolves fq_id + section extraction | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-27b | call_model with {{id:uuid->pointer}} resolves fq_id + frontmatter pointer dereference | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-28 | call_model with multiple references across messages — all resolved, injected_references[] lists each in order | test_call_model_multi_ref | 2026-05-03 | 2026-05-03 |
+| L-29 | injected_references entry for -> dereference includes resolved_to (path-only refs do NOT) | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-30 | call_model with {{ref:nonexistent.md}} returns reference_resolution_failed | test_call_model_ref_errors | 2026-05-03 | 2026-05-03 |
 | L-31 | call_model with one valid + one invalid reference fails entire call (fail-fast, no LLM dispatch); valid ref absent from failed_references[] (Phase 3 Gap 6) (VALIDATED) | test_call_model_ref_errors | 2026-05-03 | 2026-05-03 |
 | L-31a | call_model with TWO invalid references aggregates both into failed_references[] (Phase 3 Gap 1, OQ #7) (VALIDATED) | test_call_model_ref_errors | 2026-05-03 | 2026-05-03 |
-| L-32 | call_model with {{ref:path->missing.pointer}} returns reference_resolution_failed with pointer-specific reason | test_call_model_ref_errors | 2026-05-03 | pending Phase 111 |
-| L-33 | call_model with no reference patterns is forwarded byte-for-byte unchanged; no injected_references / prompt_chars in response | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-33a | injected_references[].chars is integer matching resolved content length exactly | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-33b | response metadata includes top-level prompt_chars integer | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-33c | sum(injected_references[].chars) <= prompt_chars invariant | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-33d | tokens.input/output and cost_usd unchanged shape from no-reference baseline | test_call_model_references | 2026-05-03 | pending Phase 111 |
-| L-33e | injected_references[] entries do NOT contain a tokens field (negative assertion) | test_call_model_references | 2026-05-03 | pending Phase 111 |
+| L-32 | call_model with {{ref:path->missing.pointer}} returns reference_resolution_failed with pointer-specific reason | test_call_model_ref_errors | 2026-05-03 | 2026-05-03 |
+| L-33 | call_model with no reference patterns is forwarded byte-for-byte unchanged; no injected_references / prompt_chars in response | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-33a | injected_references[].chars is integer matching resolved content length exactly | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-33b | response metadata includes top-level prompt_chars integer | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-33c | sum(injected_references[].chars) <= prompt_chars invariant | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-33d | tokens.input/output and cost_usd unchanged shape from no-reference baseline | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-33e | injected_references[] entries do NOT contain a tokens field (negative assertion) | test_call_model_references | 2026-05-03 | 2026-05-03 |
 | L-49 | `call_model` with `{{ref:source.md->ptr}}` where `source.md` frontmatter contains `ptr: "Research/.projections/target.md"` (path-style value with `/` and `.md`) — call succeeds, `metadata.injected_references[0].resolved_to === "Research/.projections/target.md"` exactly (the configured path), and `metadata.injected_references[0].chars` equals the byte-length of `target.md`'s body. Verifies the path-resolution branch of §6.6 fires for `->` derefs in `call_model`. | — | 2026-05-03 |  |
 | L-50 | `call_model` with `{{ref:source.md->ptr}}` where `source.md` frontmatter contains `ptr: "<UUID-of-target>"` (UUID-format value, no `/`, no `.md`) — call succeeds, `metadata.injected_references[0].resolved_to` is the **vault-relative path** of the resolved target document (NOT the UUID string), and `metadata.injected_references[0].chars` equals the target's body length. Verifies fq_id-resolution branch of §6.6 fires for `->` derefs and `resolved_to` always normalizes to a path regardless of how the pointer was expressed. Uses the same UUID resolution branch as D-61 but on the call_model surface. | — | 2026-05-03 |  |
 | L-51 | `call_model` with `{{ref:source.md->ptr}}` where `source.md` frontmatter contains `ptr: "target.md"` (bare filename — no `/`, ends with `.md`, but no UUID format) — call succeeds, `metadata.injected_references[0].resolved_to` is the vault-relative path of the matched target document (not the bare filename). Verifies the filename-search branch of §6.6 fires for `->` derefs in `call_model`. Parallels D-62 on the call_model surface. | — | 2026-05-03 |  |
@@ -633,23 +633,23 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-39 | search resolver without parameters.query → clear error | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
-| L-39a | resolver=model without name → schema validation error | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
-| L-39b | resolver=purpose without name → schema validation error | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
-| L-39c | resolver=list_models with no llm: section → llm_not_configured | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
-| L-39d | resolver=list_purposes with no llm: section → llm_not_configured | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
-| L-39e | resolver=search with no llm: section → llm_not_configured (guard before param validation) | test_discovery_resolver_errors | 2026-05-03 | pending Phase 111 |
-| L-39f | configured-but-empty models[] returns {models: []} (NOT llm_not_configured) | test_discovery_resolvers | 2026-05-03 | pending Phase 111 |
-| L-39g | configured-but-empty purposes[] returns {purposes: []} | test_discovery_resolvers | 2026-05-03 | pending Phase 111 |
+| L-39 | search resolver without parameters.query → clear error | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39a | resolver=model without name → schema validation error | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39b | resolver=purpose without name → schema validation error | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39c | resolver=list_models with no llm: section → llm_not_configured | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39d | resolver=list_purposes with no llm: section → llm_not_configured | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39e | resolver=search with no llm: section → llm_not_configured (guard before param validation) | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39f | configured-but-empty models[] returns {models: []} (NOT llm_not_configured) | test_discovery_resolvers | 2026-05-03 | 2026-05-03 |
+| L-39g | configured-but-empty purposes[] returns {purposes: []} | test_discovery_resolvers | 2026-05-03 | 2026-05-03 |
 | L-39h | call_model with no args (only resolver) returns model list (VALIDATED) | test_discovery_resolvers | 2026-05-03 | 2026-05-03 |
 | L-39h_purposes | call_model({resolver: "list_purposes"}) with no args returns populated purposes[] (uniformity with list_models) (Phase 4 Gap 9) (VALIDATED) | test_discovery_resolvers | 2026-05-03 | 2026-05-03 |
-| L-39i | declared capabilities array returned verbatim | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
-| L-39j | declared-empty capabilities preserved (NOT omitted) | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
-| L-39k | undeclared capabilities/context_window/description OMITTED from response | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
-| L-39l | context_window value preserved when declared; key omitted when not | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
-| L-39m | custom capability strings pass through verbatim (no taxonomy validation) | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
-| L-39n | description present when declared, omitted when not | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
-| L-39o | search response entries follow same omit-when-undeclared rule as list_models | test_discovery_optional_fields | 2026-05-03 | pending Phase 111 |
+| L-39i | declared capabilities array returned verbatim | test_discovery_optional_fields | 2026-05-03 | 2026-05-03 |
+| L-39j | declared-empty capabilities preserved (NOT omitted) | test_discovery_optional_fields | 2026-05-03 | 2026-05-03 |
+| L-39k | undeclared capabilities/context_window/description OMITTED from response | test_discovery_optional_fields | 2026-05-03 | 2026-05-03 |
+| L-39l | context_window value preserved when declared; key omitted when not | test_discovery_optional_fields | 2026-05-03 | 2026-05-03 |
+| L-39m | custom capability strings pass through verbatim (no taxonomy validation) | test_discovery_optional_fields | 2026-05-03 | 2026-05-03 |
+| L-39n | description present when declared, omitted when not | test_discovery_optional_fields | 2026-05-03 | 2026-05-03 |
+| L-39o | search response entries follow same omit-when-undeclared rule as list_models | test_discovery_optional_fields | 2026-05-03 | 2026-05-03 |
 | L-63 | `call_model` with `resolver=list_models` returns each model's `input_cost_per_million` and `output_cost_per_million` **byte-for-byte equal** to the configured YAML values for non-trivial decimals. Configure a model with `cost_per_million: { input: 0.594321, output: 1.234567 }` (6+ significant digits, neither a round number); assert response entry has `input_cost_per_million === 0.594321` AND `output_cost_per_million === 1.234567` (strict `===`, no float coercion drift, no rounding). Verifies §8.3 "hard per-million-token costs from the configuration table." | — | 2026-05-03 |  |
 | L-64 | `call_model` with `resolver=list_purposes` returns each purpose's `input_cost_per_million` and `output_cost_per_million` equal to the **first (primary) model in the purpose's `models:` chain**, not the second, not an average. Setup: configure two models `fast` (rates 0.59/0.79) and `mid` (rates 3.0/15.0); configure purpose `analysis` with `models: ["fast", "mid"]`; assert the `analysis` entry in `list_purposes` has `input_cost_per_million === 0.59` AND `output_cost_per_million === 0.79` (matches `fast`, NOT `mid`, NOT `(0.59+3.0)/2`). Verifies §8.3 "Purpose-level costs reflect the primary model's rates." | — | 2026-05-03 |  |
 | L-65 | `call_model` with `resolver=list_models` for a model configured with `cost_per_million: { input: 0, output: 0 }` returns response entry containing the literal keys `"input_cost_per_million": 0` AND `"output_cost_per_million": 0` (key present, value strictly `=== 0`). The cost keys are NOT omitted (cost fields are required per §8.2.1) and are NOT `null`. Verifies the omit-when-absent rule (L-39k) does NOT apply to required cost fields — zero is treated as a declared value, not absence. Pairs with L-41 (zero-cost on the call_model surface). | — | 2026-05-03 |  |
@@ -678,8 +678,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| LLM Tools | 14 | 14 | 0 |
-| **Total** | **298** | **294** | **4** |
+| LLM Tools | 91 | 59 | 32 |
+| **Total** | **375** | **339** | **36** |
 
 ---
 
@@ -1289,6 +1289,9 @@ Covers: L-10, L-11
 
 ### test_llm_usage_filters
 Covers: L-12, L-13, L-14
+
+### test_call_model_trace_arithmetic
+Covers: L-47, L-48
 
 ### test_call_model_references
 Covers: L-24, L-25, L-26, L-27, L-27a, L-27b, L-29, L-33, L-33a, L-33b, L-33c, L-33d, L-33e
