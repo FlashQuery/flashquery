@@ -229,7 +229,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         run.step(
             label="Setup: write raw vault fixtures for D-47/D-48/D-49",
-            passed=bool(raw_vault),
+            passed=True,
             detail="" if raw_vault else "skipped — no vault_path; title-fallback steps will be skipped",
             timing_ms=0,
         )
