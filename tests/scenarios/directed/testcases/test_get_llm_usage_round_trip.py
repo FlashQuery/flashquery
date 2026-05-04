@@ -185,19 +185,33 @@ def run_test(args: argparse.Namespace) -> TestRun:
             entry_cost = entries[0].get("cost_usd") if entries else None
             entry_trace = entries[0].get("trace_id") if entries else None
 
+            # L-46 tolerance: envelope cost_usd carries IEEE-754 binary FP noise
+            # (e.g. 0.000009640000000000001) while the persisted Supabase row is
+            # stored in NUMERIC(18,10) (per src/storage/supabase.ts:511) which
+            # strips the FP tail to 0.00000964. Both are correct representations
+            # of the same arithmetic; strict equality is over-specified. Match
+            # L-47's tolerance approach for total_cost_usd. L-40 separately pins
+            # the formula-exactness within ±1e-9.
+            cost_delta = (
+                abs(entry_cost - cost_usd_X)
+                if isinstance(entry_cost, (int, float)) and isinstance(cost_usd_X, (int, float))
+                else None
+            )
             l46_checks = {
                 "exactly 1 entry returned for trace": isinstance(entries, list) and len(entries) == 1,
                 "entry.trace_id matches seed": entry_trace == trace_rt,
-                "entry.cost_usd === metadata.cost_usd (strict equality)":
-                    entry_cost == cost_usd_X and isinstance(entry_cost, (int, float)),
+                "entry.cost_usd is numeric": isinstance(entry_cost, (int, float)),
+                "entry.cost_usd ≈ metadata.cost_usd (±1e-9)":
+                    cost_delta is not None and cost_delta <= 1e-9,
             }
             run.step(
-                label="L-46: get_llm_usage round-trip cost_usd equals call_model cost_usd",
+                label="L-46: get_llm_usage round-trip cost_usd matches call_model cost_usd within ±1e-9",
                 passed=all(l46_checks.values()),
                 detail=(
                     f"checks={l46_checks}, "
                     f"call_model.cost_usd={cost_usd_X!r}, "
                     f"entry.cost_usd={entry_cost!r}, "
+                    f"delta={cost_delta!r}, "
                     f"entry.trace_id={entry_trace!r}, "
                     f"entries_len={len(entries)}"
                 ),

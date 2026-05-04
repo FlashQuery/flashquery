@@ -115,8 +115,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 return run
             target50_chars = len(target50_body) + 1
 
-            # L-51 target: bare-filename match — unique filename target51.md
-            target51_path = f"{base}/bare-name/target51.md"
+            # L-51 target: bare-filename (no extension) match. Per §6.6, a value
+            # ending in a configured markdown extension is path-only — to actually
+            # exercise the filename-search branch, the pointer value must be the
+            # bare basename without the extension. The vault file itself is a
+            # normal `.md` file in a nested folder; filename search walks the
+            # vault and matches by basename + configured extension.
+            target51_basename = f"target51_{run_id}"  # unique stem, no extension
+            target51_path = f"{base}/bare-name/{target51_basename}.md"
             target51_body = "target51 unique body"
             create51 = client.call_tool(
                 "create_document",
@@ -186,7 +192,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             (server.vault_path / source51_path).write_text(
                 f"---\n"
                 f"fq_id: {s51_id}\n"
-                f"ptr: \"target51.md\"\n"
+                f"ptr: \"{target51_basename}\"\n"
                 f"---\n\n"
                 f"source51\n"
             )
@@ -266,7 +272,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
                      detail=f"checks={checks}, resolved_to={entry.get('resolved_to')!r}, expected_path={target50_path!r}, uuid={target50_fq_id}, chars={entry.get('chars')}, expected_chars={target50_chars}",
                      timing_ms=r.timing_ms, tool_result=r)
 
-            # ── L-51: bare-filename pointer value ─────────────────────────
+            # ── L-51: bare-basename (extensionless) pointer value ────────
+            # Per §6.6, a pointer value with no `/` and no `.md` extension and
+            # no UUID format hits the filename-search branch — the resolver
+            # walks the vault and matches `<value>.md` (or any configured
+            # markdown extension) by basename. resolved_to should be the full
+            # vault-relative path of the unique match, not the bare basename.
             r = client.call_tool(
                 "call_model", resolver="model", name="fast",
                 messages=[{"role": "user", "content":
@@ -282,14 +293,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     isinstance(injected, list) and len(injected) == 1,
                 "resolved_to == full vault-relative target51 path":
                     entry.get("resolved_to") == target51_path,
-                "resolved_to is not the bare filename":
-                    entry.get("resolved_to") != "target51.md",
+                "resolved_to is not the bare basename":
+                    entry.get("resolved_to") != target51_basename,
                 "chars == target51_chars":
                     entry.get("chars") == target51_chars,
             }
-            run.step(label="L-51: bare-filename ptr resolves to full vault path",
+            run.step(label="L-51: extensionless filename ptr resolves via filename-search to full vault path",
                      passed=all(checks.values()),
-                     detail=f"checks={checks}, resolved_to={entry.get('resolved_to')!r}, expected={target51_path!r}, chars={entry.get('chars')}, expected_chars={target51_chars}",
+                     detail=f"checks={checks}, ptr_value={target51_basename!r}, resolved_to={entry.get('resolved_to')!r}, expected={target51_path!r}, chars={entry.get('chars')}, expected_chars={target51_chars}",
                      timing_ms=r.timing_ms, tool_result=r)
 
             # ── L-52: top-level pointer (single segment, no dot) ─────────

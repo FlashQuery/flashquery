@@ -152,15 +152,24 @@ def run_test(args: argparse.Namespace) -> TestRun:
             resp = json.loads(r.text) if r.text else {}
             failed = resp.get("failed_references", [])
             reason55 = (failed[0].get("reason") if failed else "") or ""
+            # The implementation uses a single template across all non-string
+            # types: "Reference path 'X' resolved to a <found_type>, expected a
+            # string identifier" (per src/mcp/utils/document-output.ts:464).
+            # Match on the durable semantic phrasing — "expected a string" or
+            # "string identifier" — rather than the spec prose's older "not a
+            # string" wording. Either substring proves the failure communicates
+            # "expected string, got something else."
+            reason55_lc = reason55.lower()
             checks = {
                 "isError true": (not r.ok),
                 "error == reference_resolution_failed":
                     resp.get("error") == "reference_resolution_failed",
                 "failed has 1 entry": isinstance(failed, list) and len(failed) == 1,
-                "reason contains 'not a string'":
-                    "not a string" in reason55.lower(),
+                "reason indicates non-string value":
+                    "expected a string" in reason55_lc
+                    or "string identifier" in reason55_lc,
             }
-            run.step(label="L-55: pointer to non-string scalar → 'not a string' reason",
+            run.step(label="L-55: pointer to non-string scalar → reason indicates non-string value",
                      passed=all(checks.values()),
                      detail=f"checks={checks}, reason={reason55!r}",
                      timing_ms=r.timing_ms, tool_result=r)
