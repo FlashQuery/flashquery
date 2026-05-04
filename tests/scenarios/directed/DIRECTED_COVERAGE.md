@@ -23,7 +23,7 @@ Core CRUD operations on vault documents via MCP.
 | D-04 | Created document is readable on disk with correct frontmatter (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
 | D-05 | Get document by fqc_id returns body content (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
 | D-06 | Get document by vault-relative path (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-04-16 |
-| D-07 | Get document by filename (no directory) (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-04-16 |
+| D-07 | Get document by filename (no directory) (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-05-04 |
 | D-08 | Update document body (full replacement) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
 | D-09 | Update document title only (body preserved) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-04-16 |
 | D-10 | Update document tags only (body and title preserved) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-04-16 |
@@ -384,7 +384,7 @@ Behaviors that span multiple tools and represent system-level guarantees.
 |----|----------|------------|--------------|--------------|
 | X-01 | Identifier resolution: fqc_id (UUID) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
 | X-02 | Identifier resolution: vault-relative path (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-04-16 |
-| X-03 | Identifier resolution: filename only (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-04-16 |
+| X-03 | Identifier resolution: filename only (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-05-04 |
 | X-04 | Write lock contention returns error with guidance (VALIDATED) | test_write_lock_contention | 2026-04-14 | 2026-04-16 |
 | X-05 | Batch identifiers (array input where supported) (VALIDATED) | test_cross_cutting_edge_cases | 2026-04-14 | 2026-04-16 |
 | X-06 | Frontmatter round-trip: create → read → verify all fields (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |

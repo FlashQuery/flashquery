@@ -6,7 +6,7 @@ Scenario:
     1. Create a document via MCP (create_document) at a specific path
     2. Call force_file_scan to ensure it is indexed in the database
     3. Get document by vault-relative path (e.g., "_test/myfile.md") — verify content
-    4. Get document by filename only (e.g., "myfile.md") — verify content
+    4. Get document by filename only (e.g., "myfile") — verify content
     5. Verify both resolutions returned the same fqc_id
     Cleanup is automatic (filesystem + database) even if the test fails.
 
@@ -75,7 +75,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
     unique_title = f"FQC Identifier Test {run.run_id}"
     test_path = f"_test/{TEST_NAME}_{run.run_id}.md"
-    filename_only = Path(test_path).name  # just "test_document_identifier_resolution_<run_id>.md"
+    filename_only = Path(test_path).stem  # just "test_document_identifier_resolution_<run_id>" (no .md — per §6.6, '.md' identifiers are path lookups, not filename search)
     body_content = (
         f"## Identifier Resolution Test\n\n"
         f"Created by {TEST_NAME} (run {run.run_id}).\n\n"
