@@ -120,7 +120,7 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
   4. Returned message shapes can be passed into a later `call_model` call without schema rejection.
   5. Provider variations around `tool_calls`, empty assistant content, argument shapes, and finish reasons normalize to one internal contract.
   6. Phase-specific runnable tests exist and pass for chat primitive behavior, Mode 1 envelope compatibility, `return_messages`, message round-tripping, and provider normalization, including directed scenario coverage for the public `call_model` envelope behavior; the phase plan names exact commands/scenarios.
-**Plans**: TBD during `$gsd-plan-phase 112`
+**Plans**: `112-01-PLAN.md`, `112-02-PLAN.md`, `112-03-PLAN.md`, `112-04-PLAN.md`, `112-05-PLAN.md`
 **UI hint**: no
 
 ### Phase 113: Document Reference System Core

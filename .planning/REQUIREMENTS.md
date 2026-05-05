@@ -7,12 +7,12 @@
 
 ### Chat Primitive And Envelope
 
-- [ ] **CHAT-01**: Developer can call a lower-level `chat()` primitive that returns normalized assistant messages, usage, latency, model/provider identity, fallback position, and finish reason.
-- [ ] **CHAT-02**: Existing `complete()` and `completeByPurpose()` remain text-only wrappers that reject tool-call responses instead of silently dropping them.
-- [ ] **CHAT-03**: MCP client can pass and receive round-trippable `call_model` messages with nullable assistant content, `tool_calls`, `tool_call_id`, and participant `name` fields.
-- [ ] **CHAT-04**: MCP client can set `return_messages: true` and receive the post-hydration message history plus final assistant output; default responses keep `messages: []`.
-- [ ] **CHAT-05**: Discovery resolvers ignore `return_messages` and keep their existing raw discovery response shapes.
-- [ ] **CHAT-06**: Provider response normalization handles tool-call finish reasons, string/object arguments, missing content with tool calls, and provider capability mismatches with typed actionable errors.
+- [x] **CHAT-01**: Developer can call a lower-level `chat()` primitive that returns normalized assistant messages, usage, latency, model/provider identity, fallback position, and finish reason.
+- [x] **CHAT-02**: Existing `complete()` and `completeByPurpose()` remain text-only wrappers that reject tool-call responses instead of silently dropping them.
+- [x] **CHAT-03**: MCP client can pass and receive round-trippable `call_model` messages with nullable assistant content, `tool_calls`, `tool_call_id`, and participant `name` fields.
+- [x] **CHAT-04**: MCP client can set `return_messages: true` and receive the post-hydration message history plus final assistant output; default responses keep `messages: []`.
+- [x] **CHAT-05**: Discovery resolvers ignore `return_messages` and keep their existing raw discovery response shapes.
+- [x] **CHAT-06**: Provider response normalization handles tool-call finish reasons, string/object arguments, missing content with tool calls, and provider capability mismatches with typed actionable errors.
 
 ### Document References
 
@@ -80,7 +80,7 @@
 
 ### Test Coverage
 
-- [ ] **VAL-112**: Phase 112 ships runnable unit, MCP-boundary, and directed scenario tests that validate `chat()`, Mode 1 envelope compatibility, `return_messages`, round-trippable messages, and provider normalization.
+- [x] **VAL-112**: Phase 112 ships runnable unit, MCP-boundary, and directed scenario tests that validate `chat()`, Mode 1 envelope compatibility, `return_messages`, round-trippable messages, and provider normalization.
 - [ ] **VAL-113**: Phase 113 ships runnable unit, directed, and integration tests that validate reference parsing, escaping, ambiguity handling, typed failures, metadata, and non-recursive hydration.
 - [ ] **VAL-114**: Phase 114 ships runnable unit, directed, and integration tests that validate template parameter validation, substitution, document parameters, aliases, and `_items` list injection.
 - [ ] **VAL-115**: Phase 115 ships runnable unit, TypeScript integration, and public startup/config scenario tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
@@ -89,9 +89,9 @@
 - [ ] **VAL-118**: Phase 118 ships runnable unit, integration, E2E, and directed scenario tests validating fresh template discovery, masquerade tool naming, collision diagnostics, reverse-map dispatch, and mixed native/template loops.
 - [ ] **VAL-119**: Phase 119 ships runnable unit and directed scenario tests validating discovery diagnostics, structured capability reporting, discovery search behavior, and the `help` resolver.
 - [ ] **VAL-120**: Phase 120 ships runnable cross-phase E2E, directed, and YAML integration suites proving the full ATL workflows and updating coverage matrices with final scenario IDs.
-- [ ] **TEST-01**: Every implementation phase includes its own runnable validation before the phase can be marked complete; tests are not deferred wholesale to Phase 120.
-- [ ] **TEST-02**: A deterministic OpenAI-compatible mock provider exists early enough for the first phase that needs provider/tool-loop validation and is reused by later E2E/scenario tests.
-- [ ] **TEST-03**: Phase plans identify exact test commands or scenario invocations required for that phase's acceptance.
+- [x] **TEST-01**: Every implementation phase includes its own runnable validation before the phase can be marked complete; tests are not deferred wholesale to Phase 120.
+- [x] **TEST-02**: A deterministic OpenAI-compatible mock provider exists early enough for the first phase that needs provider/tool-loop validation and is reused by later E2E/scenario tests.
+- [x] **TEST-03**: Phase plans identify exact test commands or scenario invocations required for that phase's acceptance.
 - [ ] **TEST-04**: Scenario tests are added in the same phase as the public behavior they validate; Phase 120 only fills cross-phase gaps and finalizes coverage matrices.
 
 ## Future Requirements
@@ -123,12 +123,12 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CHAT-01 | Phase 112 | Pending |
-| CHAT-02 | Phase 112 | Pending |
-| CHAT-03 | Phase 112 | Pending |
-| CHAT-04 | Phase 112 | Pending |
-| CHAT-05 | Phase 112 | Pending |
-| CHAT-06 | Phase 112 | Pending |
+| CHAT-01 | Phase 112 | Complete |
+| CHAT-02 | Phase 112 | Complete |
+| CHAT-03 | Phase 112 | Complete |
+| CHAT-04 | Phase 112 | Complete |
+| CHAT-05 | Phase 112 | Complete |
+| CHAT-06 | Phase 112 | Complete |
 | REF-01 | Phase 113 | Pending |
 | REF-02 | Phase 113 | Pending |
 | REF-03 | Phase 113 | Pending |
@@ -172,7 +172,7 @@
 | DISC-02 | Phase 119 | Pending |
 | DISC-03 | Phase 119 | Pending |
 | DISC-04 | Phase 119 | Pending |
-| VAL-112 | Phase 112 | Pending |
+| VAL-112 | Phase 112 | Complete |
 | VAL-113 | Phase 113 | Pending |
 | VAL-114 | Phase 114 | Pending |
 | VAL-115 | Phase 115 | Pending |
@@ -181,9 +181,9 @@
 | VAL-118 | Phase 118 | Pending |
 | VAL-119 | Phase 119 | Pending |
 | VAL-120 | Phase 120 | Pending |
-| TEST-01 | Phase 112 | Pending |
-| TEST-02 | Phase 112 | Pending |
-| TEST-03 | Phase 112 | Pending |
+| TEST-01 | Phase 112 | Complete |
+| TEST-02 | Phase 112 | Complete |
+| TEST-03 | Phase 112 | Complete |
 | TEST-04 | Phase 120 | Pending |
 
 **Coverage:**
