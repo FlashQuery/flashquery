@@ -123,7 +123,7 @@ Last activity: 2026-05-05 — Milestone v3.2 roadmap created
 **Critical architectural constraints for this milestone:**
 
 - More research is intentionally skipped; the supplied ATL, DRS, and test-plan docs are spec-complete and implementation-ready.
-- Every implementation phase must ship runnable tests for the behavior it adds; Phase 120 is cross-phase validation and coverage closure, not a deferred test dump.
+- Every implementation phase must ship runnable tests for the behavior it adds; public behavior gets scenario coverage in the same phase, and Phase 120 is cross-phase validation plus coverage closure, not a deferred test dump.
 - `chat()` is the lower-level provider primitive; existing text wrappers stay compatible and reject accidental tool-call responses.
 - Reference hydration scans host-authored input only and is non-recursive.
 - `{{id:...}}` support is removed as part of ATL; `{{ref:...}}` is the single reference prefix.

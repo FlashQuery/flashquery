@@ -80,10 +80,10 @@
 
 ### Test Coverage
 
-- [ ] **VAL-112**: Phase 112 ships runnable unit and MCP-boundary tests that validate `chat()`, Mode 1 envelope compatibility, `return_messages`, round-trippable messages, and provider normalization.
+- [ ] **VAL-112**: Phase 112 ships runnable unit, MCP-boundary, and directed scenario tests that validate `chat()`, Mode 1 envelope compatibility, `return_messages`, round-trippable messages, and provider normalization.
 - [ ] **VAL-113**: Phase 113 ships runnable unit, directed, and integration tests that validate reference parsing, escaping, ambiguity handling, typed failures, metadata, and non-recursive hydration.
 - [ ] **VAL-114**: Phase 114 ships runnable unit, directed, and integration tests that validate template parameter validation, substitution, document parameters, aliases, and `_items` list injection.
-- [ ] **VAL-115**: Phase 115 ships runnable unit and TypeScript integration tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
+- [ ] **VAL-115**: Phase 115 ships runnable unit, TypeScript integration, and public startup/config scenario tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
 - [ ] **VAL-116**: Phase 116 ships runnable unit tests and at least one public-surface scenario that validate native tool exposure, exclusions, hard exclusions, schema translation, and empty-tool omission.
 - [ ] **VAL-117**: Phase 117 ships runnable unit, E2E, and directed scenario tests with a deterministic mock provider validating native tool loops, parallel tool calls, guardrail stops, fallback, usage aggregation, and calls-log metadata.
 - [ ] **VAL-118**: Phase 118 ships runnable unit, integration, E2E, and directed scenario tests validating fresh template discovery, masquerade tool naming, collision diagnostics, reverse-map dispatch, and mixed native/template loops.
@@ -92,7 +92,7 @@
 - [ ] **TEST-01**: Every implementation phase includes its own runnable validation before the phase can be marked complete; tests are not deferred wholesale to Phase 120.
 - [ ] **TEST-02**: A deterministic OpenAI-compatible mock provider exists early enough for the first phase that needs provider/tool-loop validation and is reused by later E2E/scenario tests.
 - [ ] **TEST-03**: Phase plans identify exact test commands or scenario invocations required for that phase's acceptance.
-- [ ] **TEST-04**: Coverage matrices are updated incrementally as phase-specific directed and integration scenarios are accepted, with final closure in Phase 120.
+- [ ] **TEST-04**: Scenario tests are added in the same phase as the public behavior they validate; Phase 120 only fills cross-phase gaps and finalizes coverage matrices.
 
 ## Future Requirements
 

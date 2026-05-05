@@ -119,7 +119,7 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
   3. MCP client can set `return_messages: true` and receive post-hydration input messages plus final assistant output; default Mode 1 calls keep `messages: []`.
   4. Returned message shapes can be passed into a later `call_model` call without schema rejection.
   5. Provider variations around `tool_calls`, empty assistant content, argument shapes, and finish reasons normalize to one internal contract.
-  6. Phase-specific runnable tests exist and pass for chat primitive behavior, Mode 1 envelope compatibility, `return_messages`, message round-tripping, and provider normalization; the phase plan names exact commands/scenarios.
+  6. Phase-specific runnable tests exist and pass for chat primitive behavior, Mode 1 envelope compatibility, `return_messages`, message round-tripping, and provider normalization, including directed scenario coverage for the public `call_model` envelope behavior; the phase plan names exact commands/scenarios.
 **Plans**: TBD during `$gsd-plan-phase 112`
 **UI hint**: no
 
@@ -161,7 +161,7 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
   3. Generic config sync handles the purpose-template binding flow without duplicating YAML scrub/insert logic.
   4. Structured model capabilities replace the old free-form behavior surface for tool execution decisions.
   5. Any purpose that exposes model-visible tools fails config validation unless every fallback model declares required support.
-  6. Phase-specific runnable tests exist and pass for config parse/admission, DDL/schema verification, config sync precedence, binding resolution, and runtime capability validation.
+  6. Phase-specific runnable tests exist and pass for config parse/admission, DDL/schema verification, config sync precedence, binding resolution, runtime capability validation, and public startup/config scenarios for user-visible admission errors.
 **Plans**: TBD during `$gsd-plan-phase 115`
 **UI hint**: no
 
@@ -229,8 +229,8 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
   1. Cross-phase E2E workflows prove Mode 1, native tool loops, template tool loops, mixed loops, stops, fallback, and provider compatibility failures together.
   2. YAML integration scenarios prove reference freshness, document-parameter freshness, discovery-to-invocation closure, runtime binding reappearance, and mixed reference modes.
   3. Directed scenario coverage proves public `call_model` behavior across envelopes, references, aliases, template failures, discovery, loops, budgets, usage, capabilities, and help.
-  4. Coverage matrices contain accepted ATL rows with final IDs and traceability back to the test plan.
-  5. Phase 120 verifies that Phases 112-119 each shipped their own runnable tests; any missing phase-local validation blocks milestone completion.
+  4. Coverage matrices contain accepted ATL rows with final IDs and traceability back to the test plan, including scenario rows that were added incrementally during Phases 112-119.
+  5. Phase 120 verifies that Phases 112-119 each shipped their own runnable unit/integration/E2E/scenario tests as applicable; any missing phase-local public-behavior scenario blocks milestone completion unless the phase had no public surface.
   6. Full milestone preflight command set is documented and passes or has explicitly recorded environmental skips.
 **Plans**: TBD during `$gsd-plan-phase 120`
 **UI hint**: no
