@@ -658,6 +658,14 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-66c | `call_model` with `resolver=list_models` OMITS the `"local"` key entirely on a model entry whose provider has `type: "openai-compatible"` AND no explicit `local: true` declaration — the key is absent from the JSON object (`'local' in entry === false`), NOT present-and-false (`response.models[i].local === false` is wrong) and NOT present-and-null. Setup: configure an OpenAI/openrouter-style provider with no `local` field; configure a model that points at that provider; call `resolver=list_models`; assert `'local' not in response.models[i]`. Verifies the omit-when-not-local invariant — there is NO `"local": false` form anywhere in the discovery surface. | test_discovery_local_flag | 2026-05-03 | 2026-05-03 |
 | L-66d | **Behavioral non-influence guard.** The `provider.local` flag MUST NOT affect any FlashQuery behavior other than the `list_models` discovery output. Setup: configure two identical providers `paid-A` and `paid-B` (same `type: openai-compatible`, same endpoint, same models pointing at each) where the only difference is `paid-A` declares `local: true` and `paid-B` does not. Make `call_model` calls against models on both providers and verify: (a) `metadata.cost_usd` is computed identically (no zero-cost shortcut for local-flagged providers — cost still comes from `cost_per_million` × tokens), (b) routing/dispatch reaches the configured endpoint identically (no local-flag-based bypass), (c) `get_llm_usage` records the same fields for both. This is a regression guard tied to the code comment at [src/config/loader.ts:90](../../../src/config/loader.ts#L90) and [src/mcp/tools/llm.ts:165](../../../src/mcp/tools/llm.ts#L165) stating `local` is "read but not used to make decisions." If this row starts failing, the comment is stale and a behavioral coupling has been introduced. | test_discovery_local_flag | 2026-05-03 | 2026-05-03 |
 
+### 15.10 `call_model` — Phase 112 Response Messages
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-70 | `call_model` successful model/purpose envelopes always include root `messages`; when `return_messages` is false or omitted, `messages` is exactly `[]` | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
+| L-71 | `call_model` with `return_messages: true` returns post-hydration input messages plus a final assistant message with string `name`; returned input content contains resolved reference text and no `{{ref:` placeholder | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
+| L-72 | Discovery resolvers (`list_models`, `list_purposes`, `search`) ignore `return_messages` and keep their raw response shapes with no root `messages` envelope | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
+
 ---
 
 ## Coverage Summary
@@ -678,8 +686,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| LLM Tools | 91 | 91 | 0 |
-| **Total** | **375** | **371** | **4** |
+| LLM Tools | 94 | 94 | 0 |
+| **Total** | **378** | **374** | **4** |
 
 ---
 
@@ -1366,6 +1374,9 @@ Covers: L-63, L-64
 
 ### test_discovery_local_flag
 Covers: L-66a, L-66b, L-66c, L-66d
+
+### test_call_model_return_messages
+Covers: L-70, L-71, L-72, ATL-DS-01
 
 ### test_get_llm_usage_arithmetic
 Covers: L-68, L-69, L-70

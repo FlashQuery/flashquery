@@ -169,6 +169,7 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 | IL-23  | call_model with {{ref:...}} + trace_id → get_llm_usage filtered by that trace_id returns 1 call; the call's metadata still reports injected_references[] and prompt_chars (reference resolution participates in trace tracking) | llm_ref_trace_id_filter      | 2026-05-03   | 2026-05-03   |
 | IL-24  | call_model resolver=search with matching parameters.query → caller picks a purposes[].name from results → subsequent call_model with that purpose succeeds and writes a usage row (discovery→delegate closure via search) | llm_search_then_purpose_call | 2026-05-03   | 2026-05-03   |
 | IL-25  | call_model with mixed {{ref:path}} + {{id:<uuid>}} placeholders in one call → both resolve; injected_references[] reports both entries (path-typed and id-typed) in input order; prompt_chars reflects the combined resolved prompt | llm_mixed_ref_and_id_placeholders | 2026-05-03   | 2026-05-03   |
+| IL-26  | ATL-DS-01 exact `call_model` `return_messages` envelope assertions (default `messages: []`, hydrated returned inputs, final assistant message, discovery raw shape) are covered by directed Python because the YAML runner only supports substring assertions against `content[0].text`, not exact parsed JSON envelope checks | test_call_model_return_messages.py | 2026-05-05   |              |
 
 ---
 
