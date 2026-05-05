@@ -26,6 +26,7 @@ import { supabaseManager } from '../../storage/supabase.js';
 import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmCompletionResult } from '../../llm/client.js';
 import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
+import type { CallModelEnvelope, CallModelMessage, CallModelMetadata } from '../../llm/types.js';
 import { embeddingProvider } from '../../embedding/provider.js';
 import {
   parseReferences,
@@ -42,32 +43,7 @@ import {
 // Internal types — handler-local response envelope shape.
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface TraceCumulative {
-  total_calls: number;
-  total_tokens: { input: number; output: number };
-  total_cost_usd: number;
-  total_latency_ms: number;
-}
-
-interface CallModelMetadata {
-  resolver: 'model' | 'purpose';
-  name: string;
-  resolved_model_name: string;
-  provider_name: string;
-  fallback_position: number | null;
-  tokens: { input: number; output: number };
-  cost_usd: number;
-  latency_ms: number;
-  trace_id?: string;
-  trace_cumulative?: TraceCumulative;
-  injected_references?: Array<{ ref: string; chars: number; resolved_to?: string }>;
-  prompt_chars?: number;
-}
-
-interface CallModelEnvelope {
-  response: string;
-  metadata: CallModelMetadata;
-}
+type TraceCumulative = NonNullable<CallModelMetadata['trace_cumulative']>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // registerLlmTools — registers `call_model` unconditionally (TOOL-03).
@@ -101,11 +77,24 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           .array(
             z.object({
               role: z.enum(['system', 'user', 'assistant', 'tool']),
-              content: z.string(),
+              content: z.string().nullable().optional(),
+              name: z.string().optional(),
+              tool_call_id: z.string().optional(),
+              tool_calls: z.array(z.object({
+                id: z.string(),
+                type: z.literal('function'),
+                function: z.object({
+                  name: z.string(),
+                  arguments: z.record(z.string(), z.unknown()),
+                }),
+              })).optional(),
             })
           )
           .optional()
           .describe('OpenAI-style messages array. Required for resolver=model/purpose. Ignored for discovery resolvers.'),
+        return_messages: z.boolean().optional().describe(
+          'When true, successful model/purpose calls include post-hydration input messages plus the final assistant message.'
+        ),
         parameters: z
           .record(z.string(), z.unknown())
           .optional()
@@ -290,7 +279,11 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       // No-op when no patterns present (REFS-07 backward compat).
       // Type narrowing: Step 1.2 guarantees messages is defined for model/purpose path.
       const messagesForRefs = params.messages ?? [];
-      const parsed = parseReferences(messagesForRefs);
+      const hostReferenceMessages = messagesForRefs.map((message) => ({
+        ...message,
+        content: typeof message.content === 'string' ? message.content : '',
+      }));
+      const parsed = parseReferences(hostReferenceMessages);
       if ('error' in parsed) {
         // REFS-02: # and -> mutually exclusive — parse error → immediate fail (no LLM call)
         return {
@@ -317,7 +310,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           };
         }
         const resolvedRefs = resolved as ResolvedRef[];
-        hydratedMessages = hydrateMessages(messagesForRefs, resolvedRefs) as typeof messagesForRefs;
+        hydratedMessages = hydrateMessages(hostReferenceMessages, resolvedRefs) as typeof messagesForRefs;
         injectionMetadata = {
           injectedReferences: buildInjectedReferences(resolvedRefs),
           promptChars: computePromptChars(hydratedMessages),
@@ -511,6 +504,16 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
 
       const envelope: CallModelEnvelope = {
         response: result.text,
+        messages: params.return_messages === true
+          ? [
+              ...(hydratedMessages as CallModelMessage[]),
+              {
+                role: 'assistant',
+                content: result.text,
+                name: fallbackPosition === null ? result.modelName : resolvedName,
+              },
+            ]
+          : [],
         metadata,
       };
 

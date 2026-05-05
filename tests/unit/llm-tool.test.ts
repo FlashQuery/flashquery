@@ -600,6 +600,138 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
   });
 });
 
+describe('call_model handler — Phase 112 return_messages envelope', () => {
+  it('default model envelope includes messages: [] and accepts nullable round-trip message fields', async () => {
+    const completeMock = vi.fn().mockResolvedValue(SAMPLE_RESULT);
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const res = await handler({
+      resolver: 'model',
+      name: 'fast',
+      messages: [
+        {
+          role: 'assistant',
+          content: null,
+          name: 'general',
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'search_documents', arguments: { query: 'alpha' } },
+            },
+          ],
+        },
+        { role: 'tool', content: '{"ok":true}', tool_call_id: 'call_1' },
+        { role: 'user', content: 'continue' },
+      ],
+    });
+
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const envelope = JSON.parse(res.content[0].text) as any;
+    expect(envelope.response).toBe('hello world');
+    expect(envelope.messages).toEqual([]);
+    expect(completeMock).toHaveBeenCalledWith(
+      'fast',
+      expect.arrayContaining([
+        expect.objectContaining({
+          content: null,
+          tool_calls: [expect.objectContaining({ id: 'call_1' })],
+        }),
+      ]),
+      undefined,
+      null
+    );
+  });
+
+  it('return_messages: true returns hydrated input messages plus final assistant message', async () => {
+    const parsedRef = {
+      placeholder: '{{ref:doc.md}}',
+      ref: '{{ref:doc.md}}',
+      identifierType: 'ref' as const,
+      identifier: 'doc.md',
+      messageIndex: 0,
+    };
+    const resolvedRef = {
+      kind: 'resolved' as const,
+      placeholder: '{{ref:doc.md}}',
+      ref: '{{ref:doc.md}}',
+      content: 'ATL-RETURN-MESSAGES-MARKER-112',
+      chars: 30,
+      messageIndex: 0,
+    };
+    vi.mocked(parseReferences).mockReturnValue([parsedRef]);
+    vi.mocked(resolveReferences).mockResolvedValue([resolvedRef]);
+    vi.mocked(hydrateMessages).mockReturnValue([
+      { role: 'user', content: 'Read ATL-RETURN-MESSAGES-MARKER-112 and reply.' },
+    ]);
+    vi.mocked(buildInjectedReferences).mockReturnValue([{ ref: '{{ref:doc.md}}', chars: 30 }]);
+    vi.mocked(computePromptChars).mockReturnValue(54);
+
+    _llmClientValue = {
+      complete: vi.fn().mockResolvedValue(SAMPLE_RESULT),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const res = await handler({
+      resolver: 'model',
+      name: 'fast',
+      return_messages: true,
+      messages: [{ role: 'user', content: 'Read {{ref:doc.md}} and reply.' }],
+    });
+
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const envelope = JSON.parse(res.content[0].text) as any;
+    expect(envelope.response).toBe('hello world');
+    expect(envelope.messages).toHaveLength(2);
+    expect(envelope.messages[0].content).toContain('ATL-RETURN-MESSAGES-MARKER-112');
+    expect(envelope.messages[0].content).not.toContain('{{ref:');
+    expect(envelope.messages[1]).toMatchObject({
+      role: 'assistant',
+      content: 'hello world',
+      name: 'fast',
+    });
+  });
+
+  it('discovery resolvers ignore return_messages and keep raw shapes', async () => {
+    const completeMock = vi.fn();
+    const completeByPurposeMock = vi.fn();
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+
+    const models = JSON.parse((await handler({ resolver: 'list_models', return_messages: true })).content[0].text) as Record<string, unknown>;
+    const purposes = JSON.parse((await handler({ resolver: 'list_purposes', return_messages: true })).content[0].text) as Record<string, unknown>;
+    const search = JSON.parse((await handler({
+      resolver: 'search',
+      parameters: { query: 'general' },
+      return_messages: true,
+    })).content[0].text) as Record<string, unknown>;
+
+    expect(models.models).toBeDefined();
+    expect(models.messages).toBeUndefined();
+    expect(purposes.purposes).toBeDefined();
+    expect(purposes.messages).toBeUndefined();
+    expect(search.query).toBe('general');
+    expect(search.results).toBeDefined();
+    expect(search.messages).toBeUndefined();
+    expect(completeMock).not.toHaveBeenCalled();
+    expect(completeByPurposeMock).not.toHaveBeenCalled();
+  });
+});
+
 // ─── U-DISC-01..13: discovery resolvers + body guard ────────────────────────
 
 const DISC_LLM_CONFIG = {
