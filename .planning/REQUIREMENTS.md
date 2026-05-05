@@ -16,14 +16,14 @@
 
 ### Document References
 
-- [ ] **REF-01**: Host-authored `{{ref:...}}` placeholders support path, filename, and `fq_id` identifier resolution using the standard document identifier ladder.
-- [ ] **REF-02**: Reference parser supports mutually exclusive section (`#`), pointer (`->`), and alias (`@`) operators with typed invalid-syntax diagnostics.
-- [ ] **REF-03**: Reference scanner implements escape parity for `\{{ref:...}}` without resolving escaped placeholders or corrupting hydration spans.
-- [ ] **REF-04**: Bare filename/shorthand references fail with `ambiguous_document_identifier` when more than one active document matches.
-- [ ] **REF-05**: `{{id:...}}` active and escaped legacy support is removed during the ATL release and treated as literal text.
-- [ ] **REF-06**: Failed references return stable `ReferenceFailureReason` codes and human-readable detail under `failed_references`.
-- [ ] **REF-07**: Injected reference metadata includes resolved identity, content character counts, template usage details, and warnings where applicable.
-- [ ] **REF-08**: Reference hydration is non-recursive and applies only to host-authored input messages, not model tool-call arguments, assistant messages, or tool result messages.
+- [x] **REF-01**: Host-authored `{{ref:...}}` placeholders support path, filename, and `fq_id` identifier resolution using the standard document identifier ladder.
+- [x] **REF-02**: Reference parser supports mutually exclusive section (`#`), pointer (`->`), and alias (`@`) operators with typed invalid-syntax diagnostics.
+- [x] **REF-03**: Reference scanner implements escape parity for `\{{ref:...}}` without resolving escaped placeholders or corrupting hydration spans.
+- [x] **REF-04**: Bare filename/shorthand references fail with `ambiguous_document_identifier` when more than one active document matches.
+- [x] **REF-05**: `{{id:...}}` active and escaped legacy support is removed during the ATL release and treated as literal text.
+- [x] **REF-06**: Failed references return stable `ReferenceFailureReason` codes and human-readable detail under `failed_references`.
+- [x] **REF-07**: Injected reference metadata includes resolved identity, content character counts, template usage details, and warnings where applicable.
+- [x] **REF-08**: Reference hydration is non-recursive and applies only to host-authored input messages, not model tool-call arguments, assistant messages, or tool result messages.
 
 ### Templates And Host Parameterization
 
@@ -81,7 +81,7 @@
 ### Test Coverage
 
 - [x] **VAL-112**: Phase 112 ships runnable unit, MCP-boundary, and directed scenario tests that validate `chat()`, Mode 1 envelope compatibility, `return_messages`, round-trippable messages, and provider normalization.
-- [ ] **VAL-113**: Phase 113 ships runnable unit, directed, and integration tests that validate reference parsing, escaping, ambiguity handling, typed failures, metadata, and non-recursive hydration.
+- [x] **VAL-113**: Phase 113 ships runnable unit, directed, and integration tests that validate reference parsing, escaping, ambiguity handling, typed failures, metadata, and non-recursive hydration.
 - [ ] **VAL-114**: Phase 114 ships runnable unit, directed, and integration tests that validate template parameter validation, substitution, document parameters, aliases, and `_items` list injection.
 - [ ] **VAL-115**: Phase 115 ships runnable unit, TypeScript integration, and public startup/config scenario tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
 - [ ] **VAL-116**: Phase 116 ships runnable unit tests and at least one public-surface scenario that validate native tool exposure, exclusions, hard exclusions, schema translation, and empty-tool omission.
@@ -129,14 +129,14 @@
 | CHAT-04 | Phase 112 | Complete |
 | CHAT-05 | Phase 112 | Complete |
 | CHAT-06 | Phase 112 | Complete |
-| REF-01 | Phase 113 | Pending |
-| REF-02 | Phase 113 | Pending |
-| REF-03 | Phase 113 | Pending |
-| REF-04 | Phase 113 | Pending |
-| REF-05 | Phase 113 | Pending |
-| REF-06 | Phase 113 | Pending |
-| REF-07 | Phase 113 | Pending |
-| REF-08 | Phase 113 | Pending |
+| REF-01 | Phase 113 | Complete |
+| REF-02 | Phase 113 | Complete |
+| REF-03 | Phase 113 | Complete |
+| REF-04 | Phase 113 | Complete |
+| REF-05 | Phase 113 | Complete |
+| REF-06 | Phase 113 | Complete |
+| REF-07 | Phase 113 | Complete |
+| REF-08 | Phase 113 | Complete |
 | TMPL-01 | Phase 114 | Pending |
 | TMPL-02 | Phase 114 | Pending |
 | TMPL-03 | Phase 114 | Pending |
@@ -173,7 +173,7 @@
 | DISC-03 | Phase 119 | Pending |
 | DISC-04 | Phase 119 | Pending |
 | VAL-112 | Phase 112 | Complete |
-| VAL-113 | Phase 113 | Pending |
+| VAL-113 | Phase 113 | Complete |
 | VAL-114 | Phase 114 | Pending |
 | VAL-115 | Phase 115 | Pending |
 | VAL-116 | Phase 116 | Pending |

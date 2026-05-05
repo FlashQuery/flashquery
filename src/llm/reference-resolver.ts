@@ -335,10 +335,10 @@ function mapReferenceFailure(
  * occurrence; duplicate placeholders each get their own occurrence resolved
  * left-to-right.
  */
-export function hydrateMessages(
-  messages: Array<{ role: string; content: string }>,
+export function hydrateMessages<T extends { role: string; content?: string | null }>(
+  messages: T[],
   resolved: ResolvedRef[]
-): Array<{ role: string; content: string }> {
+): T[] {
   const byMsgIdx = new Map<number, ResolvedRef[]>();
   for (const r of resolved) {
     const arr = byMsgIdx.get(r.messageIndex) ?? [];
@@ -346,6 +346,9 @@ export function hydrateMessages(
     byMsgIdx.set(r.messageIndex, arr);
   }
   return messages.map((msg, idx) => {
+    if (typeof msg.content !== 'string') {
+      return { ...msg };
+    }
     const refs = byMsgIdx.get(idx);
     const original = msg.content;
     const replacements: Array<{ start: number; end: number; content: string }> = [];
@@ -439,7 +442,7 @@ export function buildInjectedReferences(
  * Called on the hydrated messages array (not the original).
  */
 export function computePromptChars(
-  messages: Array<{ role: string; content: string }>
+  messages: Array<{ content?: string | null }>
 ): number {
-  return messages.reduce((sum, m) => sum + m.content.length, 0);
+  return messages.reduce((sum, m) => sum + (typeof m.content === 'string' ? m.content.length : 0), 0);
 }

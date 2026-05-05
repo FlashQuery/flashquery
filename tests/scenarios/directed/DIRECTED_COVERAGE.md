@@ -599,9 +599,9 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-24 | call_model with {{ref:path}} resolves and forwards full body; injected_references[0] has ref=full placeholder + chars=body length | test_call_model_references | 2026-05-03 | 2026-05-03 |
 | L-25 | call_model with {{ref:path#Section}} resolves section only; injected_references chars matches section length | test_call_model_references | 2026-05-03 | 2026-05-03 |
 | L-26 | call_model with {{ref:path->pointer}} dereferences frontmatter pointer; injected_references entry has resolved_to and chars equals target body length | test_call_model_references | 2026-05-03 | 2026-05-03 |
-| L-27 | call_model with {{id:uuid}} resolves full body via fq_id lookup | test_call_model_references | 2026-05-03 | 2026-05-03 |
-| L-27a | call_model with {{id:uuid#Section}} resolves fq_id + section extraction | test_call_model_references | 2026-05-03 | 2026-05-03 |
-| L-27b | call_model with {{id:uuid->pointer}} resolves fq_id + frontmatter pointer dereference | test_call_model_references | 2026-05-03 | 2026-05-03 |
+| L-27 | SUPERSEDED for ATL v1: call_model with {{id:uuid}} remains literal text; fq_id lookup now uses {{ref:<fq_id>}} | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
+| L-27a | SUPERSEDED for ATL v1: call_model with {{id:uuid#Section}} remains literal text; fq_id + section lookup now uses {{ref:<fq_id>#Section}} | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
+| L-27b | SUPERSEDED for ATL v1: call_model with {{id:uuid->pointer}} remains literal text; fq_id + pointer lookup now uses {{ref:<fq_id>->pointer}} | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
 | L-28 | call_model with multiple references across messages — all resolved, injected_references[] lists each in order | test_call_model_multi_ref | 2026-05-03 | 2026-05-03 |
 | L-29 | injected_references entry for -> dereference includes resolved_to (path-only refs do NOT) | test_call_model_references | 2026-05-03 | 2026-05-03 |
 | L-30 | call_model with {{ref:nonexistent.md}} returns reference_resolution_failed | test_call_model_ref_errors | 2026-05-03 | 2026-05-03 |
@@ -665,6 +665,10 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-73 | `call_model` successful model/purpose envelopes always include root `messages`; when `return_messages` is false or omitted, `messages` is exactly `[]` | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
 | L-74 | `call_model` with `return_messages: true` returns post-hydration input messages plus a final assistant message with string `name`; returned input content contains resolved reference text and no `{{ref:` placeholder | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
 | L-75 | Discovery resolvers (`list_models`, `list_purposes`, `search`) ignore `return_messages` and keep their raw response shapes with no root `messages` envelope | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
+| L-76 | ATL-DS-02 reference grammar resolves path, filename, fq_id, section, and pointer forms through public call_model and reports injected_references metadata including chars and resolved_to | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
+| L-77 | ATL-DS-03 escape and literal behavior: odd-parity escaped refs stay literal and excluded from metadata, even-parity refs hydrate with one literal slash preserved, malformed openers stay literal, and {{id:...}} remains literal | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
+| L-78 | Host-only safety: assistant and tool messages containing {{ref:...}} are treated as ordinary data and are not scanned, hydrated, or added to injected_references metadata | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
+| L-79 | Typed reference failures return reference_resolution_failed with stable failed_references[].reason and detail for invalid syntax, ambiguous identifiers, and missing pointer paths before LLM dispatch | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
 
 ---
 
@@ -686,8 +690,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| LLM Tools | 94 | 94 | 0 |
-| **Total** | **378** | **374** | **4** |
+| LLM Tools | 98 | 98 | 0 |
+| **Total** | **382** | **378** | **4** |
 
 ---
 
@@ -728,6 +732,19 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 - L-62: source with no frontmatter → "not found in frontmatter" reason.
 
 **Resolution (2026-05-04)**: L-55 was over-specified against stale spec prose. The implementation uses a single template across all non-string types (`"Reference path 'X' resolved to a <found_type>, expected a string identifier"` per `src/mcp/utils/document-output.ts:464`) — semantically equivalent to the spec's older `"value at path is not a string"` wording but uses different phrasing. The §4.5 Error 5 example wire format in the spec was also stale (it showed `"is an object, not a string"`, which the implementation never adopted). Three coordinated fixes: (1) loosened the L-55 assertion to accept either `"expected a string"` or `"string identifier"` substring — both are durable, semantically pin the failure mode, and tolerate reasonable future rewording; (2) updated [§4.5 Error 5 example](../../../../flashquery-product/Roadmap/Features/Call-Model-With-Reference/Call-Model-With-Reference.md) to match the actual implementation message and added a note recommending the structured `found_type` field over message-string parsing; (3) updated [§5.5 prose](../../../../flashquery-product/Roadmap/Features/Call-Model-With-Reference/Call-Model-With-Reference.md) to describe the failure mode as "non-string type" rather than the older "not a string" phrasing. Test now passes 8/8 steps.
+
+---
+
+### test_call_model_reference_system_core — L-27, L-27a, L-27b, L-76, L-77, L-78, L-79
+
+**Behaviors covered**
+- L-27/L-27a/L-27b: ATL v1 supersedes active `{{id:...}}`; fq_id lookup is expressed through `{{ref:<fq_id>}}`.
+- L-76: path, filename, fq_id, section, and pointer references hydrate through public `call_model`.
+- L-77: escape parity, malformed opener literals, and literal `{{id:...}}` behavior.
+- L-78: assistant/tool messages are not host-authored reference targets.
+- L-79: stable typed failures include `reason` and `detail` before provider dispatch.
+
+**Resolution (2026-05-05)**: Added managed directed coverage for ATL-DS-02 and ATL-DS-03 via `test_call_model_reference_system_core`. The scenario uses a deterministic OpenAI-compatible mock provider, seeds vault documents, forces a scan, and validates hydration metadata plus fail-fast behavior on the public MCP surface. It also corrects the legacy Phase 109 `{{id:...}}` rows so the coverage ledger no longer contradicts ATL v1 literal-id semantics. Test passes 4/4 steps.
 
 ---
 

@@ -94,7 +94,7 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 **Milestone Goal:** Extend `call_model` from reference-aware text completion into a FlashQuery-managed agent loop that can expose safe native tools and document/template tools to delegated models.
 
 - [x] **Phase 112: Chat Primitive & Envelope Migration** - Provider-normalized `chat()` primitive, text wrapper compatibility, `return_messages`, round-trippable message shape, provider response normalization, and runnable validation (CHAT-01 through CHAT-06, VAL-112, TEST-01 through TEST-03) — Complete 2026-05-05
-- [ ] **Phase 113: Document Reference System Core** - Reference grammar, span scanner, escape parity, identifier ambiguity, typed failure taxonomy, non-recursive hydration, and runnable validation (REF-01 through REF-08, VAL-113)
+- [x] **Phase 113: Document Reference System Core** - Reference grammar, span scanner, escape parity, identifier ambiguity, typed failure taxonomy, non-recursive hydration, and runnable validation (REF-01 through REF-08, VAL-113) — Complete 2026-05-05
 - [ ] **Phase 114: Template Parameterization** - Template detection, `template_params`, alias entries, document parameters, placeholder substitution, `_items` list injection, and runnable validation (TMPL-01 through TMPL-05, VAL-114)
 - [ ] **Phase 115: Purpose Config, Bindings & Capabilities** - Purpose orchestration fields, loop defaults validation, `fqc_purpose_templates`, generic config sync, structured model capabilities, Mode 2 admission, and runnable validation (BIND-01 through BIND-05, CAP-01 through CAP-05, VAL-115)
 - [ ] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions, and runnable validation (TOOL-01 through TOOL-04, VAL-116)
@@ -136,10 +136,17 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
   6. Phase-specific runnable tests exist and pass for parser edge cases, escape parity, ambiguity, typed failure reasons, metadata, and public reference behavior.
 **Plans**: 4 plans
 Plans:
-- [ ] 113-01-PLAN.md — Reference failure constants and unit contract coverage
-- [ ] 113-02-PLAN.md — Span scanner, parser, resolver mapping, and metadata implementation
-- [ ] 113-03-PLAN.md — `call_model` host-only hydration integration
-- [ ] 113-04-PLAN.md — Integration, directed scenario, coverage, and traceability closure
+**Wave 1**
+- [x] 113-01-PLAN.md — Reference failure constants and unit contract coverage
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 113-02-PLAN.md — Span scanner, parser, resolver mapping, and metadata implementation
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 113-03-PLAN.md — `call_model` host-only hydration integration
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 113-04-PLAN.md — Integration, directed scenario, coverage, and traceability closure
 **UI hint**: no
 
 ### Phase 114: Template Parameterization
