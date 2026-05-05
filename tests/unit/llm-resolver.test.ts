@@ -6,6 +6,7 @@ import {
   type ChatMessage,
   type LlmCompletionResult,
 } from '../../src/llm/client.js';
+import type { LlmChatResult } from '../../src/llm/types.js';
 
 vi.mock('../../src/logging/logger.js', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -44,6 +45,16 @@ const SAMPLE_RESULT: LlmCompletionResult = {
   inputTokens: 10,
   outputTokens: 20,
   latencyMs: 100,
+};
+
+const SAMPLE_CHAT_RESULT: LlmChatResult = {
+  message: { role: 'assistant', content: 'response text' },
+  modelName: 'primary',
+  providerName: 'openai',
+  inputTokens: 10,
+  outputTokens: 20,
+  latencyMs: 100,
+  finishReason: 'stop',
 };
 
 let mockComplete: ReturnType<typeof vi.fn>;
@@ -366,6 +377,39 @@ describe('PurposeResolver.completeByPurpose', () => {
       expect(fallbackErr.attempts.length).toBe(0);
       expect(fallbackErr.message).toBe("Purpose 'empty' failed — all 0 models exhausted");
     }
+  });
+});
+
+describe('PurposeResolver.chatByPurpose', () => {
+  it('chat fallback success returns fallbackPosition 2 with assistant message intact', async () => {
+    mockComplete
+      .mockRejectedValueOnce(new LlmHttpError('server error', 500))
+      .mockResolvedValueOnce({ ...SAMPLE_CHAT_RESULT, modelName: 'fallback', providerName: 'openrouter' });
+
+    const resolver = new PurposeResolver(TEST_LLM_CONFIG, mockComplete);
+    const result = await resolver.chatByPurpose('chat', SAMPLE_MESSAGES);
+
+    expect(result.fallbackPosition).toBe(2);
+    expect(result.message.content).toBe('response text');
+    expect(mockComplete).toHaveBeenCalledTimes(2);
+  });
+
+  it('chat fallback applies 429 backoff before trying the next model', async () => {
+    vi.useFakeTimers();
+    mockComplete
+      .mockRejectedValueOnce(new LlmHttpError('rate limit', 429, 5000))
+      .mockResolvedValueOnce({ ...SAMPLE_CHAT_RESULT, modelName: 'fallback', providerName: 'openrouter' });
+
+    const resolver = new PurposeResolver(TEST_LLM_CONFIG, mockComplete);
+    const promise = resolver.chatByPurpose('chat', SAMPLE_MESSAGES);
+
+    await vi.advanceTimersByTimeAsync(4999);
+    expect(mockComplete).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2);
+
+    const result = await promise;
+    expect(result.fallbackPosition).toBe(2);
+    expect(mockComplete).toHaveBeenCalledTimes(2);
   });
 });
 

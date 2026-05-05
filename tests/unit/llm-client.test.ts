@@ -12,6 +12,9 @@ import {
 } from '../../src/llm/client.js';
 import * as clientModule from '../../src/llm/client.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { FINISH_REASONS } from '../../src/constants/llm.js';
+import type { LlmChatMessage } from '../../src/llm/types.js';
+import * as costTracker from '../../src/llm/cost-tracker.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module mocks
@@ -28,6 +31,11 @@ vi.mock('../../src/logging/logger.js', () => ({
 
 vi.mock('../../src/llm/config-sync.js', () => ({
   syncLlmConfigToDb: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../src/llm/cost-tracker.js', () => ({
+  computeCost: vi.fn(() => 0.0001),
+  recordLlmUsage: vi.fn(),
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -151,6 +159,47 @@ function makeOpenAISuccessBody(options?: { modelName?: string; text?: string; pr
   };
 }
 
+function makeOpenAIToolCallBody(options?: {
+  finishReason?: string;
+  content?: string | null;
+  args?: unknown;
+  usage?: { prompt_tokens?: number; completion_tokens?: number } | null;
+}) {
+  return {
+    id: 'chatcmpl-tool-test',
+    object: 'chat.completion',
+    model: 'gpt-4o',
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: options?.content ?? null,
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: {
+                name: 'search_documents',
+                arguments: options?.args ?? '{"query":"alpha"}',
+              },
+            },
+          ],
+        },
+        finish_reason: options?.finishReason ?? 'tool_calls',
+      },
+    ],
+    ...(options?.usage === null
+      ? {}
+      : {
+          usage: {
+            prompt_tokens: options?.usage?.prompt_tokens ?? 10,
+            completion_tokens: options?.usage?.completion_tokens ?? 20,
+          },
+        }),
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // mergeParameters (U-19, U-20)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,6 +213,36 @@ describe('mergeParameters', () => {
   it('U-20: defaults pass through — mergeParameters({}, {temperature: 0.1}) returns {temperature: 0.1}', () => {
     const result = mergeParameters({}, { temperature: 0.1 });
     expect(result).toEqual({ temperature: 0.1 });
+  });
+});
+
+describe('Phase 112 canonical LLM contracts', () => {
+  it('FINISH_REASONS exposes the supported finish reason constants', () => {
+    expect(FINISH_REASONS).toEqual(['stop', 'tool_calls', 'length', 'content_filter', 'unknown']);
+  });
+
+  it('LlmChatMessage supports nullable assistant content with normalized tool calls', () => {
+    const assistantMessage: LlmChatMessage = {
+      role: 'assistant',
+      content: null,
+      name: 'general',
+      tool_calls: [
+        {
+          id: 'call_1',
+          type: 'function',
+          function: { name: 'search_documents', arguments: { query: 'alpha' } },
+        },
+      ],
+    };
+    const toolMessage: LlmChatMessage = {
+      role: 'tool',
+      content: '{"ok":true}',
+      tool_call_id: 'call_1',
+    };
+
+    expect(assistantMessage.tool_calls?.[0].function.arguments).toEqual({ query: 'alpha' });
+    expect(toolMessage.name).toBeUndefined();
+    expect(toolMessage.tool_call_id).toBe('call_1');
   });
 });
 
@@ -572,6 +651,95 @@ describe('OpenAICompatibleLlmClient.complete', () => {
     await expect(client.complete('foo', SAMPLE_MESSAGES)).rejects.toThrow(
       /LLM error: Model 'foo' not found in configuration\./
     );
+  });
+});
+
+describe('OpenAICompatibleLlmClient.chat', () => {
+  let client: OpenAICompatibleLlmClient;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client = new OpenAICompatibleLlmClient(TEST_LLM_CONFIG, 'test-instance-chat');
+  });
+
+  it('chat() returns finishReason stop for provider finish_reason stop', async () => {
+    __setNextResponse({ status: 200, body: makeOpenAISuccessBody({ text: 'plain text' }) });
+    const result = await client.chat('gpt-4o', SAMPLE_MESSAGES);
+    expect(result.finishReason).toBe('stop');
+    expect(result.message).toEqual({ role: 'assistant', content: 'plain text' });
+  });
+
+  it('chat() maps function_call and non-empty tool_calls to finishReason tool_calls', async () => {
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody({ finishReason: 'function_call', args: '{"query":"alpha"}' }),
+    });
+    const functionCallResult = await client.chat('gpt-4o', SAMPLE_MESSAGES);
+    expect(functionCallResult.finishReason).toBe('tool_calls');
+    expect(functionCallResult.message.tool_calls?.[0].function.arguments).toEqual({ query: 'alpha' });
+
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody({ finishReason: 'stop', args: { query: 'beta' } }),
+    });
+    const stopWithToolsResult = await client.chat('gpt-4o', SAMPLE_MESSAGES);
+    expect(stopWithToolsResult.finishReason).toBe('tool_calls');
+    expect(stopWithToolsResult.message.tool_calls?.[0].function.arguments).toEqual({ query: 'beta' });
+  });
+
+  it('chat() rejects invalid tool call arguments JSON', async () => {
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody({ args: '{"query":' }),
+    });
+    await expect(client.chat('gpt-4o', SAMPLE_MESSAGES)).rejects.toThrow('invalid tool call arguments JSON');
+  });
+
+  it('chat() accepts empty/null assistant content with tool calls and rejects empty/null content without tool calls', async () => {
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody({ content: null }),
+    });
+    await expect(client.chat('gpt-4o', SAMPLE_MESSAGES)).resolves.toMatchObject({
+      message: { content: null },
+      finishReason: 'tool_calls',
+    });
+
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAISuccessBody({ text: '' }),
+    });
+    await expect(client.chat('gpt-4o', SAMPLE_MESSAGES)).rejects.toThrow('no completion choices');
+  });
+
+  it('chat() rejects missing usage on tool-call responses and does not record usage', async () => {
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody({ usage: null }),
+    });
+    await expect(client.chat('gpt-4o', SAMPLE_MESSAGES)).rejects.toThrow('tool-call response without usage');
+    expect(costTracker.recordLlmUsage).not.toHaveBeenCalled();
+  });
+
+  it('complete() rejects tool-call responses and still records usage for text responses', async () => {
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody(),
+    });
+    await expect(client.complete('gpt-4o', SAMPLE_MESSAGES)).rejects.toThrow(
+      'text completion wrapper received tool calls'
+    );
+
+    vi.clearAllMocks();
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAISuccessBody({ text: 'tracked text' }),
+    });
+    await client.complete('gpt-4o', SAMPLE_MESSAGES);
+    expect(costTracker.recordLlmUsage).toHaveBeenCalledWith(expect.objectContaining({
+      purposeName: '_direct',
+      modelName: 'gpt-4o',
+    }));
   });
 });
 
