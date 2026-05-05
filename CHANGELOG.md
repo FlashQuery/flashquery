@@ -7,6 +7,107 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-05
+
+This release introduces pass-by-reference document injection in `call_model`,
+consolidates `get_document` and `get_doc_outline` into a single structured tool,
+and adds model/purpose discovery — enabling a calling LLM to evaluate available
+models, delegate work via document references (without first reading documents
+into its own context), and inspect cost rates before dispatching. Together these
+extensions form a "pre-agentic" layer for intelligent token-cost-aware delegation.
+
+### Added
+- Reference syntax in `call_model` messages — `{{ref:path}}`, `{{ref:path#Section}}`,
+  `{{ref:path->pointer}}`, `{{id:uuid}}`, `{{id:uuid#Section}}`, and `{{id:uuid->pointer}}`
+  placeholders are inline-resolved before LLM dispatch. The calling LLM never has
+  to read the document into its own context — FlashQuery resolves and injects
+  the content server-side. Fail-fast `reference_resolution_failed` error on any
+  unresolvable reference (no LLM call is made).
+- `injected_references[]` and `prompt_chars` fields in the `call_model` response
+  envelope when references are resolved — enables per-reference cost attribution
+  via `tokens.input × (ref.chars / prompt_chars)`.
+- Discovery resolvers in `call_model`: `resolver: "list_models"` returns
+  `{ models: [...] }` with hard cost rates and capability metadata,
+  `resolver: "list_purposes"` returns `{ purposes: [...] }` with model chains and
+  cost rates derived from the primary model, and `resolver: "search"` performs
+  case-insensitive substring search over names and descriptions. `name` and
+  `messages` are optional for these resolvers — discovery is a free, no-network
+  operation.
+- `local: true` field on Ollama-backed model entries in `list_models` responses,
+  auto-derived from `provider.type === 'ollama'` (or set explicitly via the
+  provider's `local: true` field). Surfaces the local-vs-remote distinction so
+  callers can route accordingly.
+- Optional `description`, `context_window`, and `capabilities` fields on model
+  entries in `list_models` responses — preserved verbatim when declared in
+  `flashquery.yml`, omitted entirely when undeclared (no `null` placeholders,
+  no defaulted empty arrays). Explicitly-declared empty values like
+  `capabilities: []` are preserved.
+- Batch retrieval in `get_document` — `identifiers` accepts a string or an array.
+  Array input returns an array response with per-element success/error objects;
+  the call itself never fails for partial errors.
+- `follow_ref` parameter in `get_document` — dot-separated path into the source
+  document's frontmatter (e.g., `"supersedes"` or `"projections.summary"`)
+  resolves to a target document identifier whose content is returned nested
+  under `followed_ref`. Works with both single and array `identifiers`.
+- `reconcile_documents` MCP tool — scans the database for documents whose vault
+  file is missing, then either updates `vault_path` (file moved, `fqc_id`
+  matched at new location) or marks the row archived (file genuinely gone).
+  Supports `dry_run`.
+
+### Changed
+- **`get_document` returns a structured JSON envelope** — every successful
+  response includes `identifier`, `title`, `path`, `fq_id`, `modified`, and
+  `size.chars`, regardless of which fields are requested. New `include`
+  parameter (`("body" | "frontmatter" | "headings")[]`, default `["body"]`)
+  picks what to include. Section matching is now case-insensitive substring;
+  numeric queries (starting with a digit) are anchored to the heading start
+  (so `"3"` matches `"3. Scope"` but not `"13. Conversations"`). New
+  `max_depth`, `include_nested`, and `occurrence` parameters.
+- `search_documents` `mode` parameter now accepts a third value `"mixed"`
+  (semantic-ranked first, unindexed appended) in addition to `"filesystem"`
+  and `"semantic"`.
+- `call_model` `messages` is now optional for discovery resolvers
+  (`list_models`, `list_purposes`, `search`) — previously required for all
+  resolvers.
+
+### Removed
+- **BREAKING:** `get_doc_outline` MCP tool removed. Its functionality is fully
+  available via `get_document` with `include: ["frontmatter", "headings"]` —
+  same heading data, same frontmatter, same `max_depth` parameter, plus
+  consistent error semantics with the rest of `get_document`. Callers that
+  invoke `get_doc_outline` directly will fail; migrate to the new shape.
+
+### Fixed
+- Discovery resolver responses now correctly omit optional fields when
+  undeclared in config (per OQ #16) — previously some implementations defaulted
+  to `null` or `[]` placeholders, which misled callers about whether a model
+  truly lacked capabilities vs. simply hadn't been documented.
+- Reference resolution failures now fail fast before any LLM call, with a
+  structured `failed_references[]` listing per-reference reasons (path missing,
+  section not found, pointer absent, `#`/`->` mixed, etc.) — eliminates the
+  silent half-resolved-prompt failure mode.
+- `occurrence_out_of_range` error code surfaced consistently across `get_document`
+  section extraction (was previously folded into a generic error in some paths).
+- Various test scenarios hardened with value-bound substring assertions
+  (TC4-W5) — discovery and reference-syntax tests now distinguish
+  `"input_cost_per_million"` (key presence) from `"input_cost_per_million":0.15`
+  (key + value match), preventing silent regressions where a configured value
+  was returned as empty.
+
+### Documentation
+- Full rewrite of `get_document` and `call_model` sections in
+  `docs/FlashQuery MCP Tool Guide.md` to cover the new structured envelope,
+  `include` parameter, batch retrieval, `follow_ref`, all six reference-syntax
+  placeholder forms, response metadata (`injected_references[]`, `prompt_chars`),
+  and discovery resolver response shapes.
+- Removed `get_doc_outline` documentation; added migration note pointing users
+  at `get_document` with `include: ["frontmatter", "headings"]`.
+- Corrected three frontmatter-field-name references (`fqc_id`/`fqc_instance`/
+  `fqc_title` → canonical `fq_id`/`fq_instance`/`fq_title` per
+  `src/constants/frontmatter-fields.ts`).
+- Added a Deprecated Tools appendix documenting the `list_projects` and
+  `get_project_info` stubs (deprecated since v1.7).
+
 ## [1.2.0] - 2026-05-01
 
 This release adds native LLM calling and cost tracking to FlashQuery. Skills and agents
@@ -139,7 +240,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/FlashQuery/flashquery/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/FlashQuery/flashquery/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/FlashQuery/flashquery/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/FlashQuery/flashquery/compare/v1.0.0...v1.1.0
