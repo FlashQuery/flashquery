@@ -327,6 +327,9 @@ describe('resolveDocumentIdentifier', () => {
     await expect(
       resolveDocumentIdentifier(config, supabase as never, 'my-note', logger)
     ).rejects.toThrow('Ambiguous filename "my-note" matches 2 files');
+    await expect(
+      resolveDocumentIdentifier(config, supabase as never, 'my-note', logger)
+    ).rejects.toThrow('Use a vault-relative path or fq_id');
   });
 
   it('bare filename (no extension) not found anywhere — throws Document not found', async () => {

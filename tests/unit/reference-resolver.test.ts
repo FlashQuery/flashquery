@@ -6,6 +6,10 @@ import {
   buildInjectedReferences,
   computePromptChars,
 } from '../../src/llm/reference-resolver.js';
+import {
+  REFERENCE_FAILURE_REASONS,
+  isReferenceFailureReason,
+} from '../../src/constants/reference-failures.js';
 import type {
   ParsedRef,
   ParseRefError,
@@ -40,6 +44,20 @@ vi.mock('../../src/embedding/provider.js', () => ({
 import { resolveAndBuildDocument, DocumentRequestError } from '../../src/mcp/utils/document-output.js';
 
 beforeEach(() => vi.clearAllMocks());
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('ReferenceFailureReason constants (D-05, T-113-04)', () => {
+  it('exports a unique runtime-enumerable reason set guarded by isReferenceFailureReason', () => {
+    expect(new Set(REFERENCE_FAILURE_REASONS).size).toBe(REFERENCE_FAILURE_REASONS.length);
+    expect(REFERENCE_FAILURE_REASONS).toContain('invalid_reference_syntax');
+    expect(REFERENCE_FAILURE_REASONS).toContain('ambiguous_document_identifier');
+    for (const reason of REFERENCE_FAILURE_REASONS) {
+      expect(isReferenceFailureReason(reason)).toBe(true);
+    }
+    expect(isReferenceFailureReason('free_form_failure')).toBe(false);
+  });
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -197,6 +215,71 @@ describe('parseReferences (REFS-01, REFS-02, REFS-07)', () => {
     expect(err.error).toBe('invalid_reference_syntax');
     expect(err.reason).toContain('empty');
     expect(err.ref).toBe('{{id:}}');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('parseReferences Phase 113 DRS grammar (D-02, D-03, D-04)', () => {
+  it.each([
+    ['path', 'See {{ref:path.md}}', { identifier: 'path.md' }],
+    ['uuid', 'See {{ref:550e8400-e29b-41d4-a716-446655440000}}', { identifier: '550e8400-e29b-41d4-a716-446655440000' }],
+    ['email-ish path', 'See {{ref:People/alice@example.com.md}}', { identifier: 'People/alice@example.com.md' }],
+  ])('accepts active {{ref:...}} form for %s', (_name, content, expected) => {
+    const result = parseReferences([{ role: 'user', content }]);
+    expect(Array.isArray(result)).toBe(true);
+    const refs = result as ParsedRef[];
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      identifierType: 'ref',
+      ...expected,
+    });
+  });
+
+  it.each([
+    ['empty alias', '{{ref:@}}'],
+    ['alias with section', '{{ref:@alias#Section}}'],
+    ['alias with pointer', '{{ref:@alias->pointer}}'],
+    ['empty section', '{{ref:doc.md#}}'],
+    ['empty pointer', '{{ref:doc.md->}}'],
+    ['whitespace before section operator', '{{ref:doc.md # Section}}'],
+    ['whitespace before pointer operator', '{{ref:doc.md -> key}}'],
+  ])('rejects invalid Phase 113 syntax: %s', (_name, placeholder) => {
+    const result = parseReferences([{ role: 'user', content: placeholder }]);
+    expect(Array.isArray(result)).toBe(false);
+    const err = result as ParseRefError;
+    expect(err.error).toBe('invalid_reference_syntax');
+    expect(err.ref).toBe(placeholder);
+  });
+
+  it('treats malformed opener and legacy {{id:...}} as literal text with no metadata', () => {
+    const result = parseReferences([
+      { role: 'user', content: 'literal {{ref:doc.md and {{id:550e8400-e29b-41d4-a716-446655440000}}' },
+    ]);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toEqual([]);
+  });
+
+  it.each([
+    [String.raw`\{{ref:doc.md}}`, 0],
+    [String.raw`\\{{ref:doc.md}}`, 1],
+    [String.raw`\\\{{ref:doc.md}}`, 0],
+    [String.raw`\{{ref:}}`, 0],
+    [String.raw`\\\\{{ref:doc.md}}`, 1],
+    [String.raw`\\\\\{{ref:doc.md}}`, 0],
+    [String.raw`\{{id:550e8400-e29b-41d4-a716-446655440000}}`, 0],
+  ])('applies DRS escape parity to %s', (content, count) => {
+    const result = parseReferences([{ role: 'user', content }]);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result as ParsedRef[]).toHaveLength(count);
+  });
+
+  it('preserves duplicate identical active placeholders as distinct metadata entries', () => {
+    const result = parseReferences([
+      { role: 'user', content: '{{ref:doc.md}} and {{ref:doc.md}}' },
+    ]);
+    expect(Array.isArray(result)).toBe(true);
+    expect(result as ParsedRef[]).toHaveLength(2);
   });
 });
 
@@ -569,5 +652,39 @@ describe('resolveReferences (resolution + error mapping)', () => {
     expect(failed[0].reason).toBe('Document not found: missing/a.md');
     expect(failed[1].ref).toBe('{{ref:b.md#Ghost}}');
     expect(failed[1].reason).toBe("No heading matching 'Ghost' found in document");
+  });
+
+  it.each([
+    ['document_not_found', 'document_not_found'],
+    ['ambiguous_document_identifier', 'ambiguous_document_identifier'],
+    ['read_error', 'read_error'],
+    ['section_not_found', 'section_not_found'],
+    ['occurrence_out_of_range', 'occurrence_out_of_range'],
+    ['reference_path_not_found', 'reference_path_not_found'],
+    ['reference_path_not_string', 'reference_path_not_string'],
+    ['pointer_target_not_found', 'pointer_target_not_found'],
+  ])('maps DocumentRequestError envelope error=%s to exact ReferenceFailureReason', async (error, expectedReason) => {
+    vi.mocked(resolveAndBuildDocument).mockRejectedValueOnce(
+      new DocumentRequestError({
+        error,
+        message: `detail for ${error}`,
+      })
+    );
+
+    const parsed: ParsedRef[] = [
+      {
+        placeholder: '{{ref:doc.md}}',
+        ref: '{{ref:doc.md}}',
+        identifierType: 'ref',
+        identifier: 'doc.md',
+        messageIndex: 0,
+      },
+    ];
+
+    const out = await resolveReferences(parsed, fakeConfig, fakeSm, fakeEp, fakeLog);
+    const failed = out[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe(expectedReason);
+    expect(isReferenceFailureReason(failed.reason)).toBe(true);
   });
 });
