@@ -93,17 +93,17 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 
 **Milestone Goal:** Extend `call_model` from reference-aware text completion into a FlashQuery-managed agent loop that can expose safe native tools and document/template tools to delegated models.
 
-- [ ] **Phase 112: Chat Primitive & Envelope Migration** - Provider-normalized `chat()` primitive, text wrapper compatibility, `return_messages`, round-trippable message shape, provider response normalization (CHAT-01 through CHAT-06)
-- [ ] **Phase 113: Document Reference System Core** - Reference grammar, span scanner, escape parity, identifier ambiguity, typed failure taxonomy, non-recursive hydration (REF-01 through REF-08)
-- [ ] **Phase 114: Template Parameterization** - Template detection, `template_params`, alias entries, document parameters, placeholder substitution, `_items` list injection (TMPL-01 through TMPL-05)
-- [ ] **Phase 115: Purpose Config, Bindings & Capabilities** - Purpose orchestration fields, loop defaults validation, `fqc_purpose_templates`, generic config sync, structured model capabilities, Mode 2 admission (BIND-01 through BIND-05, CAP-01 through CAP-05)
-- [ ] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions (TOOL-01 through TOOL-04)
-- [ ] **Phase 117: Agent Loop Executor** - Mode 2 loop orchestration, internal native dispatch, parallel tool calls, guardrails, fallback, aggregate usage writes, calls log metadata (LOOP-01 through LOOP-07, TOOL-05, TOOL-06)
-- [ ] **Phase 118: Template Discovery & Masquerade Dispatch** - Fresh vault template discovery, generated `flashquery.<namespace>.<slug>` tools, collision-safe reverse map, template tool dispatch (TMPL-06 through TMPL-08)
-- [ ] **Phase 119: Discovery Diagnostics & Help Resolver** - Extended `list_purposes`, structured capability diagnostics in `list_models`, discovery `search`, v1 `help` resolver (DISC-01 through DISC-04)
-- [ ] **Phase 120: ATL Test Infrastructure & Scenario Coverage** - Mock LLM provider, unit/integration/E2E/directed/YAML coverage, coverage matrix updates (TEST-01 through TEST-06)
+- [ ] **Phase 112: Chat Primitive & Envelope Migration** - Provider-normalized `chat()` primitive, text wrapper compatibility, `return_messages`, round-trippable message shape, provider response normalization, and runnable validation (CHAT-01 through CHAT-06, VAL-112, TEST-01 through TEST-03)
+- [ ] **Phase 113: Document Reference System Core** - Reference grammar, span scanner, escape parity, identifier ambiguity, typed failure taxonomy, non-recursive hydration, and runnable validation (REF-01 through REF-08, VAL-113)
+- [ ] **Phase 114: Template Parameterization** - Template detection, `template_params`, alias entries, document parameters, placeholder substitution, `_items` list injection, and runnable validation (TMPL-01 through TMPL-05, VAL-114)
+- [ ] **Phase 115: Purpose Config, Bindings & Capabilities** - Purpose orchestration fields, loop defaults validation, `fqc_purpose_templates`, generic config sync, structured model capabilities, Mode 2 admission, and runnable validation (BIND-01 through BIND-05, CAP-01 through CAP-05, VAL-115)
+- [ ] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions, and runnable validation (TOOL-01 through TOOL-04, VAL-116)
+- [ ] **Phase 117: Agent Loop Executor** - Mode 2 loop orchestration, internal native dispatch, parallel tool calls, guardrails, fallback, aggregate usage writes, calls log metadata, and runnable validation (LOOP-01 through LOOP-07, TOOL-05, TOOL-06, VAL-117)
+- [ ] **Phase 118: Template Discovery & Masquerade Dispatch** - Fresh vault template discovery, generated `flashquery.<namespace>.<slug>` tools, collision-safe reverse map, template tool dispatch, and runnable validation (TMPL-06 through TMPL-08, VAL-118)
+- [ ] **Phase 119: Discovery Diagnostics & Help Resolver** - Extended `list_purposes`, structured capability diagnostics in `list_models`, discovery `search`, v1 `help` resolver, and runnable validation (DISC-01 through DISC-04, VAL-119)
+- [ ] **Phase 120: Cross-Phase ATL Validation & Coverage Closure** - End-to-end workflow suites, YAML integration closure, scenario matrix updates, and final coverage audit (VAL-120, TEST-04)
 
-**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (55 requirements pending).
+**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (62 requirements pending).
 
 </details>
 
@@ -112,118 +112,126 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 ### Phase 112: Chat Primitive & Envelope Migration
 **Goal**: FlashQuery has a provider-normalized chat primitive and a non-breaking `call_model` envelope that can carry round-trippable tool-loop messages while preserving existing Mode 1 behavior.
 **Depends on**: Phase 111
-**Requirements**: CHAT-01, CHAT-02, CHAT-03, CHAT-04, CHAT-05, CHAT-06
+**Requirements**: CHAT-01, CHAT-02, CHAT-03, CHAT-04, CHAT-05, CHAT-06, VAL-112, TEST-01, TEST-02, TEST-03
 **Success Criteria** (what must be TRUE):
   1. Developer can call `chat()` and inspect the normalized assistant message, usage, latency, model/provider identity, fallback position, and finish reason for a single provider round trip.
   2. Existing text completion callers still receive text-only results; if a tool-call response reaches a text wrapper, the wrapper returns a clear error instead of pretending the call succeeded.
   3. MCP client can set `return_messages: true` and receive post-hydration input messages plus final assistant output; default Mode 1 calls keep `messages: []`.
   4. Returned message shapes can be passed into a later `call_model` call without schema rejection.
   5. Provider variations around `tool_calls`, empty assistant content, argument shapes, and finish reasons normalize to one internal contract.
+  6. Phase-specific runnable tests exist and pass for chat primitive behavior, Mode 1 envelope compatibility, `return_messages`, message round-tripping, and provider normalization; the phase plan names exact commands/scenarios.
 **Plans**: TBD during `$gsd-plan-phase 112`
 **UI hint**: no
 
 ### Phase 113: Document Reference System Core
 **Goal**: Host-authored references are parsed, resolved, hydrated, and reported through a complete v1 grammar with typed failure reasons and safe non-recursive boundaries.
 **Depends on**: Phase 112
-**Requirements**: REF-01, REF-02, REF-03, REF-04, REF-05, REF-06, REF-07, REF-08
+**Requirements**: REF-01, REF-02, REF-03, REF-04, REF-05, REF-06, REF-07, REF-08, VAL-113
 **Success Criteria** (what must be TRUE):
   1. `{{ref:...}}` supports path, filename, and `fq_id` resolution through the standard document identifier ladder.
   2. Section, pointer, and alias operators parse before resolution and reject invalid combinations with stable diagnostics.
   3. Escaped placeholders follow parity semantics and never appear in reference metadata.
   4. Ambiguous shorthand identifiers fail with `ambiguous_document_identifier` and tell the caller to use path or `fq_id`.
   5. Hydration scans only host-authored input messages and does not recursively resolve injected content or model-produced strings.
+  6. Phase-specific runnable tests exist and pass for parser edge cases, escape parity, ambiguity, typed failure reasons, metadata, and public reference behavior.
 **Plans**: TBD during `$gsd-plan-phase 113`
 **UI hint**: no
 
 ### Phase 114: Template Parameterization
 **Goal**: Templates become first-class reference targets so hosts can inject parameterized markdown, document parameters, and ordered alias lists into `call_model` messages.
 **Depends on**: Phase 113
-**Requirements**: TMPL-01, TMPL-02, TMPL-03, TMPL-04, TMPL-05
+**Requirements**: TMPL-01, TMPL-02, TMPL-03, TMPL-04, TMPL-05, VAL-114
 **Success Criteria** (what must be TRUE):
   1. Referencing a document with `fq_template: true` applies declared parameters while referencing a plain document ignores `template_params`.
   2. Path-keyed and alias-keyed `template_params` both work, including multiple uses of the same template with different parameter values.
   3. `string` and `document` parameter types validate required/default behavior and produce stable typed failures.
   4. Placeholder substitution is single-pass, deterministic, and non-recursive even when substituted values contain reference-looking strings.
   5. `_items` alias lists inject an ordered sequence of documents/templates with separator support and correct metadata.
+  6. Phase-specific runnable tests exist and pass for template validation, substitution, document parameters, aliases, `_items`, and public parameterized-template behavior.
 **Plans**: TBD during `$gsd-plan-phase 114`
 **UI hint**: no
 
 ### Phase 115: Purpose Config, Bindings & Capabilities
 **Goal**: Startup config and DB sync know which purposes may expose tools/templates, and model capability declarations gate Mode 2 admission before unsafe calls can run.
 **Depends on**: Phase 114
-**Requirements**: BIND-01, BIND-02, BIND-03, BIND-04, BIND-05, CAP-01, CAP-02, CAP-03, CAP-04, CAP-05
+**Requirements**: BIND-01, BIND-02, BIND-03, BIND-04, BIND-05, CAP-01, CAP-02, CAP-03, CAP-04, CAP-05, VAL-115
 **Success Criteria** (what must be TRUE):
   1. Purpose config accepts `tools`, `excluded_tools`, and `templates`, rejects unknown top-level purpose fields, and type-validates known loop guardrails in defaults.
   2. `fqc_purpose_templates` exists with canonical `template_path` identity, unique rows, source tracking, and YAML/API precedence behavior.
   3. Generic config sync handles the purpose-template binding flow without duplicating YAML scrub/insert logic.
   4. Structured model capabilities replace the old free-form behavior surface for tool execution decisions.
   5. Any purpose that exposes model-visible tools fails config validation unless every fallback model declares required support.
+  6. Phase-specific runnable tests exist and pass for config parse/admission, DDL/schema verification, config sync precedence, binding resolution, and runtime capability validation.
 **Plans**: TBD during `$gsd-plan-phase 115`
 **UI hint**: no
 
 ### Phase 116: Model-Visible Tool Registry
 **Goal**: FlashQuery can assemble a purpose-specific model-visible tool list from safe native tools and translate those tools into provider-compatible definitions.
 **Depends on**: Phase 115
-**Requirements**: TOOL-01, TOOL-02, TOOL-03, TOOL-04
+**Requirements**: TOOL-01, TOOL-02, TOOL-03, TOOL-04, VAL-116
 **Success Criteria** (what must be TRUE):
   1. Purpose `tools` expands tiers and named tools into a final native allowlist.
   2. `excluded_tools` removes tools from the final set and fails config validation when used without `tools`.
   3. Hard-excluded tools are never exposed and produce clear warnings rather than silent omission.
   4. MCP/Zod input schemas translate to OpenAI-compatible tool definitions with strict schemas when the selected model supports them.
   5. If no model-visible tools remain, provider requests omit `tools` entirely.
+  6. Phase-specific runnable tests exist and pass for tier expansion, exclusions, hard-exclusion warnings, schema translation, and at least one public-surface tool-list scenario.
 **Plans**: TBD during `$gsd-plan-phase 116`
 **UI hint**: no
 
 ### Phase 117: Agent Loop Executor
 **Goal**: `call_model` Mode 2 can execute delegated model tool calls internally, enforce loop budgets, aggregate usage, and return complete loop metadata.
 **Depends on**: Phase 116
-**Requirements**: LOOP-01, LOOP-02, LOOP-03, LOOP-04, LOOP-05, LOOP-06, LOOP-07, TOOL-05, TOOL-06
+**Requirements**: LOOP-01, LOOP-02, LOOP-03, LOOP-04, LOOP-05, LOOP-06, LOOP-07, TOOL-05, TOOL-06, VAL-117
 **Success Criteria** (what must be TRUE):
   1. A purpose exposing native tools triggers Mode 2 loop execution and returns a final assistant response after one or more tool iterations.
   2. Native tool calls dispatch through internal FlashQuery handlers and append OpenAI-compatible tool result messages with `tool_call_id`.
   3. Multiple tool calls in one assistant turn use `Promise.allSettled` semantics and let the model recover from individual tool errors.
   4. Timeout, iteration, token, and cost guardrails stop before the next model call and report the correct `stop_reason`.
   5. Mode 2 writes one aggregate usage row and exposes per-iteration detail only in `metadata.tools.calls_log`.
+  6. Phase-specific runnable tests exist and pass with a deterministic mock provider for native tool loops, parallel calls, guardrail stops, fallback, usage aggregation, and metadata invariants.
 **Plans**: TBD during `$gsd-plan-phase 117`
 **UI hint**: no
 
 ### Phase 118: Template Discovery & Masquerade Dispatch
 **Goal**: Vault templates bound to purposes become collision-safe model-visible tools and can be invoked by delegated models inside the agent loop.
 **Depends on**: Phase 117
-**Requirements**: TMPL-06, TMPL-07, TMPL-08
+**Requirements**: TMPL-06, TMPL-07, TMPL-08, VAL-118
 **Success Criteria** (what must be TRUE):
   1. Template discovery reads current vault frontmatter and validates the v1 template tool contract.
   2. Generated tool names use `flashquery.<fq_namespace>.<slug>` and collisions are diagnosed before invocation.
   3. Dispatcher resolves model tool names through an explicit reverse map, never by re-searching slug parts.
   4. Template-tool calls validate arguments, hydrate output, and return tool results or typed errors to the delegated model.
   5. Mixed native/template tool purposes can expose both kinds of tools in one model-visible registry.
+  6. Phase-specific runnable tests exist and pass for fresh discovery, tool-name generation, collision diagnostics, reverse-map dispatch, template-tool invocation, and mixed native/template loops.
 **Plans**: TBD during `$gsd-plan-phase 118`
 **UI hint**: no
 
 ### Phase 119: Discovery Diagnostics & Help Resolver
 **Goal**: MCP clients can discover which purposes, models, templates, and tools are available before invoking an agentic `call_model` request.
 **Depends on**: Phase 118
-**Requirements**: DISC-01, DISC-02, DISC-03, DISC-04
+**Requirements**: DISC-01, DISC-02, DISC-03, DISC-04, VAL-119
 **Success Criteria** (what must be TRUE):
   1. `list_purposes` reports native tool and template-tool diagnostics, including collisions and dangling bindings.
   2. `list_models` reports structured tool capability diagnostics with distinct unknown-vs-false messages.
   3. `search` remains usable without messages and covers relevant model/purpose discovery metadata.
   4. `help` explains Mode 1, Mode 2, references, templates, tools, guardrails, and discovery usage in a machine-readable shape.
   5. Discovery calls remain outside the `CallModelEnvelope` and ignore `return_messages`.
+  6. Phase-specific runnable tests exist and pass for `list_purposes`, `list_models`, discovery `search`, `help`, and public diagnostics.
 **Plans**: TBD during `$gsd-plan-phase 119`
 **UI hint**: no
 
-### Phase 120: ATL Test Infrastructure & Scenario Coverage
-**Goal**: The ATL implementation is protected by deterministic mock-provider tests and public-surface scenario coverage aligned to the accepted ATL Test Plan.
+### Phase 120: Cross-Phase ATL Validation & Coverage Closure
+**Goal**: The already-tested phase implementations are validated together through cross-phase workflows, YAML integrations, and coverage matrix closure aligned to the accepted ATL Test Plan.
 **Depends on**: Phase 119
-**Requirements**: TEST-01, TEST-02, TEST-03, TEST-04, TEST-05, TEST-06
+**Requirements**: VAL-120, TEST-04
 **Success Criteria** (what must be TRUE):
-  1. Unit coverage locks parser, template, config, schema translation, client normalization, loop, and cost contracts.
-  2. Integration coverage proves DDL, config sync, template discovery, vault reference resolution, usage writes, and runtime bindings.
-  3. E2E and scenario tests use deterministic mock LLM behavior rather than real provider responses.
-  4. Directed scenarios prove public `call_model` behavior for references, loops, budgets, usage, capabilities, discovery, and help.
-  5. YAML integration scenarios prove freshness, discovery-to-invocation closure, runtime binding reappearance, and mixed reference modes.
-  6. Coverage matrices contain the accepted ATL rows with final IDs and traceability back to the test plan.
+  1. Cross-phase E2E workflows prove Mode 1, native tool loops, template tool loops, mixed loops, stops, fallback, and provider compatibility failures together.
+  2. YAML integration scenarios prove reference freshness, document-parameter freshness, discovery-to-invocation closure, runtime binding reappearance, and mixed reference modes.
+  3. Directed scenario coverage proves public `call_model` behavior across envelopes, references, aliases, template failures, discovery, loops, budgets, usage, capabilities, and help.
+  4. Coverage matrices contain accepted ATL rows with final IDs and traceability back to the test plan.
+  5. Phase 120 verifies that Phases 112-119 each shipped their own runnable tests; any missing phase-local validation blocks milestone completion.
+  6. Full milestone preflight command set is documented and passes or has explicitly recorded environmental skips.
 **Plans**: TBD during `$gsd-plan-phase 120`
 **UI hint**: no
 

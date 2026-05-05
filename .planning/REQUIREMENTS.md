@@ -80,12 +80,19 @@
 
 ### Test Coverage
 
-- [ ] **TEST-01**: Unit tests cover parser, escape, template substitution, config validation, schema translation, client normalization, resolver behavior, loop state, and cost arithmetic.
-- [ ] **TEST-02**: TypeScript integration tests cover schema DDL, config sync, template discovery, real vault reference resolution, aggregate usage writes, and runtime template binding.
-- [ ] **TEST-03**: E2E tests use a deterministic OpenAI-compatible mock provider to prove Mode 1, native tool loops, template tool loops, mixed loops, stops, fallback, and provider compatibility failures.
-- [ ] **TEST-04**: Directed scenario tests cover public `call_model` behavior for envelopes, references, aliases, template failures, discovery, native/template loops, budgets, usage, capabilities, and help.
-- [ ] **TEST-05**: YAML integration scenarios cover reference freshness, document-parameter freshness, discovery-to-invocation closure, runtime binding reappearance, and mixed reference modes.
-- [ ] **TEST-06**: Coverage matrices are updated with accepted ATL directed and integration scenario rows using final framework IDs.
+- [ ] **VAL-112**: Phase 112 ships runnable unit and MCP-boundary tests that validate `chat()`, Mode 1 envelope compatibility, `return_messages`, round-trippable messages, and provider normalization.
+- [ ] **VAL-113**: Phase 113 ships runnable unit, directed, and integration tests that validate reference parsing, escaping, ambiguity handling, typed failures, metadata, and non-recursive hydration.
+- [ ] **VAL-114**: Phase 114 ships runnable unit, directed, and integration tests that validate template parameter validation, substitution, document parameters, aliases, and `_items` list injection.
+- [ ] **VAL-115**: Phase 115 ships runnable unit and TypeScript integration tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
+- [ ] **VAL-116**: Phase 116 ships runnable unit tests and at least one public-surface scenario that validate native tool exposure, exclusions, hard exclusions, schema translation, and empty-tool omission.
+- [ ] **VAL-117**: Phase 117 ships runnable unit, E2E, and directed scenario tests with a deterministic mock provider validating native tool loops, parallel tool calls, guardrail stops, fallback, usage aggregation, and calls-log metadata.
+- [ ] **VAL-118**: Phase 118 ships runnable unit, integration, E2E, and directed scenario tests validating fresh template discovery, masquerade tool naming, collision diagnostics, reverse-map dispatch, and mixed native/template loops.
+- [ ] **VAL-119**: Phase 119 ships runnable unit and directed scenario tests validating discovery diagnostics, structured capability reporting, discovery search behavior, and the `help` resolver.
+- [ ] **VAL-120**: Phase 120 ships runnable cross-phase E2E, directed, and YAML integration suites proving the full ATL workflows and updating coverage matrices with final scenario IDs.
+- [ ] **TEST-01**: Every implementation phase includes its own runnable validation before the phase can be marked complete; tests are not deferred wholesale to Phase 120.
+- [ ] **TEST-02**: A deterministic OpenAI-compatible mock provider exists early enough for the first phase that needs provider/tool-loop validation and is reused by later E2E/scenario tests.
+- [ ] **TEST-03**: Phase plans identify exact test commands or scenario invocations required for that phase's acceptance.
+- [ ] **TEST-04**: Coverage matrices are updated incrementally as phase-specific directed and integration scenarios are accepted, with final closure in Phase 120.
 
 ## Future Requirements
 
@@ -165,18 +172,25 @@
 | DISC-02 | Phase 119 | Pending |
 | DISC-03 | Phase 119 | Pending |
 | DISC-04 | Phase 119 | Pending |
-| TEST-01 | Phase 120 | Pending |
-| TEST-02 | Phase 120 | Pending |
-| TEST-03 | Phase 120 | Pending |
+| VAL-112 | Phase 112 | Pending |
+| VAL-113 | Phase 113 | Pending |
+| VAL-114 | Phase 114 | Pending |
+| VAL-115 | Phase 115 | Pending |
+| VAL-116 | Phase 116 | Pending |
+| VAL-117 | Phase 117 | Pending |
+| VAL-118 | Phase 118 | Pending |
+| VAL-119 | Phase 119 | Pending |
+| VAL-120 | Phase 120 | Pending |
+| TEST-01 | Phase 112 | Pending |
+| TEST-02 | Phase 112 | Pending |
+| TEST-03 | Phase 112 | Pending |
 | TEST-04 | Phase 120 | Pending |
-| TEST-05 | Phase 120 | Pending |
-| TEST-06 | Phase 120 | Pending |
 
 **Coverage:**
-- v3.2 requirements: 55 total
-- Mapped to phases: 55
+- v3.2 requirements: 62 total
+- Mapped to phases: 62
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-05*
-*Last updated: 2026-05-05 after milestone v3.2 requirements definition*
+*Last updated: 2026-05-05 after adding per-phase validation requirements*

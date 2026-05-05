@@ -108,21 +108,22 @@ Last activity: 2026-05-05 — Milestone v3.2 roadmap created
 
 | Phase | Name | Requirements |
 |-------|------|-------------|
-| 112 | Chat Primitive & Envelope Migration | CHAT-01 through CHAT-06 |
-| 113 | Document Reference System Core | REF-01 through REF-08 |
-| 114 | Template Parameterization | TMPL-01 through TMPL-05 |
-| 115 | Purpose Config, Bindings & Capabilities | BIND-01 through BIND-05, CAP-01 through CAP-05 |
-| 116 | Model-Visible Tool Registry | TOOL-01 through TOOL-04 |
-| 117 | Agent Loop Executor | LOOP-01 through LOOP-07, TOOL-05, TOOL-06 |
-| 118 | Template Discovery & Masquerade Dispatch | TMPL-06 through TMPL-08 |
-| 119 | Discovery Diagnostics & Help Resolver | DISC-01 through DISC-04 |
-| 120 | ATL Test Infrastructure & Scenario Coverage | TEST-01 through TEST-06 |
+| 112 | Chat Primitive & Envelope Migration | CHAT-01 through CHAT-06, VAL-112, TEST-01 through TEST-03 |
+| 113 | Document Reference System Core | REF-01 through REF-08, VAL-113 |
+| 114 | Template Parameterization | TMPL-01 through TMPL-05, VAL-114 |
+| 115 | Purpose Config, Bindings & Capabilities | BIND-01 through BIND-05, CAP-01 through CAP-05, VAL-115 |
+| 116 | Model-Visible Tool Registry | TOOL-01 through TOOL-04, VAL-116 |
+| 117 | Agent Loop Executor | LOOP-01 through LOOP-07, TOOL-05, TOOL-06, VAL-117 |
+| 118 | Template Discovery & Masquerade Dispatch | TMPL-06 through TMPL-08, VAL-118 |
+| 119 | Discovery Diagnostics & Help Resolver | DISC-01 through DISC-04, VAL-119 |
+| 120 | Cross-Phase ATL Validation & Coverage Closure | VAL-120, TEST-04 |
 
 **Dependencies:** 112 → 113 → 114 → 115 → 116 → 117 → 118 → 119 → 120.
 
 **Critical architectural constraints for this milestone:**
 
 - More research is intentionally skipped; the supplied ATL, DRS, and test-plan docs are spec-complete and implementation-ready.
+- Every implementation phase must ship runnable tests for the behavior it adds; Phase 120 is cross-phase validation and coverage closure, not a deferred test dump.
 - `chat()` is the lower-level provider primitive; existing text wrappers stay compatible and reject accidental tool-call responses.
 - Reference hydration scans host-authored input only and is non-recursive.
 - `{{id:...}}` support is removed as part of ATL; `{{ref:...}}` is the single reference prefix.
