@@ -662,9 +662,9 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-70 | `call_model` successful model/purpose envelopes always include root `messages`; when `return_messages` is false or omitted, `messages` is exactly `[]` | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
-| L-71 | `call_model` with `return_messages: true` returns post-hydration input messages plus a final assistant message with string `name`; returned input content contains resolved reference text and no `{{ref:` placeholder | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
-| L-72 | Discovery resolvers (`list_models`, `list_purposes`, `search`) ignore `return_messages` and keep their raw response shapes with no root `messages` envelope | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
+| L-73 | `call_model` successful model/purpose envelopes always include root `messages`; when `return_messages` is false or omitted, `messages` is exactly `[]` | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
+| L-74 | `call_model` with `return_messages: true` returns post-hydration input messages plus a final assistant message with string `name`; returned input content contains resolved reference text and no `{{ref:` placeholder | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
+| L-75 | Discovery resolvers (`list_models`, `list_purposes`, `search`) ignore `return_messages` and keep their raw response shapes with no root `messages` envelope | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
 
 ---
 
@@ -1376,7 +1376,7 @@ Covers: L-63, L-64
 Covers: L-66a, L-66b, L-66c, L-66d
 
 ### test_call_model_return_messages
-Covers: L-70, L-71, L-72, ATL-DS-01
+Covers: L-73, L-74, L-75, ATL-DS-01
 
 ### test_get_llm_usage_arithmetic
 Covers: L-68, L-69, L-70

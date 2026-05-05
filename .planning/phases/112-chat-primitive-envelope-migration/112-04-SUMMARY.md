@@ -52,7 +52,7 @@ completed: 2026-05-05
 ## Files Created/Modified
 
 - `tests/scenarios/directed/testcases/test_call_model_return_messages.py` - Public scenario for return_messages behavior.
-- `tests/scenarios/directed/DIRECTED_COVERAGE.md` - L-70 through L-72 and ATL-DS-01 mapping.
+- `tests/scenarios/directed/DIRECTED_COVERAGE.md` - L-73 through L-75 and ATL-DS-01 mapping.
 - `tests/scenarios/integration/INTEGRATION_COVERAGE.md` - Note that directed Python owns exact JSON envelope assertions.
 
 ## Decisions Made
