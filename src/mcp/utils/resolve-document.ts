@@ -25,6 +25,30 @@ export interface ResolvedDocument {
   stalePathNote?: string;
 }
 
+export class DocumentNotFoundError extends Error {
+  constructor(public identifier: string, message = `Document not found: "${identifier}"`) {
+    super(message);
+    this.name = 'DocumentNotFoundError';
+  }
+}
+
+export class AmbiguousDocumentIdentifierError extends Error {
+  constructor(public identifier: string, public matches: string[]) {
+    super(
+      `Ambiguous filename "${identifier}" matches ${matches.length} files:\n${matches.map((m) => `  - ${m}`).join('\n')}\nUse a vault-relative path or fq_id instead.`
+    );
+    this.name = 'AmbiguousDocumentIdentifierError';
+  }
+}
+
+export class DocumentReadError extends Error {
+  constructor(public identifier: string, public path: string, public causeError: unknown) {
+    const detail = causeError instanceof Error ? causeError.message : String(causeError);
+    super(`Error reading document "${identifier}" at "${path}": ${detail}`);
+    this.name = 'DocumentReadError';
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-file mutex map — prevents concurrent pre-scan + background scan on same file
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,7 +99,7 @@ export async function resolveDocumentIdentifier(
     const { data: row, error } = queryResult;
 
     if (error || !row) {
-      throw new Error(`Document not found: no document with id "${identifier}"`);
+      throw new DocumentNotFoundError(identifier, `Document not found: no document with id "${identifier}"`);
     }
 
     const absPath = join(vaultRoot, row.path);
@@ -85,7 +109,7 @@ export async function resolveDocumentIdentifier(
     const resolvedVault = resolve(vaultRoot);
     const rel = relative(resolvedVault, resolvedAbs);
     if (rel.startsWith('..') || rel === '..') {
-      throw new Error(`Document not found: no document with id "${identifier}"`);
+      throw new DocumentNotFoundError(identifier, `Document not found: no document with id "${identifier}"`);
     }
 
     return {
@@ -112,7 +136,7 @@ export async function resolveDocumentIdentifier(
     const resolvedVault = resolve(vaultRoot);
     const rel = relative(resolvedVault, resolvedAbs);
     if (rel.startsWith('..') || rel === '..') {
-      throw new Error(`Document not found: "${identifier}"`);
+      throw new DocumentNotFoundError(identifier);
     }
 
     if (existsSync(absPath)) {
@@ -184,7 +208,7 @@ export async function resolveDocumentIdentifier(
       }
     }
 
-    throw new Error(`Document not found: "${identifier}"`);
+    throw new DocumentNotFoundError(identifier);
   }
 
   // ── 3. Filename check (no "/", not UUID, and no configured markdown extension) ─
@@ -221,13 +245,11 @@ export async function resolveDocumentIdentifier(
   });
 
   if (matches.length === 0) {
-    throw new Error(`Document not found: "${identifier}"`);
+    throw new DocumentNotFoundError(identifier);
   }
 
   if (matches.length > 1) {
-    throw new Error(
-      `Ambiguous filename "${identifier}" matches ${matches.length} files:\n${matches.map((m) => `  - ${m}`).join('\n')}\nUse a vault-relative path or fq_id instead.`
-    );
+    throw new AmbiguousDocumentIdentifierError(identifier, matches);
   }
 
   const match = matches[0];

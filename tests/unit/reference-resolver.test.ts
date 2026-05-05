@@ -42,6 +42,11 @@ vi.mock('../../src/embedding/provider.js', () => ({
 }));
 
 import { resolveAndBuildDocument, DocumentRequestError } from '../../src/mcp/utils/document-output.js';
+import {
+  AmbiguousDocumentIdentifierError,
+  DocumentNotFoundError,
+  DocumentReadError,
+} from '../../src/mcp/utils/resolve-document.js';
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -233,6 +238,31 @@ describe('parseReferences Phase 113 DRS grammar (D-02, D-03, D-04)', () => {
     expect(err.ref).toBe(placeholder);
   });
 
+  it('allows # characters inside section names after the section operator', () => {
+    const result = parseReferences([
+      { role: 'user', content: '{{ref:doc.md#Phase A # Phase B}}' },
+    ]);
+    expect(Array.isArray(result)).toBe(true);
+    const refs = result as ParsedRef[];
+    expect(refs).toHaveLength(1);
+    expect(refs[0].identifier).toBe('doc.md');
+    expect(refs[0].section).toBe('Phase A # Phase B');
+  });
+
+  it.each([
+    ['whitespace after section operator', '{{ref:doc.md# Section}}'],
+    ['whitespace before section operator', '{{ref:doc.md #Section}}'],
+    ['blank section after operator space', '{{ref:doc.md# }}'],
+    ['whitespace after pointer operator', '{{ref:doc.md-> key}}'],
+    ['whitespace before pointer operator', '{{ref:doc.md ->key}}'],
+  ])('rejects operator-boundary whitespace: %s', (_name, placeholder) => {
+    const result = parseReferences([{ role: 'user', content: placeholder }]);
+    expect(Array.isArray(result)).toBe(false);
+    const err = result as ParseRefError;
+    expect(err.error).toBe('invalid_reference_syntax');
+    expect(err.detail).toContain('whitespace');
+  });
+
   it('treats malformed opener and legacy {{id:...}} as literal text with no metadata', () => {
     const result = parseReferences([
       { role: 'user', content: 'literal {{ref:doc.md and {{id:550e8400-e29b-41d4-a716-446655440000}}' },
@@ -416,9 +446,9 @@ describe('hydrateMessages (REFS-03 partial)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('buildInjectedReferences (REFS-04)', () => {
-  it('[U-RR-14] omits resolved_to when undefined; includes it when set; section-only refs also omit resolved_to (TC3-W3)', () => {
+  it('[U-RR-14] omits non-spec identifier, includes resolved_to only when set', () => {
     const resolved: ResolvedRef[] = [
-      { kind: 'resolved', placeholder: '{{ref:a.md}}', ref: '{{ref:a.md}}', content: 'X', chars: 1, messageIndex: 0 },
+      { kind: 'resolved', placeholder: '{{ref:a.md}}', ref: '{{ref:a.md}}', content: 'X', chars: 1, identifier: 'a.md', messageIndex: 0 },
       {
         kind: 'resolved',
         placeholder: '{{ref:b.md->p}}',
@@ -428,27 +458,24 @@ describe('buildInjectedReferences (REFS-04)', () => {
         resolvedTo: 'target/b-target.md',
         messageIndex: 0,
       },
-      // TC3-W3: section-only reference (with #, no ->) — must also OMIT
-      // the resolved_to key, since §5.4 reserves resolved_to for the
-      // -> dereference operator only. Without this entry the test
-      // couldn't tell apart "path-only omits" from "everything-non-arrow
-      // omits"; this proves the rule is operator-based, not kind-based.
       {
         kind: 'resolved',
         placeholder: '{{ref:c.md#Section}}',
         ref: '{{ref:c.md#Section}}',
         content: 'Z',
         chars: 1,
+        identifier: 'c.md',
+        resolvedTo: 'nested/c.md',
         messageIndex: 0,
       },
     ];
     const out = buildInjectedReferences(resolved);
     expect(out[0]).toStrictEqual({ ref: '{{ref:a.md}}', chars: 1 });
+    expect('identifier' in out[0]).toBe(false);
     expect('resolved_to' in out[0]).toBe(false);
     expect(out[1]).toStrictEqual({ ref: '{{ref:b.md->p}}', chars: 1, resolved_to: 'target/b-target.md' });
-    // TC3-W3: section-only ref entry — same shape as path-only, no resolved_to.
-    expect(out[2]).toStrictEqual({ ref: '{{ref:c.md#Section}}', chars: 1 });
-    expect('resolved_to' in out[2]).toBe(false);
+    expect(out[2]).toStrictEqual({ ref: '{{ref:c.md#Section}}', chars: 1, resolved_to: 'nested/c.md' });
+    expect('identifier' in out[2]).toBe(false);
   });
 });
 
@@ -535,6 +562,69 @@ describe('resolveReferences (resolution + error mapping)', () => {
     expect(resolved.messageIndex).toBe(0);
   });
 
+  it('[U-RR-16b] sets resolvedTo for fq_id and filename refs whose canonical path diverges', async () => {
+    vi.mocked(resolveAndBuildDocument)
+      .mockResolvedValueOnce({
+        identifier: '550e8400-e29b-41d4-a716-446655440000',
+        title: 'doc',
+        path: 'Research/doc.md',
+        fq_id: '550e8400-e29b-41d4-a716-446655440000',
+        modified: '2026-01-01',
+        size: { chars: 5 },
+        body: 'HELLO',
+      } as unknown as Record<string, unknown>)
+      .mockResolvedValueOnce({
+        identifier: 'doc',
+        title: 'doc',
+        path: 'Research/doc.md',
+        fq_id: null,
+        modified: '2026-01-01',
+        size: { chars: 5 },
+        body: 'HELLO',
+      } as unknown as Record<string, unknown>)
+      .mockResolvedValueOnce({
+        identifier: 'Research/doc.md',
+        title: 'doc',
+        path: 'Research/doc.md',
+        fq_id: null,
+        modified: '2026-01-01',
+        size: { chars: 5 },
+        body: 'HELLO',
+      } as unknown as Record<string, unknown>);
+
+    const parsed: ParsedRef[] = [
+      {
+        placeholder: '{{ref:550e8400-e29b-41d4-a716-446655440000}}',
+        ref: '{{ref:550e8400-e29b-41d4-a716-446655440000}}',
+        identifierType: 'ref',
+        identifier: '550e8400-e29b-41d4-a716-446655440000',
+        messageIndex: 0,
+      },
+      {
+        placeholder: '{{ref:doc}}',
+        ref: '{{ref:doc}}',
+        identifierType: 'ref',
+        identifier: 'doc',
+        messageIndex: 0,
+      },
+      {
+        placeholder: '{{ref:Research/doc.md}}',
+        ref: '{{ref:Research/doc.md}}',
+        identifierType: 'ref',
+        identifier: 'Research/doc.md',
+        messageIndex: 0,
+      },
+    ];
+
+    const out = await resolveReferences(parsed, fakeConfig, fakeSm, fakeEp, fakeLog);
+    const metadata = buildInjectedReferences(out.filter((entry) => entry.kind === 'resolved') as ResolvedRef[]);
+    expect(metadata).toStrictEqual([
+      { ref: '{{ref:550e8400-e29b-41d4-a716-446655440000}}', chars: 5, resolved_to: 'Research/doc.md' },
+      { ref: '{{ref:doc}}', chars: 5, resolved_to: 'Research/doc.md' },
+      { ref: '{{ref:Research/doc.md}}', chars: 5 },
+    ]);
+  });
+
   it('[U-RR-17] returns FailedRef on DocumentRequestError', async () => {
     vi.mocked(resolveAndBuildDocument).mockRejectedValueOnce(
       new DocumentRequestError({
@@ -564,9 +654,9 @@ describe('resolveReferences (resolution + error mapping)', () => {
     expect(f.detail).toBe("No heading matching 'Open Questions' found in document");
   });
 
-  it('[U-RR-18] returns FailedRef on generic Error (document not found)', async () => {
+  it('[U-RR-18] returns FailedRef on typed document not found', async () => {
     vi.mocked(resolveAndBuildDocument).mockRejectedValueOnce(
-      new Error('Document not found: missing/ghost.md')
+      new DocumentNotFoundError('missing/ghost.md')
     );
 
     const parsed: ParsedRef[] = [
@@ -585,7 +675,7 @@ describe('resolveReferences (resolution + error mapping)', () => {
     expect('reason' in f).toBe(true);
     expect(f.ref).toBe('{{ref:missing/ghost.md}}');
     expect(f.reason).toBe('document_not_found');
-    expect(f.detail).toBe('Document not found: missing/ghost.md');
+    expect(f.detail).toBe('Document not found: "missing/ghost.md"');
   });
 
   it('[U-RR-19] aggregates multiple failures — both refs appear in failed[] (Phase 3 Gap 1, OQ #7)', async () => {
@@ -599,7 +689,7 @@ describe('resolveReferences (resolution + error mapping)', () => {
     // caught at unit level. This is the unit-level companion to the
     // directed L-31 step and the YAML two-failure case.
     vi.mocked(resolveAndBuildDocument)
-      .mockRejectedValueOnce(new Error('Document not found: missing/a.md'))
+      .mockRejectedValueOnce(new DocumentNotFoundError('missing/a.md'))
       .mockRejectedValueOnce(
         new DocumentRequestError({
           error: 'section_not_found',
@@ -633,10 +723,55 @@ describe('resolveReferences (resolution + error mapping)', () => {
     // input ref, etc.
     expect(failed[0].ref).toBe('{{ref:missing/a.md}}');
     expect(failed[0].reason).toBe('document_not_found');
-    expect(failed[0].detail).toBe('Document not found: missing/a.md');
+    expect(failed[0].detail).toBe('Document not found: "missing/a.md"');
     expect(failed[1].ref).toBe('{{ref:b.md#Ghost}}');
     expect(failed[1].reason).toBe('section_not_found');
     expect(failed[1].detail).toBe("No heading matching 'Ghost' found in document");
+  });
+
+  it.each([
+    [new DocumentNotFoundError('missing.md'), 'document_not_found'],
+    [new AmbiguousDocumentIdentifierError('shared', ['A/shared.md', 'B/shared.md']), 'ambiguous_document_identifier'],
+    [new DocumentReadError('locked.md', 'locked.md', Object.assign(new Error('permission denied'), { code: 'EACCES' })), 'read_error'],
+    [Object.assign(new Error('permission denied'), { code: 'EACCES' }), 'read_error'],
+  ])('maps typed/non-message document errors to %s', async (error, expectedReason) => {
+    vi.mocked(resolveAndBuildDocument).mockRejectedValueOnce(error);
+    const parsed: ParsedRef[] = [
+      {
+        placeholder: '{{ref:doc.md}}',
+        ref: '{{ref:doc.md}}',
+        identifierType: 'ref',
+        identifier: 'doc.md',
+        messageIndex: 0,
+      },
+    ];
+
+    const out = await resolveReferences(parsed, fakeConfig, fakeSm, fakeEp, fakeLog);
+    const failed = out[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe(expectedReason);
+    expect(fakeLog.warn).not.toHaveBeenCalled();
+  });
+
+  it('does not classify generic human-readable message text by regex', async () => {
+    vi.mocked(resolveAndBuildDocument).mockRejectedValueOnce(
+      new Error('Document not found: missing.md')
+    );
+    const parsed: ParsedRef[] = [
+      {
+        placeholder: '{{ref:missing.md}}',
+        ref: '{{ref:missing.md}}',
+        identifierType: 'ref',
+        identifier: 'missing.md',
+        messageIndex: 0,
+      },
+    ];
+
+    const out = await resolveReferences(parsed, fakeConfig, fakeSm, fakeEp, fakeLog);
+    const failed = out[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe('unknown_reference_error');
+    expect(fakeLog.warn).toHaveBeenCalled();
   });
 
   it.each([

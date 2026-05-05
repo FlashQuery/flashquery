@@ -18,6 +18,11 @@ import {
   isReferenceFailureReason,
   type ReferenceFailureReason,
 } from '../constants/reference-failures.js';
+import {
+  AmbiguousDocumentIdentifierError,
+  DocumentNotFoundError,
+  DocumentReadError,
+} from '../mcp/utils/resolve-document.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Exported types
@@ -51,7 +56,7 @@ export interface ResolvedRef {
   content: string;           // body text to inject (may be empty string)
   chars: number;             // content.length
   identifier?: string;
-  resolvedTo?: string;       // target vault-relative path; ONLY for -> dereferences
+  resolvedTo?: string;       // target vault-relative path when it diverges from the supplied ref, or for -> dereferences
   messageIndex: number;      // 0-based index for hydrateMessages filtering
   start?: number;
   end?: number;
@@ -66,7 +71,7 @@ export interface FailedRef {
 }
 
 export interface InjectionMetadata {
-  injectedReferences: Array<{ ref: string; chars: number; identifier?: string; resolved_to?: string }>;
+  injectedReferences: Array<{ ref: string; chars: number; resolved_to?: string }>;
   promptChars: number;
 }
 
@@ -182,10 +187,10 @@ function parseActiveSpan(span: ReferenceSpan, messageIndex: number): ParsedRef |
   if (arrowIdx !== -1 && hashIdx !== -1) {
     return invalid('# and -> are mutually exclusive');
   }
-  if (inner.includes(' #') || inner.includes('# ')) {
+  if (hashIdx !== -1 && (inner[hashIdx - 1] === ' ' || inner[hashIdx + 1] === ' ')) {
     return invalid('whitespace around # is not permitted');
   }
-  if (inner.includes(' ->') || inner.includes('-> ')) {
+  if (arrowIdx !== -1 && (inner[arrowIdx - 1] === ' ' || inner[arrowIdx + 2] === ' ')) {
     return invalid('whitespace around -> is not permitted');
   }
 
@@ -257,6 +262,10 @@ export async function resolveReferences(
         resolvedTo = fr?.resolved_to as string | undefined;
       } else {
         content = (result.body as string | undefined) ?? '';
+        const resultPath = typeof result.path === 'string' ? result.path : undefined;
+        if (resultPath !== undefined && normalizedReferencePath(resultPath) !== normalizedReferencePath(p.identifier)) {
+          resolvedTo = resultPath;
+        }
       }
       const out: ResolvedRef = {
         kind: 'resolved',
@@ -278,7 +287,11 @@ export async function resolveReferences(
       const mapped = mapReferenceFailure(err, p.ref, log);
       return { kind: 'failed' as const, ref: p.ref, reason: mapped.reason, detail: mapped.detail };
     }
-  }));
+	  }));
+}
+
+function normalizedReferencePath(value: string): string {
+  return value.replaceAll('\\', '/').replace(/^\.\//, '');
 }
 
 function mapReferenceFailure(
@@ -305,18 +318,24 @@ function mapReferenceFailure(
     }
   }
 
-  if (/Ambiguous filename/.test(fallbackDetail) && /Use a vault-relative path or fq_id/.test(fallbackDetail)) {
+  if (err instanceof AmbiguousDocumentIdentifierError) {
     return { reason: 'ambiguous_document_identifier', detail: fallbackDetail };
   }
-  if (/Document not found|no document with id/i.test(fallbackDetail)) {
+  if (err instanceof DocumentNotFoundError) {
     return { reason: 'document_not_found', detail: fallbackDetail };
   }
-  if (/ENOENT|EACCES|read/i.test(fallbackDetail)) {
+  if (err instanceof DocumentReadError || isNodeReadError(err)) {
     return { reason: 'read_error', detail: fallbackDetail };
   }
 
   log.warn(`reference_failure_unclassified ref=${ref} detail=${fallbackDetail}`);
   return { reason: 'unknown_reference_error', detail: fallbackDetail };
+}
+
+function isNodeReadError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null || !('code' in err)) return false;
+  const code = (err as { code?: unknown }).code;
+  return code === 'ENOENT' || code === 'EACCES' || code === 'EPERM' || code === 'EISDIR';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -417,15 +436,12 @@ function findNextPlaceholder(
  */
 export function buildInjectedReferences(
   resolved: ResolvedRef[]
-): Array<{ ref: string; chars: number; identifier?: string; resolved_to?: string }> {
+): Array<{ ref: string; chars: number; resolved_to?: string }> {
   return resolved.map((r) => {
-    const entry: { ref: string; chars: number; identifier?: string; resolved_to?: string } = {
+    const entry: { ref: string; chars: number; resolved_to?: string } = {
       ref: r.ref,
       chars: r.chars,
     };
-    if (r.identifier !== undefined) {
-      entry.identifier = r.identifier;
-    }
     if (r.resolvedTo !== undefined) {
       entry.resolved_to = r.resolvedTo;
     }

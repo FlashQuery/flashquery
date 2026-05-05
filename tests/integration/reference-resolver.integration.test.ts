@@ -54,20 +54,26 @@ async function seedDocument(vaultPath: string, relPath: string, title: string, b
 describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () => {
   let vaultPath: string;
   let config: FlashQueryConfig;
+  let supabaseReady = false;
 
   beforeAll(async () => {
     vaultPath = await mkdtemp(join(tmpdir(), 'fqc-reference-resolver-'));
     config = makeConfig(vaultPath);
     initLogger(config);
     await initSupabase(config);
+    supabaseReady = true;
     initEmbedding(config);
     await initVault(config);
-  });
+  }, 30000);
 
   afterAll(async () => {
-    await supabaseManager.getClient().from('fqc_documents').delete().eq('instance_id', INSTANCE_ID);
-    await rm(vaultPath, { recursive: true, force: true });
-    await supabaseManager.close();
+    if (supabaseReady) {
+      await supabaseManager.getClient().from('fqc_documents').delete().eq('instance_id', INSTANCE_ID);
+      await supabaseManager.close();
+    }
+    if (vaultPath) {
+      await rm(vaultPath, { recursive: true, force: true });
+    }
   });
 
   it('hydrates path, fq_id, section, pointer, ambiguity, and non-recursive metadata against real vault files', async () => {
@@ -81,6 +87,7 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
     const parsed = [
       { placeholder: '{{ref:Refs/target.md}}', ref: '{{ref:Refs/target.md}}', identifierType: 'ref' as const, identifier: 'Refs/target.md', messageIndex: 0 },
       { placeholder: `{{ref:${targetId}}}`, ref: `{{ref:${targetId}}}`, identifierType: 'ref' as const, identifier: targetId, messageIndex: 0 },
+      { placeholder: '{{ref:target}}', ref: '{{ref:target}}', identifierType: 'ref' as const, identifier: 'target', messageIndex: 0 },
       { placeholder: '{{ref:Refs/target.md#Details}}', ref: '{{ref:Refs/target.md#Details}}', identifierType: 'ref' as const, identifier: 'Refs/target.md', section: 'Details', messageIndex: 0 },
       { placeholder: '{{ref:Refs/source.md->pointer}}', ref: '{{ref:Refs/source.md->pointer}}', identifierType: 'ref' as const, identifier: 'Refs/source.md', pointer: 'pointer', messageIndex: 0 },
       { placeholder: '{{ref:shared}}', ref: '{{ref:shared}}', identifierType: 'ref' as const, identifier: 'shared', messageIndex: 0 },
@@ -96,9 +103,12 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
     expect(failures[0].detail).toContain('Use a vault-relative path or fq_id');
 
     const successes = resolved.filter((entry) => entry.kind === 'resolved');
-    expect(successes).toHaveLength(5);
+    expect(successes).toHaveLength(6);
     const metadata = buildInjectedReferences(successes);
-    expect(metadata.some((entry) => entry.resolved_to === 'Refs/target.md')).toBe(true);
+    expect(metadata).toContainEqual({ ref: `{{ref:${targetId}}}`, chars: expect.any(Number), resolved_to: 'Refs/target.md' });
+    expect(metadata).toContainEqual({ ref: '{{ref:target}}', chars: expect.any(Number), resolved_to: 'Refs/target.md' });
+    expect(metadata).toContainEqual({ ref: '{{ref:Refs/source.md->pointer}}', chars: expect.any(Number), resolved_to: 'Refs/target.md' });
+    expect(metadata.find((entry) => entry.ref === '{{ref:Refs/target.md}}')).not.toHaveProperty('resolved_to');
 
     const hydrated = hydrateMessages([
       { role: 'user', content: successes.map((entry) => entry.placeholder).join('\n') },

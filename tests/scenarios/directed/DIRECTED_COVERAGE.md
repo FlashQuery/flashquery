@@ -665,8 +665,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-73 | `call_model` successful model/purpose envelopes always include root `messages`; when `return_messages` is false or omitted, `messages` is exactly `[]` | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
 | L-74 | `call_model` with `return_messages: true` returns post-hydration input messages plus a final assistant message with string `name`; returned input content contains resolved reference text and no `{{ref:` placeholder | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
 | L-75 | Discovery resolvers (`list_models`, `list_purposes`, `search`) ignore `return_messages` and keep their raw response shapes with no root `messages` envelope | test_call_model_return_messages | 2026-05-05 | 2026-05-05 |
-| L-76 | ATL-DS-02 reference grammar resolves path, filename, fq_id, section, and pointer forms through public call_model and reports injected_references metadata including chars and resolved_to | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
-| L-77 | ATL-DS-03 escape and literal behavior: odd-parity escaped refs stay literal and excluded from metadata, even-parity refs hydrate with one literal slash preserved, malformed openers stay literal, and {{id:...}} remains literal | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
+| L-76 | ATL-DS-02 reference grammar resolves path, email-like filename path, bare filename, fq_id, section, same-doc different sections, and pointer forms through public call_model; injected_references entries preserve literal ref substrings, order, chars, and resolved_to on divergence | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
+| L-77 | ATL-DS-03 escape and literal behavior: odd-parity escaped refs stay literal and excluded from metadata, even-parity refs hydrate with one literal slash preserved, triple-escaped refs remain one-slash literals, malformed openers stay literal, and {{id:...}} remains literal | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
 | L-78 | Host-only safety: assistant and tool messages containing {{ref:...}} are treated as ordinary data and are not scanned, hydrated, or added to injected_references metadata | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
 | L-79 | Typed reference failures return reference_resolution_failed with stable failed_references[].reason and detail for invalid syntax, ambiguous identifiers, and missing pointer paths before LLM dispatch | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
 
@@ -744,7 +744,7 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 - L-78: assistant/tool messages are not host-authored reference targets.
 - L-79: stable typed failures include `reason` and `detail` before provider dispatch.
 
-**Resolution (2026-05-05)**: Added managed directed coverage for ATL-DS-02 and ATL-DS-03 via `test_call_model_reference_system_core`. The scenario uses a deterministic OpenAI-compatible mock provider, seeds vault documents, forces a scan, and validates hydration metadata plus fail-fast behavior on the public MCP surface. It also corrects the legacy Phase 109 `{{id:...}}` rows so the coverage ledger no longer contradicts ATL v1 literal-id semantics. Test passes 4/4 steps.
+**Resolution (2026-05-05)**: Added managed directed coverage for ATL-DS-02 and ATL-DS-03 via `test_call_model_reference_system_core`. The scenario uses a deterministic OpenAI-compatible mock provider, seeds vault documents, forces a scan, and validates hydration metadata plus fail-fast behavior on the public MCP surface. It covers email-like paths, bare filename and fq_id `resolved_to`, literal `ref` substrings, same-document multi-section ordering, odd/even/triple escape parity, alias/operator syntax details, and legacy `{{id:...}}` literal semantics. Test passes 5/5 steps.
 
 ---
 

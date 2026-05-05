@@ -134,19 +134,22 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 target = f"_test/{TEST_NAME}_{run_id}/target.md"
                 source = f"_test/{TEST_NAME}_{run_id}/source.md"
                 alias_doc = f"_test/{TEST_NAME}_{run_id}/alias.md"
+                email_doc = f"_test/{TEST_NAME}_{run_id}/alice@example.com.md"
                 dup_a = f"_test/{TEST_NAME}_{run_id}/a/shared.md"
                 dup_b = f"_test/{TEST_NAME}_{run_id}/b/shared.md"
                 nested = f"_test/{TEST_NAME}_{run_id}/nested.md"
 
-                target_id = _write_doc(server.vault_path, target, "TARGET BODY\n\n## Section\n\nSECTION BODY\n", fq_title="Target")
+                target_id = _write_doc(server.vault_path, target, "TARGET BODY\n\n## Section\n\nSECTION BODY\n\n## Other\n\nOTHER BODY\n", fq_title="Target")
                 _write_doc(server.vault_path, source, "SOURCE BODY\n", pointer=target, fq_title="Source")
                 _write_doc(server.vault_path, alias_doc, "ALIAS SHOULD NOT LOAD\n", fq_title="Alias")
+                _write_doc(server.vault_path, email_doc, "EMAIL BODY\n", fq_title="Email")
                 _write_doc(server.vault_path, dup_a, "DUP A\n", fq_title="Shared A")
                 _write_doc(server.vault_path, dup_b, "DUP B\n", fq_title="Shared B")
                 _write_doc(server.vault_path, nested, "literal {{ref:missing-nested.md}} remains\n", fq_title="Nested")
                 client.call_tool("force_file_scan", background=False)
 
-                success = _call(client, f"{{{{ref:{target}}}}} | {{{{ref:{target_id}}}}} | {{{{ref:{target}#Section}}}} | {{{{ref:{source}->pointer}}}} | {{{{ref:{nested}}}}}")
+                success_content = f"{{{{ref:{target}}}}} | {{{{ref:{target_id}}}}} | {{{{ref:target}}}} | {{{{ref:{email_doc}}}}} | {{{{ref:{target}#Section}}}} | {{{{ref:{source}->pointer}}}} | {{{{ref:{nested}}}}}"
+                success = _call(client, success_content)
                 env = _json(success)
                 meta = env.get("metadata", {})
                 text = env.get("response", "")
@@ -154,20 +157,40 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 checks = {
                     "call ok": success.ok,
                     "path body hydrated": "TARGET BODY" in text,
-                    "fq_id hydrated": text.count("TARGET BODY") >= 2,
+                    "fq_id hydrated": text.count("TARGET BODY") >= 3,
+                    "email-like filename hydrated": "EMAIL BODY" in text,
                     "section hydrated": "SECTION BODY" in text,
                     "pointer hydrated": any(entry.get("resolved_to") == target for entry in injected),
+                    "fq_id resolved_to": any(entry.get("ref") == f"{{{{ref:{target_id}}}}}" and entry.get("resolved_to") == target for entry in injected),
+                    "filename resolved_to": any(entry.get("ref") == "{{ref:target}}" and entry.get("resolved_to") == target for entry in injected),
+                    "refs are literal substrings": all(str(entry.get("ref", "")) in success_content for entry in injected),
+                    "no identifier leak": all("identifier" not in entry for entry in injected),
                     "non-recursive nested literal": "{{ref:missing-nested.md}}" in text,
                 }
                 run.step("ATL-DS-02 refs hydrate path, filename/fq_id, section, pointer, metadata", all(checks.values()), f"checks={checks}", tool_result=success)
 
-                escaped = _call(client, f"literal \\{{{{ref:{target}}}}} active \\\\{{{{ref:{target}}}}} id {{{{id:{target_id}}}}} malformed {{{{ref:{target}}}")
+                sections_content = f"{{{{ref:{target}#Section}}}} || {{{{ref:{target}#Other}}}}"
+                sections = _call(client, sections_content)
+                env = _json(sections)
+                text = env.get("response", "")
+                injected = env.get("metadata", {}).get("injected_references", [])
+                refs = [entry.get("ref") for entry in injected]
+                checks = {
+                    "call ok": sections.ok,
+                    "two metadata entries": refs == [f"{{{{ref:{target}#Section}}}}", f"{{{{ref:{target}#Other}}}}"],
+                    "section order": text.find("SECTION BODY") != -1 and text.find("OTHER BODY") != -1 and text.find("SECTION BODY") < text.find("OTHER BODY"),
+                    "refs are literal substrings": all(str(ref) in sections_content for ref in refs),
+                }
+                run.step("same document different sections preserve ordered metadata", all(checks.values()), f"checks={checks}, refs={refs}", tool_result=sections)
+
+                escaped = _call(client, f"literal \\{{{{ref:{target}}}}} active \\\\{{{{ref:{target}}}}} triple \\\\\\{{{{ref:{target}}}}} id {{{{id:{target_id}}}}} malformed {{{{ref:{target}}}")
                 env = _json(escaped)
                 text = env.get("response", "")
                 injected = env.get("metadata", {}).get("injected_references", [])
                 checks = {
                     "escaped literal remains": f"{{{{ref:{target}}}}}" in text,
                     "even parity active": "\\\nTARGET BODY" in text or "\\TARGET BODY" in text,
+                    "triple escaped literal": f"\\{{{{ref:{target}}}}}" in text,
                     "id literal": f"{{{{id:{target_id}}}}}" in text,
                     "malformed literal": f"{{{{ref:{target}" in text,
                     "only active ref metadata": len(injected) == 1,
@@ -176,9 +199,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
                 before_fail_calls = mock_provider.call_count
                 invalid = _call(client, "{{ref:@alias#Section}}")
+                invalid_pointer = _call(client, "{{ref:@alias->pointer}}")
+                whitespace_hash = _call(client, f"{{{{ref:{target} #Section}}}}")
+                whitespace_arrow = _call(client, f"{{{{ref:{source} ->pointer}}}}")
                 ambiguous = _call(client, "{{ref:shared}}")
                 pointer = _call(client, f"{{{{ref:{source}->missing}}}}")
-                failed_payloads = [_json(invalid), _json(ambiguous), _json(pointer)]
+                failed_payloads = [_json(invalid), _json(invalid_pointer), _json(whitespace_hash), _json(whitespace_arrow), _json(ambiguous), _json(pointer)]
                 failed_refs = [
                     entry
                     for payload in failed_payloads
@@ -188,11 +214,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 reasons = {entry.get("reason") for entry in failed_refs}
                 detail_text = " ".join(str(entry.get("detail", "")) for entry in failed_refs)
                 checks = {
-                    "is error": (not invalid.ok) and (not ambiguous.ok) and (not pointer.ok),
+                    "is error": all(not result.ok for result in [invalid, invalid_pointer, whitespace_hash, whitespace_arrow, ambiguous, pointer]),
                     "reference error": all(payload.get("error") == "reference_resolution_failed" for payload in failed_payloads),
                     "invalid syntax": "invalid_reference_syntax" in reasons,
                     "ambiguous_document_identifier": "ambiguous_document_identifier" in reasons,
                     "reference_path_not_found": "reference_path_not_found" in reasons,
+                    "alias hash detail": any("#" in str(entry.get("detail", "")) for entry in failed_payloads[0].get("failed_references", [])),
+                    "alias pointer detail": any("->" in str(entry.get("detail", "")) for entry in failed_payloads[1].get("failed_references", [])),
+                    "whitespace hash detail": any("whitespace" in str(entry.get("detail", "")) and "#" in str(entry.get("detail", "")) for entry in failed_payloads[2].get("failed_references", [])),
+                    "whitespace pointer detail": any("whitespace" in str(entry.get("detail", "")) and "->" in str(entry.get("detail", "")) for entry in failed_payloads[3].get("failed_references", [])),
                     "detail guidance": "Use a vault-relative path or fq_id" in detail_text,
                     "no LLM dispatch": mock_provider.call_count == before_fail_calls,
                 }

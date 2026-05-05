@@ -19,7 +19,7 @@ import { readFile } from 'node:fs/promises';
 import matter from 'gray-matter';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { FM } from '../../constants/frontmatter-fields.js';
-import { resolveDocumentIdentifier, targetedScan } from './resolve-document.js';
+import { DocumentReadError, resolveDocumentIdentifier, targetedScan } from './resolve-document.js';
 import type { supabaseManager } from '../../storage/supabase.js';
 import type { embeddingProvider } from '../../embedding/provider.js';
 import type { logger } from '../../logging/logger.js';
@@ -373,7 +373,12 @@ export async function resolveAndBuildDocument(
   const { config: cfg, supabaseManager: sm, embeddingProvider: ep, logger: log } = deps;
 
   const resolved = await resolveDocumentIdentifier(cfg, sm.getClient(), identifier, log);
-  const rawContent = await readFile(resolved.absPath, 'utf-8');
+  let rawContent: string;
+  try {
+    rawContent = await readFile(resolved.absPath, 'utf-8');
+  } catch (readErr) {
+    throw new DocumentReadError(identifier, resolved.relativePath, readErr);
+  }
   const parsed = matter(rawContent);
   const contentHash = createHash('sha256').update(rawContent).digest('hex');
 
