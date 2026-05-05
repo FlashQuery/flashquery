@@ -134,7 +134,12 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
   4. Ambiguous shorthand identifiers fail with `ambiguous_document_identifier` and tell the caller to use path or `fq_id`.
   5. Hydration scans only host-authored input messages and does not recursively resolve injected content or model-produced strings.
   6. Phase-specific runnable tests exist and pass for parser edge cases, escape parity, ambiguity, typed failure reasons, metadata, and public reference behavior.
-**Plans**: TBD during `$gsd-plan-phase 113`
+**Plans**: 4 plans
+Plans:
+- [ ] 113-01-PLAN.md — Reference failure constants and unit contract coverage
+- [ ] 113-02-PLAN.md — Span scanner, parser, resolver mapping, and metadata implementation
+- [ ] 113-03-PLAN.md — `call_model` host-only hydration integration
+- [ ] 113-04-PLAN.md — Integration, directed scenario, coverage, and traceability closure
 **UI hint**: no
 
 ### Phase 114: Template Parameterization
