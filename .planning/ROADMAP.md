@@ -160,7 +160,22 @@ Plans:
   4. Placeholder substitution is single-pass, deterministic, and non-recursive even when substituted values contain reference-looking strings.
   5. `_items` alias lists inject an ordered sequence of documents/templates with separator support and correct metadata.
   6. Phase-specific runnable tests exist and pass for template validation, substitution, document parameters, aliases, `_items`, and public parameterized-template behavior.
-**Plans**: TBD during `$gsd-plan-phase 114`
+**Plans**: 5 plans
+Plans:
+**Wave 1**
+- [ ] 114-01-PLAN.md — Unit contracts for template resolver and call_model wiring
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 114-02-PLAN.md — Path-keyed template rendering, validation, document params, and substitution
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 114-03-PLAN.md — Alias `_template`, `_items`, and public `template_params` wiring
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 114-04-PLAN.md — Supabase-backed resolver integration validation
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 114-05-PLAN.md — Managed directed scenario, coverage traceability, and docs review
 **UI hint**: no
 
 ### Phase 115: Purpose Config, Bindings & Capabilities
