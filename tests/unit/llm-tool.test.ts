@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { registerLlmTools } from '../../src/mcp/tools/llm.js';
+import { callModelMessageSchema, registerLlmTools } from '../../src/mcp/tools/llm.js';
 import { computeCost } from '../../src/llm/cost-tracker.js';
 import { NullLlmClient, type LlmClient, type LlmCompletionResult } from '../../src/llm/client.js';
 import { LlmFallbackError } from '../../src/llm/resolver.js';
+import { LLM_PARTICIPANT_NAMES } from '../../src/constants/llm.js';
 import {
   parseReferences,
   resolveReferences,
@@ -278,6 +279,61 @@ function captureCallModelHandler(config: typeof TEST_CONFIG): HandlerFn {
 // ─── U-RR-INT: Handler-level Step 1.5 reference resolution tests ─────────────
 
 describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () => {
+  it('[U-RR-INT-00] discovery resolvers return before reference parsing', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+
+    const res = await handler({
+      resolver: 'list_models',
+      messages: [{ role: 'user', content: '{{ref:secret.md}}' }],
+    });
+
+    expect(res.isError).toBeUndefined();
+    expect(parseReferences).not.toHaveBeenCalled();
+  });
+
+  it('[U-RR-INT-00b] only host-authored system/user string content is scanned for references', async () => {
+    vi.mocked(parseReferences).mockReturnValue([]);
+    _llmClientValue = {
+      complete: vi.fn().mockResolvedValue(SAMPLE_RESULT),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+
+    await handler({
+      resolver: 'model',
+      name: 'fast',
+      messages: [
+        { role: 'system', content: 'system {{ref:system.md}}' },
+        { role: 'user', content: 'user {{ref:user.md}}' },
+        {
+          role: 'assistant',
+          content: 'assistant {{ref:assistant-secret.md}}',
+          tool_calls: [
+            {
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'search_documents', arguments: { query: '{{ref:tool-call-secret.md}}' } },
+            },
+          ],
+        },
+        { role: 'tool', content: 'tool result {{ref:tool-secret.md}}', tool_call_id: 'call_1' },
+      ],
+    });
+
+    expect(parseReferences).toHaveBeenCalledWith([
+      { role: 'system', content: 'system {{ref:system.md}}' },
+      { role: 'user', content: 'user {{ref:user.md}}' },
+    ]);
+  });
+
   it('[U-RR-INT-01] no patterns in messages → handler forwards unchanged, no injected_references / prompt_chars in metadata', async () => {
     // Arrange: parseReferences returns [] (already set in beforeEach default)
     vi.mocked(parseReferences).mockReturnValue([]);
@@ -456,7 +512,7 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
 
   it('[U-RR-INT-03] resolveReferences returns FailedRef → handler returns reference_resolution_failed, no LLM call made (REFS-06)', async () => {
     const parsedRef = { placeholder: '{{ref:missing.md}}', ref: '{{ref:missing.md}}', identifierType: 'ref' as const, identifier: 'missing.md', messageIndex: 0 };
-    const failedRef = { kind: 'failed' as const, ref: '{{ref:missing.md}}', reason: 'Document not found: missing.md' };
+    const failedRef = { kind: 'failed' as const, ref: '{{ref:missing.md}}', reason: 'document_not_found', detail: 'Document not found: missing.md' };
     vi.mocked(parseReferences).mockReturnValue([parsedRef]);
     vi.mocked(resolveReferences).mockResolvedValue([failedRef]);
 
@@ -478,7 +534,7 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const body = JSON.parse(res.content[0].text) as any;
     expect(body.error).toBe('reference_resolution_failed');
-    expect(body.failed_references).toEqual([{ ref: '{{ref:missing.md}}', reason: 'Document not found: missing.md' }]);
+    expect(body.failed_references).toEqual([{ ref: '{{ref:missing.md}}', reason: 'document_not_found', detail: 'Document not found: missing.md' }]);
     // CRITICAL: client.complete must NOT have been called (REFS-06)
     expect(completeMock).not.toHaveBeenCalled();
     expect(hydrateMessages).not.toHaveBeenCalled();
@@ -489,7 +545,8 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
       error: 'invalid_reference_syntax',
       ref: '{{ref:doc.md#Sec->ptr}}',
       reason: 'invalid reference syntax: # and -> are mutually exclusive',
-    });
+      detail: 'The # and -> operators are mutually exclusive',
+    } as never);
 
     const completeMock = vi.fn();
     _llmClientValue = {
@@ -510,7 +567,11 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
     const body = JSON.parse(res.content[0].text) as any;
     expect(body.error).toBe('reference_resolution_failed');
     expect(body.failed_references).toEqual([
-      { ref: '{{ref:doc.md#Sec->ptr}}', reason: 'invalid reference syntax: # and -> are mutually exclusive' },
+      {
+        ref: '{{ref:doc.md#Sec->ptr}}',
+        reason: 'invalid_reference_syntax',
+        detail: 'The # and -> operators are mutually exclusive',
+      },
     ]);
     expect(completeMock).not.toHaveBeenCalled();
     // resolveReferences must NOT have been called either (parse error short-circuits)
@@ -565,8 +626,8 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
       { placeholder: '{{ref:b.md#Ghost}}', ref: '{{ref:b.md#Ghost}}', identifierType: 'ref' as const, identifier: 'b.md', section: 'Ghost', messageIndex: 0 },
     ];
     const failedRefs = [
-      { kind: 'failed' as const, ref: '{{ref:missing/a.md}}', reason: 'Document not found: missing/a.md' },
-      { kind: 'failed' as const, ref: '{{ref:b.md#Ghost}}', reason: "No heading matching 'Ghost' found in document" },
+      { kind: 'failed' as const, ref: '{{ref:missing/a.md}}', reason: 'document_not_found', detail: 'Document not found: missing/a.md' },
+      { kind: 'failed' as const, ref: '{{ref:b.md#Ghost}}', reason: 'section_not_found', detail: "No heading matching 'Ghost' found in document" },
     ];
     vi.mocked(parseReferences).mockReturnValue(parsedRefs);
     vi.mocked(resolveReferences).mockResolvedValue(failedRefs);
@@ -591,8 +652,8 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
     expect(body.error).toBe('reference_resolution_failed');
     // Both failures present, in input order (positional correspondence with parsedRefs)
     expect(body.failed_references).toEqual([
-      { ref: '{{ref:missing/a.md}}', reason: 'Document not found: missing/a.md' },
-      { ref: '{{ref:b.md#Ghost}}', reason: "No heading matching 'Ghost' found in document" },
+      { ref: '{{ref:missing/a.md}}', reason: 'document_not_found', detail: 'Document not found: missing/a.md' },
+      { ref: '{{ref:b.md#Ghost}}', reason: 'section_not_found', detail: "No heading matching 'Ghost' found in document" },
     ]);
     // CRITICAL: client.complete must NOT have been called (REFS-06 fail-fast)
     expect(completeMock).not.toHaveBeenCalled();
@@ -601,6 +662,39 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
 });
 
 describe('call_model handler — Phase 112 return_messages envelope', () => {
+  it('callModelMessageSchema rejects role=tool messages with name at the schema layer', () => {
+    const parsed = callModelMessageSchema.safeParse({
+      role: 'tool',
+      name: 'search_documents',
+      content: '{"ok":true}',
+      tool_call_id: 'call_1',
+    });
+
+    expect(parsed.success).toBe(false);
+  });
+
+  it('rejects role=tool messages that carry provider-wire name attribution', async () => {
+    const completeMock = vi.fn();
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const res = await handler({
+      resolver: 'model',
+      name: 'fast',
+      messages: [
+        { role: 'tool', name: 'search_documents', content: '{"ok":true}', tool_call_id: 'call_1' },
+      ],
+    });
+
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('role=tool messages cannot include name');
+    expect(completeMock).not.toHaveBeenCalled();
+  });
+
   it('default model envelope includes messages: [] and accepts nullable round-trip message fields', async () => {
     const completeMock = vi.fn().mockResolvedValue(SAMPLE_RESULT);
     _llmClientValue = {
@@ -698,6 +792,65 @@ describe('call_model handler — Phase 112 return_messages envelope', () => {
       role: 'assistant',
       content: 'hello world',
       name: 'fast',
+    });
+  });
+
+  it('return_messages: true applies host attribution by default and preserves caller-supplied participant names', async () => {
+    _llmClientValue = {
+      complete: vi.fn().mockResolvedValue(SAMPLE_RESULT),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const res = await handler({
+      resolver: 'model',
+      name: 'fast',
+      return_messages: true,
+      messages: [
+        { role: 'system', content: 'system instruction' },
+        { role: 'user', name: 'caller-1', content: 'hello' },
+      ],
+    });
+
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const envelope = JSON.parse(res.content[0].text) as any;
+    expect(envelope.messages[0]).toMatchObject({
+      role: 'system',
+      name: LLM_PARTICIPANT_NAMES.host,
+    });
+    expect(envelope.messages[1]).toMatchObject({
+      role: 'user',
+      name: 'caller-1',
+    });
+    expect(envelope.messages[2]).toMatchObject({
+      role: 'assistant',
+      name: 'fast',
+    });
+  });
+
+  it('return_messages: true tags final assistant messages with the purpose name on purpose calls', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn().mockResolvedValue({ ...SAMPLE_RESULT, purposeName: 'general', fallbackPosition: 1 }),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const res = await handler({
+      resolver: 'purpose',
+      name: 'general',
+      return_messages: true,
+      messages: [{ role: 'user', content: 'hello' }],
+    });
+
+    expect(res.isError).toBeUndefined();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const envelope = JSON.parse(res.content[0].text) as any;
+    expect(envelope.messages.at(-1)).toMatchObject({
+      role: 'assistant',
+      name: 'general',
     });
   });
 

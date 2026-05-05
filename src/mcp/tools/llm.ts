@@ -21,6 +21,7 @@ import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
+import { LLM_PARTICIPANT_NAMES } from '../../constants/llm.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmCompletionResult } from '../../llm/client.js';
@@ -44,6 +45,59 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type TraceCumulative = NonNullable<CallModelMetadata['trace_cumulative']>;
+
+const toolCallSchema = z.object({
+  id: z.string(),
+  type: z.literal('function'),
+  function: z.object({
+    name: z.string(),
+    arguments: z.record(z.string(), z.unknown()),
+  }),
+});
+
+export const callModelMessageSchema = z.discriminatedUnion('role', [
+  z.object({
+    role: z.literal('system'),
+    content: z.string().optional(),
+    name: z.string().optional(),
+  }),
+  z.object({
+    role: z.literal('user'),
+    content: z.string().optional(),
+    name: z.string().optional(),
+  }),
+  z.object({
+    role: z.literal('assistant'),
+    content: z.string().nullable().optional(),
+    name: z.string().optional(),
+    tool_calls: z.array(toolCallSchema).optional(),
+  }),
+  z.object({
+    role: z.literal('tool'),
+    content: z.string().optional(),
+    tool_call_id: z.string(),
+    name: z.never().optional(),
+    tool_calls: z.never().optional(),
+  }),
+]);
+
+function findToolMessageWithName(messages: CallModelMessage[]): number | null {
+  const index = messages.findIndex((message) => message.role === 'tool' && message.name !== undefined);
+  return index === -1 ? null : index;
+}
+
+function buildReturnedMessages(messages: CallModelMessage[]): CallModelMessage[] {
+  return messages.map((message) => {
+    if (message.role === 'tool') {
+      const { name: _name, ...withoutName } = message;
+      return withoutName;
+    }
+    if ((message.role === 'user' || message.role === 'system') && message.name === undefined) {
+      return { ...message, name: LLM_PARTICIPANT_NAMES.host };
+    }
+    return message;
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // registerLlmTools — registers `call_model` unconditionally (TOOL-03).
@@ -74,22 +128,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           'Ignored for discovery resolvers (list_models/list_purposes/search).'
         ),
         messages: z
-          .array(
-            z.object({
-              role: z.enum(['system', 'user', 'assistant', 'tool']),
-              content: z.string().nullable().optional(),
-              name: z.string().optional(),
-              tool_call_id: z.string().optional(),
-              tool_calls: z.array(z.object({
-                id: z.string(),
-                type: z.literal('function'),
-                function: z.object({
-                  name: z.string(),
-                  arguments: z.record(z.string(), z.unknown()),
-                }),
-              })).optional(),
-            })
-          )
+          .array(callModelMessageSchema)
           .optional()
           .describe('OpenAI-style messages array. Required for resolver=model/purpose. Ignored for discovery resolvers.'),
         return_messages: z.boolean().optional().describe(
@@ -271,25 +310,46 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       // control-flow analysis after Step 1.1's exhaustive early returns for all
       // discovery resolver values. No cast needed.
       const resolvedResolver = params.resolver;
+      const messagesForRefs = params.messages ?? [];
+      const toolMessageWithName = findToolMessageWithName(messagesForRefs as CallModelMessage[]);
+      if (toolMessageWithName !== null) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: `role=tool messages cannot include name; use tool_call_id for tool identity (message index ${toolMessageWithName})`,
+            },
+          ],
+          isError: true,
+        };
+      }
 
       // Step 1.5: Reference resolution (REFS-01 through REFS-07)
-      // Scans message content for {{ref:...}} and {{id:...}} placeholders, resolves each
+      // Scans host-authored system/user message content for {{ref:...}} placeholders, resolves each
       // via resolveAndBuildDocument (reused from get_document), and replaces inline before
       // dispatching to the LLM. Fail-fast: if any reference fails, no LLM call is made.
       // No-op when no patterns present (REFS-07 backward compat).
       // Type narrowing: Step 1.2 guarantees messages is defined for model/purpose path.
-      const messagesForRefs = params.messages ?? [];
-      const hostReferenceMessages = messagesForRefs.map((message) => ({
-        ...message,
-        content: typeof message.content === 'string' ? message.content : '',
-      }));
-      const parsed = parseReferences(hostReferenceMessages);
+      const hostReferenceTargets = messagesForRefs
+        .map((message, originalIndex) => ({ message, originalIndex }))
+        .filter(({ message }) =>
+          (message.role === 'system' || message.role === 'user') &&
+          typeof message.content === 'string'
+        );
+      const parsed = parseReferences(hostReferenceTargets.map(({ message }) => ({
+        role: message.role,
+        content: message.content as string,
+      })));
       if ('error' in parsed) {
         // REFS-02: # and -> mutually exclusive — parse error → immediate fail (no LLM call)
         return {
           content: [{ type: 'text' as const, text: JSON.stringify({
             error: 'reference_resolution_failed',
-            failed_references: [{ ref: parsed.ref, reason: parsed.reason }],
+            failed_references: [{
+              ref: parsed.ref,
+              reason: 'invalid_reference_syntax',
+              detail: parsed.detail ?? parsed.reason,
+            }],
           }) }],
           isError: true,
         };
@@ -297,20 +357,28 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       let hydratedMessages: typeof messagesForRefs = messagesForRefs;
       let injectionMetadata: InjectionMetadata | undefined;
       if (parsed.length > 0) {
-        const resolved = await resolveReferences(parsed, config, supabaseManager, embeddingProvider, logger);
+        const parsedWithOriginalIndexes = parsed.map((ref) => ({
+          ...ref,
+          messageIndex: hostReferenceTargets[ref.messageIndex]?.originalIndex ?? ref.messageIndex,
+        }));
+        const resolved = await resolveReferences(parsedWithOriginalIndexes, config, supabaseManager, embeddingProvider, logger);
         const failures = resolved.filter((r): r is FailedRef => r.kind === 'failed');
         if (failures.length > 0) {
           // REFS-06: any failure → return reference_resolution_failed; NO LLM call made
           return {
             content: [{ type: 'text' as const, text: JSON.stringify({
               error: 'reference_resolution_failed',
-              failed_references: failures.map((f) => ({ ref: f.ref, reason: f.reason })),
+              failed_references: failures.map((f) => ({
+                ref: f.ref,
+                reason: f.reason,
+                detail: f.detail,
+              })),
             }) }],
             isError: true,
           };
         }
         const resolvedRefs = resolved as ResolvedRef[];
-        hydratedMessages = hydrateMessages(hostReferenceMessages, resolvedRefs) as typeof messagesForRefs;
+        hydratedMessages = hydrateMessages(messagesForRefs, resolvedRefs) as typeof messagesForRefs;
         injectionMetadata = {
           injectedReferences: buildInjectedReferences(resolvedRefs),
           promptChars: computePromptChars(hydratedMessages),
@@ -506,7 +574,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         response: result.text,
         messages: params.return_messages === true
           ? [
-              ...(hydratedMessages as CallModelMessage[]),
+              ...buildReturnedMessages(hydratedMessages as CallModelMessage[]),
               {
                 role: 'assistant',
                 content: result.text,
