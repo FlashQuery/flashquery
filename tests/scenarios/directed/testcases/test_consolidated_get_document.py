@@ -122,6 +122,7 @@ def _write_raw_vault_file(raw_vault: str, rel_path: str, content: str, ctx: Test
     with open(abs_path, "w", encoding="utf-8") as f:
         f.write(content)
     ctx.cleanup.track_file(rel_path)
+    ctx.cleanup.track_mcp_document(rel_path)
     parts = Path(rel_path).parts
     for i in range(1, len(parts)):
         ctx.cleanup.track_dir(str(Path(*parts[:i])))
