@@ -14,6 +14,10 @@ import { resolveAndBuildDocument, DocumentRequestError } from '../mcp/utils/docu
 import type { logger } from '../logging/logger.js';
 import type { supabaseManager } from '../storage/supabase.js';
 import type { embeddingProvider } from '../embedding/provider.js';
+import {
+  isReferenceFailureReason,
+  type ReferenceFailureReason,
+} from '../constants/reference-failures.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Exported types
@@ -22,17 +26,22 @@ import type { embeddingProvider } from '../embedding/provider.js';
 export interface ParsedRef {
   placeholder: string;       // full match WITH delimiters: "{{ref:Research/doc.md#Open Questions}}"
   ref: string;               // WITH delimiters (identical to placeholder): "{{ref:Research/doc.md#Open Questions}}"
-  identifierType: 'ref' | 'id';
+  identifierType: 'ref';
   identifier: string;        // path or uuid — everything before # or -> (or end)
+  alias?: string;
   section?: string;          // present only when # operator used
   pointer?: string;          // present only when -> operator used
   messageIndex: number;      // 0-based index of source message in the messages array
+  start?: number;
+  end?: number;
+  literalPrefix?: string;
 }
 
 export interface ParseRefError {
   error: 'invalid_reference_syntax';
   ref: string;     // WITH {{ }} delimiters: "{{ref:doc.md#Sec->pointer}}"
   reason: string;  // exact string: "invalid reference syntax: # and -> are mutually exclusive"
+  detail?: string;
 }
 
 export interface ResolvedRef {
@@ -41,18 +50,23 @@ export interface ResolvedRef {
   ref: string;               // WITH delimiters (for injected_references[].ref): "{{ref:Research/doc.md#Open Questions}}"
   content: string;           // body text to inject (may be empty string)
   chars: number;             // content.length
+  identifier?: string;
   resolvedTo?: string;       // target vault-relative path; ONLY for -> dereferences
   messageIndex: number;      // 0-based index for hydrateMessages filtering
+  start?: number;
+  end?: number;
+  literalPrefix?: string;
 }
 
 export interface FailedRef {
   kind: 'failed';            // discriminant — enables reliable type guard without duck-typing
   ref: string;               // WITH delimiters (for failed_references[].ref): "{{ref:missing.md}}"
-  reason: string;            // human-readable error from resolveAndBuildDocument
+  reason: ReferenceFailureReason;
+  detail: string;
 }
 
 export interface InjectionMetadata {
-  injectedReferences: Array<{ ref: string; chars: number; resolved_to?: string }>;
+  injectedReferences: Array<{ ref: string; chars: number; identifier?: string; resolved_to?: string }>;
   promptChars: number;
 }
 
@@ -61,14 +75,11 @@ export interface InjectionMetadata {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Scan all message content strings for {{ref:...}} and {{id:...}} placeholders.
+ * Scan all message content strings for active {{ref:...}} placeholders.
  *
  * Returns a flat ParsedRef[] (one entry per match, duplicates preserved).
- * Returns ParseRefError immediately when a placeholder contains both # and -> (REFS-02).
+ * Returns ParseRefError immediately when active placeholder grammar is invalid.
  * Returns empty array when no patterns are found (REFS-07 enabling no-op).
- *
- * CRITICAL: The regex is created INSIDE this function body (not at module scope)
- * to prevent /g lastIndex state from leaking between calls (RESEARCH.md Pitfall 4).
  */
 export function parseReferences(
   messages: Array<{ role: string; content: string }>
@@ -76,49 +87,134 @@ export function parseReferences(
   const results: ParsedRef[] = [];
   for (let msgIdx = 0; msgIdx < messages.length; msgIdx++) {
     const content = messages[msgIdx].content;
-    // Regex created fresh per-call to prevent lastIndex state leak (Pitfall 4)
-    const REFERENCE_RE = /\{\{(ref|id):([^}]*?)\}\}/g;
-    for (const match of content.matchAll(REFERENCE_RE)) {
-      const placeholder = match[0];
-      const identifierType = match[1] as 'ref' | 'id';
-      const inner = match[2];
-      const ref = placeholder; // WITH {{...}} delimiters, identical to placeholder
-      const arrowIdx = inner.indexOf('->');
-      const hashIdx = inner.indexOf('#');
-      // REFS-02: # and -> are mutually exclusive in one placeholder
-      if (arrowIdx !== -1 && hashIdx !== -1) {
-        return {
-          error: 'invalid_reference_syntax',
-          ref: placeholder, // WITH {{...}} delimiters
-          reason: 'invalid reference syntax: # and -> are mutually exclusive',
-        };
-      }
-      let identifier: string;
-      let section: string | undefined;
-      let pointer: string | undefined;
-      if (arrowIdx !== -1) {
-        identifier = inner.slice(0, arrowIdx);
-        pointer = inner.slice(arrowIdx + 2);
-      } else if (hashIdx !== -1) {
-        identifier = inner.slice(0, hashIdx);
-        section = inner.slice(hashIdx + 1);
-      } else {
-        identifier = inner;
-      }
-      // REFS-08: empty identifier ({{ref:}} or {{id:}}) is semantically invalid —
-      // reject immediately at parse time with a clear error rather than letting an
-      // empty string propagate to resolveAndBuildDocument and produce an opaque failure.
-      if (!identifier) {
-        return {
-          error: 'invalid_reference_syntax' as const,
-          ref: placeholder,
-          reason: 'identifier is empty',
-        };
-      }
-      results.push({ placeholder, ref, identifierType, identifier, section, pointer, messageIndex: msgIdx });
+    for (const span of scanReferenceSpans(content)) {
+      if (span.kind === 'escaped') continue;
+      const parsed = parseActiveSpan(span, msgIdx);
+      if ('error' in parsed) return parsed;
+      results.push(parsed);
     }
   }
   return results;
+}
+
+interface ReferenceSpan {
+  kind: 'active' | 'escaped';
+  placeholder: string;
+  inner: string;
+  start: number;
+  openerStart: number;
+  end: number;
+  literalPrefix: string;
+}
+
+function scanReferenceSpans(content: string): ReferenceSpan[] {
+  const spans: ReferenceSpan[] = [];
+  let searchFrom = 0;
+  while (searchFrom < content.length) {
+    const openerStart = content.indexOf('{{ref:', searchFrom);
+    if (openerStart === -1) break;
+
+    let slashStart = openerStart;
+    while (slashStart > 0 && content[slashStart - 1] === '\\') {
+      slashStart--;
+    }
+    const slashCount = openerStart - slashStart;
+    const close = content.indexOf('}}', openerStart + 6);
+    if (close === -1) {
+      searchFrom = openerStart + 6;
+      continue;
+    }
+
+    const placeholder = content.slice(openerStart, close + 2);
+    const inner = content.slice(openerStart + 6, close);
+    if (inner.includes('{{')) {
+      searchFrom = close + 2;
+      continue;
+    }
+    const isEscaped = slashCount % 2 === 1;
+    spans.push({
+      kind: isEscaped ? 'escaped' : 'active',
+      placeholder,
+      inner,
+      start: slashStart,
+      openerStart,
+      end: close + 2,
+      literalPrefix: '\\'.repeat(isEscaped ? Math.floor(slashCount / 2) : slashCount / 2),
+    });
+    searchFrom = close + 2;
+  }
+  return spans;
+}
+
+function parseActiveSpan(span: ReferenceSpan, messageIndex: number): ParsedRef | ParseRefError {
+  const placeholder = span.placeholder;
+  const inner = span.inner;
+
+  const invalid = (detail: string): ParseRefError => ({
+    error: 'invalid_reference_syntax',
+    ref: placeholder,
+    reason: detail === '# and -> are mutually exclusive'
+      ? 'invalid reference syntax: # and -> are mutually exclusive'
+      : detail,
+    detail,
+  });
+
+  if (inner.startsWith('@')) {
+    const alias = inner.slice(1);
+    if (!alias) return invalid('alias key is empty');
+    if (alias.includes('#')) return invalid('alias references cannot use #');
+    if (alias.includes('->')) return invalid('alias references cannot use ->');
+    return {
+      placeholder,
+      ref: placeholder,
+      identifierType: 'ref',
+      identifier: alias,
+      alias,
+      messageIndex,
+      start: span.start,
+      end: span.end,
+      literalPrefix: span.literalPrefix,
+    };
+  }
+
+  const arrowIdx = inner.indexOf('->');
+  const hashIdx = inner.indexOf('#');
+  if (arrowIdx !== -1 && hashIdx !== -1) {
+    return invalid('# and -> are mutually exclusive');
+  }
+  if (inner.includes(' #') || inner.includes('# ')) {
+    return invalid('whitespace around # is not permitted');
+  }
+  if (inner.includes(' ->') || inner.includes('-> ')) {
+    return invalid('whitespace around -> is not permitted');
+  }
+
+  let identifier = inner;
+  let section: string | undefined;
+  let pointer: string | undefined;
+  if (arrowIdx !== -1) {
+    identifier = inner.slice(0, arrowIdx);
+    pointer = inner.slice(arrowIdx + 2);
+    if (!pointer) return invalid('pointer is empty');
+  } else if (hashIdx !== -1) {
+    identifier = inner.slice(0, hashIdx);
+    section = inner.slice(hashIdx + 1);
+    if (!section) return invalid('section is empty');
+  }
+  if (!identifier) return invalid('identifier is empty');
+
+  return {
+    placeholder,
+    ref: placeholder,
+    identifierType: 'ref',
+    identifier,
+    section,
+    pointer,
+    messageIndex,
+    start: span.start,
+    end: span.end,
+    literalPrefix: span.literalPrefix,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -168,24 +264,59 @@ export async function resolveReferences(
         ref: p.ref,
         content,
         chars: content.length,
+        identifier: p.identifier,
         messageIndex: p.messageIndex,
+        start: p.start,
+        end: p.end,
+        literalPrefix: p.literalPrefix,
       };
       if (resolvedTo !== undefined) {
         out.resolvedTo = resolvedTo;
       }
       return out;
     } catch (err) {
-      let reason: string;
-      if (err instanceof DocumentRequestError) {
-        reason = (err.envelope.message as string | undefined) ?? err.message;
-      } else if (err instanceof Error) {
-        reason = err.message;
-      } else {
-        reason = String(err);
-      }
-      return { kind: 'failed' as const, ref: p.ref, reason };
+      const mapped = mapReferenceFailure(err, p.ref, log);
+      return { kind: 'failed' as const, ref: p.ref, reason: mapped.reason, detail: mapped.detail };
     }
   }));
+}
+
+function mapReferenceFailure(
+  err: unknown,
+  ref: string,
+  log: typeof logger
+): { reason: ReferenceFailureReason; detail: string } {
+  const fallbackDetail = err instanceof Error ? err.message : String(err);
+  if (err instanceof DocumentRequestError) {
+    const envelopeError = typeof err.envelope.error === 'string' ? err.envelope.error : '';
+    const detail = (err.envelope.message as string | undefined) ?? fallbackDetail;
+    const mapped: Record<string, ReferenceFailureReason> = {
+      follow_ref_path_not_found: 'reference_path_not_found',
+      follow_ref_invalid_type: 'reference_path_not_string',
+      follow_ref_target_not_found: 'pointer_target_not_found',
+      section_not_found: 'section_not_found',
+      occurrence_out_of_range: 'occurrence_out_of_range',
+    };
+    if (envelopeError in mapped) {
+      return { reason: mapped[envelopeError], detail };
+    }
+    if (isReferenceFailureReason(envelopeError)) {
+      return { reason: envelopeError, detail };
+    }
+  }
+
+  if (/Ambiguous filename/.test(fallbackDetail) && /Use a vault-relative path or fq_id/.test(fallbackDetail)) {
+    return { reason: 'ambiguous_document_identifier', detail: fallbackDetail };
+  }
+  if (/Document not found|no document with id/i.test(fallbackDetail)) {
+    return { reason: 'document_not_found', detail: fallbackDetail };
+  }
+  if (/ENOENT|EACCES|read/i.test(fallbackDetail)) {
+    return { reason: 'read_error', detail: fallbackDetail };
+  }
+
+  log.warn(`reference_failure_unclassified ref=${ref} detail=${fallbackDetail}`);
+  return { reason: 'unknown_reference_error', detail: fallbackDetail };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -216,22 +347,33 @@ export function hydrateMessages(
   }
   return messages.map((msg, idx) => {
     const refs = byMsgIdx.get(idx);
-    if (!refs || refs.length === 0) {
-      return { ...msg }; // shallow copy — never return same reference
-    }
-    // Locate each placeholder's position in the ORIGINAL content before any replacement.
-    // For duplicate placeholders, track a search cursor per placeholder so each
-    // occurrence maps to its own ResolvedRef (left-to-right order).
     const original = msg.content;
-    const cursors = new Map<string, number>(); // placeholder -> next search start
     const replacements: Array<{ start: number; end: number; content: string }> = [];
-    for (const r of refs) {
-      const cursor = cursors.get(r.placeholder) ?? 0;
-      const i = original.indexOf(r.placeholder, cursor);
+    for (const r of refs ?? []) {
+      if (r.start !== undefined && r.end !== undefined) {
+        replacements.push({
+          start: r.start,
+          end: r.end,
+          content: `${r.literalPrefix ?? ''}${r.content}`,
+        });
+        continue;
+      }
+      const i = findNextPlaceholder(original, replacements, r.ref);
       if (i !== -1) {
         replacements.push({ start: i, end: i + r.placeholder.length, content: r.content });
-        cursors.set(r.placeholder, i + r.placeholder.length);
       }
+    }
+    for (const span of scanReferenceSpans(original)) {
+      if (span.kind === 'escaped') {
+        replacements.push({
+          start: span.start,
+          end: span.end,
+          content: `${span.literalPrefix}${span.placeholder}`,
+        });
+      }
+    }
+    if (replacements.length === 0) {
+      return { ...msg }; // shallow copy — never return same reference
     }
     // Sort right-to-left so applying by position doesn't shift earlier indices
     replacements.sort((a, b) => b.start - a.start);
@@ -241,6 +383,22 @@ export function hydrateMessages(
     }
     return { ...msg, content };
   });
+}
+
+function findNextPlaceholder(
+  original: string,
+  replacements: Array<{ start: number; end: number; content: string }>,
+  placeholder: string
+): number {
+  let cursor = 0;
+  while (cursor < original.length) {
+    const i = original.indexOf(placeholder, cursor);
+    if (i === -1) return -1;
+    const occupied = replacements.some((r) => i >= r.start && i < r.end);
+    if (!occupied) return i;
+    cursor = i + placeholder.length;
+  }
+  return -1;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -256,12 +414,15 @@ export function hydrateMessages(
  */
 export function buildInjectedReferences(
   resolved: ResolvedRef[]
-): Array<{ ref: string; chars: number; resolved_to?: string }> {
+): Array<{ ref: string; chars: number; identifier?: string; resolved_to?: string }> {
   return resolved.map((r) => {
-    const entry: { ref: string; chars: number; resolved_to?: string } = {
+    const entry: { ref: string; chars: number; identifier?: string; resolved_to?: string } = {
       ref: r.ref,
       chars: r.chars,
     };
+    if (r.identifier !== undefined) {
+      entry.identifier = r.identifier;
+    }
     if (r.resolvedTo !== undefined) {
       entry.resolved_to = r.resolvedTo;
     }

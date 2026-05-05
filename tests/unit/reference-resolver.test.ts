@@ -104,43 +104,28 @@ describe('parseReferences (REFS-01, REFS-02, REFS-07)', () => {
     expect(refs[0].section).toBeUndefined();
   });
 
-  it('[U-RR-04] detects {{id:uuid}} — full body by id', () => {
+  it('[U-RR-04] treats active legacy {{id:uuid}} as literal text', () => {
     const result = parseReferences([
       { role: 'user', content: 'Doc: {{id:550e8400-e29b-41d4-a716-446655440000}}' },
     ]);
     expect(Array.isArray(result)).toBe(true);
-    const refs = result as ParsedRef[];
-    expect(refs).toHaveLength(1);
-    expect(refs[0].ref).toBe('{{id:550e8400-e29b-41d4-a716-446655440000}}');
-    expect(refs[0].identifierType).toBe('id');
-    expect(refs[0].identifier).toBe('550e8400-e29b-41d4-a716-446655440000');
-    expect(refs[0].section).toBeUndefined();
-    expect(refs[0].pointer).toBeUndefined();
+    expect(result).toEqual([]);
   });
 
-  it('[U-RR-05] detects {{id:uuid#Section}} — section by id', () => {
+  it('[U-RR-05] treats active legacy {{id:uuid#Section}} as literal text', () => {
     const result = parseReferences([
       { role: 'user', content: '{{id:550e8400-e29b-41d4-a716-446655440000#Conclusions}}' },
     ]);
     expect(Array.isArray(result)).toBe(true);
-    const refs = result as ParsedRef[];
-    expect(refs).toHaveLength(1);
-    expect(refs[0].ref).toBe('{{id:550e8400-e29b-41d4-a716-446655440000#Conclusions}}');
-    expect(refs[0].identifierType).toBe('id');
-    expect(refs[0].section).toBe('Conclusions');
+    expect(result).toEqual([]);
   });
 
-  it('[U-RR-06] detects {{id:uuid->pointer}} — dereference by id', () => {
+  it('[U-RR-06] treats active legacy {{id:uuid->pointer}} as literal text', () => {
     const result = parseReferences([
       { role: 'user', content: '{{id:abc-uuid->next.ref}}' },
     ]);
     expect(Array.isArray(result)).toBe(true);
-    const refs = result as ParsedRef[];
-    expect(refs).toHaveLength(1);
-    expect(refs[0].ref).toBe('{{id:abc-uuid->next.ref}}');
-    expect(refs[0].identifierType).toBe('id');
-    expect(refs[0].identifier).toBe('abc-uuid');
-    expect(refs[0].pointer).toBe('next.ref');
+    expect(result).toEqual([]);
   });
 
   it('[U-RR-07] returns ParseRefError when # and -> both present (REFS-02)', () => {
@@ -205,16 +190,12 @@ describe('parseReferences (REFS-01, REFS-02, REFS-07)', () => {
     expect(err.ref).toBe('{{ref:}}');
   });
 
-  it('[U-RR-08c] rejects {{id:}} with empty identifier (REFS-08) (Phase 3 Gap 8)', () => {
-    // Companion to U-RR-08b: same rule for the `id:` form.
+  it('[U-RR-08c] treats active legacy {{id:}} with empty identifier as literal text', () => {
     const result = parseReferences([
       { role: 'user', content: 'See {{id:}} for nothing.' },
     ]);
-    expect(Array.isArray(result)).toBe(false);
-    const err = result as ParseRefError;
-    expect(err.error).toBe('invalid_reference_syntax');
-    expect(err.reason).toContain('empty');
-    expect(err.ref).toBe('{{id:}}');
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toEqual([]);
   });
 });
 
@@ -579,7 +560,8 @@ describe('resolveReferences (resolution + error mapping)', () => {
     expect('reason' in failed).toBe(true);
     const f = failed as FailedRef;
     expect(f.ref).toBe('{{ref:doc.md#Open Questions}}');
-    expect(f.reason).toBe("No heading matching 'Open Questions' found in document");
+    expect(f.reason).toBe('section_not_found');
+    expect(f.detail).toBe("No heading matching 'Open Questions' found in document");
   });
 
   it('[U-RR-18] returns FailedRef on generic Error (document not found)', async () => {
@@ -602,7 +584,8 @@ describe('resolveReferences (resolution + error mapping)', () => {
     const f = out[0] as FailedRef;
     expect('reason' in f).toBe(true);
     expect(f.ref).toBe('{{ref:missing/ghost.md}}');
-    expect(f.reason).toBe('Document not found: missing/ghost.md');
+    expect(f.reason).toBe('document_not_found');
+    expect(f.detail).toBe('Document not found: missing/ghost.md');
   });
 
   it('[U-RR-19] aggregates multiple failures — both refs appear in failed[] (Phase 3 Gap 1, OQ #7)', async () => {
@@ -649,9 +632,11 @@ describe('resolveReferences (resolution + error mapping)', () => {
     // Positional correspondence: the first failure pairs with the first
     // input ref, etc.
     expect(failed[0].ref).toBe('{{ref:missing/a.md}}');
-    expect(failed[0].reason).toBe('Document not found: missing/a.md');
+    expect(failed[0].reason).toBe('document_not_found');
+    expect(failed[0].detail).toBe('Document not found: missing/a.md');
     expect(failed[1].ref).toBe('{{ref:b.md#Ghost}}');
-    expect(failed[1].reason).toBe("No heading matching 'Ghost' found in document");
+    expect(failed[1].reason).toBe('section_not_found');
+    expect(failed[1].detail).toBe("No heading matching 'Ghost' found in document");
   });
 
   it.each([

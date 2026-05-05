@@ -47,7 +47,7 @@ export interface CallModelMetadata {
   latency_ms: number;
   trace_id?: string;
   trace_cumulative?: TraceCumulative;
-  injected_references?: Array<{ ref: string; chars: number; resolved_to?: string }>;
+  injected_references?: Array<{ ref: string; chars: number; identifier?: string; resolved_to?: string }>;
   prompt_chars?: number;
 }
 
