@@ -60,6 +60,13 @@ steps:
       expect_contains: '"trace_cumulative"'
       expect_not_contains: '"total_calls":1,'
 
+  - label: "Wait for second call's fire-and-forget usage row to commit"
+    # recordLlmUsage is intentionally fire-and-forget (D-08/D-09). On local
+    # Supabase the insert completes in ~1ms — fast enough that the query below
+    # races with the write when there is no delay. 250ms is well above the
+    # local insert latency and well below any CI timeout budget.
+    sleep: 0.25
+
   - label: "get_llm_usage summary filtered by trace_id (period='all') — both {{ref}} calls visible (total_calls=2)"
     # Closes IL-21's read-side loop: the rows written by {{ref}} calls
     # must be discoverable via get_llm_usage. period='all' sidesteps the
