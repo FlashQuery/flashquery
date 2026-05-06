@@ -171,6 +171,9 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 | IL-25  | SUPERSEDED for ATL v1: mixed {{ref:path}} + {{id:<uuid>}} no longer resolves both placeholders; {{id:...}} is literal text and only active {{ref:...}} participates in hydration/metadata | test_call_model_reference_system_core | 2026-05-05   | 2026-05-05   |
 | IL-26  | ATL-DS-01 exact `call_model` `return_messages` envelope assertions (default `messages: []`, hydrated returned inputs, final assistant message, discovery raw shape) are covered by directed Python because the YAML runner only supports substring assertions against `content[0].text`, not exact parsed JSON envelope checks | test_call_model_return_messages.py | 2026-05-05   |              |
 | IL-27  | ATL-I-04 reference resolver integration proves real vault path, fq_id, section, pointer resolved_to, ambiguity guidance, metadata chars, and non-recursive injected content using Supabase-backed document rows | reference-resolver.integration.test.ts | 2026-05-05   | 2026-05-05   |
+| IL-28  | TMPL-01 and TMPL-03: `reference-resolver.integration.test.ts` proves real-vault `fq_template: true` rendering, plain-document ignored params, and document-param resolution/failure through Supabase-backed document rows | reference-resolver.integration.test.ts | 2026-05-06   | 2026-05-06   |
+| IL-29  | TMPL-02 and TMPL-05: `reference-resolver.integration.test.ts` proves alias `_template` reuse and `_items` ordered list injection with `_separator`, `resolved_to_count`, and item metadata | reference-resolver.integration.test.ts | 2026-05-06   | 2026-05-06   |
+| IL-30  | VAL-114: Phase 114 full gate includes build, focused unit tests, Supabase-backed reference resolver integration, and managed directed scenario `test_call_model_template_parameterization` | reference-resolver.integration.test.ts; test_call_model_template_parameterization | 2026-05-06   | 2026-05-06   |
 
 ---
 

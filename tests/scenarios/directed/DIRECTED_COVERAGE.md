@@ -670,6 +670,17 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-78 | Host-only safety: assistant and tool messages containing {{ref:...}} are treated as ordinary data and are not scanned, hydrated, or added to injected_references metadata | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
 | L-79 | Typed reference failures return reference_resolution_failed with stable failed_references[].reason and detail for invalid syntax, ambiguous identifiers, and missing pointer paths before LLM dispatch | test_call_model_reference_system_core | 2026-05-05 | 2026-05-05 |
 
+### 15.11 `call_model` — Template Parameterization
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-71 | TMPL-01: `call_model.template_params` renders a path-keyed document with `fq_template: true` through public `call_model`, while a plain document ignores supplied template params and remains a plain reference | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
+| L-72 | TMPL-02: `call_model.template_params` alias entries with `_template` render the same template multiple times with distinct parameter values and template metadata | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
+| L-80 | TMPL-03: Template `string` and `document` params validate required values and document identifiers, returning typed `template_missing_required_param` and `template_param_doc_not_found` failures before provider dispatch | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
+| L-81 | TMPL-04: Template substitution is deterministic and non-recursive; substituted values containing `{{ref:...}}` remain literal and do not add recursive metadata or failures | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
+| L-82 | TMPL-05: Alias `_items` injects an ordered list of document/template items with `_separator`, `resolved_to_count`, and ordered `items` metadata | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
+| L-83 | VAL-114: Managed public scenario gate `test_call_model_template_parameterization` validates path-keyed templates, alias templates, `_items`, typed failures, plain-doc bypass, and non-recursive substitution | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
+
 ---
 
 ## Coverage Summary

@@ -95,7 +95,7 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 
 - [x] **Phase 112: Chat Primitive & Envelope Migration** - Provider-normalized `chat()` primitive, text wrapper compatibility, `return_messages`, round-trippable message shape, provider response normalization, and runnable validation (CHAT-01 through CHAT-06, VAL-112, TEST-01 through TEST-03) — Complete 2026-05-05
 - [x] **Phase 113: Document Reference System Core** - Reference grammar, span scanner, escape parity, identifier ambiguity, typed failure taxonomy, non-recursive hydration, and runnable validation (REF-01 through REF-08, VAL-113) — Complete 2026-05-05
-- [ ] **Phase 114: Template Parameterization** - Template detection, `template_params`, alias entries, document parameters, placeholder substitution, `_items` list injection, and runnable validation (TMPL-01 through TMPL-05, VAL-114)
+- [x] **Phase 114: Template Parameterization** - Template detection, `template_params`, alias entries, document parameters, placeholder substitution, `_items` list injection, and runnable validation (TMPL-01 through TMPL-05, VAL-114) — Complete 2026-05-06
 - [ ] **Phase 115: Purpose Config, Bindings & Capabilities** - Purpose orchestration fields, loop defaults validation, `fqc_purpose_templates`, generic config sync, structured model capabilities, Mode 2 admission, and runnable validation (BIND-01 through BIND-05, CAP-01 through CAP-05, VAL-115)
 - [ ] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions, and runnable validation (TOOL-01 through TOOL-04, VAL-116)
 - [ ] **Phase 117: Agent Loop Executor** - Mode 2 loop orchestration, internal native dispatch, parallel tool calls, guardrails, fallback, aggregate usage writes, calls log metadata, and runnable validation (LOOP-01 through LOOP-07, TOOL-05, TOOL-06, VAL-117)
@@ -103,7 +103,7 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 - [ ] **Phase 119: Discovery Diagnostics & Help Resolver** - Extended `list_purposes`, structured capability diagnostics in `list_models`, discovery `search`, v1 `help` resolver, and runnable validation (DISC-01 through DISC-04, VAL-119)
 - [ ] **Phase 120: Cross-Phase ATL Validation & Coverage Closure** - End-to-end workflow suites, YAML integration closure, scenario matrix updates, and final coverage audit (VAL-120, TEST-04)
 
-**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (52 requirements pending).
+**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (20/62 requirements complete).
 
 </details>
 
@@ -160,7 +160,7 @@ Plans:
   4. Placeholder substitution is single-pass, deterministic, and non-recursive even when substituted values contain reference-looking strings.
   5. `_items` alias lists inject an ordered sequence of documents/templates with separator support and correct metadata.
   6. Phase-specific runnable tests exist and pass for template validation, substitution, document parameters, aliases, `_items`, and public parameterized-template behavior.
-**Plans**: 5 plans
+**Plans:** 5 plans
 Plans:
 **Wave 1**
 - [x] 114-01-PLAN.md — Unit contracts for template resolver and call_model wiring
@@ -175,7 +175,7 @@ Plans:
 - [x] 114-04-PLAN.md — Supabase-backed resolver integration validation
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 114-05-PLAN.md — Managed directed scenario, coverage traceability, and docs review
+- [x] 114-05-PLAN.md — Managed directed scenario, coverage traceability, and docs review
 **UI hint**: no
 
 ### Phase 115: Purpose Config, Bindings & Capabilities
