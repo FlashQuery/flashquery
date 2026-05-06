@@ -2533,6 +2533,26 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
     expect(runtimeBindingInMock).not.toHaveBeenCalled();
   });
 
+  it('unknown purpose returns the documented not-found error before runtime template binding lookup', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+    runtimeBindingInMock.mockRejectedValueOnce(new Error('runtime table unavailable'));
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'missing-purpose',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe("Purpose 'missing-purpose' not found. Available purposes: general");
+    expect(runtimeBindingInMock).not.toHaveBeenCalled();
+  });
+
   it('purpose calls with template-only tools enter Mode 2 via hasModelVisibleTools and preserve template calls_log kind', async () => {
     expect(hasModelVisibleTools({
       nativeToolNames: [],

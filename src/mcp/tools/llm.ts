@@ -639,8 +639,18 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       let toolRegistry: ToolRegistryAssembly | undefined;
       let purposeProviderParameters = params.parameters;
       let purposeDefaults: Record<string, unknown> = {};
-      let runtimeTemplateBindings: RuntimeTemplateBinding[] = [];
+
       if (resolvedResolver === 'purpose') {
+        const normalizedPurposeName = resolvedName.toLowerCase();
+        const purpose = config.llm?.purposes.find((p) => p.name.toLowerCase() === normalizedPurposeName);
+        if (purpose === undefined) {
+          const availableNames = config.llm?.purposes.map((p) => p.name).join(', ') ?? 'none';
+          return {
+            content: [{ type: 'text' as const, text: `Purpose '${resolvedName}' not found. Available purposes: ${availableNames}` }],
+            isError: true,
+          };
+        }
+        purposeDefaults = purpose?.defaults ?? {};
         const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
         if (!runtimeTemplateBindingsResult.ok) {
           return {
@@ -648,13 +658,6 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             isError: true,
           };
         }
-        runtimeTemplateBindings = runtimeTemplateBindingsResult.bindings;
-      }
-
-      if (resolvedResolver === 'purpose') {
-        const normalizedPurposeName = resolvedName.toLowerCase();
-        const purpose = config.llm?.purposes.find((p) => p.name.toLowerCase() === normalizedPurposeName);
-        purposeDefaults = purpose?.defaults ?? {};
         for (const modelName of purpose?.models ?? []) {
           const capabilityCheck = assertResponseFormatAllowedWithTools(
             config,
@@ -686,7 +689,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           const templateRegistry = await assembleTemplateToolRegistry({
             config,
             purposeName: normalizedPurposeName,
-            runtimeBindings: runtimeTemplateBindings,
+            runtimeBindings: runtimeTemplateBindingsResult.bindings,
             nativeToolNames: nativeRegistry.nativeToolNames,
             strictTools: capabilities.strict_tools === true,
           });
