@@ -1129,8 +1129,14 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     const metadata = buildInjectedReferences([resolved]) as Array<Record<string, unknown>>;
     expect(metadata[0].resolved_to_count).toBe(2);
     expect(metadata[0].items).toEqual([
-      { resolved_to: 'Research/a.md', chars: 5 },
-      { resolved_to: 'Templates/context.md', chars: 16 },
+      { ref: 'Research/a.md', resolved_to: 'Research/a.md', chars: 5 },
+      {
+        ref: 'Templates/context.md',
+        resolved_to: 'Templates/context.md',
+        chars: 16,
+        template: true,
+        template_path: 'Templates/context.md',
+      },
     ]);
     expect(metadata[0].template_params_used).not.toHaveProperty('_items');
     expect(metadata[0].template_params_used).not.toHaveProperty('_separator');

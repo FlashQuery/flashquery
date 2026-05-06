@@ -459,6 +459,18 @@ async function resolveAliasReference(
     };
   }
 
+  if (
+    Object.prototype.hasOwnProperty.call(entry, '_items') &&
+    Object.prototype.hasOwnProperty.call(entry, '_template')
+  ) {
+    return {
+      kind: 'failed',
+      ref: p.ref,
+      reason: 'multi_ref_invalid_value',
+      detail: `Alias '${alias}' cannot specify both _items and _template`,
+    };
+  }
+
   if (Object.prototype.hasOwnProperty.call(entry, '_items')) {
     return await resolveAliasItems(p, alias, entry, config, sm, ep, log);
   }
@@ -541,16 +553,29 @@ async function resolveAliasItems(
       detail: `Alias '${alias}' _items must be an array`,
     };
   }
-  const separator = typeof entry._separator === 'string' ? entry._separator : '\n\n';
+  const separator = typeof entry._separator === 'string' ? entry._separator : '';
   const contents: string[] = [];
   const items: NonNullable<ResolvedRef['items']> = [];
   for (let index = 0; index < rawItems.length; index++) {
     const item = rawItems[index];
     try {
       if (typeof item === 'string') {
-        const result = await resolvePlainDocumentContent(item, config, sm, ep, log);
+        const result = await resolveItemStringContent(item, config, sm, ep, log);
         contents.push(result.content);
-        items.push({ resolved_to: result.path, chars: result.content.length });
+        const metadata: NonNullable<ResolvedRef['items']>[number] = {
+          ref: item,
+          chars: result.content.length,
+        };
+        if (result.path !== undefined) {
+          metadata.resolved_to = result.path;
+        }
+        if (result.template === true) {
+          metadata.template = true;
+        }
+        if (result.templatePath !== undefined) {
+          metadata.template_path = result.templatePath;
+        }
+        items.push(metadata);
         continue;
       }
       if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
@@ -562,12 +587,24 @@ async function resolveAliasItems(
         const result = await resolveTemplateSource(templateIdentifier, config, sm, ep, log);
         const body = (result.body as string | undefined) ?? '';
         const templatePath = typeof result.path === 'string' ? result.path : templateIdentifier;
-        const rendered = await renderTemplateReference(body, result, itemEntry, config, sm, ep, log);
-        contents.push(rendered.content);
-        items.push({
-          resolved_to: templatePath,
-          chars: rendered.content.length,
-        });
+        if (isTemplateDocument(result)) {
+          const rendered = await renderTemplateReference(body, result, itemEntry, config, sm, ep, log);
+          contents.push(rendered.content);
+          items.push({
+            ref: templateIdentifier,
+            resolved_to: templatePath,
+            chars: rendered.content.length,
+            template: true,
+            template_path: templatePath,
+          });
+        } else {
+          contents.push(body);
+          items.push({
+            ref: templateIdentifier,
+            resolved_to: templatePath,
+            chars: body.length,
+          });
+        }
         continue;
       }
       throw new TemplateReferenceError('multi_ref_invalid_value', `Alias '${alias}' item ${index} must be a string or template object`);
@@ -580,7 +617,7 @@ async function resolveAliasItems(
         kind: 'failed',
         ref: p.ref,
         reason: 'multi_ref_item_failed',
-        detail: `Alias '${alias}' item ${index} failed with ${reason}: ${detail}`,
+        detail: `alias=${alias} index=${index} item ${index} failed with ${reason}: ${detail}`,
       };
     }
   }
@@ -645,6 +682,79 @@ async function resolvePlainDocumentContent(
   return {
     content: (result.body as string | undefined) ?? '',
     path: typeof result.path === 'string' ? result.path : identifier,
+  };
+}
+
+async function resolveItemStringContent(
+  item: string,
+  config: FlashQueryConfig,
+  sm: typeof supabaseManager,
+  ep: typeof embeddingProvider,
+  log: typeof logger
+): Promise<{ content: string; path?: string; template?: boolean; templatePath?: string }> {
+  const parsed = parseNonAliasItemReference(item);
+  const result = await resolveAndBuildDocument(
+    parsed.identifier,
+    {
+      effectiveInclude: parsed.pointer ? ['body'] : ['body', 'frontmatter'],
+      sectionsList: parsed.section ? [parsed.section] : [],
+      effectiveIncludeNested: true,
+      occurrence: 1,
+      effectiveMaxDepth: 6,
+      followRef: parsed.pointer,
+    },
+    { config, supabaseManager: sm, embeddingProvider: ep, logger: log }
+  );
+
+  if (parsed.pointer) {
+    const followedRef = result.followed_ref as Record<string, unknown> | undefined;
+    return {
+      content: (followedRef?.body as string | undefined) ?? '',
+      path: (followedRef?.resolved_to as string | undefined) ?? (typeof result.path === 'string' ? result.path : parsed.identifier),
+    };
+  }
+
+  const body = (result.body as string | undefined) ?? '';
+  const resultPath = typeof result.path === 'string' ? result.path : parsed.identifier;
+  if (isTemplateDocument(result)) {
+    const rendered = await renderTemplateReference(body, result, {}, config, sm, ep, log);
+    return {
+      content: rendered.content,
+      path: resultPath,
+      template: true,
+      templatePath: resultPath,
+    };
+  }
+
+  return {
+    content: body,
+    path: resultPath,
+  };
+}
+
+function parseNonAliasItemReference(item: string): Pick<ParsedRef, 'identifier' | 'section' | 'pointer'> {
+  const parsed = parseActiveSpan(
+    {
+      kind: 'active',
+      placeholder: `{{ref:${item}}}`,
+      inner: item,
+      start: 0,
+      openerStart: 0,
+      end: item.length + 8,
+      literalPrefix: '',
+    },
+    0
+  );
+  if ('error' in parsed) {
+    throw new TemplateReferenceError('multi_ref_invalid_value', parsed.detail ?? parsed.reason);
+  }
+  if (parsed.alias) {
+    throw new TemplateReferenceError('multi_ref_invalid_value', '_items string entries cannot reference aliases');
+  }
+  return {
+    identifier: parsed.identifier,
+    section: parsed.section,
+    pointer: parsed.pointer,
   };
 }
 
