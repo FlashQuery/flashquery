@@ -124,7 +124,7 @@ describe('assembleNativeToolRegistry', () => {
     const result = assembleNativeToolRegistry(makeConfig(['tier:read-only']), 'research', CATALOG);
 
     expect(result.nativeToolNames).toEqual(READ_ONLY_TOOLS);
-    expect(result.providerTools).toBeUndefined();
+    expect(result.providerTools?.map((tool) => tool.function.name)).toEqual(READ_ONLY_TOOLS);
     expect(result.diagnostics).toEqual({
       expandedTiers: [{ tier: 'tier:read-only', tools: READ_ONLY_TOOLS }],
       explicitTools: [],

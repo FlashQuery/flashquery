@@ -1,9 +1,20 @@
 import type { FlashQueryConfig } from '../config/loader.js';
+import { z } from 'zod';
 
 export interface NativeToolDefinition {
   name: string;
   description: string;
   inputSchema: unknown;
+}
+
+export interface OpenAiToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+    strict?: true;
+  };
 }
 
 export interface ToolRegistryDiagnostics {
@@ -16,12 +27,21 @@ export interface ToolRegistryDiagnostics {
 
 export interface ToolRegistryAssembly {
   nativeToolNames: string[];
-  providerTools: undefined;
+  providerTools?: OpenAiToolDefinition[];
   diagnostics: ToolRegistryDiagnostics;
 }
 
 export interface ToolRegistryAssemblyOptions {
   includeUnknownTierTools?: boolean;
+  strictTools?: boolean;
+}
+
+export interface ToolSchemaNormalizationOptions {
+  strict: boolean;
+}
+
+export interface OpenAiToolDefinitionOptions {
+  strict: boolean;
 }
 
 const READ_ONLY_TOOL_NAMES = [
@@ -79,13 +99,87 @@ function addUnique(target: string[], seen: Set<string>, tool: string): void {
   target.push(tool);
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isZodSchema(value: unknown): value is z.ZodType {
+  return value instanceof z.ZodType;
+}
+
+function toZodObjectSchema(inputSchema: unknown): z.ZodObject<z.ZodRawShape> {
+  if (isZodSchema(inputSchema)) {
+    if (inputSchema instanceof z.ZodObject) return inputSchema;
+    throw new Error('Tool inputSchema must be a Zod object schema.');
+  }
+
+  if (isRecord(inputSchema)) {
+    return z.object(inputSchema as z.ZodRawShape);
+  }
+
+  throw new Error('Tool inputSchema must be a raw Zod shape object or Zod object schema.');
+}
+
+function normalizeJsonSchemaNode(schema: unknown, options: ToolSchemaNormalizationOptions): unknown {
+  if (Array.isArray(schema)) {
+    return schema.map((item) => normalizeJsonSchemaNode(item, options));
+  }
+  if (!isRecord(schema)) return schema;
+
+  const normalized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === '$schema') continue;
+    normalized[key] = normalizeJsonSchemaNode(value, options);
+  }
+
+  if (normalized['type'] === 'object') {
+    const properties = isRecord(normalized['properties']) ? normalized['properties'] : {};
+    normalized['properties'] = properties;
+    normalized['additionalProperties'] = false;
+    if (options.strict) {
+      normalized['required'] = Object.keys(properties);
+    }
+  }
+
+  return normalized;
+}
+
+export function normalizeToolJsonSchema(
+  schema: unknown,
+  options: ToolSchemaNormalizationOptions
+): Record<string, unknown> {
+  const normalized = normalizeJsonSchemaNode(schema, options);
+  if (!isRecord(normalized) || normalized['type'] !== 'object') {
+    throw new Error('Tool JSON Schema root must be an object schema.');
+  }
+  return normalized;
+}
+
+export function toOpenAiToolDefinition(
+  tool: NativeToolDefinition,
+  options: OpenAiToolDefinitionOptions
+): OpenAiToolDefinition {
+  const zodSchema = toZodObjectSchema(tool.inputSchema);
+  const parameters = normalizeToolJsonSchema(z.toJSONSchema(zodSchema), options);
+  return {
+    type: 'function',
+    function: {
+      name: tool.name,
+      description: tool.description,
+      parameters,
+      ...(options.strict ? { strict: true as const } : {}),
+    },
+  };
+}
+
 export function assembleNativeToolRegistry(
   config: FlashQueryConfig,
   purposeName: string,
   catalog: NativeToolDefinition[],
-  _options?: ToolRegistryAssemblyOptions
+  options?: ToolRegistryAssemblyOptions
 ): ToolRegistryAssembly {
   const catalogNames = new Set(catalog.map((tool) => tool.name));
+  const catalogByName = new Map(catalog.map((tool) => [tool.name, tool]));
   const hardExcludedNames = new Set<string>(HARD_EXCLUDED_NATIVE_TOOLS);
   const purpose = config.llm?.purposes.find((candidate) => candidate.name.toLowerCase() === purposeName.toLowerCase());
   const requestedTools = purpose?.tools ?? [];
@@ -135,10 +229,17 @@ export function assembleNativeToolRegistry(
     diagnostics.hardExcluded.push({ tool, reason: HARD_EXCLUDED_REASON });
     return false;
   });
+  const providerTools = nativeToolNames.map((toolName) => {
+    const tool = catalogByName.get(toolName);
+    if (!tool) {
+      throw new Error(`Catalog entry for native tool '${toolName}' was not found.`);
+    }
+    return toOpenAiToolDefinition(tool, { strict: options?.strictTools === true });
+  });
 
   return {
     nativeToolNames,
-    providerTools: undefined,
+    ...(providerTools.length > 0 ? { providerTools } : {}),
     diagnostics,
   };
 }
