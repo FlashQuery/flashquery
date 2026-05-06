@@ -1059,7 +1059,14 @@ const DISC_LLM_CONFIG = {
       costPerMillion: { input: 0.15, output: 0.6 },
       description: 'Fast small model',
       contextWindow: 131072,
-      capabilities: ['tools', 'vision'],
+      tags: ['vision'],
+      capabilities: {
+        tool_calling: true,
+        usage_on_tool_calls: true,
+        strict_tools: true,
+        parallel_tool_calls: true,
+        structured_outputs_with_tools: true,
+      },
     },
     {
       name: 'bare',
@@ -1067,7 +1074,7 @@ const DISC_LLM_CONFIG = {
       model: 'gpt-4o',
       type: 'language' as const,
       costPerMillion: { input: 2.5, output: 10.0 },
-      // description/contextWindow/capabilities all absent
+      // description/contextWindow/tags/capabilities all absent
     },
     {
       name: 'empty-caps',
@@ -1075,7 +1082,7 @@ const DISC_LLM_CONFIG = {
       model: 'gpt-3.5-turbo',
       type: 'language' as const,
       costPerMillion: { input: 0.5, output: 1.5 },
-      capabilities: [],
+      tags: [],
     },
     {
       name: 'local',
@@ -1156,7 +1163,7 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     expect('local' in fast).toBe(false);
   });
 
-  it('[U-DISC-02] list_models includes declared optional fields description/context_window/capabilities verbatim', async () => {
+  it('[U-DISC-02] list_models includes declared optional fields description/context_window/tags/capabilities verbatim', async () => {
     const handler = captureCallModelHandler(DISC_CONFIG);
     const res = await handler({ resolver: 'list_models' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1165,7 +1172,14 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     const fast = body.models.find((m: any) => m.name === 'fast');
     expect(fast.description).toBe('Fast small model');
     expect(fast.context_window).toBe(131072);
-    expect(fast.capabilities).toEqual(['tools', 'vision']);
+    expect(fast.tags).toEqual(['vision']);
+    expect(fast.capabilities).toEqual({
+      tool_calling: true,
+      usage_on_tool_calls: true,
+      strict_tools: true,
+      parallel_tool_calls: true,
+      structured_outputs_with_tools: true,
+    });
   });
 
   it('[U-DISC-03] list_models OMITS optional fields when undeclared (the keys are absent, not present-with-undefined)', async () => {
@@ -1177,18 +1191,20 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     const bare = body.models.find((m: any) => m.name === 'bare');
     expect('description' in bare).toBe(false);
     expect('context_window' in bare).toBe(false);
+    expect('tags' in bare).toBe(false);
     expect('capabilities' in bare).toBe(false);
   });
 
-  it('[U-DISC-04] list_models PRESERVES capabilities: [] (declared empty array, not omitted)', async () => {
+  it('[U-DISC-04] list_models PRESERVES tags: [] (declared empty array, not omitted)', async () => {
     const handler = captureCallModelHandler(DISC_CONFIG);
     const res = await handler({ resolver: 'list_models' });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const body = JSON.parse(res.content[0].text) as any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const empty = body.models.find((m: any) => m.name === 'empty-caps');
-    expect('capabilities' in empty).toBe(true);
-    expect(empty.capabilities).toEqual([]);
+    expect('tags' in empty).toBe(true);
+    expect(empty.tags).toEqual([]);
+    expect('capabilities' in empty).toBe(false);
   });
 
   it('[U-DISC-05] list_purposes returns {purposes: [...]} with cost rates from the primary model (models[0])', async () => {
@@ -1285,7 +1301,14 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
       output_cost_per_million: 0.6,
       description: 'Fast small model',
       context_window: 131072,
-      capabilities: ['tools', 'vision'],
+      tags: ['vision'],
+      capabilities: {
+        tool_calling: true,
+        usage_on_tool_calls: true,
+        strict_tools: true,
+        parallel_tool_calls: true,
+        structured_outputs_with_tools: true,
+      },
     });
   });
 
@@ -1416,5 +1439,59 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     expect(completeMock).not.toHaveBeenCalled();
     expect(completeByPurposeMock).not.toHaveBeenCalled();
     expect(getModelForPurposeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('call_model handler — CAP-05 response_format with tools guard', () => {
+  it('[CAP-05] returns isError before provider dispatch when structured_outputs_with_tools is declared unsupported', async () => {
+    const guardedConfig = {
+      ...TEST_CONFIG,
+      llm: {
+        providers: TEST_LLM_CONFIG.providers,
+        models: [
+          {
+            ...TEST_LLM_CONFIG.models[0],
+            capabilities: {
+              tool_calling: true,
+              usage_on_tool_calls: true,
+              structured_outputs_with_tools: false,
+            },
+          },
+        ],
+        purposes: [
+          {
+            name: 'agentic',
+            description: 'Tool purpose',
+            models: ['fast'],
+            tools: ['read'],
+            defaults: { response_format: { type: 'json_object' } },
+          },
+        ],
+      },
+    } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+
+    const completeByPurposeMock = vi.fn().mockResolvedValue({ ...SAMPLE_RESULT, purposeName: 'agentic', fallbackPosition: 1 });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: guardedConfig.llm!.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(guardedConfig as typeof TEST_CONFIG);
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'agentic',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('response_format');
+    expect(result.content[0].text).toContain('structured_outputs_with_tools');
+    expect(result.content[0].text).toContain('declared unsupported');
+    expect(completeByPurposeMock).not.toHaveBeenCalled();
   });
 });

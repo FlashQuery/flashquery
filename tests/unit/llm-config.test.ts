@@ -3,6 +3,7 @@ import { writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { loadConfig } from '../../src/config/loader.js';
+import { modelCapabilitiesWithDefaults } from '../../src/llm/capabilities.js';
 
 // Minimal base config YAML — each test appends its own llm: section to a copy of this.
 const BASE_CONFIG_YAML = `
@@ -860,6 +861,124 @@ llm:
       const config = loadConfig(tmpFile);
       expect(config.llm?.models[0].tags).toEqual(['tools', 'legacy-custom-tag', 'vision-experimental']);
       expect(config.llm?.models[0].capabilities).toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+});
+
+describe('loadConfig() — ATL-U-08 capability admission', () => {
+  it('[ATL-U-08] defaults official OpenAI structured capabilities to true', () => {
+    const caps = modelCapabilitiesWithDefaults(
+      { capabilities: undefined },
+      { name: 'openai', type: 'openai-compatible' }
+    );
+    expect(caps).toEqual({
+      tool_calling: true,
+      usage_on_tool_calls: true,
+      strict_tools: true,
+      parallel_tool_calls: true,
+      structured_outputs_with_tools: true,
+    });
+  });
+
+  it('[ATL-U-08] leaves openrouter, custom OpenAI-compatible, and ollama capabilities as unknown declarations', () => {
+    for (const provider of [
+      { name: 'openrouter', type: 'openai-compatible' as const },
+      { name: 'custom', type: 'openai-compatible' as const },
+      { name: 'local-ollama', type: 'ollama' as const },
+    ]) {
+      const caps = modelCapabilitiesWithDefaults({ capabilities: undefined }, provider);
+      expect(caps.tool_calling).toBeUndefined();
+      expect(caps.usage_on_tool_calls).toBeUndefined();
+      expect(caps.structured_outputs_with_tools).toBeUndefined();
+    }
+  });
+
+  it('[ATL-U-08] rejects tool-exposing purposes when a fallback model has unknown declaration diagnostics', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-admission-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openrouter
+      type: openai-compatible
+      endpoint: https://openrouter.ai/api
+  models:
+    - name: router-model
+      provider_name: openrouter
+      model: anthropic/claude-sonnet-4.5
+      type: language
+      cost_per_million: { input: 3, output: 15 }
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [router-model]
+      tools: [read]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/unknown declaration.*tool_calling.*usage_on_tool_calls/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects template-exposing purposes when a fallback model declares unsupported usage_on_tool_calls', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unsupported-admission-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: weak
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: false
+  purposes:
+    - name: templated
+      description: Template tool purpose
+      models: [weak]
+      templates: [Templates/research-skill.md]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/declared unsupported.*usage_on_tool_calls/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] treats a purpose without tools or templates as Mode 1 even when capabilities are unknown', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-mode1-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: local
+      type: ollama
+      endpoint: http://localhost:11434
+  models:
+    - name: llama
+      provider_name: local
+      model: llama3.2
+      type: language
+      cost_per_million: { input: 0, output: 0 }
+  purposes:
+    - name: plain
+      description: Plain Mode 1 purpose
+      models: [llama]
+      defaults:
+        response_format:
+          type: json_object
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(loadConfig(tmpFile).llm?.purposes[0].name).toBe('plain');
     } finally {
       unlinkSync(tmpFile);
     }
