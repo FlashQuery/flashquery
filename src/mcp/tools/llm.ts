@@ -138,6 +138,9 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           .record(z.string(), z.unknown())
           .optional()
           .describe('Optional LLM parameters (temperature, max_tokens, etc.) — passed through to the provider.'),
+        template_params: z.record(z.string(), z.record(z.string(), z.unknown()))
+          .optional()
+          .describe('Template parameters keyed by template path or alias for host-authored reference hydration. Ignored by discovery resolvers.'),
         trace_id: z
           .string()
           .optional()
@@ -361,7 +364,14 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           ...ref,
           messageIndex: hostReferenceTargets[ref.messageIndex]?.originalIndex ?? ref.messageIndex,
         }));
-        const resolved = await resolveReferences(parsedWithOriginalIndexes, config, supabaseManager, embeddingProvider, logger);
+        const resolved = await resolveReferences(
+          parsedWithOriginalIndexes,
+          config,
+          supabaseManager,
+          embeddingProvider,
+          logger,
+          params.template_params
+        );
         const failures = resolved.filter((r): r is FailedRef => r.kind === 'failed');
         if (failures.length > 0) {
           // REFS-06: any failure → return reference_resolution_failed; NO LLM call made
