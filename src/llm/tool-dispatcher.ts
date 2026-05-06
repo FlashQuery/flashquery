@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type { LlmChatToolCall, LlmToolMessage } from './types.js';
+import type { FlashQueryConfig } from '../config/loader.js';
+import { dispatchTemplateToolCall, type TemplateToolReverseMap } from './template-tools.js';
 import type {
   NativeToolDefinition,
   NativeToolDispatchContext,
@@ -9,6 +11,7 @@ import type {
 export type { NativeToolDispatchContext } from './tool-registry.js';
 
 export interface NativeToolCallLogEntry {
+  kind: 'native';
   id: string;
   name: string;
   ok: boolean;
@@ -37,13 +40,24 @@ export interface DispatchToolCallsOptions {
   toolCalls: LlmChatToolCall[];
   catalog: NativeToolDefinition[] | Map<string, NativeToolDefinition>;
   nativeToolNames: readonly string[];
+  templateReverseMap?: TemplateToolReverseMap;
+  templateDispatchContext?: {
+    config?: FlashQueryConfig;
+    supabaseManager?: Parameters<typeof dispatchTemplateToolCall>[0]['supabaseManager'];
+    embeddingProvider?: Parameters<typeof dispatchTemplateToolCall>[0]['embeddingProvider'];
+    logger?: Parameters<typeof dispatchTemplateToolCall>[0]['logger'];
+    templateDocuments?: Parameters<typeof dispatchTemplateToolCall>[0]['templateDocuments'];
+  };
+  config?: FlashQueryConfig;
+  templateDocuments?: Parameters<typeof dispatchTemplateToolCall>[0]['templateDocuments'];
+  templateTools?: Parameters<typeof dispatchTemplateToolCall>[0]['templateDocuments'];
   dispatchContext?: NativeToolDispatchContext;
   context?: NativeToolDispatchContext;
 }
 
 export interface DispatchToolCallsResult {
   messages: LlmToolMessage[];
-  logEntries: NativeToolCallLogEntry[];
+  logEntries: Array<NativeToolCallLogEntry | Awaited<ReturnType<typeof dispatchTemplateToolCall>>['logEntry']>;
 }
 
 interface ToolErrorPayload {
@@ -112,6 +126,7 @@ function makeLogEntry(
   const ok = payload.ok;
   const errorCode = ok ? undefined : payload.error.code;
   return {
+    kind: 'native',
     id: toolCall.id,
     name: toolCall.function.name,
     ok,
@@ -122,6 +137,39 @@ function makeLogEntry(
     arguments: args,
     status: ok ? 'success' : 'error',
   };
+}
+
+function makeTemplateReverseMap(options: DispatchToolCallsOptions): TemplateToolReverseMap {
+  return options.templateReverseMap ?? new Map();
+}
+
+function isGeneratedTemplateToolName(toolName: string): boolean {
+  return toolName.startsWith('flashquery.');
+}
+
+async function dispatchOneToolCall(
+  options: DispatchToolCallsOptions,
+  toolCall: LlmChatToolCall
+): Promise<NativeToolDispatchResult | Awaited<ReturnType<typeof dispatchTemplateToolCall>>> {
+  const templateReverseMap = makeTemplateReverseMap(options);
+  const toolName = toolCall.function.name;
+  if (templateReverseMap.has(toolName) || isGeneratedTemplateToolName(toolName)) {
+    return await dispatchTemplateToolCall({
+      toolCall,
+      templateReverseMap,
+      config: options.templateDispatchContext?.config ?? options.config,
+      supabaseManager: options.templateDispatchContext?.supabaseManager,
+      embeddingProvider: options.templateDispatchContext?.embeddingProvider,
+      logger: options.templateDispatchContext?.logger,
+      templateDocuments: options.templateDispatchContext?.templateDocuments ?? options.templateDocuments ?? options.templateTools,
+    });
+  }
+  return await dispatchNativeToolCall({
+    toolCall,
+    catalog: options.catalog,
+    nativeToolNames: options.nativeToolNames,
+    dispatchContext: resolveContext(options),
+  });
 }
 
 function errorPayload(code: string, message: string, details?: unknown): ToolErrorPayload {
@@ -231,14 +279,7 @@ export async function dispatchNativeToolCall(options: DispatchNativeToolCallOpti
 
 export async function dispatchToolCalls(options: DispatchToolCallsOptions): Promise<DispatchToolCallsResult> {
   const settled = await Promise.allSettled(
-    options.toolCalls.map((toolCall) =>
-      dispatchNativeToolCall({
-        toolCall,
-        catalog: options.catalog,
-        nativeToolNames: options.nativeToolNames,
-        dispatchContext: resolveContext(options),
-      })
-    )
+    options.toolCalls.map((toolCall) => dispatchOneToolCall(options, toolCall))
   );
 
   const results = settled.map((result, index) => {

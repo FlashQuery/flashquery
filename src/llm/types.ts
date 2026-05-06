@@ -64,6 +64,7 @@ interface TraceCumulative {
 }
 
 export interface AgentLoopToolCallLogEntry {
+  kind?: 'native' | 'template';
   tool_call_id: string;
   tool_name: string;
   arguments?: Record<string, unknown>;

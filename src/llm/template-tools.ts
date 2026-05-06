@@ -81,10 +81,11 @@ export interface AssembleTemplateToolRegistryOptions {
 export interface DispatchTemplateToolCallOptions {
   toolCall: LlmChatToolCall;
   templateReverseMap: TemplateToolReverseMap;
-  config: FlashQueryConfig;
+  config?: FlashQueryConfig;
   supabaseManager?: typeof supabaseManager;
   embeddingProvider?: typeof embeddingProvider;
   logger?: typeof logger;
+  templateDocuments?: Map<string, { body: string; frontmatter: Record<string, unknown> }>;
 }
 
 export interface TemplateToolCallLogEntry {
@@ -528,7 +529,12 @@ export async function dispatchTemplateToolCall(
     return errorResult(options.toolCall, args, 'tool_not_in_registry', `Tool '${toolName}' is not available in the template reverse map.`);
   }
 
-  const candidate = await readTemplateCandidate(options.config, templatePath);
+  const providedCandidate = options.templateDocuments?.get(templatePath);
+  const candidate = providedCandidate === undefined && options.config !== undefined
+    ? await readTemplateCandidate(options.config, templatePath)
+    : providedCandidate === undefined
+      ? null
+      : { templatePath, body: providedCandidate.body, frontmatter: providedCandidate.frontmatter };
   if (candidate === null) {
     const fallbackError = validateFallbackDispatchArgs(args);
     if (fallbackError !== null) {
@@ -549,7 +555,12 @@ export async function dispatchTemplateToolCall(
       frontmatter: candidate.frontmatter,
     },
     args,
-    options.config,
+    options.config ?? {
+      instance: {
+        id: 'template-dispatch',
+        vault: { path: process.cwd(), markdownExtensions: ['.md'] },
+      },
+    } as FlashQueryConfig,
     options.supabaseManager ?? supabaseManager,
     options.embeddingProvider ?? embeddingProvider,
     options.logger ?? logger
