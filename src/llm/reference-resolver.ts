@@ -18,6 +18,7 @@ import {
   isReferenceFailureReason,
   type ReferenceFailureReason,
 } from '../constants/reference-failures.js';
+import type { TemplateWarning } from '../constants/template-warnings.js';
 import {
   AmbiguousDocumentIdentifierError,
   DocumentNotFoundError,
@@ -63,10 +64,10 @@ export interface ResolvedRef {
   literalPrefix?: string;
   template?: boolean;
   templatePath?: string;
-  templateParamsUsed?: Record<string, { type: 'string' | 'document'; chars: number; resolved_to?: string }>;
-  templateWarnings?: string[];
+  templateParamsUsed?: Record<string, TemplateParamUsage>;
+  templateWarnings?: TemplateWarning[];
   resolvedToCount?: number;
-  items?: Array<{ ref?: string; chars: number; resolved_to?: string; template?: boolean; template_path?: string }>;
+  items?: TemplateItemMetadata[];
 }
 
 export interface FailedRef {
@@ -86,16 +87,33 @@ export interface TemplateParamDeclaration {
   default?: unknown;
 }
 
+export interface TemplateParamUsage {
+  type: 'string' | 'document';
+  chars: number;
+  input?: string;
+  resolved_to?: string;
+}
+
+export interface TemplateItemMetadata {
+  input: string;
+  chars: number;
+  resolved_to?: string;
+  template?: boolean;
+  template_path?: string;
+  template_params_used?: Record<string, TemplateParamUsage>;
+  template_warnings?: TemplateWarning[];
+}
+
 export interface InjectedReferenceMetadata {
   ref: string;
   chars: number;
   resolved_to?: string;
   template?: boolean;
   template_path?: string;
-  template_params_used?: Record<string, { type: 'string' | 'document'; chars: number; resolved_to?: string }>;
-  template_warnings?: string[];
+  template_params_used?: Record<string, TemplateParamUsage>;
+  template_warnings?: TemplateWarning[];
   resolved_to_count?: number;
-  items?: Array<{ ref?: string; chars: number; resolved_to?: string; template?: boolean; template_path?: string }>;
+  items?: TemplateItemMetadata[];
 }
 
 export interface InjectionMetadata {
@@ -277,7 +295,7 @@ export async function resolveReferences(
       const result = await resolveAndBuildDocument(
         p.identifier,
         {
-          effectiveInclude: p.pointer ? ['body'] : ['body', 'frontmatter'],
+          effectiveInclude: ['body', 'frontmatter'],
           sectionsList: p.section ? [p.section] : [],
           effectiveIncludeNested: true,
           occurrence: 1,
@@ -291,49 +309,84 @@ export async function resolveReferences(
       if (p.pointer) {
         const fr = result.followed_ref as Record<string, unknown> | undefined;
         content = (fr?.body as string | undefined) ?? '';
-          resolvedTo = fr?.resolved_to as string | undefined;
-        } else {
-          content = (result.body as string | undefined) ?? '';
-          const resultPath = typeof result.path === 'string' ? result.path : undefined;
-          if (resultPath !== undefined && normalizedReferencePath(resultPath) !== normalizedReferencePath(p.identifier)) {
-            resolvedTo = resultPath;
+        resolvedTo = fr?.resolved_to as string | undefined;
+        if (fr !== undefined && isTemplateDocument(fr)) {
+          const templatePath = resolvedTo ?? p.identifier;
+          const rendered = await renderTemplateReference(
+            content,
+            fr,
+            getTemplateEntryForPath(templateParams, p.identifier, templatePath),
+            config,
+            sm,
+            ep,
+            log
+          );
+          content = rendered.content;
+          const out: ResolvedRef = {
+            kind: 'resolved',
+            placeholder: p.placeholder,
+            ref: p.ref,
+            content,
+            chars: content.length,
+            identifier: p.identifier,
+            messageIndex: p.messageIndex,
+            start: p.start,
+            end: p.end,
+            literalPrefix: p.literalPrefix,
+            template: true,
+            templatePath,
+            templateParamsUsed: rendered.paramsUsed,
+          };
+          if (rendered.warnings.length > 0) {
+            out.templateWarnings = rendered.warnings;
           }
-          if (isTemplateDocument(result)) {
-            const templatePath = resultPath ?? p.identifier;
-            const rendered = await renderTemplateReference(
-              content,
-              result,
-              getTemplateEntryForPath(templateParams, p.identifier, templatePath),
-              config,
-              sm,
-              ep,
-              log
-            );
-            content = rendered.content;
-            const out: ResolvedRef = {
-              kind: 'resolved',
-              placeholder: p.placeholder,
-              ref: p.ref,
-              content,
-              chars: content.length,
-              identifier: p.identifier,
-              messageIndex: p.messageIndex,
-              start: p.start,
-              end: p.end,
-              literalPrefix: p.literalPrefix,
-              template: true,
-              templatePath,
-              templateParamsUsed: rendered.paramsUsed,
-            };
-            if (rendered.warnings.length > 0) {
-              out.templateWarnings = rendered.warnings;
-            }
-            if (resolvedTo !== undefined) {
-              out.resolvedTo = resolvedTo;
-            }
-            return out;
+          if (resolvedTo !== undefined) {
+            out.resolvedTo = resolvedTo;
           }
+          return out;
         }
+      } else {
+        content = (result.body as string | undefined) ?? '';
+        const resultPath = typeof result.path === 'string' ? result.path : undefined;
+        if (resultPath !== undefined && normalizedReferencePath(resultPath) !== normalizedReferencePath(p.identifier)) {
+          resolvedTo = resultPath;
+        }
+        if (isTemplateDocument(result)) {
+          const templatePath = resultPath ?? p.identifier;
+          const rendered = await renderTemplateReference(
+            content,
+            result,
+            getTemplateEntryForPath(templateParams, p.identifier, templatePath),
+            config,
+            sm,
+            ep,
+            log
+          );
+          content = rendered.content;
+          const out: ResolvedRef = {
+            kind: 'resolved',
+            placeholder: p.placeholder,
+            ref: p.ref,
+            content,
+            chars: content.length,
+            identifier: p.identifier,
+            messageIndex: p.messageIndex,
+            start: p.start,
+            end: p.end,
+            literalPrefix: p.literalPrefix,
+            template: true,
+            templatePath,
+            templateParamsUsed: rendered.paramsUsed,
+          };
+          if (rendered.warnings.length > 0) {
+            out.templateWarnings = rendered.warnings;
+          }
+          if (resolvedTo !== undefined) {
+            out.resolvedTo = resolvedTo;
+          }
+          return out;
+        }
+      }
       const out: ResolvedRef = {
         kind: 'resolved',
         placeholder: p.placeholder,
@@ -496,15 +549,22 @@ async function resolveAliasReference(
   try {
     const result = await resolveTemplateSource(templateIdentifier, config, sm, ep, log);
     const body = (result.body as string | undefined) ?? '';
+    const templatePath = typeof result.path === 'string' ? result.path : templateIdentifier;
     if (!isTemplateDocument(result)) {
       return {
-        kind: 'failed',
+        kind: 'resolved',
+        placeholder: p.placeholder,
         ref: p.ref,
-        reason: 'alias_template_not_found',
-        detail: `Alias '${alias}' _template '${templateIdentifier}' did not resolve to an fq_template document`,
+        content: body,
+        chars: body.length,
+        identifier: templateIdentifier,
+        messageIndex: p.messageIndex,
+        start: p.start,
+        end: p.end,
+        literalPrefix: p.literalPrefix,
+        resolvedTo: templatePath,
       };
     }
-    const templatePath = typeof result.path === 'string' ? result.path : templateIdentifier;
     const rendered = await renderTemplateReference(body, result, entry, config, sm, ep, log);
     const out: ResolvedRef = {
       kind: 'resolved',
@@ -553,7 +613,16 @@ async function resolveAliasItems(
       detail: `Alias '${alias}' _items must be an array`,
     };
   }
-  const separator = typeof entry._separator === 'string' ? entry._separator : '';
+  const hasSeparator = Object.prototype.hasOwnProperty.call(entry, '_separator');
+  if (hasSeparator && typeof entry._separator !== 'string') {
+    return {
+      kind: 'failed',
+      ref: p.ref,
+      reason: 'multi_ref_invalid_value',
+      detail: `Alias '${alias}' _separator must be a string`,
+    };
+  }
+  const separator = hasSeparator ? (entry._separator as string) : '\n\n';
   const contents: string[] = [];
   const items: NonNullable<ResolvedRef['items']> = [];
   for (let index = 0; index < rawItems.length; index++) {
@@ -563,7 +632,7 @@ async function resolveAliasItems(
         const result = await resolveItemStringContent(item, config, sm, ep, log);
         contents.push(result.content);
         const metadata: NonNullable<ResolvedRef['items']>[number] = {
-          ref: item,
+          input: item,
           chars: result.content.length,
         };
         if (result.path !== undefined) {
@@ -574,6 +643,12 @@ async function resolveAliasItems(
         }
         if (result.templatePath !== undefined) {
           metadata.template_path = result.templatePath;
+        }
+        if (result.templateParamsUsed !== undefined) {
+          metadata.template_params_used = result.templateParamsUsed;
+        }
+        if (result.templateWarnings !== undefined && result.templateWarnings.length > 0) {
+          metadata.template_warnings = result.templateWarnings;
         }
         items.push(metadata);
         continue;
@@ -588,27 +663,51 @@ async function resolveAliasItems(
         const body = (result.body as string | undefined) ?? '';
         const templatePath = typeof result.path === 'string' ? result.path : templateIdentifier;
         if (!isTemplateDocument(result)) {
-          throw new TemplateReferenceError(
-            'alias_template_not_found',
-            `Alias '${alias}' item ${index} _template '${templateIdentifier}' did not resolve to an fq_template document`
-          );
+          contents.push(body);
+          items.push({
+            input: templateIdentifier,
+            resolved_to: templatePath,
+            chars: body.length,
+          });
+          continue;
         }
         const rendered = await renderTemplateReference(body, result, itemEntry, config, sm, ep, log);
         contents.push(rendered.content);
-        items.push({
-          ref: templateIdentifier,
+        const itemMetadata: TemplateItemMetadata = {
+          input: templateIdentifier,
           resolved_to: templatePath,
           chars: rendered.content.length,
           template: true,
           template_path: templatePath,
-        });
+          template_params_used: rendered.paramsUsed,
+        };
+        if (rendered.warnings.length > 0) {
+          itemMetadata.template_warnings = rendered.warnings;
+        }
+        items.push(itemMetadata);
         continue;
       }
       throw new TemplateReferenceError('multi_ref_invalid_value', `Alias '${alias}' item ${index} must be a string or template object`);
     } catch (err) {
+      if (err instanceof TemplateReferenceError && err.reason === 'multi_ref_invalid_value') {
+        return {
+          kind: 'failed',
+          ref: p.ref,
+          reason: 'multi_ref_invalid_value',
+          detail: `alias=${alias} index=${index}: ${err.message}`,
+        };
+      }
+      if (err instanceof TemplateReferenceError && err.reason === 'alias_missing_template_field') {
+        return {
+          kind: 'failed',
+          ref: p.ref,
+          reason: 'multi_ref_invalid_value',
+          detail: `alias=${alias} index=${index}: item object lacks _template`,
+        };
+      }
       const reason = err instanceof TemplateReferenceError
         ? err.reason
-        : mapTemplateDocumentParamFailure(err, log).reason;
+        : mapItemResolutionFailure(err, log).reason;
       const detail = err instanceof Error ? err.message : String(err);
       return {
         kind: 'failed',
@@ -688,12 +787,19 @@ async function resolveItemStringContent(
   sm: typeof supabaseManager,
   ep: typeof embeddingProvider,
   log: typeof logger
-): Promise<{ content: string; path?: string; template?: boolean; templatePath?: string }> {
+): Promise<{
+  content: string;
+  path?: string;
+  template?: boolean;
+  templatePath?: string;
+  templateParamsUsed?: Record<string, TemplateParamUsage>;
+  templateWarnings?: TemplateWarning[];
+}> {
   const parsed = parseNonAliasItemReference(item);
   const result = await resolveAndBuildDocument(
     parsed.identifier,
     {
-      effectiveInclude: parsed.pointer ? ['body'] : ['body', 'frontmatter'],
+      effectiveInclude: ['body', 'frontmatter'],
       sectionsList: parsed.section ? [parsed.section] : [],
       effectiveIncludeNested: true,
       occurrence: 1,
@@ -705,9 +811,22 @@ async function resolveItemStringContent(
 
   if (parsed.pointer) {
     const followedRef = result.followed_ref as Record<string, unknown> | undefined;
+    const content = (followedRef?.body as string | undefined) ?? '';
+    const path = (followedRef?.resolved_to as string | undefined) ?? (typeof result.path === 'string' ? result.path : parsed.identifier);
+    if (followedRef !== undefined && isTemplateDocument(followedRef)) {
+      const rendered = await renderTemplateReference(content, followedRef, {}, config, sm, ep, log);
+      return {
+        content: rendered.content,
+        path,
+        template: true,
+        templatePath: path,
+        templateParamsUsed: rendered.paramsUsed,
+        templateWarnings: rendered.warnings,
+      };
+    }
     return {
-      content: (followedRef?.body as string | undefined) ?? '',
-      path: (followedRef?.resolved_to as string | undefined) ?? (typeof result.path === 'string' ? result.path : parsed.identifier),
+      content,
+      path,
     };
   }
 
@@ -720,6 +839,8 @@ async function resolveItemStringContent(
       path: resultPath,
       template: true,
       templatePath: resultPath,
+      templateParamsUsed: rendered.paramsUsed,
+      templateWarnings: rendered.warnings,
     };
   }
 
@@ -765,19 +886,19 @@ async function renderTemplateReference(
   log: typeof logger
 ): Promise<{
   content: string;
-  paramsUsed: Record<string, { type: 'string' | 'document'; chars: number; resolved_to?: string }>;
-  warnings: string[];
+  paramsUsed: Record<string, TemplateParamUsage>;
+  warnings: TemplateWarning[];
 }> {
   const frontmatter = result.frontmatter as Record<string, unknown> | undefined;
   const declarations = normalizeTemplateParamDeclarations(frontmatter?.fq_params);
   const values: Record<string, string> = {};
-  const paramsUsed: Record<string, { type: 'string' | 'document'; chars: number; resolved_to?: string }> = {};
-  const warnings: string[] = [];
+  const paramsUsed: Record<string, TemplateParamUsage> = {};
+  const warnings: TemplateWarning[] = [];
   const cleanParams = stripReservedTemplateParams(rawParams);
 
   for (const key of Object.keys(cleanParams)) {
     if (!(key in declarations)) {
-      warnings.push(`unknown_param_ignored:${key}`);
+      warnings.push({ type: 'unknown_param_ignored', param: key });
     }
   }
 
@@ -795,7 +916,7 @@ async function renderTemplateReference(
       }
       values[name] = '';
       paramsUsed[name] = { type: declaration.type, chars: 0 };
-      warnings.push(`optional_param_missing_no_default:${name}`);
+      warnings.push({ type: 'optional_param_missing_no_default', param: name });
       continue;
     }
 
@@ -823,6 +944,7 @@ async function renderTemplateReference(
         values[name] = doc.content;
         paramsUsed[name] = {
           type: 'document',
+          input: rawValue,
           chars: doc.content.length,
           resolved_to: doc.path,
         };
@@ -855,6 +977,13 @@ function mapTemplateDocumentParamFailure(
 ): { reason: ReferenceFailureReason; detail: string } {
   const mapped = mapReferenceFailure(err, '{{template-param}}', log);
   return { reason: 'template_param_doc_not_found', detail: mapped.detail };
+}
+
+function mapItemResolutionFailure(
+  err: unknown,
+  log: typeof logger
+): { reason: ReferenceFailureReason; detail: string } {
+  return mapReferenceFailure(err, '{{multi-ref-item}}', log);
 }
 
 interface TemplatePlaceholderSpan {
@@ -893,7 +1022,7 @@ export function renderTemplateContent(
   body: string,
   values: Record<string, string>,
   declarations: Record<string, TemplateParamDeclaration>,
-  warnings: string[] = []
+  warnings: TemplateWarning[] = []
 ): string {
   const replacements: Array<{ start: number; end: number; content: string }> = [];
   for (const span of scanTemplatePlaceholderSpans(body)) {
@@ -906,7 +1035,7 @@ export function renderTemplateContent(
       continue;
     }
     if (!(span.name in declarations)) {
-      warnings.push(`undeclared_placeholder_left_literal:${span.name}`);
+      warnings.push({ type: 'undeclared_placeholder_left_literal', placeholder: span.name });
       continue;
     }
     replacements.push({

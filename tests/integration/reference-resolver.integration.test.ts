@@ -221,7 +221,7 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
     expect(byPath.content).toBe('Name: Ada\nSource:\nSOURCE BODY\n\n');
     expect(buildInjectedReferences([byPath])[0].template_params_used).toEqual({
       name: { type: 'string', chars: 3 },
-      source: { type: 'document', chars: 12, resolved_to: 'Sources/source.md' },
+      source: { type: 'document', input: 'Sources/source.md', chars: 12, resolved_to: 'Sources/source.md' },
     });
 
     const byId = await resolveReferences([parsed[0]], config, supabaseManager, embeddingProvider, logger, {
@@ -232,6 +232,7 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
     expect(resolvedById.content).toBe('Name: Grace\nSource:\nSOURCE BODY\n\n');
     expect(buildInjectedReferences([resolvedById])[0].template_params_used?.source).toEqual({
       type: 'document',
+      input: sourceId,
       chars: 12,
       resolved_to: 'Sources/source.md',
     });
@@ -340,16 +341,37 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
       resolved_to_count: 2,
       template_params_used: {},
       items: [
-        { ref: 'List/a.md', resolved_to: 'List/a.md', chars: 6 },
+        { input: 'List/a.md', resolved_to: 'List/a.md', chars: 6 },
         {
-          ref: 'Templates/item.md',
+          input: 'Templates/item.md',
           resolved_to: 'Templates/item.md',
           chars: 11,
           template: true,
           template_path: 'Templates/item.md',
+          template_params_used: { label: { type: 'string', chars: 4 } },
         },
       ],
     });
+
+    const defaultSeparatorResolved = await resolveReferences(parsed as ParsedRef[], config, supabaseManager, embeddingProvider, logger, {
+      background: {
+        _items: ['List/a.md', { _template: 'Templates/item.md', label: 'Beta' }],
+      },
+    });
+    const defaultSeparatorSuccess = defaultSeparatorResolved[0] as ResolvedRef;
+    expect(defaultSeparatorSuccess.kind).toBe('resolved');
+    expect(defaultSeparatorSuccess.content).toBe('ALPHA\n\n\nItem: Beta\n');
+
+    const invalidSeparatorResolved = await resolveReferences(parsed as ParsedRef[], config, supabaseManager, embeddingProvider, logger, {
+      background: {
+        _items: ['List/a.md'],
+        _separator: 42,
+      },
+    });
+    const invalidSeparatorFailed = invalidSeparatorResolved[0] as FailedRef;
+    expect(invalidSeparatorFailed.kind).toBe('failed');
+    expect(invalidSeparatorFailed.reason).toBe('multi_ref_invalid_value');
+    expect(invalidSeparatorFailed.detail).toContain('_separator');
   });
 
   it('[I-TMPL-07] returns multi_ref_item_failed with alias and zero-based index detail', async () => {
@@ -369,18 +391,18 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
     expect(failed.detail).toContain('alias=background');
     expect(failed.detail).toContain('index=0');
     expect(failed.detail).toContain('item 0');
-    expect(failed.detail).toContain('template_param_doc_not_found');
+    expect(failed.detail).toContain('document_not_found');
 
     const plainTemplateResolved = await resolveReferences(parsed as ParsedRef[], config, supabaseManager, embeddingProvider, logger, {
       background: {
         _items: [{ _template: 'Docs/plain.md', label: 'Ada' }],
       },
     });
-    const plainTemplateFailed = plainTemplateResolved[0] as FailedRef;
-    expect(plainTemplateFailed.kind).toBe('failed');
-    expect(plainTemplateFailed.reason).toBe('multi_ref_item_failed');
-    expect(plainTemplateFailed.detail).toContain('alias=background');
-    expect(plainTemplateFailed.detail).toContain('index=0');
-    expect(plainTemplateFailed.detail).toContain('alias_template_not_found');
+    const plainTemplateSuccess = plainTemplateResolved[0] as ResolvedRef;
+    expect(plainTemplateSuccess.kind).toBe('resolved');
+    expect(plainTemplateSuccess.content).toBe('Plain {{label}} body\n');
+    expect(buildInjectedReferences([plainTemplateSuccess])[0].items).toEqual([
+      { input: 'Docs/plain.md', resolved_to: 'Docs/plain.md', chars: 'Plain {{label}} body\n'.length },
+    ]);
   });
 });

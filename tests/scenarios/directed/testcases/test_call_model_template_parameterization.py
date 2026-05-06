@@ -153,7 +153,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 item_a = f"{root}/docs/item-a.md"
                 item_b = f"{root}/docs/item-b.md"
 
-                _write_doc(server.vault_path, target, "TARGET BODY\n", fq_title="Target")
+                target_id = _write_doc(server.vault_path, target, "TARGET BODY\n", fq_title="Target")
                 _write_doc(server.vault_path, plain, "Plain {{name}} remains.\n", fq_title="Plain")
                 _write_doc(server.vault_path, nested_literal, "literal {{ref:missing.md}} remains\n", fq_title="Nested Literal")
                 _write_doc(server.vault_path, item_a, "ALPHA\n", fq_title="Item A")
@@ -207,15 +207,38 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "metadata template true": first.get("template") is True,
                     "metadata template path": first.get("template_path") == template,
                     "metadata string param": params_used.get("name", {}).get("type") == "string",
+                    "metadata document input": params_used.get("source", {}).get("input") == target,
                     "metadata document param": params_used.get("source", {}).get("resolved_to") == target,
                     "metadata literal param": params_used.get("literal", {}).get("chars") == len("kept {{ref:missing.md}} literal"),
                 }
                 run.step("ATL-DS-04 path-keyed template_params render with metadata", all(checks.values()), f"checks={checks}, injected={injected}", tool_result=success)
 
+                by_id = _call(
+                    client,
+                    f"Use {_ref(template)}",
+                    template_params={
+                        template: {
+                            "name": "IdSource",
+                            "source": target_id,
+                            "literal": "id",
+                        }
+                    },
+                )
+                env = _json(by_id)
+                injected = env.get("metadata", {}).get("injected_references", [])
+                params_used = injected[0].get("template_params_used", {}) if injected and isinstance(injected[0], dict) else {}
+                checks = {
+                    "call ok": by_id.ok,
+                    "fq_id rendered": "Review IdSource" in env.get("response", ""),
+                    "document input fq_id": params_used.get("source", {}).get("input") == target_id,
+                    "document resolved path": params_used.get("source", {}).get("resolved_to") == target,
+                }
+                run.step("ATL-DS-04 document param metadata preserves fq_id input", all(checks.values()), f"checks={checks}, injected={injected}", tool_result=by_id)
+
                 # ── Step ATL-DS-05: alias _template and _items ───────────────
                 alias = _call(
                     client,
-                    "A {{ref:@first}}\nB {{ref:@second}}\nList {{ref:@bundle}}",
+                    "A {{ref:@first}}\nB {{ref:@second}}\nList {{ref:@bundle}}\nPlain {{ref:@plain_obj}}",
                     template_params={
                         "first": {"_template": template, "name": "First", "source": target, "literal": "one"},
                         "second": {"_template": template, "name": "Second", "source": target, "literal": "two"},
@@ -227,12 +250,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
                             ],
                             "_separator": "\n--\n",
                         },
+                        "plain_obj": {"_items": [{"_template": plain, "name": "Ignored"}]},
                     },
                 )
                 env = _json(alias)
                 text = env.get("response", "")
                 injected = env.get("metadata", {}).get("injected_references", [])
                 bundle = next((entry for entry in injected if isinstance(entry, dict) and entry.get("ref") == "{{ref:@bundle}}"), {})
+                plain_obj = next((entry for entry in injected if isinstance(entry, dict) and entry.get("ref") == "{{ref:@plain_obj}}"), {})
+                bundle_items = bundle.get("items", [])
+                plain_items = plain_obj.get("items", [])
                 checks = {
                     "call ok": alias.ok,
                     "first alias rendered": "Review First" in text,
@@ -241,8 +268,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "items ordered": text.find("ALPHA") != -1 and text.find("Item Beta") > text.find("ALPHA") and text.find("BRAVO") > text.find("Item Beta"),
                     "separator injected": "\n--\n" in text,
                     "bundle resolved count": bundle.get("resolved_to_count") == 3,
-                    "bundle metadata items": len(bundle.get("items", [])) == 3,
-                    "item template metadata": any(item.get("template") is True and item.get("template_path") == item_template for item in bundle.get("items", [])),
+                    "bundle metadata items": len(bundle_items) == 3,
+                    "item input metadata": bundle_items and bundle_items[0].get("input") == item_a,
+                    "item template metadata": any(
+                        item.get("template") is True
+                        and item.get("template_path") == item_template
+                        and item.get("template_params_used", {}).get("label", {}).get("chars") == 4
+                        for item in bundle_items
+                    ),
+                    "plain object item injects raw body": "Plain {{name}} remains." in text,
+                    "plain object item input metadata": plain_items and plain_items[0].get("input") == plain and plain_items[0].get("template") is not True,
                 }
                 run.step("ATL-DS-05 alias templates and _items render in order", all(checks.values()), f"checks={checks}, injected={injected}", tool_result=alias)
 
@@ -251,21 +286,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 missing_required = _call(client, _ref(template), template_params={template: {"source": target, "literal": "x"}})
                 invalid_doc = _call(client, _ref(template), template_params={template: {"name": "Ada", "source": f"{root}/docs/missing.md", "literal": "x"}})
                 invalid_items = _call(client, "{{ref:@bundle}}", template_params={"bundle": {"_items": "not-an-array"}})
-                invalid_plain_template_item = _call(
-                    client,
-                    "{{ref:@bundle}}",
-                    template_params={"bundle": {"_items": [{"_template": plain, "name": "Ada"}]}},
-                )
-                payloads = [_json(missing_required), _json(invalid_doc), _json(invalid_items), _json(invalid_plain_template_item)]
+                invalid_separator = _call(client, "{{ref:@bundle}}", template_params={"bundle": {"_items": [item_a], "_separator": 42}})
+                payloads = [_json(missing_required), _json(invalid_doc), _json(invalid_items), _json(invalid_separator)]
                 reasons = _failure_reasons(*payloads)
                 checks = {
-                    "all errored": all(not result.ok for result in [missing_required, invalid_doc, invalid_items, invalid_plain_template_item]),
+                    "all errored": all(not result.ok for result in [missing_required, invalid_doc, invalid_items, invalid_separator]),
                     "reference errors": all(payload.get("error") == "reference_resolution_failed" for payload in payloads),
                     "missing required": "template_missing_required_param" in reasons,
                     "invalid document param": "template_param_doc_not_found" in reasons,
                     "invalid items": "multi_ref_invalid_value" in reasons,
-                    "plain _template item rejected": any(
-                        "alias_template_not_found" in str(entry.get("detail", ""))
+                    "invalid separator detail": any(
+                        "_separator" in str(entry.get("detail", ""))
                         for payload in payloads
                         for entry in payload.get("failed_references", [])
                         if isinstance(entry, dict)

@@ -10,6 +10,10 @@ import {
   REFERENCE_FAILURE_REASONS,
   isReferenceFailureReason,
 } from '../../src/constants/reference-failures.js';
+import {
+  TEMPLATE_WARNING_TYPES,
+  type TemplateWarning,
+} from '../../src/constants/template-warnings.js';
 import type {
   ParsedRef,
   ParseRefError,
@@ -61,6 +65,17 @@ describe('ReferenceFailureReason constants (D-05, T-113-04)', () => {
       expect(isReferenceFailureReason(reason)).toBe(true);
     }
     expect(isReferenceFailureReason('free_form_failure')).toBe(false);
+  });
+});
+
+describe('TemplateWarning constants (TMPL-04)', () => {
+  it('exports stable runtime-enumerable template warning types', () => {
+    expect(TEMPLATE_WARNING_TYPES).toEqual([
+      'unknown_param_ignored',
+      'optional_param_missing_no_default',
+      'undeclared_placeholder_left_literal',
+    ]);
+    expect(new Set(TEMPLATE_WARNING_TYPES).size).toBe(TEMPLATE_WARNING_TYPES.length);
   });
 });
 
@@ -893,6 +908,34 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     });
   });
 
+  it('[U-TMPL-01b] emits structured template warnings with stable types', async () => {
+    vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
+      templateResult('Templates/warnings.md', 'Known {{name}} Optional {{note}} Extra {{extra}}', {
+        name: { type: 'string', required: true },
+        note: { type: 'string' },
+      })
+    );
+
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/warnings.md}}', 'Templates/warnings.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/warnings.md': { name: 'Ada', unknown: 'ignored' } }
+    );
+
+    const metadata = buildInjectedReferences([out[0] as ResolvedRef]);
+    expect(metadata[0].template_warnings).toEqual([
+      { type: 'unknown_param_ignored', param: 'unknown' },
+      { type: 'optional_param_missing_no_default', param: 'note' },
+      { type: 'undeclared_placeholder_left_literal', placeholder: 'extra' },
+    ]);
+    for (const warning of metadata[0].template_warnings as TemplateWarning[]) {
+      expect(TEMPLATE_WARNING_TYPES).toContain(warning.type);
+    }
+  });
+
   it('[U-TMPL-02] ignores template_params for plain documents and injects literal body unchanged', async () => {
     vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
       plainResult('Templates/plain.md', 'Hello {{name}}')
@@ -997,6 +1040,14 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
       { 'Templates/review.md': { target_doc: 'Research/target.md' } }
     );
     expect((resolved[0] as ResolvedRef).content).toBe('Doc:\nTARGET BODY');
+    expect(buildInjectedReferences([resolved[0] as ResolvedRef])[0].template_params_used).toEqual({
+      target_doc: {
+        type: 'document',
+        input: 'Research/target.md',
+        chars: 11,
+        resolved_to: 'Research/target.md',
+      },
+    });
     expect(resolveAndBuildDocument).toHaveBeenCalledWith(
       'Research/target.md',
       expect.objectContaining({ effectiveInclude: ['body'] }),
@@ -1129,13 +1180,14 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     const metadata = buildInjectedReferences([resolved]) as Array<Record<string, unknown>>;
     expect(metadata[0].resolved_to_count).toBe(2);
     expect(metadata[0].items).toEqual([
-      { ref: 'Research/a.md', resolved_to: 'Research/a.md', chars: 5 },
+      { input: 'Research/a.md', resolved_to: 'Research/a.md', chars: 5 },
       {
-        ref: 'Templates/context.md',
+        input: 'Templates/context.md',
         resolved_to: 'Templates/context.md',
         chars: 16,
         template: true,
         template_path: 'Templates/context.md',
+        template_params_used: { focus: { type: 'string', chars: 9 } },
       },
     ]);
     expect(metadata[0].template_params_used).not.toHaveProperty('_items');
@@ -1164,7 +1216,7 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     expect(failed.reason).toBe('multi_ref_item_failed');
     expect(failed.detail).toContain('background');
     expect(failed.detail).toContain('item 0');
-    expect(failed.detail).toContain('template_param_doc_not_found');
+    expect(failed.detail).toContain('document_not_found');
   });
 
   it('[U-TMPL-10b] _items string entries reuse section and pointer grammar and keep ordered item refs', async () => {
@@ -1190,7 +1242,7 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
 
     const resolved = out[0] as ResolvedRef;
     expect(resolved.kind).toBe('resolved');
-    expect(resolved.content).toBe('SECTION BODYPOINTER BODY');
+    expect(resolved.content).toBe('SECTION BODY\n\nPOINTER BODY');
     expect(resolveAndBuildDocument).toHaveBeenNthCalledWith(
       1,
       'Research/a.md',
@@ -1205,8 +1257,8 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     );
     const metadata = buildInjectedReferences([resolved]) as Array<Record<string, unknown>>;
     expect(metadata[0].items).toEqual([
-      { ref: 'Research/a.md#Summary', resolved_to: 'Research/a.md', chars: 12 },
-      { ref: 'Research/b.md->next.doc', resolved_to: 'Research/target.md', chars: 12 },
+      { input: 'Research/a.md#Summary', resolved_to: 'Research/a.md', chars: 12 },
+      { input: 'Research/b.md->next.doc', resolved_to: 'Research/target.md', chars: 12 },
     ]);
   });
 
@@ -1232,11 +1284,12 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     const metadata = buildInjectedReferences([resolvedOut[0] as ResolvedRef]) as Array<Record<string, unknown>>;
     expect(metadata[0].items).toEqual([
       {
-        ref: 'Templates/context.md',
+        input: 'Templates/context.md',
         resolved_to: 'Templates/context.md',
         chars: 16,
         template: true,
         template_path: 'Templates/context.md',
+        template_params_used: { focus: { type: 'string', chars: 9 } },
       },
     ]);
 
@@ -1254,13 +1307,13 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     );
     const failed = failedOut[0] as FailedRef;
     expect(failed.kind).toBe('failed');
-    expect(failed.reason).toBe('multi_ref_item_failed');
+    expect(failed.reason).toBe('multi_ref_invalid_value');
     expect(failed.detail).toContain('alias=background');
     expect(failed.detail).toContain('index=0');
-    expect(failed.detail).toContain('alias_missing_template_field');
+    expect(failed.detail).toContain('_template');
   });
 
-  it('[U-TMPL-10d] _items object _template rejects plain documents instead of injecting raw body', async () => {
+  it('[U-TMPL-10d] _items object _template plain documents inject raw body and ignore params', async () => {
     vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
       plainResult('Docs/plain.md', 'Plain {{label}} body')
     );
@@ -1278,12 +1331,92 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
       }
     );
 
-    const failed = resolvedOut[0] as FailedRef;
+    const resolved = resolvedOut[0] as ResolvedRef;
+    expect(resolved.kind).toBe('resolved');
+    expect(resolved.content).toBe('Plain {{label}} body');
+    const metadata = buildInjectedReferences([resolved]);
+    expect(metadata[0].items).toEqual([
+      { input: 'Docs/plain.md', resolved_to: 'Docs/plain.md', chars: 'Plain {{label}} body'.length },
+    ]);
+  });
+
+  it('[U-TMPL-10e] non-string _separator returns multi_ref_invalid_value', async () => {
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:@background}}', 'background')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      {
+        background: {
+          _items: ['Research/a.md'],
+          _separator: 42,
+        },
+      }
+    );
+
+    const failed = out[0] as FailedRef;
     expect(failed.kind).toBe('failed');
-    expect(failed.reason).toBe('multi_ref_item_failed');
-    expect(failed.detail).toContain('alias=background');
-    expect(failed.detail).toContain('index=0');
-    expect(failed.detail).toContain('alias_template_not_found');
-    expect(failed.detail).toContain('fq_template');
+    expect(failed.reason).toBe('multi_ref_invalid_value');
+    expect(failed.detail).toContain('_separator');
+  });
+
+  it('[U-TMPL-10f] invalid item strings and objects are multi_ref_invalid_value shape errors', async () => {
+    const empty = await resolveWithTemplateParams(
+      [parsedRef('{{ref:@background}}', 'background')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { background: { _items: [''] } }
+    );
+    expect((empty[0] as FailedRef).reason).toBe('multi_ref_invalid_value');
+
+    const aliasItem = await resolveWithTemplateParams(
+      [parsedRef('{{ref:@background}}', 'background')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { background: { _items: ['@other'] } }
+    );
+    expect((aliasItem[0] as FailedRef).reason).toBe('multi_ref_invalid_value');
+  });
+
+  it('[U-TMPL-11] pointer-dereferenced templates render params from the followed target', async () => {
+    vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce({
+      ...plainResult('Refs/source.md', 'unused'),
+      followed_ref: {
+        body: 'Pointer {{name}}',
+        resolved_to: 'Templates/pointer-target.md',
+        frontmatter: {
+          fq_template: true,
+          fq_params: { name: { type: 'string', required: true } },
+        },
+      },
+    });
+
+    const out = await resolveWithTemplateParams(
+      [{
+        ...parsedRef('{{ref:Refs/source.md->target}}', 'Refs/source.md'),
+        pointer: 'target',
+      }],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/pointer-target.md': { name: 'Ada' } }
+    );
+
+    const resolved = out[0] as ResolvedRef;
+    expect(resolved.kind).toBe('resolved');
+    expect(resolved.content).toBe('Pointer Ada');
+    expect(buildInjectedReferences([resolved])[0]).toMatchObject({
+      ref: '{{ref:Refs/source.md->target}}',
+      resolved_to: 'Templates/pointer-target.md',
+      template: true,
+      template_path: 'Templates/pointer-target.md',
+      template_params_used: { name: { type: 'string', chars: 3 } },
+    });
   });
 });
