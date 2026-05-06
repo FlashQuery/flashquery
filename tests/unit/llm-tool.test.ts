@@ -2373,6 +2373,57 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
     });
   });
 
+  it('search exposes resolved purpose metadata including template diagnostics', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-search-template-tools-'));
+    await writeTemplateFixture(vaultPath, 'Templates/Research-Skill.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_namespace: 'skill',
+      fq_desc: 'Research skill',
+      fq_params: { topic: { type: 'string', required: true } },
+    });
+
+    const config = {
+      ...TEST_CONFIG,
+      instance: { ...TEST_CONFIG.instance, vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+      templates: { defaultAccess: 'permissive' },
+      llm: {
+        ...TEST_LLM_CONFIG,
+        purposes: [
+          {
+            name: 'template_reviewer',
+            description: 'Reviewer with template tools',
+            models: ['fast'],
+            templates: ['Templates/Research-Skill.md'],
+          },
+        ],
+      },
+    } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+
+    const handler = captureCallModelHandler(config as typeof TEST_CONFIG);
+    const result = await handler({ resolver: 'search', parameters: { query: 'template_reviewer' } });
+    const payload = JSON.parse(result.content[0].text);
+
+    expect(payload.results.purposes).toEqual([
+      expect.objectContaining({
+        name: 'template_reviewer',
+        template_tools: expect.arrayContaining([
+          expect.objectContaining({
+            name: 'flashquery.skill.research_skill',
+            template_path: 'Templates/Research-Skill.md',
+          }),
+        ]),
+        template_tool_conflicts: [],
+      }),
+    ]);
+  });
+
   it('purpose calls with template-only tools enter Mode 2 via hasModelVisibleTools and preserve template calls_log kind', async () => {
     expect(hasModelVisibleTools({
       nativeToolNames: [],

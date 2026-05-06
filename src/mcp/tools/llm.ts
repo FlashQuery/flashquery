@@ -455,12 +455,12 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             (m.description ?? '').toLowerCase().includes(q)
           )
           .map(modelToResponse);
-        const matchedPurposes = cfgPurposes
+        const matchedPurposes = await Promise.all(cfgPurposes
           .filter((p) =>
             p.name.toLowerCase().includes(q) ||
             p.description.toLowerCase().includes(q)
           )
-          .map(purposeToResponse);
+          .map(purposeToResponse));
         return {
           content: [
             {

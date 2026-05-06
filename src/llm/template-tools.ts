@@ -508,16 +508,6 @@ function parseToolArguments(args: unknown): Record<string, unknown> | null {
   return isRecord(args) ? args : null;
 }
 
-function validateFallbackDispatchArgs(args: Record<string, unknown>): string | null {
-  if (!Object.prototype.hasOwnProperty.call(args, 'topic')) return 'template_missing_required_param';
-  if (typeof args.topic !== 'string') return 'template_param_invalid_type';
-  if (Object.prototype.hasOwnProperty.call(args, 'source') && args.source === 'Missing.md') {
-    return 'template_param_doc_not_found';
-  }
-  if (!Object.prototype.hasOwnProperty.call(args, 'source')) return 'unsupported_template_param_schema';
-  return null;
-}
-
 export async function dispatchTemplateToolCall(
   options: DispatchTemplateToolCallOptions
 ): Promise<DispatchTemplateToolCallResult> {
@@ -538,11 +528,13 @@ export async function dispatchTemplateToolCall(
       ? null
       : { templatePath, body: providedCandidate.body, frontmatter: providedCandidate.frontmatter };
   if (candidate === null) {
-    const fallbackError = validateFallbackDispatchArgs(args);
-    if (fallbackError !== null) {
-      return errorResult(options.toolCall, args, fallbackError, `Template tool '${toolName}' failed validation.`, templatePath);
-    }
-    return successResult(options.toolCall, templatePath, args, `Template ${templatePath}\n${Object.values(args).join('\n')}`);
+    return errorResult(
+      options.toolCall,
+      args,
+      'template_not_found',
+      `Template tool '${toolName}' could not read template '${templatePath}'.`,
+      templatePath
+    );
   }
 
   const schema = templateParamSchema(candidate.frontmatter.fq_params);

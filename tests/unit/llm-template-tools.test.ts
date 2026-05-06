@@ -30,6 +30,13 @@ async function writeTemplate(root: string, relPath: string, frontmatter: Record<
   await writeFile(path, `---\n${yaml}\n---\n\n${body}`);
 }
 
+const testLogger = {
+  info: () => undefined,
+  debug: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
+
 describe('ATL-U-15 template masquerade name generation and discovery contracts', () => {
   it('generates flashquery.<namespace>.<slug> names with template namespace defaulting', async () => {
     const { buildTemplateToolName } = await loadTemplateTools();
@@ -186,18 +193,24 @@ describe('ATL-U-15 template masquerade name generation and discovery contracts',
 describe('ATL-U-15 template tool dispatch contracts', () => {
   it('hydrates templates through the reverse map and returns JSON-stringified successful tool payloads', async () => {
     const { dispatchTemplateToolCall } = await loadTemplateTools();
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-template-dispatch-unit-'));
+    await writeTemplate(vaultPath, 'Templates/Research-Skill.md', {
+      fq_template: true,
+      fq_params: { topic: { type: 'string', required: true } },
+    }, 'Research {{topic}}');
+
     const result = await dispatchTemplateToolCall({
       toolCall: {
         id: 'call_research_skill',
         type: 'function',
         function: {
           name: 'flashquery.skill.research_skill',
-          arguments: { topic: 'Phase 118', source: 'Docs/source.md' },
+          arguments: { topic: 'Phase 118' },
         },
       },
       templateReverseMap: new Map([['flashquery.skill.research_skill', 'Templates/Research-Skill.md']]),
       config: {
-        instance: { id: 'unit', vault: { path: '/tmp/fqc-unit', markdownExtensions: ['.md'] } },
+        instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
       },
     });
 
@@ -215,14 +228,27 @@ describe('ATL-U-15 template tool dispatch contracts', () => {
   });
 
   it.each([
-    ['template_missing_required_param', {}],
-    ['template_param_invalid_type', { topic: 123 }],
-    ['template_param_doc_not_found', { topic: 'Phase 118', source: 'Missing.md' }],
-    ['unsupported_template_param_schema', { topic: 'Phase 118' }],
-    ['tool_not_in_registry', { topic: 'Phase 118' }],
-    ['invalid_tool_arguments', 'not-an-object'],
-  ])('returns recoverable %s tool errors instead of throwing', async (expectedCode, args) => {
+    ['template_missing_required_param', {}, { topic: { type: 'string', required: true } }],
+    ['template_param_invalid_type', { topic: 123 }, { topic: { type: 'string', required: true } }],
+    ['template_param_doc_not_found', { topic: 'Phase 118', source: 'Missing.md' }, {
+      topic: { type: 'string', required: true },
+      source: { type: 'document', required: true },
+    }],
+    ['unsupported_template_param_schema', { topic: 'Phase 118' }, { topic: { type: 'number', required: true } }],
+    ['template_not_found', { topic: 'Phase 118' }, null],
+    ['tool_not_in_registry', { topic: 'Phase 118' }, { topic: { type: 'string', required: true } }],
+    ['invalid_tool_arguments', 'not-an-object', { topic: { type: 'string', required: true } }],
+  ])('returns recoverable %s tool errors instead of throwing', async (expectedCode, args, fqParams) => {
     const { dispatchTemplateToolCall } = await loadTemplateTools();
+    const templateDocuments = fqParams === null
+      ? undefined
+      : new Map([[
+          'Templates/Research-Skill.md',
+          {
+            body: 'Research {{topic}} {{source}}',
+            frontmatter: { fq_template: true, fq_params: fqParams },
+          },
+        ]]);
     const result = await dispatchTemplateToolCall({
       toolCall: {
         id: `call_${expectedCode}`,
@@ -235,9 +261,8 @@ describe('ATL-U-15 template tool dispatch contracts', () => {
         },
       },
       templateReverseMap: new Map([['flashquery.skill.research_skill', 'Templates/Research-Skill.md']]),
-      config: {
-        instance: { id: 'unit', vault: { path: '/tmp/fqc-unit', markdownExtensions: ['.md'] } },
-      },
+      templateDocuments,
+      logger: testLogger,
     });
 
     expect(JSON.parse(result.message.content)).toMatchObject({
