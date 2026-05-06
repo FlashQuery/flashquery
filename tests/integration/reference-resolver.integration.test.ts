@@ -11,7 +11,8 @@ import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
 import { initEmbedding, embeddingProvider } from '../../src/embedding/provider.js';
 import { initVault } from '../../src/storage/vault.js';
 import { logger } from '../../src/logging/logger.js';
-import { resolveReferences, hydrateMessages, buildInjectedReferences } from '../../src/llm/reference-resolver.js';
+import { parseReferences, resolveReferences, hydrateMessages, buildInjectedReferences } from '../../src/llm/reference-resolver.js';
+import type { FailedRef, ParsedRef, ResolvedRef } from '../../src/llm/reference-resolver.js';
 import { TEST_DATABASE_URL, TEST_SUPABASE_KEY, TEST_SUPABASE_URL, HAS_SUPABASE } from '../helpers/test-env.js';
 
 const INSTANCE_ID = `reference-resolver-${Date.now()}`;
@@ -116,5 +117,151 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
     expect(hydrated[0].content).toContain('TARGET BODY');
     expect(hydrated[0].content).toContain('SECTION BODY');
     expect(hydrated[0].content).toContain('literal {{ref:Refs/nested.md}} remains');
+  });
+
+  it('[I-TMPL-01] renders fq_template true documents with path-keyed string template_params', async () => {
+    await seedDocument(vaultPath, 'Templates/greeting.md', 'Greeting Template', 'Hello {{name}}.', {
+      fq_template: true,
+      fq_params: {
+        name: { type: 'string', required: true },
+      },
+    });
+
+    const parsed: ParsedRef[] = [
+      {
+        placeholder: '{{ref:Templates/greeting.md}}',
+        ref: '{{ref:Templates/greeting.md}}',
+        identifierType: 'ref',
+        identifier: 'Templates/greeting.md',
+        messageIndex: 0,
+      },
+    ];
+
+    const resolved = await resolveReferences(parsed, config, supabaseManager, embeddingProvider, logger, {
+      'Templates/greeting.md': { name: 'Ada' },
+    });
+    const successes = resolved.filter((entry): entry is ResolvedRef => entry.kind === 'resolved');
+    expect(successes).toHaveLength(1);
+    expect(successes[0].content).toBe('Hello Ada.\n');
+
+    const hydrated = hydrateMessages([
+      { role: 'user', content: 'Render {{ref:Templates/greeting.md}}' },
+    ], successes);
+    expect(hydrated[0].content).toBe('Render Hello Ada.\n');
+
+    const metadata = buildInjectedReferences(successes);
+    expect(metadata[0]).toMatchObject({
+      ref: '{{ref:Templates/greeting.md}}',
+      chars: 'Hello Ada.\n'.length,
+      template: true,
+      template_path: 'Templates/greeting.md',
+      template_params_used: {
+        name: { type: 'string', chars: 3 },
+      },
+    });
+  });
+
+  it('[I-TMPL-02] ignores template_params for real plain documents', async () => {
+    await seedDocument(vaultPath, 'Docs/plain-template-looking.md', 'Plain Doc', 'Hello {{name}}.');
+
+    const parsed: ParsedRef[] = [
+      {
+        placeholder: '{{ref:Docs/plain-template-looking.md}}',
+        ref: '{{ref:Docs/plain-template-looking.md}}',
+        identifierType: 'ref',
+        identifier: 'Docs/plain-template-looking.md',
+        messageIndex: 0,
+      },
+    ];
+
+    const resolved = await resolveReferences(parsed, config, supabaseManager, embeddingProvider, logger, {
+      'Docs/plain-template-looking.md': { name: 'Ada' },
+    });
+    const successes = resolved.filter((entry): entry is ResolvedRef => entry.kind === 'resolved');
+    expect(successes).toHaveLength(1);
+    expect(successes[0].content).toBe('Hello {{name}}.\n');
+
+    const metadata = buildInjectedReferences(successes);
+    expect(metadata[0]).not.toHaveProperty('template');
+    expect(metadata[0]).not.toHaveProperty('template_params_used');
+  });
+
+  it('[I-TMPL-03] resolves real document template params by path and fq_id', async () => {
+    const sourceId = await seedDocument(vaultPath, 'Sources/source.md', 'Source Doc', 'SOURCE BODY');
+    await seedDocument(vaultPath, 'Templates/with-source.md', 'Source Template', 'Name: {{name}}\nSource:\n{{source}}', {
+      fq_template: true,
+      fq_params: {
+        name: { type: 'string', required: true },
+        source: { type: 'document', required: true },
+      },
+    });
+
+    const parsed: ParsedRef[] = [
+      {
+        placeholder: '{{ref:Templates/with-source.md}}',
+        ref: '{{ref:Templates/with-source.md}}',
+        identifierType: 'ref',
+        identifier: 'Templates/with-source.md',
+        messageIndex: 0,
+      },
+      {
+        placeholder: '{{ref:Templates/with-source.md}}',
+        ref: '{{ref:Templates/with-source.md}}',
+        identifierType: 'ref',
+        identifier: 'Templates/with-source.md',
+        messageIndex: 0,
+      },
+    ];
+
+    const resolved = await resolveReferences(parsed, config, supabaseManager, embeddingProvider, logger, {
+      'Templates/with-source.md': { name: 'Ada', source: 'Sources/source.md' },
+    });
+    const byPath = resolved[0] as ResolvedRef;
+    expect(byPath.kind).toBe('resolved');
+    expect(byPath.content).toBe('Name: Ada\nSource:\nSOURCE BODY\n\n');
+    expect(buildInjectedReferences([byPath])[0].template_params_used).toEqual({
+      name: { type: 'string', chars: 3 },
+      source: { type: 'document', chars: 12, resolved_to: 'Sources/source.md' },
+    });
+
+    const byId = await resolveReferences([parsed[0]], config, supabaseManager, embeddingProvider, logger, {
+      'Templates/with-source.md': { name: 'Grace', source: sourceId },
+    });
+    const resolvedById = byId[0] as ResolvedRef;
+    expect(resolvedById.kind).toBe('resolved');
+    expect(resolvedById.content).toBe('Name: Grace\nSource:\nSOURCE BODY\n\n');
+    expect(buildInjectedReferences([resolvedById])[0].template_params_used?.source).toEqual({
+      type: 'document',
+      chars: 12,
+      resolved_to: 'Sources/source.md',
+    });
+  });
+
+  it('[I-TMPL-04] returns template_param_doc_not_found for missing real document params', async () => {
+    await seedDocument(vaultPath, 'Templates/missing-source.md', 'Missing Source Template', 'Source:\n{{source}}', {
+      fq_template: true,
+      fq_params: {
+        source: { type: 'document', required: true },
+      },
+    });
+
+    const parsed: ParsedRef[] = [
+      {
+        placeholder: '{{ref:Templates/missing-source.md}}',
+        ref: '{{ref:Templates/missing-source.md}}',
+        identifierType: 'ref',
+        identifier: 'Templates/missing-source.md',
+        messageIndex: 0,
+      },
+    ];
+
+    const resolved = await resolveReferences(parsed, config, supabaseManager, embeddingProvider, logger, {
+      'Templates/missing-source.md': { source: 'Sources/missing.md' },
+    });
+    const failed = resolved[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe('template_param_doc_not_found');
+    expect(failed.detail).toContain('source');
+    expect(failed.detail).toContain('Sources/missing.md');
   });
 });
