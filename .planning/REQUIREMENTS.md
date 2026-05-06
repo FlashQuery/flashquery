@@ -59,14 +59,14 @@
 - [x] **TOOL-02**: Purpose-level `excluded_tools` removes tools from the final set and is invalid without `tools`.
 - [x] **TOOL-03**: Hard-excluded tools, including `call_model` and admin/plugin management tools, are removed from exposure with warnings.
 - [x] **TOOL-04**: Internal tool registry translates MCP/Zod schemas into OpenAI-compatible tool definitions with strict-mode support where available.
-- [ ] **TOOL-05**: Delegated model native tool calls are dispatched internally through FlashQuery handlers without exposing an MCP server to the delegated model.
-- [ ] **TOOL-06**: Tool result messages use OpenAI-compatible `tool` role messages keyed by `tool_call_id`, with JSON-stringified raw results.
+- [x] **TOOL-05**: Delegated model native tool calls are dispatched internally through FlashQuery handlers without exposing an MCP server to the delegated model.
+- [x] **TOOL-06**: Tool result messages use OpenAI-compatible `tool` role messages keyed by `tool_call_id`, with JSON-stringified raw results.
 
 ### Agent Loop Execution
 
 - [ ] **LOOP-01**: `call_model` Mode 2 runs a FlashQuery-managed loop when a purpose exposes native tools, template tools, or both.
 - [ ] **LOOP-02**: Loop executor appends assistant tool-call messages, dispatches returned tool calls, appends tool result messages, and continues until a final assistant response or stop condition.
-- [ ] **LOOP-03**: Multiple tool calls in one assistant message are dispatched with `Promise.allSettled` semantics and individual errors returned to the model.
+- [x] **LOOP-03**: Multiple tool calls in one assistant message are dispatched with `Promise.allSettled` semantics and individual errors returned to the model.
 - [ ] **LOOP-04**: Loop guardrails enforce `timeout_ms`, `max_iterations`, `max_tokens_budget`, and `max_cost_usd` before starting the next model call.
 - [ ] **LOOP-05**: Existing purpose fallback behavior works across chat iterations, preserving completed iteration history when a fallback model is selected.
 - [ ] **LOOP-06**: Mode 2 writes exactly one aggregate `fqc_llm_usage` row per `call_model` invocation via the existing cost tracker shutdown drain.
@@ -159,13 +159,13 @@
 | TOOL-04 | Phase 116 | Complete |
 | LOOP-01 | Phase 117 | Pending |
 | LOOP-02 | Phase 117 | Pending |
-| LOOP-03 | Phase 117 | Pending |
+| LOOP-03 | Phase 117 | Complete |
 | LOOP-04 | Phase 117 | Pending |
 | LOOP-05 | Phase 117 | Pending |
 | LOOP-06 | Phase 117 | Pending |
 | LOOP-07 | Phase 117 | Pending |
-| TOOL-05 | Phase 117 | Pending |
-| TOOL-06 | Phase 117 | Pending |
+| TOOL-05 | Phase 117 | Complete |
+| TOOL-06 | Phase 117 | Complete |
 | TMPL-06 | Phase 118 | Pending |
 | TMPL-07 | Phase 118 | Pending |
 | TMPL-08 | Phase 118 | Pending |
