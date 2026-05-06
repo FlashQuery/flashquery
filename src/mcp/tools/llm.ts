@@ -702,6 +702,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             providerParameters: purposeProviderParameters,
             purposeDefaults,
             nativeToolCatalog,
+            // toolRegistry carries the templateReverseMap used for generated template tool dispatch.
             toolRegistry,
             templateDispatchContext: { config, logger },
             traceId: params.trace_id ?? null,

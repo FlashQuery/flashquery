@@ -47,6 +47,25 @@ class MockProvider:
                 "choices": [{"message": {"role": "assistant", "content": "ATL-DS-10 final"}, "finish_reason": "stop"}],
                 "usage": {"prompt_tokens": 20, "completion_tokens": 5},
             },
+            {
+                "choices": [{
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [{
+                            "id": "call_research_skill_missing_param",
+                            "type": "function",
+                            "function": {"name": "flashquery.skill.research_skill", "arguments": json.dumps({"source": "Docs/source.md"})},
+                        }],
+                    },
+                    "finish_reason": "tool_calls",
+                }],
+                "usage": {"prompt_tokens": 9, "completion_tokens": 3},
+            },
+            {
+                "choices": [{"message": {"role": "assistant", "content": "ATL-DS-10 recovery final"}, "finish_reason": "stop"}],
+                "usage": {"prompt_tokens": 18, "completion_tokens": 4},
+            },
         ]
         self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
         self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
@@ -130,9 +149,23 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 and envelope.get("response") == "ATL-DS-10 final"
                 and any(call.get("kind") == "template" and call.get("tool_name") == "flashquery.skill.research_skill" for entry in calls_log for call in entry.get("tool_calls", []))
                 and len(provider.requests) == 2
-                and "SOURCE BODY ATL-DS-10" in json.dumps(provider.requests[-1])
+                and "SOURCE BODY ATL-DS-10" in result.text
             )
             run.step("ATL-DS-10 validates string and document params through public call_model template tool loop", passed, json.dumps({"result": result.text[:1500], "requests": provider.requests}, sort_keys=True)[:4000], tool_result=result)
+            missing_result = client.call_tool("call_model", resolver="purpose", name="template_agent", messages=[{"role": "user", "content": "ATL-DS-10 missing required param recovery"}], return_messages=True)
+            missing_envelope = json.loads(missing_result.text or "{}") if missing_result.ok else {}
+            missing_calls_log = missing_envelope.get("metadata", {}).get("tools", {}).get("calls_log", [])
+            missing_passed = (
+                missing_result.ok
+                and missing_envelope.get("response") == "ATL-DS-10 recovery final"
+                and any(
+                    call.get("kind") == "template"
+                    and call.get("error_code") == "template_missing_required_param"
+                    for entry in missing_calls_log
+                    for call in entry.get("tool_calls", [])
+                )
+            )
+            run.step("ATL-DS-10 returns recoverable template_missing_required_param tool errors", missing_passed, json.dumps({"result": missing_result.text[:1500]}, sort_keys=True), tool_result=missing_result)
     return run
 
 
