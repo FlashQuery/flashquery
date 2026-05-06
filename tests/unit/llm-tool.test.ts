@@ -2501,6 +2501,38 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
     expect(result.content[0].text).toContain('runtime table unavailable');
   });
 
+  it('list_models does not load runtime template bindings', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+    runtimeBindingInMock.mockRejectedValueOnce(new Error('runtime table unavailable'));
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const result = await handler({ resolver: 'list_models' });
+
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toHaveProperty('models');
+    expect(runtimeBindingInMock).not.toHaveBeenCalled();
+  });
+
+  it('malformed search returns the documented validation error before runtime template binding lookup', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+    runtimeBindingInMock.mockRejectedValueOnce(new Error('runtime table unavailable'));
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const result = await handler({ resolver: 'search' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toBe('search requires parameters.query (non-empty string)');
+    expect(runtimeBindingInMock).not.toHaveBeenCalled();
+  });
+
   it('purpose calls with template-only tools enter Mode 2 via hasModelVisibleTools and preserve template calls_log kind', async () => {
     expect(hasModelVisibleTools({
       nativeToolNames: [],

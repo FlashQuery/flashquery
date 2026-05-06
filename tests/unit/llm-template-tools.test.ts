@@ -319,6 +319,44 @@ describe('ATL-U-15 template tool dispatch contracts', () => {
     });
   });
 
+  it('uses declared defaults when strict providers send null for optional template params', async () => {
+    const { dispatchTemplateToolCall } = await loadTemplateTools();
+    const result = await dispatchTemplateToolCall({
+      toolCall: {
+        id: 'call_optional_default_skill',
+        type: 'function',
+        function: {
+          name: 'flashquery_skill_optional_default_skill',
+          arguments: { topic: 'Phase 118', tone: null },
+        },
+      },
+      templateReverseMap: new Map([['flashquery_skill_optional_default_skill', 'Templates/Optional-Default-Skill.md']]),
+      templateDocuments: new Map([[
+        'Templates/Optional-Default-Skill.md',
+        {
+          body: 'Research {{topic}} in a {{tone}} tone',
+          frontmatter: {
+            fq_template: true,
+            fq_params: {
+              topic: { type: 'string', required: true },
+              tone: { type: 'string', required: false, default: 'precise' },
+            },
+          },
+        },
+      ]]),
+      logger: testLogger,
+    });
+
+    const payload = JSON.parse(result.message.content);
+    expect(payload).toMatchObject({
+      ok: true,
+      result: {
+        content: 'Research Phase 118 in a precise tone',
+      },
+    });
+    expect(payload.result.template_warnings ?? []).toEqual([]);
+  });
+
   it('does not read reverse-map template paths that normalize outside the vault', async () => {
     const { dispatchTemplateToolCall } = await loadTemplateTools();
     const rootPath = await mkdtemp(join(tmpdir(), 'fqc-template-path-containment-'));

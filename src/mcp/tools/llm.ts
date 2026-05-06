@@ -426,16 +426,10 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           return capabilities.strict_tools === true;
         };
 
-        const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
-        if (!runtimeTemplateBindingsResult.ok) {
-          return {
-            content: [{ type: 'text' as const, text: `call_model failed: ${runtimeTemplateBindingsResult.message}` }],
-            isError: true,
-          };
-        }
-        const runtimeTemplateBindings = runtimeTemplateBindingsResult.bindings;
-
-        const purposeToResponse = async (p: typeof cfgPurposes[number]): Promise<Record<string, unknown>> => {
+        const purposeToResponse = async (
+          p: typeof cfgPurposes[number],
+          runtimeTemplateBindings: RuntimeTemplateBinding[]
+        ): Promise<Record<string, unknown>> => {
           const primaryName = p.models[0];
           const primary = primaryName ? modelsByName.get(primaryName) : undefined;
           const templateRegistry = await assembleTemplateToolRegistry({
@@ -463,32 +457,53 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           return { content: [{ type: 'text' as const, text: JSON.stringify({ models }) }] };
         }
 
-        if (params.resolver === 'list_purposes') {
-          const purposes = await Promise.all(cfgPurposes.map(purposeToResponse));
-          return { content: [{ type: 'text' as const, text: JSON.stringify({ purposes }) }] };
-        }
-
-        // params.resolver === 'search'
         const queryRaw = params.parameters?.['query'];
-        if (typeof queryRaw !== 'string' || queryRaw === '') {
+        if (params.resolver === 'search' && (typeof queryRaw !== 'string' || queryRaw === '')) {
           return {
             content: [{ type: 'text' as const, text: 'search requires parameters.query (non-empty string)' }],
             isError: true,
           };
         }
-        const q = queryRaw.toLowerCase();
+
+        if (params.resolver === 'list_purposes') {
+          const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
+          if (!runtimeTemplateBindingsResult.ok) {
+            return {
+              content: [{ type: 'text' as const, text: `call_model failed: ${runtimeTemplateBindingsResult.message}` }],
+              isError: true,
+            };
+          }
+          const purposes = await Promise.all(cfgPurposes.map((purpose) =>
+            purposeToResponse(purpose, runtimeTemplateBindingsResult.bindings)
+          ));
+          return { content: [{ type: 'text' as const, text: JSON.stringify({ purposes }) }] };
+        }
+
+        // params.resolver === 'search'
+        const q = (queryRaw as string).toLowerCase();
         const matchedModels = cfgModels
           .filter((m) =>
             m.name.toLowerCase().includes(q) ||
             (m.description ?? '').toLowerCase().includes(q)
           )
           .map(modelToResponse);
-        const matchedPurposes = await Promise.all(cfgPurposes
-          .filter((p) =>
+        const matchedPurposeConfigs = cfgPurposes.filter((p) =>
             p.name.toLowerCase().includes(q) ||
             p.description.toLowerCase().includes(q)
-          )
-          .map(purposeToResponse));
+          );
+        let matchedPurposes: Array<Record<string, unknown>> = [];
+        if (matchedPurposeConfigs.length > 0) {
+          const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
+          if (!runtimeTemplateBindingsResult.ok) {
+            return {
+              content: [{ type: 'text' as const, text: `call_model failed: ${runtimeTemplateBindingsResult.message}` }],
+              isError: true,
+            };
+          }
+          matchedPurposes = await Promise.all(matchedPurposeConfigs.map((purpose) =>
+            purposeToResponse(purpose, runtimeTemplateBindingsResult.bindings)
+          ));
+        }
         return {
           content: [
             {
