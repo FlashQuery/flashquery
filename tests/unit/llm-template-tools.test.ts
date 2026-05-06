@@ -38,6 +38,27 @@ const testLogger = {
 };
 
 describe('ATL-U-15 template masquerade name generation and discovery contracts', () => {
+  it('returns stable empty template diagnostic arrays when no template tools are available', async () => {
+    const { assembleTemplateToolRegistry } = await loadTemplateTools();
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-template-tools-empty-diagnostics-'));
+
+    const registry = await assembleTemplateToolRegistry({
+      config: {
+        instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+        templates: { defaultAccess: 'restrictive' },
+        llm: { purposes: [{ name: 'researcher', description: 'Researcher', models: ['fast'] }] },
+      },
+      purposeName: 'researcher',
+    });
+
+    expect(registry.diagnostics).toEqual({
+      template_tools: [],
+      template_tool_warnings: [],
+      dangling_template_paths: [],
+      template_tool_conflicts: [],
+    });
+  });
+
   it('generates provider-safe flashquery_<namespace>_<slug> names with template namespace defaulting', async () => {
     const { buildTemplateToolName } = await loadTemplateTools();
 

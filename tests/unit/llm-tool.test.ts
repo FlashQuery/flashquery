@@ -1949,6 +1949,76 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     expect('capabilities' in empty).toBe(false);
   });
 
+  it('[ATL-U-16] list_models exposes capability_diagnostics with unknown-vs-false remediation', async () => {
+    const config = {
+      ...DISC_CONFIG,
+      llm: {
+        providers: [
+          { name: 'custom', type: 'openai-compatible' as const, endpoint: 'https://llm.example.test', apiKey: 'sk-test' },
+        ],
+        models: [
+          {
+            name: 'unknown-tools',
+            providerName: 'custom',
+            model: 'unknown-tools-model',
+            type: 'language' as const,
+            costPerMillion: { input: 1, output: 2 },
+          },
+          {
+            name: 'unsupported-tools',
+            providerName: 'custom',
+            model: 'unsupported-tools-model',
+            type: 'language' as const,
+            costPerMillion: { input: 1, output: 2 },
+            capabilities: {
+              tool_calling: false,
+              usage_on_tool_calls: false,
+            },
+          },
+        ],
+        purposes: [],
+      },
+    } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+    const handler = captureCallModelHandler(config as typeof TEST_CONFIG);
+
+    const result = await handler({ resolver: 'list_models' });
+    const payload = JSON.parse(result.content[0].text) as {
+      models: Array<{ name: string; capability_diagnostics: Array<Record<string, string>> }>;
+    };
+    const unknown = payload.models.find((model) => model.name === 'unknown-tools');
+    const unsupported = payload.models.find((model) => model.name === 'unsupported-tools');
+
+    expect(result.isError).toBeUndefined();
+    expect(unknown?.capability_diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          capability: 'tool_calling',
+          state: 'unknown_declaration',
+          remediation: expect.stringContaining('capabilities.tool_calling: true|false'),
+        }),
+        expect.objectContaining({
+          capability: 'usage_on_tool_calls',
+          state: 'unknown_declaration',
+          remediation: expect.stringContaining('capabilities.usage_on_tool_calls: true|false'),
+        }),
+      ])
+    );
+    expect(unsupported?.capability_diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          capability: 'tool_calling',
+          state: 'declared_unsupported',
+        }),
+        expect.objectContaining({
+          capability: 'usage_on_tool_calls',
+          state: 'declared_unsupported',
+        }),
+      ])
+    );
+    expect(JSON.stringify(unsupported?.capability_diagnostics)).not.toContain('declare missing');
+    expect(JSON.stringify(unsupported?.capability_diagnostics)).not.toContain('capabilities.tool_calling: true|false');
+  });
+
   it('[U-DISC-05] list_purposes returns {purposes: [...]} with cost rates from the primary model (models[0])', async () => {
     const handler = captureCallModelHandler(DISC_CONFIG);
     const res = await handler({ resolver: 'list_purposes' });
@@ -2017,6 +2087,67 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     const minimal = body.purposes.find((p: any) => p.name === 'minimal');
     expect(general.defaults).toEqual({ temperature: 0.7 });
     expect('defaults' in minimal).toBe(false);
+  });
+
+  it('[ATL-U-16] list_purposes includes empty native and template diagnostic arrays on every purpose', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const result = await handler({ resolver: 'list_purposes' });
+    const payload = JSON.parse(result.content[0].text) as {
+      purposes: Array<Record<string, unknown>>;
+    };
+
+    expect(result.isError).toBeUndefined();
+    for (const purpose of payload.purposes) {
+      expect(purpose.native_tools).toEqual([]);
+      expect(purpose.native_tool_diagnostics).toEqual({
+        expanded_tiers: [],
+        explicit_tools: [],
+        excluded: [],
+        hard_excluded: [],
+        unknown: [],
+      });
+      expect(purpose.template_tools).toEqual([]);
+      expect(purpose.template_tool_warnings).toEqual([]);
+      expect(purpose.template_tool_conflicts).toEqual([]);
+      expect(purpose.dangling_template_paths).toEqual([]);
+    }
+  });
+
+  it('[ATL-U-16] list_purposes exposes configured native tool names before resolver=purpose invocation', async () => {
+    const config = {
+      ...DISC_CONFIG,
+      llm: {
+        ...DISC_LLM_CONFIG,
+        purposes: [
+          {
+            name: 'agentic',
+            description: 'Agentic purpose with native tools',
+            models: ['fast'],
+            tools: ['get_document'],
+          },
+        ],
+      },
+    } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+    const { handler, server } = captureCallModelRegistration(config as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    const result = await handler({ resolver: 'list_purposes' });
+    const payload = JSON.parse(result.content[0].text) as {
+      purposes: Array<Record<string, unknown>>;
+    };
+
+    expect(result.isError).toBeUndefined();
+    expect(payload.purposes[0]).toMatchObject({
+      name: 'agentic',
+      native_tools: ['get_document'],
+      native_tool_diagnostics: {
+        expanded_tiers: [],
+        explicit_tools: ['get_document'],
+        excluded: [],
+        hard_excluded: [],
+        unknown: [],
+      },
+    });
   });
 
   it('[U-DISC-07] search with parameters.query case-insensitive matches model name (substring) — full per-entry shape locked down (TC4-W2)', async () => {

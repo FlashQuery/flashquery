@@ -224,6 +224,20 @@ describe('TOOL_TIERS', () => {
 });
 
 describe('assembleNativeToolRegistry', () => {
+  it('returns stable empty native diagnostics when a purpose declares no native tools', () => {
+    const result = assembleNativeToolRegistry(makeConfig(), 'research', CATALOG);
+
+    expect(result.nativeToolNames).toEqual([]);
+    expect(result.providerTools).toBeUndefined();
+    expect(result.diagnostics).toEqual({
+      expandedTiers: [],
+      explicitTools: [],
+      excluded: [],
+      hardExcluded: [],
+      unknown: [],
+    });
+  });
+
   it('expands tier:read-only to read-safe native tools', () => {
     const result = assembleNativeToolRegistry(makeConfig(['tier:read-only']), 'research', CATALOG);
 
