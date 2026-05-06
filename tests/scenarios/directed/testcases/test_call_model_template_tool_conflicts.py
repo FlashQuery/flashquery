@@ -113,8 +113,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run.step("ATL-DS-08 list_purposes exposes template_tool_conflicts", passed_discovery, json.dumps({"purpose": purpose}, sort_keys=True), tool_result=discovery)
 
             result = client.call_tool("call_model", resolver="purpose", name="conflict_agent", messages=[{"role": "user", "content": "ATL-DS-08"}])
-            passed_call = (not result.ok) and len(provider.requests) == 0 and "template_tool_conflicts" in (result.text or "")
-            run.step("ATL-DS-08 call_model fails before provider invocation on template collision", passed_call, json.dumps({"provider_requests": provider.requests, "response": result.text[:1000]}, sort_keys=True), tool_result=result)
+            response_text = result.text or ""
+            passed_call = (
+                (not result.ok)
+                and len(provider.requests) == 0
+                and "tool_registry_collision" in response_text
+                and "template_tool_conflicts" in response_text
+            )
+            run.step(
+                "ATL-DS-08 call_model fails before provider invocation on template collision",
+                passed_call,
+                json.dumps({"provider_requests": provider.requests, "requests_count": 0, "response": response_text[:1000]}, sort_keys=True),
+                tool_result=result,
+            )
     return run
 
 
