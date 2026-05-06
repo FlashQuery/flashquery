@@ -9,7 +9,11 @@ import {
   type TemplateParamDeclaration,
   type TemplateParamUsage,
 } from './reference-resolver.js';
-import { normalizeToolJsonSchema, type OpenAiToolDefinition } from './tool-registry.js';
+import {
+  mergeModelVisibleToolRegistries,
+  normalizeToolJsonSchema,
+  type OpenAiToolDefinition,
+} from './tool-registry.js';
 import type { LlmChatToolCall, LlmToolMessage } from './types.js';
 import type { TemplateWarning } from '../constants/template-warnings.js';
 import { supabaseManager } from '../storage/supabase.js';
@@ -55,6 +59,8 @@ export interface TemplateToolRegistryAssembly {
   diagnostics: TemplateToolDiagnostics;
   providerTools?: OpenAiToolDefinition[];
 }
+
+export { mergeModelVisibleToolRegistries };
 
 export interface TemplateToolRuntimeBinding {
   purpose_name?: string;
@@ -164,7 +170,12 @@ function emptyDiagnostics(): TemplateToolDiagnostics {
 
 async function discoverMarkdownFiles(root: string, markdownExtensions: string[]): Promise<string[]> {
   async function walk(dir: string): Promise<string[]> {
-    const entries = await readdir(dir, { withFileTypes: true });
+    let entries: Awaited<ReturnType<typeof readdir>>;
+    try {
+      entries = await readdir(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
     const files = await Promise.all(entries.map(async (entry) => {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) return await walk(full);

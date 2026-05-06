@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { z } from 'zod';
 import { callModelMessageSchema, hasModelVisibleTools, registerLlmTools } from '../../src/mcp/tools/llm.js';
 import { computeCost } from '../../src/llm/cost-tracker.js';
@@ -50,13 +53,17 @@ vi.mock('../../src/llm/client.js', async (importOriginal) => {
 });
 
 // reference-resolver mock — allows tests to control parseReferences / resolveReferences / hydrateMessages
-vi.mock('../../src/llm/reference-resolver.js', () => ({
-  parseReferences: vi.fn(),
-  resolveReferences: vi.fn(),
-  hydrateMessages: vi.fn(),
-  buildInjectedReferences: vi.fn(),
-  computePromptChars: vi.fn(),
-}));
+vi.mock('../../src/llm/reference-resolver.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/llm/reference-resolver.js')>();
+  return {
+    ...actual,
+    parseReferences: vi.fn(),
+    resolveReferences: vi.fn(),
+    hydrateMessages: vi.fn(),
+    buildInjectedReferences: vi.fn(),
+    computePromptChars: vi.fn(),
+  };
+});
 
 // embeddingProvider mock — new llm.ts import must resolve cleanly in tests
 vi.mock('../../src/embedding/provider.js', () => ({
@@ -321,6 +328,20 @@ function seedNativeToolCatalog(server: CapturedServer): void {
       },
     }
   );
+}
+
+async function writeTemplateFixture(
+  root: string,
+  relPath: string,
+  frontmatter: Record<string, unknown>,
+  body = 'Template body'
+): Promise<void> {
+  const path = join(root, relPath);
+  await mkdir(dirname(path), { recursive: true });
+  const yaml = Object.entries(frontmatter)
+    .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
+    .join('\n');
+  await writeFile(path, `---\n${yaml}\n---\n\n${body}`);
 }
 
 // ─── U-RR-INT: Handler-level Step 1.5 reference resolution tests ─────────────
@@ -2298,8 +2319,24 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
       getModelForPurpose: vi.fn(),
     } as unknown as LlmClient;
 
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-list-purposes-template-tools-'));
+    await writeTemplateFixture(vaultPath, 'Templates/Research-Skill.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_namespace: 'skill',
+      fq_desc: 'Research skill',
+      fq_params: { topic: { type: 'string', required: true } },
+    });
+    await writeTemplateFixture(vaultPath, 'Templates/Document Review.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_namespace: 'review',
+      fq_desc: 'Document review',
+    });
+
     const config = {
       ...TEST_CONFIG,
+      instance: { ...TEST_CONFIG.instance, vault: { path: vaultPath, markdownExtensions: ['.md'] } },
       templates: { defaultAccess: 'permissive' },
       llm: {
         ...TEST_LLM_CONFIG,

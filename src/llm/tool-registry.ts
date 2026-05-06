@@ -1,6 +1,11 @@
 import type { FlashQueryConfig } from '../config/loader.js';
 import type { logger } from '../logging/logger.js';
 import { z } from 'zod';
+import type {
+  TemplateToolDiagnostics,
+  TemplateToolRegistryAssembly,
+  TemplateToolReverseMap,
+} from './template-tools.js';
 
 export interface NativeToolResponse {
   content: Array<{ type: 'text'; text: string }>;
@@ -49,8 +54,15 @@ export interface ToolRegistryDiagnostics {
 
 export interface ToolRegistryAssembly {
   nativeToolNames: string[];
+  templateToolNames?: string[];
+  templateReverseMap?: TemplateToolReverseMap;
   providerTools?: OpenAiToolDefinition[];
-  diagnostics: ToolRegistryDiagnostics;
+  diagnostics: ToolRegistryDiagnostics & Partial<TemplateToolDiagnostics>;
+  collisions?: Array<{
+    name: string;
+    template_paths: string[];
+    sources: Array<{ kind: 'template' | 'native'; template_path?: string; name?: string }>;
+  }>;
 }
 
 export interface ToolRegistryAssemblyOptions {
@@ -286,5 +298,90 @@ export function assembleNativeToolRegistry(
     nativeToolNames,
     ...(providerTools.length > 0 ? { providerTools } : {}),
     diagnostics,
+  };
+}
+
+function templateToolPath(tool: unknown): string | undefined {
+  if (!isRecord(tool)) return undefined;
+  const path = tool['templatePath'] ?? tool['template_path'];
+  return typeof path === 'string' ? path : undefined;
+}
+
+function templateToolName(tool: unknown): string | undefined {
+  if (!isRecord(tool)) return undefined;
+  const name = tool['name'];
+  return typeof name === 'string' ? name : undefined;
+}
+
+export function mergeModelVisibleToolRegistries(input: {
+  native?: ToolRegistryAssembly;
+  template?: TemplateToolRegistryAssembly | {
+    providerTools?: OpenAiToolDefinition[];
+    templateTools?: unknown[];
+    templateReverseMap?: TemplateToolReverseMap;
+    diagnostics?: Partial<TemplateToolDiagnostics>;
+  };
+}): ToolRegistryAssembly {
+  const native = input.native ?? {
+    nativeToolNames: [],
+    diagnostics: { expandedTiers: [], explicitTools: [], excluded: [], hardExcluded: [], unknown: [] },
+  };
+  const template = input.template;
+  const providerTools = [
+    ...(native.providerTools ?? []),
+    ...(template?.providerTools ?? []),
+  ];
+  const templateTools = template?.templateTools ?? [];
+  const templateToolNames = templateTools
+    .map((tool) => templateToolName(tool))
+    .filter((name): name is string => name !== undefined);
+  const templateReverseMap = template?.templateReverseMap;
+  const diagnostics = {
+    ...native.diagnostics,
+    ...(template?.diagnostics ?? {}),
+  };
+  const sourceGroups = new Map<string, Array<{ kind: 'template' | 'native'; template_path?: string; name?: string }>>();
+
+  for (const name of native.nativeToolNames) {
+    const sources = sourceGroups.get(name) ?? [];
+    sources.push({ kind: 'native', name });
+    sourceGroups.set(name, sources);
+  }
+  for (const tool of templateTools) {
+    const name = templateToolName(tool);
+    if (name === undefined) continue;
+    const sources = sourceGroups.get(name) ?? [];
+    const path = templateToolPath(tool);
+    sources.push({ kind: 'template', ...(path === undefined ? {} : { template_path: path }) });
+    sourceGroups.set(name, sources);
+  }
+
+  const collisions = [...sourceGroups.entries()]
+    .filter(([, sources]) => sources.length > 1)
+    .map(([name, sources]) => ({
+      name,
+      template_paths: Array.from(new Set(sources
+        .map((source) => source.template_path)
+        .filter((path): path is string => path !== undefined))),
+      sources,
+    }));
+  const templateDiagnosticsConflicts = diagnostics.template_tool_conflicts ?? [];
+  const allCollisions = [
+    ...templateDiagnosticsConflicts,
+    ...collisions.filter((collision) =>
+      !templateDiagnosticsConflicts.some((existing) => existing.name === collision.name)
+    ),
+  ];
+
+  return {
+    nativeToolNames: native.nativeToolNames,
+    templateToolNames,
+    ...(templateReverseMap === undefined ? {} : { templateReverseMap }),
+    ...(providerTools.length > 0 ? { providerTools } : {}),
+    diagnostics: {
+      ...diagnostics,
+      template_tool_conflicts: allCollisions,
+    },
+    collisions: allCollisions,
   };
 }

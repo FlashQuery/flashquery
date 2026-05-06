@@ -100,6 +100,7 @@ export interface AgentLoopAggregateUsage {
 
 export interface AgentLoopMetadataTools {
   native_tool_names: string[];
+  template_tool_names?: string[];
   diagnostics: Record<string, unknown>;
   stop_reason?: AgentLoopStopReason;
   iterations?: number;

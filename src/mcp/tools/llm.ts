@@ -30,7 +30,13 @@ import { computeCost } from '../../llm/cost-tracker.js';
 import { executeAgentLoop } from '../../llm/agent-loop.js';
 import { assertResponseFormatAllowedWithTools, modelCapabilitiesWithDefaults } from '../../llm/capabilities.js';
 import type { CallModelEnvelope, CallModelMessage, CallModelMetadata, LlmChatResult } from '../../llm/types.js';
-import { assembleNativeToolRegistry, type ToolRegistryAssembly, type ToolRegistryDiagnostics } from '../../llm/tool-registry.js';
+import {
+  assembleNativeToolRegistry,
+  mergeModelVisibleToolRegistries,
+  type ToolRegistryAssembly,
+  type ToolRegistryDiagnostics,
+} from '../../llm/tool-registry.js';
+import { assembleTemplateToolRegistry, type TemplateToolDiagnostics } from '../../llm/template-tools.js';
 import { getNativeToolCatalog } from '../tool-catalog.js';
 import { embeddingProvider } from '../../embedding/provider.js';
 import {
@@ -57,6 +63,7 @@ type PublicToolDiagnostics = Record<string, unknown> & {
   excluded?: ToolRegistryDiagnostics['excluded'];
   hard_excluded?: ToolRegistryDiagnostics['hardExcluded'];
   unknown?: ToolRegistryDiagnostics['unknown'];
+  template_tool_warnings?: TemplateToolDiagnostics['template_tool_warnings'];
 };
 
 const toolCallSchema = z.object({
@@ -115,7 +122,7 @@ function buildReturnedMessages(messages: CallModelMessage[], assistantName?: str
   });
 }
 
-function toPublicToolDiagnostics(diagnostics: ToolRegistryDiagnostics): PublicToolDiagnostics {
+function toPublicToolDiagnostics(diagnostics: ToolRegistryAssembly['diagnostics']): PublicToolDiagnostics {
   const publicDiagnostics: PublicToolDiagnostics = {};
   if (diagnostics.expandedTiers.length > 0) {
     publicDiagnostics.expanded_tiers = diagnostics.expandedTiers;
@@ -131,6 +138,9 @@ function toPublicToolDiagnostics(diagnostics: ToolRegistryDiagnostics): PublicTo
   }
   if (diagnostics.unknown.length > 0) {
     publicDiagnostics.unknown = diagnostics.unknown;
+  }
+  if ((diagnostics.template_tool_warnings?.length ?? 0) > 0) {
+    publicDiagnostics.template_tool_warnings = diagnostics.template_tool_warnings;
   }
   return publicDiagnostics;
 }
@@ -216,6 +226,9 @@ function buildMode2Envelope(
     latency_ms: loopEnvelope.metadata.latency_ms,
     tools: {
       native_tool_names: toolRegistry.nativeToolNames,
+      ...(toolRegistry.templateToolNames && toolRegistry.templateToolNames.length > 0
+        ? { template_tool_names: toolRegistry.templateToolNames }
+        : {}),
       diagnostics: publicDiagnostics,
       stop_reason: loopTools?.stop_reason ?? 'error',
       iterations: loopTools?.iterations ?? 0,
@@ -383,15 +396,35 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
 
         // Project a purpose config entry to the discovery response shape.
         // Cost rates come from the primary model (models[0]); 0/0 if missing or empty list.
-        const purposeToResponse = (p: typeof cfgPurposes[number]): Record<string, unknown> => {
+        const strictToolsForPurpose = (purpose: typeof cfgPurposes[number]): boolean => {
+          const primaryModelName = purpose.models[0];
+          const primaryModel = primaryModelName ? modelsByName.get(primaryModelName) : undefined;
+          const selectedProvider = primaryModel
+            ? config.llm?.providers.find((provider) => provider.name === primaryModel.providerName)
+            : undefined;
+          const capabilities = primaryModel && selectedProvider
+            ? modelCapabilitiesWithDefaults(primaryModel, selectedProvider)
+            : {};
+          return capabilities.strict_tools === true;
+        };
+
+        const purposeToResponse = async (p: typeof cfgPurposes[number]): Promise<Record<string, unknown>> => {
           const primaryName = p.models[0];
           const primary = primaryName ? modelsByName.get(primaryName) : undefined;
+          const templateRegistry = await assembleTemplateToolRegistry({
+            config,
+            purposeName: p.name,
+            strictTools: strictToolsForPurpose(p),
+          });
           const entry: Record<string, unknown> = {
             name: p.name,
             description: p.description,
             models: p.models,
             input_cost_per_million: primary?.costPerMillion.input ?? 0,
             output_cost_per_million: primary?.costPerMillion.output ?? 0,
+            template_tools: templateRegistry.diagnostics.template_tools,
+            template_tool_conflicts: templateRegistry.diagnostics.template_tool_conflicts,
+            dangling_template_paths: templateRegistry.diagnostics.dangling_template_paths,
           };
           if (p.defaults !== undefined) entry['defaults'] = p.defaults;
           return entry;
@@ -403,7 +436,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         }
 
         if (params.resolver === 'list_purposes') {
-          const purposes = cfgPurposes.map(purposeToResponse);
+          const purposes = await Promise.all(cfgPurposes.map(purposeToResponse));
           return { content: [{ type: 'text' as const, text: JSON.stringify({ purposes }) }] };
         }
 
@@ -566,7 +599,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
 
       if (resolvedResolver === 'purpose') {
         const normalizedPurposeName = resolvedName.toLowerCase();
-        const purpose = config.llm?.purposes.find((p) => p.name === normalizedPurposeName);
+        const purpose = config.llm?.purposes.find((p) => p.name.toLowerCase() === normalizedPurposeName);
         purposeDefaults = purpose?.defaults ?? {};
         for (const modelName of purpose?.models ?? []) {
           const capabilityCheck = assertResponseFormatAllowedWithTools(
@@ -582,7 +615,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             };
           }
         }
-        if (purpose?.tools !== undefined) {
+        if (purpose !== undefined) {
           const selectedModel = client.getModelForPurpose(resolvedName);
           const selectedProvider = selectedModel
             ? config.llm?.providers.find((provider) => provider.name === selectedModel.config.providerName)
@@ -590,15 +623,40 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           const capabilities = selectedModel && selectedProvider
             ? modelCapabilitiesWithDefaults(selectedModel.config, selectedProvider)
             : {};
-          toolRegistry = assembleNativeToolRegistry(
+          const nativeRegistry = assembleNativeToolRegistry(
             config,
             normalizedPurposeName,
             nativeToolCatalog,
             { strictTools: capabilities.strict_tools === true }
           );
-          const baseParameters = params.parameters ?? {};
+          const templateRegistry = await assembleTemplateToolRegistry({
+            config,
+            purposeName: normalizedPurposeName,
+            nativeToolNames: nativeRegistry.nativeToolNames,
+            strictTools: capabilities.strict_tools === true,
+          });
+          toolRegistry = mergeModelVisibleToolRegistries({
+            native: nativeRegistry,
+            template: templateRegistry,
+          });
+          if ((toolRegistry.collisions?.length ?? 0) > 0) {
+            return {
+              content: [{ type: 'text' as const, text: JSON.stringify({
+                error: 'tool_registry_collision',
+                collisions: toolRegistry.collisions,
+                template_tool_conflicts: toolRegistry.collisions,
+              }) }],
+              isError: true,
+            };
+          }
+          const hasConfiguredToolSurface =
+            purpose.tools !== undefined ||
+            purpose.excludedTools !== undefined ||
+            purpose.templates !== undefined ||
+            config.templates !== undefined;
+          const baseParameters = params.parameters ?? (hasConfiguredToolSurface ? {} : undefined);
           purposeProviderParameters = toolRegistry.providerTools && toolRegistry.providerTools.length > 0
-            ? mergeProviderTools(baseParameters, toolRegistry.providerTools)
+            ? mergeProviderTools(baseParameters ?? {}, toolRegistry.providerTools)
             : baseParameters;
         }
       }
