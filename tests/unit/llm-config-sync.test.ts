@@ -200,6 +200,10 @@ describe('syncLlmConfigToDb()', () => {
       model_name: 'gpt-4o',
       position: 1,
     });
+
+    expect(logger.info).toHaveBeenCalledWith(
+      'LLM config synced: 1 provider(s), 1 model(s), 1 purpose(s), 0 purpose-template binding(s) (instance=i-test-u14)'
+    );
   });
 
   it('[ATL-I-02] inserts YAML purpose-template rows, skips source api ownership, and allows reappear after removal', async () => {

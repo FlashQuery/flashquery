@@ -71,6 +71,10 @@ export async function syncConfigAdapter<T>(
   return { inserted, skipped };
 }
 
+export async function syncPurposeTemplateBindings(config: FlashQueryConfig): Promise<ConfigSyncResult> {
+  return syncConfigAdapter(config, createPurposeTemplateSyncAdapter(config));
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // syncLlmConfigToDb — wipe-and-reinsert YAML rows; preserve webapp rows
 // ─────────────────────────────────────────────────────────────────────────────
@@ -254,7 +258,7 @@ export async function syncLlmConfigToDb(config: FlashQueryConfig): Promise<void>
     }
   }
 
-  const templateSync = await syncConfigAdapter(config, createPurposeTemplateSyncAdapter(config));
+  const templateSync = await syncPurposeTemplateBindings(config);
 
   logger.info(
     `LLM config synced: ${config.llm.providers.length} provider(s), ${config.llm.models.length} model(s), ${config.llm.purposes.length} purpose(s), ${templateSync.inserted} purpose-template binding(s) (instance=${instanceId})`
