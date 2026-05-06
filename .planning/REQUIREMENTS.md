@@ -27,11 +27,11 @@
 
 ### Templates And Host Parameterization
 
-- [ ] **TMPL-01**: Vault documents with `fq_template: true` are treated as parameterizable templates; plain documents continue resolving as plain references.
-- [ ] **TMPL-02**: `call_model.template_params` supports path-keyed template parameters and alias-keyed entries with `_template`.
-- [ ] **TMPL-03**: Template parameters support `string` and `document` types, required/default validation, document identifier resolution, and typed failures.
-- [ ] **TMPL-04**: Template placeholder substitution is deterministic, single-pass, non-recursive, and supports escape parity for template placeholders.
-- [ ] **TMPL-05**: Alias entries support `_items` lists with optional `_separator` for ordered multi-document injection at one `{{ref:@alias}}` slot.
+- [x] **TMPL-01**: Vault documents with `fq_template: true` are treated as parameterizable templates; plain documents continue resolving as plain references.
+- [x] **TMPL-02**: `call_model.template_params` supports path-keyed template parameters and alias-keyed entries with `_template`.
+- [x] **TMPL-03**: Template parameters support `string` and `document` types, required/default validation, document identifier resolution, and typed failures.
+- [x] **TMPL-04**: Template placeholder substitution is deterministic, single-pass, non-recursive, and supports escape parity for template placeholders.
+- [x] **TMPL-05**: Alias entries support `_items` lists with optional `_separator` for ordered multi-document injection at one `{{ref:@alias}}` slot.
 - [ ] **TMPL-06**: Template discovery reads frontmatter fresh from vault documents and validates `fq_namespace`, `fq_desc`, `fq_expose_as_tool`, and `fq_params`.
 - [ ] **TMPL-07**: Masqueraded template tools use generated names `flashquery.<fq_namespace>.<slug>` and maintain an explicit reverse map to canonical template paths.
 - [ ] **TMPL-08**: Template-tool dispatch validates model-supplied arguments, hydrates template output, and returns JSON-stringified tool results or typed tool errors to the loop.
@@ -82,7 +82,7 @@
 
 - [x] **VAL-112**: Phase 112 ships runnable unit, MCP-boundary, and directed scenario tests that validate `chat()`, Mode 1 envelope compatibility, `return_messages`, round-trippable messages, and provider normalization.
 - [x] **VAL-113**: Phase 113 ships runnable unit, directed, and integration tests that validate reference parsing, escaping, ambiguity handling, typed failures, metadata, and non-recursive hydration.
-- [ ] **VAL-114**: Phase 114 ships runnable unit, directed, and integration tests that validate template parameter validation, substitution, document parameters, aliases, and `_items` list injection.
+- [x] **VAL-114**: Phase 114 ships runnable unit, directed, and integration tests that validate template parameter validation, substitution, document parameters, aliases, and `_items` list injection.
 - [ ] **VAL-115**: Phase 115 ships runnable unit, TypeScript integration, and public startup/config scenario tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
 - [ ] **VAL-116**: Phase 116 ships runnable unit tests and at least one public-surface scenario that validate native tool exposure, exclusions, hard exclusions, schema translation, and empty-tool omission.
 - [ ] **VAL-117**: Phase 117 ships runnable unit, E2E, and directed scenario tests with a deterministic mock provider validating native tool loops, parallel tool calls, guardrail stops, fallback, usage aggregation, and calls-log metadata.
@@ -137,11 +137,11 @@
 | REF-06 | Phase 113 | Complete |
 | REF-07 | Phase 113 | Complete |
 | REF-08 | Phase 113 | Complete |
-| TMPL-01 | Phase 114 | Pending |
-| TMPL-02 | Phase 114 | Pending |
-| TMPL-03 | Phase 114 | Pending |
-| TMPL-04 | Phase 114 | Pending |
-| TMPL-05 | Phase 114 | Pending |
+| TMPL-01 | Phase 114 | Complete |
+| TMPL-02 | Phase 114 | Complete |
+| TMPL-03 | Phase 114 | Complete |
+| TMPL-04 | Phase 114 | Complete |
+| TMPL-05 | Phase 114 | Complete |
 | BIND-01 | Phase 115 | Pending |
 | BIND-02 | Phase 115 | Pending |
 | BIND-03 | Phase 115 | Pending |
@@ -174,7 +174,7 @@
 | DISC-04 | Phase 119 | Pending |
 | VAL-112 | Phase 112 | Complete |
 | VAL-113 | Phase 113 | Complete |
-| VAL-114 | Phase 114 | Pending |
+| VAL-114 | Phase 114 | Complete |
 | VAL-115 | Phase 115 | Pending |
 | VAL-116 | Phase 116 | Pending |
 | VAL-117 | Phase 117 | Pending |

@@ -163,7 +163,7 @@ Plans:
 **Plans**: 5 plans
 Plans:
 **Wave 1**
-- [ ] 114-01-PLAN.md — Unit contracts for template resolver and call_model wiring
+- [x] 114-01-PLAN.md — Unit contracts for template resolver and call_model wiring
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 114-02-PLAN.md — Path-keyed template rendering, validation, document params, and substitution
