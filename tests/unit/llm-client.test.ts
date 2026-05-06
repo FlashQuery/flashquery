@@ -808,6 +808,29 @@ describe('OpenAICompatibleLlmClient.chat', () => {
       modelName: 'gpt-4o',
     }));
   });
+
+  it('chatByPurpose() records usage with trace id and fallback position for tool-call responses', async () => {
+    __setNextResponse({
+      status: 200,
+      body: makeOpenAIToolCallBody(),
+    });
+
+    const result = await client.chatByPurpose('default', SAMPLE_MESSAGES, {
+      tools: [{ type: 'function', function: { name: 'search_documents', parameters: {} } }],
+    }, 'trace-native-tools');
+
+    expect(result.finishReason).toBe('tool_calls');
+    expect(costTracker.recordLlmUsage).toHaveBeenCalledWith(expect.objectContaining({
+      instanceId: 'test-instance-chat',
+      purposeName: 'default',
+      modelName: 'gpt-4o',
+      providerName: 'openai',
+      inputTokens: 10,
+      outputTokens: 20,
+      fallbackPosition: 1,
+      traceId: 'trace-native-tools',
+    }));
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

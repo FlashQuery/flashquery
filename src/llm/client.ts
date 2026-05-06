@@ -532,9 +532,26 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     purposeName: string,
     messages: LlmChatMessage[],
     parameters?: Record<string, unknown>,
-    _traceId?: string | null
+    traceId?: string | null
   ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }> {
-    return this.resolver.chatByPurpose(purposeName, messages, parameters);
+    const result = await this.resolver.chatByPurpose(purposeName, messages, parameters);
+    const model = this.config.models.find((m) => m.name === result.modelName);
+    const costUsd = model
+      ? computeCost(result.inputTokens, result.outputTokens, model.costPerMillion)
+      : 0;
+    recordLlmUsage({
+      instanceId: this.instanceId,
+      purposeName,
+      modelName: result.modelName,
+      providerName: result.providerName,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      costUsd,
+      latencyMs: result.latencyMs,
+      fallbackPosition: result.fallbackPosition,
+      traceId: traceId ?? null,
+    });
+    return result;
   }
 
   getModelForPurpose(
