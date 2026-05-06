@@ -1114,21 +1114,34 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
   } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
 
   it('[TOOL-04] purpose calls with tools: [get_document] pass one provider function tool and expose metadata.tools.native_tool_names', async () => {
-    const chatByPurposeMock = vi.fn().mockResolvedValue({
-      message: { role: 'assistant', content: SAMPLE_RESULT.text },
-      modelName: SAMPLE_RESULT.modelName,
-      providerName: SAMPLE_RESULT.providerName,
-      inputTokens: SAMPLE_RESULT.inputTokens,
-      outputTokens: SAMPLE_RESULT.outputTokens,
-      latencyMs: SAMPLE_RESULT.latencyMs,
-      finishReason: 'stop',
-      purposeName: 'documented',
-      fallbackPosition: 1,
+    vi.mocked(executeAgentLoop).mockResolvedValue({
+      response: SAMPLE_RESULT.text,
+      messages: [],
+      metadata: {
+        resolver: 'purpose',
+        name: 'documented',
+        resolved_model_name: SAMPLE_RESULT.modelName,
+        provider_name: SAMPLE_RESULT.providerName,
+        fallback_position: 1,
+        tokens: { input: SAMPLE_RESULT.inputTokens, output: SAMPLE_RESULT.outputTokens },
+        cost_usd: 0,
+        latency_ms: SAMPLE_RESULT.latencyMs,
+        tools: {
+          native_tool_names: ['get_document'],
+          diagnostics: { explicit_tools: ['get_document'] },
+          stop_reason: 'final_response',
+          iterations: 1,
+          calls_log: [],
+          aggregate_usage: { tokens: { input: SAMPLE_RESULT.inputTokens, output: SAMPLE_RESULT.outputTokens }, cost_usd: 0, latency_ms: SAMPLE_RESULT.latencyMs },
+        },
+      },
     });
+    const chatByPurposeMock = vi.fn();
     _llmClientValue = {
       complete: vi.fn(),
       completeByPurpose: vi.fn(),
       chatByPurpose: chatByPurposeMock,
+      chatByPurposeUnrecorded: vi.fn(),
       getModelForPurpose: vi.fn().mockReturnValue({
         modelName: 'fast',
         providerName: 'openai',
@@ -1146,22 +1159,13 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     });
 
     expect(result.isError).toBeUndefined();
-    expect(chatByPurposeMock).toHaveBeenCalledWith(
-      'documented',
-      [{ role: 'user', content: 'Read the document.' }],
-      expect.objectContaining({
-        tools: [
-          expect.objectContaining({
-            type: 'function',
-            function: expect.objectContaining({ name: 'get_document' }),
-          }),
-        ],
+    expect(chatByPurposeMock).not.toHaveBeenCalled();
+    expect(executeAgentLoop).toHaveBeenCalledWith(expect.objectContaining({
+      providerParameters: expect.objectContaining({
+        tools: [expect.objectContaining({ function: expect.objectContaining({ name: 'get_document' }) })],
       }),
-      null
-    );
-    const providerParams = chatByPurposeMock.mock.calls[0][2] as { tools?: Array<{ function: { name: string } }> };
-    expect(providerParams.tools).toHaveLength(1);
-    expect(providerParams.tools?.[0].function.name).toBe('get_document');
+      toolRegistry: expect.objectContaining({ nativeToolNames: ['get_document'] }),
+    }));
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const envelope = JSON.parse(result.content[0].text) as any;
@@ -1169,32 +1173,35 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     expect(envelope.metadata.tools.diagnostics.explicit_tools).toEqual(['get_document']);
   });
 
-  it('[TOOL-04] purpose native tools preserve assistant tool_calls instead of routing through text completion', async () => {
-    const chatByPurposeMock = vi.fn().mockResolvedValue({
-      message: {
-        role: 'assistant',
-        content: null,
-        tool_calls: [
-          {
-            id: 'call_get_doc',
-            type: 'function',
-            function: { name: 'get_document', arguments: { path: 'notes/alpha.md' } },
-          },
-        ],
+  it('[TOOL-04] purpose native tools execute the loop instead of returning assistant tool_calls as the durable response', async () => {
+    vi.mocked(executeAgentLoop).mockResolvedValue({
+      response: 'final after native dispatch',
+      messages: [],
+      metadata: {
+        resolver: 'purpose',
+        name: 'documented',
+        resolved_model_name: SAMPLE_RESULT.modelName,
+        provider_name: SAMPLE_RESULT.providerName,
+        fallback_position: 1,
+        tokens: { input: SAMPLE_RESULT.inputTokens, output: SAMPLE_RESULT.outputTokens },
+        cost_usd: 0,
+        latency_ms: SAMPLE_RESULT.latencyMs,
+        tools: {
+          native_tool_names: ['get_document'],
+          diagnostics: {},
+          stop_reason: 'final_response',
+          iterations: 2,
+          calls_log: [],
+          aggregate_usage: { tokens: { input: SAMPLE_RESULT.inputTokens, output: SAMPLE_RESULT.outputTokens }, cost_usd: 0, latency_ms: SAMPLE_RESULT.latencyMs },
+        },
       },
-      modelName: SAMPLE_RESULT.modelName,
-      providerName: SAMPLE_RESULT.providerName,
-      inputTokens: SAMPLE_RESULT.inputTokens,
-      outputTokens: SAMPLE_RESULT.outputTokens,
-      latencyMs: SAMPLE_RESULT.latencyMs,
-      finishReason: 'tool_calls',
-      purposeName: 'documented',
-      fallbackPosition: 1,
     });
+    const chatByPurposeMock = vi.fn();
     _llmClientValue = {
       complete: vi.fn(),
       completeByPurpose: vi.fn(),
       chatByPurpose: chatByPurposeMock,
+      chatByPurposeUnrecorded: vi.fn(),
       getModelForPurpose: vi.fn().mockReturnValue({
         modelName: 'fast',
         providerName: 'openai',
@@ -1212,20 +1219,13 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     });
 
     expect(result.isError).toBeUndefined();
-    expect(chatByPurposeMock).toHaveBeenCalledOnce();
-    const envelope = JSON.parse(result.content[0].text) as {
-      response: string;
-      messages: Array<{ role: string; content: string | null; tool_calls?: unknown[] }>;
-    };
-    expect(envelope.response).toBe('');
-    expect(envelope.messages.at(-1)).toMatchObject({
-      role: 'assistant',
-      content: null,
-      tool_calls: [expect.objectContaining({ id: 'call_get_doc' })],
-    });
+    expect(chatByPurposeMock).not.toHaveBeenCalled();
+    const envelope = JSON.parse(result.content[0].text) as { response: string; messages: unknown[] };
+    expect(envelope.response).toBe('final after native dispatch');
+    expect(envelope.messages).toEqual([]);
   });
 
-  it('[TOOL-04] purpose native tools append to caller-supplied provider tools', async () => {
+  it('[TOOL-04] purpose native tools reject caller-supplied provider tools while Mode 3 is deferred', async () => {
     const callerTool = {
       type: 'function',
       function: {
@@ -1234,21 +1234,12 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
         parameters: { type: 'object', properties: {}, additionalProperties: false },
       },
     };
-    const chatByPurposeMock = vi.fn().mockResolvedValue({
-      message: { role: 'assistant', content: SAMPLE_RESULT.text },
-      modelName: SAMPLE_RESULT.modelName,
-      providerName: SAMPLE_RESULT.providerName,
-      inputTokens: SAMPLE_RESULT.inputTokens,
-      outputTokens: SAMPLE_RESULT.outputTokens,
-      latencyMs: SAMPLE_RESULT.latencyMs,
-      finishReason: 'stop',
-      purposeName: 'documented',
-      fallbackPosition: 1,
-    });
+    const chatByPurposeMock = vi.fn();
     _llmClientValue = {
       complete: vi.fn(),
       completeByPurpose: vi.fn(),
       chatByPurpose: chatByPurposeMock,
+      chatByPurposeUnrecorded: vi.fn(),
       getModelForPurpose: vi.fn().mockReturnValue({
         modelName: 'fast',
         providerName: 'openai',
@@ -1266,9 +1257,9 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
       parameters: { tools: [callerTool] },
     });
 
-    expect(result.isError).toBeUndefined();
-    const providerParams = chatByPurposeMock.mock.calls[0][2] as { tools?: Array<{ function: { name: string } }> };
-    expect(providerParams.tools?.map((tool) => tool.function.name)).toEqual(['caller_tool', 'get_document']);
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Mode 3 caller-provided tools are deferred');
+    expect(chatByPurposeMock).not.toHaveBeenCalled();
   });
 
   it('[TOOL-03] purpose calls with tools: [call_model] omit provider tools and expose hard_excluded diagnostics', async () => {
@@ -1422,9 +1413,11 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
       }),
       instanceId: 'test-instance-tools',
       traceId: 'trace-loop-1',
-      chatByPurpose: chatByPurposeUnrecordedMock,
+      chatByPurpose: expect.any(Function),
       modelCostLookup: expect.any(Function),
     }));
+    await vi.mocked(executeAgentLoop).mock.calls.at(-1)?.[0].chatByPurpose('documented', [], {});
+    expect(chatByPurposeUnrecordedMock).toHaveBeenCalledWith('documented', [], {});
     const envelope = JSON.parse(result.content[0].text) as { response: string; messages: unknown[]; metadata: { tools: { stop_reason: string } } };
     expect(envelope.response).toBe('final loop answer');
     expect(envelope.messages).toEqual([]);

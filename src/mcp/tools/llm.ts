@@ -27,6 +27,7 @@ import { supabaseManager } from '../../storage/supabase.js';
 import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmCompletionResult } from '../../llm/client.js';
 import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
+import { executeAgentLoop } from '../../llm/agent-loop.js';
 import { assertResponseFormatAllowedWithTools, modelCapabilitiesWithDefaults } from '../../llm/capabilities.js';
 import type { CallModelEnvelope, CallModelMessage, CallModelMetadata, LlmChatResult } from '../../llm/types.js';
 import { assembleNativeToolRegistry, type ToolRegistryAssembly, type ToolRegistryDiagnostics } from '../../llm/tool-registry.js';
@@ -137,6 +138,10 @@ function hasPublicToolDiagnostics(diagnostics: PublicToolDiagnostics): boolean {
 
 function hasProviderToolArray(parameters: Record<string, unknown> | undefined): boolean {
   return Array.isArray(parameters?.['tools']) && parameters['tools'].length > 0;
+}
+
+export function hasModelVisibleTools(toolRegistry: ToolRegistryAssembly | undefined): boolean {
+  return (toolRegistry?.providerTools?.length ?? 0) > 0;
 }
 
 function mergeProviderTools(
@@ -368,6 +373,17 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       // discovery resolver values. No cast needed.
       const resolvedResolver = params.resolver;
       const messagesForRefs = params.messages ?? [];
+      if (hasProviderToolArray(params.parameters) || Array.isArray((params as { tools?: unknown }).tools)) {
+        return {
+          content: [
+            {
+              type: 'text' as const,
+              text: 'Mode 3 caller-provided tools are deferred; remove caller-provided tools for FlashQuery-managed Mode 2.',
+            },
+          ],
+          isError: true,
+        };
+      }
       const toolMessageWithName = findToolMessageWithName(messagesForRefs);
       if (toolMessageWithName !== null) {
         return {
@@ -522,6 +538,34 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       }
 
       // Step 2: Dispatch by resolver
+      if (resolvedResolver === 'purpose' && hasModelVisibleTools(toolRegistry)) {
+        try {
+          const loopEnvelope = await executeAgentLoop({
+            instanceId: config.instance.id,
+            purposeName: resolvedName,
+            initialMessages: hydratedMessages,
+            providerParameters: purposeProviderParameters,
+            nativeToolCatalog,
+            toolRegistry,
+            traceId: params.trace_id ?? null,
+            chatByPurpose: client.chatByPurposeUnrecorded.bind(client),
+            modelCostLookup: (modelName) => config.llm?.models.find((model) => model.name === modelName),
+            logger,
+            getIsShuttingDown,
+          });
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify(loopEnvelope) }],
+          };
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error(`call_model failed (agent loop): ${resolvedResolver}/${resolvedName} — ${message}`);
+          return {
+            content: [{ type: 'text' as const, text: `call_model failed: ${message}` }],
+            isError: true,
+          };
+        }
+      }
+
       let result: LlmCompletionResult | PurposeChatResult;
       let fallbackPosition: number | null;
 
@@ -534,15 +578,6 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             params.trace_id ?? null
           );
           fallbackPosition = null; // explicit null per TOOL-02 / Pitfall 2
-        } else if (hasProviderToolArray(purposeProviderParameters)) {
-          const purposeResult = await client.chatByPurpose(
-            resolvedName,
-            hydratedMessages,
-            purposeProviderParameters,
-            params.trace_id ?? null
-          );
-          result = purposeResult;
-          fallbackPosition = purposeResult.fallbackPosition; // 1-indexed (Phase 100 D-06)
         } else {
           const purposeResult = await client.completeByPurpose(
             resolvedName,
