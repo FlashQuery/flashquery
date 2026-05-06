@@ -27,6 +27,7 @@ import { supabaseManager } from '../../storage/supabase.js';
 import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmCompletionResult } from '../../llm/client.js';
 import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
+import { assertResponseFormatAllowedWithTools } from '../../llm/capabilities.js';
 import type { CallModelEnvelope, CallModelMessage, CallModelMetadata } from '../../llm/types.js';
 import { embeddingProvider } from '../../embedding/provider.js';
 import {
@@ -212,6 +213,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           };
           if (m.description !== undefined) entry['description'] = m.description;
           if (m.contextWindow !== undefined) entry['context_window'] = m.contextWindow;
+          if (m.tags !== undefined) entry['tags'] = m.tags;
           if (m.capabilities !== undefined) entry['capabilities'] = m.capabilities;
           // Auto-derive `local` per spec §8.3 example + dev plan §6.4.1.
           const prov = providersByName.get(m.providerName);
@@ -393,6 +395,24 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           injectedReferences: buildInjectedReferences(resolvedRefs),
           promptChars: computePromptChars(hydratedMessages),
         };
+      }
+
+      if (resolvedResolver === 'purpose') {
+        const selected = client.getModelForPurpose(resolvedName);
+        if (selected) {
+          const capabilityCheck = assertResponseFormatAllowedWithTools(
+            config,
+            resolvedName,
+            selected.modelName,
+            params.parameters
+          );
+          if (!capabilityCheck.ok) {
+            return {
+              content: [{ type: 'text' as const, text: capabilityCheck.message }],
+              isError: true,
+            };
+          }
+        }
       }
 
       // Step 1b: trace pre-snapshot (D-11 fix) — query existing trace rows BEFORE
