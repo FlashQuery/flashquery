@@ -27,8 +27,10 @@ import { supabaseManager } from '../../storage/supabase.js';
 import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmCompletionResult } from '../../llm/client.js';
 import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
-import { assertResponseFormatAllowedWithTools } from '../../llm/capabilities.js';
+import { assertResponseFormatAllowedWithTools, modelCapabilitiesWithDefaults } from '../../llm/capabilities.js';
 import type { CallModelEnvelope, CallModelMessage, CallModelMetadata } from '../../llm/types.js';
+import { assembleNativeToolRegistry, type ToolRegistryAssembly, type ToolRegistryDiagnostics } from '../../llm/tool-registry.js';
+import { getNativeToolCatalog } from '../tool-catalog.js';
 import { embeddingProvider } from '../../embedding/provider.js';
 import {
   parseReferences,
@@ -46,6 +48,14 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type TraceCumulative = NonNullable<CallModelMetadata['trace_cumulative']>;
+
+type PublicToolDiagnostics = Record<string, unknown> & {
+  expanded_tiers?: ToolRegistryDiagnostics['expandedTiers'];
+  explicit_tools?: ToolRegistryDiagnostics['explicitTools'];
+  excluded?: ToolRegistryDiagnostics['excluded'];
+  hard_excluded?: ToolRegistryDiagnostics['hardExcluded'];
+  unknown?: ToolRegistryDiagnostics['unknown'];
+};
 
 const toolCallSchema = z.object({
   id: z.string(),
@@ -100,6 +110,30 @@ function buildReturnedMessages(messages: CallModelMessage[]): CallModelMessage[]
   });
 }
 
+function toPublicToolDiagnostics(diagnostics: ToolRegistryDiagnostics): PublicToolDiagnostics {
+  const publicDiagnostics: PublicToolDiagnostics = {};
+  if (diagnostics.expandedTiers.length > 0) {
+    publicDiagnostics.expanded_tiers = diagnostics.expandedTiers;
+  }
+  if (diagnostics.explicitTools.length > 0) {
+    publicDiagnostics.explicit_tools = diagnostics.explicitTools;
+  }
+  if (diagnostics.excluded.length > 0) {
+    publicDiagnostics.excluded = diagnostics.excluded;
+  }
+  if (diagnostics.hardExcluded.length > 0) {
+    publicDiagnostics.hard_excluded = diagnostics.hardExcluded;
+  }
+  if (diagnostics.unknown.length > 0) {
+    publicDiagnostics.unknown = diagnostics.unknown;
+  }
+  return publicDiagnostics;
+}
+
+function hasPublicToolDiagnostics(diagnostics: PublicToolDiagnostics): boolean {
+  return Object.keys(diagnostics).length > 0;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // registerLlmTools — registers `call_model` unconditionally (TOOL-03).
 // The MCP SDK does not allow tools to be added after `server.connect()` (issue #893),
@@ -108,6 +142,8 @@ function buildReturnedMessages(messages: CallModelMessage[]): CallModelMessage[]
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function registerLlmTools(server: McpServer, config: FlashQueryConfig): void {
+  const nativeToolCatalog = getNativeToolCatalog(server);
+
   server.registerTool(
     'call_model',
     {
@@ -397,6 +433,9 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         };
       }
 
+      let toolRegistry: ToolRegistryAssembly | undefined;
+      let purposeProviderParameters = params.parameters;
+
       if (resolvedResolver === 'purpose') {
         const normalizedPurposeName = resolvedName.toLowerCase();
         const purpose = config.llm?.purposes.find((p) => p.name === normalizedPurposeName);
@@ -413,6 +452,25 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
               isError: true,
             };
           }
+        }
+        if (purpose?.tools !== undefined) {
+          const selectedModel = client.getModelForPurpose(resolvedName);
+          const selectedProvider = selectedModel
+            ? config.llm?.providers.find((provider) => provider.name === selectedModel.config.providerName)
+            : undefined;
+          const capabilities = selectedModel && selectedProvider
+            ? modelCapabilitiesWithDefaults(selectedModel.config, selectedProvider)
+            : {};
+          toolRegistry = assembleNativeToolRegistry(
+            config,
+            normalizedPurposeName,
+            nativeToolCatalog,
+            { strictTools: capabilities.strict_tools === true }
+          );
+          const baseParameters = params.parameters ?? {};
+          purposeProviderParameters = toolRegistry.providerTools && toolRegistry.providerTools.length > 0
+            ? { ...baseParameters, tools: toolRegistry.providerTools }
+            : baseParameters;
         }
       }
 
@@ -464,7 +522,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           const purposeResult = await client.completeByPurpose(
             resolvedName,
             hydratedMessages,
-            params.parameters,
+            purposeProviderParameters,
             params.trace_id ?? null
           );
           result = purposeResult;
@@ -599,6 +657,17 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       if (injectionMetadata) {
         metadata.injected_references = injectionMetadata.injectedReferences;
         metadata.prompt_chars = injectionMetadata.promptChars;
+      }
+
+      if (toolRegistry) {
+        const publicDiagnostics = toPublicToolDiagnostics(toolRegistry.diagnostics);
+        if ((config.llm?.purposes.find((p) => p.name === resolvedName.toLowerCase())?.tools?.length ?? 0) > 0 ||
+            hasPublicToolDiagnostics(publicDiagnostics)) {
+          metadata.tools = {
+            native_tool_names: toolRegistry.nativeToolNames,
+            diagnostics: publicDiagnostics,
+          };
+        }
       }
 
       const envelope: CallModelEnvelope = {

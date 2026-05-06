@@ -76,6 +76,10 @@ export interface CallModelMetadata {
   trace_cumulative?: TraceCumulative;
   injected_references?: InjectedReferenceMetadata[];
   prompt_chars?: number;
+  tools?: {
+    native_tool_names: string[];
+    diagnostics: Record<string, unknown>;
+  };
 }
 
 export interface CallModelEnvelope {
