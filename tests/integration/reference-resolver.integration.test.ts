@@ -264,4 +264,110 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
     expect(failed.detail).toContain('source');
     expect(failed.detail).toContain('Sources/missing.md');
   });
+
+  it('[I-TMPL-05] renders two aliases through the same real _template with different values', async () => {
+    await seedDocument(vaultPath, 'Templates/review.md', 'Review Template', 'Criteria: {{criteria}}', {
+      fq_template: true,
+      fq_params: {
+        criteria: { type: 'string', required: true },
+      },
+    });
+    const message = 'First {{ref:@first}}\nSecond {{ref:@second}}';
+    const parsed = parseReferences([{ role: 'user', content: message }]);
+    expect(Array.isArray(parsed)).toBe(true);
+
+    const resolved = await resolveReferences(parsed as ParsedRef[], config, supabaseManager, embeddingProvider, logger, {
+      first: { _template: 'Templates/review.md', criteria: 'completeness' },
+      second: { _template: 'Templates/review.md', criteria: 'consistency' },
+    });
+    const successes = resolved.filter((entry): entry is ResolvedRef => entry.kind === 'resolved');
+    expect(successes).toHaveLength(2);
+
+    const hydrated = hydrateMessages([{ role: 'user', content: message }], successes);
+    expect(hydrated[0].content).toBe('First Criteria: completeness\n\nSecond Criteria: consistency\n');
+
+    const metadata = buildInjectedReferences(successes);
+    expect(metadata).toEqual([
+      expect.objectContaining({
+        ref: '{{ref:@first}}',
+        resolved_to: 'Templates/review.md',
+        template: true,
+        template_path: 'Templates/review.md',
+        template_params_used: { criteria: { type: 'string', chars: 12 } },
+      }),
+      expect.objectContaining({
+        ref: '{{ref:@second}}',
+        resolved_to: 'Templates/review.md',
+        template: true,
+        template_path: 'Templates/review.md',
+        template_params_used: { criteria: { type: 'string', chars: 11 } },
+      }),
+    ]);
+  });
+
+  it('[I-TMPL-06] renders alias _items in caller order with _separator and ordered metadata', async () => {
+    await seedDocument(vaultPath, 'List/a.md', 'List A', 'ALPHA');
+    await seedDocument(vaultPath, 'Templates/item.md', 'Item Template', 'Item: {{label}}', {
+      fq_template: true,
+      fq_params: {
+        label: { type: 'string', required: true },
+      },
+    });
+    const message = 'Background:\n{{ref:@background}}';
+    const parsed = parseReferences([{ role: 'user', content: message }]);
+    expect(Array.isArray(parsed)).toBe(true);
+
+    const resolved = await resolveReferences(parsed as ParsedRef[], config, supabaseManager, embeddingProvider, logger, {
+      background: {
+        _items: [
+          'List/a.md',
+          { _template: 'Templates/item.md', label: 'Beta' },
+        ],
+        _separator: '\n---\n',
+      },
+    });
+    const successes = resolved.filter((entry): entry is ResolvedRef => entry.kind === 'resolved');
+    expect(successes).toHaveLength(1);
+    expect(successes[0].content).toBe('ALPHA\n\n---\nItem: Beta\n');
+
+    const hydrated = hydrateMessages([{ role: 'user', content: message }], successes);
+    expect(hydrated[0].content).toBe('Background:\nALPHA\n\n---\nItem: Beta\n');
+
+    const metadata = buildInjectedReferences(successes);
+    expect(metadata[0]).toMatchObject({
+      ref: '{{ref:@background}}',
+      chars: 'ALPHA\n\n---\nItem: Beta\n'.length,
+      resolved_to_count: 2,
+      template_params_used: {},
+      items: [
+        { ref: 'List/a.md', resolved_to: 'List/a.md', chars: 6 },
+        {
+          ref: 'Templates/item.md',
+          resolved_to: 'Templates/item.md',
+          chars: 11,
+          template: true,
+          template_path: 'Templates/item.md',
+        },
+      ],
+    });
+  });
+
+  it('[I-TMPL-07] returns multi_ref_item_failed with alias and zero-based index detail', async () => {
+    const parsed = parseReferences([{ role: 'user', content: '{{ref:@background}}' }]);
+    expect(Array.isArray(parsed)).toBe(true);
+
+    const resolved = await resolveReferences(parsed as ParsedRef[], config, supabaseManager, embeddingProvider, logger, {
+      background: {
+        _items: ['List/missing.md'],
+        _separator: '\n\n',
+      },
+    });
+    const failed = resolved[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe('multi_ref_item_failed');
+    expect(failed.detail).toContain('alias=background');
+    expect(failed.detail).toContain('index=0');
+    expect(failed.detail).toContain('item 0');
+    expect(failed.detail).toContain('template_param_doc_not_found');
+  });
 });
