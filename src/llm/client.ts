@@ -84,6 +84,12 @@ export interface LlmClient {
     traceId?: string | null
   ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }>;
 
+  chatByPurposeUnrecorded(
+    purposeName: string,
+    messages: LlmChatMessage[],
+    parameters?: Record<string, unknown>
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }>;
+
   getModelForPurpose(
     purposeName: string
   ): {
@@ -555,6 +561,14 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     return result;
   }
 
+  async chatByPurposeUnrecorded(
+    purposeName: string,
+    messages: LlmChatMessage[],
+    parameters?: Record<string, unknown>
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }> {
+    return this.resolver.chatByPurpose(purposeName, messages, parameters);
+  }
+
   getModelForPurpose(
     purposeName: string
   ): {
@@ -613,6 +627,17 @@ export class NullLlmClient implements LlmClient {
     _messages: LlmChatMessage[],
     _parameters?: Record<string, unknown>,
     _traceId?: string | null
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }> {
+    throw new Error(
+      'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async chatByPurposeUnrecorded(
+    _purposeName: string,
+    _messages: LlmChatMessage[],
+    _parameters?: Record<string, unknown>
   ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }> {
     throw new Error(
       'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'

@@ -938,6 +938,7 @@ describe('OpenAICompatibleLlmClient.chatByPurposeUnrecorded', () => {
       }
     );
 
+    vi.clearAllMocks();
     const result = await client.chatByPurposeUnrecorded('unrecorded', SAMPLE_MESSAGES);
 
     expect(requestedModels).toEqual(['gpt-4o', 'gpt-4o-mini']);

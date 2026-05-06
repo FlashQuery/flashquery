@@ -1,4 +1,4 @@
-import type { FinishReason } from '../constants/llm.js';
+import type { AgentLoopStopReason, FinishReason } from '../constants/llm.js';
 import type { InjectedReferenceMetadata } from './reference-resolver.js';
 
 export interface LlmChatToolCall {
@@ -63,6 +63,51 @@ interface TraceCumulative {
   total_latency_ms: number;
 }
 
+export interface AgentLoopToolCallLogEntry {
+  tool_call_id: string;
+  tool_name: string;
+  arguments?: Record<string, unknown>;
+  status?: string;
+  ok?: boolean;
+  error_code?: string;
+  result_summary?: string;
+  tokens?: { input: number; output: number };
+}
+
+export interface AgentLoopCallLogEntry {
+  iteration: number;
+  model_name: string;
+  provider_name: string;
+  fallback_position: number;
+  finish_reason: FinishReason;
+  tokens: { input: number; output: number };
+  cost_usd: number;
+  latency_ms: number;
+  assistant: {
+    content: string | null;
+  };
+  tool_calls: AgentLoopToolCallLogEntry[];
+}
+
+export interface AgentLoopAggregateUsage {
+  tokens: { input: number; output: number };
+  cost_usd: number;
+  latency_ms: number;
+}
+
+export interface AgentLoopMetadataTools {
+  native_tool_names: string[];
+  diagnostics: Record<string, unknown>;
+  stop_reason?: AgentLoopStopReason;
+  iterations?: number;
+  calls_log?: AgentLoopCallLogEntry[];
+  aggregate_usage?: AgentLoopAggregateUsage;
+  estimate_ladder?: {
+    input: string[];
+    output: string[];
+  };
+}
+
 export interface CallModelMetadata {
   resolver: 'model' | 'purpose';
   name: string;
@@ -76,10 +121,7 @@ export interface CallModelMetadata {
   trace_cumulative?: TraceCumulative;
   injected_references?: InjectedReferenceMetadata[];
   prompt_chars?: number;
-  tools?: {
-    native_tool_names: string[];
-    diagnostics: Record<string, unknown>;
-  };
+  tools?: AgentLoopMetadataTools;
 }
 
 export interface CallModelEnvelope {
