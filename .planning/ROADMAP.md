@@ -160,7 +160,7 @@ Plans:
   4. Placeholder substitution is single-pass, deterministic, and non-recursive even when substituted values contain reference-looking strings.
   5. `_items` alias lists inject an ordered sequence of documents/templates with separator support and correct metadata.
   6. Phase-specific runnable tests exist and pass for template validation, substitution, document parameters, aliases, `_items`, and public parameterized-template behavior.
-**Plans:** 5 plans
+**Plans:** 5/5 plans complete
 Plans:
 **Wave 1**
 - [x] 114-01-PLAN.md — Unit contracts for template resolver and call_model wiring
