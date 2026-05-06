@@ -276,9 +276,167 @@ function captureCallModelHandler(config: typeof TEST_CONFIG): HandlerFn {
   return handler;
 }
 
+function captureCallModelRegistration(config: typeof TEST_CONFIG): { spec: unknown; handler: HandlerFn } {
+  let capturedSpec: unknown;
+  let capturedHandler: HandlerFn | undefined;
+  const fakeServer = {
+    registerTool: vi.fn((name: string, spec: unknown, handler: HandlerFn) => {
+      if (name === 'call_model') {
+        capturedSpec = spec;
+        capturedHandler = handler;
+      }
+    }),
+  };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  registerLlmTools(fakeServer as any, config);
+  if (!capturedHandler) throw new Error('call_model handler not registered');
+  return { spec: capturedSpec, handler: capturedHandler };
+}
+
 // ─── U-RR-INT: Handler-level Step 1.5 reference resolution tests ─────────────
 
 describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () => {
+  it('[U-TMPL-07] call_model schema admits template_params and passes it to resolveReferences as the sixth argument', async () => {
+    const parsedRef = {
+      placeholder: '{{ref:Templates/greeting.md}}',
+      ref: '{{ref:Templates/greeting.md}}',
+      identifierType: 'ref' as const,
+      identifier: 'Templates/greeting.md',
+      messageIndex: 0,
+    };
+    const resolvedRef = {
+      kind: 'resolved' as const,
+      placeholder: '{{ref:Templates/greeting.md}}',
+      ref: '{{ref:Templates/greeting.md}}',
+      content: 'Hello Ada',
+      chars: 9,
+      messageIndex: 0,
+    };
+    const template_params = {
+      'Templates/greeting.md': { name: 'Ada' },
+    };
+    vi.mocked(parseReferences).mockReturnValue([parsedRef]);
+    vi.mocked(resolveReferences).mockResolvedValue([resolvedRef]);
+    vi.mocked(hydrateMessages).mockReturnValue([{ role: 'user', content: 'Hello Ada' }]);
+    vi.mocked(buildInjectedReferences).mockReturnValue([
+      {
+        ref: '{{ref:Templates/greeting.md}}',
+        chars: 9,
+        template_params_used: { name: { type: 'string', chars: 3 } },
+      } as never,
+    ]);
+    vi.mocked(computePromptChars).mockReturnValue(9);
+
+    _llmClientValue = {
+      complete: vi.fn().mockResolvedValue(SAMPLE_RESULT),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const { spec, handler } = captureCallModelRegistration(TEST_CONFIG);
+    expect((spec as { inputSchema: Record<string, unknown> }).inputSchema).toHaveProperty('template_params');
+
+    const res = await handler({
+      resolver: 'model',
+      name: 'fast',
+      messages: [{ role: 'user', content: '{{ref:Templates/greeting.md}}' }],
+      template_params,
+    });
+
+    expect(res.isError).toBeUndefined();
+    expect(resolveReferences).toHaveBeenCalledWith(
+      [parsedRef],
+      TEST_CONFIG,
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      template_params
+    );
+  });
+
+  it('[U-TMPL-08] discovery resolvers ignore template_params and reference-looking messages before parsing', async () => {
+    const completeMock = vi.fn();
+    const completeByPurposeMock = vi.fn();
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+
+    for (const resolver of ['list_models', 'list_purposes'] as const) {
+      const res = await handler({
+        resolver,
+        messages: [{ role: 'user', content: '{{ref:Templates/greeting.md}}' }],
+        template_params: { 'Templates/greeting.md': { name: 'Ada' } },
+      });
+      expect(res.isError).toBeUndefined();
+    }
+
+    const search = await handler({
+      resolver: 'search',
+      parameters: { query: 'fast' },
+      messages: [{ role: 'user', content: '{{ref:@background}}' }],
+      template_params: { background: { _items: ['Research/a.md'], _separator: '\n\n' } },
+    });
+
+    expect(search.isError).toBeUndefined();
+    expect(parseReferences).not.toHaveBeenCalled();
+    expect(resolveReferences).not.toHaveBeenCalled();
+    expect(hydrateMessages).not.toHaveBeenCalled();
+    expect(buildInjectedReferences).not.toHaveBeenCalled();
+    expect(completeMock).not.toHaveBeenCalled();
+    expect(completeByPurposeMock).not.toHaveBeenCalled();
+  });
+
+  it('[U-TMPL-11] template resolver failures return reference_resolution_failed and do not call the provider', async () => {
+    const parsedRef = {
+      placeholder: '{{ref:Templates/greeting.md}}',
+      ref: '{{ref:Templates/greeting.md}}',
+      identifierType: 'ref' as const,
+      identifier: 'Templates/greeting.md',
+      messageIndex: 0,
+    };
+    const failedRef = {
+      kind: 'failed' as const,
+      ref: '{{ref:Templates/greeting.md}}',
+      reason: 'template_missing_required_param',
+      detail: "Required template parameter 'name' is missing",
+    };
+    vi.mocked(parseReferences).mockReturnValue([parsedRef]);
+    vi.mocked(resolveReferences).mockResolvedValue([failedRef]);
+
+    const completeMock = vi.fn();
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const res = await handler({
+      resolver: 'model',
+      name: 'fast',
+      messages: [{ role: 'user', content: '{{ref:Templates/greeting.md}}' }],
+      template_params: { 'Templates/greeting.md': {} },
+    });
+
+    expect(res.isError).toBe(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const body = JSON.parse(res.content[0].text) as any;
+    expect(body.error).toBe('reference_resolution_failed');
+    expect(body.failed_references).toEqual([
+      {
+        ref: '{{ref:Templates/greeting.md}}',
+        reason: 'template_missing_required_param',
+        detail: "Required template parameter 'name' is missing",
+      },
+    ]);
+    expect(completeMock).not.toHaveBeenCalled();
+    expect(hydrateMessages).not.toHaveBeenCalled();
+  });
+
   it('[U-RR-INT-00] discovery resolvers return before reference parsing', async () => {
     _llmClientValue = {
       complete: vi.fn(),
