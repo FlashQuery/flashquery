@@ -87,6 +87,9 @@ export interface AgentLoopCallLogEntry {
     content: string | null;
   };
   tool_calls: AgentLoopToolCallLogEntry[];
+  tool_call_id?: string;
+  tool_name?: string;
+  status?: string;
 }
 
 export interface AgentLoopAggregateUsage {

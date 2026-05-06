@@ -193,7 +193,12 @@ describe('ATL-U-13 loop executor state machine contract', () => {
     const { executeAgentLoop } = await loadAgentLoop();
     const recordUsage = vi.fn();
     const chat = vi.fn()
-      .mockResolvedValueOnce(chatResult({ inputTokens: 17, outputTokens: 3 }))
+      .mockResolvedValueOnce(chatResult({
+        message: { role: 'assistant', content: null, tool_calls: [MODE_2_TOOL] },
+        finishReason: 'tool_calls',
+        inputTokens: 17,
+        outputTokens: 3,
+      }))
       .mockRejectedValueOnce(new Error('provider error: content_filter'));
 
     const result = await executeAgentLoop(buildOptions({ chat, recordUsage }));
@@ -270,7 +275,13 @@ describe('ATL-U-14 cost, budget, and usage aggregation contract', () => {
     const { executeAgentLoop } = await loadAgentLoop();
     const result = await executeAgentLoop(buildOptions({
       chat: vi.fn()
-        .mockResolvedValueOnce(chatResult({ modelName: 'fast', inputTokens: 100, outputTokens: 10 }))
+        .mockResolvedValueOnce(chatResult({
+          modelName: 'fast',
+          message: { role: 'assistant', content: null, tool_calls: [MODE_2_TOOL] },
+          finishReason: 'tool_calls',
+          inputTokens: 100,
+          outputTokens: 10,
+        }))
         .mockResolvedValueOnce(chatResult({ modelName: 'fallback', providerName: 'openrouter', inputTokens: 20, outputTokens: 5 })),
       selectedModelsByIteration: ['fast', 'fallback'],
     }));
