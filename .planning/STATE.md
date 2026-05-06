@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
-status: ready_to_plan
+status: executing
 stopped_at: Completed 116-04-PLAN.md
-last_updated: "2026-05-06T12:20:31.500Z"
+last_updated: "2026-05-06T14:55:11.315Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 23
-  completed_phases: 6
-  total_plans: 23
-  completed_plans: 23
-  percent: 26
+  completed_phases: 5
+  total_plans: 28
+  completed_plans: 24
+  percent: 86
 ---
 
 # FlashQuery Core — State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-05)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 116 — model-visible-tool-registry
+**Current focus:** Phase 117 — agent-loop-executor
 
 ## Current Position
 
-Phase: 117
-Plan: Not started
-Status: Ready to plan
+Phase: 117 (agent-loop-executor) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-05-06
 
 ## Performance Metrics
@@ -68,6 +68,7 @@ Last activity: 2026-05-06
 | Phase 116 P02 | 4m11s | 2 tasks | 4 files |
 | Phase 116 P03 | 5m16s | 2 tasks | 2 files |
 | Phase 116 P04 | 12min | 3 tasks | 8 files |
+| Phase 117 P01 | 12min | 2 tasks | 6 files |
 
 ## Decisions
 
@@ -91,6 +92,8 @@ Last activity: 2026-05-06
 - [Phase 116]: 116-03 preserves hard-excluded tool names at config load so registry diagnostics can warn/remove them.
 - [Phase 116]: 116-04 kept automatic native tool exposure scoped to purpose resolver calls; direct model calls remain caller-parameter only.
 - [Phase 116]: 116-04 exposes public metadata.tools diagnostics in snake_case while preserving internal registry diagnostics in camelCase.
+- [Phase 117]: 117-01: Wave 0 tests intentionally remain RED until src/llm/agent-loop.ts and src/llm/tool-dispatcher.ts land.
+- [Phase 117]: 117-01: Directed scenario framework paths were corrected to tests/scenarios/framework during execution.
 
 ## Accumulated Context
 
@@ -172,7 +175,7 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T12:20:31.481Z
+Last session: 2026-05-06T14:54:17.860Z
 Stopped at: Completed 116-04-PLAN.md
 Resume: None
 
