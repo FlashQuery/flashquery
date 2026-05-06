@@ -150,8 +150,8 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
   });
 
   it.each([
-    ['handler isError true', { content: [{ type: 'text', text: 'bad input' }], isError: true }, 'tool_handler_error'],
-    ['thrown error', new Error('boom'), 'tool_handler_threw'],
+    ['handler isError true', { content: [{ type: 'text', text: 'bad input' }], isError: true }, 'handler_error'],
+    ['thrown error', new Error('boom'), 'handler_error'],
   ])('TOOL-05 turns %s into recoverable tool error content', async (_label, handlerOutcome, expectedCode) => {
     const { dispatchToolCalls } = await loadDispatcher();
     const handler = handlerOutcome instanceof Error
@@ -166,6 +166,38 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
     expect(JSON.parse(result.messages[0].content ?? '{}')).toMatchObject({
       ok: false,
       error: { code: expectedCode, recoverable: true },
+    });
+  });
+
+  it('TOOL-05 preserves successful sibling tool results when another sibling handler fails', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [
+        toolCall('get_document', { identifier: 'Research/ATL.md' }, 'call_success'),
+        toolCall('search_documents', { query: 'boom' }, 'call_failure'),
+      ],
+      nativeToolNames: ['get_document', 'search_documents'],
+      catalog: new Map([
+        ['get_document', {
+          name: 'get_document',
+          inputSchema: z.object({ identifier: z.string() }),
+          handler: vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok sibling' }] }),
+        }],
+        ['search_documents', {
+          name: 'search_documents',
+          inputSchema: z.object({ query: z.string() }),
+          handler: vi.fn().mockRejectedValue(new Error('sibling failed')),
+        }],
+      ]),
+    }));
+
+    expect(JSON.parse(result.messages[0].content ?? '{}')).toMatchObject({
+      ok: true,
+      result: { content: [{ type: 'text', text: 'ok sibling' }] },
+    });
+    expect(JSON.parse(result.messages[1].content ?? '{}')).toMatchObject({
+      ok: false,
+      error: { code: 'handler_error', recoverable: true },
     });
   });
 
@@ -202,10 +234,9 @@ describe('TOOL-06 OpenAI-compatible tool result message contract', () => {
     expect('name' in result.messages[0]).toBe(false);
   });
 
-  it('TOOL-06 serializes raw payload exactly as content === JSON.stringify(rawPayload)', async () => {
+  it('TOOL-06 serializes stable success payloads exactly as content === JSON.stringify(payload)', async () => {
     const { dispatchToolCalls } = await loadDispatcher();
-    const rawPayload = {
-      ok: true,
+    const rawHandlerResult = {
       content: [{ type: 'text', text: 'Result body with literal {{ref:Secret/plan.md}} not hydrated.' }],
     };
     const result = await dispatchToolCalls(buildDispatcherOptions({
@@ -213,12 +244,12 @@ describe('TOOL-06 OpenAI-compatible tool result message contract', () => {
         ['get_document', {
           name: 'get_document',
           inputSchema: z.object({ identifier: z.string() }),
-          handler: vi.fn().mockResolvedValue(rawPayload),
+          handler: vi.fn().mockResolvedValue(rawHandlerResult),
         }],
       ]),
     }));
 
-    expect(result.messages[0].content).toBe(JSON.stringify(rawPayload));
+    expect(result.messages[0].content).toBe(JSON.stringify({ ok: true, result: rawHandlerResult }));
   });
 
   it('TOOL-06 records calls-log metadata with tool_call_id, tool name, argument object, status, and result summary', async () => {
