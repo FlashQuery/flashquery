@@ -854,7 +854,12 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     };
   }
 
-  function templateResult(path: string, body: string, fqParams: Record<string, unknown>) {
+  function templateResult(
+    path: string,
+    body: string,
+    fqParams: Record<string, unknown>,
+    frontmatterExtras: Record<string, unknown> = {}
+  ) {
     return {
       identifier: path,
       title: path,
@@ -866,6 +871,7 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
       frontmatter: {
         fq_template: true,
         fq_params: fqParams,
+        ...frontmatterExtras,
       },
     } as unknown as Record<string, unknown>;
   }
@@ -905,6 +911,40 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     const metadata = buildInjectedReferences([resolved]) as Array<Record<string, unknown>>;
     expect(metadata[0].template_params_used).toEqual({
       name: { type: 'string', chars: 3 },
+    });
+  });
+
+  it('[U-TMPL-06] preserves direct reference access for templates with invalid masquerade metadata', async () => {
+    vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
+      templateResult('Templates/Skill.md', 'Research {{topic}}', {
+        topic: { type: 'string', required: true },
+      }, {
+        fq_expose_as_tool: true,
+        fq_namespace: 'Skill',
+        fq_desc: 'Uppercase namespace is invalid for masquerade only',
+      })
+    );
+
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/Skill.md}}', 'Templates/Skill.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/Skill.md': { topic: 'Phase 118' } }
+    );
+
+    expect(out[0]).toMatchObject({
+      kind: 'resolved',
+      content: 'Research Phase 118',
+      template: true,
+      templatePath: 'Templates/Skill.md',
+    });
+    expect(buildInjectedReferences([out[0] as ResolvedRef])[0]).toMatchObject({
+      ref: '{{ref:Templates/Skill.md}}',
+      template: true,
+      template_path: 'Templates/Skill.md',
+      template_params_used: { topic: { type: 'string', chars: 9 } },
     });
   });
 
