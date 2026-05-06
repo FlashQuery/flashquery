@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
-status: executing
-stopped_at: Completed 116-03-PLAN.md
-last_updated: "2026-05-06T12:06:21.227Z"
+status: verifying
+stopped_at: Completed 116-04-PLAN.md
+last_updated: "2026-05-06T12:20:31.500Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 23
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 23
-  completed_plans: 22
-  percent: 96
+  completed_plans: 23
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 
 Phase: 116 (model-visible-tool-registry) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-06
 
 ## Performance Metrics
@@ -67,6 +67,7 @@ Last activity: 2026-05-06
 | Phase 116 P01 | 12min | 2 tasks | 2 files |
 | Phase 116 P02 | 4m11s | 2 tasks | 4 files |
 | Phase 116 P03 | 5m16s | 2 tasks | 2 files |
+| Phase 116 P04 | 12min | 3 tasks | 8 files |
 
 ## Decisions
 
@@ -88,6 +89,8 @@ Last activity: 2026-05-06
 - [Phase 116]: 116-02 uses Zod 4 z.toJSONSchema plus OpenAI-specific normalization for strict tool definitions.
 - [Phase 116]: 116-03 validates purpose native tool declarations from TOOL_TIERS and HARD_EXCLUDED_NATIVE_TOOLS.
 - [Phase 116]: 116-03 preserves hard-excluded tool names at config load so registry diagnostics can warn/remove them.
+- [Phase 116]: 116-04 kept automatic native tool exposure scoped to purpose resolver calls; direct model calls remain caller-parameter only.
+- [Phase 116]: 116-04 exposes public metadata.tools diagnostics in snake_case while preserving internal registry diagnostics in camelCase.
 
 ## Accumulated Context
 
@@ -169,8 +172,8 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T12:06:21.205Z
-Stopped at: Completed 116-03-PLAN.md
+Last session: 2026-05-06T12:20:31.481Z
+Stopped at: Completed 116-04-PLAN.md
 Resume: None
 
 ## Deferred Items
