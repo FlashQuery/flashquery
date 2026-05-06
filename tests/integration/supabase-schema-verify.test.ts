@@ -34,6 +34,7 @@ function loadTestConfig(): FlashQueryConfig {
   if (process.env.SUPABASE_URL) config.supabase.url = process.env.SUPABASE_URL;
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) config.supabase.serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (process.env.DATABASE_URL) config.supabase.databaseUrl = process.env.DATABASE_URL;
+  config.supabase.skipDdl = false;
   return config;
 }
 
@@ -60,7 +61,7 @@ describe('Schema Verification (Integration)', () => {
       console.log('⚠️  Skipping schema verify integration tests: failed to initialize or connect to Supabase:', (err as Error).message);
       testSupabaseAvailable = false;
     }
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (client) {
@@ -72,17 +73,17 @@ describe('Schema Verification (Integration)', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Test 1: Happy path — verifySchema succeeds when all 5 tables exist
+  // Test 1: Happy path — verifySchema succeeds when all required tables exist
   // ─────────────────────────────────────────────────────────────────────────
 
-  it('verifySchema succeeds when all 5 tables exist after DDL', async () => {
+  it('verifySchema succeeds when all required tables exist after DDL', async () => {
     if (!testSupabaseAvailable) {
       console.log('⏭️  Skipping: Supabase not available');
       return;
     }
 
     // Prerequisite: A fresh Supabase instance with DDL already executed (from beforeAll in supabase.test.ts)
-    // verifySchema checks that all 5 required tables exist
+    // verifySchema checks that all required tables exist
     // This is the happy path — should not throw
     await expect(verifySchema(client!)).resolves.toBeUndefined();
   });
@@ -313,7 +314,7 @@ describe('Schema Verification (Integration)', () => {
     const result = await client!.query(`
       SELECT
         tc.constraint_name,
-        array_agg(kcu.column_name ORDER BY kcu.ordinal_position) AS columns
+        array_to_json(array_agg(kcu.column_name ORDER BY kcu.ordinal_position)) AS columns
       FROM information_schema.table_constraints tc
       JOIN information_schema.key_column_usage kcu
         ON tc.constraint_name = kcu.constraint_name

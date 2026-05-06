@@ -41,6 +41,7 @@ export async function tableExists(client: pg.Client, tableName: string): Promise
  * - fqc_llm_purposes: LLM purpose config (Phase 98)
  * - fqc_llm_purpose_models: purpose-to-model mappings (Phase 98)
  * - fqc_llm_usage: LLM usage telemetry (Phase 98)
+ * - fqc_purpose_templates: purpose-template bindings (Phase 115)
  *
  * @param client - A connected pg.Client instance
  * @returns Resolves successfully if all tables exist
@@ -58,6 +59,7 @@ export async function verifySchema(client: pg.Client): Promise<void> {
     'fqc_llm_purposes',
     'fqc_llm_purpose_models',
     'fqc_llm_usage',
+    'fqc_purpose_templates',
   ];
 
   const missingTables: string[] = [];
