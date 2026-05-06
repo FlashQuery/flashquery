@@ -2289,3 +2289,67 @@ describe('call_model handler — CAP-05 response_format with tools guard', () =>
     expect(completeByPurposeMock).not.toHaveBeenCalled();
   });
 });
+
+describe('call_model handler — ATL-U-15 template tool discovery metadata', () => {
+  it('list_purposes exposes template_tools, template_tool_conflicts, and fresh template diagnostics', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const config = {
+      ...TEST_CONFIG,
+      templates: { defaultAccess: 'permissive' },
+      llm: {
+        ...TEST_LLM_CONFIG,
+        purposes: [
+          {
+            name: 'reviewer',
+            description: 'Reviewer',
+            models: ['fast'],
+            templates: ['Templates/Research-Skill.md', 'Templates/Document Review.md'],
+          },
+        ],
+      },
+    } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+
+    const handler = captureCallModelHandler(config as typeof TEST_CONFIG);
+    const result = await handler({ resolver: 'list_purposes' });
+    const payload = JSON.parse(result.content[0].text);
+
+    expect(payload.purposes[0]).toMatchObject({
+      name: 'reviewer',
+      template_tools: expect.arrayContaining([
+        expect.objectContaining({
+          name: 'flashquery.skill.research_skill',
+          template_path: 'Templates/Research-Skill.md',
+          description: expect.any(String),
+          parameters: expect.any(Object),
+        }),
+        expect.objectContaining({
+          name: 'flashquery.review.document_review',
+          template_path: 'Templates/Document Review.md',
+        }),
+      ]),
+      template_tool_conflicts: expect.any(Array),
+    });
+  });
+
+  it('purpose calls with template-only tools enter Mode 2 via hasModelVisibleTools and preserve template calls_log kind', async () => {
+    expect(hasModelVisibleTools({
+      nativeToolNames: [],
+      providerTools: [
+        {
+          type: 'function',
+          function: {
+            name: 'flashquery.template.weekly_checklist',
+            description: 'Weekly checklist',
+            parameters: { type: 'object', properties: {}, additionalProperties: false },
+          },
+        },
+      ],
+      diagnostics: { expandedTiers: [], explicitTools: [], excluded: [], hardExcluded: [], unknown: [] },
+    })).toBe(true);
+  });
+});

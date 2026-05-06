@@ -553,3 +553,40 @@ describe('normalizeToolJsonSchema', () => {
     });
   });
 });
+
+describe('ATL-U-15 combined provider-visible registry contracts', () => {
+  it('keeps native and template provider tools in one final registry and reports collisions by final function name', async () => {
+    const module = await import('../../src/llm/template-tools.js') as {
+      mergeModelVisibleToolRegistries: (input: Record<string, unknown>) => {
+        providerTools?: Array<{ function: { name: string } }>;
+        collisions: Array<Record<string, unknown>>;
+      };
+    };
+    const native = assembleNativeToolRegistry(makeConfig(['get_document']), 'research', CATALOG);
+    const merged = module.mergeModelVisibleToolRegistries({
+      native,
+      template: {
+        providerTools: [
+          { type: 'function', function: { name: 'flashquery.skill.research_skill', description: 'Research', parameters: { type: 'object', properties: {} } } },
+          { type: 'function', function: { name: 'get_document', description: 'Conflicting template', parameters: { type: 'object', properties: {} } } },
+        ],
+        templateTools: [
+          { name: 'flashquery.skill.research_skill', template_path: 'Templates/Research-Skill.md' },
+          { name: 'get_document', template_path: 'Templates/Get Document.md' },
+        ],
+      },
+    });
+
+    expect(merged.providerTools?.map((tool) => tool.function.name)).toEqual([
+      'get_document',
+      'flashquery.skill.research_skill',
+      'get_document',
+    ]);
+    expect(merged.collisions).toEqual([
+      expect.objectContaining({
+        name: 'get_document',
+        template_paths: ['Templates/Get Document.md'],
+      }),
+    ]);
+  });
+});

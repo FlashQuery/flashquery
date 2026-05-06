@@ -267,3 +267,53 @@ describe('TOOL-06 OpenAI-compatible tool result message contract', () => {
     ]));
   });
 });
+
+describe('ATL-U-15 mixed native/template dispatcher contracts', () => {
+  it('routes generated flashquery template names through templateReverseMap before native fallback and records kind=template', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [
+        toolCall('flashquery.skill.research_skill', { topic: 'Phase 118' }, 'call_template'),
+      ],
+      nativeToolNames: [],
+      templateReverseMap: new Map([['flashquery.skill.research_skill', 'Templates/Research-Skill.md']]),
+      templateTools: new Map([
+        ['Templates/Research-Skill.md', {
+          body: 'Research {{topic}}',
+          frontmatter: {
+            fq_template: true,
+            fq_expose_as_tool: true,
+            fq_namespace: 'skill',
+            fq_desc: 'Research skill',
+            fq_params: { topic: { type: 'string', required: true } },
+          },
+        }],
+      ]),
+    }));
+
+    expect(JSON.parse(result.messages[0].content ?? '{}')).toMatchObject({
+      ok: true,
+      result: { template_path: 'Templates/Research-Skill.md', content: 'Research Phase 118' },
+    });
+    expect(result.logEntries[0]).toMatchObject({
+      kind: 'template',
+      tool_call_id: 'call_template',
+      tool_name: 'flashquery.skill.research_skill',
+      status: 'success',
+    });
+  });
+
+  it('preserves kind discrimination for mixed native/template sibling calls', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [
+        toolCall('get_document', { identifier: 'Research/ATL.md' }, 'call_native'),
+        toolCall('flashquery.skill.research_skill', { topic: 'Phase 118' }, 'call_template'),
+      ],
+      nativeToolNames: ['get_document'],
+      templateReverseMap: new Map([['flashquery.skill.research_skill', 'Templates/Research-Skill.md']]),
+    }));
+
+    expect(result.logEntries.map((entry) => entry.kind)).toEqual(['native', 'template']);
+  });
+});
