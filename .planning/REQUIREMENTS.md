@@ -49,9 +49,9 @@
 
 - [x] **CAP-01**: Model config supports structured capabilities for tool calling, usage on tool calls, strict tools, parallel tool calls, and structured outputs with tools.
 - [x] **CAP-02**: Existing free-form model `capabilities: string[]` is migrated or replaced without preserving two conflicting capability surfaces.
-- [ ] **CAP-03**: Mode 2 purposes fail config validation unless every fallback model declares required tool-calling and usage capabilities.
+- [x] **CAP-03**: Mode 2 purposes fail config validation unless every fallback model declares required tool-calling and usage capabilities.
 - [ ] **CAP-04**: Runtime/API template binding runs the same capability admission validation as YAML config.
-- [ ] **CAP-05**: Requests combining `response_format` with model-visible tools fail when the resolved model does not support structured outputs with tools.
+- [x] **CAP-05**: Requests combining `response_format` with model-visible tools fail when the resolved model does not support structured outputs with tools.
 
 ### Native Tool Exposure
 
@@ -150,9 +150,9 @@
 | BIND-05 | Phase 115 | Pending |
 | CAP-01 | Phase 115 | Complete |
 | CAP-02 | Phase 115 | Complete |
-| CAP-03 | Phase 115 | Pending |
+| CAP-03 | Phase 115 | Complete |
 | CAP-04 | Phase 115 | Pending |
-| CAP-05 | Phase 115 | Pending |
+| CAP-05 | Phase 115 | Complete |
 | TOOL-01 | Phase 116 | Pending |
 | TOOL-02 | Phase 116 | Pending |
 | TOOL-03 | Phase 116 | Pending |
