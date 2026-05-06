@@ -126,7 +126,7 @@ Phase 118 can build template discovery and masquerade dispatch on top of a valid
 ## Self-Check: PASSED
 
 - Created file exists: `.planning/phases/117-agent-loop-executor/117-VALIDATION.md`.
-- Summary file exists: `.planning/phases/117-agent-loop-executor/117-agent-loop-executor-05-SUMMARY.md`.
+- Summary file exists: `.planning/phases/117-agent-loop-executor/117-05-SUMMARY.md`.
 - Task commits exist: `971a3ee`, `23355b0`.
 - Verification commands passed.
 

@@ -145,7 +145,7 @@ Plan 117-04 can wire `call_model` purpose calls into `executeAgentLoop()` using 
 
 ## Self-Check: PASSED
 
-- Summary file exists: `.planning/phases/117-agent-loop-executor/117-agent-loop-executor-03-SUMMARY.md`.
+- Summary file exists: `.planning/phases/117-agent-loop-executor/117-03-SUMMARY.md`.
 - Created file exists: `src/llm/agent-loop.ts`.
 - Task commits exist: `3452656`, `90c4543`, `ca50986`.
 - Verification commands passed.

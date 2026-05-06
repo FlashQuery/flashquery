@@ -120,7 +120,7 @@ Plan 117-03 can use captured catalog handlers and `dispatchToolCalls()` as the i
 ## Self-Check: PASSED
 
 - Created file exists: `src/llm/tool-dispatcher.ts`.
-- Summary file exists: `.planning/phases/117-agent-loop-executor/117-agent-loop-executor-02-SUMMARY.md`.
+- Summary file exists: `.planning/phases/117-agent-loop-executor/117-02-SUMMARY.md`.
 - Task commits exist: `daed815`, `2a0de9f`, `d656ae5`, `d98a215`.
 - Verification commands passed.
 

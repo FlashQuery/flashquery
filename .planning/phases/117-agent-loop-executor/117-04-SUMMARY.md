@@ -133,7 +133,7 @@ Plan 117-05 can validate the broader Phase 117 surface using the public `call_mo
 
 ## Self-Check: PASSED
 
-- Summary file exists: `.planning/phases/117-agent-loop-executor/117-agent-loop-executor-04-SUMMARY.md`.
+- Summary file exists: `.planning/phases/117-agent-loop-executor/117-04-SUMMARY.md`.
 - Task commits exist: `db263ec`, `faf261b`, `1174072`, `723e645`.
 - Modified files exist: `src/mcp/tools/llm.ts`, `tests/unit/llm-tool.test.ts`, `tests/e2e/call-model-agent-loop.e2e.test.ts`.
 - Verification commands passed.
