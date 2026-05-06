@@ -1,5 +1,5 @@
-import { readdir, readFile } from 'node:fs/promises';
-import { basename, extname, join, relative, resolve as resolvePath } from 'node:path';
+import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
+import { basename, extname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { posix as pathPosix } from 'node:path';
 import matter from 'gray-matter';
 import type { FlashQueryConfig } from '../config/loader.js';
@@ -193,6 +193,31 @@ async function discoverMarkdownFiles(root: string, markdownExtensions: string[])
   return await walk(root);
 }
 
+function escapesBase(relativePath: string): boolean {
+  return (
+    relativePath === '' ||
+    relativePath === '..' ||
+    relativePath.startsWith(`..${sep}`) ||
+    isAbsolute(relativePath)
+  );
+}
+
+async function isContainedNonSymlink(vaultRoot: string, fullPath: string, normalizedPath: string): Promise<boolean> {
+  try {
+    const realVaultRoot = await realpath(vaultRoot);
+    let cursor = realVaultRoot;
+    for (const segment of normalizedPath.split('/').filter(Boolean)) {
+      cursor = resolvePath(cursor, segment);
+      const stat = await lstat(cursor);
+      if (stat.isSymbolicLink()) return false;
+    }
+    const realFullPath = await realpath(fullPath);
+    return !escapesBase(relative(realVaultRoot, realFullPath));
+  } catch {
+    return false;
+  }
+}
+
 async function readTemplateCandidate(
   config: FlashQueryConfig,
   templatePath: string,
@@ -203,10 +228,11 @@ async function readTemplateCandidate(
   const vaultRoot = resolvePath(config.instance.vault.path);
   const fullPath = resolvePath(vaultRoot, normalized);
   const relativePath = relative(vaultRoot, fullPath);
-  if (relativePath === '' || relativePath === '..' || relativePath.startsWith('../') || relativePath.startsWith('/')) {
+  if (escapesBase(relativePath)) {
     return null;
   }
   try {
+    if (!await isContainedNonSymlink(vaultRoot, fullPath, normalized)) return null;
     const raw = await readFile(fullPath, 'utf8');
     const parsed = matter(raw);
     return {

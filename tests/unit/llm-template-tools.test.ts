@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -339,6 +339,38 @@ describe('ATL-U-15 template tool dispatch contracts', () => {
         },
       },
       templateReverseMap: new Map([['flashquery_skill_outside', 'safe/../../outside.md']]),
+      config: {
+        instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+      },
+    });
+
+    expect(JSON.parse(result.message.content)).toMatchObject({
+      ok: false,
+      error: { code: 'template_not_found', recoverable: true },
+    });
+  });
+
+  it('does not read reverse-map template paths through vault symlinks', async () => {
+    const { dispatchTemplateToolCall } = await loadTemplateTools();
+    const rootPath = await mkdtemp(join(tmpdir(), 'fqc-template-symlink-containment-'));
+    const vaultPath = join(rootPath, 'vault');
+    await mkdir(vaultPath, { recursive: true });
+    await writeTemplate(rootPath, 'outside.md', {
+      fq_template: true,
+      fq_params: { topic: { type: 'string', required: true } },
+    }, 'Outside {{topic}}');
+    await symlink(join(rootPath, 'outside.md'), join(vaultPath, 'link.md'));
+
+    const result = await dispatchTemplateToolCall({
+      toolCall: {
+        id: 'call_symlink',
+        type: 'function',
+        function: {
+          name: 'flashquery_skill_symlink',
+          arguments: { topic: 'Phase 118' },
+        },
+      },
+      templateReverseMap: new Map([['flashquery_skill_symlink', 'link.md']]),
       config: {
         instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
       },
