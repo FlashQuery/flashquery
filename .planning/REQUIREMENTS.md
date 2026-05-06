@@ -55,9 +55,9 @@
 
 ### Native Tool Exposure
 
-- [ ] **TOOL-01**: Purpose-level `tools` expands safe tool tiers and named tools into a final model-visible native tool allowlist.
-- [ ] **TOOL-02**: Purpose-level `excluded_tools` removes tools from the final set and is invalid without `tools`.
-- [ ] **TOOL-03**: Hard-excluded tools, including `call_model` and admin/plugin management tools, are removed from exposure with warnings.
+- [x] **TOOL-01**: Purpose-level `tools` expands safe tool tiers and named tools into a final model-visible native tool allowlist.
+- [x] **TOOL-02**: Purpose-level `excluded_tools` removes tools from the final set and is invalid without `tools`.
+- [x] **TOOL-03**: Hard-excluded tools, including `call_model` and admin/plugin management tools, are removed from exposure with warnings.
 - [ ] **TOOL-04**: Internal tool registry translates MCP/Zod schemas into OpenAI-compatible tool definitions with strict-mode support where available.
 - [ ] **TOOL-05**: Delegated model native tool calls are dispatched internally through FlashQuery handlers without exposing an MCP server to the delegated model.
 - [ ] **TOOL-06**: Tool result messages use OpenAI-compatible `tool` role messages keyed by `tool_call_id`, with JSON-stringified raw results.
@@ -153,9 +153,9 @@
 | CAP-03 | Phase 115 | Complete |
 | CAP-04 | Phase 115 | Complete |
 | CAP-05 | Phase 115 | Complete |
-| TOOL-01 | Phase 116 | Pending |
-| TOOL-02 | Phase 116 | Pending |
-| TOOL-03 | Phase 116 | Pending |
+| TOOL-01 | Phase 116 | Complete |
+| TOOL-02 | Phase 116 | Complete |
+| TOOL-03 | Phase 116 | Complete |
 | TOOL-04 | Phase 116 | Pending |
 | LOOP-01 | Phase 117 | Pending |
 | LOOP-02 | Phase 117 | Pending |

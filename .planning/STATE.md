@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
-status: ready_to_plan
-stopped_at: Completed 115-05-PLAN.md
-last_updated: "2026-05-06T04:01:30.000Z"
+status: executing
+stopped_at: Completed 115-03-PLAN.md
+last_updated: "2026-05-06T11:48:38.924Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 23
   completed_phases: 4
-  total_plans: 19
-  completed_plans: 19
-  percent: 17
+  total_plans: 23
+  completed_plans: 20
+  percent: 87
 ---
 
 # FlashQuery Core — State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-05)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 115 — purpose-config-bindings-capabilities
+**Current focus:** Phase 116 — model-visible-tool-registry
 
 ## Current Position
 
-Phase: 116
-Plan: Not started
-Status: Ready to plan
+Phase: 116 (model-visible-tool-registry) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-05-06
 
 ## Performance Metrics
@@ -64,6 +64,7 @@ Last activity: 2026-05-06
 | Phase 115 P04 | 6 min | 3 tasks | 5 files |
 | Phase 115 P03 | 7 min | 3 tasks | 4 files |
 | Phase 115 P05 | 9 min | 3 tasks | 7 files |
+| Phase 116 P01 | 12min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -79,6 +80,8 @@ Last activity: 2026-05-06
 - [Phase 115]: 115-03: Purpose-template runtime rows use source='api' while existing LLM config tables keep source='webapp' for compatibility.
 - [Phase 115]: 115-05: Runtime binding precedence remains validated in `tests/integration/llm-config-sync.test.ts` until a public runtime binding scenario tool exists.
 - [Phase 115]: 115-05: User-facing docs remain deferred until later ATL phases expose the final tool registry, loop execution, and discovery/help surfaces.
+- [Phase 116]: 116-01 kept providerTools explicitly undefined until Plan 02 adds schema translation.
+- [Phase 116]: 116-01 treats native tool tiers as static policy rather than inferring from the MCP server surface.
 
 ## Accumulated Context
 
@@ -160,7 +163,7 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T03:49:40.223Z
+Last session: 2026-05-06T11:47:57.103Z
 Stopped at: Completed 115-03-PLAN.md
 Resume: None
 
