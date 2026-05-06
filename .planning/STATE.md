@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
-status: executing
-stopped_at: Completed 117-05-PLAN.md
-last_updated: "2026-05-06T18:54:39.582Z"
-last_activity: 2026-05-06 -- Phase 118 execution started
+status: completed
+stopped_at: Completed 118-05-PLAN.md
+last_updated: "2026-05-06T19:49:22.139Z"
+last_activity: 2026-05-06 -- Completed 118-05 validation closure
 progress:
   total_phases: 23
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 33
-  completed_plans: 28
-  percent: 85
+  completed_plans: 33
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 
 ## Current Position
 
-Phase: 118 (template-discovery-masquerade-dispatch) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 118
-Last activity: 2026-05-06 -- Phase 118 execution started
+Phase: 118 (template-discovery-masquerade-dispatch) — COMPLETE
+Plan: 5 of 5
+Status: Completed Phase 118
+Last activity: 2026-05-06 -- Completed 118-05 validation closure
 
 ## Performance Metrics
 
@@ -73,6 +73,7 @@ Last activity: 2026-05-06 -- Phase 118 execution started
 | Phase 117 P03 | 6m33s | 2 tasks | 6 files |
 | Phase 117 P04 | 16min | 2 tasks | 3 files |
 | Phase 117 P05 | 13min | 2 tasks | 5 files |
+| Phase 118 P05 | 12min | 2 tasks | 10 files |
 
 ## Decisions
 
@@ -106,6 +107,7 @@ Last activity: 2026-05-06 -- Phase 118 execution started
 - [Phase 117]: 117-04: call_model owns public Mode 2 envelope mapping while executeAgentLoop owns internal loop execution.
 - [Phase 117]: 117-05 validates VAL-117 with deterministic mock providers and no real-provider correctness dependencies.
 - [Phase 117]: 117-05 treats pre-call max-token stops as zero-completed-iteration behavior with no provider request or usage row.
+- [Phase 118]: Public template validation now treats provider request capture as auxiliary; directed assertions use the public `call_model` envelope and calls-log metadata.
 
 ## Accumulated Context
 
@@ -187,8 +189,8 @@ Last activity: 2026-05-06 -- Phase 118 execution started
 
 ## Session Continuity
 
-Last session: 2026-05-06T15:51:10.391Z
-Stopped at: Completed 117-05-PLAN.md
+Last session: 2026-05-06T19:47:34.132Z
+Stopped at: Completed 118-05-PLAN.md
 Resume: None
 
 ## Deferred Items
