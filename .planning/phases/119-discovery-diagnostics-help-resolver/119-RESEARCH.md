@@ -372,22 +372,22 @@ const merged = mergeModelVisibleToolRegistries({ native, template });
 |---|-------|---------|---------------|
 | A1 | Static help content often duplicates enums and can drift. | Common Pitfalls | Low; mitigation is still valid because drift tests are explicitly required. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact public field names for native diagnostics**
    - What we know: `list_purposes` must include usable native tools and public diagnostics. [VERIFIED: 119-CONTEXT.md]
-   - What's unclear: Whether fields should be named `native_tools`, `native_tool_diagnostics`, `tool_diagnostics`, or mirror internal names exactly. [VERIFIED: source inspection]
-   - Recommendation: Planner should create a Wave 0 contract test that pins additive fields before implementation. [VERIFIED: ATL Test Plan ATL-U-16]
+   - Resolution: Use additive public fields named `native_tools` and `native_tool_diagnostics` on every purpose. Keep template diagnostics in the already specified `template_tools`, `template_tool_warnings`, `template_tool_conflicts`, and `dangling_template_paths` fields. Do not mirror internal camelCase names directly in the public JSON shape. [VERIFIED: 119-CONTEXT.md; CITED: ATL Test Plan ATL-U-16]
+   - Planner action: Wave 0 must pin those exact field names before implementation. [VERIFIED: ATL Test Plan ATL-U-16]
 
 2. **Whether `list_models` should include defaults-expanded capabilities or declared-only plus diagnostics**
    - What we know: Existing `modelToResponse` emits declared `capabilities` only when present; `modelCapabilitiesWithDefaults` derives OpenAI defaults. [VERIFIED: src/mcp/tools/llm.ts, src/llm/capabilities.ts]
-   - What's unclear: The desired split between `capabilities` and a new diagnostics/effective field. [VERIFIED: source inspection]
-   - Recommendation: Preserve `capabilities` as declared config and add `effective_capabilities` plus `capability_diagnostics` for clarity. [ASSUMED]
+   - Resolution: Preserve existing `capabilities` output as the declared config surface for compatibility, and add `capability_diagnostics` as the required Phase 119 public diagnostic surface. `capability_diagnostics` must make defaults and undeclared values understandable through `state` and `message` without requiring callers to infer from legacy tags. Adding `effective_capabilities` is permitted if it falls out naturally from the helper implementation, but it is not mandatory for Phase 119 acceptance. [VERIFIED: src/mcp/tools/llm.ts, src/llm/capabilities.ts; CITED: Agentic-LLM-Tool-Loop.md OQ-27]
+   - Planner action: Tests must pin `capability_diagnostics` with `unknown_declaration` and `declared_unsupported` states; they should not require `effective_capabilities` unless the implementation explicitly adds it. [VERIFIED: 119-VALIDATION.md]
 
 3. **Usage-row no-op verification for directed help**
    - What we know: Help must not write usage rows. [VERIFIED: 119-CONTEXT.md]
-   - What's unclear: The cheapest existing public helper for counting `fqc_llm_usage` rows in directed scenarios. [VERIFIED: scenario inspection]
-   - Recommendation: Use existing public usage/trace behavior if available; otherwise unit-test no client call and directed-test raw shape only. [ASSUMED]
+   - Resolution: Unit tests are the authoritative low-cost guard for no LLM invocation and no envelope/usage path: `resolver: "help"` must execute before LLM client calls, trace snapshots, reference hydration, and usage recording. Directed scenarios should assert the public raw shape, absence of envelope-only keys, and no requirement for `name`/`messages`; they do not need private database row counting unless an existing public usage helper makes that cheap during execution. [VERIFIED: src/mcp/tools/llm.ts; VERIFIED: scenario inspection]
+   - Planner action: Keep the no-usage requirement in Plan 02 unit tests and public shape requirement in Plan 03 directed tests. Do not block the plan on private DB inspection. [VERIFIED: 119-VALIDATION.md]
 
 ## Environment Availability
 
