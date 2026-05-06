@@ -1160,4 +1160,97 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     expect(failed.detail).toContain('item 0');
     expect(failed.detail).toContain('template_param_doc_not_found');
   });
+
+  it('[U-TMPL-10b] _items string entries reuse section and pointer grammar and keep ordered item refs', async () => {
+    vi.mocked(resolveAndBuildDocument)
+      .mockResolvedValueOnce(plainResult('Research/a.md', 'SECTION BODY'))
+      .mockResolvedValueOnce({
+        ...plainResult('Research/b.md', 'unused'),
+        followed_ref: { body: 'POINTER BODY', resolved_to: 'Research/target.md' },
+      });
+
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:@background}}', 'background')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      {
+        background: {
+          _items: ['Research/a.md#Summary', 'Research/b.md->next.doc'],
+        },
+      }
+    );
+
+    const resolved = out[0] as ResolvedRef;
+    expect(resolved.kind).toBe('resolved');
+    expect(resolved.content).toBe('SECTION BODYPOINTER BODY');
+    expect(resolveAndBuildDocument).toHaveBeenNthCalledWith(
+      1,
+      'Research/a.md',
+      expect.objectContaining({ sectionsList: ['Summary'], followRef: undefined }),
+      expect.objectContaining({ config: fakeConfig })
+    );
+    expect(resolveAndBuildDocument).toHaveBeenNthCalledWith(
+      2,
+      'Research/b.md',
+      expect.objectContaining({ sectionsList: [], followRef: 'next.doc' }),
+      expect.objectContaining({ config: fakeConfig })
+    );
+    const metadata = buildInjectedReferences([resolved]) as Array<Record<string, unknown>>;
+    expect(metadata[0].items).toEqual([
+      { ref: 'Research/a.md#Summary', resolved_to: 'Research/a.md', chars: 12 },
+      { ref: 'Research/b.md->next.doc', resolved_to: 'Research/target.md', chars: 12 },
+    ]);
+  });
+
+  it('[U-TMPL-10c] _items object entries record template metadata and wrap missing _template by index', async () => {
+    vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
+      templateResult('Templates/context.md', 'Focus: {{focus}}', {
+        focus: { type: 'string', required: true },
+      })
+    );
+
+    const resolvedOut = await resolveWithTemplateParams(
+      [parsedRef('{{ref:@background}}', 'background')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      {
+        background: {
+          _items: [{ _template: 'Templates/context.md', focus: 'readiness' }],
+        },
+      }
+    );
+    const metadata = buildInjectedReferences([resolvedOut[0] as ResolvedRef]) as Array<Record<string, unknown>>;
+    expect(metadata[0].items).toEqual([
+      {
+        ref: 'Templates/context.md',
+        resolved_to: 'Templates/context.md',
+        chars: 16,
+        template: true,
+        template_path: 'Templates/context.md',
+      },
+    ]);
+
+    const failedOut = await resolveWithTemplateParams(
+      [parsedRef('{{ref:@background}}', 'background')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      {
+        background: {
+          _items: [{}],
+        },
+      }
+    );
+    const failed = failedOut[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe('multi_ref_item_failed');
+    expect(failed.detail).toContain('alias=background');
+    expect(failed.detail).toContain('index=0');
+    expect(failed.detail).toContain('alias_missing_template_field');
+  });
 });
