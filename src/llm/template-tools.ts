@@ -5,13 +5,16 @@ import matter from 'gray-matter';
 import type { FlashQueryConfig } from '../config/loader.js';
 import {
   normalizeTemplateParamDeclarations,
-  renderTemplateContent,
+  renderTemplateDocument,
   type TemplateParamDeclaration,
   type TemplateParamUsage,
 } from './reference-resolver.js';
 import { normalizeToolJsonSchema, type OpenAiToolDefinition } from './tool-registry.js';
 import type { LlmChatToolCall, LlmToolMessage } from './types.js';
 import type { TemplateWarning } from '../constants/template-warnings.js';
+import { supabaseManager } from '../storage/supabase.js';
+import { embeddingProvider } from '../embedding/provider.js';
+import { logger } from '../logging/logger.js';
 
 export interface TemplateToolDefinition {
   name: string;
@@ -73,6 +76,9 @@ export interface DispatchTemplateToolCallOptions {
   toolCall: LlmChatToolCall;
   templateReverseMap: TemplateToolReverseMap;
   config: FlashQueryConfig;
+  supabaseManager?: typeof supabaseManager;
+  embeddingProvider?: typeof embeddingProvider;
+  logger?: typeof logger;
 }
 
 export interface TemplateToolCallLogEntry {
@@ -525,38 +531,28 @@ export async function dispatchTemplateToolCall(
     return errorResult(options.toolCall, args, 'unsupported_template_param_schema', schema.error, templatePath);
   }
 
-  const values: Record<string, string> = {};
-  const paramsUsed: Record<string, TemplateParamUsage> = {};
-  const warnings: TemplateWarning[] = [];
-  for (const [name, declaration] of Object.entries(schema.declarations)) {
-    const hasSupplied = Object.prototype.hasOwnProperty.call(args, name);
-    const hasDefault = Object.prototype.hasOwnProperty.call(declaration, 'default');
-    const rawValue = hasSupplied ? args[name] : declaration.default;
-    if (!hasSupplied && !hasDefault) {
-      if (declaration.required === true) {
-        return errorResult(options.toolCall, args, 'template_missing_required_param', `Required template parameter '${name}' is missing`, templatePath);
-      }
-      values[name] = '';
-      paramsUsed[name] = { type: declaration.type, chars: 0 };
-      warnings.push({ type: 'optional_param_missing_no_default', param: name });
-      continue;
-    }
-    if (typeof rawValue !== 'string') {
-      return errorResult(options.toolCall, args, 'template_param_invalid_type', `Template parameter '${name}' must be a string`, templatePath);
-    }
-    if (declaration.type === 'document') {
-      const doc = await readTemplateCandidate(options.config, normalizeTemplatePath(rawValue));
-      if (doc === null) {
-        return errorResult(options.toolCall, args, 'template_param_doc_not_found', `Document template parameter '${name}' failed to resolve '${rawValue}'`, templatePath);
-      }
-      values[name] = doc.body;
-      paramsUsed[name] = { type: 'document', input: rawValue, chars: doc.body.length, resolved_to: normalizeTemplatePath(rawValue) };
-    } else {
-      values[name] = rawValue;
-      paramsUsed[name] = { type: 'string', chars: rawValue.length };
-    }
+  const rendered = await renderTemplateDocument(
+    {
+      body: candidate.body,
+      path: templatePath,
+      frontmatter: candidate.frontmatter,
+    },
+    args,
+    options.config,
+    options.supabaseManager ?? supabaseManager,
+    options.embeddingProvider ?? embeddingProvider,
+    options.logger ?? logger
+  );
+  if (!rendered.ok) {
+    return errorResult(options.toolCall, args, rendered.reason, rendered.detail, templatePath);
   }
+  return successResult(
+    options.toolCall,
+    templatePath,
+    args,
+    rendered.content,
+    rendered.paramsUsed,
+    rendered.warnings
+  );
 
-  const content = renderTemplateContent(candidate.body, values, schema.declarations, warnings);
-  return successResult(options.toolCall, templatePath, args, content, paramsUsed, warnings);
 }

@@ -121,6 +121,21 @@ export interface InjectionMetadata {
   promptChars: number;
 }
 
+export interface RenderTemplateDocumentSuccess {
+  ok: true;
+  content: string;
+  paramsUsed: Record<string, TemplateParamUsage>;
+  warnings: TemplateWarning[];
+}
+
+export interface RenderTemplateDocumentFailure {
+  ok: false;
+  reason: ReferenceFailureReason;
+  detail: string;
+}
+
+export type RenderTemplateDocumentResult = RenderTemplateDocumentSuccess | RenderTemplateDocumentFailure;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // parseReferences — pure-logic regex scan
 // ─────────────────────────────────────────────────────────────────────────────
@@ -960,6 +975,39 @@ async function renderTemplateReference(
 
   const rendered = renderTemplateContent(body, values, declarations, warnings);
   return { content: rendered, paramsUsed, warnings };
+}
+
+export async function renderTemplateDocument(
+  templateDocument: Record<string, unknown>,
+  rawParams: Record<string, unknown>,
+  config: FlashQueryConfig,
+  sm: typeof supabaseManager,
+  ep: typeof embeddingProvider,
+  log: typeof logger
+): Promise<RenderTemplateDocumentResult> {
+  try {
+    const rendered = await renderTemplateReference(
+      (templateDocument.body as string | undefined) ?? '',
+      templateDocument,
+      rawParams,
+      config,
+      sm,
+      ep,
+      log
+    );
+    return {
+      ok: true,
+      content: rendered.content,
+      paramsUsed: rendered.paramsUsed,
+      warnings: rendered.warnings,
+    };
+  } catch (err) {
+    if (err instanceof TemplateReferenceError) {
+      return { ok: false, reason: err.reason, detail: err.message };
+    }
+    const mapped = mapReferenceFailure(err, '{{template-tool}}', log);
+    return { ok: false, reason: mapped.reason, detail: mapped.detail };
+  }
 }
 
 function stripReservedTemplateParams(params: Record<string, unknown>): Record<string, unknown> {
