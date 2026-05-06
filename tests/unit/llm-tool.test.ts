@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
-import { callModelMessageSchema, registerLlmTools } from '../../src/mcp/tools/llm.js';
+import { callModelMessageSchema, hasModelVisibleTools, registerLlmTools } from '../../src/mcp/tools/llm.js';
 import { computeCost } from '../../src/llm/cost-tracker.js';
 import { NullLlmClient, type LlmClient, type LlmCompletionResult } from '../../src/llm/client.js';
 import { LlmFallbackError } from '../../src/llm/resolver.js';
 import { LLM_PARTICIPANT_NAMES } from '../../src/constants/llm.js';
 import { getNativeToolCatalog } from '../../src/mcp/tool-catalog.js';
+import { executeAgentLoop } from '../../src/llm/agent-loop.js';
 import {
   parseReferences,
   resolveReferences,
@@ -60,6 +61,10 @@ vi.mock('../../src/llm/reference-resolver.js', () => ({
 // embeddingProvider mock — new llm.ts import must resolve cleanly in tests
 vi.mock('../../src/embedding/provider.js', () => ({
   embeddingProvider: { embed: vi.fn() },
+}));
+
+vi.mock('../../src/llm/agent-loop.js', () => ({
+  executeAgentLoop: vi.fn(),
 }));
 
 // ─── Test fixtures ──────────────────────────────────────────────────────────
@@ -1353,6 +1358,145 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
       { temperature: 0.2 },
       null
     );
+  });
+
+  it('[LOOP-01] routes purpose calls with native tools through executeAgentLoop and non-recording purpose chat', async () => {
+    vi.mocked(executeAgentLoop).mockResolvedValue({
+      response: 'final loop answer',
+      messages: [],
+      metadata: {
+        resolver: 'purpose',
+        name: 'documented',
+        resolved_model_name: 'fast',
+        provider_name: 'openai',
+        fallback_position: 1,
+        tokens: { input: 12, output: 8 },
+        cost_usd: 0.0000066,
+        latency_ms: 90,
+        tools: {
+          native_tool_names: ['get_document'],
+          diagnostics: { explicit_tools: ['get_document'] },
+          stop_reason: 'final_response',
+          iterations: 1,
+          calls_log: [],
+          aggregate_usage: { tokens: { input: 12, output: 8 }, cost_usd: 0.0000066, latency_ms: 90 },
+        },
+      },
+    });
+    const chatByPurposeMock = vi.fn();
+    const chatByPurposeUnrecordedMock = vi.fn();
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      chatByPurpose: chatByPurposeMock,
+      chatByPurposeUnrecorded: chatByPurposeUnrecordedMock,
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'documented',
+      messages: [{ role: 'user', content: 'Read the document.' }],
+      trace_id: 'trace-loop-1',
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(chatByPurposeMock).not.toHaveBeenCalled();
+    expect(executeAgentLoop).toHaveBeenCalledWith(expect.objectContaining({
+      purposeName: 'documented',
+      initialMessages: [{ role: 'user', content: 'Read the document.' }],
+      providerParameters: expect.objectContaining({
+        tools: [expect.objectContaining({ function: expect.objectContaining({ name: 'get_document' }) })],
+      }),
+      nativeToolCatalog: expect.any(Array),
+      toolRegistry: expect.objectContaining({
+        nativeToolNames: ['get_document'],
+        providerTools: [expect.objectContaining({ function: expect.objectContaining({ name: 'get_document' }) })],
+      }),
+      instanceId: 'test-instance-tools',
+      traceId: 'trace-loop-1',
+      chatByPurpose: chatByPurposeUnrecordedMock,
+      modelCostLookup: expect.any(Function),
+    }));
+    const envelope = JSON.parse(result.content[0].text) as { response: string; messages: unknown[]; metadata: { tools: { stop_reason: string } } };
+    expect(envelope.response).toBe('final loop answer');
+    expect(envelope.messages).toEqual([]);
+    expect(envelope.metadata.tools.stop_reason).toBe('final_response');
+  });
+
+  it('[LOOP-01] rejects caller-provided tools while Mode 3 cooperative dispatch is deferred', async () => {
+    const callerTool = {
+      type: 'function',
+      function: {
+        name: 'caller_tool',
+        description: 'Caller-provided provider tool',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+      },
+    };
+    const chatByPurposeMock = vi.fn();
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      chatByPurpose: chatByPurposeMock,
+      chatByPurposeUnrecorded: vi.fn(),
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'documented',
+      messages: [{ role: 'user', content: 'Read the document.' }],
+      parameters: { tools: [callerTool] },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('Mode 3 caller-provided tools are deferred');
+    expect(chatByPurposeMock).not.toHaveBeenCalled();
+    expect(executeAgentLoop).not.toHaveBeenCalled();
+  });
+
+  it('[LOOP-01] hasModelVisibleTools selects Mode 2 from the final registry, not native-tool count only', () => {
+    const templateTool = {
+      type: 'function' as const,
+      function: {
+        name: 'flashquery.template.brief',
+        description: 'Template masquerade',
+        parameters: { type: 'object', properties: {}, additionalProperties: false },
+      },
+    };
+    const diagnostics = { expandedTiers: [], explicitTools: [], excluded: [], hardExcluded: [], unknown: [] };
+
+    expect(hasModelVisibleTools({
+      nativeToolNames: ['get_document'],
+      providerTools: [{ ...templateTool, function: { ...templateTool.function, name: 'get_document' } }],
+      diagnostics,
+    })).toBe(true);
+    expect(hasModelVisibleTools({ nativeToolNames: [], providerTools: [templateTool], diagnostics })).toBe(true);
+    expect(hasModelVisibleTools({
+      nativeToolNames: ['get_document'],
+      providerTools: [
+        { ...templateTool, function: { ...templateTool.function, name: 'get_document' } },
+        templateTool,
+      ],
+      diagnostics,
+    })).toBe(true);
+    expect(hasModelVisibleTools({ nativeToolNames: [], providerTools: [templateTool], diagnostics })).toBe(true);
+    expect(hasModelVisibleTools({ nativeToolNames: [], providerTools: [], diagnostics })).toBe(false);
+    expect(hasModelVisibleTools({ nativeToolNames: [], diagnostics })).toBe(false);
   });
 });
 
