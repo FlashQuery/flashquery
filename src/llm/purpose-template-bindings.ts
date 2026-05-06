@@ -162,6 +162,28 @@ export async function removePurposeTemplateRuntime(
   }
 }
 
+export async function loadPurposeTemplateRuntimeBindings(
+  instanceId: string
+): Promise<Array<{ purposeName: string; templatePath: string; source: string }>> {
+  const { data, error } = await supabaseManager
+    .getClient()
+    .from('fqc_purpose_templates')
+    .select('purpose_name, template_path, source')
+    .eq('instance_id', instanceId)
+    .in('source', ['api', 'webapp']);
+
+  if (error) {
+    throw new Error(`LLM sync: runtime purpose-template binding lookup failed: ${error.message}`);
+  }
+
+  return ((data ?? []) as Array<{ purpose_name: string; template_path: string; source: string }>)
+    .map((row) => ({
+      purposeName: row.purpose_name,
+      templatePath: row.template_path,
+      source: row.source,
+    }));
+}
+
 export async function validatePersistedPurposeTemplateAdmissions(config: FlashQueryConfig): Promise<void> {
   if (!config.llm) return;
 

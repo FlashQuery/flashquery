@@ -108,7 +108,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             conflicts = purpose.get("template_tool_conflicts", [])
             passed_discovery = (
                 discovery.ok
-                and any(c.get("name") == "flashquery.skill.research_skill" and set(c.get("template_paths", [])) == {"Templates/Research Skill.md", "Other/Research-Skill.md"} for c in conflicts)
+                and any(c.get("name") == "flashquery_skill_research_skill" and set(c.get("template_paths", [])) == {"Templates/Research Skill.md", "Other/Research-Skill.md"} for c in conflicts)
             )
             run.step("ATL-DS-08 list_purposes exposes template_tool_conflicts", passed_discovery, json.dumps({"purpose": purpose}, sort_keys=True), tool_result=discovery)
 

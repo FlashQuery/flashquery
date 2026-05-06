@@ -28,10 +28,14 @@ vi.mock('../../src/server/shutdown-state.js', () => ({
   getIsShuttingDown: vi.fn(() => false),
 }));
 
-// supabaseManager mock — chainable .from().select().eq().eq() (insert removed — D-06: llm.ts no longer calls .insert() directly)
+// supabaseManager mock — chainable selects for usage traces and runtime template bindings.
+let purposeTemplateRuntimeRows: Array<{ purpose_name: string; template_path: string; source: string }> = [];
+const runtimeBindingInMock = vi.fn().mockImplementation(() =>
+  Promise.resolve({ data: purposeTemplateRuntimeRows, error: null })
+);
 const selectEqEqMock = vi.fn().mockResolvedValue({ data: [], error: null });
-const selectEqMock = vi.fn(() => ({ eq: selectEqEqMock }));
-const selectMock = vi.fn(() => ({ eq: selectEqMock }));
+const selectEqMock = vi.fn(() => ({ eq: selectEqEqMock, in: runtimeBindingInMock }));
+const selectMock = vi.fn(() => ({ eq: selectEqMock, in: runtimeBindingInMock }));
 const fromMock = vi.fn(() => ({ select: selectMock }));
 vi.mock('../../src/storage/supabase.js', () => ({
   supabaseManager: {
@@ -106,6 +110,7 @@ const SAMPLE_RESULT: LlmCompletionResult = {
 beforeEach(() => {
   vi.clearAllMocks();
   _llmClientValue = undefined;
+  purposeTemplateRuntimeRows = [];
   selectEqEqMock.mockResolvedValue({ data: [], error: null });
   // Default: no patterns in messages (REFS-07 path) — existing tests are unaffected
   vi.mocked(parseReferences).mockReturnValue([]);
@@ -1489,7 +1494,7 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     const templateTool = {
       type: 'function' as const,
       function: {
-        name: 'flashquery.template.brief',
+        name: 'flashquery_template_brief',
         description: 'Template masquerade',
         parameters: { type: 'object', properties: {}, additionalProperties: false },
       },
@@ -2359,13 +2364,13 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
       name: 'reviewer',
       template_tools: expect.arrayContaining([
         expect.objectContaining({
-          name: 'flashquery.skill.research_skill',
+          name: 'flashquery_skill_research_skill',
           template_path: 'Templates/Research-Skill.md',
           description: expect.any(String),
           parameters: expect.any(Object),
         }),
         expect.objectContaining({
-          name: 'flashquery.review.document_review',
+          name: 'flashquery_review_document_review',
           template_path: 'Templates/Document Review.md',
         }),
       ]),
@@ -2415,13 +2420,63 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
         name: 'template_reviewer',
         template_tools: expect.arrayContaining([
           expect.objectContaining({
-            name: 'flashquery.skill.research_skill',
+            name: 'flashquery_skill_research_skill',
             template_path: 'Templates/Research-Skill.md',
           }),
         ]),
         template_tool_conflicts: [],
       }),
     ]);
+  });
+
+  it('list_purposes exposes api/webapp runtime template bindings alongside YAML bindings', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-runtime-template-tools-'));
+    await writeTemplateFixture(vaultPath, 'Templates/Runtime-Skill.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_namespace: 'skill',
+      fq_desc: 'Runtime skill',
+      fq_params: { topic: { type: 'string', required: true } },
+    });
+    purposeTemplateRuntimeRows = [
+      { purpose_name: 'runtime_reviewer', template_path: 'Templates/Runtime-Skill.md', source: 'api' },
+    ];
+
+    const config = {
+      ...TEST_CONFIG,
+      instance: { ...TEST_CONFIG.instance, vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+      templates: { defaultAccess: 'restrictive' },
+      llm: {
+        ...TEST_LLM_CONFIG,
+        purposes: [
+          {
+            name: 'runtime_reviewer',
+            description: 'Reviewer with runtime template tools',
+            models: ['fast'],
+          },
+        ],
+      },
+    } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+
+    const handler = captureCallModelHandler(config as typeof TEST_CONFIG);
+    const result = await handler({ resolver: 'list_purposes' });
+    const payload = JSON.parse(result.content[0].text);
+
+    expect(payload.purposes[0]).toMatchObject({
+      name: 'runtime_reviewer',
+      template_tools: [
+        expect.objectContaining({
+          name: 'flashquery_skill_runtime_skill',
+          template_path: 'Templates/Runtime-Skill.md',
+        }),
+      ],
+    });
   });
 
   it('purpose calls with template-only tools enter Mode 2 via hasModelVisibleTools and preserve template calls_log kind', async () => {
@@ -2431,7 +2486,7 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
         {
           type: 'function',
           function: {
-            name: 'flashquery.template.weekly_checklist',
+            name: 'flashquery_template_weekly_checklist',
             description: 'Weekly checklist',
             parameters: { type: 'object', properties: {}, additionalProperties: false },
           },

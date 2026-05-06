@@ -38,21 +38,35 @@ const testLogger = {
 };
 
 describe('ATL-U-15 template masquerade name generation and discovery contracts', () => {
-  it('generates flashquery.<namespace>.<slug> names with template namespace defaulting', async () => {
+  it('generates provider-safe flashquery_<namespace>_<slug> names with template namespace defaulting', async () => {
     const { buildTemplateToolName } = await loadTemplateTools();
 
     expect(buildTemplateToolName({
       templatePath: 'Templates/Research-Skill.md',
       frontmatter: { fq_template: true, fq_expose_as_tool: true, fq_namespace: 'skill', fq_desc: 'Research skill' },
-    })).toBe('flashquery.skill.research_skill');
+    })).toBe('flashquery_skill_research_skill');
     expect(buildTemplateToolName({
       templatePath: 'Templates/Document Review.md',
       frontmatter: { fq_template: true, fq_expose_as_tool: true, fq_namespace: 'review', fq_desc: 'Review document' },
-    })).toBe('flashquery.review.document_review');
+    })).toBe('flashquery_review_document_review');
     expect(buildTemplateToolName({
       templatePath: 'Templates/Weekly Checklist.md',
       frontmatter: { fq_template: true, fq_expose_as_tool: true, fq_desc: 'Weekly checklist' },
-    })).toBe('flashquery.template.weekly_checklist');
+    })).toBe('flashquery_template_weekly_checklist');
+  });
+
+  it('suppresses generated names that violate provider function-name constraints', async () => {
+    const { buildTemplateToolName } = await loadTemplateTools();
+    const validName = buildTemplateToolName({
+      templatePath: 'Templates/Research-Skill.md',
+      frontmatter: { fq_template: true, fq_expose_as_tool: true, fq_namespace: 'skill', fq_desc: 'Research skill' },
+    });
+    expect(validName).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
+
+    expect(buildTemplateToolName({
+      templatePath: `Templates/${'Very Long '.repeat(10)}Template.md`,
+      frontmatter: { fq_template: true, fq_expose_as_tool: true, fq_namespace: 'skill', fq_desc: 'Too long' },
+    })).toBeNull();
   });
 
   it('warns and suppresses invalid or incomplete masquerade templates while preserving diagnostics', async () => {
@@ -137,7 +151,7 @@ describe('ATL-U-15 template masquerade name generation and discovery contracts',
       purposeName: 'researcher',
     });
 
-    expect(registry.providerTools?.map((tool) => tool.function.name)).toEqual(['flashquery.skill.research_skill']);
+    expect(registry.providerTools?.map((tool) => tool.function.name)).toEqual(['flashquery_skill_research_skill']);
     expect(registry.providerTools?.[0].function.description).toBe('Fresh description v1');
     expect(registry.providerTools?.[0].function.parameters).toMatchObject({
       type: 'object',
@@ -148,7 +162,7 @@ describe('ATL-U-15 template masquerade name generation and discovery contracts',
       required: ['topic', 'source'],
       additionalProperties: false,
     });
-    expect(registry.templateReverseMap.get('flashquery.skill.research_skill')).toBe(templatePath);
+    expect(registry.templateReverseMap.get('flashquery_skill_research_skill')).toBe(templatePath);
     expect([...registry.templateReverseMap.keys()]).not.toContain('research_skill');
   });
 
@@ -175,13 +189,13 @@ describe('ATL-U-15 template masquerade name generation and discovery contracts',
         llm: { purposes: [{ name: 'researcher', description: 'Researcher', models: ['fast'] }] },
       },
       purposeName: 'researcher',
-      nativeToolNames: ['flashquery.skill.research_skill'],
+      nativeToolNames: ['flashquery_skill_research_skill'],
     });
 
     expect(registry.diagnostics).toMatchObject({
       template_tool_conflicts: [
         {
-          name: 'flashquery.skill.research_skill',
+          name: 'flashquery_skill_research_skill',
           template_paths: expect.arrayContaining(['Templates/Research Skill.md', 'Other/Research-Skill.md']),
         },
       ],
@@ -204,11 +218,11 @@ describe('ATL-U-15 template tool dispatch contracts', () => {
         id: 'call_research_skill',
         type: 'function',
         function: {
-          name: 'flashquery.skill.research_skill',
+          name: 'flashquery_skill_research_skill',
           arguments: { topic: 'Phase 118' },
         },
       },
-      templateReverseMap: new Map([['flashquery.skill.research_skill', 'Templates/Research-Skill.md']]),
+      templateReverseMap: new Map([['flashquery_skill_research_skill', 'Templates/Research-Skill.md']]),
       config: {
         instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
       },
@@ -222,7 +236,7 @@ describe('ATL-U-15 template tool dispatch contracts', () => {
     expect(result.logEntry).toMatchObject({
       kind: 'template',
       tool_call_id: 'call_research_skill',
-      tool_name: 'flashquery.skill.research_skill',
+      tool_name: 'flashquery_skill_research_skill',
       status: 'success',
     });
   });
@@ -255,12 +269,12 @@ describe('ATL-U-15 template tool dispatch contracts', () => {
         type: 'function',
         function: {
           name: expectedCode === 'tool_not_in_registry'
-            ? 'flashquery.skill.not_in_current_map'
-            : 'flashquery.skill.research_skill',
+            ? 'flashquery_skill_not_in_current_map'
+            : 'flashquery_skill_research_skill',
           arguments: args,
         },
       },
-      templateReverseMap: new Map([['flashquery.skill.research_skill', 'Templates/Research-Skill.md']]),
+      templateReverseMap: new Map([['flashquery_skill_research_skill', 'Templates/Research-Skill.md']]),
       templateDocuments,
       logger: testLogger,
     });

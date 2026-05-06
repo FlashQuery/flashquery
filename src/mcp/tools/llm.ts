@@ -37,6 +37,7 @@ import {
   type ToolRegistryDiagnostics,
 } from '../../llm/tool-registry.js';
 import { assembleTemplateToolRegistry, type TemplateToolDiagnostics } from '../../llm/template-tools.js';
+import { loadPurposeTemplateRuntimeBindings } from '../../llm/purpose-template-bindings.js';
 import { getNativeToolCatalog } from '../tool-catalog.js';
 import { embeddingProvider } from '../../embedding/provider.js';
 import {
@@ -408,12 +409,15 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           return capabilities.strict_tools === true;
         };
 
+        const runtimeTemplateBindings = await loadPurposeTemplateRuntimeBindings(config.instance.id);
+
         const purposeToResponse = async (p: typeof cfgPurposes[number]): Promise<Record<string, unknown>> => {
           const primaryName = p.models[0];
           const primary = primaryName ? modelsByName.get(primaryName) : undefined;
           const templateRegistry = await assembleTemplateToolRegistry({
             config,
             purposeName: p.name,
+            runtimeBindings: runtimeTemplateBindings,
             strictTools: strictToolsForPurpose(p),
           });
           const entry: Record<string, unknown> = {
@@ -596,6 +600,9 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       let toolRegistry: ToolRegistryAssembly | undefined;
       let purposeProviderParameters = params.parameters;
       let purposeDefaults: Record<string, unknown> = {};
+      const runtimeTemplateBindings = resolvedResolver === 'purpose'
+        ? await loadPurposeTemplateRuntimeBindings(config.instance.id)
+        : [];
 
       if (resolvedResolver === 'purpose') {
         const normalizedPurposeName = resolvedName.toLowerCase();
@@ -632,6 +639,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           const templateRegistry = await assembleTemplateToolRegistry({
             config,
             purposeName: normalizedPurposeName,
+            runtimeBindings: runtimeTemplateBindings,
             nativeToolNames: nativeRegistry.nativeToolNames,
             strictTools: capabilities.strict_tools === true,
           });

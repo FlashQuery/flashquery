@@ -35,7 +35,7 @@ class MockProvider:
                         "content": None,
                         "tool_calls": [
                             {"id": "call_native_search", "type": "function", "function": {"name": "search_documents", "arguments": json.dumps({"query": "ATL-DS-11", "mode": "filesystem"})}},
-                            {"id": "call_template_skill", "type": "function", "function": {"name": "flashquery.skill.research_skill", "arguments": json.dumps({"topic": "ATL-DS-11"})}},
+                            {"id": "call_template_skill", "type": "function", "function": {"name": "flashquery_skill_research_skill", "arguments": json.dumps({"topic": "ATL-DS-11"})}},
                         ],
                     },
                     "finish_reason": "tool_calls",
@@ -133,7 +133,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 and "native" in kinds
                 and "template" in kinds
                 and "search_documents" in native_names
-                and "flashquery.skill.research_skill" in template_names
+                and "flashquery_skill_research_skill" in template_names
             )
             run.step("ATL-DS-11 final provider-visible registry and calls_log include native and template kinds", passed, json.dumps({"kinds": kinds, "native_names": native_names, "template_names": template_names, "result": result.text[:1500]}, sort_keys=True), tool_result=result)
     return run

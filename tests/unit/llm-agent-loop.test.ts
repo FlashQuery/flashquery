@@ -178,11 +178,11 @@ describe('ATL-U-13 loop executor state machine contract', () => {
       id: 'call_template_1',
       type: 'function',
       function: {
-        name: 'flashquery.skill.research_skill',
+        name: 'flashquery_skill_research_skill',
         arguments: { topic: 'Phase 118' },
       },
     };
-    const templateReverseMap = new Map([['flashquery.skill.research_skill', 'Templates/Research-Skill.md']]);
+    const templateReverseMap = new Map([['flashquery_skill_research_skill', 'Templates/Research-Skill.md']]);
     const toolDispatcher = vi.fn().mockResolvedValue({
       messages: [
         { role: 'tool', tool_call_id: 'call_get_document_1', content: JSON.stringify({ ok: true }) },
@@ -190,7 +190,7 @@ describe('ATL-U-13 loop executor state machine contract', () => {
       ],
       logEntries: [
         { kind: 'native', tool_name: 'get_document', tool_call_id: 'call_get_document_1', status: 'success' },
-        { kind: 'template', tool_name: 'flashquery.skill.research_skill', tool_call_id: 'call_template_1', status: 'success' },
+        { kind: 'template', tool_name: 'flashquery_skill_research_skill', tool_call_id: 'call_template_1', status: 'success' },
       ],
     });
     const chat: ScriptedChat = vi.fn()
@@ -207,11 +207,11 @@ describe('ATL-U-13 loop executor state machine contract', () => {
       providerTools: undefined,
       toolRegistry: {
         nativeToolNames: ['get_document'],
-        templateToolNames: ['flashquery.skill.research_skill'],
+        templateToolNames: ['flashquery_skill_research_skill'],
         templateReverseMap,
         providerTools: [
           { type: 'function', function: { name: 'get_document', description: 'Get doc', parameters: {} } },
-          { type: 'function', function: { name: 'flashquery.skill.research_skill', description: 'Research', parameters: {} } },
+          { type: 'function', function: { name: 'flashquery_skill_research_skill', description: 'Research', parameters: {} } },
         ],
         diagnostics: {
           expandedTiers: [],

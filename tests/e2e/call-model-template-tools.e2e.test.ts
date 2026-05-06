@@ -7,6 +7,19 @@ import * as http from 'node:http';
 import { describe, expect, it } from 'vitest';
 
 type MockResponse = { status?: number; body: Record<string, unknown> };
+const OPENAI_TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+function invalidToolNameResponse(name: string): MockResponse {
+  return {
+    status: 400,
+    body: {
+      error: {
+        message: `Invalid function tool name '${name}'`,
+        type: 'invalid_request_error',
+      },
+    },
+  };
+}
 
 class ScriptedOpenAiProvider {
   readonly requests: Record<string, unknown>[] = [];
@@ -28,8 +41,14 @@ class ScriptedOpenAiProvider {
       const chunks: Buffer[] = [];
       for await (const chunk of req) chunks.push(Buffer.from(chunk));
       const rawBody = Buffer.concat(chunks).toString('utf-8');
-      this.requests.push(JSON.parse(rawBody) as Record<string, unknown>);
-      const next = this.script.shift() ?? finalTextResponse('fallback final', 1, 1);
+      const requestBody = JSON.parse(rawBody) as Record<string, unknown>;
+      this.requests.push(requestBody);
+      const invalidToolName = (requestBody.tools as Array<{ function?: { name?: string } }> | undefined)
+        ?.map((tool) => tool.function?.name)
+        .find((name): name is string => typeof name === 'string' && !OPENAI_TOOL_NAME_PATTERN.test(name));
+      const next = invalidToolName !== undefined
+        ? invalidToolNameResponse(invalidToolName)
+        : this.script.shift() ?? finalTextResponse('fallback final', 1, 1);
       const payload = JSON.stringify(next.body);
       res.writeHead(next.status ?? 200, {
         'Content-Type': 'application/json',
@@ -192,9 +211,9 @@ async function callModel(client: Client, args: Record<string, unknown>): Promise
 }
 
 describe('call_model template-tool masquerade public E2E contracts', () => {
-  it('ATL-E2E-04 exposes flashquery.skill.research_skill, dispatches it, and returns hydrated template tool content', async () => {
+  it('ATL-E2E-04 exposes flashquery_skill_research_skill, dispatches it, and returns hydrated template tool content', async () => {
     const provider = new ScriptedOpenAiProvider([
-      toolCallResponse([{ id: 'call_research_skill', name: 'flashquery.skill.research_skill', args: { topic: 'ATL-E2E-04' } }]),
+      toolCallResponse([{ id: 'call_research_skill', name: 'flashquery_skill_research_skill', args: { topic: 'ATL-E2E-04' } }]),
       finalTextResponse('template loop complete', 21, 8),
     ]);
     await provider.start();
@@ -207,7 +226,7 @@ describe('call_model template-tool masquerade public E2E contracts', () => {
       }));
       expect(provider.requests[0]).toMatchObject({
         tools: expect.arrayContaining([
-          expect.objectContaining({ function: expect.objectContaining({ name: 'flashquery.skill.research_skill' }) }),
+          expect.objectContaining({ function: expect.objectContaining({ name: 'flashquery_skill_research_skill' }) }),
         ]),
       });
       expect(envelope).toMatchObject({
@@ -235,7 +254,7 @@ describe('call_model template-tool masquerade public E2E contracts', () => {
     const provider = new ScriptedOpenAiProvider([
       toolCallResponse([
         { id: 'call_native_doc', name: 'get_document', args: { identifiers: 'Docs/Native.md' } },
-        { id: 'call_template_skill', name: 'flashquery.skill.research_skill', args: { topic: 'ATL-E2E-05' } },
+        { id: 'call_template_skill', name: 'flashquery_skill_research_skill', args: { topic: 'ATL-E2E-05' } },
       ]),
       finalTextResponse('mixed loop complete', 24, 9),
     ]);
@@ -252,7 +271,7 @@ describe('call_model template-tool masquerade public E2E contracts', () => {
       expect(provider.requests[0]).toMatchObject({
         tools: expect.arrayContaining([
           expect.objectContaining({ function: expect.objectContaining({ name: 'get_document' }) }),
-          expect.objectContaining({ function: expect.objectContaining({ name: 'flashquery.skill.research_skill' }) }),
+          expect.objectContaining({ function: expect.objectContaining({ name: 'flashquery_skill_research_skill' }) }),
         ]),
       });
     } finally {

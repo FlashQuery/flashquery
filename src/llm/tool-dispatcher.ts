@@ -144,7 +144,7 @@ function makeTemplateReverseMap(options: DispatchToolCallsOptions): TemplateTool
 }
 
 function isGeneratedTemplateToolName(toolName: string): boolean {
-  return toolName.startsWith('flashquery.');
+  return toolName.startsWith('flashquery_');
 }
 
 async function dispatchOneToolCall(

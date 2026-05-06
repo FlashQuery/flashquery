@@ -567,11 +567,11 @@ describe('ATL-U-15 combined provider-visible registry contracts', () => {
       native,
       template: {
         providerTools: [
-          { type: 'function', function: { name: 'flashquery.skill.research_skill', description: 'Research', parameters: { type: 'object', properties: {} } } },
+          { type: 'function', function: { name: 'flashquery_skill_research_skill', description: 'Research', parameters: { type: 'object', properties: {} } } },
           { type: 'function', function: { name: 'get_document', description: 'Conflicting template', parameters: { type: 'object', properties: {} } } },
         ],
         templateTools: [
-          { name: 'flashquery.skill.research_skill', template_path: 'Templates/Research-Skill.md' },
+          { name: 'flashquery_skill_research_skill', template_path: 'Templates/Research-Skill.md' },
           { name: 'get_document', template_path: 'Templates/Get Document.md' },
         ],
       },
@@ -579,7 +579,7 @@ describe('ATL-U-15 combined provider-visible registry contracts', () => {
 
     expect(merged.providerTools?.map((tool) => tool.function.name)).toEqual([
       'get_document',
-      'flashquery.skill.research_skill',
+      'flashquery_skill_research_skill',
       'get_document',
     ]);
     expect(merged.collisions).toEqual([

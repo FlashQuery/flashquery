@@ -122,8 +122,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tools = purpose.get("template_tools", [])
             passed = (
                 result.ok
-                and any(t.get("name") == "flashquery.skill.research_skill" and t.get("template_path") == "Templates/Research-Skill.md" and "parameters" in t for t in tools)
-                and any(t.get("name") == "flashquery.template.weekly_checklist" and t.get("description") == "Weekly checklist" for t in tools)
+                and any(t.get("name") == "flashquery_skill_research_skill" and t.get("template_path") == "Templates/Research-Skill.md" and "parameters" in t for t in tools)
+                and any(t.get("name") == "flashquery_template_weekly_checklist" and t.get("description") == "Weekly checklist" for t in tools)
                 and isinstance(purpose.get("template_tool_conflicts"), list)
             )
             run.step(

@@ -36,7 +36,7 @@ class MockProvider:
                         "tool_calls": [{
                             "id": "call_research_skill",
                             "type": "function",
-                            "function": {"name": "flashquery.skill.research_skill", "arguments": json.dumps({"topic": "ATL-DS-10", "source": "Docs/source.md"})},
+                            "function": {"name": "flashquery_skill_research_skill", "arguments": json.dumps({"topic": "ATL-DS-10", "source": "Docs/source.md"})},
                         }],
                     },
                     "finish_reason": "tool_calls",
@@ -55,7 +55,7 @@ class MockProvider:
                         "tool_calls": [{
                             "id": "call_research_skill_missing_param",
                             "type": "function",
-                            "function": {"name": "flashquery.skill.research_skill", "arguments": json.dumps({"source": "Docs/source.md"})},
+                            "function": {"name": "flashquery_skill_research_skill", "arguments": json.dumps({"source": "Docs/source.md"})},
                         }],
                     },
                     "finish_reason": "tool_calls",
@@ -147,7 +147,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             passed = (
                 result.ok
                 and envelope.get("response") == "ATL-DS-10 final"
-                and any(call.get("kind") == "template" and call.get("tool_name") == "flashquery.skill.research_skill" for entry in calls_log for call in entry.get("tool_calls", []))
+                and any(call.get("kind") == "template" and call.get("tool_name") == "flashquery_skill_research_skill" for entry in calls_log for call in entry.get("tool_calls", []))
                 and len(provider.requests) == 2
                 and "SOURCE BODY ATL-DS-10" in result.text
             )

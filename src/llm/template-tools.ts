@@ -117,7 +117,8 @@ interface TemplateDocumentCandidate {
 const TEMPLATE_TOOL_PREFIX = 'flashquery';
 const DEFAULT_NAMESPACE = 'template';
 const NAMESPACE_PATTERN = /^[a-z][a-z0-9_]*$/;
-// Contract markers: generated tools are `flashquery.${namespace}.${slug}` and
+const TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+// Contract markers: generated tools are `flashquery_${namespace}_${slug}` and
 // resolver-backed dispatch reads templates with effectiveInclude: ['body', 'frontmatter'].
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -149,7 +150,9 @@ export function generateTemplateToolName(input: { namespace?: string; path: stri
   const namespace = input.namespace ?? DEFAULT_NAMESPACE;
   if (!NAMESPACE_PATTERN.test(namespace)) return null;
   const slug = generateTemplateSlug(basename(input.path, extname(input.path)));
-  return slug === null ? null : `${TEMPLATE_TOOL_PREFIX}.${namespace}.${slug}`;
+  if (slug === null) return null;
+  const name = `${TEMPLATE_TOOL_PREFIX}_${namespace}_${slug}`;
+  return TOOL_NAME_PATTERN.test(name) ? name : null;
 }
 
 export function buildTemplateToolName(input: {
@@ -301,7 +304,7 @@ function validateTemplateCandidate(
   }
   const toolName = generateTemplateToolName({ namespace, path: candidate.templatePath });
   if (toolName === null) {
-    return { warning: { code: 'empty_slug', message: 'Template filename produced an empty slug' } };
+    return { warning: { code: 'invalid_tool_name', message: 'Template filename produced an invalid provider tool name' } };
   }
   const params = templateParamSchema(frontmatter.fq_params);
   if (params.error !== undefined) {

@@ -85,11 +85,11 @@ describe('ATL-I-03 template discovery through real vault files', () => {
     const second = await assembleTemplateToolRegistry({ config, purposeName: 'researcher' });
 
     expect(first.providerTools?.[0].function).toMatchObject({
-      name: 'flashquery.skill.research_skill',
+      name: 'flashquery_skill_research_skill',
       description: 'Fresh v1',
     });
     expect(second.providerTools?.[0].function).toMatchObject({
-      name: 'flashquery.skill.research_skill',
+      name: 'flashquery_skill_research_skill',
       description: 'Fresh v2',
     });
   });
@@ -116,9 +116,9 @@ describe('ATL-I-03 template discovery through real vault files', () => {
       purposeName: 'researcher',
     });
 
-    expect(permissive.providerTools?.map((tool) => tool.function.name)).toContain('flashquery.template.weekly_checklist');
+    expect(permissive.providerTools?.map((tool) => tool.function.name)).toContain('flashquery_template_weekly_checklist');
     expect(restrictiveWithoutBinding.providerTools ?? []).toEqual([]);
-    expect(restrictiveWithBinding.providerTools?.map((tool) => tool.function.name)).toEqual(['flashquery.template.weekly_checklist']);
+    expect(restrictiveWithBinding.providerTools?.map((tool) => tool.function.name)).toEqual(['flashquery_template_weekly_checklist']);
   });
 
   it('combines YAML/runtime/API binding rows and reports dangling path diagnostics', async () => {
@@ -139,7 +139,7 @@ describe('ATL-I-03 template discovery through real vault files', () => {
       ],
     });
 
-    expect(registry.providerTools?.map((tool) => tool.function.name)).toContain('flashquery.review.document_review');
+    expect(registry.providerTools?.map((tool) => tool.function.name)).toContain('flashquery_review_document_review');
     expect(JSON.stringify(registry.diagnostics)).toContain('Templates/Dangling.md');
     expect(JSON.stringify(registry.diagnostics)).toContain('dangling');
     expect(JSON.stringify(registry.diagnostics)).toContain('api');
