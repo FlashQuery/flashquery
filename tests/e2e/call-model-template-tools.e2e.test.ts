@@ -164,7 +164,7 @@ llm:
     - name: template_agent
       description: Template-only ATL-E2E-04
       models: [template-model]
-      templates: [Templates/Research-Skill.md]
+      templates: [Templates/Research-Skill.md, Templates/Source-Skill.md]
       defaults: { max_iterations: 3, timeout_ms: 10000 }
     - name: mixed_agent
       description: Mixed ATL-E2E-05
@@ -181,6 +181,16 @@ llm:
     fq_desc: 'Research skill',
     fq_params: { topic: { type: 'string', required: true } },
   }, 'Research skill says {{topic}}.');
+  await writeDoc(vaultPath, 'Templates/Source-Skill.md', {
+    fq_template: true,
+    fq_expose_as_tool: true,
+    fq_namespace: 'skill',
+    fq_desc: 'Source skill',
+    fq_params: {
+      topic: { type: 'string', required: true },
+      source: { type: 'document', required: true },
+    },
+  }, 'Source skill says {{topic}} with {{source}}.');
   await writeDoc(vaultPath, 'Docs/Native.md', { fq_status: 'active' }, 'Native document body.');
 
   const transport = new StdioClientTransport({
@@ -250,6 +260,94 @@ describe('call_model template-tool masquerade public E2E contracts', () => {
     }
   }, 60000);
 
+  it('ATL-E2E-04 returns recoverable missing-argument errors and lets the model retry', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      toolCallResponse([{ id: 'call_missing_topic', name: 'flashquery_skill_research_skill', args: {} }]),
+      toolCallResponse([{ id: 'call_retry_topic', name: 'flashquery_skill_research_skill', args: { topic: 'ATL-E2E-04 retry' } }]),
+      finalTextResponse('template retry complete', 31, 8),
+    ]);
+    await provider.start();
+    try {
+      const envelope = await withManagedMcp(provider, (client) => callModel(client, {
+        resolver: 'purpose',
+        name: 'template_agent',
+        messages: [{ role: 'user', content: 'ATL-E2E-04 retry after missing argument.' }],
+      }));
+      expect(JSON.stringify(provider.requests[1])).toContain('template_missing_required_param');
+      expect(JSON.stringify(provider.requests[2])).toContain('Research skill says ATL-E2E-04 retry.');
+      expect(envelope).toMatchObject({
+        response: 'template retry complete',
+        metadata: {
+          tools: {
+            stop_reason: 'final_response',
+            calls_log: expect.arrayContaining([
+              expect.objectContaining({
+                tool_calls: expect.arrayContaining([
+                  expect.objectContaining({ kind: 'template', tool_call_id: 'call_missing_topic', status: 'error', error_code: 'template_missing_required_param' }),
+                ]),
+              }),
+              expect.objectContaining({
+                tool_calls: expect.arrayContaining([
+                  expect.objectContaining({ kind: 'template', tool_call_id: 'call_retry_topic', status: 'success' }),
+                ]),
+              }),
+            ]),
+          },
+        },
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-04 returns tool_not_in_registry for generated names absent from the reverse map', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      toolCallResponse([{ id: 'call_phantom', name: 'flashquery_skill_phantom', args: { topic: 'ATL-E2E-04' } }]),
+      finalTextResponse('phantom recovered', 22, 6),
+    ]);
+    await provider.start();
+    try {
+      const envelope = await withManagedMcp(provider, (client) => callModel(client, {
+        resolver: 'purpose',
+        name: 'template_agent',
+        messages: [{ role: 'user', content: 'ATL-E2E-04 phantom tool.' }],
+      }));
+      expect(JSON.stringify(provider.requests[1])).toContain('tool_not_in_registry');
+      expect(envelope).toMatchObject({
+        response: 'phantom recovered',
+        metadata: { tools: { stop_reason: 'final_response' } },
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-04 resolves document template parameters through the identifier ladder', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      toolCallResponse([{
+        id: 'call_source_skill',
+        name: 'flashquery_skill_source_skill',
+        args: { topic: 'ATL-E2E-04 document', source: 'Docs/Native.md' },
+      }]),
+      finalTextResponse('document param complete', 25, 7),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, (client) => callModel(client, {
+        resolver: 'purpose',
+        name: 'template_agent',
+        messages: [{ role: 'user', content: 'ATL-E2E-04 document parameter.' }],
+      }));
+      const secondRequest = JSON.stringify(provider.requests[1]);
+      expect(secondRequest).toContain('Source skill says ATL-E2E-04 document');
+      expect(secondRequest).toContain('Native document body.');
+      expect(secondRequest).toContain('resolved_to');
+      expect(secondRequest).toContain('Docs/Native.md');
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
   it('ATL-E2E-05 executes native and template tools in one loop and preserves calls-log kind values', async () => {
     const provider = new ScriptedOpenAiProvider([
       toolCallResponse([
@@ -274,6 +372,9 @@ describe('call_model template-tool masquerade public E2E contracts', () => {
           expect.objectContaining({ function: expect.objectContaining({ name: 'flashquery_skill_research_skill' }) }),
         ]),
       });
+      const secondRequest = JSON.stringify(provider.requests[1]);
+      expect(secondRequest).toContain('Native document body.');
+      expect(secondRequest).toContain('Research skill says ATL-E2E-05.');
     } finally {
       await provider.stop();
     }
