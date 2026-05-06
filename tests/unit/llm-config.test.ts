@@ -517,6 +517,173 @@ llm:
     }
   });
 
+  it('[ATL-U-08] rejects excluded_tools without tools', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-excluded-without-tools-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      excluded_tools: [search_memory]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/\[purpose\].*excluded_tools requires tools/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects unknown purpose tool tier names', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-tier-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      tools: [tier:unknown]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/\[purpose\].*unknown tool tier 'tier:unknown'/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects unknown native tools in tools', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-tool-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      tools: [not_a_tool]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/\[purpose\].*unknown native tool 'not_a_tool'/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects unknown native tools in excluded_tools', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-excluded-tool-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      tools: [tier:read-only]
+      excluded_tools: [not_a_tool]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/\[purpose\].*unknown native tool 'not_a_tool'/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] preserves hard-excluded native tool declarations for registry diagnostics', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-hard-excluded-tools-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      tools: [call_model, register_plugin]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.purposes[0].tools).toEqual(['call_model', 'register_plugin']);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('[ATL-U-08] rejects unknown top-level purpose keys including tols and audit_document', () => {
     const buildYaml = (field: string) => BASE_CONFIG_YAML + `
 llm:
