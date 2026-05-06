@@ -316,4 +316,30 @@ describe('ATL-U-15 mixed native/template dispatcher contracts', () => {
 
     expect(result.logEntries.map((entry) => entry.kind)).toEqual(['native', 'template']);
   });
+
+  it('returns recoverable tool_not_in_registry for generated flashquery names absent from the reverse map', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [
+        toolCall('flashquery.skill.research_skill', { topic: 'Phase 118' }, 'call_template_missing'),
+      ],
+      nativeToolNames: ['flashquery.skill.research_skill'],
+      templateReverseMap: new Map(),
+    }));
+
+    expect(JSON.parse(result.messages[0].content ?? '{}')).toMatchObject({
+      ok: false,
+      error: {
+        code: 'tool_not_in_registry',
+        recoverable: true,
+      },
+    });
+    expect(result.logEntries[0]).toMatchObject({
+      kind: 'template',
+      tool_call_id: 'call_template_missing',
+      tool_name: 'flashquery.skill.research_skill',
+      status: 'error',
+      error_code: 'tool_not_in_registry',
+    });
+  });
 });
