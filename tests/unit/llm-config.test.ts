@@ -459,6 +459,186 @@ llm:
     }
   });
 
+  it('[ATL-U-08] parses purpose tools, excluded_tools, templates, provider defaults, and numeric loop guardrails', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-purpose-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million:
+        input: 2.5
+        output: 10.0
+  purposes:
+    - name: researcher
+      description: Research with bounded loop controls
+      models:
+        - gpt-4o
+      tools:
+        - read
+      excluded_tools:
+        - write
+      templates:
+        - Templates/research.md
+      defaults:
+        temperature: 0.2
+        vendor_flag: enabled
+        response_format:
+          type: json_object
+        timeout_ms: 30000
+        max_cost_usd: 0.25
+        max_tokens_budget: 12000
+        max_iterations: 5
+        result_summary_chars: 2000
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      const purpose = config.llm?.purposes[0];
+      expect(purpose?.tools).toEqual(['read']);
+      expect(purpose?.excludedTools).toEqual(['write']);
+      expect(purpose?.templates).toEqual(['Templates/research.md']);
+      expect(purpose?.defaults?.['temperature']).toBe(0.2);
+      expect(purpose?.defaults?.['vendor_flag']).toBe('enabled');
+      expect(purpose?.defaults?.['timeout_ms']).toBe(30000);
+      expect(purpose?.defaults?.['max_cost_usd']).toBe(0.25);
+      expect(purpose?.defaults?.['max_tokens_budget']).toBe(12000);
+      expect(purpose?.defaults?.['max_iterations']).toBe(5);
+      expect(purpose?.defaults?.['result_summary_chars']).toBe(2000);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects unknown top-level purpose keys including tols and audit_document', () => {
+    const buildYaml = (field: string) => BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million:
+        input: 2.5
+        output: 10.0
+  purposes:
+    - name: default
+      description: General
+      models:
+        - gpt-4o
+      ${field}: true
+`;
+
+    for (const field of ['tols', 'audit_document']) {
+      const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-${field}-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+      writeFileSync(tmpFile, buildYaml(field));
+      try {
+        expect(() => loadConfig(tmpFile)).toThrow(new RegExp(field));
+      } finally {
+        unlinkSync(tmpFile);
+      }
+    }
+  });
+
+  it('[ATL-U-08] rejects non-number loop guardrail defaults while preserving provider parameters', () => {
+    const buildYaml = (key: string) => BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million:
+        input: 2.5
+        output: 10.0
+  purposes:
+    - name: default
+      description: General
+      models:
+        - gpt-4o
+      defaults:
+        temperature: 0.1
+        vendor_flag: passthrough
+        ${key}: bad
+`;
+
+    for (const key of ['timeout_ms', 'max_cost_usd', 'max_tokens_budget', 'max_iterations', 'result_summary_chars']) {
+      const tmpFile = join(tmpdir(), `fqc-atl-u08-guardrail-${key}-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+      writeFileSync(tmpFile, buildYaml(key));
+      try {
+        expect(() => loadConfig(tmpFile)).toThrow(new RegExp(key));
+      } finally {
+        unlinkSync(tmpFile);
+      }
+    }
+  });
+
+  it('[ATL-U-08] migrates legacy string capabilities to tags and preserves structured behavioral capabilities', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-capabilities-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: legacy
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      capabilities:
+        - tools
+        - vision
+    - name: structured
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      tags: ["vision"]
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: false
+        parallel_tool_calls: true
+        structured_outputs_with_tools: true
+  purposes:
+    - name: default
+      description: General
+      models: [legacy, structured]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].tags).toEqual(['tools', 'vision']);
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
+      expect(config.llm?.models[1].tags).toEqual(['vision']);
+      expect(config.llm?.models[1].capabilities).toEqual({
+        tool_calling: true,
+        usage_on_tool_calls: true,
+        strict_tools: false,
+        parallel_tool_calls: true,
+        structured_outputs_with_tools: true,
+      });
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('[CONF-06] rejects pre-v3.0 flat llm: { provider, model } config with migration error', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const prevKey = process.env['OPENAI_API_KEY'];
@@ -481,7 +661,7 @@ llm:
 });
 
 describe('loadConfig() — DISC-05 optional model fields', () => {
-  it('[U-DISC-05-01] parses a model declaring all three optional fields (description, context_window, capabilities)', () => {
+  it('[U-DISC-05-01] parses optional discovery metadata plus structured behavioral capabilities', () => {
     const tmpFile = join(tmpdir(), `fqc-disc05-01-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 llm:
@@ -497,7 +677,13 @@ llm:
       cost_per_million: { input: 0.15, output: 0.6 }
       description: "A fast small model for routine tasks"
       context_window: 131072
-      capabilities: ["tools", "vision"]
+      tags: ["vision"]
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: true
+        parallel_tool_calls: false
+        structured_outputs_with_tools: true
   purposes:
     - name: default
       description: General
@@ -508,13 +694,20 @@ llm:
       const config = loadConfig(tmpFile);
       expect(config.llm?.models[0].description).toBe('A fast small model for routine tasks');
       expect(config.llm?.models[0].contextWindow).toBe(131072);
-      expect(config.llm?.models[0].capabilities).toEqual(['tools', 'vision']);
+      expect(config.llm?.models[0].tags).toEqual(['vision']);
+      expect(config.llm?.models[0].capabilities).toEqual({
+        tool_calling: true,
+        usage_on_tool_calls: true,
+        strict_tools: true,
+        parallel_tool_calls: false,
+        structured_outputs_with_tools: true,
+      });
     } finally {
       unlinkSync(tmpFile);
     }
   });
 
-  it('[U-DISC-05-02] omits all three optional fields when not declared (undefined, NOT null/empty)', () => {
+  it('[U-DISC-05-02] omits optional model metadata when not declared (undefined, NOT null/empty)', () => {
     const tmpFile = join(tmpdir(), `fqc-disc05-02-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 llm:
@@ -538,13 +731,14 @@ llm:
       const config = loadConfig(tmpFile);
       expect(config.llm?.models[0].description).toBeUndefined();
       expect(config.llm?.models[0].contextWindow).toBeUndefined();
+      expect(config.llm?.models[0].tags).toBeUndefined();
       expect(config.llm?.models[0].capabilities).toBeUndefined();
     } finally {
       unlinkSync(tmpFile);
     }
   });
 
-  it('[U-DISC-05-03] preserves capabilities: [] (declared empty array, NOT undefined)', () => {
+  it('[U-DISC-05-03] migrates an explicitly empty legacy capability list to empty tags', () => {
     const tmpFile = join(tmpdir(), `fqc-disc05-03-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 llm:
@@ -558,7 +752,8 @@ llm:
       model: gpt-4o-mini
       type: language
       cost_per_million: { input: 0.15, output: 0.6 }
-      capabilities: []
+      capabilities:
+        []
   purposes:
     - name: default
       description: General
@@ -567,14 +762,15 @@ llm:
     writeFileSync(tmpFile, yaml);
     try {
       const config = loadConfig(tmpFile);
-      expect(config.llm?.models[0].capabilities).toEqual([]);
-      expect(config.llm?.models[0].capabilities).not.toBeUndefined();
+      expect(config.llm?.models[0].tags).toEqual([]);
+      expect(config.llm?.models[0].tags).not.toBeUndefined();
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
     } finally {
       unlinkSync(tmpFile);
     }
   });
 
-  it('[U-DISC-05-04] declaring description only leaves context_window and capabilities undefined', () => {
+  it('[U-DISC-05-04] declaring description only leaves context_window, tags, and capabilities undefined', () => {
     const tmpFile = join(tmpdir(), `fqc-disc05-04-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 llm:
@@ -599,6 +795,7 @@ llm:
       const config = loadConfig(tmpFile);
       expect(config.llm?.models[0].description).toBe('Just description');
       expect(config.llm?.models[0].contextWindow).toBeUndefined();
+      expect(config.llm?.models[0].tags).toBeUndefined();
       expect(config.llm?.models[0].capabilities).toBeUndefined();
     } finally {
       unlinkSync(tmpFile);
@@ -635,7 +832,7 @@ llm:
     }
   });
 
-  it('[U-DISC-05-06] passes custom capability strings through unchanged (no validation of values)', () => {
+  it('[U-DISC-05-06] migrates custom legacy capability strings to tags', () => {
     const tmpFile = join(tmpdir(), `fqc-disc05-06-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 llm:
@@ -649,7 +846,10 @@ llm:
       model: gpt-4o-mini
       type: language
       cost_per_million: { input: 0.15, output: 0.6 }
-      capabilities: ["tools", "custom-thing-no-validation", "vision-experimental"]
+      capabilities:
+        - tools
+        - legacy-custom-tag
+        - vision-experimental
   purposes:
     - name: default
       description: General
@@ -658,7 +858,8 @@ llm:
     writeFileSync(tmpFile, yaml);
     try {
       const config = loadConfig(tmpFile);
-      expect(config.llm?.models[0].capabilities).toEqual(['tools', 'custom-thing-no-validation', 'vision-experimental']);
+      expect(config.llm?.models[0].tags).toEqual(['tools', 'legacy-custom-tag', 'vision-experimental']);
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
     } finally {
       unlinkSync(tmpFile);
     }
