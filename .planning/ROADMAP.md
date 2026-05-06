@@ -169,7 +169,7 @@ Plans:
 - [x] 114-02-PLAN.md — Path-keyed template rendering, validation, document params, and substitution
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 114-03-PLAN.md — Alias `_template`, `_items`, and public `template_params` wiring
+- [x] 114-03-PLAN.md — Alias `_template`, `_items`, and public `template_params` wiring
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 114-04-PLAN.md — Supabase-backed resolver integration validation
