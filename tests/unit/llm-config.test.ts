@@ -482,9 +482,9 @@ llm:
       models:
         - gpt-4o
       tools:
-        - read
+        - search_memory
       excluded_tools:
-        - write
+        - get_memory
       templates:
         - Templates/research.md
       defaults:
@@ -502,8 +502,8 @@ llm:
     try {
       const config = loadConfig(tmpFile);
       const purpose = config.llm?.purposes[0];
-      expect(purpose?.tools).toEqual(['read']);
-      expect(purpose?.excludedTools).toEqual(['write']);
+      expect(purpose?.tools).toEqual(['search_memory']);
+      expect(purpose?.excludedTools).toEqual(['get_memory']);
       expect(purpose?.templates).toEqual(['Templates/research.md']);
       expect(purpose?.defaults?.['temperature']).toBe(0.2);
       expect(purpose?.defaults?.['vendor_flag']).toBe('enabled');
@@ -1080,7 +1080,7 @@ llm:
     - name: agentic
       description: Agentic purpose
       models: [router-model]
-      tools: [read]
+      tools: [search_memory]
 `;
     writeFileSync(tmpFile, yaml);
     try {

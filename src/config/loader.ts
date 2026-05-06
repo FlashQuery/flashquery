@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { validateAllPurposeMode2Admissions } from '../llm/capabilities.js';
+import { HARD_EXCLUDED_NATIVE_TOOLS, TOOL_TIERS } from '../llm/tool-registry.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Zod schemas (snake_case — matches YAML structure)
@@ -459,6 +460,11 @@ type LlmValidationError = { layer: 'provider' | 'model' | 'purpose' | 'cross-ref
 function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
   const errors: LlmValidationError[] = [];
   const namePattern = /^[a-z0-9][a-z0-9_-]*$/;
+  const toolTierNames = new Set<string>(Object.keys(TOOL_TIERS));
+  const nativeToolNames = new Set<string>([
+    ...Object.values(TOOL_TIERS).flat(),
+    ...HARD_EXCLUDED_NATIVE_TOOLS,
+  ]);
 
   // CONF-01: name format validation
   for (const p of llm.providers) {
@@ -519,6 +525,25 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
           message: `purpose '${pu.name}' references unknown model '${ref}' — defined models: [${[...modelNames].join(', ') || '(none)'}]`,
         });
       }
+    }
+  }
+
+  for (const pu of llm.purposes) {
+    const tools = pu.tools ?? [];
+    const excludedTools = pu.excluded_tools ?? [];
+    if (excludedTools.length > 0 && tools.length === 0) {
+      errors.push({ layer: 'purpose', name: pu.name, message: `purpose '${pu.name}' excluded_tools requires tools` });
+    }
+
+    for (const tool of [...tools, ...excludedTools]) {
+      if (toolTierNames.has(tool) || nativeToolNames.has(tool)) continue;
+      errors.push({
+        layer: 'purpose',
+        name: pu.name,
+        message: tool.startsWith('tier:')
+          ? `purpose '${pu.name}' unknown tool tier '${tool}'`
+          : `purpose '${pu.name}' unknown native tool '${tool}'`,
+      });
     }
   }
 
