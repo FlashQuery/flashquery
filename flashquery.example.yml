@@ -220,7 +220,13 @@ llm:
       # Omit any field to omit it from the response (omit-when-undeclared per OQ #16).
       description: "Fast, cheap small model for routine tasks"
       context_window: 128000
-      capabilities: ["tools", "vision"]
+      tags: ["vision"]
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: true
+        parallel_tool_calls: true
+        structured_outputs_with_tools: true
     # - name: smart
     #   provider_name: openrouter
     #   model: anthropic/claude-opus-4-7
@@ -254,3 +260,23 @@ llm:
     #   defaults:
     #     temperature: 0.3
     #     max_tokens: 1024
+    #     response_format:
+    #       type: json_object
+    #     timeout_ms: 30000
+    #     max_cost_usd: 0.25
+    #     max_tokens_budget: 12000
+    #     max_iterations: 5
+    #     result_summary_chars: 2000
+    #
+    # - name: researcher
+    #   description: |
+    #     Delegated research loop with a bounded model-visible tool set and
+    #     purpose-bound vault templates.
+    #   models:
+    #     - fast
+    #   tools:
+    #     - read
+    #   excluded_tools:
+    #     - write
+    #   templates:
+    #     - Templates/research-brief.md
