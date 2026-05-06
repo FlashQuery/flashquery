@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { callModelMessageSchema, registerLlmTools } from '../../src/mcp/tools/llm.js';
 import { computeCost } from '../../src/llm/cost-tracker.js';
 import { NullLlmClient, type LlmClient, type LlmCompletionResult } from '../../src/llm/client.js';
 import { LlmFallbackError } from '../../src/llm/resolver.js';
 import { LLM_PARTICIPANT_NAMES } from '../../src/constants/llm.js';
+import { getNativeToolCatalog } from '../../src/mcp/tool-catalog.js';
 import {
   parseReferences,
   resolveReferences,
@@ -261,6 +263,9 @@ describe('call_model handler — trace_id envelope shape (U-31)', () => {
 // Helper: capture the call_model handler from registerLlmTools
 // ─────────────────────────────────────────────────────────────────────────────
 type HandlerFn = (params: unknown) => Promise<{ isError?: boolean; content: Array<{ type: string; text: string }> }>;
+type CapturedServer = {
+  registerTool: ReturnType<typeof vi.fn>;
+};
 
 function captureCallModelHandler(config: typeof TEST_CONFIG): HandlerFn {
   const handlers = new Map<string, HandlerFn>();
@@ -276,7 +281,7 @@ function captureCallModelHandler(config: typeof TEST_CONFIG): HandlerFn {
   return handler;
 }
 
-function captureCallModelRegistration(config: typeof TEST_CONFIG): { spec: unknown; handler: HandlerFn } {
+function captureCallModelRegistration(config: typeof TEST_CONFIG): { spec: unknown; handler: HandlerFn; server: CapturedServer } {
   let capturedSpec: unknown;
   let capturedHandler: HandlerFn | undefined;
   const fakeServer = {
@@ -290,7 +295,27 @@ function captureCallModelRegistration(config: typeof TEST_CONFIG): { spec: unkno
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   registerLlmTools(fakeServer as any, config);
   if (!capturedHandler) throw new Error('call_model handler not registered');
-  return { spec: capturedSpec, handler: capturedHandler };
+  return { spec: capturedSpec, handler: capturedHandler, server: fakeServer };
+}
+
+function seedNativeToolCatalog(server: CapturedServer): void {
+  const catalog = getNativeToolCatalog(server as never);
+  catalog.push(
+    {
+      name: 'get_document',
+      description: 'Read one or more documents',
+      inputSchema: {
+        identifiers: z.union([z.string(), z.array(z.string())]).describe('Document identifier(s)'),
+      },
+    },
+    {
+      name: 'call_model',
+      description: 'Call any configured LLM model',
+      inputSchema: {
+        resolver: z.string(),
+      },
+    }
+  );
 }
 
 // ─── U-RR-INT: Handler-level Step 1.5 reference resolution tests ─────────────
@@ -1040,6 +1065,185 @@ describe('call_model handler — Phase 112 return_messages envelope', () => {
     expect(search.messages).toBeUndefined();
     expect(completeMock).not.toHaveBeenCalled();
     expect(completeByPurposeMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('call_model handler — Phase 116 native tool registry wiring', () => {
+  const TOOL_PURPOSE_CONFIG = {
+    instance: { id: 'test-instance-tools', name: 'Test', vault: { path: '/tmp/vault', markdownExtensions: ['.md'] } },
+    llm: {
+      providers: TEST_LLM_CONFIG.providers,
+      models: [
+        {
+          ...TEST_LLM_CONFIG.models[0],
+          capabilities: {
+            tool_calling: true,
+            usage_on_tool_calls: true,
+            strict_tools: true,
+            structured_outputs_with_tools: true,
+          },
+        },
+      ],
+      purposes: [
+        {
+          name: 'documented',
+          description: 'Documented purpose',
+          models: ['fast'],
+          tools: ['get_document'],
+        },
+        {
+          name: 'unsafe',
+          description: 'Unsafe purpose',
+          models: ['fast'],
+          tools: ['call_model'],
+        },
+        {
+          name: 'excluded',
+          description: 'Excluded purpose',
+          models: ['fast'],
+          tools: ['get_document'],
+          excludedTools: ['get_document'],
+        },
+      ],
+    },
+  } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+
+  it('[TOOL-04] purpose calls with tools: [get_document] pass one provider function tool and expose metadata.tools.native_tool_names', async () => {
+    const completeByPurposeMock = vi.fn().mockResolvedValue({
+      ...SAMPLE_RESULT,
+      purposeName: 'documented',
+      fallbackPosition: 1,
+    });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'documented',
+      messages: [{ role: 'user', content: 'Read the document.' }],
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(completeByPurposeMock).toHaveBeenCalledWith(
+      'documented',
+      [{ role: 'user', content: 'Read the document.' }],
+      expect.objectContaining({
+        tools: [
+          expect.objectContaining({
+            type: 'function',
+            function: expect.objectContaining({ name: 'get_document' }),
+          }),
+        ],
+      }),
+      null
+    );
+    const providerParams = completeByPurposeMock.mock.calls[0][2] as { tools?: Array<{ function: { name: string } }> };
+    expect(providerParams.tools).toHaveLength(1);
+    expect(providerParams.tools?.[0].function.name).toBe('get_document');
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const envelope = JSON.parse(result.content[0].text) as any;
+    expect(envelope.metadata.tools.native_tool_names).toEqual(['get_document']);
+    expect(envelope.metadata.tools.diagnostics.explicit_tools).toEqual(['get_document']);
+  });
+
+  it('[TOOL-03] purpose calls with tools: [call_model] omit provider tools and expose hard_excluded diagnostics', async () => {
+    const completeByPurposeMock = vi.fn().mockResolvedValue({
+      ...SAMPLE_RESULT,
+      purposeName: 'unsafe',
+      fallbackPosition: 1,
+    });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'unsafe',
+      messages: [{ role: 'user', content: 'Try a nested call.' }],
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(completeByPurposeMock.mock.calls[0][2]).not.toHaveProperty('tools');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const envelope = JSON.parse(result.content[0].text) as any;
+    expect(envelope.metadata.tools.native_tool_names).toEqual([]);
+    expect(envelope.metadata.tools.diagnostics.hard_excluded).toEqual([
+      expect.objectContaining({ tool: 'call_model' }),
+    ]);
+  });
+
+  it('[TOOL-02] purpose calls with excludedTools removing the final tool do not pass tools: []', async () => {
+    const completeByPurposeMock = vi.fn().mockResolvedValue({
+      ...SAMPLE_RESULT,
+      purposeName: 'excluded',
+      fallbackPosition: 1,
+    });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    await handler({
+      resolver: 'purpose',
+      name: 'excluded',
+      messages: [{ role: 'user', content: 'No tools remain.' }],
+    });
+
+    expect(completeByPurposeMock.mock.calls[0][2]).not.toHaveProperty('tools');
+  });
+
+  it('[T-116-13] direct model calls preserve explicit caller provider parameters only', async () => {
+    const completeMock = vi.fn().mockResolvedValue(SAMPLE_RESULT);
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    await handler({
+      resolver: 'model',
+      name: 'fast',
+      messages: [{ role: 'user', content: 'Direct call.' }],
+      parameters: { temperature: 0.2 },
+    });
+
+    expect(completeMock).toHaveBeenCalledWith(
+      'fast',
+      [{ role: 'user', content: 'Direct call.' }],
+      { temperature: 0.2 },
+      null
+    );
   });
 });
 
