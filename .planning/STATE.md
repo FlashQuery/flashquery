@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
-status: executing
-stopped_at: Completed 115-03-PLAN.md
-last_updated: "2026-05-06T03:49:40.479Z"
+status: verifying
+stopped_at: Completed 115-05-PLAN.md
+last_updated: "2026-05-06T04:01:30.000Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 23
   completed_phases: 3
   total_plans: 19
-  completed_plans: 18
-  percent: 95
+  completed_plans: 19
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 
 Phase: 115 (purpose-config-bindings-capabilities) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Focused validation gate passed; ready for review/verification
 Last activity: 2026-05-06
 
 ## Performance Metrics
@@ -63,6 +63,7 @@ Last activity: 2026-05-06
 | Phase 115 P02 | 4 min | 2 tasks | 4 files |
 | Phase 115 P04 | 6 min | 3 tasks | 5 files |
 | Phase 115 P03 | 7 min | 3 tasks | 4 files |
+| Phase 115 P05 | 9 min | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -76,6 +77,8 @@ Last activity: 2026-05-06
 - [Phase 114]: Documentation review deferred to Phase 119 because README.md and docs/ARCHITECTURE.md do not yet describe call_model references/templates.
 - [Phase 115]: 115-03: Dangling structurally valid template paths warn and persist for later discovery/dispatch filtering.
 - [Phase 115]: 115-03: Purpose-template runtime rows use source='api' while existing LLM config tables keep source='webapp' for compatibility.
+- [Phase 115]: 115-05: Runtime binding precedence remains validated in `tests/integration/llm-config-sync.test.ts` until a public runtime binding scenario tool exists.
+- [Phase 115]: 115-05: User-facing docs remain deferred until later ATL phases expose the final tool registry, loop execution, and discovery/help surfaces.
 
 ## Accumulated Context
 

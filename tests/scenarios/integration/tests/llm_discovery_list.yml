@@ -17,7 +17,7 @@ deps: [llm]
 # Self-contained discovery fixture. The runner's default --managed llm config (see
 # tests/scenarios/framework/fqc_test_utils.py:_resolve_llm_config) declares only the
 # required model fields, so the optional fields (description, context_window,
-# capabilities) and the auto-derived `local` flag would be omitted from the response —
+# tags, structured capabilities) and the auto-derived `local` flag would be omitted from the response —
 # correct per OQ #16, but it would mean steps 8-11 below could never land. extra_config
 # is deep-merged into the generated config (lists replace, dicts recurse) before the
 # managed server starts, giving this test a fixture that exercises the full
@@ -51,7 +51,13 @@ extra_config:
           output: 0.60
         description: "Fast, cheap small model for routine tasks"
         context_window: 128000
-        capabilities: ["tools", "vision"]
+        tags: ["vision"]
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+          strict_tools: true
+          parallel_tool_calls: true
+          structured_outputs_with_tools: true
       - name: local
         provider_name: local-ollama
         model: llama3.2:latest
@@ -121,12 +127,19 @@ steps:
         resolver: list_models
       expect_contains: '"output_cost_per_million":0.6'
 
-  - label: "TC4-W5/DISC-01: list_models entry — capabilities field carries the configured array verbatim (locks down OQ #16 preserve-when-declared) — IL-15"
+  - label: "TC4-W5/DISC-01/CAP-01/CAP-02: list_models entry — tags carry free-form discovery labels separately from structured capabilities — IL-15"
     assert:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"capabilities":["tools","vision"]'
+      expect_contains: '"tags":["vision"]'
+
+  - label: "TC4-W5/DISC-01/CAP-01: list_models entry — structured capabilities include all Phase 115 model capability keys — IL-15"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"capabilities":{"tool_calling":true,"usage_on_tool_calls":true,"strict_tools":true,"parallel_tool_calls":true,"structured_outputs_with_tools":true}'
 
   - label: "TC4-W5/DISC-01: list_models entry — description field carries the configured string verbatim — IL-15"
     assert:
@@ -153,7 +166,7 @@ steps:
     # The embeddings model is declared with no capabilities key; per OQ #16 it
     # must be OMITTED entirely from the response (not present-with-empty-array,
     # not present-with-null). This step would have passed the prior bare-key
-    # check even if every model had `capabilities: []` injected as a default.
+    # check even if every model had an empty capabilities array injected as a default.
     assert:
       op: call_model
       args:

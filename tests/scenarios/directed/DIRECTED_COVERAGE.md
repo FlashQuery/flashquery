@@ -680,6 +680,7 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-81 | TMPL-04: Template substitution is deterministic and non-recursive; substituted values containing `{{ref:...}}` remain literal and do not add recursive metadata or failures | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
 | L-82 | TMPL-05: Alias `_items` injects an ordered list of document/template items with `_separator`, `resolved_to_count`, and ordered `items` metadata | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
 | L-83 | VAL-114: Managed public scenario gate `test_call_model_template_parameterization` validates path-keyed templates, alias templates, `_items`, typed failures, plain-doc bypass, and non-recursive substitution | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
+| L-84 | ATL-DS-14: Capability admission failures for Mode 2 purposes are user-visible and actionable, including `tool_calling`, `usage_on_tool_calls`, and `structured_outputs_with_tools` diagnostics that distinguish `declared unsupported` from `unknown declaration` and fail before provider dispatch when `response_format` is incompatible with model-visible tools | test_call_model_agent_loop_capabilities | 2026-05-06 | 2026-05-06 |
 
 ---
 
@@ -1408,6 +1409,9 @@ Covers: L-73, L-74, L-75, ATL-DS-01
 
 ### test_get_llm_usage_arithmetic
 Covers: L-68, L-69, L-70
+
+### test_call_model_agent_loop_capabilities
+Covers: L-84, ATL-DS-14, VAL-115
 
 ---
 

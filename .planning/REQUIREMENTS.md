@@ -84,7 +84,7 @@
 - [x] **VAL-112**: Phase 112 ships runnable unit, MCP-boundary, and directed scenario tests that validate `chat()`, Mode 1 envelope compatibility, `return_messages`, round-trippable messages, and provider normalization.
 - [x] **VAL-113**: Phase 113 ships runnable unit, directed, and integration tests that validate reference parsing, escaping, ambiguity handling, typed failures, metadata, and non-recursive hydration.
 - [x] **VAL-114**: Phase 114 ships runnable unit, directed, and integration tests that validate template parameter validation, substitution, document parameters, aliases, and `_items` list injection.
-- [ ] **VAL-115**: Phase 115 ships runnable unit, TypeScript integration, and public startup/config scenario tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
+- [x] **VAL-115**: Phase 115 ships runnable unit, TypeScript integration, and public startup/config scenario tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
 - [ ] **VAL-116**: Phase 116 ships runnable unit tests and at least one public-surface scenario that validate native tool exposure, exclusions, hard exclusions, schema translation, and empty-tool omission.
 - [ ] **VAL-117**: Phase 117 ships runnable unit, E2E, and directed scenario tests with a deterministic mock provider validating native tool loops, parallel tool calls, guardrail stops, fallback, usage aggregation, and calls-log metadata.
 - [ ] **VAL-118**: Phase 118 ships runnable unit, integration, E2E, and directed scenario tests validating fresh template discovery, masquerade tool naming, collision diagnostics, reverse-map dispatch, and mixed native/template loops.
@@ -176,7 +176,7 @@
 | VAL-112 | Phase 112 | Complete |
 | VAL-113 | Phase 113 | Complete |
 | VAL-114 | Phase 114 | Complete |
-| VAL-115 | Phase 115 | Pending |
+| VAL-115 | Phase 115 | Complete |
 | VAL-116 | Phase 116 | Pending |
 | VAL-117 | Phase 117 | Pending |
 | VAL-118 | Phase 118 | Pending |

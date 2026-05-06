@@ -1,7 +1,7 @@
 ---
 phase: 115
 slug: purpose-config-bindings-capabilities
-status: draft
+status: complete
 nyquist_compliant: true
 wave_0_complete: false
 created: 2026-05-06
@@ -38,11 +38,11 @@ created: 2026-05-06
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 115-01-01 | TBD | 1 | BIND-01, BIND-02 | T-115-01 | Purpose config rejects unknown top-level keys and validates loop guardrails before startup proceeds. | unit | `npm test -- tests/unit/llm-config.test.ts` | ✅ | ⬜ pending |
-| 115-02-01 | TBD | 1 | BIND-03 | T-115-02 | Schema verification requires `fqc_purpose_templates` with unique identity and source tracking. | unit + integration | `npm test -- tests/unit/schema-verify.test.ts && npm run test:integration -- tests/integration/supabase-schema-verify.test.ts` | ⚠️ extend/create | ⬜ pending |
-| 115-03-01 | TBD | 2 | BIND-04, BIND-05 | T-115-03 | YAML sync cannot overwrite API-owned purpose-template bindings and normalizes template paths. | unit + integration | `npm test -- tests/unit/llm-config-sync.test.ts && npm run test:integration -- tests/integration/llm-config-sync.test.ts` | ⚠️ extend | ⬜ pending |
-| 115-04-01 | TBD | 2 | CAP-01, CAP-02, CAP-03 | T-115-04 | Mode 2 exposure is denied unless every fallback model declares required structured capabilities. | unit | `npm test -- tests/unit/llm-config.test.ts tests/unit/llm-tool.test.ts` | ✅ | ⬜ pending |
-| 115-05-01 | TBD | 3 | CAP-04, CAP-05, VAL-115 | T-115-05 | Runtime/API template binding and public calls use the same admission diagnostics as YAML config. | unit + directed scenario + YAML integration scenario | `npm test -- tests/unit/llm-config-sync.test.ts tests/unit/llm-tool.test.ts && python3 tests/scenarios/directed/run_suite.py --managed test_call_model_agent_loop_capabilities && (cd tests/scenarios/integration && python3 run_integration.py --managed llm_discovery_list)` | ❌ create scenario | ⬜ pending |
+| 115-01-01 | 115-01 | 1 | BIND-01, BIND-02 | T-115-01 | Purpose config rejects unknown top-level keys and validates loop guardrails before startup proceeds. | unit | `npm test -- tests/unit/llm-config.test.ts` | ✅ | ✅ green |
+| 115-02-01 | 115-02 | 1 | BIND-03 | T-115-02 | Schema verification requires `fqc_purpose_templates` with unique identity and source tracking. | unit + integration | `npm test -- tests/unit/schema-verify.test.ts && npm run test:integration -- tests/integration/supabase-schema-verify.test.ts` | ✅ | ✅ green |
+| 115-03-01 | 115-03 | 3 | BIND-04, BIND-05 | T-115-03 | YAML sync cannot overwrite API-owned purpose-template bindings and normalizes template paths. | unit + integration | `npm test -- tests/unit/llm-config-sync.test.ts && npm run test:integration -- tests/integration/llm-config-sync.test.ts` | ✅ | ✅ green |
+| 115-04-01 | 115-04 | 2 | CAP-01, CAP-02, CAP-03 | T-115-04 | Mode 2 exposure is denied unless every fallback model declares required structured capabilities. | unit | `npm test -- tests/unit/llm-config.test.ts tests/unit/llm-tool.test.ts` | ✅ | ✅ green |
+| 115-05-01 | 115-05 | 4 | CAP-04, CAP-05, VAL-115 | T-115-05 | Runtime/API template binding and public calls use the same admission diagnostics as YAML config. | unit + directed scenario + YAML integration scenario | `npm test -- tests/unit/llm-config-sync.test.ts tests/unit/llm-tool.test.ts && python3 tests/scenarios/directed/run_suite.py --managed test_call_model_agent_loop_capabilities && (cd tests/scenarios/integration && python3 run_integration.py --managed llm_discovery_list)` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ needs extension*
 
@@ -50,11 +50,11 @@ created: 2026-05-06
 
 ## Wave 0 Requirements
 
-- [ ] `tests/unit/llm-config.test.ts` — add/adjust tests for strict purpose fields, loop guardrails, structured capabilities, unknown-vs-false diagnostics, and old free-form capability migration/removal.
-- [ ] `tests/unit/schema-verify.test.ts` — add checks for `fqc_purpose_templates` table/columns/constraints if no focused coverage exists.
-- [ ] `tests/integration/llm-config-sync.test.ts` — extend for purpose-template YAML/API precedence, dangling warnings, and reappearance-on-restart behavior.
-- [ ] `tests/scenarios/directed/testcases/test_call_model_agent_loop_capabilities.py` — create public startup/config scenario coverage for admission diagnostics if no equivalent exists.
-- [ ] `tests/scenarios/integration/tests/llm_discovery_list.yml` — update and run with `cd tests/scenarios/integration && python3 run_integration.py --managed llm_discovery_list` to prove the final `tags` plus structured `capabilities` discovery shape.
+- [x] `tests/unit/llm-config.test.ts` — strict purpose fields, loop guardrails, structured capabilities, unknown-vs-false diagnostics, and legacy free-form capability migration to tags.
+- [x] `tests/unit/schema-verify.test.ts` — `fqc_purpose_templates` table/columns/constraints plus Phase 115 model/purpose storage columns.
+- [x] `tests/integration/llm-config-sync.test.ts` — purpose-template YAML/API precedence, dangling warnings, and reappearance-on-restart behavior.
+- [x] `tests/scenarios/directed/testcases/test_call_model_agent_loop_capabilities.py` — public startup/config scenario coverage for admission diagnostics.
+- [x] `tests/scenarios/integration/tests/llm_discovery_list.yml` — final `tags` plus structured `capabilities` discovery shape.
 
 ---
 
@@ -66,17 +66,26 @@ created: 2026-05-06
 
 ## Docs-Impact Review
 
-- [ ] At Phase 115 close, record whether user-facing docs need updates for `tools`, `excluded_tools`, `templates`, loop guardrail defaults, `tags`, and structured model `capabilities`; if no docs update is required in this phase, record the no-docs-impact rationale here before sign-off.
+- [x] Phase 115 did not update user-facing docs because the phase deliberately closes config/schema/sync/test contracts that later ATL phases will make fully usable through tool registry, loop execution, and discovery/help. Release-facing docs should be updated before ATL v1 release to describe purpose `tools`, `excluded_tools`, `templates`, known loop guardrail defaults, model `tags`, and structured model `capabilities`.
+
+## Executed Validation
+
+- **2026-05-06:** `npm run build && npm test -- tests/unit/llm-config.test.ts tests/unit/llm-config-sync.test.ts tests/unit/llm-tool.test.ts tests/unit/schema-verify.test.ts && npm run test:integration -- tests/integration/llm-config-sync.test.ts tests/integration/supabase-schema-verify.test.ts && python3 tests/scenarios/directed/run_suite.py --managed test_call_model_agent_loop_capabilities && (cd tests/scenarios/integration && python3 run_integration.py --managed llm_discovery_list)` — passed.
+- Unit result: 4 files passed, 93 tests passed.
+- TypeScript integration result: 2 files passed, 11 tests passed.
+- Directed scenario result: `test_call_model_agent_loop_capabilities` passed 5/5 steps.
+- YAML integration result: `llm_discovery_list` passed 19/19 steps.
+- Coverage traceability: BIND-01 through BIND-05, CAP-01 through CAP-05, and VAL-115 are mapped in `.planning/REQUIREMENTS.md`, `tests/scenarios/directed/DIRECTED_COVERAGE.md`, and `tests/scenarios/integration/INTEGRATION_COVERAGE.md`.
 
 ---
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 240s
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 240s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** complete
