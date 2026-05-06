@@ -428,22 +428,24 @@ Replace this with structured capabilities plus `tags` if the migration path is c
 |---|-------|---------|---------------|
 | A1 | Runtime/API template binding may require adding a new MCP tool or internal helper because no current `bind_template` tool exists. [ASSUMED] | Standard Stack / Validation | Planner may over-scope CAP-04 if the intended runtime API is a non-MCP internal API not yet documented. |
 
-## Open Questions
+## Open Questions — RESOLVED
+
+All Phase 115 research questions are resolved by the locked plan decisions below. These answers are authoritative for execution unless a later user decision supersedes them.
 
 1. **What is the exact runtime/API template binding surface for CAP-04?**
    - What we know: ATL-I-06 says runtime template binding API depends on final registration tool name/API. [CITED: ATL Test Plan ATL-I-06]
    - What's unclear: Current code has no `bind_template` MCP tool or obvious purpose-template registration surface. [VERIFIED: rg registerTool/bind_template]
-   - Recommendation: Planner should either include a small internal binding service plus tests, or mark public runtime-binding scenario tests blocked until the API name is decided. [CITED: ATL Test Plan Readiness Gates]
+   - RESOLVED: Phase 115 implements an internal/shared runtime binding service only, with `bindPurposeTemplateRuntime` and `removePurposeTemplateRuntime` (or equivalent names) in `src/llm/purpose-template-bindings.ts`. No public MCP `bind_template`/runtime registration tool is added or accepted in Phase 115. CAP-04 is verified through unit and TypeScript integration coverage for the internal service and config sync precedence, not through an invented public YAML scenario. [VERIFIED: 115-03-PLAN.md] [VERIFIED: 115-05-PLAN.md]
 
 2. **Should old `capabilities: string[]` become `tags: string[]` or be removed?**
    - What we know: Context allows migration, rename to `tags`, or removal, but requires one behavior surface. [VERIFIED: 115-CONTEXT.md]
    - What's unclear: Existing docs and scenarios expose old `capabilities` as public discovery metadata. [VERIFIED: docs/FlashQuery MCP Tool Guide.md] [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md]
-   - Recommendation: Use `tags: string[]` to preserve non-behavior metadata with clearer semantics, then update discovery rows and docs. [ASSUMED]
+   - RESOLVED: Legacy free-form model `capabilities: string[]` migrates to `tags: string[]` for non-behavior metadata. Behavioral support is represented only by structured `capabilities` booleans: `tool_calling`, `usage_on_tool_calls`, `strict_tools`, `parallel_tool_calls`, and `structured_outputs_with_tools`. Discovery and tests must not preserve old string-array capabilities as a behavior surface. [VERIFIED: 115-01-PLAN.md] [VERIFIED: 115-04-PLAN.md] [VERIFIED: 115-05-PLAN.md]
 
 3. **Should `fqc_llm_purposes` include `audit_document text` now?**
    - What we know: ATL Test Plan mentions `audit_document text` if finalized, but Phase 115 context says audit is deferred and must not be accepted in normal v1 config. [CITED: ATL Test Plan ATL-I-01] [VERIFIED: 115-CONTEXT.md]
    - What's unclear: Whether the planner wants a nullable reserved DB column despite config rejection.
-   - Recommendation: Do not add `audit_document` unless the plan explicitly treats it as storage-only reserved state with no accepted config surface. [VERIFIED: 115-CONTEXT.md]
+   - RESOLVED: Phase 115 does not add `audit_document` to config parsing, discovery, runtime APIs, or storage. Purpose config must reject `audit_document` as an unknown top-level key. Audit document writes and related storage remain deferred until a later phase explicitly accepts that surface. [VERIFIED: 115-CONTEXT.md] [VERIFIED: 115-01-PLAN.md]
 
 ## Environment Availability
 
