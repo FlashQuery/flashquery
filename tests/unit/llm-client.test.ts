@@ -14,8 +14,8 @@ import {
 } from '../../src/llm/client.js';
 import * as clientModule from '../../src/llm/client.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
-import { FINISH_REASONS, LLM_PARTICIPANT_NAMES } from '../../src/constants/llm.js';
-import type { LlmChatMessage } from '../../src/llm/types.js';
+import { AGENT_LOOP_STOP_REASONS, FINISH_REASONS, LLM_PARTICIPANT_NAMES } from '../../src/constants/llm.js';
+import type { CallModelMetadata, LlmChatMessage } from '../../src/llm/types.js';
 import * as costTracker from '../../src/llm/cost-tracker.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,6 +229,62 @@ describe('Phase 112 canonical LLM contracts', () => {
 
   it('LLM_PARTICIPANT_NAMES exposes centralized participant attribution constants', () => {
     expect(LLM_PARTICIPANT_NAMES).toEqual({ host: 'host' });
+  });
+
+  it('AGENT_LOOP_STOP_REASONS exposes the canonical Mode 2 stop reasons', () => {
+    expect(AGENT_LOOP_STOP_REASONS).toEqual([
+      'final_response',
+      'max_iterations',
+      'timeout',
+      'max_cost',
+      'max_tokens',
+      'shutdown',
+      'error',
+    ]);
+  });
+
+  it('CallModelMetadata.tools supports the public Mode 2 metadata shape and remains optional', () => {
+    const mode1Metadata: CallModelMetadata = {
+      resolver: 'purpose',
+      name: 'research',
+      resolved_model_name: 'fast',
+      provider_name: 'openai',
+      fallback_position: 1,
+      tokens: { input: 0, output: 0 },
+      cost_usd: 0,
+      latency_ms: 0,
+    };
+    const mode2Metadata: CallModelMetadata = {
+      ...mode1Metadata,
+      tools: {
+        native_tool_names: ['get_document'],
+        diagnostics: { expanded_tiers: [] },
+        stop_reason: 'final_response',
+        iterations: 1,
+        calls_log: [
+          {
+            iteration: 1,
+            model_name: 'fast',
+            provider_name: 'openai',
+            fallback_position: 1,
+            finish_reason: 'stop',
+            tokens: { input: 11, output: 7 },
+            cost_usd: 0.000025,
+            latency_ms: 31,
+            assistant: { content: 'done' },
+            tool_calls: [],
+          },
+        ],
+        aggregate_usage: {
+          tokens: { input: 11, output: 7 },
+          cost_usd: 0.000025,
+          latency_ms: 31,
+        },
+      },
+    };
+
+    expect(mode1Metadata.tools).toBeUndefined();
+    expect(mode2Metadata.tools?.calls_log[0].tokens).toEqual({ input: 11, output: 7 });
   });
 
   it('host participant attribution is not hard-coded outside the constants module', () => {
@@ -834,6 +890,66 @@ describe('OpenAICompatibleLlmClient.chat', () => {
       fallbackPosition: 1,
       traceId: 'trace-native-tools',
     }));
+  });
+});
+
+describe('OpenAICompatibleLlmClient.chatByPurposeUnrecorded', () => {
+  it('walks the purpose fallback chain and never records public usage', async () => {
+    const config = {
+      ...TEST_LLM_CONFIG,
+      purposes: [
+        ...TEST_LLM_CONFIG.purposes,
+        { name: 'unrecorded', description: 'Unrecorded purpose', models: ['gpt-4o', 'fast'] },
+      ],
+    };
+    const client = new OpenAICompatibleLlmClient(config, 'test-instance-unrecorded');
+    const httpsMod = await import('node:https');
+    const requestedModels: string[] = [];
+    const responses = [
+      { statusCode: 500, body: { error: 'first model failed' } },
+      { statusCode: 200, body: makeOpenAISuccessBody({ text: 'fallback ok', promptTokens: 21, completionTokens: 9 }) },
+    ];
+
+    vi.spyOn(httpsMod as typeof httpsMod & { request: unknown }, 'request').mockImplementation(
+      (_opts: unknown, cb: unknown) => {
+        const response = responses.shift();
+        return {
+          on(_event: string, _handler: (err?: Error) => void) {},
+          write(body: string) {
+            const parsed = JSON.parse(body) as { model?: string };
+            if (parsed.model) requestedModels.push(parsed.model);
+          },
+          end() {
+            if (!response) throw new Error('unexpected request');
+            const bodyStr = JSON.stringify(response.body);
+            const chunks = [Buffer.from(bodyStr, 'utf-8')];
+            const res = {
+              statusCode: response.statusCode,
+              statusMessage: response.statusCode === 200 ? 'OK' : 'ERROR',
+              headers: {},
+              on(event: string, handler: (chunk?: Buffer) => void) {
+                if (event === 'data') for (const chunk of chunks) handler(chunk);
+                else if (event === 'end') setTimeout(() => handler(), 0);
+              },
+            };
+            (cb as (res: typeof res) => void)(res);
+          },
+        } as unknown as ReturnType<typeof httpsMod.request>;
+      }
+    );
+
+    const result = await client.chatByPurposeUnrecorded('unrecorded', SAMPLE_MESSAGES);
+
+    expect(requestedModels).toEqual(['gpt-4o', 'gpt-4o-mini']);
+    expect(result).toMatchObject({
+      purposeName: 'unrecorded',
+      fallbackPosition: 2,
+      modelName: 'fast',
+      providerName: 'openai',
+      inputTokens: 21,
+      outputTokens: 9,
+    });
+    expect(costTracker.recordLlmUsage).not.toHaveBeenCalled();
   });
 });
 
