@@ -198,7 +198,7 @@ async function readTemplateCandidate(
 }
 
 async function discoverAllTemplateCandidates(config: FlashQueryConfig): Promise<TemplateDocumentCandidate[]> {
-  const markdownExtensions = config.instance.vault.markdownExtensions ?? ['.md'];
+  const markdownExtensions = config.instance.vault.markdownExtensions;
   const files = await discoverMarkdownFiles(config.instance.vault.path, markdownExtensions);
   const candidates = await Promise.all(files.map(async (file) => {
     const templatePath = relative(config.instance.vault.path, file).replaceAll('\\', '/');
