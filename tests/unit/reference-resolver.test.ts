@@ -808,3 +808,356 @@ describe('resolveReferences (resolution + error mapping)', () => {
     expect(isReferenceFailureReason(failed.reason)).toBe(true);
   });
 });
+
+describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
+  const fakeConfig = {} as import('../../src/config/loader.js').FlashQueryConfig;
+  const fakeSm = { getClient: vi.fn(() => ({})) } as unknown as typeof import('../../src/storage/supabase.js').supabaseManager;
+  const fakeEp = { embed: vi.fn() } as unknown as typeof import('../../src/embedding/provider.js').embeddingProvider;
+  const fakeLog = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as typeof import('../../src/logging/logger.js').logger;
+  const resolveWithTemplateParams = resolveReferences as unknown as (
+    parsed: ParsedRef[],
+    config: typeof fakeConfig,
+    sm: typeof fakeSm,
+    ep: typeof fakeEp,
+    log: typeof fakeLog,
+    templateParams?: Record<string, Record<string, unknown>>
+  ) => Promise<Array<ResolvedRef | FailedRef>>;
+
+  beforeEach(() => {
+    vi.mocked(resolveAndBuildDocument).mockReset();
+  });
+
+  function parsedRef(ref: string, identifier = ref.slice('{{ref:'.length, -'}}'.length)): ParsedRef {
+    const isAlias = ref.startsWith('{{ref:@');
+    return {
+      placeholder: ref,
+      ref,
+      identifierType: 'ref',
+      identifier,
+      alias: isAlias ? identifier : undefined,
+      messageIndex: 0,
+    };
+  }
+
+  function templateResult(path: string, body: string, fqParams: Record<string, unknown>) {
+    return {
+      identifier: path,
+      title: path,
+      path,
+      fq_id: null,
+      modified: '2026-05-06',
+      size: { chars: body.length },
+      body,
+      frontmatter: {
+        fq_template: true,
+        fq_params: fqParams,
+      },
+    } as unknown as Record<string, unknown>;
+  }
+
+  function plainResult(path: string, body: string) {
+    return {
+      identifier: path,
+      title: path,
+      path,
+      fq_id: null,
+      modified: '2026-05-06',
+      size: { chars: body.length },
+      body,
+      frontmatter: {},
+    } as unknown as Record<string, unknown>;
+  }
+
+  it('[U-TMPL-01] renders fq_template true documents with path-keyed template_params', async () => {
+    vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
+      templateResult('Templates/greeting.md', 'Hello {{name}}', {
+        name: { type: 'string', required: true },
+      })
+    );
+
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/greeting.md}}', 'Templates/greeting.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/greeting.md': { name: 'Ada' } }
+    );
+
+    const resolved = out[0] as ResolvedRef;
+    expect(resolved.kind).toBe('resolved');
+    expect(resolved.content).toBe('Hello Ada');
+    const metadata = buildInjectedReferences([resolved]) as Array<Record<string, unknown>>;
+    expect(metadata[0].template_params_used).toEqual({
+      name: { type: 'string', chars: 3 },
+    });
+  });
+
+  it('[U-TMPL-02] ignores template_params for plain documents and injects literal body unchanged', async () => {
+    vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
+      plainResult('Templates/plain.md', 'Hello {{name}}')
+    );
+
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/plain.md}}', 'Templates/plain.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/plain.md': { name: 'Ada' } }
+    );
+
+    const resolved = out[0] as ResolvedRef;
+    expect(resolved.kind).toBe('resolved');
+    expect(resolved.content).toBe('Hello {{name}}');
+    const metadata = buildInjectedReferences([resolved]) as Array<Record<string, unknown>>;
+    expect(metadata[0].template_params_used).toBeUndefined();
+  });
+
+  it('[U-TMPL-03] fails missing required template params with template_missing_required_param', async () => {
+    vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
+      templateResult('Templates/greeting.md', 'Hello {{name}}', {
+        name: { type: 'string', required: true },
+      })
+    );
+
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/greeting.md}}', 'Templates/greeting.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/greeting.md': {} }
+    );
+
+    const failed = out[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe('template_missing_required_param');
+    expect(failed.detail).toContain('name');
+  });
+
+  it('[U-TMPL-04] applies default string params and rejects non-string values with template_param_invalid_type', async () => {
+    vi.mocked(resolveAndBuildDocument)
+      .mockResolvedValueOnce(
+        templateResult('Templates/tone.md', 'Tone: {{tone}}', {
+          tone: { type: 'string', default: 'standard' },
+        })
+      )
+      .mockResolvedValueOnce(
+        templateResult('Templates/tone.md', 'Tone: {{tone}}', {
+          tone: { type: 'string', default: 'standard' },
+        })
+      );
+
+    const defaulted = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/tone.md}}', 'Templates/tone.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/tone.md': {} }
+    );
+    expect((defaulted[0] as ResolvedRef).content).toBe('Tone: standard');
+
+    const invalid = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/tone.md}}', 'Templates/tone.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/tone.md': { tone: 42 } }
+    );
+    const failed = invalid[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe('template_param_invalid_type');
+    expect(failed.detail).toContain('tone');
+  });
+
+  it('[U-TMPL-05] resolves document params through document resolver and maps failures to template_param_doc_not_found', async () => {
+    vi.mocked(resolveAndBuildDocument)
+      .mockResolvedValueOnce(
+        templateResult('Templates/review.md', 'Doc:\n{{target_doc}}', {
+          target_doc: { type: 'document', required: true },
+        })
+      )
+      .mockResolvedValueOnce(plainResult('Research/target.md', 'TARGET BODY'))
+      .mockResolvedValueOnce(
+        templateResult('Templates/review.md', 'Doc:\n{{target_doc}}', {
+          target_doc: { type: 'document', required: true },
+        })
+      )
+      .mockRejectedValueOnce(new DocumentNotFoundError('Research/missing.md'));
+
+    const resolved = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/review.md}}', 'Templates/review.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/review.md': { target_doc: 'Research/target.md' } }
+    );
+    expect((resolved[0] as ResolvedRef).content).toBe('Doc:\nTARGET BODY');
+    expect(resolveAndBuildDocument).toHaveBeenCalledWith(
+      'Research/target.md',
+      expect.objectContaining({ effectiveInclude: ['body'] }),
+      expect.objectContaining({ config: fakeConfig })
+    );
+
+    const failedOut = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/review.md}}', 'Templates/review.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      { 'Templates/review.md': { target_doc: 'Research/missing.md' } }
+    );
+    const failed = failedOut[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe('template_param_doc_not_found');
+    expect(failed.detail).toContain('target_doc');
+    expect(failed.detail).toContain('Research/missing.md');
+  });
+
+  it(String.raw`[U-TMPL-06] substitutes once, preserves escaped \{{name}}, and does not recurse into param-introduced refs`, async () => {
+    vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
+      templateResult(
+        'Templates/single-pass.md',
+        String.raw`Name: {{name}} Escaped: \{{name}} Later: {{later}}`,
+        {
+          name: { type: 'string', required: true },
+          later: { type: 'string', required: true },
+        }
+      )
+    );
+
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:Templates/single-pass.md}}', 'Templates/single-pass.md')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      {
+        'Templates/single-pass.md': {
+          name: 'Ada',
+          later: '{{ref:later.md}}',
+        },
+      }
+    );
+
+    expect((out[0] as ResolvedRef).content).toBe('Name: Ada Escaped: {{name}} Later: {{ref:later.md}}');
+    expect(resolveAndBuildDocument).toHaveBeenCalledTimes(1);
+  });
+
+  it('[U-TMPL-09] renders duplicate alias _template uses with different alias-keyed values', async () => {
+    vi.mocked(resolveAndBuildDocument)
+      .mockResolvedValueOnce(
+        templateResult('Templates/review.md', 'Criteria: {{criteria}}', {
+          criteria: { type: 'string', required: true },
+        })
+      )
+      .mockResolvedValueOnce(
+        templateResult('Templates/review.md', 'Criteria: {{criteria}}', {
+          criteria: { type: 'string', required: true },
+        })
+      );
+
+    const parsed: ParsedRef[] = [
+      {
+        placeholder: '{{ref:@review-a}}',
+        ref: '{{ref:@review-a}}',
+        identifierType: 'ref',
+        identifier: 'review-a',
+        alias: 'review-a',
+        messageIndex: 0,
+        start: 10,
+        end: 27,
+      },
+      {
+        placeholder: '{{ref:@review-b}}',
+        ref: '{{ref:@review-b}}',
+        identifierType: 'ref',
+        identifier: 'review-b',
+        alias: 'review-b',
+        messageIndex: 0,
+        start: 39,
+        end: 56,
+      },
+    ];
+
+    const out = await resolveWithTemplateParams(parsed, fakeConfig, fakeSm, fakeEp, fakeLog, {
+      'review-a': { _template: 'Templates/review.md', criteria: 'completeness' },
+      'review-b': { _template: 'Templates/review.md', criteria: 'consistency' },
+    });
+
+    const hydrated = hydrateMessages(
+      [{ role: 'user', content: 'Review A: {{ref:@review-a}}\nReview B: {{ref:@review-b}}' }],
+      out as ResolvedRef[]
+    );
+    expect(hydrated[0].content).toBe('Review A: Criteria: completeness\nReview B: Criteria: consistency');
+  });
+
+  // [U-TMPL-010] preserves the plan's grep contract; canonical ID is [U-TMPL-10].
+  it('[U-TMPL-10] renders alias _items in order with _separator and metadata items/resolved_to_count', async () => {
+    vi.mocked(resolveAndBuildDocument)
+      .mockResolvedValueOnce(plainResult('Research/a.md', 'ALPHA'))
+      .mockResolvedValueOnce(
+        templateResult('Templates/context.md', 'Focus: {{focus}}', {
+          focus: { type: 'string', required: true },
+        })
+      );
+
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:@background}}', 'background')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      {
+        background: {
+          _items: [
+            'Research/a.md',
+            { _template: 'Templates/context.md', focus: 'readiness' },
+          ],
+          _separator: '\n---\n',
+        },
+      }
+    );
+
+    const resolved = out[0] as ResolvedRef;
+    expect(resolved.kind).toBe('resolved');
+    expect(resolved.content).toBe('ALPHA\n---\nFocus: readiness');
+    const metadata = buildInjectedReferences([resolved]) as Array<Record<string, unknown>>;
+    expect(metadata[0].resolved_to_count).toBe(2);
+    expect(metadata[0].items).toEqual([
+      { resolved_to: 'Research/a.md', chars: 5 },
+      { resolved_to: 'Templates/context.md', chars: 16 },
+    ]);
+    expect(metadata[0].template_params_used).not.toHaveProperty('_items');
+    expect(metadata[0].template_params_used).not.toHaveProperty('_separator');
+  });
+
+  it('[U-TMPL-10] wraps _items failures with multi_ref_item_failed and preserves item detail', async () => {
+    vi.mocked(resolveAndBuildDocument).mockRejectedValueOnce(new DocumentNotFoundError('Research/missing.md'));
+
+    const out = await resolveWithTemplateParams(
+      [parsedRef('{{ref:@background}}', 'background')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      {
+        background: {
+          _items: ['Research/missing.md'],
+          _separator: '\n\n',
+        },
+      }
+    );
+
+    const failed = out[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe('multi_ref_item_failed');
+    expect(failed.detail).toContain('background');
+    expect(failed.detail).toContain('item 0');
+    expect(failed.detail).toContain('template_param_doc_not_found');
+  });
+});
