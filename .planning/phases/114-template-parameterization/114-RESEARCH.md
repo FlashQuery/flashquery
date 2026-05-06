@@ -323,16 +323,16 @@ All claims in this research were verified from local code, local planning/produc
 |---|-------|---------|---------------|
 | — | — | — | — |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `fq_template`, `fq_params`, and warning names be added to `frontmatter-fields.ts`?**
    - What we know: Existing `FM` constants contain FlashQuery-managed fields like `fq_id`, but DRS says `fq_template` is author-authored and not auto-inserted. [VERIFIED: `src/constants/frontmatter-fields.ts`; CITED: DRS §6.3]
-   - What's unclear: Whether this project wants constants for user-authored `fq_*` fields that are read but not managed. [VERIFIED: codebase convention scan]
+   - RESOLVED: Keep `fq_template` and `fq_params` out of managed write/repair frontmatter constants. Do not add them to auto-managed frontmatter flows. If implementation finds a narrower local constant module useful for template reading only, that is acceptable; otherwise use resolver-local strings. [VERIFIED: codebase convention scan; CITED: DRS §6.3]
    - Recommendation: Planner should allow either local string constants inside resolver or a separate template constants module; do not add `fq_template` to write/repair flows. [CITED: DRS §6.3]
 
 2. **Should Phase 114 update user-facing docs now or defer to Phase 119 help/docs?**
    - What we know: Phase 114 success criteria only require runnable tests and behavior; Phase 119 owns help resolver; AGENTS document-maintenance skill asks for docs review after user-facing behavior changes. [VERIFIED: `.planning/ROADMAP.md`; `.agents/skills/document-maintenance/SKILL.md`]
-   - What's unclear: Whether formal docs update is expected in this phase's implementation plan. [VERIFIED: no 114-CONTEXT.md]
+   - RESOLVED: Include a documentation review checkpoint in Plan 05. Defer broad user-facing docs/help updates to Phase 119 unless Phase 114 execution changes or creates a directly relevant doc surface that already describes `call_model` references. [VERIFIED: no 114-CONTEXT.md; `.planning/ROADMAP.md` Phase 119]
    - Recommendation: Include a documentation review checkpoint, but keep code tasks focused on CLI/MCP behavior. [VERIFIED: AGENTS.md; document-maintenance skill]
 
 ## Environment Availability
