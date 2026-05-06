@@ -142,6 +142,59 @@ function makeConfig(tools?: string[], excludedTools?: string[]): FlashQueryConfi
 }
 
 describe('TOOL_TIERS', () => {
+  it('captures native tool handlers while preserving SDK registration behavior', async () => {
+    const originalRegisterTool = vi.fn();
+    const server = wrapServerWithToolCatalog({
+      registerTool: originalRegisterTool,
+    } as unknown as McpServer);
+    const handler = vi.fn().mockResolvedValue({ content: [{ type: 'text', text: 'ok' }] });
+    const inputSchema = { identifier: z.string() };
+    const signal = new AbortController().signal;
+
+    server.registerTool(
+      'get_document',
+      {
+        description: 'Get document',
+        inputSchema,
+      },
+      handler as never
+    );
+
+    const catalog = getNativeToolCatalog(server);
+    expect(catalog).toHaveLength(1);
+    expect(catalog[0]).toMatchObject({
+      name: 'get_document',
+      description: 'Get document',
+      inputSchema,
+    });
+    expect(catalog[0].handler).toEqual(expect.any(Function));
+    expect(originalRegisterTool).toHaveBeenCalledWith(
+      'get_document',
+      { description: 'Get document', inputSchema },
+      handler
+    );
+
+    await catalog[0].handler(
+      { identifier: 'Research/ATL.md' },
+      {
+        signal,
+        traceId: 'trace-handler',
+        instanceId: 'instance-handler',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+        logContext: { request_id: 'req-handler' },
+      }
+    );
+
+    expect(handler).toHaveBeenCalledWith(
+      { identifier: 'Research/ATL.md' },
+      expect.objectContaining({
+        signal,
+        traceId: 'trace-handler',
+        instanceId: 'instance-handler',
+      })
+    );
+  });
+
   it('defines the exact tier:read-only native tool allowlist', () => {
     expect(TOOL_TIERS['tier:read-only']).toEqual(READ_ONLY_TOOLS);
   });
