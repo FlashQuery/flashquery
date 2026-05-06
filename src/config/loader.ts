@@ -104,23 +104,60 @@ const ModelCostSchema = z
   })
   .strip();
 
-const ModelSchema = z
+const ModelCapabilitiesSchema = z
   .object({
-    name: z.string(),
-    provider_name: z.string(),
-    model: z.string(),
-    type: z.enum(['language', 'reasoning', 'embedding', 'vision', 'code', 'audio', 'guardian']),
-    dimensions: z.number().optional(),
-    cost_per_million: ModelCostSchema,
-    description: z.string().optional(),
-    context_window: z.number().int().positive().optional(),
-    capabilities: z.array(z.string()).optional(),
+    tool_calling: z.boolean().optional(),
+    usage_on_tool_calls: z.boolean().optional(),
+    strict_tools: z.boolean().optional(),
+    parallel_tool_calls: z.boolean().optional(),
+    structured_outputs_with_tools: z.boolean().optional(),
   })
-  .strip();
+  .strict();
 
-// PurposeDefaultsSchema is intentionally permissive — values are LLM provider params
-// (temperature, max_tokens, etc.) and we don't constrain their shape.
-const PurposeDefaultsSchema = z.record(z.string(), z.unknown());
+const ModelSchema = z
+  .preprocess((raw) => {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+    const model = { ...(raw as Record<string, unknown>) };
+    if (Array.isArray(model['capabilities'])) {
+      model['tags'] = model['tags'] ?? model['capabilities'];
+      delete model['capabilities'];
+    }
+    return model;
+  }, z.object({
+      name: z.string(),
+      provider_name: z.string(),
+      model: z.string(),
+      type: z.enum(['language', 'reasoning', 'embedding', 'vision', 'code', 'audio', 'guardian']),
+      dimensions: z.number().optional(),
+      cost_per_million: ModelCostSchema,
+      description: z.string().optional(),
+      context_window: z.number().int().positive().optional(),
+      tags: z.array(z.string()).optional(),
+      capabilities: ModelCapabilitiesSchema.optional(),
+    })
+    .strip());
+
+const LOOP_GUARDRAIL_DEFAULT_KEYS = [
+  'timeout_ms',
+  'max_cost_usd',
+  'max_tokens_budget',
+  'max_iterations',
+  'result_summary_chars',
+] as const;
+
+// Purpose defaults are intentionally permissive for provider params, with
+// targeted validation for FlashQuery loop guardrails that affect agent runtime.
+const PurposeDefaultsSchema = z.record(z.string(), z.unknown()).superRefine((defaults, ctx) => {
+  for (const key of LOOP_GUARDRAIL_DEFAULT_KEYS) {
+    if (key in defaults && typeof defaults[key] !== 'number') {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: `${key} must be a number when declared in purpose.defaults`,
+      });
+    }
+  }
+});
 
 const PurposeSchema = z
   .object({
@@ -128,8 +165,11 @@ const PurposeSchema = z
     description: z.string(),
     models: z.array(z.string()),
     defaults: PurposeDefaultsSchema.optional(),
+    tools: z.array(z.string()).optional(),
+    excluded_tools: z.array(z.string()).optional(),
+    templates: z.array(z.string()).optional(),
   })
-  .strip();
+  .strict();
 
 const LlmSchema = z
   .object({
@@ -205,9 +245,24 @@ export interface FlashQueryConfig {
       costPerMillion: { input: number; output: number };
       description?: string;
       contextWindow?: number;
-      capabilities?: string[];
+      tags?: string[];
+      capabilities?: {
+        tool_calling?: boolean;
+        usage_on_tool_calls?: boolean;
+        strict_tools?: boolean;
+        parallel_tool_calls?: boolean;
+        structured_outputs_with_tools?: boolean;
+      };
     }>;
-    purposes: Array<{ name: string; description: string; models: string[]; defaults?: Record<string, unknown> }>;
+    purposes: Array<{
+      name: string;
+      description: string;
+      models: string[];
+      defaults?: Record<string, unknown>;
+      tools?: string[];
+      excludedTools?: string[];
+      templates?: string[];
+    }>;
   };
   embedding?: {
     provider: string;
@@ -356,8 +411,24 @@ type RawLlmModel = {
   model: string;
   type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
   cost_per_million: { input: number; output: number };
+  capabilities?: {
+    tool_calling?: boolean;
+    usage_on_tool_calls?: boolean;
+    strict_tools?: boolean;
+    parallel_tool_calls?: boolean;
+    structured_outputs_with_tools?: boolean;
+  };
+  tags?: string[];
 };
-type RawLlmPurpose = { name: string; description: string; models: string[]; defaults?: Record<string, unknown> };
+type RawLlmPurpose = {
+  name: string;
+  description: string;
+  models: string[];
+  defaults?: Record<string, unknown>;
+  tools?: string[];
+  excluded_tools?: string[];
+  templates?: string[];
+};
 type RawLlm = { providers: RawLlmProvider[]; models: RawLlmModel[]; purposes: RawLlmPurpose[] };
 
 /**
@@ -676,6 +747,21 @@ export function loadConfig(configPath: string): FlashQueryConfig {
         camelLlm.purposes[i].defaults = JSON.parse(JSON.stringify(rawDefaults)) as Record<string, unknown>;
       } else {
         delete camelLlm.purposes[i].defaults;
+      }
+    }
+  }
+
+  // Keep structured model capability keys in their YAML/API contract form.
+  // snakeToCamel would otherwise rename `tool_calling` to `toolCalling`,
+  // creating a second behavioral capability surface.
+  if (result.data.llm?.models && Array.isArray((camel['llm'] as { models?: unknown })?.models)) {
+    const camelLlm = camel['llm'] as { models: Array<{ capabilities?: Record<string, unknown> }> };
+    for (let i = 0; i < camelLlm.models.length; i++) {
+      const rawCapabilities = result.data.llm.models[i]?.capabilities;
+      if (rawCapabilities !== undefined) {
+        camelLlm.models[i].capabilities = JSON.parse(JSON.stringify(rawCapabilities)) as Record<string, unknown>;
+      } else {
+        delete camelLlm.models[i].capabilities;
       }
     }
   }
