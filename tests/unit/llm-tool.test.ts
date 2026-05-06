@@ -424,7 +424,7 @@ describe('call_model handler — Step 1.5 reference resolution (U-RR-INT)', () =
 
     const handler = captureCallModelHandler(TEST_CONFIG);
 
-    for (const resolver of ['list_models', 'list_purposes'] as const) {
+    for (const resolver of ['list_models', 'list_purposes', 'help'] as const) {
       const res = await handler({
         resolver,
         messages: [{ role: 'user', content: '{{ref:Templates/greeting.md}}' }],
@@ -1099,6 +1099,43 @@ describe('call_model handler — Phase 112 return_messages envelope', () => {
     expect(search.messages).toBeUndefined();
     expect(completeMock).not.toHaveBeenCalled();
     expect(completeByPurposeMock).not.toHaveBeenCalled();
+  });
+
+  it('help resolver ignores return_messages and keeps a raw non-envelope shape', async () => {
+    const completeMock = vi.fn();
+    const completeByPurposeMock = vi.fn();
+    _llmClientValue = {
+      complete: completeMock,
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const result = await handler({
+      resolver: 'help',
+      name: 'fast',
+      return_messages: true,
+      messages: [{ role: 'user', content: '{{ref:Docs/secret.md}}' }],
+    });
+    const help = JSON.parse(result.content[0].text) as Record<string, unknown>;
+
+    expect(result.isError).toBeUndefined();
+    expect(Object.keys(help)).toEqual([
+      'summary',
+      'reference_syntax',
+      'template_bindings',
+      'modes',
+      'envelope',
+      'errors',
+      'discovery',
+      'examples',
+    ]);
+    expect(help.metadata).toBeUndefined();
+    expect(help.usage).toBeUndefined();
+    expect(help.messages).toBeUndefined();
+    expect(completeMock).not.toHaveBeenCalled();
+    expect(completeByPurposeMock).not.toHaveBeenCalled();
+    expect(parseReferences).not.toHaveBeenCalled();
   });
 });
 
@@ -2115,7 +2152,7 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
 
     const handler = captureCallModelHandler(DISC_CONFIG);
 
-    for (const resolver of ['list_models', 'list_purposes'] as const) {
+    for (const resolver of ['list_models', 'list_purposes', 'help'] as const) {
       const res = await handler({
         resolver,
         name: 'fast',
@@ -2126,9 +2163,23 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
       const body = JSON.parse(res.content[0].text) as any;
       if (resolver === 'list_models') {
         expect(Array.isArray(body.models)).toBe(true);
-      } else {
+      } else if (resolver === 'list_purposes') {
         expect(Array.isArray(body.purposes)).toBe(true);
+      } else {
+        expect(Object.keys(body)).toEqual([
+          'summary',
+          'reference_syntax',
+          'template_bindings',
+          'modes',
+          'envelope',
+          'errors',
+          'discovery',
+          'examples',
+        ]);
       }
+      expect(body.metadata).toBeUndefined();
+      expect(body.usage).toBeUndefined();
+      expect(body.messages).toBeUndefined();
     }
     // search (which requires parameters.query) — same rule, but messages
     // must still be ignored alongside parameters.
@@ -2144,6 +2195,68 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     expect(completeMock).not.toHaveBeenCalled();
     expect(completeByPurposeMock).not.toHaveBeenCalled();
     expect(getModelForPurposeMock).not.toHaveBeenCalled();
+  });
+
+  it('[ATL-U-16] resolver=help is accepted without name, messages, or configured LLM client', async () => {
+    _llmClientValue = new NullLlmClient();
+    const { spec, handler } = captureCallModelRegistration(DISC_CONFIG);
+    const resolverSchema = ((spec as { inputSchema: Record<string, { options?: string[] }> }).inputSchema.resolver);
+
+    expect(resolverSchema.options).toEqual(['model', 'purpose', 'list_models', 'list_purposes', 'search', 'help']);
+
+    const result = await handler({ resolver: 'help' });
+    const help = JSON.parse(result.content[0].text) as Record<string, unknown>;
+
+    expect(result.isError).toBeUndefined();
+    expect(Object.keys(help)).toEqual([
+      'summary',
+      'reference_syntax',
+      'template_bindings',
+      'modes',
+      'envelope',
+      'errors',
+      'discovery',
+      'examples',
+    ]);
+    expect(help.metadata).toBeUndefined();
+    expect(help.usage).toBeUndefined();
+    expect(help.messages).toBeUndefined();
+  });
+
+  it('[ATL-U-16] help discovery lists every supported resolver value', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const result = await handler({ resolver: 'help' });
+    const help = JSON.parse(result.content[0].text) as {
+      discovery: { resolvers: string[] };
+    };
+
+    expect(help.discovery.resolvers).toEqual(['model', 'purpose', 'list_models', 'list_purposes', 'search', 'help']);
+  });
+
+  it('[ATL-U-16] search indexes discovery diagnostics for capabilities, templates, and help', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+
+    for (const query of [
+      'tool_calling',
+      'usage_on_tool_calls',
+      'template_tools',
+      'template_tool_conflicts',
+      'dangling_template_paths',
+      'help',
+    ]) {
+      const result = await handler({ resolver: 'search', parameters: { query } });
+      const payload = JSON.parse(result.content[0].text) as {
+        results: { models: unknown[]; purposes: unknown[] };
+      };
+
+      expect(result.isError).toBeUndefined();
+      expect(Array.isArray(payload.results.models)).toBe(true);
+      expect(Array.isArray(payload.results.purposes)).toBe(true);
+      expect(payload.results.models.length + payload.results.purposes.length, query).toBeGreaterThan(0);
+      expect(payload).not.toHaveProperty('metadata');
+      expect(payload).not.toHaveProperty('usage');
+      expect(payload).not.toHaveProperty('messages');
+    }
   });
 });
 
