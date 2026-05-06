@@ -123,18 +123,30 @@ def run_test(args: argparse.Namespace) -> TestRun:
             envelope = json.loads(result.text) if result.ok else {}
             metadata = envelope.get("metadata", {})
             tools = metadata.get("tools", {})
+            zero_completed_iteration_usage = (
+                tools.get("stop_reason") == "max_tokens"
+                and tools.get("calls_log") == []
+                and metadata.get("tokens", {}).get("input") == 0
+                and metadata.get("tokens", {}).get("output") == 0
+                and metadata.get("cost_usd") == 0
+                and len(provider.requests) == 0
+            )
             passed = (
                 result.ok
                 and tools.get("stop_reason") in {"max_iterations", "timeout", "max_tokens", "max_cost", "shutdown", "error"}
                 and isinstance(tools.get("calls_log"), list)
                 and "tokens" in metadata
                 and "cost_usd" in metadata
-                and len(provider.requests) == 1
+                and zero_completed_iteration_usage
             )
             run.step(
                 label="ATL-DS-12 asserts stop reasons, dispatch-time timeout, provider error, zero usage rows, estimate ladder, fallback cost, and per-model accounting",
                 passed=passed,
-                detail=json.dumps({"result": result.text[:1000], "request_count": len(provider.requests)}, sort_keys=True),
+                detail=json.dumps({
+                    "result": result.text[:1000],
+                    "request_count": len(provider.requests),
+                    "zero_completed_iteration_usage": zero_completed_iteration_usage,
+                }, sort_keys=True),
                 timing_ms=result.timing_ms,
                 tool_result=result,
             )
