@@ -74,10 +74,10 @@
 
 ### Discovery And Help
 
-- [ ] **DISC-01**: `list_purposes` exposes native tool and template-tool diagnostics, including usable tools and template collision details.
-- [ ] **DISC-02**: `list_models` exposes structured capability diagnostics with clear unknown-vs-false explanations.
-- [ ] **DISC-03**: `search` continues to provide discovery over model and purpose metadata without requiring messages.
-- [ ] **DISC-04**: A v1 `help` resolver describes supported `call_model` modes, references, templates, tools, loop controls, and discovery usage.
+- [x] **DISC-01**: `list_purposes` exposes native tool and template-tool diagnostics, including usable tools and template collision details.
+- [x] **DISC-02**: `list_models` exposes structured capability diagnostics with clear unknown-vs-false explanations.
+- [x] **DISC-03**: `search` continues to provide discovery over model and purpose metadata without requiring messages.
+- [x] **DISC-04**: A v1 `help` resolver describes supported `call_model` modes, references, templates, tools, loop controls, and discovery usage.
 
 ### Test Coverage
 
@@ -88,7 +88,7 @@
 - [x] **VAL-116**: Phase 116 ships runnable unit tests and at least one public-surface scenario that validate native tool exposure, exclusions, hard exclusions, schema translation, and empty-tool omission.
 - [x] **VAL-117**: Phase 117 ships runnable unit, E2E, and directed scenario tests with a deterministic mock provider validating native tool loops, parallel tool calls, guardrail stops, fallback, usage aggregation, and calls-log metadata.
 - [x] **VAL-118**: Phase 118 ships runnable unit, integration, E2E, and directed scenario tests validating fresh template discovery, masquerade tool naming, collision diagnostics, reverse-map dispatch, and mixed native/template loops.
-- [ ] **VAL-119**: Phase 119 ships runnable unit and directed scenario tests validating discovery diagnostics, structured capability reporting, discovery search behavior, and the `help` resolver.
+- [x] **VAL-119**: Phase 119 ships runnable unit and directed scenario tests validating discovery diagnostics, structured capability reporting, discovery search behavior, and the `help` resolver.
 - [ ] **VAL-120**: Phase 120 ships runnable cross-phase E2E, directed, and YAML integration suites proving the full ATL workflows and updating coverage matrices with final scenario IDs.
 - [x] **TEST-01**: Every implementation phase includes its own runnable validation before the phase can be marked complete; tests are not deferred wholesale to Phase 120.
 - [x] **TEST-02**: A deterministic OpenAI-compatible mock provider exists early enough for the first phase that needs provider/tool-loop validation and is reused by later E2E/scenario tests.
@@ -169,10 +169,10 @@
 | TMPL-06 | Phase 118 | Complete |
 | TMPL-07 | Phase 118 | Complete |
 | TMPL-08 | Phase 118 | Complete |
-| DISC-01 | Phase 119 | Pending |
-| DISC-02 | Phase 119 | Pending |
-| DISC-03 | Phase 119 | Pending |
-| DISC-04 | Phase 119 | Pending |
+| DISC-01 | Phase 119 | Complete |
+| DISC-02 | Phase 119 | Complete |
+| DISC-03 | Phase 119 | Complete |
+| DISC-04 | Phase 119 | Complete |
 | VAL-112 | Phase 112 | Complete |
 | VAL-113 | Phase 113 | Complete |
 | VAL-114 | Phase 114 | Complete |
@@ -180,7 +180,7 @@
 | VAL-116 | Phase 116 | Complete |
 | VAL-117 | Phase 117 | Complete |
 | VAL-118 | Phase 118 | Complete |
-| VAL-119 | Phase 119 | Pending |
+| VAL-119 | Phase 119 | Complete |
 | VAL-120 | Phase 120 | Pending |
 | TEST-01 | Phase 112 | Complete |
 | TEST-02 | Phase 112 | Complete |

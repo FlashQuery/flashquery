@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
-status: ready_to_plan
-stopped_at: Completed 118-05-PLAN.md
-last_updated: "2026-05-06T19:49:22.139Z"
-last_activity: 2026-05-06 -- Completed 118-05 validation closure
+status: executing
+stopped_at: Completed 119-01-PLAN.md
+last_updated: "2026-05-06T23:58:38.052Z"
+last_activity: 2026-05-06
 progress:
   total_phases: 23
-  completed_phases: 8
-  total_plans: 33
-  completed_plans: 33
-  percent: 35
+  completed_phases: 7
+  total_plans: 36
+  completed_plans: 34
+  percent: 94
 ---
 
 # FlashQuery Core — State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-05)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 118 — template-discovery-masquerade-dispatch
+**Current focus:** Phase 119 — discovery-diagnostics-help-resolver
 
 ## Current Position
 
-Phase: 119
-Plan: Not started
-Status: Ready to plan
+Phase: 119 (discovery-diagnostics-help-resolver) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
 Last activity: 2026-05-06
 
 ## Performance Metrics
@@ -74,6 +74,7 @@ Last activity: 2026-05-06
 | Phase 117 P04 | 16min | 2 tasks | 3 files |
 | Phase 117 P05 | 13min | 2 tasks | 5 files |
 | Phase 118 P05 | 12min | 2 tasks | 10 files |
+| Phase 119 P01 | 6min | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -108,6 +109,8 @@ Last activity: 2026-05-06
 - [Phase 117]: 117-05 validates VAL-117 with deterministic mock providers and no real-provider correctness dependencies.
 - [Phase 117]: 117-05 treats pre-call max-token stops as zero-completed-iteration behavior with no provider request or usage row.
 - [Phase 118]: Public template validation now treats provider request capture as auxiliary; directed assertions use the public `call_model` envelope and calls-log metadata.
+- [Phase 119]: Plan 01 intentionally leaves focused validation RED so Plan 02 can implement exact public discovery/help contracts.
+- [Phase 119]: Help resolver tests require raw JSON outside CallModelEnvelope and assert stable top-level key order.
 
 ## Accumulated Context
 
@@ -189,8 +192,8 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T19:47:34.132Z
-Stopped at: Completed 118-05-PLAN.md
+Last session: 2026-05-06T23:58:38.028Z
+Stopped at: Completed 119-01-PLAN.md
 Resume: None
 
 ## Deferred Items
