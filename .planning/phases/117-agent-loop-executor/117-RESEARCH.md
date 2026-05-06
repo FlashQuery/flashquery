@@ -365,22 +365,22 @@ recordLlmUsage({
 |---|-------|---------|---------------|
 | A1 | None. | — | All implementation-relevant claims were verified from repository files, supplied canonical docs, Context7, npm registry, or official OpenAI docs. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should the non-recording purpose chat path be public on `LlmClient` or private to `OpenAICompatibleLlmClient`/`AgentLoopExecutor`?**
+1. **RESOLVED: Should the non-recording purpose chat path be public on `LlmClient` or private to `OpenAICompatibleLlmClient`/`AgentLoopExecutor`?**
    - What we know: Public `chatByPurpose()` records usage today, but the executor needs fallback per round without recording. [VERIFIED: src/llm/client.ts; VERIFIED: src/llm/resolver.ts]
-   - What's unclear: Best API boundary that avoids exposing a foot-gun to future callers. [VERIFIED: src/llm/client.ts]
-   - Recommendation: Add an internal executor dependency such as `createPurposeChatRunner()` or constructor-injected `LoopChatFn`, not a broadly advertised public method. [VERIFIED: 117-CONTEXT.md]
+   - Decision: Phase 117 plans add `chatByPurposeUnrecorded()` as the explicit non-recording path and require Mode 2 loop code to use that path rather than public recording `chatByPurpose()`. [VERIFIED: 117-03-PLAN.md]
+   - Rationale: This preserves existing recording behavior for public chat calls while giving `executeAgentLoop()` a testable, grep-verifiable no-usage-write dependency. [VERIFIED: 117-03-PLAN.md]
 
-2. **What exact CG-4 tool payload shape should Phase 117 freeze?**
+2. **RESOLVED: What exact CG-4 tool payload shape should Phase 117 freeze?**
    - What we know: Product docs require JSON-stringified tool result/error payloads and stable dispatcher error codes. [CITED: Agentic-LLM-Tool-Loop.md]
-   - What's unclear: The exact object keys are not already implemented in source. [VERIFIED: src/llm/types.ts]
-   - Recommendation: First task should define constants/types/tests for `{ ok, tool, result | error }`-style payloads before executor code. [CITED: ATL Test Plan.md]
+   - Decision: Phase 117 plans freeze success payloads as `{ ok: true, result: rawHandlerResult }` and error payloads as `{ ok: false, error: { code, message, details? } }`, serialized into `LlmToolMessage.content` with `JSON.stringify(payload)`. [VERIFIED: 117-02-PLAN.md]
+   - Rationale: This gives the model stable recovery data while preserving existing raw MCP handler result shape inside `result`. [VERIFIED: 117-02-PLAN.md]
 
-3. **How much of template masquerade should Phase 117 stub?**
+3. **RESOLVED: How much of template masquerade should Phase 117 stub?**
    - What we know: Phase 118 owns template discovery and dispatch, but Mode 2 selection is defined by the final registry including future template tools. [VERIFIED: ROADMAP.md; CITED: Document Reference System.md]
-   - What's unclear: Whether Phase 117 should create a generic dispatcher interface with template routes returning "not implemented" or only native routes. [VERIFIED: 117-CONTEXT.md]
-   - Recommendation: Build the dispatcher interface to support native/template route types, but populate only native routes in Phase 117. [VERIFIED: ROADMAP.md]
+   - Decision: Phase 117 plans keep dispatch implementation native-only but require Mode 2 selection to use final model-visible registry non-empty, such as `hasModelVisibleTools(toolRegistry)` / `providerTools.length > 0`, not `nativeToolNames.length > 0`. Tests must cover template-only/provider-tool-only selection cases without implementing Phase 118 template dispatch. [VERIFIED: 117-04-PLAN.md]
+   - Rationale: This preserves the product contract and future template-tool path while keeping Phase 117 scoped to native loop execution. [VERIFIED: 117-04-PLAN.md]
 
 ## Environment Availability
 
