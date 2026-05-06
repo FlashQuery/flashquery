@@ -66,10 +66,15 @@ const ALL_CATALOG_TOOL_NAMES = [
   'custom_native_tool',
 ];
 
+const noopNativeHandler: NativeToolDefinition['handler'] = async () => ({
+  content: [{ type: 'text', text: 'ok' }],
+});
+
 const CATALOG: NativeToolDefinition[] = ALL_CATALOG_TOOL_NAMES.map((name) => ({
   name,
   description: `${name} description`,
   inputSchema: {},
+  handler: noopNativeHandler,
 }));
 
 function makeCatalogServer(): McpServer {
@@ -345,6 +350,7 @@ describe('assembleNativeToolRegistry', () => {
         name: 'search_documents',
         description: 'Search documents',
         inputSchema: schema,
+        handler: noopNativeHandler,
       },
     ];
 
@@ -492,6 +498,7 @@ describe('validateAndCacheNativeToolSchemas', () => {
         name: 'search_documents',
         description: 'Search documents',
         inputSchema: { query: z.string() },
+        handler: noopNativeHandler,
       },
     ];
 
@@ -511,6 +518,7 @@ describe('validateAndCacheNativeToolSchemas', () => {
         name: 'bad_native_tool',
         description: 'Bad native tool',
         inputSchema: z.string(),
+        handler: noopNativeHandler,
       },
     ];
 

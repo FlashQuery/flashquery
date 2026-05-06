@@ -1,10 +1,30 @@
 import type { FlashQueryConfig } from '../config/loader.js';
+import type { logger } from '../logging/logger.js';
 import { z } from 'zod';
+
+export interface NativeToolResponse {
+  content: Array<{ type: 'text'; text: string }>;
+  isError?: boolean;
+}
+
+export interface NativeToolDispatchContext {
+  signal: AbortSignal;
+  traceId?: string | null;
+  instanceId: string;
+  logger?: Pick<typeof logger, 'debug' | 'warn' | 'error'>;
+  logContext?: Record<string, unknown>;
+}
+
+export type NativeToolHandler = (
+  args: Record<string, unknown>,
+  context: NativeToolDispatchContext
+) => Promise<NativeToolResponse>;
 
 export interface NativeToolDefinition {
   name: string;
   description: string;
   inputSchema: unknown;
+  handler: NativeToolHandler;
   openAiStrict?: OpenAiToolDefinition;
   openAiNonStrict?: OpenAiToolDefinition;
 }
