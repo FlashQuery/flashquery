@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import {
   HARD_EXCLUDED_NATIVE_TOOLS,
   TOOL_TIERS,
   assembleNativeToolRegistry,
+  normalizeToolJsonSchema,
+  toOpenAiToolDefinition,
   type NativeToolDefinition,
 } from '../../src/llm/tool-registry.js';
 
@@ -208,6 +211,203 @@ describe('assembleNativeToolRegistry', () => {
         hardExcluded: [],
         unknown: [],
       },
+    });
+  });
+
+  it('omits providerTools when hard-excluded catalog entries are requested', () => {
+    const result = assembleNativeToolRegistry(
+      makeConfig(['call_model', 'register_plugin', 'unregister_plugin', 'get_plugin_info']),
+      'research',
+      CATALOG,
+      { strictTools: true }
+    );
+
+    expect(result.nativeToolNames).toEqual([]);
+    expect(result.providerTools).toBeUndefined();
+    expect(result.diagnostics.hardExcluded).toEqual([
+      { tool: 'call_model', reason: 'Tool is not safe for delegated model-visible native access.' },
+      { tool: 'register_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
+      { tool: 'unregister_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
+      { tool: 'get_plugin_info', reason: 'Tool is not safe for delegated model-visible native access.' },
+    ]);
+  });
+
+  it('assembles strict OpenAI provider tools from catalog schemas', () => {
+    const schema = z.object({
+      query: z.string().describe('Search query'),
+      tags: z.array(z.string()).optional().describe('Optional tags'),
+      mode: z.enum(['fast', 'deep']),
+      nested: z.object({
+        path: z.string(),
+      }),
+    });
+    const catalog: NativeToolDefinition[] = [
+      {
+        name: 'search_documents',
+        description: 'Search documents',
+        inputSchema: schema,
+      },
+    ];
+
+    const result = assembleNativeToolRegistry(makeConfig(['search_documents']), 'research', catalog, {
+      strictTools: true,
+    });
+
+    expect(result.providerTools).toEqual([
+      {
+        type: 'function',
+        function: {
+          name: 'search_documents',
+          description: 'Search documents',
+          parameters: {
+            type: 'object',
+            properties: {
+              query: { type: 'string', description: 'Search query' },
+              tags: {
+                type: 'array',
+                items: { type: 'string' },
+                description: 'Optional tags',
+              },
+              mode: { type: 'string', enum: ['fast', 'deep'] },
+              nested: {
+                type: 'object',
+                properties: {
+                  path: { type: 'string' },
+                },
+                required: ['path'],
+                additionalProperties: false,
+              },
+            },
+            required: ['query', 'tags', 'mode', 'nested'],
+            additionalProperties: false,
+          },
+          strict: true,
+        },
+      },
+    ]);
+  });
+});
+
+describe('toOpenAiToolDefinition', () => {
+  it('wraps raw MCP inputSchema shapes before JSON Schema conversion', () => {
+    const tool = toOpenAiToolDefinition(
+      {
+        name: 'save_memory',
+        description: 'Save memory',
+        inputSchema: {
+          content: z.string().describe('Memory content'),
+          tags: z.array(z.string()).optional(),
+        },
+      },
+      { strict: false }
+    );
+
+    expect(tool).toEqual({
+      type: 'function',
+      function: {
+        name: 'save_memory',
+        description: 'Save memory',
+        parameters: {
+          type: 'object',
+          properties: {
+            content: { type: 'string', description: 'Memory content' },
+            tags: { type: 'array', items: { type: 'string' } },
+          },
+          required: ['content'],
+          additionalProperties: false,
+        },
+      },
+    });
+  });
+
+  it('converts z.object inputSchema values directly and omits strict in non-strict mode', () => {
+    const tool = toOpenAiToolDefinition(
+      {
+        name: 'get_document',
+        description: 'Get document',
+        inputSchema: z.object({
+          identifier: z.string(),
+          include: z.array(z.enum(['body', 'frontmatter'])).optional(),
+        }),
+      },
+      { strict: false }
+    );
+
+    expect(tool).toEqual({
+      type: 'function',
+      function: {
+        name: 'get_document',
+        description: 'Get document',
+        parameters: {
+          type: 'object',
+          properties: {
+            identifier: { type: 'string' },
+            include: {
+              type: 'array',
+              items: { type: 'string', enum: ['body', 'frontmatter'] },
+            },
+          },
+          required: ['identifier'],
+          additionalProperties: false,
+        },
+      },
+    });
+    expect(tool.function).not.toHaveProperty('strict');
+  });
+
+  it('sets strict mode and normalizes every object to disallow additional properties', () => {
+    const tool = toOpenAiToolDefinition(
+      {
+        name: 'search_documents',
+        description: 'Search documents',
+        inputSchema: z.object({
+          query: z.string(),
+          filters: z
+            .object({
+              tags: z.array(z.string()).optional(),
+            })
+            .optional(),
+        }),
+      },
+      { strict: true }
+    );
+
+    expect(tool.function.strict).toBe(true);
+    expect(tool.function.parameters).toMatchObject({
+      additionalProperties: false,
+      required: ['query', 'filters'],
+      properties: {
+        filters: {
+          additionalProperties: false,
+          required: ['tags'],
+        },
+      },
+    });
+  });
+});
+
+describe('normalizeToolJsonSchema', () => {
+  it('requires every root property in strict mode', () => {
+    const normalized = normalizeToolJsonSchema(
+      {
+        type: 'object',
+        properties: {
+          query: { type: 'string' },
+          tags: { type: 'array', items: { type: 'string' } },
+        },
+        required: ['query'],
+      },
+      { strict: true }
+    );
+
+    expect(normalized).toEqual({
+      type: 'object',
+      properties: {
+        query: { type: 'string' },
+        tags: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['query', 'tags'],
+      additionalProperties: false,
     });
   });
 });
