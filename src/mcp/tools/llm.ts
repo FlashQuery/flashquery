@@ -28,7 +28,7 @@ import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmComple
 import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
 import { assertResponseFormatAllowedWithTools, modelCapabilitiesWithDefaults } from '../../llm/capabilities.js';
-import type { CallModelEnvelope, CallModelMessage, CallModelMetadata } from '../../llm/types.js';
+import type { CallModelEnvelope, CallModelMessage, CallModelMetadata, LlmChatResult } from '../../llm/types.js';
 import { assembleNativeToolRegistry, type ToolRegistryAssembly, type ToolRegistryDiagnostics } from '../../llm/tool-registry.js';
 import { getNativeToolCatalog } from '../tool-catalog.js';
 import { embeddingProvider } from '../../embedding/provider.js';
@@ -48,6 +48,7 @@ import {
 // ─────────────────────────────────────────────────────────────────────────────
 
 type TraceCumulative = NonNullable<CallModelMetadata['trace_cumulative']>;
+type PurposeChatResult = LlmChatResult & { purposeName: string; fallbackPosition: number };
 
 type PublicToolDiagnostics = Record<string, unknown> & {
   expanded_tiers?: ToolRegistryDiagnostics['expandedTiers'];
@@ -132,6 +133,21 @@ function toPublicToolDiagnostics(diagnostics: ToolRegistryDiagnostics): PublicTo
 
 function hasPublicToolDiagnostics(diagnostics: PublicToolDiagnostics): boolean {
   return Object.keys(diagnostics).length > 0;
+}
+
+function hasProviderToolArray(parameters: Record<string, unknown> | undefined): boolean {
+  return Array.isArray(parameters?.['tools']) && parameters['tools'].length > 0;
+}
+
+function mergeProviderTools(
+  baseParameters: Record<string, unknown>,
+  providerTools: NonNullable<ToolRegistryAssembly['providerTools']>
+): Record<string, unknown> {
+  const callerTools = Array.isArray(baseParameters['tools']) ? baseParameters['tools'] : [];
+  return {
+    ...baseParameters,
+    tools: [...callerTools, ...providerTools],
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -469,7 +485,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           );
           const baseParameters = params.parameters ?? {};
           purposeProviderParameters = toolRegistry.providerTools && toolRegistry.providerTools.length > 0
-            ? { ...baseParameters, tools: toolRegistry.providerTools }
+            ? mergeProviderTools(baseParameters, toolRegistry.providerTools)
             : baseParameters;
         }
       }
@@ -506,7 +522,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       }
 
       // Step 2: Dispatch by resolver
-      let result: LlmCompletionResult;
+      let result: LlmCompletionResult | PurposeChatResult;
       let fallbackPosition: number | null;
 
       try {
@@ -518,6 +534,15 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             params.trace_id ?? null
           );
           fallbackPosition = null; // explicit null per TOOL-02 / Pitfall 2
+        } else if (hasProviderToolArray(purposeProviderParameters)) {
+          const purposeResult = await client.chatByPurpose(
+            resolvedName,
+            hydratedMessages,
+            purposeProviderParameters,
+            params.trace_id ?? null
+          );
+          result = purposeResult;
+          fallbackPosition = purposeResult.fallbackPosition; // 1-indexed (Phase 100 D-06)
         } else {
           const purposeResult = await client.completeByPurpose(
             resolvedName,
@@ -593,6 +618,26 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
 
       // Step 3: Compute cost from config
       // result.modelName is the resolved alias (lowercased per Phase 99 D-08)
+      const assistantMessage = 'message' in result ? result.message : undefined;
+      const hasAssistantToolCalls = (assistantMessage?.tool_calls?.length ?? 0) > 0;
+      const responseText = 'text' in result
+        ? result.text
+        : typeof assistantMessage?.content === 'string'
+          ? assistantMessage.content
+          : hasAssistantToolCalls
+            ? ''
+            : undefined;
+      if (responseText === undefined) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text:
+              `call_model failed: LLM error: ${result.providerName} returned a 200 response with no completion choices.`,
+          }],
+          isError: true,
+        };
+      }
+
       const modelConfig = config.llm?.models.find((m) => m.name === result.modelName);
       const costUsd = modelConfig
         ? computeCost(result.inputTokens, result.outputTokens, modelConfig.costPerMillion)
@@ -671,15 +716,20 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       }
 
       const envelope: CallModelEnvelope = {
-        response: result.text,
-        messages: params.return_messages === true
+        response: responseText,
+        messages: params.return_messages === true || hasAssistantToolCalls
           ? [
               ...buildReturnedMessages(hydratedMessages),
-              {
-                role: 'assistant',
-                content: result.text,
-                name: fallbackPosition === null ? result.modelName : resolvedName,
-              },
+              assistantMessage
+                ? {
+                    ...assistantMessage,
+                    name: fallbackPosition === null ? result.modelName : resolvedName,
+                  }
+                : {
+                    role: 'assistant',
+                    content: responseText,
+                    name: fallbackPosition === null ? result.modelName : resolvedName,
+                  },
             ]
           : [],
         metadata,
