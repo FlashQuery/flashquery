@@ -20,6 +20,8 @@ import { supabaseManager } from '../storage/supabase.js';
 import { embeddingProvider } from '../embedding/provider.js';
 import { logger } from '../logging/logger.js';
 
+const FALLBACK_MARKDOWN_EXTENSIONS: string[] = ['.md'];
+
 export interface TemplateToolDefinition {
   name: string;
   templatePath: string;
@@ -558,7 +560,7 @@ export async function dispatchTemplateToolCall(
     options.config ?? {
       instance: {
         id: 'template-dispatch',
-        vault: { path: process.cwd(), markdownExtensions: ['.md'] },
+        vault: { path: process.cwd(), markdownExtensions: FALLBACK_MARKDOWN_EXTENSIONS },
       },
     } as FlashQueryConfig,
     options.supabaseManager ?? supabaseManager,
