@@ -267,7 +267,22 @@ Plans:
   4. Template-tool calls validate arguments, hydrate output, and return tool results or typed errors to the delegated model.
   5. Mixed native/template tool purposes can expose both kinds of tools in one model-visible registry.
   6. Phase-specific runnable tests exist and pass for fresh discovery, tool-name generation, collision diagnostics, reverse-map dispatch, template-tool invocation, and mixed native/template loops.
-**Plans**: TBD during `$gsd-plan-phase 118`
+**Plans:** 5 plans
+Plans:
+**Wave 0**
+- [ ] 118-01-PLAN.md — RED validation contracts for unit, integration, E2E, and directed Phase 118 behavior
+
+**Wave 1** *(blocked on 118-01 completion)*
+- [ ] 118-02-PLAN.md — Fresh template discovery, validation, generated names, schemas, and reverse-map assembly
+
+**Wave 2** *(blocked on 118-02 completion)*
+- [ ] 118-03-PLAN.md — Combined native/template registry merge, collision failures, and list_purposes diagnostics
+
+**Wave 3** *(blocked on 118-03 completion)*
+- [ ] 118-04-PLAN.md — Reverse-map template dispatch, recoverable tool errors, and calls-log kind metadata
+
+**Wave 4** *(blocked on 118-04 completion)*
+- [ ] 118-05-PLAN.md — Public E2E/directed validation, coverage ledgers, and VAL-118 closure
 **UI hint**: no
 
 ### Phase 119: Discovery Diagnostics & Help Resolver
