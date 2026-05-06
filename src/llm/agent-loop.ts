@@ -83,6 +83,15 @@ function numberParameter(parameters: Record<string, unknown>, key: string, fallb
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
 }
 
+function loopParameter(
+  parameters: Record<string, unknown>,
+  purposeDefaults: Record<string, unknown>,
+  key: string,
+  fallback?: number
+): number | undefined {
+  return numberParameter(parameters, key) ?? numberParameter(purposeDefaults, key, fallback);
+}
+
 function hasVisibleTools(options: ExecuteAgentLoopOptions, nativeToolNames: string[], providerTools: unknown[]): boolean {
   return nativeToolNames.length > 0 || providerTools.length > 0 || options.templatesDefaultAccess === 'all';
 }
@@ -289,6 +298,8 @@ function toAssistantText(result: LlmChatResult): string {
 
 export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promise<CallModelEnvelope & { mode?: string; usageRow?: Partial<LlmUsageRecord> }> {
   if ((options.callerProvidedTools?.length ?? 0) > 0) {
+    // Public calls reject Mode 3 at the MCP boundary; this is a defense-in-depth
+    // guard for direct executor callers.
     throw Object.assign(new Error('Mode 3 caller-provided tools are deferred.'), {
       code: 'mode_3_deferred',
       message: 'Mode 3 caller-provided tools are deferred; remove caller-provided tools for FlashQuery-managed Mode 2.',
@@ -317,11 +328,11 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
 
   const parameters = options.providerParameters ?? options.parameters ?? {};
   const purposeDefaults = options.purposeDefaults ?? {};
-  const timeoutMs = numberParameter(parameters, 'timeout_ms', 30_000) ?? 30_000;
-  const maxIterations = numberParameter(parameters, 'max_iterations', 10) ?? 10;
-  const maxTokensBudget = numberParameter(parameters, 'max_tokens_budget');
-  const maxCostUsd = numberParameter(parameters, 'max_cost_usd');
-  const resultSummaryChars = numberParameter(parameters, 'result_summary_chars', options.resultSummaryChars ?? 200) ?? 200;
+  const timeoutMs = loopParameter(parameters, purposeDefaults, 'timeout_ms', 30_000) ?? 30_000;
+  const maxIterations = loopParameter(parameters, purposeDefaults, 'max_iterations', 10) ?? 10;
+  const maxTokensBudget = loopParameter(parameters, purposeDefaults, 'max_tokens_budget');
+  const maxCostUsd = loopParameter(parameters, purposeDefaults, 'max_cost_usd');
+  const resultSummaryChars = loopParameter(parameters, purposeDefaults, 'result_summary_chars', options.resultSummaryChars ?? 200) ?? 200;
   const now = options.now ?? Date.now;
   const deadline = now() + timeoutMs;
   const abortController = makeAbortController(options, deadline);
@@ -334,7 +345,7 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
     return { ...result, fallbackPosition: result.fallbackPosition ?? 1 };
   });
   const dispatcher = options.toolDispatcher ?? dispatchToolCalls;
-  let latestResult: (LlmChatResult & { fallbackPosition?: number }) | null = null;
+  let firstSuccessfulResult: (LlmChatResult & { fallbackPosition?: number }) | null = null;
   let latestAssistantText = '';
   let lastModelName: string | null = options.initialModelName ?? options.models?.[0]?.name ?? null;
 
@@ -354,8 +365,8 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
       maxCostUsd
     );
     if (stopBefore) {
-      const envelope = makeEnvelope(options, messages, callsLog, stopBefore, totals, latestAssistantText, latestResult);
-      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, stopBefore, totals, latestAssistantText, firstSuccessfulResult);
+      envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
 
@@ -368,23 +379,26 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
       });
     } catch {
       const stopReason = getAbortStopReason(abortController.signal) ?? 'error';
-      const envelope = makeEnvelope(options, messages, callsLog, stopReason, totals, latestAssistantText, latestResult);
-      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, stopReason, totals, latestAssistantText, firstSuccessfulResult);
+      envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
 
-    latestResult = result;
+    if (firstSuccessfulResult === null) firstSuccessfulResult = result;
     lastModelName = result.modelName;
     const costUsd = costForResult(options, result);
     totals.inputTokens += result.inputTokens;
     totals.outputTokens += result.outputTokens;
     totals.costUsd += costUsd;
     totals.latencyMs += result.latencyMs;
-    latestAssistantText = toAssistantText(result) || latestAssistantText;
+    latestAssistantText = toAssistantText(result);
 
-    const assistantMessage: LlmChatMessage = result.message;
+    const assistantMessage: LlmChatMessage = {
+      ...result.message,
+      name: result.message.name ?? options.purposeName,
+    };
     messages.push(assistantMessage);
-    const toolCalls = result.message.tool_calls ?? [];
+    const toolCalls = assistantMessage.tool_calls ?? [];
     callsLog.push({
       iteration: callsLog.length + 1,
       model_name: result.modelName,
@@ -394,7 +408,7 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
       tokens: { input: result.inputTokens, output: result.outputTokens },
       cost_usd: costUsd,
       latency_ms: result.latencyMs,
-      assistant: { content: result.message.content ?? null },
+      assistant: { content: assistantMessage.content ?? null },
       tool_calls: toolCalls.map((toolCall) => ({
         tool_call_id: toolCall.id,
         tool_name: toolCall.function.name,
@@ -403,25 +417,25 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
     });
 
     if (maxCostUsd !== undefined && totals.costUsd > maxCostUsd) {
-      const envelope = makeEnvelope(options, messages, callsLog, 'max_cost', totals, latestAssistantText, latestResult);
-      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'max_cost', totals, latestAssistantText, firstSuccessfulResult);
+      envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
 
     if (toolCalls.length === 0 || result.finishReason !== 'tool_calls') {
-      const envelope = makeEnvelope(options, messages, callsLog, 'final_response', totals, latestAssistantText, latestResult);
-      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'final_response', totals, latestAssistantText, firstSuccessfulResult);
+      envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
 
     if (options.getIsShuttingDown?.() === true || options.shutdownSignal?.aborted === true) {
-      const envelope = makeEnvelope(options, messages, callsLog, 'shutdown', totals, latestAssistantText, latestResult);
-      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'shutdown', totals, latestAssistantText, firstSuccessfulResult);
+      envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
     if (hasTimedOut(now, deadline)) {
-      const envelope = makeEnvelope(options, messages, callsLog, 'timeout', totals, latestAssistantText, latestResult);
-      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'timeout', totals, latestAssistantText, firstSuccessfulResult);
+      envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
 
@@ -455,18 +469,18 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
     const dispatchTimedOut = dispatchResult.logEntries.some((entry) => entry.error_code === 'timeout' || entry.status === 'timeout');
     const abortStopReason = getAbortStopReason(abortController.signal);
     if (forcedAfterDispatch || dispatchTimedOut || abortStopReason === 'timeout') {
-      const envelope = makeEnvelope(options, messages, callsLog, forcedAfterDispatch ?? 'timeout', totals, latestAssistantText, latestResult);
-      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, forcedAfterDispatch ?? 'timeout', totals, latestAssistantText, firstSuccessfulResult);
+      envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
     if (options.getIsShuttingDown?.() === true || options.shutdownSignal?.aborted === true || abortStopReason === 'shutdown') {
-      const envelope = makeEnvelope(options, messages, callsLog, 'shutdown', totals, latestAssistantText, latestResult);
-      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'shutdown', totals, latestAssistantText, firstSuccessfulResult);
+      envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
     if (hasTimedOut(now, deadline)) {
-      const envelope = makeEnvelope(options, messages, callsLog, 'timeout', totals, latestAssistantText, latestResult);
-      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'timeout', totals, latestAssistantText, firstSuccessfulResult);
+      envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
   }

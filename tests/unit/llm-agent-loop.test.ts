@@ -128,6 +128,7 @@ describe('ATL-U-13 loop executor state machine contract', () => {
 
     expect(roles.indexOf('assistant')).toBeLessThan(roles.indexOf('tool'));
     expect(result.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'assistant', name: 'research', tool_calls: [MODE_2_TOOL] }),
       expect.objectContaining({ role: 'tool', tool_call_id: 'call_get_document_1', name: undefined }),
     ]));
     expect(result.metadata).toMatchObject({
@@ -231,6 +232,27 @@ describe('ATL-U-13 loop executor state machine contract', () => {
     });
   });
 
+  it('ATL-E2E-06 returns empty response for guardrail stop after an unfulfilled tool-call-only assistant turn', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const chat: ScriptedChat = vi.fn()
+      .mockResolvedValueOnce(chatResult({
+        message: { role: 'assistant', content: 'I will inspect that.', tool_calls: [MODE_2_TOOL] },
+        finishReason: 'tool_calls',
+      }))
+      .mockResolvedValueOnce(chatResult({
+        message: { role: 'assistant', content: null, tool_calls: [MODE_2_TOOL] },
+        finishReason: 'tool_calls',
+      }));
+
+    const result = await executeAgentLoop(buildOptions({
+      chat,
+      parameters: { max_tokens: 128, max_iterations: 2 },
+    }));
+
+    expect(result.metadata.tools.stop_reason).toBe('max_iterations');
+    expect(result.response).toBe('');
+  });
+
   it('ATL-U-13 passes the loop AbortSignal into in-flight model calls so timeout_ms can abort them', async () => {
     const { executeAgentLoop } = await loadAgentLoop();
     const observedSignals: AbortSignal[] = [];
@@ -311,7 +333,7 @@ describe('ATL-U-14 cost, budget, and usage aggregation contract', () => {
     expect(result.metadata.cost_usd).toBeCloseTo(((100 * 1) + (10 * 2) + (20 * 10) + (5 * 20)) / 1_000_000, 12);
   });
 
-  it('ATL-U-14 stamps final metadata and aggregate usage with the latest successful fallback result', async () => {
+  it('ATL-U-14 stamps final metadata and aggregate usage with the first successful fallback result', async () => {
     const { executeAgentLoop } = await loadAgentLoop();
     const recordUsage = vi.fn();
     const result = await executeAgentLoop(buildOptions({
@@ -336,15 +358,52 @@ describe('ATL-U-14 cost, budget, and usage aggregation contract', () => {
     }));
 
     expect(result.metadata).toMatchObject({
-      resolved_model_name: 'fallback',
-      provider_name: 'openrouter',
-      fallback_position: 2,
+      resolved_model_name: 'fast',
+      provider_name: 'openai',
+      fallback_position: 1,
     });
     expect(recordUsage).toHaveBeenCalledWith(expect.objectContaining({
-      modelName: 'fallback',
-      providerName: 'openrouter',
-      fallbackPosition: 2,
+      modelName: 'fast',
+      providerName: 'openai',
+      fallbackPosition: 1,
     }));
+  });
+
+  it('ATL-U-14 honors purpose defaults for loop guardrails and caller parameters override them', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const defaultLimited = await executeAgentLoop(buildOptions({
+      purposeDefaults: { max_iterations: 1 },
+      parameters: { max_tokens: 128 },
+    }));
+    expect(defaultLimited.metadata.tools.stop_reason).toBe('max_iterations');
+
+    const callerOverride = await executeAgentLoop(buildOptions({
+      purposeDefaults: { max_iterations: 1 },
+      parameters: { max_tokens: 128, max_iterations: 3 },
+    }));
+    expect(callerOverride.metadata.tools.stop_reason).toBe('final_response');
+  });
+
+  it('ATL-U-09 honors purpose-level result_summary_chars and lets caller parameters override it', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const longSummary = 'abcdefghijklmnopqrstuvwxyz';
+    const toolDispatcher = vi.fn().mockResolvedValue({
+      messages: [{ role: 'tool', tool_call_id: 'call_get_document_1', content: JSON.stringify({ ok: true }) }],
+      logEntries: [{ tool_name: 'get_document', tool_call_id: 'call_get_document_1', result_summary: longSummary }],
+    });
+
+    const defaultLimited = await executeAgentLoop(buildOptions({
+      toolDispatcher,
+      purposeDefaults: { result_summary_chars: 5 },
+    }));
+    expect(defaultLimited.metadata.tools.calls_log[0].tool_calls[0].result_summary).toBe('abcde...');
+
+    const callerLimited = await executeAgentLoop(buildOptions({
+      toolDispatcher,
+      purposeDefaults: { result_summary_chars: 5 },
+      parameters: { max_tokens: 128, result_summary_chars: 3 },
+    }));
+    expect(callerLimited.metadata.tools.calls_log[0].tool_calls[0].result_summary).toBe('abc...');
   });
 
   it('ATL-U-14 uses the selected initial model to enforce max_cost_usd before the first provider call', async () => {

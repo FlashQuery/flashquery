@@ -99,11 +99,14 @@ function findToolMessageWithName(messages: CallModelMessage[]): number | null {
   return index === -1 ? null : index;
 }
 
-function buildReturnedMessages(messages: CallModelMessage[]): CallModelMessage[] {
+function buildReturnedMessages(messages: CallModelMessage[], assistantName?: string): CallModelMessage[] {
   return messages.map((message) => {
     if (message.role === 'tool') {
       const { name: _name, ...withoutName } = message;
       return withoutName;
+    }
+    if (message.role === 'assistant' && message.name === undefined && assistantName !== undefined) {
+      return { ...message, name: assistantName };
     }
     if ((message.role === 'user' || message.role === 'system') && message.name === undefined) {
       return { ...message, name: LLM_PARTICIPANT_NAMES.host };
@@ -241,7 +244,7 @@ function buildMode2Envelope(
   return {
     response: loopEnvelope.response,
     messages: params.return_messages === true
-      ? [...buildReturnedMessages(hydratedMessages), ...buildReturnedMessages(loopHistory)]
+      ? [...buildReturnedMessages(hydratedMessages), ...buildReturnedMessages(loopHistory, loopEnvelope.metadata.name)]
       : [],
     metadata,
   };
@@ -559,10 +562,12 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
 
       let toolRegistry: ToolRegistryAssembly | undefined;
       let purposeProviderParameters = params.parameters;
+      let purposeDefaults: Record<string, unknown> = {};
 
       if (resolvedResolver === 'purpose') {
         const normalizedPurposeName = resolvedName.toLowerCase();
         const purpose = config.llm?.purposes.find((p) => p.name === normalizedPurposeName);
+        purposeDefaults = purpose?.defaults ?? {};
         for (const modelName of purpose?.models ?? []) {
           const capabilityCheck = assertResponseFormatAllowedWithTools(
             config,
@@ -637,15 +642,16 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             purposeName: resolvedName,
             initialMessages: hydratedMessages,
             providerParameters: purposeProviderParameters,
+            purposeDefaults,
             nativeToolCatalog,
             toolRegistry,
-              traceId: params.trace_id ?? null,
-              chatByPurpose: client.chatByPurposeUnrecorded.bind(client),
-              modelCostLookup: (modelName) => config.llm?.models.find((model) => model.name === modelName),
-              initialModelName: client.getModelForPurpose(resolvedName)?.modelName ?? null,
-              logger,
-              getIsShuttingDown,
-            });
+            traceId: params.trace_id ?? null,
+            chatByPurpose: client.chatByPurposeUnrecorded.bind(client),
+            modelCostLookup: (modelName) => config.llm?.models.find((model) => model.name === modelName),
+            initialModelName: client.getModelForPurpose(resolvedName)?.modelName ?? null,
+            logger,
+            getIsShuttingDown,
+          });
           const envelope = buildMode2Envelope(
             loopEnvelope,
             hydratedMessages,
@@ -842,8 +848,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
 
       if (toolRegistry) {
         const publicDiagnostics = toPublicToolDiagnostics(toolRegistry.diagnostics);
-        if ((config.llm?.purposes.find((p) => p.name === resolvedName.toLowerCase())?.tools?.length ?? 0) > 0 ||
-            hasPublicToolDiagnostics(publicDiagnostics)) {
+        if (hasModelVisibleTools(toolRegistry) && hasPublicToolDiagnostics(publicDiagnostics)) {
           metadata.tools = {
             native_tool_names: toolRegistry.nativeToolNames,
             diagnostics: publicDiagnostics,

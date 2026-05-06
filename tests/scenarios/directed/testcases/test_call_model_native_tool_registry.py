@@ -6,7 +6,7 @@ Scenario:
     1. Start a deterministic OpenAI-compatible mock provider.
     2. Configure a purpose with tools: [get_document, call_model] and strict tool support.
     3. Call call_model through resolver=purpose and assert get_document is exposed while call_model is hard-excluded.
-    4. Call a second purpose where excluded_tools removes get_document and assert the provider request omits tools.
+    4. Call a second purpose where excluded_tools removes get_document and assert the provider request and Mode 2 metadata omit tools.
 
 Coverage: L-85, VAL-116
 
@@ -239,20 +239,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     empty_parse_error = f"{type(exc).__name__}: {exc}"
                 else:
                     empty_parse_error = ""
-                empty_metadata_tools = empty_envelope.get("metadata", {}).get("tools", {})
+                empty_metadata = empty_envelope.get("metadata", {})
                 passed_empty = (
                     result_empty.ok
                     and "tools" not in second_request
-                    and empty_metadata_tools.get("native_tool_names") == []
-                    and empty_metadata_tools.get("diagnostics", {}).get("excluded") == ["get_document"]
+                    and "tools" not in empty_metadata
                 )
                 run.step(
-                    label="VAL-116: excluded final native tool omits provider tools instead of sending tools: []",
+                    label="VAL-116: excluded final native tool omits provider tools and Mode 2 tools metadata",
                     passed=passed_empty,
                     detail=empty_parse_error or json.dumps({
                         "provider_has_tools": "tools" in second_request,
                         "provider_tools": second_request.get("tools"),
-                        "metadata_tools": empty_metadata_tools,
+                        "metadata": empty_metadata,
                         "response": result_empty.text[:500],
                     }, sort_keys=True),
                     timing_ms=result_empty.timing_ms,

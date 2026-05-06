@@ -200,7 +200,7 @@ describe('call_model agent-loop public E2E contracts', () => {
       expect(envelope).toMatchObject({
         response: 'native loop complete',
         messages: expect.arrayContaining([
-          expect.objectContaining({ role: 'assistant', tool_calls: expect.any(Array) }),
+          expect.objectContaining({ role: 'assistant', name: 'agentic', tool_calls: expect.any(Array) }),
           expect.objectContaining({ role: 'tool', tool_call_id: 'call_search_1' }),
         ]),
         metadata: {
@@ -214,7 +214,7 @@ describe('call_model agent-loop public E2E contracts', () => {
       });
       expect(provider.requests[1]).toMatchObject({
         messages: expect.arrayContaining([
-          expect.objectContaining({ role: 'assistant', tool_calls: expect.any(Array) }),
+          expect.objectContaining({ role: 'assistant', name: 'agentic', tool_calls: expect.any(Array) }),
           expect.objectContaining({ role: 'tool', tool_call_id: 'call_search_1' }),
         ]),
       });
@@ -278,6 +278,7 @@ describe('call_model agent-loop public E2E contracts', () => {
         tokens: expect.any(Object),
         cost_usd: expect.any(Number),
       });
+      expect(envelope.response).toBe('');
     } finally {
       await provider.stop();
     }
@@ -323,9 +324,9 @@ describe('call_model agent-loop public E2E contracts', () => {
         return_messages: true,
       }));
       expect(envelope.metadata).toMatchObject({
-        resolved_model_name: 'fallback-agent-model',
+        resolved_model_name: 'agent-model',
         provider_name: 'mock',
-        fallback_position: 2,
+        fallback_position: 1,
         cost_usd: expect.closeTo(((10 * 1) + (4 * 2) + (20 * 10) + (5 * 20)) / 1_000_000, 12),
         tools: {
           stop_reason: 'final_response',
@@ -337,6 +338,7 @@ describe('call_model agent-loop public E2E contracts', () => {
       });
       expect(provider.requests.at(-1)).toMatchObject({
         messages: expect.arrayContaining([
+          expect.objectContaining({ role: 'assistant', name: 'agentic', tool_calls: expect.any(Array) }),
           expect.objectContaining({ role: 'tool', tool_call_id: 'call_first_model' }),
         ]),
       });

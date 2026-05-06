@@ -1262,7 +1262,7 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     expect(chatByPurposeMock).not.toHaveBeenCalled();
   });
 
-  it('[TOOL-03] purpose calls with tools: [call_model] omit provider tools and expose hard_excluded diagnostics', async () => {
+  it('[TOOL-03] purpose calls with tools: [call_model] omit provider tools and omit Mode 2 tools metadata', async () => {
     const completeByPurposeMock = vi.fn().mockResolvedValue({
       ...SAMPLE_RESULT,
       purposeName: 'unsafe',
@@ -1291,10 +1291,7 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     expect(completeByPurposeMock.mock.calls[0][2]).not.toHaveProperty('tools');
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const envelope = JSON.parse(result.content[0].text) as any;
-    expect(envelope.metadata.tools.native_tool_names).toEqual([]);
-    expect(envelope.metadata.tools.diagnostics.hard_excluded).toEqual([
-      expect.objectContaining({ tool: 'call_model' }),
-    ]);
+    expect(envelope.metadata).not.toHaveProperty('tools');
   });
 
   it('[TOOL-02] purpose calls with excludedTools removing the final tool do not pass tools: []', async () => {
@@ -1651,12 +1648,74 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     const envelope = JSON.parse(result.content[0].text) as { messages: Array<Record<string, unknown>> };
     expect(envelope.messages[0]).toMatchObject({ role: 'user', name: LLM_PARTICIPANT_NAMES.host, content: 'Read the document.' });
     expect(envelope.messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({ role: 'assistant', tool_calls: expect.any(Array) }),
+      expect.objectContaining({ role: 'assistant', name: 'documented', tool_calls: expect.any(Array) }),
       expect.objectContaining({ role: 'tool', tool_call_id: 'call_doc' }),
-      expect.objectContaining({ role: 'assistant', content: 'final loop answer' }),
+      expect.objectContaining({ role: 'assistant', name: 'documented', content: 'final loop answer' }),
     ]));
     const toolMessage = envelope.messages.find((message) => message.role === 'tool');
     expect(toolMessage).not.toHaveProperty('name');
+  });
+
+  it('[LOOP-03] passes purpose defaults into the Mode 2 executor for loop guardrails', async () => {
+    vi.mocked(executeAgentLoop).mockResolvedValue({
+      response: 'final after native dispatch',
+      messages: [],
+      metadata: {
+        resolver: 'purpose',
+        name: 'documented',
+        resolved_model_name: SAMPLE_RESULT.modelName,
+        provider_name: SAMPLE_RESULT.providerName,
+        fallback_position: 1,
+        tokens: { input: SAMPLE_RESULT.inputTokens, output: SAMPLE_RESULT.outputTokens },
+        cost_usd: 0,
+        latency_ms: SAMPLE_RESULT.latencyMs,
+        tools: {
+          native_tool_names: ['get_document'],
+          diagnostics: {},
+          stop_reason: 'final_response',
+          iterations: 1,
+          calls_log: [],
+          aggregate_usage: { tokens: { input: SAMPLE_RESULT.inputTokens, output: SAMPLE_RESULT.outputTokens }, cost_usd: 0, latency_ms: SAMPLE_RESULT.latencyMs },
+        },
+      },
+    });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      chatByPurpose: vi.fn(),
+      chatByPurposeUnrecorded: vi.fn(),
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const config = {
+      ...TOOL_PURPOSE_CONFIG,
+      llm: {
+        ...TOOL_PURPOSE_CONFIG.llm,
+        purposes: TOOL_PURPOSE_CONFIG.llm?.purposes.map((purpose) =>
+          purpose.name === 'documented'
+            ? { ...purpose, defaults: { timeout_ms: 1234, max_iterations: 2, result_summary_chars: 64 } }
+            : purpose
+        ),
+      },
+    } as typeof TEST_CONFIG;
+    const { handler, server } = captureCallModelRegistration(config);
+    seedNativeToolCatalog(server);
+
+    await handler({
+      resolver: 'purpose',
+      name: 'documented',
+      messages: [{ role: 'user', content: 'Read the document.' }],
+      parameters: { max_iterations: 3 },
+    });
+
+    expect(executeAgentLoop).toHaveBeenCalledWith(expect.objectContaining({
+      purposeDefaults: { timeout_ms: 1234, max_iterations: 2, result_summary_chars: 64 },
+      providerParameters: expect.objectContaining({ max_iterations: 3 }),
+    }));
   });
 });
 
