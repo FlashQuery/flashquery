@@ -3,6 +3,7 @@ import * as yaml from 'js-yaml';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
+import { validateAllPurposeMode2Admissions } from '../llm/capabilities.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Zod schemas (snake_case — matches YAML structure)
@@ -788,6 +789,11 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // Stored as a runtime-only Map alongside `_deprecationWarnings`. Not part of the
   // public FlashQueryConfig type — consumers use getLlmApiKeyRefs(config) below.
   (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'] = rawLlmApiKeyRefs;
+
+  const capabilityErrors = validateAllPurposeMode2Admissions(config);
+  if (capabilityErrors.length > 0) {
+    throw new Error(capabilityErrors.map((e) => `Config error: [capability] ${e.message}`).join('\n'));
+  }
 
   return config;
 }
