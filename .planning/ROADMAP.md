@@ -172,7 +172,7 @@ Plans:
 - [x] 114-03-PLAN.md — Alias `_template`, `_items`, and public `template_params` wiring
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 114-04-PLAN.md — Supabase-backed resolver integration validation
+- [x] 114-04-PLAN.md — Supabase-backed resolver integration validation
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 114-05-PLAN.md — Managed directed scenario, coverage traceability, and docs review

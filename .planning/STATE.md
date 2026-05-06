@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
 status: executing
-stopped_at: Completed 114-03-PLAN.md
-last_updated: "2026-05-06T00:56:14.763Z"
+stopped_at: Completed 114-04-PLAN.md
+last_updated: "2026-05-06T01:04:51.978Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 23
   completed_phases: 2
   total_plans: 14
-  completed_plans: 12
-  percent: 86
+  completed_plans: 13
+  percent: 93
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 ## Current Position
 
 Phase: 114 (template-parameterization) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-05-06
 
@@ -57,6 +57,7 @@ Last activity: 2026-05-06
 | Phase 114 P01 | 4m16s | 2 tasks | 3 files |
 | Phase 114 P02 | 6m26s | 2 tasks | 3 files |
 | Phase 114 P03 | 3m21s | 2 tasks | 4 files |
+| Phase 114 P04 | 4m36s | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -64,6 +65,8 @@ Last activity: 2026-05-06
 - Requested frontmatter during body reference resolution so only fq_template true documents enter template rendering.
 - 114-03: Kept @alias resolution strictly keyed to template_params[alias]; alias names are never sent through vault lookup.
 - 114-03: _items string entries reuse non-alias reference grammar for section and pointer resolution.
+- [Phase 114]: Used existing reference resolver integration suite and HAS_SUPABASE lifecycle for real-vault template coverage.
+- [Phase 114]: Alias integration tests parse real @alias placeholders before resolver hydration.
 
 ## Accumulated Context
 
@@ -145,8 +148,8 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T00:56:14.738Z
-Stopped at: Completed 114-03-PLAN.md
+Last session: 2026-05-06T01:04:51.574Z
+Stopped at: Completed 114-04-PLAN.md
 Resume: Continue Phase 114 with `.planning/phases/114-template-parameterization/114-04-PLAN.md`
 
 ## Deferred Items
