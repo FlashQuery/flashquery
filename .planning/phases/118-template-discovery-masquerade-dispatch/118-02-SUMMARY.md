@@ -9,7 +9,7 @@ requires:
     provides: RED contracts for template-tool discovery, reverse maps, and dispatch from Plan 01
 provides:
   - Fresh vault template discovery and frontmatter validation for model-visible template tools
-  - Deterministic `flashquery.<namespace>.<slug>` tool naming with explicit reverse-map assembly
+  - Deterministic `flashquery_<namespace>_<slug>` tool naming with explicit reverse-map assembly
   - Reusable resolver-backed template render primitive for model-initiated template dispatch
 affects: [phase-118, phase-119, phase-120, call_model, agent-loop]
 
@@ -103,7 +103,7 @@ None beyond the expected RED baseline from Plan 01 before implementation.
 - `npm test -- tests/unit/reference-resolver.test.ts tests/unit/llm-template-tools.test.ts` - passed, 93 tests.
 - `npm run test:integration -- tests/integration/template-tools.integration.test.ts` - passed, 3 tests. This test config also ran a production build during setup.
 - `npm run build` - passed.
-- Acceptance greps for exported assembly/name helpers, frontmatter/access fields, generated `flashquery.*` contract, schema normalization, and resolver include contract all passed.
+- Acceptance greps for exported assembly/name helpers, frontmatter/access fields, generated `flashquery_*` contract, schema normalization, and resolver include contract all passed.
 
 ## User Setup Required
 

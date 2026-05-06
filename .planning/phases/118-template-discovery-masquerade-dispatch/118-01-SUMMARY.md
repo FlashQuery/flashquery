@@ -39,7 +39,7 @@ key-decisions:
   - "Directed scenarios assert public MCP responses, provider requests, and vault files only."
 
 patterns-established:
-  - "Template-tool contracts assert exact generated names: flashquery.skill.research_skill, flashquery.review.document_review, and flashquery.template.weekly_checklist."
+  - "Template-tool contracts assert exact generated names: flashquery_skill_research_skill, flashquery_review_document_review, and flashquery_template_weekly_checklist."
   - "Template dispatch contracts require recoverable JSON tool errors including template_missing_required_param and tool_not_in_registry."
 
 requirements-completed: [VAL-118, TMPL-06, TMPL-07, TMPL-08]

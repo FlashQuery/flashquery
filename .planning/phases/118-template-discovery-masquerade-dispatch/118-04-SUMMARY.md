@@ -32,7 +32,7 @@ key-files:
     - tests/unit/llm-agent-loop.test.ts
 
 key-decisions:
-  - "Generated `flashquery.*` tool calls are treated as template calls and must resolve through the current invocation reverse map."
+  - "Generated `flashquery_*` tool calls are treated as template calls and must resolve through the current invocation reverse map."
   - "Native and template call logs keep existing fields and add `kind` without renaming public metadata."
   - "STATE.md and ROADMAP.md were intentionally not updated because the orchestrator owns those writes for parallel execution."
 
@@ -60,7 +60,7 @@ completed: 2026-05-06
 
 ## Accomplishments
 
-- Updated `dispatchToolCalls()` to route generated `flashquery.*` names through `templateReverseMap` and `dispatchTemplateToolCall()` before native fallback.
+- Updated `dispatchToolCalls()` to route generated `flashquery_*` names through `templateReverseMap` and `dispatchTemplateToolCall()` before native fallback.
 - Added recoverable `tool_not_in_registry` template payloads for generated names absent from the current reverse map.
 - Added additive `kind: "native" | "template"` calls-log metadata and public type support.
 - Threaded `templateReverseMap` and template dispatch context from `executeAgentLoop()` and `call_model` into the batch dispatcher.
@@ -88,7 +88,7 @@ Each task was committed atomically:
 
 ## Decisions Made
 
-Generated `flashquery.*` names are classified as template tool calls even when absent from `templateReverseMap`; they return recoverable `tool_not_in_registry` instead of being interpreted as native names.
+Generated `flashquery_*` names are classified as template tool calls even when absent from `templateReverseMap`; they return recoverable `tool_not_in_registry` instead of being interpreted as native names.
 
 ## Deviations from Plan
 

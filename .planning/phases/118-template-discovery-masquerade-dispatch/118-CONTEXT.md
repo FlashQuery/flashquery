@@ -28,7 +28,8 @@ The phase is not responsible for Phase 119 discovery/help polish except where Ph
 - A template is any vault document with `fq_template: true`. `fq_namespace` defaults to `"template"` if absent and must match `[a-z][a-z0-9_]*`; dots, uppercase, and leading digits are invalid. `fq_expose_as_tool: true` is required for model-visible masquerade tools. `fq_desc` is required for masqueraded tools. `fq_params` defines model-supplied arguments and supports at least the existing `string` and `document` parameter behavior.
 
 ### D-04 Name Generation Contract
-- Generated masquerade tool names MUST use `flashquery.<fq_namespace>.<slug>`. Slug generation is centralized and deterministic: filename stem, lowercase, non-alphanumeric runs replaced with `_`, trim leading/trailing `_`, reject empty. Empty slugs and invalid namespaces are discovery-time warnings that prevent masquerade exposure but preserve direct reference/template access.
+- Generated masquerade tool names MUST use provider-safe `flashquery_<fq_namespace>_<slug>`. Slug generation is centralized and deterministic: filename stem, lowercase, non-alphanumeric runs replaced with `_`, trim leading/trailing `_`, reject empty. Empty slugs and invalid namespaces are discovery-time warnings that prevent masquerade exposure but preserve direct reference/template access.
+- Accepted override, 2026-05-06: earlier dotted examples (`flashquery.<fq_namespace>.<slug>`) are superseded because OpenAI-compatible function/tool names permit only letters, numbers, underscores, and dashes, with a 64-character maximum. The underscore form is the canonical public contract.
 
 ### D-05 Collision Policy
 - Collision checks happen per purpose over the complete model-visible registry assembled for the invocation, including native tools and generated template tools. If two entries produce the same final name, assembly fails hard for `call_model`; do not suffix, choose scan-order winners, or silently drop a colliding tool. Diagnostics must list the generated name and every source, including canonical `template_path` values for templates.
@@ -78,7 +79,7 @@ The phase is not responsible for Phase 119 discovery/help polish except where Ph
 <specifics>
 ## Specific Ideas
 
-- Expected public/generated tool name examples include `flashquery.skill.research_skill`, `flashquery.review.document_review`, and `flashquery.template.weekly_checklist`.
+- Expected public/generated tool name examples include `flashquery_skill_research_skill`, `flashquery_review_document_review`, and `flashquery_template_weekly_checklist`.
 - `list_purposes`-style diagnostics needed for Phase 118 tests include usable `template_tools` entries with `name`, `template_path`, `description`, `parameters`, and `template_tool_conflicts` entries with `{ name, template_paths }`.
 - Directed scenario names from the test plan: `ATL-DS-07` template discovery and purpose listing, `ATL-DS-08` collision diagnostics, `ATL-DS-10` template tool loop, and `ATL-DS-11` mixed native/template loop.
 - E2E names from the test plan: `ATL-E2E-04` template-tool masquerade loop and `ATL-E2E-05` mixed native and template tools.

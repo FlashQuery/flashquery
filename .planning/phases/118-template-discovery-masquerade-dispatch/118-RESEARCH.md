@@ -20,7 +20,7 @@
 - A template is any vault document with `fq_template: true`. `fq_namespace` defaults to `"template"` if absent and must match `[a-z][a-z0-9_]*`; dots, uppercase, and leading digits are invalid. `fq_expose_as_tool: true` is required for model-visible masquerade tools. `fq_desc` is required for masqueraded tools. `fq_params` defines model-supplied arguments and supports at least the existing `string` and `document` parameter behavior.
 
 ### D-04 Name Generation Contract
-- Generated masquerade tool names MUST use `flashquery.<fq_namespace>.<slug>`. Slug generation is centralized and deterministic: filename stem, lowercase, non-alphanumeric runs replaced with `_`, trim leading/trailing `_`, reject empty. Empty slugs and invalid namespaces are discovery-time warnings that prevent masquerade exposure but preserve direct reference/template access.
+- Generated masquerade tool names MUST use `flashquery_<fq_namespace>_<slug>`. Slug generation is centralized and deterministic: filename stem, lowercase, non-alphanumeric runs replaced with `_`, trim leading/trailing `_`, reject empty. Empty slugs and invalid namespaces are discovery-time warnings that prevent masquerade exposure but preserve direct reference/template access.
 
 ### D-05 Collision Policy
 - Collision checks happen per purpose over the complete model-visible registry assembled for the invocation, including native tools and generated template tools. If two entries produce the same final name, assembly fails hard for `call_model`; do not suffix, choose scan-order winners, or silently drop a colliding tool. Diagnostics must list the generated name and every source, including canonical `template_path` values for templates.
@@ -60,7 +60,7 @@
 | ID | Description | Research Support |
 |----|-------------|------------------|
 | TMPL-06 | Template discovery reads frontmatter fresh and validates `fq_namespace`, `fq_desc`, `fq_expose_as_tool`, and `fq_params`. [CITED: .planning/REQUIREMENTS.md] | Use fresh vault reads during registry assembly and expose discovery diagnostics for invalid namespace, missing description, unsupported params, empty slug, dangling paths, and non-exposed templates. [CITED: Document Reference System.md §6.2, §11.1, §12.4] |
-| TMPL-07 | Masqueraded template tools use `flashquery.<fq_namespace>.<slug>` and maintain explicit reverse map to canonical paths. [CITED: .planning/REQUIREMENTS.md] | Centralize slug/name generation and return a per-call `Map<generated_name, template_path>` from registry assembly. [CITED: Document Reference System.md §11.1-§11.2] |
+| TMPL-07 | Masqueraded template tools use provider-safe `flashquery_<fq_namespace>_<slug>` names and maintain explicit reverse map to canonical paths. [CITED: .planning/REQUIREMENTS.md] | Centralize slug/name generation and return a per-call `Map<generated_name, template_path>` from registry assembly. The original dotted sketch is superseded because OpenAI-compatible function/tool names permit only letters, numbers, underscores, and dashes. |
 | TMPL-08 | Template-tool dispatch validates model arguments, hydrates output, and returns JSON-stringified tool results or typed errors. [CITED: .planning/REQUIREMENTS.md] | Reuse `reference-resolver.ts` template validation/hydration primitives but wrap failures as recoverable tool payloads, not host `reference_resolution_failed` MCP errors. [VERIFIED: src/llm/reference-resolver.ts; CITED: Document Reference System.md §11.4] |
 | VAL-118 | Phase 118 ships unit, integration, E2E, and directed scenario tests. [CITED: .planning/REQUIREMENTS.md] | Implement ATL-U-15, ATL-I-03, ATL-E2E-04, ATL-E2E-05, ATL-DS-07, ATL-DS-08, ATL-DS-10, and ATL-DS-11 coverage. [CITED: ATL Test Plan.md] |
 </phase_requirements>
@@ -304,7 +304,7 @@ export function slugTemplateFilename(filenameStem: string): string | null {
 }
 
 export function templateToolName(namespace: string, slug: string): string {
-  return `flashquery.${namespace}.${slug}`;
+  return `flashquery_${namespace}_${slug}`;
 }
 ```
 
@@ -328,14 +328,14 @@ function templateToolError(toolCallId: string, code: string, message: string, de
 {
   "template_tools": [
     {
-      "name": "flashquery.skill.research_skill",
+      "name": "flashquery_skill_research_skill",
       "template_path": "Templates/Research-Skill.md",
       "description": "Structured methodology for autonomous web research.",
       "parameters": { "type": "object", "properties": { "topic": { "type": "string" } }, "required": ["topic"] }
     }
   ],
   "template_tool_conflicts": [
-    { "name": "flashquery.skill.research_skill", "template_paths": ["Templates/Research-Skill.md", "Other/Research Skill.md"] }
+    { "name": "flashquery_skill_research_skill", "template_paths": ["Templates/Research-Skill.md", "Other/Research Skill.md"] }
   ],
   "dangling_template_paths": []
 }

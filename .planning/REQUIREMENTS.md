@@ -34,7 +34,7 @@
 - [x] **TMPL-04**: Template placeholder substitution is deterministic, single-pass, non-recursive, and supports escape parity for template placeholders.
 - [x] **TMPL-05**: Alias entries support `_items` lists with optional `_separator` for ordered multi-document injection at one `{{ref:@alias}}` slot.
 - [x] **TMPL-06**: Template discovery reads frontmatter fresh from vault documents and validates `fq_namespace`, `fq_desc`, `fq_expose_as_tool`, and `fq_params`.
-- [x] **TMPL-07**: Masqueraded template tools use generated names `flashquery.<fq_namespace>.<slug>` and maintain an explicit reverse map to canonical template paths.
+- [x] **TMPL-07**: Masqueraded template tools use provider-safe generated names `flashquery_<fq_namespace>_<slug>` and maintain an explicit reverse map to canonical template paths. This supersedes the original dotted `flashquery.<fq_namespace>.<slug>` sketch because OpenAI-compatible function/tool names permit only letters, numbers, underscores, and dashes.
 - [x] **TMPL-08**: Template-tool dispatch validates model-supplied arguments, hydrates template output, and returns JSON-stringified tool results or typed tool errors to the loop.
 
 ### Purpose Config And Bindings
