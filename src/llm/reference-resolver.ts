@@ -922,6 +922,13 @@ async function renderTemplateReference(
     const hasDefault = Object.prototype.hasOwnProperty.call(declaration, 'default');
     const rawValue = hasSupplied ? cleanParams[name] : declaration.default;
 
+    if (hasSupplied && rawValue === null && declaration.required !== true) {
+      values[name] = '';
+      paramsUsed[name] = { type: declaration.type, chars: 0 };
+      warnings.push({ type: 'optional_param_missing_no_default', param: name });
+      continue;
+    }
+
     if (!hasSupplied && !hasDefault) {
       if (declaration.required === true) {
         throw new TemplateReferenceError(

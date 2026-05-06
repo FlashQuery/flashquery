@@ -1,5 +1,5 @@
 import { readdir, readFile } from 'node:fs/promises';
-import { basename, extname, join, relative } from 'node:path';
+import { basename, extname, join, relative, resolve as resolvePath } from 'node:path';
 import { posix as pathPosix } from 'node:path';
 import matter from 'gray-matter';
 import type { FlashQueryConfig } from '../config/loader.js';
@@ -198,13 +198,19 @@ async function readTemplateCandidate(
   templatePath: string,
   source?: string
 ): Promise<TemplateDocumentCandidate | null> {
-  if (!isSafeTemplatePath(templatePath)) return null;
-  const fullPath = join(config.instance.vault.path, templatePath);
+  const normalized = normalizeTemplatePath(templatePath);
+  if (!isSafeTemplatePath(normalized)) return null;
+  const vaultRoot = resolvePath(config.instance.vault.path);
+  const fullPath = resolvePath(vaultRoot, normalized);
+  const relativePath = relative(vaultRoot, fullPath);
+  if (relativePath === '' || relativePath === '..' || relativePath.startsWith('../') || relativePath.startsWith('/')) {
+    return null;
+  }
   try {
     const raw = await readFile(fullPath, 'utf8');
     const parsed = matter(raw);
     return {
-      templatePath,
+      templatePath: normalized,
       body: parsed.content,
       frontmatter: parsed.data,
       source,
@@ -282,6 +288,36 @@ function templateParamSchema(
     additionalProperties: false,
   }, { strict: false });
   return { schema, declarations };
+}
+
+function templateProviderSchema(
+  declarations: Record<string, TemplateParamDeclaration>,
+  strict: boolean
+): Record<string, unknown> {
+  if (!strict) {
+    return templateParamSchema(Object.fromEntries(
+      Object.entries(declarations).map(([name, declaration]) => [name, declaration])
+    )).schema;
+  }
+
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+  for (const [name, declaration] of Object.entries(declarations)) {
+    const base = declaration.type === 'document'
+      ? { type: 'string', description: 'Vault document identifier' }
+      : { type: 'string' };
+    properties[name] = declaration.required === true
+      ? base
+      : { anyOf: [base, { type: 'null' }] };
+    required.push(name);
+  }
+
+  return {
+    type: 'object',
+    properties,
+    required,
+    additionalProperties: false,
+  };
 }
 
 function validateTemplateCandidate(
@@ -418,7 +454,10 @@ export async function assembleTemplateToolRegistry(
       function: {
         name: tool.name,
         description: tool.description,
-        parameters: normalizeToolJsonSchema(tool.parameters, { strict: options.strictTools === true }),
+        parameters: templateProviderSchema(
+          normalizeTemplateParamDeclarations(tool.frontmatter.fq_params),
+          options.strictTools === true
+        ),
         ...(options.strictTools === true ? { strict: true as const } : {}),
       },
     });

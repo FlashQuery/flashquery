@@ -166,6 +166,45 @@ describe('ATL-U-15 template masquerade name generation and discovery contracts',
     expect([...registry.templateReverseMap.keys()]).not.toContain('research_skill');
   });
 
+  it('keeps optional template params nullable under strict provider schemas', async () => {
+    const { assembleTemplateToolRegistry } = await loadTemplateTools();
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-template-tools-strict-'));
+    await writeTemplate(vaultPath, 'Templates/Optional-Skill.md', {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_namespace: 'skill',
+      fq_desc: 'Optional skill',
+      fq_params: {
+        topic: { type: 'string', required: true },
+        note: { type: 'string', required: false },
+      },
+    }, 'Research {{topic}} {{note}}');
+
+    const registry = await assembleTemplateToolRegistry({
+      config: {
+        instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+        templates: { defaultAccess: 'permissive' },
+        llm: { purposes: [{ name: 'researcher', description: 'Researcher', models: ['fast'] }] },
+      },
+      purposeName: 'researcher',
+      strictTools: true,
+    });
+
+    expect(registry.providerTools?.[0].function).toMatchObject({
+      name: 'flashquery_skill_optional_skill',
+      strict: true,
+      parameters: {
+        type: 'object',
+        required: ['topic', 'note'],
+        properties: {
+          topic: { type: 'string' },
+          note: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+        },
+        additionalProperties: false,
+      },
+    });
+  });
+
   it('fails hard on template/template and native/template final-name collisions with all template_path sources', async () => {
     const { assembleTemplateToolRegistry } = await loadTemplateTools();
     const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-template-tools-conflict-'));
@@ -238,6 +277,76 @@ describe('ATL-U-15 template tool dispatch contracts', () => {
       tool_call_id: 'call_research_skill',
       tool_name: 'flashquery_skill_research_skill',
       status: 'success',
+    });
+  });
+
+  it('treats null optional template params as omitted during dispatch', async () => {
+    const { dispatchTemplateToolCall } = await loadTemplateTools();
+    const result = await dispatchTemplateToolCall({
+      toolCall: {
+        id: 'call_optional_skill',
+        type: 'function',
+        function: {
+          name: 'flashquery_skill_optional_skill',
+          arguments: { topic: 'Phase 118', note: null },
+        },
+      },
+      templateReverseMap: new Map([['flashquery_skill_optional_skill', 'Templates/Optional-Skill.md']]),
+      templateDocuments: new Map([[
+        'Templates/Optional-Skill.md',
+        {
+          body: 'Research {{topic}} {{note}}',
+          frontmatter: {
+            fq_template: true,
+            fq_params: {
+              topic: { type: 'string', required: true },
+              note: { type: 'string', required: false },
+            },
+          },
+        },
+      ]]),
+      logger: testLogger,
+    });
+
+    expect(JSON.parse(result.message.content)).toMatchObject({
+      ok: true,
+      result: {
+        content: 'Research Phase 118 ',
+        template_warnings: expect.arrayContaining([
+          expect.objectContaining({ type: 'optional_param_missing_no_default', param: 'note' }),
+        ]),
+      },
+    });
+  });
+
+  it('does not read reverse-map template paths that normalize outside the vault', async () => {
+    const { dispatchTemplateToolCall } = await loadTemplateTools();
+    const rootPath = await mkdtemp(join(tmpdir(), 'fqc-template-path-containment-'));
+    const vaultPath = join(rootPath, 'vault');
+    await mkdir(vaultPath, { recursive: true });
+    await writeTemplate(rootPath, 'outside.md', {
+      fq_template: true,
+      fq_params: { topic: { type: 'string', required: true } },
+    }, 'Outside {{topic}}');
+
+    const result = await dispatchTemplateToolCall({
+      toolCall: {
+        id: 'call_outside',
+        type: 'function',
+        function: {
+          name: 'flashquery_skill_outside',
+          arguments: { topic: 'Phase 118' },
+        },
+      },
+      templateReverseMap: new Map([['flashquery_skill_outside', 'safe/../../outside.md']]),
+      config: {
+        instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+      },
+    });
+
+    expect(JSON.parse(result.message.content)).toMatchObject({
+      ok: false,
+      error: { code: 'template_not_found', recoverable: true },
     });
   });
 
