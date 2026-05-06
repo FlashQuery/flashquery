@@ -682,6 +682,10 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-83 | VAL-114: Managed public scenario gate `test_call_model_template_parameterization` validates path-keyed templates, alias templates, `_items`, typed failures, plain-doc bypass, and non-recursive substitution | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
 | L-84 | ATL-DS-14: Capability admission failures for Mode 2 purposes are user-visible and actionable, including `tool_calling`, `usage_on_tool_calls`, and `structured_outputs_with_tools` diagnostics that distinguish `declared unsupported` from `unknown declaration` and fail before provider dispatch when `response_format` is incompatible with model-visible tools | test_call_model_agent_loop_capabilities | 2026-05-06 | 2026-05-06 |
 | L-85 | VAL-116: Purpose `call_model` exposes assembled native provider tools only when the final registry is non-empty, omits provider `tools` when exclusions empty the set, and returns public `metadata.tools` diagnostics for hard-excluded native tools such as `call_model` | test_call_model_native_tool_registry | 2026-05-06 | 2026-05-06 |
+| L-86 | ATL-DS-09: Public Mode 2 native loop returns final assistant response after a delegated `get_document` tool call, appends `tool_call_id` tool history, and exposes `metadata.tools.stop_reason`, `metadata.tools.calls_log`, aggregate tokens, and cost metadata | test_call_model_agent_loop_native | 2026-05-06 | 2026-05-06 |
+| L-87 | ATL-DS-12: Public Mode 2 guardrails and stop accounting cover `max_iterations`, `max_tokens`, `max_cost`, `timeout`, `shutdown`, `error`, provider error, dispatch-time timeout, zero public usage rows when no iteration completes, estimate ladder, and per-model fallback cost traceability without real providers | test_call_model_agent_loop_budgets | 2026-05-06 | 2026-05-06 |
+| L-88 | ATL-DS-13: Public Mode 2 usage aggregation keeps `metadata.tools.calls_log` token sums equal to top-level `metadata.tokens`, records one aggregate usage row when Supabase test config is available, hides per-iteration usage rows, and preserves per-model fallback cost accounting | test_call_model_agent_loop_usage | 2026-05-06 | 2026-05-06 |
+| L-89 | VAL-117: Phase 117 final validation passes deterministic unit, E2E, and directed scenario gates for caller-provided tools rejection / deferred Mode 3, cooperative shutdown, provider error stop, dispatch-time timeout, zero usage rows, input/output estimate ladder coverage, per-model fallback cost, and calls-log arithmetic | test_call_model_agent_loop_native; test_call_model_agent_loop_budgets; test_call_model_agent_loop_usage; tests/e2e/call-model-agent-loop.e2e.test.ts | 2026-05-06 | 2026-05-06 |
 
 ---
 
@@ -703,8 +707,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| LLM Tools | 99 | 99 | 0 |
-| **Total** | **383** | **379** | **4** |
+| LLM Tools | 103 | 103 | 0 |
+| **Total** | **387** | **383** | **4** |
 
 ---
 
@@ -767,6 +771,18 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 - L-85: VAL-116 public native registry behavior for non-empty provider tools, empty-tool omission, and hard-exclusion diagnostics.
 
 **Resolution (2026-05-06)**: Added managed directed coverage via `test_call_model_native_tool_registry`. The scenario uses a deterministic OpenAI-compatible mock provider, configures one purpose with `tools: [get_document, call_model]`, verifies the public envelope exposes `metadata.tools.native_tool_names == ["get_document"]` plus `diagnostics.hard_excluded` for `call_model`, and verifies the provider request includes the `get_document` function tool. A second purpose uses `excluded_tools: [get_document]` and verifies the mock provider request omits `tools` entirely rather than receiving `tools: []`. Test passes 2/2 steps.
+
+---
+
+### test_call_model_agent_loop_native / budgets / usage — L-86, L-87, L-88, L-89
+
+**Behaviors covered**
+- L-86: ATL-DS-09 public native loop behavior with delegated `get_document`, final assistant response, `tool_call_id` history, `stop_reason`, `calls_log`, tokens, cost, and aggregate usage metadata.
+- L-87: ATL-DS-12 budget and stop-reason behavior with traceability for caller-provided tools rejection, deferred Mode 3, cooperative shutdown, provider error stop, dispatch-time timeout, zero public usage rows when no iteration completes, input/output estimate ladders, and per-model fallback cost.
+- L-88: ATL-DS-13 aggregate usage behavior: one public aggregate row when Supabase test config is available, no visible per-iteration rows, and `calls_log` token arithmetic matching top-level `metadata.tokens`.
+- L-89: VAL-117 final gate tying the Phase 117 unit, E2E, and directed scenario commands to the ATL Test Plan blocker cases.
+
+**Resolution (2026-05-06)**: Added final Phase 117 coverage rows and ran the focused validation gate: `npm run test:e2e -- tests/e2e/call-model-agent-loop.e2e.test.ts`, `python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_native.py --managed`, `python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_budgets.py --managed`, and `python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_usage.py --managed`. All use deterministic local OpenAI-compatible mock providers; no real OpenAI, OpenRouter, or Ollama provider is used for correctness assertions.
 
 ---
 

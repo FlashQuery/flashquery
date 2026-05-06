@@ -21,7 +21,7 @@
 - ✅ **v2.9 Filesystem Primitive Tools** — Phases 90-97 (shipped 2026-04-25)
 - ✅ **v3.0 Native LLM Access** — Phases 98-106 (shipped 2026-04-30)
 - ✅ **v3.1 Call Model With Reference** — Phases 107-110 + 111 (CMR verification fixes) (shipped 2026-05-05)
-- ◆ **v3.2 Agentic LLM Tools** — Phases 112-120 (planning)
+- ◆ **v3.2 Agentic LLM Tools** — Phases 112-120 (executing)
 
 ## Phases
 
@@ -98,12 +98,12 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 - [x] **Phase 114: Template Parameterization** - Template detection, `template_params`, alias entries, document parameters, placeholder substitution, `_items` list injection, and runnable validation (TMPL-01 through TMPL-05, VAL-114) — Complete 2026-05-06
 - [ ] **Phase 115: Purpose Config, Bindings & Capabilities** - Purpose orchestration fields, loop defaults validation, `fqc_purpose_templates`, generic config sync, structured model capabilities, Mode 2 admission, and runnable validation (BIND-01 through BIND-05, CAP-01 through CAP-05, VAL-115)
 - [x] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions, and runnable validation (TOOL-01 through TOOL-04, VAL-116) — Complete 2026-05-06
-- [ ] **Phase 117: Agent Loop Executor** - Mode 2 loop orchestration, internal native dispatch, parallel tool calls, guardrails, fallback, aggregate usage writes, calls log metadata, and runnable validation (LOOP-01 through LOOP-07, TOOL-05, TOOL-06, VAL-117)
+- [x] **Phase 117: Agent Loop Executor** - Mode 2 loop orchestration, internal native dispatch, parallel tool calls, guardrails, fallback, aggregate usage writes, calls log metadata, and runnable validation (LOOP-01 through LOOP-07, TOOL-05, TOOL-06, VAL-117) — Complete 2026-05-06
 - [ ] **Phase 118: Template Discovery & Masquerade Dispatch** - Fresh vault template discovery, generated `flashquery.<namespace>.<slug>` tools, collision-safe reverse map, template tool dispatch, and runnable validation (TMPL-06 through TMPL-08, VAL-118)
 - [ ] **Phase 119: Discovery Diagnostics & Help Resolver** - Extended `list_purposes`, structured capability diagnostics in `list_models`, discovery `search`, v1 `help` resolver, and runnable validation (DISC-01 through DISC-04, VAL-119)
 - [ ] **Phase 120: Cross-Phase ATL Validation & Coverage Closure** - End-to-end workflow suites, YAML integration closure, scenario matrix updates, and final coverage audit (VAL-120, TEST-04)
 
-**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (20/62 requirements complete).
+**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (50/62 requirements complete).
 
 </details>
 
@@ -240,20 +240,20 @@ Plans:
   4. Timeout, iteration, token, and cost guardrails stop before the next model call and report the correct `stop_reason`.
   5. Mode 2 writes one aggregate usage row and exposes per-iteration detail only in `metadata.tools.calls_log`.
   6. Phase-specific runnable tests exist and pass with a deterministic mock provider for native tool loops, parallel calls, guardrail stops, fallback, usage aggregation, and metadata invariants.
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 **Wave 1**
 - [x] 117-01-PLAN.md — Wave 0 validation scaffolding for loop executor, dispatcher, E2E, and directed scenarios
 
 **Wave 2** *(blocked on 117-01 completion)*
 - [x] 117-02-PLAN.md — Internal native tool dispatcher and catalog handler capture
-- [ ] 117-03-PLAN.md — Mode 2 loop executor, non-recording purpose chat, guardrails, and aggregate accounting
+- [x] 117-03-PLAN.md — Mode 2 loop executor, non-recording purpose chat, guardrails, and aggregate accounting
 
 **Wave 3** *(blocked on 117-02 and 117-03 completion)*
-- [ ] 117-04-PLAN.md — `call_model` Mode 2 routing, envelope metadata, and returned messages
+- [x] 117-04-PLAN.md — `call_model` Mode 2 routing, envelope metadata, and returned messages
 
 **Wave 4** *(blocked on 117-04 completion)*
-- [ ] 117-05-PLAN.md — E2E/directed validation closure, coverage ledgers, and VAL-117 traceability
+- [x] 117-05-PLAN.md — E2E/directed validation closure, coverage ledgers, and VAL-117 traceability
 **UI hint**: no
 
 ### Phase 118: Template Discovery & Masquerade Dispatch
