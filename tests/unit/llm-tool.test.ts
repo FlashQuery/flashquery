@@ -1494,4 +1494,122 @@ describe('call_model handler — CAP-05 response_format with tools guard', () =>
     expect(result.content[0].text).toContain('declared unsupported');
     expect(completeByPurposeMock).not.toHaveBeenCalled();
   });
+
+  it('[CR-03] rejects response_format when any fallback model cannot combine structured outputs with tools', async () => {
+    const guardedConfig = {
+      ...TEST_CONFIG,
+      llm: {
+        providers: TEST_LLM_CONFIG.providers,
+        models: [
+          {
+            ...TEST_LLM_CONFIG.models[0],
+            name: 'primary',
+            capabilities: {
+              tool_calling: true,
+              usage_on_tool_calls: true,
+              structured_outputs_with_tools: true,
+            },
+          },
+          {
+            ...TEST_LLM_CONFIG.models[0],
+            name: 'fallback',
+            capabilities: {
+              tool_calling: true,
+              usage_on_tool_calls: true,
+              structured_outputs_with_tools: false,
+            },
+          },
+        ],
+        purposes: [
+          {
+            name: 'agentic',
+            description: 'Tool purpose',
+            models: ['primary', 'fallback'],
+            tools: ['read'],
+            defaults: { response_format: { type: 'json_object' } },
+          },
+        ],
+      },
+    } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+
+    const completeByPurposeMock = vi.fn().mockResolvedValue({ ...SAMPLE_RESULT, purposeName: 'agentic', fallbackPosition: 1 });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'primary',
+        providerName: 'openai',
+        config: guardedConfig.llm!.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(guardedConfig as typeof TEST_CONFIG);
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'agentic',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('fallback');
+    expect(result.content[0].text).toContain('structured_outputs_with_tools');
+    expect(completeByPurposeMock).not.toHaveBeenCalled();
+  });
+
+  it('[CR-03] rejects response_format fallback bypass when caller uses mixed-case purpose name', async () => {
+    const guardedConfig = {
+      ...TEST_CONFIG,
+      llm: {
+        providers: TEST_LLM_CONFIG.providers,
+        models: [
+          {
+            ...TEST_LLM_CONFIG.models[0],
+            name: 'primary',
+            capabilities: {
+              tool_calling: true,
+              usage_on_tool_calls: true,
+              structured_outputs_with_tools: true,
+            },
+          },
+          {
+            ...TEST_LLM_CONFIG.models[0],
+            name: 'fallback',
+            capabilities: {
+              tool_calling: true,
+              usage_on_tool_calls: true,
+              structured_outputs_with_tools: false,
+            },
+          },
+        ],
+        purposes: [
+          {
+            name: 'agentic',
+            description: 'Tool purpose',
+            models: ['primary', 'fallback'],
+            tools: ['read'],
+            defaults: { response_format: { type: 'json_object' } },
+          },
+        ],
+      },
+    } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
+
+    const completeByPurposeMock = vi.fn().mockResolvedValue({ ...SAMPLE_RESULT, purposeName: 'agentic', fallbackPosition: 1 });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: completeByPurposeMock,
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+
+    const handler = captureCallModelHandler(guardedConfig as typeof TEST_CONFIG);
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'Agentic',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('fallback');
+    expect(result.content[0].text).toContain('structured_outputs_with_tools');
+    expect(completeByPurposeMock).not.toHaveBeenCalled();
+  });
 });

@@ -17,6 +17,7 @@ function normalizeTemplatePath(templateIdentifier: string): string {
   if (
     normalized === '.' ||
     normalized === '' ||
+    normalized.startsWith('/') ||
     normalized.startsWith('../') ||
     normalized === '..' ||
     normalized.endsWith('/')
@@ -24,6 +25,12 @@ function normalizeTemplatePath(templateIdentifier: string): string {
     throw new Error(`Invalid template binding path '${templateIdentifier}': path must be vault-relative`);
   }
   return normalized;
+}
+
+function assertPurposeExists(config: FlashQueryConfig, purposeName: string): void {
+  if (!config.llm?.purposes.some((purpose) => purpose.name === purposeName)) {
+    throw new Error(`Purpose '${purposeName}' not found in LLM configuration`);
+  }
 }
 
 function parsePurposeTemplateBindings(config: FlashQueryConfig): PurposeTemplateBinding[] {
@@ -94,6 +101,7 @@ export async function bindPurposeTemplateRuntime(
   purposeName: string,
   templateIdentifier: string
 ): Promise<void> {
+  assertPurposeExists(config, purposeName);
   const templatePath = normalizeTemplatePath(templateIdentifier);
   const admission = validatePurposeMode2Admission(configWithRuntimeBindingExposure(config, purposeName, templatePath), purposeName);
   if (!admission.ok) {
@@ -134,6 +142,7 @@ export async function removePurposeTemplateRuntime(
   purposeName: string,
   templateIdentifier: string
 ): Promise<void> {
+  assertPurposeExists(config, purposeName);
   const templatePath = normalizeTemplatePath(templateIdentifier);
   const { error } = await supabaseManager
     .getClient()

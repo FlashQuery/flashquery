@@ -203,13 +203,9 @@ describe('Schema Verification (Integration)', () => {
     }
 
     // Test that verifySchema is called and passes with existing schema
-    // (Schema was already initialized in beforeAll)
-    try {
-      const result = await verifySchema(client!);
-      expect(result).toBeUndefined(); // verifySchema returns undefined on success
-    } catch (err) {
-      console.log('⚠️  Schema verification failed (test environment may have incomplete schema):', (err as Error).message);
-    }
+    // (Schema was already initialized in beforeAll). Once Supabase is available,
+    // schema verification failures should fail this test instead of being logged.
+    await expect(verifySchema(client!)).resolves.toBeUndefined();
 
     // Verify that supabaseManager has a client available (from beforeAll initialization)
     const supaClient = supabaseManager.getClient();
@@ -231,16 +227,7 @@ describe('Schema Verification (Integration)', () => {
     // When skip_ddl is true, verifySchema is called defensively but errors don't block initialization
     // Test this by verifying that we can query the schema (indicating defensive check passed)
 
-    try {
-      const result = await verifySchema(client!);
-      // If verifySchema succeeds, schema is complete
-      expect(result).toBeUndefined();
-    } catch (err) {
-      // If verifySchema fails, that's OK for this test — the point is that
-      // with skip_ddl: true, a verification failure wouldn't block initialization
-      // (The actual test of non-blocking behavior happens in the initialize() path in supabase.ts)
-      console.log('⚠️  Schema verification detected missing tables (expected in some test environments):', (err as Error).message);
-    }
+    await expect(verifySchema(client!)).resolves.toBeUndefined();
   });
 
   // ─────────────────────────────────────────────────────────────────────────

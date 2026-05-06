@@ -398,12 +398,13 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       }
 
       if (resolvedResolver === 'purpose') {
-        const selected = client.getModelForPurpose(resolvedName);
-        if (selected) {
+        const normalizedPurposeName = resolvedName.toLowerCase();
+        const purpose = config.llm?.purposes.find((p) => p.name === normalizedPurposeName);
+        for (const modelName of purpose?.models ?? []) {
           const capabilityCheck = assertResponseFormatAllowedWithTools(
             config,
-            resolvedName,
-            selected.modelName,
+            normalizedPurposeName,
+            modelName,
             params.parameters
           );
           if (!capabilityCheck.ok) {

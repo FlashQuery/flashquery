@@ -23,6 +23,7 @@ export async function syncConfigAdapter<T>(
   config: FlashQueryConfig,
   adapter: ConfigSyncAdapter<T>
 ): Promise<ConfigSyncResult> {
+  const items = await adapter.parseYaml(config);
   const client = supabaseManager.getClient();
   const instanceId = config.instance.id;
 
@@ -37,7 +38,6 @@ export async function syncConfigAdapter<T>(
 
   let inserted = 0;
   let skipped = 0;
-  const items = await adapter.parseYaml(config);
   for (const item of items) {
     let query = client
       .from(adapter.table)

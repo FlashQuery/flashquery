@@ -48,8 +48,8 @@ vi.mock('../../src/logging/logger.js', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-import { syncLlmConfigToDb } from '../../src/llm/config-sync.js';
-import { bindPurposeTemplateRuntime } from '../../src/llm/purpose-template-bindings.js';
+import { syncConfigAdapter, syncLlmConfigToDb } from '../../src/llm/config-sync.js';
+import { bindPurposeTemplateRuntime, removePurposeTemplateRuntime } from '../../src/llm/purpose-template-bindings.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { logger } from '../../src/logging/logger.js';
 
@@ -288,6 +288,54 @@ describe('syncLlmConfigToDb()', () => {
       /Capability admission failed for purpose 'researcher'.*tool_calling/
     );
     expect(supabaseCalls.some((c) => c.table === 'fqc_purpose_templates' && c.op === 'insert')).toBe(false);
+  });
+
+  it('[CR-01] rejects absolute runtime template paths before any database write', async () => {
+    const config = baseConfig();
+
+    await expect(bindPurposeTemplateRuntime(config, 'researcher', '/etc/passwd')).rejects.toThrow(
+      /path must be vault-relative/
+    );
+
+    expect(supabaseCalls).toEqual([]);
+  });
+
+  it('[CR-02] rejects runtime template binding for unknown purposes before insert', async () => {
+    const config = baseConfig();
+
+    await expect(bindPurposeTemplateRuntime(config, 'missing-purpose', 'Templates/research-skill.md')).rejects.toThrow(
+      /Purpose 'missing-purpose' not found/
+    );
+
+    expect(supabaseCalls.some((c) => c.table === 'fqc_purpose_templates' && c.op === 'insert')).toBe(false);
+  });
+
+  it('[CR-02] rejects runtime template removal for unknown purposes before delete', async () => {
+    const config = baseConfig();
+
+    await expect(removePurposeTemplateRuntime(config, 'missing-purpose', 'Templates/research-skill.md')).rejects.toThrow(
+      /Purpose 'missing-purpose' not found/
+    );
+
+    expect(supabaseCalls.some((c) => c.table === 'fqc_purpose_templates' && c.op === 'delete')).toBe(false);
+  });
+
+  it('[CR-04] parses YAML adapter rows before deleting existing YAML rows', async () => {
+    const config = baseConfig();
+    const adapter = {
+      table: 'fqc_purpose_templates',
+      runtimeSource: 'api' as const,
+      parseYaml: vi.fn(() => {
+        throw new Error('bad yaml binding');
+      }),
+      identity: () => ({ purpose_name: 'researcher', template_path: 'Templates/research-skill.md' }),
+      toRow: () => ({}),
+      describeIdentity: () => 'template binding',
+    };
+
+    await expect(syncConfigAdapter(config, adapter)).rejects.toThrow(/bad yaml binding/);
+
+    expect(supabaseCalls.some((c) => c.table === 'fqc_purpose_templates' && c.op === 'delete')).toBe(false);
   });
 
   it('[BIND-01/CAP-01/CAP-02] persists structured sync payloads without regressing webapp precedence fields', async () => {
