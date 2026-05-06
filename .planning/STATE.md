@@ -4,14 +4,14 @@ milestone: v3.2
 milestone_name: Agentic LLM Tools
 status: executing
 stopped_at: Completed 117-02-PLAN.md
-last_updated: "2026-05-06T15:04:29.759Z"
+last_updated: "2026-05-06T15:15:33.402Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 23
   completed_phases: 5
   total_plans: 28
-  completed_plans: 25
-  percent: 89
+  completed_plans: 26
+  percent: 93
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 ## Current Position
 
 Phase: 117 (agent-loop-executor) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-05-06
 
@@ -70,6 +70,7 @@ Last activity: 2026-05-06
 | Phase 116 P04 | 12min | 3 tasks | 8 files |
 | Phase 117 P01 | 12min | 2 tasks | 6 files |
 | Phase 117 P02 | 9min | 2 tasks | 5 files |
+| Phase 117 P03 | 6m33s | 2 tasks | 6 files |
 
 ## Decisions
 
@@ -97,6 +98,8 @@ Last activity: 2026-05-06
 - [Phase 117]: 117-01: Directed scenario framework paths were corrected to tests/scenarios/framework during execution.
 - [Phase 117]: 117-02: Handler isError responses and thrown handler failures share the recoverable handler_error code.
 - [Phase 117]: 117-02: Successful native dispatch payloads are serialized as { ok: true, result: rawHandlerResult }.
+- [Phase 117]: 117-03 uses chatByPurposeUnrecorded for Mode 2 iterations so only the executor writes aggregate usage.
+- [Phase 117]: 117-03 aggregate usage rows preserve first successful iteration identity while calls_log stores later fallback detail.
 
 ## Accumulated Context
 
@@ -178,7 +181,7 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T15:04:29.587Z
+Last session: 2026-05-06T15:14:50.397Z
 Stopped at: Completed 117-02-PLAN.md
 Resume: None
 

@@ -64,13 +64,13 @@
 
 ### Agent Loop Execution
 
-- [ ] **LOOP-01**: `call_model` Mode 2 runs a FlashQuery-managed loop when a purpose exposes native tools, template tools, or both.
-- [ ] **LOOP-02**: Loop executor appends assistant tool-call messages, dispatches returned tool calls, appends tool result messages, and continues until a final assistant response or stop condition.
+- [x] **LOOP-01**: `call_model` Mode 2 runs a FlashQuery-managed loop when a purpose exposes native tools, template tools, or both.
+- [x] **LOOP-02**: Loop executor appends assistant tool-call messages, dispatches returned tool calls, appends tool result messages, and continues until a final assistant response or stop condition.
 - [x] **LOOP-03**: Multiple tool calls in one assistant message are dispatched with `Promise.allSettled` semantics and individual errors returned to the model.
-- [ ] **LOOP-04**: Loop guardrails enforce `timeout_ms`, `max_iterations`, `max_tokens_budget`, and `max_cost_usd` before starting the next model call.
-- [ ] **LOOP-05**: Existing purpose fallback behavior works across chat iterations, preserving completed iteration history when a fallback model is selected.
-- [ ] **LOOP-06**: Mode 2 writes exactly one aggregate `fqc_llm_usage` row per `call_model` invocation via the existing cost tracker shutdown drain.
-- [ ] **LOOP-07**: Mode 2 response metadata includes `metadata.tools.calls_log`, aggregate tokens/cost, stop reason, exposed tool diagnostics, and token arithmetic invariants.
+- [x] **LOOP-04**: Loop guardrails enforce `timeout_ms`, `max_iterations`, `max_tokens_budget`, and `max_cost_usd` before starting the next model call.
+- [x] **LOOP-05**: Existing purpose fallback behavior works across chat iterations, preserving completed iteration history when a fallback model is selected.
+- [x] **LOOP-06**: Mode 2 writes exactly one aggregate `fqc_llm_usage` row per `call_model` invocation via the existing cost tracker shutdown drain.
+- [x] **LOOP-07**: Mode 2 response metadata includes `metadata.tools.calls_log`, aggregate tokens/cost, stop reason, exposed tool diagnostics, and token arithmetic invariants.
 
 ### Discovery And Help
 
@@ -86,7 +86,7 @@
 - [x] **VAL-114**: Phase 114 ships runnable unit, directed, and integration tests that validate template parameter validation, substitution, document parameters, aliases, and `_items` list injection.
 - [x] **VAL-115**: Phase 115 ships runnable unit, TypeScript integration, and public startup/config scenario tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
 - [x] **VAL-116**: Phase 116 ships runnable unit tests and at least one public-surface scenario that validate native tool exposure, exclusions, hard exclusions, schema translation, and empty-tool omission.
-- [ ] **VAL-117**: Phase 117 ships runnable unit, E2E, and directed scenario tests with a deterministic mock provider validating native tool loops, parallel tool calls, guardrail stops, fallback, usage aggregation, and calls-log metadata.
+- [x] **VAL-117**: Phase 117 ships runnable unit, E2E, and directed scenario tests with a deterministic mock provider validating native tool loops, parallel tool calls, guardrail stops, fallback, usage aggregation, and calls-log metadata.
 - [ ] **VAL-118**: Phase 118 ships runnable unit, integration, E2E, and directed scenario tests validating fresh template discovery, masquerade tool naming, collision diagnostics, reverse-map dispatch, and mixed native/template loops.
 - [ ] **VAL-119**: Phase 119 ships runnable unit and directed scenario tests validating discovery diagnostics, structured capability reporting, discovery search behavior, and the `help` resolver.
 - [ ] **VAL-120**: Phase 120 ships runnable cross-phase E2E, directed, and YAML integration suites proving the full ATL workflows and updating coverage matrices with final scenario IDs.
@@ -157,13 +157,13 @@
 | TOOL-02 | Phase 116 | Complete |
 | TOOL-03 | Phase 116 | Complete |
 | TOOL-04 | Phase 116 | Complete |
-| LOOP-01 | Phase 117 | Pending |
-| LOOP-02 | Phase 117 | Pending |
+| LOOP-01 | Phase 117 | Complete |
+| LOOP-02 | Phase 117 | Complete |
 | LOOP-03 | Phase 117 | Complete |
-| LOOP-04 | Phase 117 | Pending |
-| LOOP-05 | Phase 117 | Pending |
-| LOOP-06 | Phase 117 | Pending |
-| LOOP-07 | Phase 117 | Pending |
+| LOOP-04 | Phase 117 | Complete |
+| LOOP-05 | Phase 117 | Complete |
+| LOOP-06 | Phase 117 | Complete |
+| LOOP-07 | Phase 117 | Complete |
 | TOOL-05 | Phase 117 | Complete |
 | TOOL-06 | Phase 117 | Complete |
 | TMPL-06 | Phase 118 | Pending |
@@ -178,7 +178,7 @@
 | VAL-114 | Phase 114 | Complete |
 | VAL-115 | Phase 115 | Complete |
 | VAL-116 | Phase 116 | Complete |
-| VAL-117 | Phase 117 | Pending |
+| VAL-117 | Phase 117 | Complete |
 | VAL-118 | Phase 118 | Pending |
 | VAL-119 | Phase 119 | Pending |
 | VAL-120 | Phase 120 | Pending |
