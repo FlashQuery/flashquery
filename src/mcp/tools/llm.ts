@@ -155,6 +155,96 @@ function mergeProviderTools(
   };
 }
 
+function messagesStartWithHydrated(
+  loopMessages: CallModelMessage[],
+  hydratedMessages: CallModelMessage[]
+): boolean {
+  if (loopMessages.length < hydratedMessages.length) return false;
+  return hydratedMessages.every((message, index) => JSON.stringify(loopMessages[index]) === JSON.stringify(message));
+}
+
+function buildTraceCumulative(
+  tracePreSnapshot: Array<{ input_tokens: number | null; output_tokens: number | null; cost_usd: number | null; latency_ms: number | null }> | null,
+  current: { tokens: { input: number; output: number }; cost_usd: number; latency_ms: number }
+): TraceCumulative | undefined {
+  if (tracePreSnapshot === null) {
+    return {
+      total_calls: 1,
+      total_tokens: { input: current.tokens.input, output: current.tokens.output },
+      total_cost_usd: current.cost_usd,
+      total_latency_ms: current.latency_ms,
+    };
+  }
+
+  return {
+    total_calls: tracePreSnapshot.length + 1,
+    total_tokens: {
+      input: tracePreSnapshot.reduce((sum, row) => sum + Number(row.input_tokens ?? 0), 0) + current.tokens.input,
+      output: tracePreSnapshot.reduce((sum, row) => sum + Number(row.output_tokens ?? 0), 0) + current.tokens.output,
+    },
+    total_cost_usd: tracePreSnapshot.reduce((sum, row) => sum + Number(row.cost_usd ?? 0), 0) + current.cost_usd,
+    total_latency_ms: tracePreSnapshot.reduce((sum, row) => sum + Number(row.latency_ms ?? 0), 0) + current.latency_ms,
+  };
+}
+
+function buildMode2Envelope(
+  loopEnvelope: CallModelEnvelope,
+  hydratedMessages: CallModelMessage[],
+  toolRegistry: ToolRegistryAssembly,
+  params: { return_messages?: boolean; trace_id?: string },
+  tracePreSnapshot: Array<{ input_tokens: number | null; output_tokens: number | null; cost_usd: number | null; latency_ms: number | null }> | null,
+  injectionMetadata?: InjectionMetadata
+): CallModelEnvelope {
+  const loopTools = loopEnvelope.metadata.tools;
+  const publicDiagnostics = toPublicToolDiagnostics(toolRegistry.diagnostics);
+  const loopHistory = messagesStartWithHydrated(loopEnvelope.messages, hydratedMessages)
+    ? loopEnvelope.messages.slice(hydratedMessages.length)
+    : loopEnvelope.messages;
+  const metadata: CallModelMetadata = {
+    resolver: loopEnvelope.metadata.resolver,
+    name: loopEnvelope.metadata.name,
+    resolved_model_name: loopEnvelope.metadata.resolved_model_name,
+    provider_name: loopEnvelope.metadata.provider_name,
+    fallback_position: loopEnvelope.metadata.fallback_position,
+    tokens: loopEnvelope.metadata.tokens,
+    cost_usd: loopEnvelope.metadata.cost_usd,
+    latency_ms: loopEnvelope.metadata.latency_ms,
+    tools: {
+      native_tool_names: toolRegistry.nativeToolNames,
+      diagnostics: publicDiagnostics,
+      stop_reason: loopTools?.stop_reason ?? 'error',
+      iterations: loopTools?.iterations ?? 0,
+      calls_log: loopTools?.calls_log ?? [],
+      aggregate_usage: loopTools?.aggregate_usage ?? {
+        tokens: loopEnvelope.metadata.tokens,
+        cost_usd: loopEnvelope.metadata.cost_usd,
+        latency_ms: loopEnvelope.metadata.latency_ms,
+      },
+    },
+  };
+
+  if (params.trace_id) {
+    metadata.trace_id = params.trace_id;
+    metadata.trace_cumulative = buildTraceCumulative(tracePreSnapshot, {
+      tokens: loopEnvelope.metadata.tokens,
+      cost_usd: loopEnvelope.metadata.cost_usd,
+      latency_ms: loopEnvelope.metadata.latency_ms,
+    });
+  }
+  if (injectionMetadata) {
+    metadata.injected_references = injectionMetadata.injectedReferences;
+    metadata.prompt_chars = injectionMetadata.promptChars;
+  }
+
+  return {
+    response: loopEnvelope.response,
+    messages: params.return_messages === true
+      ? [...buildReturnedMessages(hydratedMessages), ...buildReturnedMessages(loopHistory)]
+      : [],
+    metadata,
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // registerLlmTools — registers `call_model` unconditionally (TOOL-03).
 // The MCP SDK does not allow tools to be added after `server.connect()` (issue #893),
@@ -553,8 +643,16 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             logger,
             getIsShuttingDown,
           });
+          const envelope = buildMode2Envelope(
+            loopEnvelope,
+            hydratedMessages,
+            toolRegistry,
+            { return_messages: params.return_messages, trace_id: params.trace_id },
+            tracePreSnapshot,
+            injectionMetadata
+          );
           return {
-            content: [{ type: 'text' as const, text: JSON.stringify(loopEnvelope) }],
+            content: [{ type: 'text' as const, text: JSON.stringify(envelope) }],
           };
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);

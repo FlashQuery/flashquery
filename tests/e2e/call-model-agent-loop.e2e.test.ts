@@ -287,14 +287,21 @@ describe('call_model agent-loop public E2E contracts', () => {
     const provider = new ScriptedOpenAiProvider([finalTextResponse('should not dispatch', 1, 1)]);
     await provider.start();
     try {
-      await expect(withManagedMcp(provider, (client) => callModel(client, {
-        resolver: 'purpose',
-        name: 'agentic',
-        messages: [{ role: 'user', content: 'caller-provided Mode 3 external tool should be rejected.' }],
-        parameters: {
-          tools: [{ type: 'function', function: { name: 'external_search', parameters: { type: 'object' } } }],
-        },
-      }))).rejects.toThrow(/caller-provided|Mode 3|deferred/i);
+      await withManagedMcp(provider, async (client) => {
+        const result = await client.callTool({
+          name: 'call_model',
+          arguments: {
+            resolver: 'purpose',
+            name: 'agentic',
+            messages: [{ role: 'user', content: 'caller-provided Mode 3 external tool should be rejected.' }],
+            parameters: {
+              tools: [{ type: 'function', function: { name: 'external_search', parameters: { type: 'object' } } }],
+            },
+          },
+        }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/caller-provided|Mode 3|deferred/i);
+      });
       expect(provider.requests.length).toBe(0);
     } finally {
       await provider.stop();
