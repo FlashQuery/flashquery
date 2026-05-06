@@ -189,7 +189,7 @@ Plans:
   4. Structured model capabilities replace the old free-form behavior surface for tool execution decisions.
   5. Any purpose that exposes model-visible tools fails config validation unless every fallback model declares required support.
   6. Phase-specific runnable tests exist and pass for config parse/admission, DDL/schema verification, config sync precedence, binding resolution, runtime capability validation, and public startup/config scenarios for user-visible admission errors.
-**Plans:** 5/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 **Wave 1**
 - [x] 115-01-PLAN.md — Purpose config schema, loop default validation, capability migration, and example config
