@@ -268,4 +268,68 @@ describe('Schema Verification (Integration)', () => {
     `);
     expect(result.rows[0].exists).toBe(true);
   });
+
+  it('ATL-I-01 exposes fqc_purpose_templates columns after DDL', async () => {
+    if (!testSupabaseAvailable) {
+      console.log('⏭️  Skipping: Supabase not available');
+      return;
+    }
+
+    const result = await client!.query(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'fqc_purpose_templates'
+        AND column_name = ANY($1::text[])
+      ORDER BY column_name
+      `,
+      [[
+        'instance_id',
+        'purpose_name',
+        'template_path',
+        'source',
+        'created_at',
+        'updated_at',
+      ]]
+    );
+
+    expect(result.rows.map((row: { column_name: string }) => row.column_name)).toEqual([
+      'created_at',
+      'instance_id',
+      'purpose_name',
+      'source',
+      'template_path',
+      'updated_at',
+    ]);
+  });
+
+  it('ATL-I-01 enforces unique fqc_purpose_templates identity by instance, purpose, and template_path', async () => {
+    if (!testSupabaseAvailable) {
+      console.log('⏭️  Skipping: Supabase not available');
+      return;
+    }
+
+    const result = await client!.query(`
+      SELECT
+        tc.constraint_name,
+        array_agg(kcu.column_name ORDER BY kcu.ordinal_position) AS columns
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
+      WHERE tc.table_schema = 'public'
+        AND tc.table_name = 'fqc_purpose_templates'
+        AND tc.constraint_type = 'UNIQUE'
+      GROUP BY tc.constraint_name
+    `);
+
+    expect(result.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          columns: ['instance_id', 'purpose_name', 'template_path'],
+        }),
+      ])
+    );
+  });
 });
