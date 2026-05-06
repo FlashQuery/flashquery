@@ -88,12 +88,14 @@ def _record_startup_case(
     config: dict,
     expected_capability: str,
     expected_state: str,
+    expected_remediation: str | None = None,
 ) -> None:
     captured_error = _startup_error(fqc_dir, config)
     passed = (
         "server unexpectedly started" not in captured_error
         and expected_capability in captured_error
         and expected_state in captured_error
+        and (expected_remediation is None or expected_remediation in captured_error)
     )
     run.step(
         label=label,
@@ -121,6 +123,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         config=_base_llm({"usage_on_tool_calls": True}),
         expected_capability="tool_calling",
         expected_state="unknown declaration",
+        expected_remediation="capabilities.tool_calling: true|false",
     )
 
     _record_startup_case(
@@ -142,6 +145,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
         config=_base_llm({"tool_calling": True}, {"tools": [], "templates": ["Templates/research-skill.md"]}),
         expected_capability="usage_on_tool_calls",
         expected_state="unknown declaration",
+        expected_remediation="capabilities.usage_on_tool_calls: true|false",
+    )
+
+    _record_startup_case(
+        run,
+        label="ATL-DS-14: permissive template exposure blocks no-binding purpose with unknown capabilities",
+        fqc_dir=args.fqc_dir,
+        config=_base_llm({"usage_on_tool_calls": True}, {"tools": []}),
+        expected_capability="tool_calling",
+        expected_state="unknown declaration",
+        expected_remediation="capabilities.tool_calling: true|false",
     )
 
     runtime_config = _base_llm(

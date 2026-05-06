@@ -46,6 +46,8 @@ describe('loadConfig() — LLM three-layer schema', () => {
     const prevKey = process.env['OPENAI_API_KEY'];
     process.env['OPENAI_API_KEY'] = 'sk-test-abc';
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: openai
@@ -87,6 +89,8 @@ llm:
   it('[U-02] accepts valid names matching [a-z0-9][a-z0-9_-]*: fast, local-ollama, auto_tag', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: fast
@@ -140,6 +144,8 @@ llm:
   it('[U-03] accepts a purpose with empty models: [] list (deferred to runtime per PURP-02)', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: openai
@@ -174,6 +180,8 @@ llm:
     process.env['TEST_FQC_LLM_KEY'] = 'sk-expanded';
     process.env['TEST_FQC_LLM_ENDPOINT'] = 'https://example.invalid/v1';
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: testprovider
@@ -211,6 +219,8 @@ llm:
   it('[U-05] accepts cost_per_million: { input: 0, output: 0 } for local/free models per MOD-02', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: local
@@ -693,6 +703,30 @@ llm:
     }
   });
 
+  it('[ATL-U-08] defaults top-level templates.default_access to permissive', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-templates-default-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    writeFileSync(tmpFile, BASE_CONFIG_YAML);
+    try {
+      expect(loadConfig(tmpFile).templates?.defaultAccess).toBe('permissive');
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] accepts only permissive or restrictive for templates.default_access', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-templates-invalid-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: open
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/templates\.default_access/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('[ATL-U-08] rejects unknown top-level purpose keys including tols and audit_document', () => {
     const buildYaml = (field: string) => BASE_CONFIG_YAML + `
 llm:
@@ -1071,7 +1105,7 @@ describe('loadConfig() — ATL-U-08 capability admission', () => {
     }
   });
 
-  it('[ATL-U-08] rejects tool-exposing purposes when a fallback model has unknown declaration diagnostics', () => {
+  it('[ATL-U-08] rejects tool-exposing purposes when a fallback model has unknown declaration diagnostics with remediation', () => {
     const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-admission-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 llm:
@@ -1093,7 +1127,7 @@ llm:
 `;
     writeFileSync(tmpFile, yaml);
     try {
-      expect(() => loadConfig(tmpFile)).toThrow(/unknown declaration.*tool_calling.*usage_on_tool_calls/);
+      expect(() => loadConfig(tmpFile)).toThrow(/unknown declaration.*capabilities\.tool_calling: true\|false.*capabilities\.usage_on_tool_calls: true\|false/);
     } finally {
       unlinkSync(tmpFile);
     }
@@ -1130,9 +1164,38 @@ llm:
     }
   });
 
-  it('[ATL-U-08] treats a purpose without tools or templates as Mode 1 even when capabilities are unknown', () => {
+  it('[ATL-U-08] rejects permissive default template exposure when capabilities are unknown', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-permissive-mode2-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: local
+      type: ollama
+      endpoint: http://localhost:11434
+  models:
+    - name: llama
+      provider_name: local
+      model: llama3.2
+      type: language
+      cost_per_million: { input: 0, output: 0 }
+  purposes:
+    - name: plain
+      description: Plain purpose with default template exposure
+      models: [llama]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/unknown declaration.*capabilities\.tool_calling: true\|false/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] treats restrictive/no-binding purposes as Mode 1 even when capabilities are unknown', () => {
     const tmpFile = join(tmpdir(), `fqc-atl-u08-mode1-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: local

@@ -320,4 +320,25 @@ describe('Schema Verification (Integration)', () => {
       ])
     );
   });
+
+  it('ATL-I-01 constrains fqc_purpose_templates source to yaml, api, or webapp', async () => {
+    if (!testSupabaseAvailable) {
+      console.log('⏭️  Skipping: Supabase not available');
+      return;
+    }
+
+    const result = await client!.query(`
+      SELECT pg_get_constraintdef(c.oid) AS definition
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      WHERE n.nspname = 'public'
+        AND t.relname = 'fqc_purpose_templates'
+        AND c.conname = 'fqc_purpose_templates_source_check'
+    `);
+
+    expect(result.rows[0]?.definition).toContain("'yaml'");
+    expect(result.rows[0]?.definition).toContain("'api'");
+    expect(result.rows[0]?.definition).toContain("'webapp'");
+  });
 });

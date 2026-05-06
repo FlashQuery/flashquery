@@ -5,6 +5,7 @@ import { logger } from '../logging/logger.js';
 import { isFinishReason } from '../constants/llm.js';
 import { computeCost, recordLlmUsage } from './cost-tracker.js';
 import { syncLlmConfigToDb } from './config-sync.js';
+import { validatePersistedPurposeTemplateAdmissions } from './purpose-template-bindings.js';
 import { PurposeResolver } from './resolver.js';
 import type { LlmChatMessage, LlmChatResult, LlmChatToolCall } from './types.js';
 
@@ -664,6 +665,7 @@ export async function initLlm(config: FlashQueryConfig): Promise<void> {
   }
   llmClient = new OpenAICompatibleLlmClient(config.llm, config.instance.id);
   await syncLlmConfigToDb(config);
+  await validatePersistedPurposeTemplateAdmissions(config);
   logger.info(
     `LLM: ${config.llm.providers.length} provider(s), ${config.llm.purposes.length} purpose(s) configured`
   );

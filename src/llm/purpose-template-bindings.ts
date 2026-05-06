@@ -3,7 +3,7 @@ import { supabaseManager } from '../storage/supabase.js';
 import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import type { ConfigSyncAdapter } from './config-sync.js';
-import { validatePurposeMode2Admission } from './capabilities.js';
+import { validateAllPurposeMode2Admissions, validatePurposeMode2Admission } from './capabilities.js';
 
 export interface PurposeTemplateBinding {
   instanceId: string;
@@ -58,7 +58,7 @@ function parsePurposeTemplateBindings(config: FlashQueryConfig): PurposeTemplate
 export function createPurposeTemplateSyncAdapter(_config: FlashQueryConfig): ConfigSyncAdapter<PurposeTemplateBinding> {
   return {
     table: 'fqc_purpose_templates',
-    runtimeSource: 'api',
+    runtimeSources: ['api', 'webapp'],
     parseYaml: parsePurposeTemplateBindings,
     identity: (binding) => ({
       purpose_name: binding.purposeName,
@@ -71,8 +71,8 @@ export function createPurposeTemplateSyncAdapter(_config: FlashQueryConfig): Con
       source: 'yaml',
     }),
     describeIdentity: (binding) => `template binding '${binding.purposeName}:${binding.templatePath}'`,
-    runtimeOwnershipWarning: (binding) =>
-      `Template binding '${binding.purposeName}:${binding.templatePath}' is managed via API — YAML binding skipped`,
+    runtimeOwnershipWarning: (binding, source) =>
+      `Template binding '${binding.purposeName}:${binding.templatePath}' is managed via ${source === 'api' ? 'API' : 'webapp'} — YAML binding skipped`,
   };
 }
 
@@ -109,21 +109,26 @@ export async function bindPurposeTemplateRuntime(
   }
 
   const client = supabaseManager.getClient();
-  const { data: existing, error: lookupErr } = await client
-    .from('fqc_purpose_templates')
-    .select('id')
-    .eq('instance_id', config.instance.id)
-    .eq('purpose_name', purposeName)
-    .eq('template_path', templatePath)
-    .eq('source', 'api')
-    .maybeSingle();
-  if (lookupErr) {
-    throw new Error(
-      `LLM sync: api lookup for template binding '${purposeName}:${templatePath}' failed: ${lookupErr.message}`
-    );
-  }
-  if (existing) {
-    return;
+  for (const source of ['webapp', 'api'] as const) {
+    const { data: existing, error: lookupErr } = await client
+      .from('fqc_purpose_templates')
+      .select('id')
+      .eq('instance_id', config.instance.id)
+      .eq('purpose_name', purposeName)
+      .eq('template_path', templatePath)
+      .eq('source', source)
+      .maybeSingle();
+    if (lookupErr) {
+      throw new Error(
+        `LLM sync: ${source} lookup for template binding '${purposeName}:${templatePath}' failed: ${lookupErr.message}`
+      );
+    }
+    if (existing) {
+      if (source === 'webapp') {
+        throw new Error(`Template binding '${purposeName}:${templatePath}' is webapp-managed; API binding rejected`);
+      }
+      return;
+    }
   }
 
   const { error: insertErr } = await client.from('fqc_purpose_templates').insert({
@@ -154,5 +159,50 @@ export async function removePurposeTemplateRuntime(
     .eq('source', 'api');
   if (error) {
     throw new Error(`LLM sync: remove template binding '${purposeName}:${templatePath}' failed: ${error.message}`);
+  }
+}
+
+export async function validatePersistedPurposeTemplateAdmissions(config: FlashQueryConfig): Promise<void> {
+  if (!config.llm) return;
+
+  const { data, error } = await supabaseManager
+    .getClient()
+    .from('fqc_purpose_templates')
+    .select('purpose_name, template_path, source')
+    .eq('instance_id', config.instance.id)
+    .in('source', ['api', 'webapp']);
+
+  if (error) {
+    throw new Error(`LLM sync: persisted purpose-template admission lookup failed: ${error.message}`);
+  }
+
+  const runtimeRows = (data ?? []) as Array<{ purpose_name: string; template_path: string }>;
+  if (runtimeRows.length === 0) return;
+
+  const templatesByPurpose = new Map<string, Set<string>>();
+  for (const row of runtimeRows) {
+    const templates = templatesByPurpose.get(row.purpose_name) ?? new Set<string>();
+    templates.add(row.template_path);
+    templatesByPurpose.set(row.purpose_name, templates);
+  }
+
+  const configWithRuntimeExposure: FlashQueryConfig = {
+    ...config,
+    llm: {
+      ...config.llm,
+      purposes: config.llm.purposes.map((purpose) => {
+        const runtimeTemplates = templatesByPurpose.get(purpose.name);
+        if (!runtimeTemplates) return purpose;
+        return {
+          ...purpose,
+          templates: Array.from(new Set([...(purpose.templates ?? []), ...runtimeTemplates])),
+        };
+      }),
+    },
+  };
+
+  const capabilityErrors = validateAllPurposeMode2Admissions(configWithRuntimeExposure);
+  if (capabilityErrors.length > 0) {
+    throw new Error(capabilityErrors.map((e) => `Config error: [capability] ${e.message}`).join('\n'));
   }
 }

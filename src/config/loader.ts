@@ -202,6 +202,13 @@ const LoggingSchema = z
   .strip()
   .prefault({});
 
+const TemplatesSchema = z
+  .object({
+    default_access: z.enum(['permissive', 'restrictive']).default('permissive'),
+  })
+  .strict()
+  .prefault({});
+
 // ConfigSchema: strict schema — only known v1.7 fields accepted
 // Note: legacy field rejection (projects, defaults, vault) is enforced in loadConfig()
 // before this schema runs, providing clear actionable error messages.
@@ -213,6 +220,7 @@ const ConfigSchema = z
     git: GitSchema,
     mcp: McpSchema,
     llm: LlmSchema,
+    templates: TemplatesSchema,
     embedding: EmbeddingSchema.optional(),
     logging: LoggingSchema,
     locking: LockingSchema,
@@ -237,6 +245,7 @@ export interface FlashQueryConfig {
   git: { autoCommit: boolean; autoPush: boolean; remote: string; branch: string };
   mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
   locking: { enabled: boolean; ttlSeconds: number };
+  templates?: { defaultAccess: 'permissive' | 'restrictive' };
   llm?: {
     providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean }>;
     models: Array<{

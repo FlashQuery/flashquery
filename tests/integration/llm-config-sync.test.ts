@@ -159,6 +159,38 @@ describe('LLM config sync purpose-template bindings (Integration)', () => {
     ]);
   });
 
+  it('[ATL-I-02] preserves source webapp rows and rejects API writes into webapp-owned slots', async () => {
+    if (!available) return;
+    const config = makeConfig();
+    const client = supabaseManager.getClient();
+    const warnSpy = vi.spyOn(logger, 'warn');
+
+    await client.from('fqc_purpose_templates').insert({
+      instance_id: instanceId,
+      purpose_name: 'researcher',
+      template_path: 'Templates/research-skill.md',
+      source: 'webapp',
+    });
+
+    await syncLlmConfigToDb(config);
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      "Template binding 'researcher:Templates/research-skill.md' is managed via webapp — YAML binding skipped"
+    );
+    const { data: rows } = await client
+      .from('fqc_purpose_templates')
+      .select('purpose_name, template_path, source')
+      .eq('instance_id', instanceId)
+      .eq('template_path', 'Templates/research-skill.md');
+    expect(rows).toEqual([
+      { purpose_name: 'researcher', template_path: 'Templates/research-skill.md', source: 'webapp' },
+    ]);
+
+    await expect(bindPurposeTemplateRuntime(config, 'researcher', 'Templates/research-skill.md')).rejects.toThrow(
+      /webapp-managed; API binding rejected/
+    );
+  });
+
   it('[ATL-I-02] persists dangling structurally valid paths with a warning', async () => {
     if (!available) return;
     const warnSpy = vi.spyOn(logger, 'warn');

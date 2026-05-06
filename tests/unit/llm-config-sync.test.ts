@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 type SupabaseOp = { table: string; op: 'delete' | 'insert' | 'select'; payload?: unknown; filters: Array<[string, unknown]> };
 const supabaseCalls: SupabaseOp[] = [];
 const existingRuntimeRows = new Set<string>();
+const selectRowsByTable = new Map<string, unknown[]>();
 
 function runtimeRowKey(table: string, filters: Array<[string, unknown]>): string {
   return `${table}:${filters.map(([col, val]) => `${col}=${String(val)}`).join('|')}`;
@@ -34,6 +35,12 @@ function makeMockClient() {
     // Awaiting a delete chain (no maybeSingle) — record on then()
     then(onFulfilled: (v: unknown) => unknown) {
       if (current.op === 'delete') recordAndReset('delete');
+      if (current.op === 'select') {
+        const table = current.table!;
+        const data = selectRowsByTable.get(table) ?? [];
+        recordAndReset('select');
+        return Promise.resolve({ data, error: null }).then(onFulfilled);
+      }
       return Promise.resolve({ data: null, error: null }).then(onFulfilled);
     },
   };
@@ -49,7 +56,7 @@ vi.mock('../../src/logging/logger.js', () => ({
 }));
 
 import { syncConfigAdapter, syncLlmConfigToDb } from '../../src/llm/config-sync.js';
-import { bindPurposeTemplateRuntime, removePurposeTemplateRuntime } from '../../src/llm/purpose-template-bindings.js';
+import { bindPurposeTemplateRuntime, removePurposeTemplateRuntime, validatePersistedPurposeTemplateAdmissions } from '../../src/llm/purpose-template-bindings.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { logger } from '../../src/logging/logger.js';
 
@@ -65,6 +72,7 @@ function withRawApiKeyRefs(config: FlashQueryConfig, refs: Record<string, string
 beforeEach(() => {
   supabaseCalls.length = 0;
   existingRuntimeRows.clear();
+  selectRowsByTable.clear();
   vi.clearAllMocks();
 });
 
@@ -258,6 +266,45 @@ describe('syncLlmConfigToDb()', () => {
     ).toBe(true);
   });
 
+  it('[ATL-I-02] skips YAML purpose-template rows when source webapp owns the slot', async () => {
+    const config = withRawApiKeyRefs(baseConfig(), { openai: '${OPENAI_API_KEY}' });
+    existingRuntimeRows.add(runtimeRowKey('fqc_purpose_templates', [
+      ['instance_id', 'i-test-u14'],
+      ['purpose_name', 'researcher'],
+      ['template_path', 'Templates/research-skill.md'],
+      ['source', 'webapp'],
+    ]));
+
+    await syncLlmConfigToDb(config);
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Template binding 'researcher:Templates/research-skill.md' is managed via webapp — YAML binding skipped"
+    );
+    expect(
+      supabaseCalls.some(
+        (c) =>
+          c.table === 'fqc_purpose_templates' &&
+          c.op === 'insert' &&
+          (c.payload as Record<string, unknown>)['template_path'] === 'Templates/research-skill.md'
+      )
+    ).toBe(false);
+  });
+
+  it('[ATL-U-08] rejects runtime API binding when source webapp owns the slot', async () => {
+    const config = baseConfig();
+    existingRuntimeRows.add(runtimeRowKey('fqc_purpose_templates', [
+      ['instance_id', 'i-test-u14'],
+      ['purpose_name', 'researcher'],
+      ['template_path', 'Templates/research-skill.md'],
+      ['source', 'webapp'],
+    ]));
+
+    await expect(bindPurposeTemplateRuntime(config, 'researcher', 'Templates/research-skill.md')).rejects.toThrow(
+      /webapp-managed; API binding rejected/
+    );
+    expect(supabaseCalls.some((c) => c.table === 'fqc_purpose_templates' && c.op === 'insert')).toBe(false);
+  });
+
   it('[ATL-I-02] warns but persists dangling structurally valid template paths', async () => {
     const config = withRawApiKeyRefs(baseConfig(), { openai: '${OPENAI_API_KEY}' });
 
@@ -288,6 +335,29 @@ describe('syncLlmConfigToDb()', () => {
       /Capability admission failed for purpose 'researcher'.*tool_calling/
     );
     expect(supabaseCalls.some((c) => c.table === 'fqc_purpose_templates' && c.op === 'insert')).toBe(false);
+  });
+
+  it('[ATL-I-06] rejects persisted API bindings that make a restrictive purpose Mode 2-ineligible at startup', async () => {
+    const config = baseConfig();
+    config.templates = { defaultAccess: 'restrictive' };
+    config.llm!.purposes[0] = {
+      name: 'researcher',
+      description: 'Research',
+      models: ['gpt-4o'],
+    };
+    config.llm!.providers[0] = { name: 'openrouter', type: 'openai-compatible', endpoint: 'https://openrouter.ai/api/v1' };
+    config.llm!.models[0] = {
+      ...config.llm!.models[0],
+      providerName: 'openrouter',
+      capabilities: undefined,
+    };
+    selectRowsByTable.set('fqc_purpose_templates', [
+      { purpose_name: 'researcher', template_path: 'Templates/api-skill.md', source: 'api' },
+    ]);
+
+    await expect(validatePersistedPurposeTemplateAdmissions(config)).rejects.toThrow(
+      /Capability admission failed for purpose 'researcher'.*capabilities\.tool_calling: true\|false/
+    );
   });
 
   it('[CR-01] rejects absolute runtime template paths before any database write', async () => {
@@ -324,7 +394,7 @@ describe('syncLlmConfigToDb()', () => {
     const config = baseConfig();
     const adapter = {
       table: 'fqc_purpose_templates',
-      runtimeSource: 'api' as const,
+      runtimeSources: ['api' as const],
       parseYaml: vi.fn(() => {
         throw new Error('bad yaml binding');
       }),

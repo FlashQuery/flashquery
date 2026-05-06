@@ -37,8 +37,12 @@ export function modelCapabilitiesWithDefaults(
   return { ...declared };
 }
 
-function purposeHasModelVisibleExposure(purpose: LlmPurpose): boolean {
-  return (purpose.tools?.length ?? 0) > 0 || (purpose.templates?.length ?? 0) > 0;
+function purposeHasModelVisibleExposure(config: FlashQueryConfig, purpose: LlmPurpose): boolean {
+  return (
+    (purpose.tools?.length ?? 0) > 0 ||
+    (purpose.templates?.length ?? 0) > 0 ||
+    (config.templates?.defaultAccess ?? 'permissive') === 'permissive'
+  );
 }
 
 function diagnosticForCapability(
@@ -48,7 +52,10 @@ function diagnosticForCapability(
 ): string | null {
   if (value === true) return null;
   const state = value === false ? 'declared unsupported' : 'unknown declaration';
-  return `${state}: model '${modelName}' lacks ${capability}`;
+  const remediation = value === undefined
+    ? ` — declare 'capabilities.${capability}: true|false' on this model`
+    : '';
+  return `${state}: model '${modelName}' lacks ${capability}${remediation}`;
 }
 
 export function validatePurposeMode2Admission(
@@ -58,7 +65,7 @@ export function validatePurposeMode2Admission(
   const llm = config.llm;
   if (!llm) return { ok: true };
   const purpose = llm.purposes.find((p) => p.name === purposeName);
-  if (!purpose || !purposeHasModelVisibleExposure(purpose)) return { ok: true };
+  if (!purpose || !purposeHasModelVisibleExposure(config, purpose)) return { ok: true };
 
   const providers = new Map(llm.providers.map((p) => [p.name, p]));
   const models = new Map(llm.models.map((m) => [m.name, m]));
@@ -98,7 +105,7 @@ export function assertResponseFormatAllowedWithTools(
   const llm = config.llm;
   if (!llm) return { ok: true };
   const purpose = llm.purposes.find((p) => p.name === purposeName);
-  if (!purpose || !purposeHasModelVisibleExposure(purpose)) return { ok: true };
+  if (!purpose || !purposeHasModelVisibleExposure(config, purpose)) return { ok: true };
   const responseFormat = parameters?.['response_format'] ?? purpose.defaults?.['response_format'];
   if (responseFormat === undefined) return { ok: true };
 

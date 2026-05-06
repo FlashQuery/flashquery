@@ -527,7 +527,8 @@ CREATE INDEX IF NOT EXISTS idx_llm_usage_instance_purpose ON fqc_llm_usage(insta
 CREATE INDEX IF NOT EXISTS idx_llm_usage_instance_trace ON fqc_llm_usage(instance_id, trace_id);
 
 -- Phase 115: Purpose-template bindings (BIND-03)
--- source: 'yaml' rows are recreated by startup config sync; 'api' rows are runtime-managed.
+-- source: 'yaml' rows are recreated by startup config sync; 'api' rows are runtime-managed;
+-- 'webapp' rows are durable UI-managed rows that block YAML/API ownership.
 CREATE TABLE IF NOT EXISTS fqc_purpose_templates (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   instance_id TEXT NOT NULL,
@@ -538,6 +539,17 @@ CREATE TABLE IF NOT EXISTS fqc_purpose_templates (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(instance_id, purpose_name, template_path)
 );
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'fqc_purpose_templates_source_check'
+  ) THEN
+    ALTER TABLE fqc_purpose_templates
+      ADD CONSTRAINT fqc_purpose_templates_source_check
+      CHECK (source IN ('yaml', 'api', 'webapp'));
+  END IF;
+END $$;
 CREATE INDEX IF NOT EXISTS idx_fqc_purpose_templates_lookup
   ON fqc_purpose_templates(instance_id, purpose_name);
 

@@ -35,6 +35,10 @@ vi.mock('../../src/llm/config-sync.js', () => ({
   syncLlmConfigToDb: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('../../src/llm/purpose-template-bindings.js', () => ({
+  validatePersistedPurposeTemplateAdmissions: vi.fn().mockResolvedValue(undefined),
+}));
+
 vi.mock('../../src/llm/cost-tracker.js', () => ({
   computeCost: vi.fn(() => 0.0001),
   recordLlmUsage: vi.fn(),
@@ -842,8 +846,9 @@ describe('initLlm', () => {
     vi.clearAllMocks();
   });
 
-  it('U-21: initLlm(config) with config.llm defined assigns llmClient to OpenAICompatibleLlmClient and calls syncLlmConfigToDb(config) once', async () => {
+  it('U-21: initLlm(config) with config.llm defined assigns llmClient to OpenAICompatibleLlmClient and runs startup sync/admission', async () => {
     const { syncLlmConfigToDb } = await import('../../src/llm/config-sync.js');
+    const { validatePersistedPurposeTemplateAdmissions } = await import('../../src/llm/purpose-template-bindings.js');
 
     const config = {
       llm: TEST_LLM_CONFIG,
@@ -855,10 +860,13 @@ describe('initLlm', () => {
     expect(clientModule.llmClient).toBeInstanceOf(OpenAICompatibleLlmClient);
     expect(syncLlmConfigToDb).toHaveBeenCalledOnce();
     expect(syncLlmConfigToDb).toHaveBeenCalledWith(config);
+    expect(validatePersistedPurposeTemplateAdmissions).toHaveBeenCalledOnce();
+    expect(validatePersistedPurposeTemplateAdmissions).toHaveBeenCalledWith(config);
   });
 
   it('U-22: initLlm(config) with config.llm undefined assigns llmClient to NullLlmClient, logs "LLM: not configured" at info level, and does NOT call syncLlmConfigToDb', async () => {
     const { syncLlmConfigToDb } = await import('../../src/llm/config-sync.js');
+    const { validatePersistedPurposeTemplateAdmissions } = await import('../../src/llm/purpose-template-bindings.js');
     const { logger } = await import('../../src/logging/logger.js');
 
     const config = {
@@ -869,6 +877,7 @@ describe('initLlm', () => {
 
     expect(clientModule.llmClient).toBeInstanceOf(NullLlmClient);
     expect(syncLlmConfigToDb).not.toHaveBeenCalled();
+    expect(validatePersistedPurposeTemplateAdmissions).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('not configured'));
   });
 });

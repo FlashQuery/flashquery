@@ -6,12 +6,12 @@ import { createPurposeTemplateSyncAdapter } from './purpose-template-bindings.js
 
 export interface ConfigSyncAdapter<T> {
   table: string;
-  runtimeSource: 'api' | 'webapp';
+  runtimeSources: Array<'api' | 'webapp'>;
   parseYaml(config: FlashQueryConfig): Promise<T[]> | T[];
   identity(item: T): Record<string, string>;
   toRow(item: T): Record<string, unknown>;
   describeIdentity(item: T): string;
-  runtimeOwnershipWarning?: (item: T) => string;
+  runtimeOwnershipWarning?: (item: T, source: 'api' | 'webapp') => string;
 }
 
 export interface ConfigSyncResult {
@@ -39,23 +39,30 @@ export async function syncConfigAdapter<T>(
   let inserted = 0;
   let skipped = 0;
   for (const item of items) {
-    let query = client
-      .from(adapter.table)
-      .select('id')
-      .eq('instance_id', instanceId);
-    for (const [column, value] of Object.entries(adapter.identity(item))) {
-      query = query.eq(column, value);
+    let runtimeOwnedBy: 'api' | 'webapp' | null = null;
+    for (const source of adapter.runtimeSources) {
+      let query = client
+        .from(adapter.table)
+        .select('id')
+        .eq('instance_id', instanceId);
+      for (const [column, value] of Object.entries(adapter.identity(item))) {
+        query = query.eq(column, value);
+      }
+      const { data: existing, error: lookupErr } = await query.eq('source', source).maybeSingle();
+      if (lookupErr) {
+        throw new Error(
+          `LLM sync: ${source} lookup for ${adapter.describeIdentity(item)} failed: ${lookupErr.message}`
+        );
+      }
+      if (existing) {
+        runtimeOwnedBy = source;
+        break;
+      }
     }
-    const { data: existing, error: lookupErr } = await query.eq('source', adapter.runtimeSource).maybeSingle();
-    if (lookupErr) {
-      throw new Error(
-        `LLM sync: ${adapter.runtimeSource} lookup for ${adapter.describeIdentity(item)} failed: ${lookupErr.message}`
-      );
-    }
-    if (existing) {
+    if (runtimeOwnedBy) {
       logger.warn(
-        adapter.runtimeOwnershipWarning?.(item) ??
-          `${adapter.describeIdentity(item)} is managed via ${adapter.runtimeSource} — YAML definition skipped`
+        adapter.runtimeOwnershipWarning?.(item, runtimeOwnedBy) ??
+          `${adapter.describeIdentity(item)} is managed via ${runtimeOwnedBy} — YAML definition skipped`
       );
       skipped++;
       continue;
