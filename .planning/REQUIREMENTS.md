@@ -41,7 +41,7 @@
 
 - [x] **BIND-01**: Purpose config accepts first-class orchestration fields `tools`, `excluded_tools`, and `templates` while rejecting unknown top-level purpose fields.
 - [x] **BIND-02**: Purpose defaults continue passing provider parameters through permissively while type-validating known loop guardrail keys.
-- [ ] **BIND-03**: Schema verification creates `fqc_purpose_templates` with unique `(instance_id, purpose_name, template_path)` rows and source tracking.
+- [x] **BIND-03**: Schema verification creates `fqc_purpose_templates` with unique `(instance_id, purpose_name, template_path)` rows and source tracking.
 - [ ] **BIND-04**: Generic config sync supports YAML-to-DB adapter flows and lets API/runtime template bindings override YAML until removed.
 - [ ] **BIND-05**: Template bindings resolve ergonomic identifiers to normalized vault-relative `template_path` values and warn on dangling bindings.
 
@@ -145,7 +145,7 @@
 | TMPL-05 | Phase 114 | Complete |
 | BIND-01 | Phase 115 | Complete |
 | BIND-02 | Phase 115 | Complete |
-| BIND-03 | Phase 115 | Pending |
+| BIND-03 | Phase 115 | Complete |
 | BIND-04 | Phase 115 | Pending |
 | BIND-05 | Phase 115 | Pending |
 | CAP-01 | Phase 115 | Complete |
