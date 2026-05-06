@@ -314,7 +314,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       // discovery resolver values. No cast needed.
       const resolvedResolver = params.resolver;
       const messagesForRefs = params.messages ?? [];
-      const toolMessageWithName = findToolMessageWithName(messagesForRefs as CallModelMessage[]);
+      const toolMessageWithName = findToolMessageWithName(messagesForRefs);
       if (toolMessageWithName !== null) {
         return {
           content: [
@@ -388,7 +388,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           };
         }
         const resolvedRefs = resolved as ResolvedRef[];
-        hydratedMessages = hydrateMessages(messagesForRefs, resolvedRefs) as typeof messagesForRefs;
+        hydratedMessages = hydrateMessages(messagesForRefs, resolvedRefs);
         injectionMetadata = {
           injectedReferences: buildInjectedReferences(resolvedRefs),
           promptChars: computePromptChars(hydratedMessages),
@@ -584,7 +584,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         response: result.text,
         messages: params.return_messages === true
           ? [
-              ...buildReturnedMessages(hydratedMessages as CallModelMessage[]),
+              ...buildReturnedMessages(hydratedMessages),
               {
                 role: 'assistant',
                 content: result.text,

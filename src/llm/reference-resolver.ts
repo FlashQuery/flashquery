@@ -626,7 +626,7 @@ async function resolveAliasItems(
   const contents: string[] = [];
   const items: NonNullable<ResolvedRef['items']> = [];
   for (let index = 0; index < rawItems.length; index++) {
-    const item = rawItems[index];
+    const item: unknown = rawItems[index];
     try {
       if (typeof item === 'string') {
         const result = await resolveItemStringContent(item, config, sm, ep, log);
