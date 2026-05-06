@@ -39,16 +39,16 @@
 
 ### Purpose Config And Bindings
 
-- [ ] **BIND-01**: Purpose config accepts first-class orchestration fields `tools`, `excluded_tools`, and `templates` while rejecting unknown top-level purpose fields.
-- [ ] **BIND-02**: Purpose defaults continue passing provider parameters through permissively while type-validating known loop guardrail keys.
+- [x] **BIND-01**: Purpose config accepts first-class orchestration fields `tools`, `excluded_tools`, and `templates` while rejecting unknown top-level purpose fields.
+- [x] **BIND-02**: Purpose defaults continue passing provider parameters through permissively while type-validating known loop guardrail keys.
 - [ ] **BIND-03**: Schema verification creates `fqc_purpose_templates` with unique `(instance_id, purpose_name, template_path)` rows and source tracking.
 - [ ] **BIND-04**: Generic config sync supports YAML-to-DB adapter flows and lets API/runtime template bindings override YAML until removed.
 - [ ] **BIND-05**: Template bindings resolve ergonomic identifiers to normalized vault-relative `template_path` values and warn on dangling bindings.
 
 ### Model Capabilities
 
-- [ ] **CAP-01**: Model config supports structured capabilities for tool calling, usage on tool calls, strict tools, parallel tool calls, and structured outputs with tools.
-- [ ] **CAP-02**: Existing free-form model `capabilities: string[]` is migrated or replaced without preserving two conflicting capability surfaces.
+- [x] **CAP-01**: Model config supports structured capabilities for tool calling, usage on tool calls, strict tools, parallel tool calls, and structured outputs with tools.
+- [x] **CAP-02**: Existing free-form model `capabilities: string[]` is migrated or replaced without preserving two conflicting capability surfaces.
 - [ ] **CAP-03**: Mode 2 purposes fail config validation unless every fallback model declares required tool-calling and usage capabilities.
 - [ ] **CAP-04**: Runtime/API template binding runs the same capability admission validation as YAML config.
 - [ ] **CAP-05**: Requests combining `response_format` with model-visible tools fail when the resolved model does not support structured outputs with tools.
@@ -143,13 +143,13 @@
 | TMPL-03 | Phase 114 | Complete |
 | TMPL-04 | Phase 114 | Complete |
 | TMPL-05 | Phase 114 | Complete |
-| BIND-01 | Phase 115 | Pending |
-| BIND-02 | Phase 115 | Pending |
+| BIND-01 | Phase 115 | Complete |
+| BIND-02 | Phase 115 | Complete |
 | BIND-03 | Phase 115 | Pending |
 | BIND-04 | Phase 115 | Pending |
 | BIND-05 | Phase 115 | Pending |
-| CAP-01 | Phase 115 | Pending |
-| CAP-02 | Phase 115 | Pending |
+| CAP-01 | Phase 115 | Complete |
+| CAP-02 | Phase 115 | Complete |
 | CAP-03 | Phase 115 | Pending |
 | CAP-04 | Phase 115 | Pending |
 | CAP-05 | Phase 115 | Pending |
