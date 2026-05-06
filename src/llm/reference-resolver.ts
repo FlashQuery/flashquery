@@ -61,6 +61,12 @@ export interface ResolvedRef {
   start?: number;
   end?: number;
   literalPrefix?: string;
+  template?: boolean;
+  templatePath?: string;
+  templateParamsUsed?: Record<string, { type: 'string' | 'document'; chars: number; resolved_to?: string }>;
+  templateWarnings?: string[];
+  resolvedToCount?: number;
+  items?: Array<{ ref?: string; chars: number; resolved_to?: string; template?: boolean; template_path?: string }>;
 }
 
 export interface FailedRef {
@@ -70,8 +76,30 @@ export interface FailedRef {
   detail: string;
 }
 
+export interface TemplateParamsInput {
+  [key: string]: Record<string, unknown>;
+}
+
+export interface TemplateParamDeclaration {
+  type: 'string' | 'document';
+  required?: boolean;
+  default?: unknown;
+}
+
+export interface InjectedReferenceMetadata {
+  ref: string;
+  chars: number;
+  resolved_to?: string;
+  template?: boolean;
+  template_path?: string;
+  template_params_used?: Record<string, { type: 'string' | 'document'; chars: number; resolved_to?: string }>;
+  template_warnings?: string[];
+  resolved_to_count?: number;
+  items?: Array<{ ref?: string; chars: number; resolved_to?: string; template?: boolean; template_path?: string }>;
+}
+
 export interface InjectionMetadata {
-  injectedReferences: Array<{ ref: string; chars: number; resolved_to?: string }>;
+  injectedReferences: InjectedReferenceMetadata[];
   promptChars: number;
 }
 
@@ -238,14 +266,18 @@ export async function resolveReferences(
   config: FlashQueryConfig,
   sm: typeof supabaseManager,
   ep: typeof embeddingProvider,
-  log: typeof logger
+  log: typeof logger,
+  templateParams?: TemplateParamsInput
 ): Promise<Array<ResolvedRef | FailedRef>> {
   return Promise.all(parsed.map(async (p): Promise<ResolvedRef | FailedRef> => {
     try {
+      if (p.alias) {
+        return await resolveAliasReference(p, config, sm, ep, log, templateParams);
+      }
       const result = await resolveAndBuildDocument(
         p.identifier,
         {
-          effectiveInclude: ['body'],
+          effectiveInclude: p.pointer ? ['body'] : ['body', 'frontmatter'],
           sectionsList: p.section ? [p.section] : [],
           effectiveIncludeNested: true,
           occurrence: 1,
@@ -259,14 +291,49 @@ export async function resolveReferences(
       if (p.pointer) {
         const fr = result.followed_ref as Record<string, unknown> | undefined;
         content = (fr?.body as string | undefined) ?? '';
-        resolvedTo = fr?.resolved_to as string | undefined;
-      } else {
-        content = (result.body as string | undefined) ?? '';
-        const resultPath = typeof result.path === 'string' ? result.path : undefined;
-        if (resultPath !== undefined && normalizedReferencePath(resultPath) !== normalizedReferencePath(p.identifier)) {
-          resolvedTo = resultPath;
+          resolvedTo = fr?.resolved_to as string | undefined;
+        } else {
+          content = (result.body as string | undefined) ?? '';
+          const resultPath = typeof result.path === 'string' ? result.path : undefined;
+          if (resultPath !== undefined && normalizedReferencePath(resultPath) !== normalizedReferencePath(p.identifier)) {
+            resolvedTo = resultPath;
+          }
+          if (isTemplateDocument(result)) {
+            const templatePath = resultPath ?? p.identifier;
+            const rendered = await renderTemplateReference(
+              content,
+              result,
+              getTemplateEntryForPath(templateParams, p.identifier, templatePath),
+              config,
+              sm,
+              ep,
+              log
+            );
+            content = rendered.content;
+            const out: ResolvedRef = {
+              kind: 'resolved',
+              placeholder: p.placeholder,
+              ref: p.ref,
+              content,
+              chars: content.length,
+              identifier: p.identifier,
+              messageIndex: p.messageIndex,
+              start: p.start,
+              end: p.end,
+              literalPrefix: p.literalPrefix,
+              template: true,
+              templatePath,
+              templateParamsUsed: rendered.paramsUsed,
+            };
+            if (rendered.warnings.length > 0) {
+              out.templateWarnings = rendered.warnings;
+            }
+            if (resolvedTo !== undefined) {
+              out.resolvedTo = resolvedTo;
+            }
+            return out;
+          }
         }
-      }
       const out: ResolvedRef = {
         kind: 'resolved',
         placeholder: p.placeholder,
@@ -284,10 +351,469 @@ export async function resolveReferences(
       }
       return out;
     } catch (err) {
+      if (err instanceof TemplateReferenceError) {
+        return { kind: 'failed' as const, ref: p.ref, reason: err.reason, detail: err.message };
+      }
       const mapped = mapReferenceFailure(err, p.ref, log);
       return { kind: 'failed' as const, ref: p.ref, reason: mapped.reason, detail: mapped.detail };
     }
 	  }));
+}
+
+class TemplateReferenceError extends Error {
+  constructor(public reason: ReferenceFailureReason, message: string) {
+    super(message);
+    this.name = 'TemplateReferenceError';
+  }
+}
+
+const RESERVED_TEMPLATE_PARAM_KEYS = new Set(['_template', '_items', '_separator']);
+
+export function isTemplateDocument(result: Record<string, unknown>): boolean {
+  const frontmatter = result.frontmatter;
+  return typeof frontmatter === 'object' &&
+    frontmatter !== null &&
+    (frontmatter as Record<string, unknown>).fq_template === true;
+}
+
+export function getTemplateEntryForPath(
+  templateParams: TemplateParamsInput | undefined,
+  identifier: string,
+  resolvedPath?: string
+): Record<string, unknown> {
+  if (!templateParams) return {};
+  const direct = templateParams[identifier];
+  if (direct) return direct;
+  if (resolvedPath) {
+    return templateParams[resolvedPath] ?? templateParams[normalizedReferencePath(resolvedPath)] ?? {};
+  }
+  return {};
+}
+
+export function normalizeTemplateParamDeclarations(
+  raw: unknown
+): Record<string, TemplateParamDeclaration> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const declarations: Record<string, TemplateParamDeclaration> = {};
+  for (const [name, value] of Object.entries(raw)) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) continue;
+    const record = value as Record<string, unknown>;
+    if (record.type !== 'string' && record.type !== 'document') continue;
+    const declaration: TemplateParamDeclaration = { type: record.type };
+    if (typeof record.required === 'boolean') {
+      declaration.required = record.required;
+    }
+    if (Object.prototype.hasOwnProperty.call(record, 'default')) {
+      declaration.default = record.default;
+    }
+    declarations[name] = declaration;
+  }
+  return declarations;
+}
+
+export function buildTemplateMetadata(r: ResolvedRef): InjectedReferenceMetadata {
+  const entry: InjectedReferenceMetadata = {
+    ref: r.ref,
+    chars: r.chars,
+  };
+  if (r.resolvedTo !== undefined) {
+    entry.resolved_to = r.resolvedTo;
+  }
+  if (r.template === true) {
+    entry.template = true;
+  }
+  if (r.templatePath !== undefined) {
+    entry.template_path = r.templatePath;
+  }
+  if (r.templateParamsUsed !== undefined) {
+    entry.template_params_used = r.templateParamsUsed;
+  }
+  if (r.templateWarnings !== undefined && r.templateWarnings.length > 0) {
+    entry.template_warnings = r.templateWarnings;
+  }
+  if (r.resolvedToCount !== undefined) {
+    entry.resolved_to_count = r.resolvedToCount;
+  }
+  if (r.items !== undefined) {
+    entry.items = r.items;
+  }
+  return entry;
+}
+
+async function resolveAliasReference(
+  p: ParsedRef,
+  config: FlashQueryConfig,
+  sm: typeof supabaseManager,
+  ep: typeof embeddingProvider,
+  log: typeof logger,
+  templateParams?: TemplateParamsInput
+): Promise<ResolvedRef | FailedRef> {
+  const alias = p.alias ?? p.identifier;
+  const entry = templateParams?.[alias];
+  if (!entry) {
+    return {
+      kind: 'failed',
+      ref: p.ref,
+      reason: 'alias_key_not_found',
+      detail: `Alias '${alias}' not found in template_params`,
+    };
+  }
+
+  if (Object.prototype.hasOwnProperty.call(entry, '_items')) {
+    return await resolveAliasItems(p, alias, entry, config, sm, ep, log);
+  }
+
+  const templateIdentifier = entry._template;
+  if (typeof templateIdentifier !== 'string' || templateIdentifier.length === 0) {
+    return {
+      kind: 'failed',
+      ref: p.ref,
+      reason: 'alias_missing_template_field',
+      detail: `Alias '${alias}' is missing required _template field`,
+    };
+  }
+  if (templateIdentifier.startsWith('@')) {
+    return {
+      kind: 'failed',
+      ref: p.ref,
+      reason: 'alias_template_not_found',
+      detail: `Alias '${alias}' _template cannot reference another alias`,
+    };
+  }
+
+  try {
+    const result = await resolveTemplateSource(templateIdentifier, config, sm, ep, log);
+    const body = (result.body as string | undefined) ?? '';
+    if (!isTemplateDocument(result)) {
+      return {
+        kind: 'failed',
+        ref: p.ref,
+        reason: 'alias_template_not_found',
+        detail: `Alias '${alias}' _template '${templateIdentifier}' did not resolve to an fq_template document`,
+      };
+    }
+    const templatePath = typeof result.path === 'string' ? result.path : templateIdentifier;
+    const rendered = await renderTemplateReference(body, result, entry, config, sm, ep, log);
+    const out: ResolvedRef = {
+      kind: 'resolved',
+      placeholder: p.placeholder,
+      ref: p.ref,
+      content: rendered.content,
+      chars: rendered.content.length,
+      identifier: templateIdentifier,
+      messageIndex: p.messageIndex,
+      start: p.start,
+      end: p.end,
+      literalPrefix: p.literalPrefix,
+      resolvedTo: templatePath,
+      template: true,
+      templatePath,
+      templateParamsUsed: rendered.paramsUsed,
+    };
+    if (rendered.warnings.length > 0) {
+      out.templateWarnings = rendered.warnings;
+    }
+    return out;
+  } catch (err) {
+    if (err instanceof TemplateReferenceError) {
+      return { kind: 'failed', ref: p.ref, reason: err.reason, detail: err.message };
+    }
+    const mapped = mapReferenceFailure(err, p.ref, log);
+    return { kind: 'failed', ref: p.ref, reason: 'alias_template_not_found', detail: mapped.detail };
+  }
+}
+
+async function resolveAliasItems(
+  p: ParsedRef,
+  alias: string,
+  entry: Record<string, unknown>,
+  config: FlashQueryConfig,
+  sm: typeof supabaseManager,
+  ep: typeof embeddingProvider,
+  log: typeof logger
+): Promise<ResolvedRef | FailedRef> {
+  const rawItems = entry._items;
+  if (!Array.isArray(rawItems)) {
+    return {
+      kind: 'failed',
+      ref: p.ref,
+      reason: 'multi_ref_invalid_value',
+      detail: `Alias '${alias}' _items must be an array`,
+    };
+  }
+  const separator = typeof entry._separator === 'string' ? entry._separator : '\n\n';
+  const contents: string[] = [];
+  const items: NonNullable<ResolvedRef['items']> = [];
+  for (let index = 0; index < rawItems.length; index++) {
+    const item = rawItems[index];
+    try {
+      if (typeof item === 'string') {
+        const result = await resolvePlainDocumentContent(item, config, sm, ep, log);
+        contents.push(result.content);
+        items.push({ resolved_to: result.path, chars: result.content.length });
+        continue;
+      }
+      if (typeof item === 'object' && item !== null && !Array.isArray(item)) {
+        const itemEntry = item as Record<string, unknown>;
+        const templateIdentifier = itemEntry._template;
+        if (typeof templateIdentifier !== 'string' || templateIdentifier.length === 0) {
+          throw new TemplateReferenceError('alias_missing_template_field', `Alias '${alias}' item ${index} is missing _template`);
+        }
+        const result = await resolveTemplateSource(templateIdentifier, config, sm, ep, log);
+        const body = (result.body as string | undefined) ?? '';
+        const templatePath = typeof result.path === 'string' ? result.path : templateIdentifier;
+        const rendered = await renderTemplateReference(body, result, itemEntry, config, sm, ep, log);
+        contents.push(rendered.content);
+        items.push({
+          resolved_to: templatePath,
+          chars: rendered.content.length,
+        });
+        continue;
+      }
+      throw new TemplateReferenceError('multi_ref_invalid_value', `Alias '${alias}' item ${index} must be a string or template object`);
+    } catch (err) {
+      const reason = err instanceof TemplateReferenceError
+        ? err.reason
+        : mapTemplateDocumentParamFailure(err, log).reason;
+      const detail = err instanceof Error ? err.message : String(err);
+      return {
+        kind: 'failed',
+        ref: p.ref,
+        reason: 'multi_ref_item_failed',
+        detail: `Alias '${alias}' item ${index} failed with ${reason}: ${detail}`,
+      };
+    }
+  }
+  const content = contents.join(separator);
+  return {
+    kind: 'resolved',
+    placeholder: p.placeholder,
+    ref: p.ref,
+    content,
+    chars: content.length,
+    identifier: alias,
+    messageIndex: p.messageIndex,
+    start: p.start,
+    end: p.end,
+    literalPrefix: p.literalPrefix,
+    resolvedToCount: items.length,
+    items,
+    templateParamsUsed: {},
+  };
+}
+
+async function resolveTemplateSource(
+  identifier: string,
+  config: FlashQueryConfig,
+  sm: typeof supabaseManager,
+  ep: typeof embeddingProvider,
+  log: typeof logger
+): Promise<Record<string, unknown>> {
+  return await resolveAndBuildDocument(
+    identifier,
+    {
+      effectiveInclude: ['body', 'frontmatter'],
+      sectionsList: [],
+      effectiveIncludeNested: true,
+      occurrence: 1,
+      effectiveMaxDepth: 6,
+      followRef: undefined,
+    },
+    { config, supabaseManager: sm, embeddingProvider: ep, logger: log }
+  );
+}
+
+async function resolvePlainDocumentContent(
+  identifier: string,
+  config: FlashQueryConfig,
+  sm: typeof supabaseManager,
+  ep: typeof embeddingProvider,
+  log: typeof logger
+): Promise<{ content: string; path?: string }> {
+  const result = await resolveAndBuildDocument(
+    identifier,
+    {
+      effectiveInclude: ['body'],
+      sectionsList: [],
+      effectiveIncludeNested: true,
+      occurrence: 1,
+      effectiveMaxDepth: 6,
+      followRef: undefined,
+    },
+    { config, supabaseManager: sm, embeddingProvider: ep, logger: log }
+  );
+  return {
+    content: (result.body as string | undefined) ?? '',
+    path: typeof result.path === 'string' ? result.path : identifier,
+  };
+}
+
+async function renderTemplateReference(
+  body: string,
+  result: Record<string, unknown>,
+  rawParams: Record<string, unknown>,
+  config: FlashQueryConfig,
+  sm: typeof supabaseManager,
+  ep: typeof embeddingProvider,
+  log: typeof logger
+): Promise<{
+  content: string;
+  paramsUsed: Record<string, { type: 'string' | 'document'; chars: number; resolved_to?: string }>;
+  warnings: string[];
+}> {
+  const frontmatter = result.frontmatter as Record<string, unknown> | undefined;
+  const declarations = normalizeTemplateParamDeclarations(frontmatter?.fq_params);
+  const values: Record<string, string> = {};
+  const paramsUsed: Record<string, { type: 'string' | 'document'; chars: number; resolved_to?: string }> = {};
+  const warnings: string[] = [];
+  const cleanParams = stripReservedTemplateParams(rawParams);
+
+  for (const key of Object.keys(cleanParams)) {
+    if (!(key in declarations)) {
+      warnings.push(`unknown_param_ignored:${key}`);
+    }
+  }
+
+  for (const [name, declaration] of Object.entries(declarations)) {
+    const hasSupplied = Object.prototype.hasOwnProperty.call(cleanParams, name);
+    const hasDefault = Object.prototype.hasOwnProperty.call(declaration, 'default');
+    const rawValue = hasSupplied ? cleanParams[name] : declaration.default;
+
+    if (!hasSupplied && !hasDefault) {
+      if (declaration.required === true) {
+        throw new TemplateReferenceError(
+          'template_missing_required_param',
+          `Required template parameter '${name}' is missing`
+        );
+      }
+      values[name] = '';
+      paramsUsed[name] = { type: declaration.type, chars: 0 };
+      warnings.push(`optional_param_missing_no_default:${name}`);
+      continue;
+    }
+
+    if (declaration.type === 'string') {
+      if (typeof rawValue !== 'string') {
+        throw new TemplateReferenceError(
+          'template_param_invalid_type',
+          `Template parameter '${name}' must be a string`
+        );
+      }
+      values[name] = rawValue;
+      paramsUsed[name] = { type: 'string', chars: rawValue.length };
+      continue;
+    }
+
+    if (declaration.type === 'document') {
+      if (typeof rawValue !== 'string') {
+        throw new TemplateReferenceError(
+          'template_param_invalid_type',
+          `Template parameter '${name}' must be a document identifier string`
+        );
+      }
+      try {
+        const doc = await resolvePlainDocumentContent(rawValue, config, sm, ep, log);
+        values[name] = doc.content;
+        paramsUsed[name] = {
+          type: 'document',
+          chars: doc.content.length,
+          resolved_to: doc.path,
+        };
+      } catch (err) {
+        const mapped = mapTemplateDocumentParamFailure(err, log);
+        throw new TemplateReferenceError(
+          'template_param_doc_not_found',
+          `Document template parameter '${name}' failed to resolve '${rawValue}': ${mapped.detail}`
+        );
+      }
+    }
+  }
+
+  const rendered = renderTemplateContent(body, values, declarations, warnings);
+  return { content: rendered, paramsUsed, warnings };
+}
+
+function stripReservedTemplateParams(params: Record<string, unknown>): Record<string, unknown> {
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (RESERVED_TEMPLATE_PARAM_KEYS.has(key)) continue;
+    clean[key] = value;
+  }
+  return clean;
+}
+
+function mapTemplateDocumentParamFailure(
+  err: unknown,
+  log: typeof logger
+): { reason: ReferenceFailureReason; detail: string } {
+  const mapped = mapReferenceFailure(err, '{{template-param}}', log);
+  return { reason: 'template_param_doc_not_found', detail: mapped.detail };
+}
+
+interface TemplatePlaceholderSpan {
+  kind: 'active' | 'escaped';
+  name: string;
+  placeholder: string;
+  start: number;
+  end: number;
+  literalPrefix: string;
+}
+
+function scanTemplatePlaceholderSpans(content: string): TemplatePlaceholderSpan[] {
+  const spans: TemplatePlaceholderSpan[] = [];
+  const pattern = /\{\{([A-Za-z_][A-Za-z0-9_]*)\}\}/g;
+  for (const match of content.matchAll(pattern)) {
+    const openerStart = match.index ?? 0;
+    let slashStart = openerStart;
+    while (slashStart > 0 && content[slashStart - 1] === '\\') {
+      slashStart--;
+    }
+    const slashCount = openerStart - slashStart;
+    const isEscaped = slashCount % 2 === 1;
+    spans.push({
+      kind: isEscaped ? 'escaped' : 'active',
+      name: match[1],
+      placeholder: match[0],
+      start: slashStart,
+      end: openerStart + match[0].length,
+      literalPrefix: '\\'.repeat(isEscaped ? Math.floor(slashCount / 2) : slashCount / 2),
+    });
+  }
+  return spans;
+}
+
+export function renderTemplateContent(
+  body: string,
+  values: Record<string, string>,
+  declarations: Record<string, TemplateParamDeclaration>,
+  warnings: string[] = []
+): string {
+  const replacements: Array<{ start: number; end: number; content: string }> = [];
+  for (const span of scanTemplatePlaceholderSpans(body)) {
+    if (span.kind === 'escaped') {
+      replacements.push({
+        start: span.start,
+        end: span.end,
+        content: `${span.literalPrefix}${span.placeholder}`,
+      });
+      continue;
+    }
+    if (!(span.name in declarations)) {
+      warnings.push(`undeclared_placeholder_left_literal:${span.name}`);
+      continue;
+    }
+    replacements.push({
+      start: span.start,
+      end: span.end,
+      content: `${span.literalPrefix}${values[span.name] ?? ''}`,
+    });
+  }
+  replacements.sort((a, b) => b.start - a.start);
+  let content = body;
+  for (const rep of replacements) {
+    content = content.slice(0, rep.start) + rep.content + content.slice(rep.end);
+  }
+  return content;
 }
 
 function normalizedReferencePath(value: string): string {
@@ -372,7 +898,11 @@ export function hydrateMessages<T extends { role: string; content?: string | nul
     const original = msg.content;
     const replacements: Array<{ start: number; end: number; content: string }> = [];
     for (const r of refs ?? []) {
-      if (r.start !== undefined && r.end !== undefined) {
+      if (
+        r.start !== undefined &&
+        r.end !== undefined &&
+        original.slice(r.start + (r.literalPrefix?.length ?? 0), r.end) === r.placeholder
+      ) {
         replacements.push({
           start: r.start,
           end: r.end,
@@ -436,17 +966,8 @@ function findNextPlaceholder(
  */
 export function buildInjectedReferences(
   resolved: ResolvedRef[]
-): Array<{ ref: string; chars: number; resolved_to?: string }> {
-  return resolved.map((r) => {
-    const entry: { ref: string; chars: number; resolved_to?: string } = {
-      ref: r.ref,
-      chars: r.chars,
-    };
-    if (r.resolvedTo !== undefined) {
-      entry.resolved_to = r.resolvedTo;
-    }
-    return entry;
-  });
+): InjectedReferenceMetadata[] {
+  return resolved.map((r) => buildTemplateMetadata(r));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

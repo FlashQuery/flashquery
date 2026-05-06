@@ -1,4 +1,5 @@
 import type { FinishReason } from '../constants/llm.js';
+import type { InjectedReferenceMetadata } from './reference-resolver.js';
 
 export interface LlmChatToolCall {
   id: string;
@@ -47,7 +48,7 @@ export interface CallModelMetadata {
   latency_ms: number;
   trace_id?: string;
   trace_cumulative?: TraceCumulative;
-  injected_references?: Array<{ ref: string; chars: number; resolved_to?: string }>;
+  injected_references?: InjectedReferenceMetadata[];
   prompt_chars?: number;
 }
 
