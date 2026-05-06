@@ -34,7 +34,7 @@ class MockProvider:
                         "role": "assistant",
                         "content": None,
                         "tool_calls": [
-                            {"id": "call_native_search", "type": "function", "function": {"name": "search_documents", "arguments": json.dumps({"query": "ATL-DS-11", "mode": "filesystem"})}},
+                            {"id": "call_native_doc", "type": "function", "function": {"name": "get_document", "arguments": json.dumps({"identifiers": "Docs/native.md"})}},
                             {"id": "call_template_skill", "type": "function", "function": {"name": "flashquery_skill_research_skill", "arguments": json.dumps({"topic": "ATL-DS-11"})}},
                         ],
                     },
@@ -100,7 +100,7 @@ def _config(provider_url: str) -> dict[str, Any]:
                 "cost_per_million": {"input": 1, "output": 2},
                 "capabilities": {"tool_calling": True, "usage_on_tool_calls": True, "strict_tools": True, "parallel_tool_calls": True},
             }],
-            "purposes": [{"name": "mixed_agent", "description": "ATL-DS-11", "models": ["agent-model"], "tools": ["search_documents"], "templates": ["Templates/Research-Skill.md"], "defaults": {"max_iterations": 3, "timeout_ms": 10000}}],
+            "purposes": [{"name": "mixed_agent", "description": "ATL-DS-11", "models": ["agent-model"], "tools": ["get_document"], "templates": ["Templates/Research-Skill.md"], "defaults": {"max_iterations": 3, "timeout_ms": 10000}}],
         },
     }
 
@@ -127,15 +127,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
             kinds = [call.get("kind") for entry in calls_log for call in entry.get("tool_calls", [])]
             native_names = envelope.get("metadata", {}).get("tools", {}).get("native_tool_names", [])
             template_names = envelope.get("metadata", {}).get("tools", {}).get("template_tool_names", [])
+            model_visible_payload = json.dumps({
+                "second_request": provider.requests[1] if len(provider.requests) > 1 else {},
+                "messages": envelope.get("messages", []),
+            }, sort_keys=True)
             passed = (
                 result.ok
                 and envelope.get("response") == "ATL-DS-11 final"
                 and "native" in kinds
                 and "template" in kinds
-                and "search_documents" in native_names
+                and "get_document" in native_names
                 and "flashquery_skill_research_skill" in template_names
+                and "NATIVE DOC ATL-DS-11" in model_visible_payload
+                and "Skill ATL-DS-11" in model_visible_payload
             )
-            run.step("ATL-DS-11 final provider-visible registry and calls_log include native and template kinds", passed, json.dumps({"kinds": kinds, "native_names": native_names, "template_names": template_names, "result": result.text[:1500]}, sort_keys=True), tool_result=result)
+            run.step("ATL-DS-11 final provider-visible registry and calls_log include native and template kinds", passed, json.dumps({"kinds": kinds, "native_names": native_names, "template_names": template_names, "model_visible_payload": model_visible_payload[:1500], "result": result.text[:1500]}, sort_keys=True), tool_result=result)
     return run
 
 
