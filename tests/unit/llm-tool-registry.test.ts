@@ -7,8 +7,21 @@ import {
   assembleNativeToolRegistry,
   normalizeToolJsonSchema,
   toOpenAiToolDefinition,
+  validateAndCacheNativeToolSchemas,
   type NativeToolDefinition,
 } from '../../src/llm/tool-registry.js';
+import { getNativeToolCatalog, wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
+import { registerMemoryTools } from '../../src/mcp/tools/memory.js';
+import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
+import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
+import { registerRecordTools } from '../../src/mcp/tools/records.js';
+import { registerCompoundTools } from '../../src/mcp/tools/compound.js';
+import { registerScanTools } from '../../src/mcp/tools/scan.js';
+import { registerPendingReviewTools } from '../../src/mcp/tools/pending-review.js';
+import { registerFileTools } from '../../src/mcp/tools/files.js';
+import { registerLlmTools } from '../../src/mcp/tools/llm.js';
+import { registerLlmUsageTools } from '../../src/mcp/tools/llm-usage.js';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const READ_ONLY_TOOLS = [
   'search_documents',
@@ -58,6 +71,25 @@ const CATALOG: NativeToolDefinition[] = ALL_CATALOG_TOOL_NAMES.map((name) => ({
   description: `${name} description`,
   inputSchema: {},
 }));
+
+function makeCatalogServer(): McpServer {
+  return wrapServerWithToolCatalog({
+    registerTool: () => undefined,
+  } as unknown as McpServer);
+}
+
+function registerAllNativeTools(server: McpServer, config: FlashQueryConfig): void {
+  registerMemoryTools(server, config);
+  registerDocumentTools(server, config);
+  registerPluginTools(server, config);
+  registerRecordTools(server, config);
+  registerCompoundTools(server, config);
+  registerScanTools(server, config);
+  registerPendingReviewTools(server, config);
+  registerFileTools(server, config);
+  registerLlmTools(server, config);
+  registerLlmUsageTools(server, config);
+}
 
 function makeConfig(tools?: string[], excludedTools?: string[]): FlashQueryConfig {
   return {
@@ -116,6 +148,20 @@ describe('TOOL_TIERS', () => {
 
   it('defines tier:read-write as read-only plus write-capable native tools', () => {
     expect(TOOL_TIERS['tier:read-write']).toEqual([...READ_ONLY_TOOLS, ...READ_WRITE_EXTRA_TOOLS]);
+  });
+
+  it('contains only currently registered native MCP tools', () => {
+    const server = makeCatalogServer();
+    registerAllNativeTools(server, makeConfig());
+    const catalog = getNativeToolCatalog(server);
+    validateAndCacheNativeToolSchemas(catalog);
+    const catalogNames = new Set(catalog.map((tool) => tool.name));
+
+    for (const toolName of Object.values(TOOL_TIERS).flat()) {
+      expect(catalogNames.has(toolName), `${toolName} must be registered before it can appear in a tier`).toBe(true);
+    }
+    expect(catalogNames.has('get_doc_outline')).toBe(false);
+    expect(catalog.every((tool) => tool.openAiStrict && tool.openAiNonStrict)).toBe(true);
   });
 });
 
@@ -383,6 +429,41 @@ describe('toOpenAiToolDefinition', () => {
         },
       },
     });
+  });
+});
+
+describe('validateAndCacheNativeToolSchemas', () => {
+  it('precomputes strict and non-strict OpenAI definitions for native tools', () => {
+    const catalog: NativeToolDefinition[] = [
+      {
+        name: 'search_documents',
+        description: 'Search documents',
+        inputSchema: { query: z.string() },
+      },
+    ];
+
+    validateAndCacheNativeToolSchemas(catalog);
+
+    expect(catalog[0].openAiNonStrict?.function.strict).toBeUndefined();
+    expect(catalog[0].openAiStrict?.function.strict).toBe(true);
+    expect(catalog[0].openAiStrict?.function.parameters).toMatchObject({
+      additionalProperties: false,
+      required: ['query'],
+    });
+  });
+
+  it('fails startup validation with the offending native tool name for untranslatable schemas', () => {
+    const catalog: NativeToolDefinition[] = [
+      {
+        name: 'bad_native_tool',
+        description: 'Bad native tool',
+        inputSchema: z.string(),
+      },
+    ];
+
+    expect(() => validateAndCacheNativeToolSchemas(catalog)).toThrow(
+      /Config error: \[native-tool\] tool 'bad_native_tool' schema translation failed/
+    );
   });
 });
 

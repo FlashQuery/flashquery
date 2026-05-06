@@ -1,9 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+vi.mock('../../src/logging/logger.js', () => ({
+  logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 import { loadConfig } from '../../src/config/loader.js';
 import { modelCapabilitiesWithDefaults } from '../../src/llm/capabilities.js';
+import { logger } from '../../src/logging/logger.js';
 
 // Minimal base config YAML — each test appends its own llm: section to a copy of this.
 const BASE_CONFIG_YAML = `
@@ -651,6 +657,7 @@ llm:
   });
 
   it('[ATL-U-08] preserves hard-excluded native tool declarations for registry diagnostics', () => {
+    vi.mocked(logger.warn).mockClear();
     const tmpFile = join(tmpdir(), `fqc-atl-u08-hard-excluded-tools-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 templates:
@@ -679,6 +686,8 @@ llm:
     try {
       const config = loadConfig(tmpFile);
       expect(config.llm?.purposes[0].tools).toEqual(['call_model', 'register_plugin']);
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("purpose 'agentic' lists hard-excluded native tool 'call_model'"));
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("purpose 'agentic' lists hard-excluded native tool 'register_plugin'"));
     } finally {
       unlinkSync(tmpFile);
     }

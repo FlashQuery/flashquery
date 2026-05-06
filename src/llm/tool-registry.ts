@@ -5,6 +5,8 @@ export interface NativeToolDefinition {
   name: string;
   description: string;
   inputSchema: unknown;
+  openAiStrict?: OpenAiToolDefinition;
+  openAiNonStrict?: OpenAiToolDefinition;
 }
 
 export interface OpenAiToolDefinition {
@@ -172,6 +174,27 @@ export function toOpenAiToolDefinition(
   };
 }
 
+export function validateAndCacheNativeToolSchemas(catalog: NativeToolDefinition[]): void {
+  for (const tool of catalog) {
+    try {
+      tool.openAiNonStrict = toOpenAiToolDefinition(tool, { strict: false });
+      tool.openAiStrict = toOpenAiToolDefinition(tool, { strict: true });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`Config error: [native-tool] tool '${tool.name}' schema translation failed: ${message}`);
+    }
+  }
+}
+
+function getCachedOpenAiToolDefinition(
+  tool: NativeToolDefinition,
+  options: OpenAiToolDefinitionOptions
+): OpenAiToolDefinition {
+  if (options.strict && tool.openAiStrict) return tool.openAiStrict;
+  if (!options.strict && tool.openAiNonStrict) return tool.openAiNonStrict;
+  return toOpenAiToolDefinition(tool, options);
+}
+
 export function assembleNativeToolRegistry(
   config: FlashQueryConfig,
   purposeName: string,
@@ -234,7 +257,7 @@ export function assembleNativeToolRegistry(
     if (!tool) {
       throw new Error(`Catalog entry for native tool '${toolName}' was not found.`);
     }
-    return toOpenAiToolDefinition(tool, { strict: options?.strictTools === true });
+    return getCachedOpenAiToolDefinition(tool, { strict: options?.strictTools === true });
   });
 
   return {

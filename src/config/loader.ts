@@ -5,6 +5,7 @@ import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { validateAllPurposeMode2Admissions } from '../llm/capabilities.js';
 import { HARD_EXCLUDED_NATIVE_TOOLS, TOOL_TIERS } from '../llm/tool-registry.js';
+import { logger } from '../logging/logger.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Zod schemas (snake_case — matches YAML structure)
@@ -550,6 +551,19 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
   return errors;
 }
 
+function warnHardExcludedPurposeTools(llm: RawLlm): void {
+  const hardExcluded = new Set<string>(HARD_EXCLUDED_NATIVE_TOOLS);
+  for (const pu of llm.purposes) {
+    const hardExcludedTools = [...(pu.tools ?? []), ...(pu.excluded_tools ?? [])]
+      .filter((tool) => hardExcluded.has(tool));
+    for (const tool of hardExcludedTools) {
+      logger?.warn(
+        `Config: purpose '${pu.name}' lists hard-excluded native tool '${tool}'; it will be removed from the model-visible registry.`
+      );
+    }
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // resolveConfigPath
 // ─────────────────────────────────────────────────────────────────────────────
@@ -756,6 +770,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
         .join('\n');
       throw new Error(message);
     }
+    warnHardExcludedPurposeTools(result.data.llm);
   }
 
   // 8. Convert snake_case to camelCase

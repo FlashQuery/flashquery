@@ -1,6 +1,5 @@
 /**
  * Markdown parsing utilities for MCP tools
- * Used by get_doc_outline for wikilink extraction and resolution
  */
 
 /**
@@ -109,7 +108,6 @@ export function extractHeadings(content: string): Array<{ level: number; text: s
 
 /**
  * Filter headings by maximum depth
- * Used by get_doc_outline max_depth parameter
  *
  * @param headings Array of heading objects
  * @param maxDepth Maximum heading level to include (1-6)
