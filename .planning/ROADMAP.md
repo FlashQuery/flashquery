@@ -216,14 +216,14 @@ Plans:
   4. MCP/Zod input schemas translate to OpenAI-compatible tool definitions with strict schemas when the selected model supports them.
   5. If no model-visible tools remain, provider requests omit `tools` entirely.
   6. Phase-specific runnable tests exist and pass for tier expansion, exclusions, hard-exclusion warnings, schema translation, and at least one public-surface tool-list scenario.
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 Plans:
 **Wave 1**
 - [x] 116-01-PLAN.md — Native tool tier expansion, exclusions, and hard-exclusion diagnostics
 
 **Wave 2** *(blocked on 116-01 completion)*
 - [x] 116-02-PLAN.md — MCP tool catalog capture and OpenAI-compatible schema translation
-- [ ] 116-03-PLAN.md — Startup config validation for purpose tool declarations
+- [x] 116-03-PLAN.md — Startup config validation for purpose tool declarations
 
 **Wave 3** *(blocked on 116-02 and 116-03 completion)*
 - [ ] 116-04-PLAN.md — call_model provider-tool wiring, public scenario coverage, and VAL-116 closure

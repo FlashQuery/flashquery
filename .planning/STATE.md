@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
 status: executing
-stopped_at: Completed 116-02-PLAN.md
-last_updated: "2026-05-06T11:57:21.187Z"
+stopped_at: Completed 116-03-PLAN.md
+last_updated: "2026-05-06T12:06:21.227Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 23
   completed_phases: 4
   total_plans: 23
-  completed_plans: 21
-  percent: 91
+  completed_plans: 22
+  percent: 96
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 ## Current Position
 
 Phase: 116 (model-visible-tool-registry) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-06
 
@@ -66,6 +66,7 @@ Last activity: 2026-05-06
 | Phase 115 P05 | 9 min | 3 tasks | 7 files |
 | Phase 116 P01 | 12min | 2 tasks | 2 files |
 | Phase 116 P02 | 4m11s | 2 tasks | 4 files |
+| Phase 116 P03 | 5m16s | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -85,6 +86,8 @@ Last activity: 2026-05-06
 - [Phase 116]: 116-01 treats native tool tiers as static policy rather than inferring from the MCP server surface.
 - [Phase 116]: 116-02 captures native tool metadata by wrapping McpServer.registerTool before registration instead of reading SDK internals.
 - [Phase 116]: 116-02 uses Zod 4 z.toJSONSchema plus OpenAI-specific normalization for strict tool definitions.
+- [Phase 116]: 116-03 validates purpose native tool declarations from TOOL_TIERS and HARD_EXCLUDED_NATIVE_TOOLS.
+- [Phase 116]: 116-03 preserves hard-excluded tool names at config load so registry diagnostics can warn/remove them.
 
 ## Accumulated Context
 
@@ -166,8 +169,8 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T11:57:21.164Z
-Stopped at: Completed 116-02-PLAN.md
+Last session: 2026-05-06T12:06:21.205Z
+Stopped at: Completed 116-03-PLAN.md
 Resume: None
 
 ## Deferred Items
