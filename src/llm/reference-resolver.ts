@@ -587,24 +587,21 @@ async function resolveAliasItems(
         const result = await resolveTemplateSource(templateIdentifier, config, sm, ep, log);
         const body = (result.body as string | undefined) ?? '';
         const templatePath = typeof result.path === 'string' ? result.path : templateIdentifier;
-        if (isTemplateDocument(result)) {
-          const rendered = await renderTemplateReference(body, result, itemEntry, config, sm, ep, log);
-          contents.push(rendered.content);
-          items.push({
-            ref: templateIdentifier,
-            resolved_to: templatePath,
-            chars: rendered.content.length,
-            template: true,
-            template_path: templatePath,
-          });
-        } else {
-          contents.push(body);
-          items.push({
-            ref: templateIdentifier,
-            resolved_to: templatePath,
-            chars: body.length,
-          });
+        if (!isTemplateDocument(result)) {
+          throw new TemplateReferenceError(
+            'alias_template_not_found',
+            `Alias '${alias}' item ${index} _template '${templateIdentifier}' did not resolve to an fq_template document`
+          );
         }
+        const rendered = await renderTemplateReference(body, result, itemEntry, config, sm, ep, log);
+        contents.push(rendered.content);
+        items.push({
+          ref: templateIdentifier,
+          resolved_to: templatePath,
+          chars: rendered.content.length,
+          template: true,
+          template_path: templatePath,
+        });
         continue;
       }
       throw new TemplateReferenceError('multi_ref_invalid_value', `Alias '${alias}' item ${index} must be a string or template object`);

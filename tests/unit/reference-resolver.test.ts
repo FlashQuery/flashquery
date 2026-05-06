@@ -1259,4 +1259,31 @@ describe('resolveReferences template parameter contracts (TMPL-01..05)', () => {
     expect(failed.detail).toContain('index=0');
     expect(failed.detail).toContain('alias_missing_template_field');
   });
+
+  it('[U-TMPL-10d] _items object _template rejects plain documents instead of injecting raw body', async () => {
+    vi.mocked(resolveAndBuildDocument).mockResolvedValueOnce(
+      plainResult('Docs/plain.md', 'Plain {{label}} body')
+    );
+
+    const resolvedOut = await resolveWithTemplateParams(
+      [parsedRef('{{ref:@background}}', 'background')],
+      fakeConfig,
+      fakeSm,
+      fakeEp,
+      fakeLog,
+      {
+        background: {
+          _items: [{ _template: 'Docs/plain.md', label: 'Ada' }],
+        },
+      }
+    );
+
+    const failed = resolvedOut[0] as FailedRef;
+    expect(failed.kind).toBe('failed');
+    expect(failed.reason).toBe('multi_ref_item_failed');
+    expect(failed.detail).toContain('alias=background');
+    expect(failed.detail).toContain('index=0');
+    expect(failed.detail).toContain('alias_template_not_found');
+    expect(failed.detail).toContain('fq_template');
+  });
 });

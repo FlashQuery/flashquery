@@ -251,14 +251,25 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 missing_required = _call(client, _ref(template), template_params={template: {"source": target, "literal": "x"}})
                 invalid_doc = _call(client, _ref(template), template_params={template: {"name": "Ada", "source": f"{root}/docs/missing.md", "literal": "x"}})
                 invalid_items = _call(client, "{{ref:@bundle}}", template_params={"bundle": {"_items": "not-an-array"}})
-                payloads = [_json(missing_required), _json(invalid_doc), _json(invalid_items)]
+                invalid_plain_template_item = _call(
+                    client,
+                    "{{ref:@bundle}}",
+                    template_params={"bundle": {"_items": [{"_template": plain, "name": "Ada"}]}},
+                )
+                payloads = [_json(missing_required), _json(invalid_doc), _json(invalid_items), _json(invalid_plain_template_item)]
                 reasons = _failure_reasons(*payloads)
                 checks = {
-                    "all errored": all(not result.ok for result in [missing_required, invalid_doc, invalid_items]),
+                    "all errored": all(not result.ok for result in [missing_required, invalid_doc, invalid_items, invalid_plain_template_item]),
                     "reference errors": all(payload.get("error") == "reference_resolution_failed" for payload in payloads),
                     "missing required": "template_missing_required_param" in reasons,
                     "invalid document param": "template_param_doc_not_found" in reasons,
                     "invalid items": "multi_ref_invalid_value" in reasons,
+                    "plain _template item rejected": any(
+                        "alias_template_not_found" in str(entry.get("detail", ""))
+                        for payload in payloads
+                        for entry in payload.get("failed_references", [])
+                        if isinstance(entry, dict)
+                    ),
                     "no provider dispatch": mock_provider.call_count == before_fail_calls,
                 }
                 run.step("ATL-DS-06 template failures abort before provider dispatch", all(checks.values()), f"checks={checks}, reasons={reasons}, payloads={payloads}", tool_result=missing_required)

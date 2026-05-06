@@ -353,6 +353,7 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
   });
 
   it('[I-TMPL-07] returns multi_ref_item_failed with alias and zero-based index detail', async () => {
+    await seedDocument(vaultPath, 'Docs/plain.md', 'Plain', 'Plain {{label}} body');
     const parsed = parseReferences([{ role: 'user', content: '{{ref:@background}}' }]);
     expect(Array.isArray(parsed)).toBe(true);
 
@@ -369,5 +370,17 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
     expect(failed.detail).toContain('index=0');
     expect(failed.detail).toContain('item 0');
     expect(failed.detail).toContain('template_param_doc_not_found');
+
+    const plainTemplateResolved = await resolveReferences(parsed as ParsedRef[], config, supabaseManager, embeddingProvider, logger, {
+      background: {
+        _items: [{ _template: 'Docs/plain.md', label: 'Ada' }],
+      },
+    });
+    const plainTemplateFailed = plainTemplateResolved[0] as FailedRef;
+    expect(plainTemplateFailed.kind).toBe('failed');
+    expect(plainTemplateFailed.reason).toBe('multi_ref_item_failed');
+    expect(plainTemplateFailed.detail).toContain('alias=background');
+    expect(plainTemplateFailed.detail).toContain('index=0');
+    expect(plainTemplateFailed.detail).toContain('alias_template_not_found');
   });
 });

@@ -81,7 +81,7 @@ completed: 2026-05-06
 ## Verification
 
 - `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_call_model_template_parameterization` - passed 1/1 suite, 4/4 steps, strict cleanup clean.
-- `npm run build && npm test -- tests/unit/reference-resolver.test.ts tests/unit/llm-tool.test.ts && npm run test:integration -- tests/integration/reference-resolver.integration.test.ts && python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_call_model_template_parameterization` - passed. Build succeeded; unit tests passed 123/123; integration tests passed 8/8; directed scenario passed 1/1 suite with 4/4 steps.
+- `npm run build && npm test -- tests/unit/reference-resolver.test.ts tests/unit/llm-tool.test.ts && npm run test:integration -- tests/integration/reference-resolver.integration.test.ts && python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_call_model_template_parameterization` - passed. Build succeeded; unit tests passed 124/124; integration tests passed 8/8; directed scenario passed 1/1 suite with 4/4 steps.
 - Acceptance greps passed for scenario strings, directed coverage rows, integration coverage rows, completed requirements, roadmap plan list, and validation command records.
 
 ## Decisions Made
@@ -97,6 +97,7 @@ None - plan executed as written. The directed coverage row remap was an anticipa
 
 - Initial Python scenario load failed on an f-string brace escaping error. Fixed the test helper by adding `_ref(identifier)` and reran the scenario successfully before the Task 1 commit.
 - The full integration gate emitted an existing non-fatal DDL log about dropping a missing `fqc_documents.description` column; the integration suite still passed 8/8.
+- Advisory code review found `_items` object `_template` accepted plain documents. Fixed by requiring `fq_template` targets, added unit/integration/scenario coverage, and reran the full phase gate successfully.
 
 ## Known Stubs
 
