@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
 status: executing
-stopped_at: Completed 115-04-PLAN.md
-last_updated: "2026-05-06T03:38:30.447Z"
+stopped_at: Completed 115-03-PLAN.md
+last_updated: "2026-05-06T03:49:40.479Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 23
   completed_phases: 3
   total_plans: 19
-  completed_plans: 17
-  percent: 89
+  completed_plans: 18
+  percent: 95
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 ## Current Position
 
 Phase: 115 (purpose-config-bindings-capabilities) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-05-06
 
@@ -62,6 +62,7 @@ Last activity: 2026-05-06
 | Phase 115 P01 | 7 min | 3 tasks | 3 files |
 | Phase 115 P02 | 4 min | 2 tasks | 4 files |
 | Phase 115 P04 | 6 min | 3 tasks | 5 files |
+| Phase 115 P03 | 7 min | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -73,6 +74,8 @@ Last activity: 2026-05-06
 - [Phase 114]: Alias integration tests parse real @alias placeholders before resolver hydration.
 - [Phase 114]: Directed coverage row IDs L-73 through L-76 were occupied, so TMPL-03/TMPL-04/TMPL-05/VAL-114 were remapped to L-80 through L-83.
 - [Phase 114]: Documentation review deferred to Phase 119 because README.md and docs/ARCHITECTURE.md do not yet describe call_model references/templates.
+- [Phase 115]: 115-03: Dangling structurally valid template paths warn and persist for later discovery/dispatch filtering.
+- [Phase 115]: 115-03: Purpose-template runtime rows use source='api' while existing LLM config tables keep source='webapp' for compatibility.
 
 ## Accumulated Context
 
@@ -154,8 +157,8 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T03:38:30.421Z
-Stopped at: Completed 115-04-PLAN.md
+Last session: 2026-05-06T03:49:40.223Z
+Stopped at: Completed 115-03-PLAN.md
 Resume: None
 
 ## Deferred Items
