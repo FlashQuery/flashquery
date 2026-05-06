@@ -153,6 +153,7 @@ describe('syncLlmConfigToDb()', () => {
       'fqc_llm_purposes',
       'fqc_llm_models',
       'fqc_llm_providers',
+      'fqc_purpose_templates',
     ]);
 
     // Provider insert with source='yaml' AND api_key_ref stores the literal ${ENV_VAR}, not the resolved secret.
