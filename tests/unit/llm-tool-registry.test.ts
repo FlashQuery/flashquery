@@ -526,6 +526,21 @@ describe('validateAndCacheNativeToolSchemas', () => {
       /Config error: \[native-tool\] tool 'bad_native_tool' schema translation failed/
     );
   });
+
+  it('fails startup validation when a native tool uses the reserved template prefix', () => {
+    const catalog: NativeToolDefinition[] = [
+      {
+        name: 'flashquery_diagnostics',
+        description: 'Reserved-prefix native tool',
+        inputSchema: {},
+        handler: noopNativeHandler,
+      },
+    ];
+
+    expect(() => validateAndCacheNativeToolSchemas(catalog)).toThrow(
+      /Config error: \[native-tool\] tool 'flashquery_diagnostics' uses the reserved 'flashquery_' prefix/
+    );
+  });
 });
 
 describe('normalizeToolJsonSchema', () => {

@@ -143,17 +143,13 @@ function makeTemplateReverseMap(options: DispatchToolCallsOptions): TemplateTool
   return options.templateReverseMap ?? new Map<string, string>();
 }
 
-function isGeneratedTemplateToolName(toolName: string): boolean {
-  return toolName.startsWith('flashquery_');
-}
-
 async function dispatchOneToolCall(
   options: DispatchToolCallsOptions,
   toolCall: LlmChatToolCall
 ): Promise<NativeToolDispatchResult | Awaited<ReturnType<typeof dispatchTemplateToolCall>>> {
   const templateReverseMap = makeTemplateReverseMap(options);
   const toolName = toolCall.function.name;
-  if (templateReverseMap.has(toolName) || isGeneratedTemplateToolName(toolName)) {
+  if (templateReverseMap.has(toolName)) {
     return await dispatchTemplateToolCall({
       toolCall,
       templateReverseMap,

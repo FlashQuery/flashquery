@@ -122,6 +122,7 @@ export const HARD_EXCLUDED_NATIVE_TOOLS = [
 ] as const;
 
 const HARD_EXCLUDED_REASON = 'Tool is not safe for delegated model-visible native access.';
+const TEMPLATE_TOOL_NAME_PREFIX = 'flashquery_';
 
 function isToolTierName(tool: string): tool is ToolTierName {
   return Object.prototype.hasOwnProperty.call(TOOL_TIERS, tool);
@@ -208,6 +209,12 @@ export function toOpenAiToolDefinition(
 
 export function validateAndCacheNativeToolSchemas(catalog: NativeToolDefinition[]): void {
   for (const tool of catalog) {
+    if (tool.name.startsWith(TEMPLATE_TOOL_NAME_PREFIX)) {
+      throw new Error(
+        `Config error: [native-tool] tool '${tool.name}' uses the reserved '${TEMPLATE_TOOL_NAME_PREFIX}' prefix; ` +
+        'this prefix is reserved for FlashQuery-generated template tools.'
+      );
+    }
     try {
       tool.openAiNonStrict = toOpenAiToolDefinition(tool, { strict: false });
       tool.openAiStrict = toOpenAiToolDefinition(tool, { strict: true });
