@@ -323,6 +323,10 @@ describe('call_model agent-loop public E2E contracts', () => {
         return_messages: true,
       }));
       expect(envelope.metadata).toMatchObject({
+        resolved_model_name: 'fallback-agent-model',
+        provider_name: 'mock',
+        fallback_position: 2,
+        cost_usd: expect.closeTo(((10 * 1) + (4 * 2) + (20 * 10) + (5 * 20)) / 1_000_000, 12),
         tools: {
           stop_reason: 'final_response',
           calls_log: expect.arrayContaining([

@@ -148,7 +148,9 @@ function mergeProviderTools(
   baseParameters: Record<string, unknown>,
   providerTools: NonNullable<ToolRegistryAssembly['providerTools']>
 ): Record<string, unknown> {
-  const callerTools = Array.isArray(baseParameters['tools']) ? baseParameters['tools'] : [];
+  const callerTools = Array.isArray(baseParameters['tools'])
+    ? baseParameters['tools'] as Array<Record<string, unknown>>
+    : [];
   return {
     ...baseParameters,
     tools: [...callerTools, ...providerTools],
@@ -637,12 +639,13 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             providerParameters: purposeProviderParameters,
             nativeToolCatalog,
             toolRegistry,
-            traceId: params.trace_id ?? null,
-            chatByPurpose: client.chatByPurposeUnrecorded.bind(client),
-            modelCostLookup: (modelName) => config.llm?.models.find((model) => model.name === modelName),
-            logger,
-            getIsShuttingDown,
-          });
+              traceId: params.trace_id ?? null,
+              chatByPurpose: client.chatByPurposeUnrecorded.bind(client),
+              modelCostLookup: (modelName) => config.llm?.models.find((model) => model.name === modelName),
+              initialModelName: client.getModelForPurpose(resolvedName)?.modelName ?? null,
+              logger,
+              getIsShuttingDown,
+            });
           const envelope = buildMode2Envelope(
             loopEnvelope,
             hydratedMessages,
@@ -751,9 +754,9 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
 
       // Step 3: Compute cost from config
       // result.modelName is the resolved alias (lowercased per Phase 99 D-08)
-      const assistantMessage = 'message' in result ? result.message : undefined;
+      const assistantMessage: LlmChatResult['message'] | undefined = 'message' in result ? result.message : undefined;
       const hasAssistantToolCalls = (assistantMessage?.tool_calls?.length ?? 0) > 0;
-      const responseText = 'text' in result
+      const responseText: string = 'text' in result
         ? result.text
         : typeof assistantMessage?.content === 'string'
           ? assistantMessage.content
@@ -859,7 +862,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
                     name: fallbackPosition === null ? result.modelName : resolvedName,
                   }
                 : {
-                    role: 'assistant',
+                    role: 'assistant' as const,
                     content: responseText,
                     name: fallbackPosition === null ? result.modelName : resolvedName,
                   },

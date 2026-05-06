@@ -88,7 +88,7 @@ function summarize(content: string): string {
 }
 
 function getAbortCode(signal: AbortSignal): string {
-  const reason = signal.reason;
+  const reason = signal.reason as unknown;
   if (reason === 'timeout' || reason === 'shutdown') return reason;
   if (reason instanceof Error && /timeout/i.test(reason.message)) return 'timeout';
   if (reason instanceof Error && /shutdown/i.test(reason.message)) return 'shutdown';

@@ -201,7 +201,9 @@ export function validateAndCacheNativeToolSchemas(catalog: NativeToolDefinition[
       tool.openAiStrict = toOpenAiToolDefinition(tool, { strict: true });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      throw new Error(`Config error: [native-tool] tool '${tool.name}' schema translation failed: ${message}`);
+      throw new Error(`Config error: [native-tool] tool '${tool.name}' schema translation failed: ${message}`, {
+        cause: error,
+      });
     }
   }
 }

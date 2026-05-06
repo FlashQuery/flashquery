@@ -1415,9 +1415,14 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
       traceId: 'trace-loop-1',
       chatByPurpose: expect.any(Function),
       modelCostLookup: expect.any(Function),
+      initialModelName: 'fast',
     }));
-    await vi.mocked(executeAgentLoop).mock.calls.at(-1)?.[0].chatByPurpose('documented', [], {});
-    expect(chatByPurposeUnrecordedMock).toHaveBeenCalledWith('documented', [], {});
+    await vi.mocked(executeAgentLoop).mock.calls.at(-1)?.[0].chatByPurpose('documented', [], {
+      signal: new AbortController().signal,
+    });
+    expect(chatByPurposeUnrecordedMock).toHaveBeenCalledWith('documented', [], {
+      signal: expect.any(AbortSignal),
+    });
     const envelope = JSON.parse(result.content[0].text) as { response: string; messages: unknown[]; metadata: { tools: { stop_reason: string } } };
     expect(envelope.response).toBe('final loop answer');
     expect(envelope.messages).toEqual([]);

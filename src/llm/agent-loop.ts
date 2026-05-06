@@ -1,7 +1,8 @@
 import { computeCost, recordLlmUsage as writeLlmUsage } from './cost-tracker.js';
 import { dispatchToolCalls } from './tool-dispatcher.js';
+import type { AgentLoopStopReason } from '../constants/llm.js';
 import type { LlmUsageRecord } from './cost-tracker.js';
-import type { LlmChatMessage, LlmChatResult, LlmChatToolCall, CallModelEnvelope, AgentLoopCallLogEntry, AgentLoopStopReason } from './types.js';
+import type { LlmChatMessage, LlmChatResult, LlmChatToolCall, CallModelEnvelope, AgentLoopCallLogEntry } from './types.js';
 import type { NativeToolCallLogEntry, NativeToolDispatchContext } from './tool-dispatcher.js';
 import type { NativeToolDefinition, OpenAiToolDefinition, ToolRegistryAssembly } from './tool-registry.js';
 
@@ -55,6 +56,7 @@ export interface ExecuteAgentLoopOptions {
   traceId?: string | null;
   modelCostLookup?: (modelName: string) => ModelCost | undefined;
   models?: ModelCost[];
+  initialModelName?: string | null;
   recordUsage?: (record: LlmUsageRecord) => void;
   now?: () => number;
   getIsShuttingDown?: () => boolean;
@@ -135,6 +137,15 @@ function hasTimedOut(now: () => number, deadline: number): boolean {
   return now() >= deadline;
 }
 
+function getAbortStopReason(signal: AbortSignal): AgentLoopStopReason | null {
+  if (!signal.aborted) return null;
+  const reason = signal.reason as unknown;
+  if (reason === 'timeout' || reason === 'shutdown') return reason;
+  if (reason instanceof Error && /timeout/i.test(reason.message)) return 'timeout';
+  if (reason instanceof Error && /shutdown/i.test(reason.message)) return 'shutdown';
+  return 'shutdown';
+}
+
 function makeAbortController(options: ExecuteAgentLoopOptions, deadline: number): AbortController {
   const controller = new AbortController();
   const shutdownSignal = options.shutdownSignal;
@@ -213,11 +224,11 @@ function makeEnvelope(
   stopReason: AgentLoopStopReason,
   totals: LoopTotals,
   latestAssistantText: string,
-  firstResult: (LlmChatResult & { fallbackPosition?: number }) | null
+  resultForMetadata: (LlmChatResult & { fallbackPosition?: number }) | null
 ): CallModelEnvelope & { mode?: string; usageRow?: Partial<LlmUsageRecord> } {
-  const resolvedModelName = firstResult?.modelName ?? '';
-  const providerName = firstResult?.providerName ?? '';
-  const fallbackPosition = firstResult?.fallbackPosition ?? null;
+  const resolvedModelName = resultForMetadata?.modelName ?? '';
+  const providerName = resultForMetadata?.providerName ?? '';
+  const fallbackPosition = resultForMetadata?.fallbackPosition ?? null;
 
   return {
     response: stopReason === 'final_response' ? latestAssistantText : latestAssistantText,
@@ -252,20 +263,20 @@ function makeEnvelope(
 
 function recordAggregateUsage(
   options: ExecuteAgentLoopOptions,
-  firstResult: (LlmChatResult & { fallbackPosition?: number }) | null,
+  resultForMetadata: (LlmChatResult & { fallbackPosition?: number }) | null,
   totals: LoopTotals
 ): Partial<LlmUsageRecord> {
-  if (!firstResult) return {};
+  if (!resultForMetadata) return {};
   const record: LlmUsageRecord = {
     instanceId: options.instanceId ?? '',
     purposeName: options.purposeName,
-    modelName: firstResult.modelName,
-    providerName: firstResult.providerName,
+    modelName: resultForMetadata.modelName,
+    providerName: resultForMetadata.providerName,
     inputTokens: totals.inputTokens,
     outputTokens: totals.outputTokens,
     costUsd: totals.costUsd,
     latencyMs: totals.latencyMs,
-    fallbackPosition: firstResult.fallbackPosition ?? null,
+    fallbackPosition: resultForMetadata.fallbackPosition ?? null,
     traceId: options.traceId ?? null,
   };
   (options.recordUsage ?? writeLlmUsage)(record);
@@ -323,9 +334,9 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
     return { ...result, fallbackPosition: result.fallbackPosition ?? 1 };
   });
   const dispatcher = options.toolDispatcher ?? dispatchToolCalls;
-  let firstResult: (LlmChatResult & { fallbackPosition?: number }) | null = null;
+  let latestResult: (LlmChatResult & { fallbackPosition?: number }) | null = null;
   let latestAssistantText = '';
-  let lastModelName: string | null = options.models?.[0]?.name ?? null;
+  let lastModelName: string | null = options.initialModelName ?? options.models?.[0]?.name ?? null;
 
   while (true) {
     const stopBefore = shouldStopBeforeCall(
@@ -343,8 +354,8 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
       maxCostUsd
     );
     if (stopBefore) {
-      const envelope = makeEnvelope(options, messages, callsLog, stopBefore, totals, latestAssistantText, firstResult);
-      envelope.usageRow = recordAggregateUsage(options, firstResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, stopBefore, totals, latestAssistantText, latestResult);
+      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
       return envelope;
     }
 
@@ -353,14 +364,16 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
       result = await chatByPurpose(options.purposeName, messages, {
         ...parameters,
         ...(providerTools.length > 0 ? { tools: providerTools } : {}),
+        signal: abortController.signal,
       });
     } catch {
-      const envelope = makeEnvelope(options, messages, callsLog, 'error', totals, latestAssistantText, firstResult);
-      envelope.usageRow = recordAggregateUsage(options, firstResult, totals);
+      const stopReason = getAbortStopReason(abortController.signal) ?? 'error';
+      const envelope = makeEnvelope(options, messages, callsLog, stopReason, totals, latestAssistantText, latestResult);
+      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
       return envelope;
     }
 
-    firstResult ??= result;
+    latestResult = result;
     lastModelName = result.modelName;
     const costUsd = costForResult(options, result);
     totals.inputTokens += result.inputTokens;
@@ -389,20 +402,26 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
       })),
     });
 
+    if (maxCostUsd !== undefined && totals.costUsd > maxCostUsd) {
+      const envelope = makeEnvelope(options, messages, callsLog, 'max_cost', totals, latestAssistantText, latestResult);
+      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
+      return envelope;
+    }
+
     if (toolCalls.length === 0 || result.finishReason !== 'tool_calls') {
-      const envelope = makeEnvelope(options, messages, callsLog, 'final_response', totals, latestAssistantText, firstResult);
-      envelope.usageRow = recordAggregateUsage(options, firstResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'final_response', totals, latestAssistantText, latestResult);
+      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
       return envelope;
     }
 
     if (options.getIsShuttingDown?.() === true || options.shutdownSignal?.aborted === true) {
-      const envelope = makeEnvelope(options, messages, callsLog, 'shutdown', totals, latestAssistantText, firstResult);
-      envelope.usageRow = recordAggregateUsage(options, firstResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'shutdown', totals, latestAssistantText, latestResult);
+      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
       return envelope;
     }
     if (hasTimedOut(now, deadline)) {
-      const envelope = makeEnvelope(options, messages, callsLog, 'timeout', totals, latestAssistantText, firstResult);
-      envelope.usageRow = recordAggregateUsage(options, firstResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'timeout', totals, latestAssistantText, latestResult);
+      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
       return envelope;
     }
 
@@ -434,19 +453,20 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
 
     const forcedAfterDispatch = normalizeStopReason(options.forceStopAfterDispatch);
     const dispatchTimedOut = dispatchResult.logEntries.some((entry) => entry.error_code === 'timeout' || entry.status === 'timeout');
-    if (forcedAfterDispatch || dispatchTimedOut || abortController.signal.reason === 'timeout') {
-      const envelope = makeEnvelope(options, messages, callsLog, forcedAfterDispatch ?? 'timeout', totals, latestAssistantText, firstResult);
-      envelope.usageRow = recordAggregateUsage(options, firstResult, totals);
+    const abortStopReason = getAbortStopReason(abortController.signal);
+    if (forcedAfterDispatch || dispatchTimedOut || abortStopReason === 'timeout') {
+      const envelope = makeEnvelope(options, messages, callsLog, forcedAfterDispatch ?? 'timeout', totals, latestAssistantText, latestResult);
+      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
       return envelope;
     }
-    if (options.getIsShuttingDown?.() === true || options.shutdownSignal?.aborted === true || abortController.signal.reason === 'shutdown') {
-      const envelope = makeEnvelope(options, messages, callsLog, 'shutdown', totals, latestAssistantText, firstResult);
-      envelope.usageRow = recordAggregateUsage(options, firstResult, totals);
+    if (options.getIsShuttingDown?.() === true || options.shutdownSignal?.aborted === true || abortStopReason === 'shutdown') {
+      const envelope = makeEnvelope(options, messages, callsLog, 'shutdown', totals, latestAssistantText, latestResult);
+      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
       return envelope;
     }
     if (hasTimedOut(now, deadline)) {
-      const envelope = makeEnvelope(options, messages, callsLog, 'timeout', totals, latestAssistantText, firstResult);
-      envelope.usageRow = recordAggregateUsage(options, firstResult, totals);
+      const envelope = makeEnvelope(options, messages, callsLog, 'timeout', totals, latestAssistantText, latestResult);
+      envelope.usageRow = recordAggregateUsage(options, latestResult, totals);
       return envelope;
     }
   }

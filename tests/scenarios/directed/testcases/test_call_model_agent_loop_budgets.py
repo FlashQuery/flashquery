@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-ATL-DS-12: public budget, timeout, shutdown, provider error, dispatch-time timeout,
-zero usage, estimate, fallback cost, and per-model stop accounting scenario.
+ATL-DS-12: public max-token, max-cost, max-iteration, zero-usage, and
+completed-iteration accounting scenario.
 """
 from __future__ import annotations
 
@@ -112,15 +112,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
     with RepeatingToolProvider() as provider:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=_config(provider.url)) as server:
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
-            result = client.call_tool(
+            max_tokens_result = client.call_tool(
                 "call_model",
                 resolver="purpose",
                 name="agentic_budgets",
                 messages=[{"role": "user", "content": "ATL-DS-12 budget stop"}],
-                parameters={"max_iterations": 1, "max_tokens_budget": 1, "max_cost_usd": 0.000001, "timeout_ms": 5000},
-                trace_id="atl-ds-12",
+                parameters={"max_iterations": 4, "max_tokens_budget": 1, "timeout_ms": 5000},
+                trace_id="atl-ds-12-max-tokens",
             )
-            envelope = json.loads(result.text) if result.ok else {}
+            envelope = json.loads(max_tokens_result.text) if max_tokens_result.ok else {}
             metadata = envelope.get("metadata", {})
             tools = metadata.get("tools", {})
             zero_completed_iteration_usage = (
@@ -131,24 +131,65 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 and metadata.get("cost_usd") == 0
                 and len(provider.requests) == 0
             )
+            max_cost_result = client.call_tool(
+                "call_model",
+                resolver="purpose",
+                name="agentic_budgets",
+                messages=[{"role": "user", "content": "ATL-DS-12 cost stop"}],
+                parameters={"max_iterations": 4, "max_cost_usd": 0.000000001, "timeout_ms": 5000},
+                trace_id="atl-ds-12-max-cost",
+            )
+            max_cost_envelope = json.loads(max_cost_result.text) if max_cost_result.ok else {}
+            max_cost_tools = max_cost_envelope.get("metadata", {}).get("tools", {})
+            max_cost_pre_stop = (
+                max_cost_tools.get("stop_reason") == "max_cost"
+                and max_cost_tools.get("calls_log") == []
+                and len(provider.requests) == 0
+            )
+            max_iterations_result = client.call_tool(
+                "call_model",
+                resolver="purpose",
+                name="agentic_budgets",
+                messages=[{"role": "user", "content": "ATL-DS-12 iteration stop"}],
+                parameters={"max_iterations": 1, "timeout_ms": 5000},
+                trace_id="atl-ds-12-max-iterations",
+            )
+            max_iterations_envelope = json.loads(max_iterations_result.text) if max_iterations_result.ok else {}
+            max_iterations_metadata = max_iterations_envelope.get("metadata", {})
+            max_iterations_tools = max_iterations_metadata.get("tools", {})
+            max_iterations_after_completed_iteration = (
+                max_iterations_tools.get("stop_reason") == "max_iterations"
+                and len(max_iterations_tools.get("calls_log", [])) == 1
+                and max_iterations_metadata.get("tokens", {}).get("input") == 8
+                and max_iterations_metadata.get("tokens", {}).get("output") == 3
+                and len(provider.requests) == 1
+            )
             passed = (
-                result.ok
-                and tools.get("stop_reason") in {"max_iterations", "timeout", "max_tokens", "max_cost", "shutdown", "error"}
+                max_tokens_result.ok
+                and max_cost_result.ok
+                and max_iterations_result.ok
+                and tools.get("stop_reason") in {"max_tokens"}
                 and isinstance(tools.get("calls_log"), list)
                 and "tokens" in metadata
                 and "cost_usd" in metadata
                 and zero_completed_iteration_usage
+                and max_cost_pre_stop
+                and max_iterations_after_completed_iteration
             )
             run.step(
-                label="ATL-DS-12 asserts stop reasons, dispatch-time timeout, provider error, zero usage rows, estimate ladder, fallback cost, and per-model accounting",
+                label="ATL-DS-12 asserts max-token/max-cost pre-call zero usage and max-iteration completed usage",
                 passed=passed,
                 detail=json.dumps({
-                    "result": result.text[:1000],
+                    "max_tokens_result": max_tokens_result.text[:1000],
+                    "max_cost_result": max_cost_result.text[:1000],
+                    "max_iterations_result": max_iterations_result.text[:1000],
                     "request_count": len(provider.requests),
                     "zero_completed_iteration_usage": zero_completed_iteration_usage,
+                    "max_cost_pre_stop": max_cost_pre_stop,
+                    "max_iterations_after_completed_iteration": max_iterations_after_completed_iteration,
                 }, sort_keys=True),
-                timing_ms=result.timing_ms,
-                tool_result=result,
+                timing_ms=max_tokens_result.timing_ms + max_cost_result.timing_ms + max_iterations_result.timing_ms,
+                tool_result=max_iterations_result,
             )
     return run
 

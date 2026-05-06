@@ -207,7 +207,13 @@ function normalizeProviderParameters(parameters: Record<string, unknown>): Recor
   if (Array.isArray(normalized['tools']) && normalized['tools'].length === 0) {
     delete normalized['tools'];
   }
+  delete normalized['signal'];
   return normalized;
+}
+
+function getAbortSignal(parameters?: Record<string, unknown>): AbortSignal | undefined {
+  const signal = parameters?.['signal'];
+  return signal instanceof AbortSignal ? signal : undefined;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -325,8 +331,16 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     // Phase 99 default: 30000ms. Per-provider config deferred to a later phase.
     const timeoutMs = (provider as { timeoutMs?: number }).timeoutMs ?? 30000;
 
+    const callerSignal = getAbortSignal(parameters);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const timeoutId = setTimeout(() => controller.abort('timeout'), timeoutMs);
+    let abortListener: (() => void) | undefined;
+    if (callerSignal?.aborted) {
+      controller.abort(callerSignal.reason as unknown);
+    } else if (callerSignal) {
+      abortListener = () => controller.abort(callerSignal.reason as unknown);
+      callerSignal.addEventListener('abort', abortListener, { once: true });
+    }
     const startTime = performance.now(); // D-10
 
     try {
@@ -344,8 +358,18 @@ export class OpenAICompatibleLlmClient implements LlmClient {
       } catch (err: unknown) {
         const name = (err as { name?: string }).name;
         if (name === 'AbortError') {
+          const reason = controller.signal.reason as unknown;
+          const reasonText = reason === 'timeout'
+            ? `${timeoutMs}ms timeout`
+            : reason === undefined
+              ? 'abort signal'
+              : reason instanceof Error
+                ? reason.message
+                : typeof reason === 'string'
+                  ? reason
+                  : 'abort signal';
           throw new LlmNetworkError(
-            `LLM error: ${provider.name} request exceeded ${timeoutMs}ms timeout.`,
+            `LLM error: ${provider.name} request aborted by ${reasonText}.`,
             { cause: err }
           );
         }
@@ -463,6 +487,9 @@ export class OpenAICompatibleLlmClient implements LlmClient {
       };
     } finally {
       clearTimeout(timeoutId); // avoid keeping the event loop alive
+      if (callerSignal && abortListener) {
+        callerSignal.removeEventListener('abort', abortListener);
+      }
     }
   }
 

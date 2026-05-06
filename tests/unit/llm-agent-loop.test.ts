@@ -230,6 +230,28 @@ describe('ATL-U-13 loop executor state machine contract', () => {
       },
     });
   });
+
+  it('ATL-U-13 passes the loop AbortSignal into in-flight model calls so timeout_ms can abort them', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const observedSignals: AbortSignal[] = [];
+    const chat = vi.fn((_messages: LlmChatMessage[], parameters?: Record<string, unknown>) => {
+      const signal = parameters?.['signal'];
+      expect(signal).toBeInstanceOf(AbortSignal);
+      observedSignals.push(signal as AbortSignal);
+      return new Promise<LlmChatResult>((_resolve, reject) => {
+        (signal as AbortSignal).addEventListener('abort', () => reject(new Error('aborted by loop timeout')), { once: true });
+      });
+    });
+
+    const result = await executeAgentLoop(buildOptions({
+      chat,
+      parameters: { timeout_ms: 1, max_tokens: 128 },
+    }));
+
+    expect(chat).toHaveBeenCalledTimes(1);
+    expect(observedSignals[0].aborted).toBe(true);
+    expect(result.metadata.tools.stop_reason).toBe('timeout');
+  });
 });
 
 describe('ATL-U-14 cost, budget, and usage aggregation contract', () => {
@@ -287,6 +309,62 @@ describe('ATL-U-14 cost, budget, and usage aggregation contract', () => {
     }));
 
     expect(result.metadata.cost_usd).toBeCloseTo(((100 * 1) + (10 * 2) + (20 * 10) + (5 * 20)) / 1_000_000, 12);
+  });
+
+  it('ATL-U-14 stamps final metadata and aggregate usage with the latest successful fallback result', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const recordUsage = vi.fn();
+    const result = await executeAgentLoop(buildOptions({
+      recordUsage,
+      chat: vi.fn()
+        .mockResolvedValueOnce(chatResult({
+          modelName: 'fast',
+          providerName: 'openai',
+          fallbackPosition: 1,
+          message: { role: 'assistant', content: null, tool_calls: [MODE_2_TOOL] },
+          finishReason: 'tool_calls',
+          inputTokens: 100,
+          outputTokens: 10,
+        }))
+        .mockResolvedValueOnce(chatResult({
+          modelName: 'fallback',
+          providerName: 'openrouter',
+          fallbackPosition: 2,
+          inputTokens: 20,
+          outputTokens: 5,
+        })),
+    }));
+
+    expect(result.metadata).toMatchObject({
+      resolved_model_name: 'fallback',
+      provider_name: 'openrouter',
+      fallback_position: 2,
+    });
+    expect(recordUsage).toHaveBeenCalledWith(expect.objectContaining({
+      modelName: 'fallback',
+      providerName: 'openrouter',
+      fallbackPosition: 2,
+    }));
+  });
+
+  it('ATL-U-14 uses the selected initial model to enforce max_cost_usd before the first provider call', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const chat = vi.fn();
+
+    const result = await executeAgentLoop(buildOptions({
+      chat,
+      models: [],
+      initialModelName: 'expensive',
+      modelCostLookup: (modelName: string) =>
+        modelName === 'expensive'
+          ? { name: 'expensive', providerName: 'openai', costPerMillion: { input: 1_000_000, output: 1_000_000 } }
+          : undefined,
+      parameters: { max_tokens: 128, max_cost_usd: 0.000001 },
+    }));
+
+    expect(chat).not.toHaveBeenCalled();
+    expect(result.metadata.tools.stop_reason).toBe('max_cost');
+    expect(result.metadata.tokens).toEqual({ input: 0, output: 0 });
   });
 
   it('ATL-U-14 covers budget estimate ladders: ceil(message_chars / 4), cumulative average, 0, parameters.max_tokens, purpose default max_tokens, and DEFAULT_OUTPUT_TOKEN_ESTIMATE = 2048', async () => {
