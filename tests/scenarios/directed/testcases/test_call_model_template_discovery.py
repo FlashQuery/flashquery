@@ -115,6 +115,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 fq_expose_as_tool=True,
                 fq_desc="Weekly checklist",
             )
+            _write_doc(
+                server.vault_path,
+                "Templates/Hidden Skill.md",
+                "Hidden body",
+                fq_template=True,
+                fq_expose_as_tool=False,
+                fq_namespace="skill",
+                fq_desc="Hidden skill not for masquerade",
+            )
+            _write_doc(
+                server.vault_path,
+                "Docs/Plain.md",
+                "Plain document body",
+            )
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
             result = client.call_tool("call_model", resolver="list_purposes")
             payload = json.loads(result.text or "{}") if result.ok else {}
@@ -124,6 +138,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 result.ok
                 and any(t.get("name") == "flashquery_skill_research_skill" and t.get("template_path") == "Templates/Research-Skill.md" and "parameters" in t for t in tools)
                 and any(t.get("name") == "flashquery_template_weekly_checklist" and t.get("description") == "Weekly checklist" for t in tools)
+                and not any(t.get("template_path") == "Templates/Hidden Skill.md" for t in tools)
+                and not any(t.get("template_path") == "Docs/Plain.md" for t in tools)
                 and isinstance(purpose.get("template_tool_conflicts"), list)
             )
             run.step(
