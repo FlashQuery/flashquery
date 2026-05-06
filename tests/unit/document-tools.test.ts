@@ -49,6 +49,42 @@ vi.mock('../../src/embedding/provider.js', () => ({
 }));
 
 vi.mock('../../src/mcp/utils/resolve-document.js', () => ({
+  DocumentNotFoundError: class DocumentNotFoundError extends Error {
+    identifier: string;
+
+    constructor(identifier: string, message = `Document not found: "${identifier}"`) {
+      super(message);
+      this.name = 'DocumentNotFoundError';
+      this.identifier = identifier;
+    }
+  },
+  AmbiguousDocumentIdentifierError: class AmbiguousDocumentIdentifierError extends Error {
+    identifier: string;
+    matches: string[];
+
+    constructor(identifier: string, matches: string[]) {
+      super(
+        `Ambiguous filename "${identifier}" matches ${matches.length} files:\n${matches.map((m) => `  - ${m}`).join('\n')}\nUse a vault-relative path or fq_id instead.`
+      );
+      this.name = 'AmbiguousDocumentIdentifierError';
+      this.identifier = identifier;
+      this.matches = matches;
+    }
+  },
+  DocumentReadError: class DocumentReadError extends Error {
+    identifier: string;
+    path: string;
+    causeError: unknown;
+
+    constructor(identifier: string, path: string, causeError: unknown) {
+      const detail = causeError instanceof Error ? causeError.message : String(causeError);
+      super(`Error reading document "${identifier}" at "${path}": ${detail}`);
+      this.name = 'DocumentReadError';
+      this.identifier = identifier;
+      this.path = path;
+      this.causeError = causeError;
+    }
+  },
   resolveDocumentIdentifier: vi.fn().mockImplementation(async (_config: unknown, _supabase: unknown, identifier: string) => ({
     absPath: `/tmp/test-vault/${identifier}`,
     relativePath: identifier,

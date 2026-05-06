@@ -195,6 +195,14 @@ export function mergeParameters(
   return { ...purposeDefaults, ...callerParams };
 }
 
+function normalizeProviderParameters(parameters: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...parameters };
+  if (Array.isArray(normalized['tools']) && normalized['tools'].length === 0) {
+    delete normalized['tools'];
+  }
+  return normalized;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // OpenAICompatibleLlmClient
 // ─────────────────────────────────────────────────────────────────────────────
@@ -304,7 +312,7 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     }
 
     const apiKey = provider.apiKey;
-    const mergedParams = parameters ? mergeParameters(parameters, {}) : {};
+    const mergedParams = parameters ? normalizeProviderParameters(mergeParameters(parameters, {})) : {};
 
     // T-99-02: timeout-bounded execution
     // Phase 99 default: 30000ms. Per-provider config deferred to a later phase.

@@ -367,17 +367,15 @@ All claims in this research were verified from local code, local planning/produc
 |---|-------|---------|---------------|
 | — | — | — | — |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `resolveDocumentIdentifier()` itself gain a typed ambiguity error, or should Phase 113 classify ambiguity only in the reference resolver?** [VERIFIED: src/mcp/utils/resolve-document.ts]
    - What we know: The existing helper throws a specific ambiguity message that includes matching paths and guidance. [VERIFIED: src/mcp/utils/resolve-document.ts]
-   - What's unclear: Changing helper error types can affect other tools that catch generic errors. [VERIFIED: src/mcp/tools/documents.ts; src/mcp/utils/document-output.ts]
-   - Recommendation: Prefer a narrow typed error class that preserves current `.message`, or add a wrapper classifier in `reference-resolver.ts` if planner wants minimal blast radius. [VERIFIED: codebase inspection]
+   - RESOLVED: Phase 113 should classify ambiguity at the reference resolver boundary rather than changing `resolveDocumentIdentifier()` as a prerequisite. This keeps blast radius narrow for existing document tools that currently catch generic errors, while still producing the public `ambiguous_document_identifier` `ReferenceFailureReason` required by `call_model`. If implementation discovers an existing helper-level typed error path that preserves current `.message` behavior for all other callers, it may use that helper internally, but the executable requirement is boundary classification in `src/llm/reference-resolver.ts`. [VERIFIED: src/mcp/tools/documents.ts; src/mcp/utils/document-output.ts; 113-CONTEXT.md D-04/D-05]
 
 2. **How much alias scaffolding belongs in Phase 113?** [VERIFIED: 113-CONTEXT.md]
    - What we know: `@` is a v1 grammar operator and parser diagnostics for empty alias/operator conflicts are in Phase 113. [VERIFIED: 113-CONTEXT.md; CITED: DRS §4.2-§4.3]
-   - What's unclear: Full alias hydration depends on `template_params`, which is mostly Phase 114. [VERIFIED: 113-CONTEXT.md]
-   - Recommendation: Parse alias syntax and return typed `alias_key_not_found` or minimal scaffold failures only if `template_params` is accepted in this phase; do not implement template substitution. [VERIFIED: 113-CONTEXT.md]
+   - RESOLVED: Phase 113 owns alias grammar parsing and invalid-syntax diagnostics only: positional `@`, empty alias key, and disallowed alias combinations with `#` or `->`. Full alias hydration through `template_params`, `_template`, `_items`, document parameters, template substitution, and alias-specific runtime failures are Phase 114 unless a minimal type placeholder is necessary to keep parser output shaped for later extension. Phase 113 must not implement template substitution. [VERIFIED: 113-CONTEXT.md D-02/D-06/deferred; DRS §4.2-§4.3]
 
 ## Environment Availability
 

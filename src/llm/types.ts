@@ -10,16 +10,42 @@ export interface LlmChatToolCall {
   };
 }
 
-export interface LlmChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
+export interface LlmSystemMessage {
+  role: 'system';
+  content?: string;
+  name?: string;
+  tool_call_id?: never;
+  tool_calls?: never;
+}
+
+export interface LlmUserMessage {
+  role: 'user';
+  content?: string;
+  name?: string;
+  tool_call_id?: never;
+  tool_calls?: never;
+}
+
+export interface LlmAssistantMessage {
+  role: 'assistant';
   content?: string | null;
   name?: string;
-  tool_call_id?: string;
+  tool_call_id?: never;
   tool_calls?: LlmChatToolCall[];
 }
 
+export interface LlmToolMessage {
+  role: 'tool';
+  content?: string;
+  name?: never;
+  tool_call_id: string;
+  tool_calls?: never;
+}
+
+export type LlmChatMessage = LlmSystemMessage | LlmUserMessage | LlmAssistantMessage | LlmToolMessage;
+
 export interface LlmChatResult {
-  message: LlmChatMessage & { role: 'assistant' };
+  message: LlmAssistantMessage;
   modelName: string;
   providerName: string;
   inputTokens: number;

@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   OpenAICompatibleLlmClient,
@@ -12,7 +14,7 @@ import {
 } from '../../src/llm/client.js';
 import * as clientModule from '../../src/llm/client.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
-import { FINISH_REASONS } from '../../src/constants/llm.js';
+import { FINISH_REASONS, LLM_PARTICIPANT_NAMES } from '../../src/constants/llm.js';
 import type { LlmChatMessage } from '../../src/llm/types.js';
 import * as costTracker from '../../src/llm/cost-tracker.js';
 
@@ -221,6 +223,23 @@ describe('Phase 112 canonical LLM contracts', () => {
     expect(FINISH_REASONS).toEqual(['stop', 'tool_calls', 'length', 'content_filter', 'unknown']);
   });
 
+  it('LLM_PARTICIPANT_NAMES exposes centralized participant attribution constants', () => {
+    expect(LLM_PARTICIPANT_NAMES).toEqual({ host: 'host' });
+  });
+
+  it('host participant attribution is not hard-coded outside the constants module', () => {
+    const files = [
+      ...listTypeScriptFiles('src/llm'),
+      'src/mcp/tools/llm.ts',
+    ];
+    const hostLiteralRe = /['"](host|flashquery\.host)['"]/g;
+
+    for (const file of files) {
+      const text = readFileSync(file, 'utf8');
+      expect(text.match(hostLiteralRe) ?? [], file).toEqual([]);
+    }
+  });
+
   it('LlmChatMessage supports nullable assistant content with normalized tool calls', () => {
     const assistantMessage: LlmChatMessage = {
       role: 'assistant',
@@ -245,6 +264,15 @@ describe('Phase 112 canonical LLM contracts', () => {
     expect(toolMessage.tool_call_id).toBe('call_1');
   });
 });
+
+function listTypeScriptFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((entry) => {
+    const fullPath = join(dir, entry);
+    const stat = statSync(fullPath);
+    if (stat.isDirectory()) return listTypeScriptFiles(fullPath);
+    return fullPath.endsWith('.ts') ? [fullPath] : [];
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LlmHttpError and LlmNetworkError class identity (U-29..U-33)
@@ -667,6 +695,45 @@ describe('OpenAICompatibleLlmClient.chat', () => {
     const result = await client.chat('gpt-4o', SAMPLE_MESSAGES);
     expect(result.finishReason).toBe('stop');
     expect(result.message).toEqual({ role: 'assistant', content: 'plain text' });
+  });
+
+  it('chat() omits empty tools arrays from provider requests while preserving non-empty tools', async () => {
+    const httpsMod = await import('node:https');
+    const capturedBodies: Array<Record<string, unknown>> = [];
+    vi.spyOn(httpsMod as typeof httpsMod & { request: unknown }, 'request').mockImplementation(
+      (_opts: unknown, cb: unknown) => {
+        return {
+          on(_event: string, _handler: (err?: Error) => void) {},
+          write(body: string) {
+            capturedBodies.push(JSON.parse(body) as Record<string, unknown>);
+          },
+          end() {
+            const bodyStr = JSON.stringify(makeOpenAISuccessBody({ text: 'ok' }));
+            const chunks = [Buffer.from(bodyStr, 'utf-8')];
+            const res = {
+              statusCode: 200,
+              statusMessage: 'OK',
+              headers: {},
+              on(event: string, handler: (chunk?: Buffer) => void) {
+                if (event === 'data') for (const chunk of chunks) handler(chunk);
+                else if (event === 'end') setTimeout(() => handler(), 0);
+              },
+            };
+            (cb as (res: typeof res) => void)(res);
+          },
+        } as unknown as ReturnType<typeof httpsMod.request>;
+      }
+    );
+
+    await client.chat('gpt-4o', SAMPLE_MESSAGES, { tools: [] });
+    await client.chat('gpt-4o', SAMPLE_MESSAGES, {
+      tools: [{ type: 'function', function: { name: 'search_documents', parameters: {} } }],
+    });
+
+    expect(capturedBodies[0]).not.toHaveProperty('tools');
+    expect(capturedBodies[1].tools).toEqual([
+      { type: 'function', function: { name: 'search_documents', parameters: {} } },
+    ]);
   });
 
   it('chat() maps function_call and non-empty tool_calls to finishReason tool_calls', async () => {
