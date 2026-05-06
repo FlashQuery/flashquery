@@ -1491,6 +1491,168 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     expect(hasModelVisibleTools({ nativeToolNames: [], providerTools: [], diagnostics })).toBe(false);
     expect(hasModelVisibleTools({ nativeToolNames: [], diagnostics })).toBe(false);
   });
+
+  it('[LOOP-07] Mode 2 default envelope maps loop metadata and keeps messages empty', async () => {
+    selectEqEqMock.mockResolvedValue({
+      data: [{ input_tokens: 5, output_tokens: 7, cost_usd: 0.0001, latency_ms: 10 }],
+      error: null,
+    });
+    vi.mocked(executeAgentLoop).mockResolvedValue({
+      response: 'final loop answer',
+      messages: [
+        { role: 'user', content: 'Read the document.' },
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: 'call_doc', type: 'function', function: { name: 'get_document', arguments: { identifiers: 'Doc.md' } } }],
+        },
+        { role: 'tool', content: '{"ok":true}', tool_call_id: 'call_doc' },
+        { role: 'assistant', content: 'final loop answer' },
+      ],
+      metadata: {
+        resolver: 'purpose',
+        name: 'documented',
+        resolved_model_name: 'fast',
+        provider_name: 'openai',
+        fallback_position: 1,
+        tokens: { input: 12, output: 8 },
+        cost_usd: 0.0000066,
+        latency_ms: 90,
+        tools: {
+          native_tool_names: ['get_document'],
+          diagnostics: { explicitTools: ['get_document'] },
+          stop_reason: 'final_response',
+          iterations: 2,
+          calls_log: [{
+            iteration: 1,
+            model_name: 'fast',
+            provider_name: 'openai',
+            fallback_position: 1,
+            finish_reason: 'tool_calls',
+            tokens: { input: 12, output: 8 },
+            cost_usd: 0.0000066,
+            latency_ms: 90,
+            assistant: { content: null },
+            tool_calls: [{ tool_call_id: 'call_doc', tool_name: 'get_document', status: 'success' }],
+          }],
+          aggregate_usage: { tokens: { input: 12, output: 8 }, cost_usd: 0.0000066, latency_ms: 90 },
+        },
+      },
+    });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      chatByPurpose: vi.fn(),
+      chatByPurposeUnrecorded: vi.fn(),
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'documented',
+      messages: [{ role: 'user', content: 'Read the document.' }],
+      trace_id: 'trace-loop-2',
+    });
+
+    expect(result.isError).toBeUndefined();
+    const envelope = JSON.parse(result.content[0].text) as {
+      messages: unknown[];
+      metadata: {
+        trace_cumulative: { total_calls: number; total_tokens: { input: number; output: number }; total_cost_usd: number; total_latency_ms: number };
+        tools: Record<string, unknown>;
+      };
+    };
+    expect(envelope.messages).toEqual([]);
+    expect(envelope.metadata.trace_cumulative).toEqual({
+      total_calls: 2,
+      total_tokens: { input: 17, output: 15 },
+      total_cost_usd: 0.0001066,
+      total_latency_ms: 100,
+    });
+    expect(envelope.metadata.tools).toMatchObject({
+      native_tool_names: ['get_document'],
+      diagnostics: { explicit_tools: ['get_document'] },
+      stop_reason: 'final_response',
+      iterations: 2,
+      calls_log: expect.any(Array),
+      aggregate_usage: { tokens: { input: 12, output: 8 }, cost_usd: 0.0000066, latency_ms: 90 },
+    });
+    for (const key of ['stop_reason', 'iterations', 'calls_log', 'aggregate_usage', 'diagnostics', 'native_tool_names']) {
+      expect(envelope.metadata.tools).toHaveProperty(key);
+    }
+  });
+
+  it('[LOOP-07] Mode 2 return_messages true prepends hydrated host messages and removes tool message names', async () => {
+    vi.mocked(executeAgentLoop).mockResolvedValue({
+      response: 'final loop answer',
+      messages: [
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [{ id: 'call_doc', type: 'function', function: { name: 'get_document', arguments: { identifiers: 'Doc.md' } } }],
+        },
+        { role: 'tool', name: 'get_document' as never, content: '{"ok":true}', tool_call_id: 'call_doc' },
+        { role: 'assistant', content: 'final loop answer' },
+      ],
+      metadata: {
+        resolver: 'purpose',
+        name: 'documented',
+        resolved_model_name: 'fast',
+        provider_name: 'openai',
+        fallback_position: 1,
+        tokens: { input: 12, output: 8 },
+        cost_usd: 0.0000066,
+        latency_ms: 90,
+        tools: {
+          native_tool_names: ['get_document'],
+          diagnostics: {},
+          stop_reason: 'final_response',
+          iterations: 2,
+          calls_log: [],
+          aggregate_usage: { tokens: { input: 12, output: 8 }, cost_usd: 0.0000066, latency_ms: 90 },
+        },
+      },
+    });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      chatByPurpose: vi.fn(),
+      chatByPurposeUnrecorded: vi.fn(),
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'documented',
+      return_messages: true,
+      messages: [{ role: 'user', content: 'Read the document.' }],
+    });
+
+    expect(result.isError).toBeUndefined();
+    const envelope = JSON.parse(result.content[0].text) as { messages: Array<Record<string, unknown>> };
+    expect(envelope.messages[0]).toMatchObject({ role: 'user', name: LLM_PARTICIPANT_NAMES.host, content: 'Read the document.' });
+    expect(envelope.messages).toEqual(expect.arrayContaining([
+      expect.objectContaining({ role: 'assistant', tool_calls: expect.any(Array) }),
+      expect.objectContaining({ role: 'tool', tool_call_id: 'call_doc' }),
+      expect.objectContaining({ role: 'assistant', content: 'final loop answer' }),
+    ]));
+    const toolMessage = envelope.messages.find((message) => message.role === 'tool');
+    expect(toolMessage).not.toHaveProperty('name');
+  });
 });
 
 // ─── U-DISC-01..13: discovery resolvers + body guard ────────────────────────

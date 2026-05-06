@@ -199,6 +199,10 @@ describe('call_model agent-loop public E2E contracts', () => {
       }));
       expect(envelope).toMatchObject({
         response: 'native loop complete',
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: 'assistant', tool_calls: expect.any(Array) }),
+          expect.objectContaining({ role: 'tool', tool_call_id: 'call_search_1' }),
+        ]),
         metadata: {
           tools: {
             stop_reason: 'final_response',
@@ -238,11 +242,16 @@ describe('call_model agent-loop public E2E contracts', () => {
         tools: {
           stop_reason: 'final_response',
           calls_log: expect.arrayContaining([
-            expect.objectContaining({ tool_call_id: 'call_doc_ok' }),
-            expect.objectContaining({ tool_call_id: 'call_doc_missing' }),
+            expect.objectContaining({
+              tool_calls: expect.arrayContaining([
+                expect.objectContaining({ tool_call_id: 'call_doc_ok' }),
+                expect.objectContaining({ tool_call_id: 'call_doc_missing' }),
+              ]),
+            }),
           ]),
         },
       });
+      expect(envelope.messages).toEqual([]);
     } finally {
       await provider.stop();
     }
@@ -282,7 +291,9 @@ describe('call_model agent-loop public E2E contracts', () => {
         resolver: 'purpose',
         name: 'agentic',
         messages: [{ role: 'user', content: 'caller-provided Mode 3 external tool should be rejected.' }],
-        tools: [{ type: 'function', function: { name: 'external_search', parameters: { type: 'object' } } }],
+        parameters: {
+          tools: [{ type: 'function', function: { name: 'external_search', parameters: { type: 'object' } } }],
+        },
       }))).rejects.toThrow(/caller-provided|Mode 3|deferred/i);
       expect(provider.requests.length).toBe(0);
     } finally {
