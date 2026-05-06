@@ -189,7 +189,20 @@ Plans:
   4. Structured model capabilities replace the old free-form behavior surface for tool execution decisions.
   5. Any purpose that exposes model-visible tools fails config validation unless every fallback model declares required support.
   6. Phase-specific runnable tests exist and pass for config parse/admission, DDL/schema verification, config sync precedence, binding resolution, runtime capability validation, and public startup/config scenarios for user-visible admission errors.
-**Plans**: TBD during `$gsd-plan-phase 115`
+**Plans:** 5 plans
+Plans:
+**Wave 1**
+- [ ] 115-01-PLAN.md — Purpose config schema, loop default validation, capability migration, and example config
+- [ ] 115-02-PLAN.md — Purpose-template table DDL, schema verification, and capability/tag storage
+
+**Wave 2** *(blocked on 115-01 completion)*
+- [ ] 115-04-PLAN.md — Structured capability defaulting, startup admission, discovery projection, and response_format guard
+
+**Wave 3** *(blocked on 115-01, 115-02, and 115-04 completion)*
+- [ ] 115-03-PLAN.md — Generic config sync, purpose-template binding normalization, API precedence, and runtime admission
+
+**Wave 4** *(blocked on 115-03 completion)*
+- [ ] 115-05-PLAN.md — Public scenario coverage, coverage ledgers, validation gate, and traceability closure
 **UI hint**: no
 
 ### Phase 116: Model-Visible Tool Registry
