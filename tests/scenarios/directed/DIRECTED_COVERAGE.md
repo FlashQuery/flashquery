@@ -681,6 +681,7 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-82 | TMPL-05: Alias `_items` injects an ordered list of document/template items with `_separator`, `resolved_to_count`, and ordered `items` metadata | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
 | L-83 | VAL-114: Managed public scenario gate `test_call_model_template_parameterization` validates path-keyed templates, alias templates, `_items`, typed failures, plain-doc bypass, and non-recursive substitution | test_call_model_template_parameterization | 2026-05-06 | 2026-05-06 |
 | L-84 | ATL-DS-14: Capability admission failures for Mode 2 purposes are user-visible and actionable, including `tool_calling`, `usage_on_tool_calls`, and `structured_outputs_with_tools` diagnostics that distinguish `declared unsupported` from `unknown declaration` and fail before provider dispatch when `response_format` is incompatible with model-visible tools | test_call_model_agent_loop_capabilities | 2026-05-06 | 2026-05-06 |
+| L-85 | VAL-116: Purpose `call_model` exposes assembled native provider tools only when the final registry is non-empty, omits provider `tools` when exclusions empty the set, and returns public `metadata.tools` diagnostics for hard-excluded native tools such as `call_model` | test_call_model_native_tool_registry | 2026-05-06 | 2026-05-06 |
 
 ---
 
@@ -702,8 +703,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| LLM Tools | 98 | 98 | 0 |
-| **Total** | **382** | **378** | **4** |
+| LLM Tools | 99 | 99 | 0 |
+| **Total** | **383** | **379** | **4** |
 
 ---
 
@@ -757,6 +758,15 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 - L-79: stable typed failures include `reason` and `detail` before provider dispatch.
 
 **Resolution (2026-05-05)**: Added managed directed coverage for ATL-DS-02 and ATL-DS-03 via `test_call_model_reference_system_core`. The scenario uses a deterministic OpenAI-compatible mock provider, seeds vault documents, forces a scan, and validates hydration metadata plus fail-fast behavior on the public MCP surface. It covers email-like paths, bare filename and fq_id `resolved_to`, literal `ref` substrings, same-document multi-section ordering, odd/even/triple escape parity, alias/operator syntax details, and legacy `{{id:...}}` literal semantics. Test passes 5/5 steps.
+
+---
+
+### test_call_model_native_tool_registry — L-85
+
+**Behaviors covered**
+- L-85: VAL-116 public native registry behavior for non-empty provider tools, empty-tool omission, and hard-exclusion diagnostics.
+
+**Resolution (2026-05-06)**: Added managed directed coverage via `test_call_model_native_tool_registry`. The scenario uses a deterministic OpenAI-compatible mock provider, configures one purpose with `tools: [get_document, call_model]`, verifies the public envelope exposes `metadata.tools.native_tool_names == ["get_document"]` plus `diagnostics.hard_excluded` for `call_model`, and verifies the provider request includes the `get_document` function tool. A second purpose uses `excluded_tools: [get_document]` and verifies the mock provider request omits `tools` entirely rather than receiving `tools: []`. Test passes 2/2 steps.
 
 ---
 

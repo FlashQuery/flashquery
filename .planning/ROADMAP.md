@@ -97,7 +97,7 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 - [x] **Phase 113: Document Reference System Core** - Reference grammar, span scanner, escape parity, identifier ambiguity, typed failure taxonomy, non-recursive hydration, and runnable validation (REF-01 through REF-08, VAL-113) — Complete 2026-05-05
 - [x] **Phase 114: Template Parameterization** - Template detection, `template_params`, alias entries, document parameters, placeholder substitution, `_items` list injection, and runnable validation (TMPL-01 through TMPL-05, VAL-114) — Complete 2026-05-06
 - [ ] **Phase 115: Purpose Config, Bindings & Capabilities** - Purpose orchestration fields, loop defaults validation, `fqc_purpose_templates`, generic config sync, structured model capabilities, Mode 2 admission, and runnable validation (BIND-01 through BIND-05, CAP-01 through CAP-05, VAL-115)
-- [ ] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions, and runnable validation (TOOL-01 through TOOL-04, VAL-116)
+- [x] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions, and runnable validation (TOOL-01 through TOOL-04, VAL-116) — Complete 2026-05-06
 - [ ] **Phase 117: Agent Loop Executor** - Mode 2 loop orchestration, internal native dispatch, parallel tool calls, guardrails, fallback, aggregate usage writes, calls log metadata, and runnable validation (LOOP-01 through LOOP-07, TOOL-05, TOOL-06, VAL-117)
 - [ ] **Phase 118: Template Discovery & Masquerade Dispatch** - Fresh vault template discovery, generated `flashquery.<namespace>.<slug>` tools, collision-safe reverse map, template tool dispatch, and runnable validation (TMPL-06 through TMPL-08, VAL-118)
 - [ ] **Phase 119: Discovery Diagnostics & Help Resolver** - Extended `list_purposes`, structured capability diagnostics in `list_models`, discovery `search`, v1 `help` resolver, and runnable validation (DISC-01 through DISC-04, VAL-119)
@@ -216,7 +216,7 @@ Plans:
   4. MCP/Zod input schemas translate to OpenAI-compatible tool definitions with strict schemas when the selected model supports them.
   5. If no model-visible tools remain, provider requests omit `tools` entirely.
   6. Phase-specific runnable tests exist and pass for tier expansion, exclusions, hard-exclusion warnings, schema translation, and at least one public-surface tool-list scenario.
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 **Wave 1**
 - [x] 116-01-PLAN.md — Native tool tier expansion, exclusions, and hard-exclusion diagnostics
@@ -226,7 +226,7 @@ Plans:
 - [x] 116-03-PLAN.md — Startup config validation for purpose tool declarations
 
 **Wave 3** *(blocked on 116-02 and 116-03 completion)*
-- [ ] 116-04-PLAN.md — call_model provider-tool wiring, public scenario coverage, and VAL-116 closure
+- [x] 116-04-PLAN.md — call_model provider-tool wiring, public scenario coverage, and VAL-116 closure
 **UI hint**: no
 
 ### Phase 117: Agent Loop Executor

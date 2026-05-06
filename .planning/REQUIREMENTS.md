@@ -1,7 +1,7 @@
 # Requirements: FlashQuery Core v3.2 Agentic LLM Tools
 
 **Defined:** 2026-05-05
-**Last Updated:** 2026-05-06 after Phase 114 full gate
+**Last Updated:** 2026-05-06 after Phase 116 model-visible registry validation
 **Core Value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
 
 ## v3.2 Requirements
@@ -194,4 +194,4 @@
 
 ---
 *Requirements defined: 2026-05-05*
-*Last updated: 2026-05-05 after adding per-phase validation requirements*
+*Last updated: 2026-05-06 after Phase 116 model-visible registry validation*
