@@ -687,6 +687,11 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-88 | ATL-DS-13: Public Mode 2 usage aggregation keeps `metadata.tools.calls_log` token sums equal to top-level `metadata.tokens`, records one aggregate usage row when Supabase test config is available, hides per-iteration usage rows, and preserves per-model fallback cost accounting | test_call_model_agent_loop_usage | 2026-05-06 | 2026-05-06 |
 | L-89 | VAL-117: Phase 117 final validation passes deterministic unit, E2E, and directed scenario gates: directed scenarios cover public native loop, budget stops (max-tokens, max-cost, max-iterations, timeout, provider error), usage aggregation, and calls-log arithmetic; unit/E2E gates cover caller-provided tools rejection / deferred Mode 3, cooperative shutdown, dispatch-time timeout, zero usage rows, input/output estimate ladder coverage, and per-model fallback cost | test_call_model_agent_loop_native; test_call_model_agent_loop_budgets; test_call_model_agent_loop_usage; tests/unit/llm-agent-loop.test.ts; tests/unit/llm-tool.test.ts; tests/e2e/call-model-agent-loop.e2e.test.ts | 2026-05-06 | 2026-05-06 |
 | L-90 | **PENDING — ATL-DS-12 step 6 cooperative shutdown directed coverage.** Drives a Mode 2 loop into `stop_reason: 'shutdown'` through the public MCP boundary by signaling the FQCServer mid-loop after at least one iteration completes. **Required behaviors to assert:** envelope.metadata.tools.stop_reason == 'shutdown'; calls_log length ≥ 1 (completed-iteration usage preserved); aggregate usage row reflects only the completed iteration(s); the response field follows guardrail policy (most recent assistant text or empty string after an unfulfilled tool-call turn). **Implementation sketch:** (1) start an `FQCServer` and a long-running mock provider that responds slowly enough to give the test thread a window to signal shutdown after the first chat completes; (2) launch `client.call_tool('call_model', ...)` in a background `threading.Thread` so the main thread can observe progress; (3) when the mock provider's `requests` list reaches length 1 (first chat received), have the main thread invoke a new framework helper (proposed: `FQCServer.signal_graceful_shutdown()`, sending SIGTERM but **not** waiting for the process — letting the in-flight call drain); (4) join the background thread to retrieve the envelope and assert. **Framework prerequisite:** `tests/scenarios/framework/fqc_test_utils.py::FQCServer` currently exposes only `stop()`, which sends SIGTERM **and** waits for process exit, blocking the in-flight `call_tool`. A non-blocking `signal_graceful_shutdown()` (or equivalent) helper must be added before this directed test can be written; alternatively, the test can spawn its own subprocess wrapper and send SIGTERM directly. **Coverage anchor:** `Agentic-LLM-Tool-Loop.md` §5.4 design invariant 5 ("Cooperative shutdown is not a generic error") and ATL Test Plan ATL-DS-12 step 6 ("Signal cooperative shutdown mid-loop and assert `stop_reason: 'shutdown'` after completed-iteration usage is recorded"). **Status:** Not yet implemented; cooperative shutdown is currently exercised at the unit tier (`tests/unit/llm-agent-loop.test.ts:388-395` via `forceStopBeforeNextCall: 'shutdown'`) only. | (future) test_call_model_agent_loop_shutdown | — | — |
+| L-91 | ATL-DS-07: `list_purposes` exposes fresh template-tool discovery diagnostics, including generated `flashquery.*` names, canonical `template_path`, descriptions, parameters, empty conflicts, and dangling template paths when applicable | test_call_model_template_discovery | 2026-05-06 | 2026-05-06 |
+| L-92 | ATL-DS-08: Template tool-name collisions surface `template_tool_conflicts` diagnostics and block `call_model` with `tool_registry_collision` before provider invocation | test_call_model_template_tool_conflicts | 2026-05-06 | 2026-05-06 |
+| L-93 | ATL-DS-10: Public template-tool Mode 2 loop dispatches `flashquery.skill.research_skill`, hydrates string and document parameters into a tool result, appends tool history, and lets the delegated model return a final response | test_call_model_agent_loop_template_tool | 2026-05-06 | 2026-05-06 |
+| L-94 | ATL-DS-11: Public mixed native/template Mode 2 loop exposes `search_documents` and `flashquery.skill.research_skill` together, dispatches both in one assistant turn, and records `kind: native` plus `kind: template` calls-log entries | test_call_model_agent_loop_mixed_tools | 2026-05-06 | 2026-05-06 |
+| L-95 | VAL-118: Phase 118 final validation passes deterministic unit, integration, E2E, directed scenario, lint, and build gates for fresh discovery, generated names, collision diagnostics, reverse-map dispatch, template invocation, typed template-tool errors, and mixed native/template loops | tests/unit/llm-template-tools.test.ts; tests/integration/template-tools.integration.test.ts; tests/e2e/call-model-template-tools.e2e.test.ts; test_call_model_template_discovery; test_call_model_template_tool_conflicts; test_call_model_agent_loop_template_tool; test_call_model_agent_loop_mixed_tools | 2026-05-06 | 2026-05-06 |
 
 ---
 
@@ -708,8 +713,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| LLM Tools | 104 | 103 | 1 |
-| **Total** | **388** | **383** | **5** |
+| LLM Tools | 109 | 108 | 1 |
+| **Total** | **393** | **388** | **5** |
 
 ---
 
@@ -785,6 +790,19 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 - L-90: PENDING — ATL-DS-12 step 6 cooperative shutdown directed coverage. Requires a non-blocking `FQCServer.signal_graceful_shutdown()` framework helper (or equivalent subprocess wrapper) before the test can drive a Mode 2 loop into `stop_reason: 'shutdown'` mid-call without blocking the in-flight `call_tool`. Implementation sketch and required assertions are documented in the L-90 row above so a future test-generation pass can pick it up directly.
 
 **Resolution (2026-05-06)**: Added final Phase 117 coverage rows and ran the focused validation gate: `npm run test:e2e -- tests/e2e/call-model-agent-loop.e2e.test.ts`, `python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_native.py --managed`, `python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_budgets.py --managed`, and `python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_usage.py --managed`. All use deterministic local OpenAI-compatible mock providers; no real OpenAI, OpenRouter, or Ollama provider is used for correctness assertions.
+
+---
+
+### Phase 118 template discovery and masquerade dispatch — L-91, L-92, L-93, L-94, L-95
+
+**Behaviors covered**
+- L-91: ATL-DS-07 public template discovery and purpose listing diagnostics.
+- L-92: ATL-DS-08 collision diagnostics and pre-provider `call_model` blocking.
+- L-93: ATL-DS-10 template-tool loop with string/document params and recoverable `template_missing_required_param`.
+- L-94: ATL-DS-11 mixed native/template loop with native/template calls-log kinds.
+- L-95: VAL-118 final green validation gate across unit, integration, E2E, directed, lint, and build checks.
+
+**Resolution (2026-05-06)**: Added final Phase 118 coverage rows and ran the full gate: `npm run lint && npm test -- tests/unit/llm-template-tools.test.ts tests/unit/llm-tool-registry.test.ts tests/unit/llm-tool-dispatcher.test.ts tests/unit/llm-agent-loop.test.ts tests/unit/llm-tool.test.ts && npm run test:integration -- tests/integration/template-tools.integration.test.ts && npm run test:e2e -- tests/e2e/call-model-template-tools.e2e.test.ts && python3 tests/scenarios/directed/testcases/test_call_model_template_discovery.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_template_tool_conflicts.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_template_tool.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_mixed_tools.py --managed && npm run build`. All gates passed with deterministic local mock providers.
 
 ---
 

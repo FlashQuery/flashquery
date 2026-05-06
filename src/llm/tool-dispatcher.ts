@@ -140,7 +140,7 @@ function makeLogEntry(
 }
 
 function makeTemplateReverseMap(options: DispatchToolCallsOptions): TemplateToolReverseMap {
-  return options.templateReverseMap ?? new Map();
+  return options.templateReverseMap ?? new Map<string, string>();
 }
 
 function isGeneratedTemplateToolName(toolName: string): boolean {

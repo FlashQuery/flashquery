@@ -99,11 +99,11 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 - [ ] **Phase 115: Purpose Config, Bindings & Capabilities** - Purpose orchestration fields, loop defaults validation, `fqc_purpose_templates`, generic config sync, structured model capabilities, Mode 2 admission, and runnable validation (BIND-01 through BIND-05, CAP-01 through CAP-05, VAL-115)
 - [x] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions, and runnable validation (TOOL-01 through TOOL-04, VAL-116) — Complete 2026-05-06
 - [x] **Phase 117: Agent Loop Executor** - Mode 2 loop orchestration, internal native dispatch, parallel tool calls, guardrails, fallback, aggregate usage writes, calls log metadata, and runnable validation (LOOP-01 through LOOP-07, TOOL-05, TOOL-06, VAL-117) — Complete 2026-05-06
-- [ ] **Phase 118: Template Discovery & Masquerade Dispatch** - Fresh vault template discovery, generated `flashquery.<namespace>.<slug>` tools, collision-safe reverse map, template tool dispatch, and runnable validation (TMPL-06 through TMPL-08, VAL-118)
+- [x] **Phase 118: Template Discovery & Masquerade Dispatch** - Fresh vault template discovery, generated `flashquery.<namespace>.<slug>` tools, collision-safe reverse map, template tool dispatch, and runnable validation (TMPL-06 through TMPL-08, VAL-118) — Complete 2026-05-06
 - [ ] **Phase 119: Discovery Diagnostics & Help Resolver** - Extended `list_purposes`, structured capability diagnostics in `list_models`, discovery `search`, v1 `help` resolver, and runnable validation (DISC-01 through DISC-04, VAL-119)
 - [ ] **Phase 120: Cross-Phase ATL Validation & Coverage Closure** - End-to-end workflow suites, YAML integration closure, scenario matrix updates, and final coverage audit (VAL-120, TEST-04)
 
-**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (50/62 requirements complete).
+**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (54/62 requirements complete).
 
 </details>
 
@@ -267,7 +267,7 @@ Plans:
   4. Template-tool calls validate arguments, hydrate output, and return tool results or typed errors to the delegated model.
   5. Mixed native/template tool purposes can expose both kinds of tools in one model-visible registry.
   6. Phase-specific runnable tests exist and pass for fresh discovery, tool-name generation, collision diagnostics, reverse-map dispatch, template-tool invocation, and mixed native/template loops.
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 **Wave 0**
 - [x] 118-01-PLAN.md — RED validation contracts for unit, integration, E2E, and directed Phase 118 behavior
@@ -282,7 +282,7 @@ Plans:
 - [x] 118-04-PLAN.md — Reverse-map template dispatch, recoverable tool errors, and calls-log kind metadata
 
 **Wave 4** *(blocked on 118-04 completion)*
-- [ ] 118-05-PLAN.md — Public E2E/directed validation, coverage ledgers, and VAL-118 closure
+- [x] 118-05-PLAN.md — Public E2E/directed validation, coverage ledgers, and VAL-118 closure
 **UI hint**: no
 
 ### Phase 119: Discovery Diagnostics & Help Resolver

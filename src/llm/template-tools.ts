@@ -203,7 +203,7 @@ async function readTemplateCandidate(
     return {
       templatePath,
       body: parsed.content,
-      frontmatter: parsed.data as Record<string, unknown>,
+      frontmatter: parsed.data,
       source,
     };
   } catch {

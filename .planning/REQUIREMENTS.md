@@ -33,9 +33,9 @@
 - [x] **TMPL-03**: Template parameters support `string` and `document` types, required/default validation, document identifier resolution, and typed failures.
 - [x] **TMPL-04**: Template placeholder substitution is deterministic, single-pass, non-recursive, and supports escape parity for template placeholders.
 - [x] **TMPL-05**: Alias entries support `_items` lists with optional `_separator` for ordered multi-document injection at one `{{ref:@alias}}` slot.
-- [ ] **TMPL-06**: Template discovery reads frontmatter fresh from vault documents and validates `fq_namespace`, `fq_desc`, `fq_expose_as_tool`, and `fq_params`.
-- [ ] **TMPL-07**: Masqueraded template tools use generated names `flashquery.<fq_namespace>.<slug>` and maintain an explicit reverse map to canonical template paths.
-- [ ] **TMPL-08**: Template-tool dispatch validates model-supplied arguments, hydrates template output, and returns JSON-stringified tool results or typed tool errors to the loop.
+- [x] **TMPL-06**: Template discovery reads frontmatter fresh from vault documents and validates `fq_namespace`, `fq_desc`, `fq_expose_as_tool`, and `fq_params`.
+- [x] **TMPL-07**: Masqueraded template tools use generated names `flashquery.<fq_namespace>.<slug>` and maintain an explicit reverse map to canonical template paths.
+- [x] **TMPL-08**: Template-tool dispatch validates model-supplied arguments, hydrates template output, and returns JSON-stringified tool results or typed tool errors to the loop.
 
 ### Purpose Config And Bindings
 
@@ -87,7 +87,7 @@
 - [x] **VAL-115**: Phase 115 ships runnable unit, TypeScript integration, and public startup/config scenario tests that validate purpose config fields, loop default validation, DB schema, config sync, template binding precedence, and capability admission.
 - [x] **VAL-116**: Phase 116 ships runnable unit tests and at least one public-surface scenario that validate native tool exposure, exclusions, hard exclusions, schema translation, and empty-tool omission.
 - [x] **VAL-117**: Phase 117 ships runnable unit, E2E, and directed scenario tests with a deterministic mock provider validating native tool loops, parallel tool calls, guardrail stops, fallback, usage aggregation, and calls-log metadata.
-- [ ] **VAL-118**: Phase 118 ships runnable unit, integration, E2E, and directed scenario tests validating fresh template discovery, masquerade tool naming, collision diagnostics, reverse-map dispatch, and mixed native/template loops.
+- [x] **VAL-118**: Phase 118 ships runnable unit, integration, E2E, and directed scenario tests validating fresh template discovery, masquerade tool naming, collision diagnostics, reverse-map dispatch, and mixed native/template loops.
 - [ ] **VAL-119**: Phase 119 ships runnable unit and directed scenario tests validating discovery diagnostics, structured capability reporting, discovery search behavior, and the `help` resolver.
 - [ ] **VAL-120**: Phase 120 ships runnable cross-phase E2E, directed, and YAML integration suites proving the full ATL workflows and updating coverage matrices with final scenario IDs.
 - [x] **TEST-01**: Every implementation phase includes its own runnable validation before the phase can be marked complete; tests are not deferred wholesale to Phase 120.
@@ -166,9 +166,9 @@
 | LOOP-07 | Phase 117 | Complete |
 | TOOL-05 | Phase 117 | Complete |
 | TOOL-06 | Phase 117 | Complete |
-| TMPL-06 | Phase 118 | Pending |
-| TMPL-07 | Phase 118 | Pending |
-| TMPL-08 | Phase 118 | Pending |
+| TMPL-06 | Phase 118 | Complete |
+| TMPL-07 | Phase 118 | Complete |
+| TMPL-08 | Phase 118 | Complete |
 | DISC-01 | Phase 119 | Pending |
 | DISC-02 | Phase 119 | Pending |
 | DISC-03 | Phase 119 | Pending |
@@ -179,7 +179,7 @@
 | VAL-115 | Phase 115 | Complete |
 | VAL-116 | Phase 116 | Complete |
 | VAL-117 | Phase 117 | Complete |
-| VAL-118 | Phase 118 | Pending |
+| VAL-118 | Phase 118 | Complete |
 | VAL-119 | Phase 119 | Pending |
 | VAL-120 | Phase 120 | Pending |
 | TEST-01 | Phase 112 | Complete |
