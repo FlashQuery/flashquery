@@ -111,6 +111,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   _llmClientValue = undefined;
   purposeTemplateRuntimeRows = [];
+  runtimeBindingInMock.mockImplementation(() =>
+    Promise.resolve({ data: purposeTemplateRuntimeRows, error: null })
+  );
   selectEqEqMock.mockResolvedValue({ data: [], error: null });
   // Default: no patterns in messages (REFS-07 path) — existing tests are unaffected
   vi.mocked(parseReferences).mockReturnValue([]);
@@ -2477,6 +2480,25 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
         }),
       ],
     });
+  });
+
+  it('list_purposes returns a structured MCP error when runtime template binding lookup fails', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+    runtimeBindingInMock.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'runtime table unavailable' },
+    });
+
+    const handler = captureCallModelHandler(TEST_CONFIG);
+    const result = await handler({ resolver: 'list_purposes' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('call_model failed:');
+    expect(result.content[0].text).toContain('runtime table unavailable');
   });
 
   it('purpose calls with template-only tools enter Mode 2 via hasModelVisibleTools and preserve template calls_log kind', async () => {

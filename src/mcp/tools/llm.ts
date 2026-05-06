@@ -57,6 +57,10 @@ import {
 
 type TraceCumulative = NonNullable<CallModelMetadata['trace_cumulative']>;
 type PurposeChatResult = LlmChatResult & { purposeName: string; fallbackPosition: number };
+type RuntimeTemplateBinding = Awaited<ReturnType<typeof loadPurposeTemplateRuntimeBindings>>[number];
+type RuntimeTemplateBindingLoadResult =
+  | { ok: true; bindings: RuntimeTemplateBinding[] }
+  | { ok: false; message: string };
 
 type PublicToolDiagnostics = Record<string, unknown> & {
   expanded_tiers?: ToolRegistryDiagnostics['expandedTiers'];
@@ -66,6 +70,19 @@ type PublicToolDiagnostics = Record<string, unknown> & {
   unknown?: ToolRegistryDiagnostics['unknown'];
   template_tool_warnings?: TemplateToolDiagnostics['template_tool_warnings'];
 };
+
+async function safeLoadPurposeTemplateRuntimeBindings(instanceId: string): Promise<RuntimeTemplateBindingLoadResult> {
+  try {
+    return {
+      ok: true,
+      bindings: await loadPurposeTemplateRuntimeBindings(instanceId),
+    };
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`call_model failed to load runtime template bindings: ${message}`);
+    return { ok: false, message };
+  }
+}
 
 const toolCallSchema = z.object({
   id: z.string(),
@@ -409,7 +426,14 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
           return capabilities.strict_tools === true;
         };
 
-        const runtimeTemplateBindings = await loadPurposeTemplateRuntimeBindings(config.instance.id);
+        const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
+        if (!runtimeTemplateBindingsResult.ok) {
+          return {
+            content: [{ type: 'text' as const, text: `call_model failed: ${runtimeTemplateBindingsResult.message}` }],
+            isError: true,
+          };
+        }
+        const runtimeTemplateBindings = runtimeTemplateBindingsResult.bindings;
 
         const purposeToResponse = async (p: typeof cfgPurposes[number]): Promise<Record<string, unknown>> => {
           const primaryName = p.models[0];
@@ -600,9 +624,17 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       let toolRegistry: ToolRegistryAssembly | undefined;
       let purposeProviderParameters = params.parameters;
       let purposeDefaults: Record<string, unknown> = {};
-      const runtimeTemplateBindings = resolvedResolver === 'purpose'
-        ? await loadPurposeTemplateRuntimeBindings(config.instance.id)
-        : [];
+      let runtimeTemplateBindings: RuntimeTemplateBinding[] = [];
+      if (resolvedResolver === 'purpose') {
+        const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
+        if (!runtimeTemplateBindingsResult.ok) {
+          return {
+            content: [{ type: 'text' as const, text: `call_model failed: ${runtimeTemplateBindingsResult.message}` }],
+            isError: true,
+          };
+        }
+        runtimeTemplateBindings = runtimeTemplateBindingsResult.bindings;
+      }
 
       if (resolvedResolver === 'purpose') {
         const normalizedPurposeName = resolvedName.toLowerCase();
