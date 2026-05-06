@@ -703,6 +703,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             purposeDefaults,
             nativeToolCatalog,
             toolRegistry,
+            templateDispatchContext: { config, logger },
             traceId: params.trace_id ?? null,
             chatByPurpose: client.chatByPurposeUnrecorded.bind(client),
             modelCostLookup: (modelName) => config.llm?.models.find((model) => model.name === modelName),

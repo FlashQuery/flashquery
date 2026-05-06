@@ -1,10 +1,12 @@
 import { computeCost, recordLlmUsage as writeLlmUsage } from './cost-tracker.js';
 import { dispatchToolCalls } from './tool-dispatcher.js';
 import type { AgentLoopStopReason } from '../constants/llm.js';
+import type { FlashQueryConfig } from '../config/loader.js';
 import type { LlmUsageRecord } from './cost-tracker.js';
-import type { LlmChatMessage, LlmChatResult, LlmChatToolCall, CallModelEnvelope, AgentLoopCallLogEntry } from './types.js';
-import type { NativeToolCallLogEntry, NativeToolDispatchContext } from './tool-dispatcher.js';
+import type { LlmChatMessage, LlmChatResult, LlmChatToolCall, CallModelEnvelope, AgentLoopCallLogEntry, AgentLoopToolCallLogEntry } from './types.js';
+import type { DispatchToolCallsOptions, NativeToolDispatchContext } from './tool-dispatcher.js';
 import type { NativeToolDefinition, OpenAiToolDefinition, ToolRegistryAssembly } from './tool-registry.js';
+import type { TemplateToolReverseMap } from './template-tools.js';
 
 export const DEFAULT_OUTPUT_TOKEN_ESTIMATE = 2048;
 
@@ -19,13 +21,17 @@ type LegacyChat = (
   parameters?: Record<string, unknown>
 ) => Promise<LlmChatResult & { fallbackPosition?: number }>;
 
+type TemplateDispatchContext = NonNullable<DispatchToolCallsOptions['templateDispatchContext']>;
+
 type ToolDispatcher = (options: {
   toolCalls: LlmChatToolCall[];
   catalog: NativeToolDefinition[] | Map<string, NativeToolDefinition>;
   nativeToolNames: readonly string[];
+  templateReverseMap?: TemplateToolReverseMap;
+  templateDispatchContext?: ExecuteAgentLoopOptions['templateDispatchContext'];
   dispatchContext: NativeToolDispatchContext;
   dispatchPolicy?: 'Promise.allSettled';
-}) => Promise<{ messages: LlmChatMessage[]; logEntries: NativeToolCallLogEntry[] }>;
+}) => Promise<{ messages: LlmChatMessage[]; logEntries: AgentLoopToolCallLogEntry[] }>;
 
 interface ModelCost {
   name: string;
@@ -53,6 +59,7 @@ export interface ExecuteAgentLoopOptions {
   chatByPurpose?: ChatByPurpose;
   chat?: LegacyChat;
   toolDispatcher?: ToolDispatcher;
+  templateDispatchContext?: TemplateDispatchContext & { config?: FlashQueryConfig };
   traceId?: string | null;
   modelCostLookup?: (modelName: string) => ModelCost | undefined;
   models?: ModelCost[];
@@ -122,7 +129,7 @@ function estimateOutputTokens(parameters: Record<string, unknown>, purposeDefaul
   return DEFAULT_OUTPUT_TOKEN_ESTIMATE;
 }
 
-function summarizeToolResult(entry: NativeToolCallLogEntry, maxChars: number): NativeToolCallLogEntry {
+function summarizeToolResult(entry: AgentLoopToolCallLogEntry, maxChars: number): AgentLoopToolCallLogEntry {
   if (!entry.result_summary || entry.result_summary.length <= maxChars) return entry;
   return { ...entry, result_summary: `${entry.result_summary.slice(0, maxChars)}...` };
 }
@@ -254,6 +261,9 @@ function makeEnvelope(
       ...(options.traceId ? { trace_id: options.traceId } : {}),
       tools: {
         native_tool_names: getNativeToolNames(options),
+        ...(options.toolRegistry?.templateToolNames && options.toolRegistry.templateToolNames.length > 0
+          ? { template_tool_names: options.toolRegistry.templateToolNames }
+          : {}),
         diagnostics: options.toolRegistry?.diagnostics ?? {},
         stop_reason: stopReason,
         iterations: callsLog.length,
@@ -443,6 +453,8 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
       toolCalls,
       catalog: options.nativeToolCatalog ?? [],
       nativeToolNames,
+      templateReverseMap: options.toolRegistry?.templateReverseMap,
+      templateDispatchContext: options.templateDispatchContext,
       dispatchContext: {
         signal: abortController.signal,
         traceId: options.traceId ?? null,
