@@ -240,7 +240,7 @@ Plans:
   4. Timeout, iteration, token, and cost guardrails stop before the next model call and report the correct `stop_reason`.
   5. Mode 2 writes one aggregate usage row and exposes per-iteration detail only in `metadata.tools.calls_log`.
   6. Phase-specific runnable tests exist and pass with a deterministic mock provider for native tool loops, parallel calls, guardrail stops, fallback, usage aggregation, and metadata invariants.
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 Plans:
 **Wave 1**
 - [x] 117-01-PLAN.md — Wave 0 validation scaffolding for loop executor, dispatcher, E2E, and directed scenarios

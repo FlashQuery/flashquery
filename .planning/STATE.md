@@ -4,14 +4,14 @@ milestone: v3.2
 milestone_name: Agentic LLM Tools
 status: executing
 stopped_at: Completed 117-02-PLAN.md
-last_updated: "2026-05-06T15:15:33.402Z"
+last_updated: "2026-05-06T15:35:19.795Z"
 last_activity: 2026-05-06
 progress:
   total_phases: 23
   completed_phases: 5
   total_plans: 28
-  completed_plans: 26
-  percent: 93
+  completed_plans: 27
+  percent: 96
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 ## Current Position
 
 Phase: 117 (agent-loop-executor) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-05-06
 
@@ -71,6 +71,7 @@ Last activity: 2026-05-06
 | Phase 117 P01 | 12min | 2 tasks | 6 files |
 | Phase 117 P02 | 9min | 2 tasks | 5 files |
 | Phase 117 P03 | 6m33s | 2 tasks | 6 files |
+| Phase 117 P04 | 16min | 2 tasks | 3 files |
 
 ## Decisions
 
@@ -100,6 +101,8 @@ Last activity: 2026-05-06
 - [Phase 117]: 117-02: Successful native dispatch payloads are serialized as { ok: true, result: rawHandlerResult }.
 - [Phase 117]: 117-03 uses chatByPurposeUnrecorded for Mode 2 iterations so only the executor writes aggregate usage.
 - [Phase 117]: 117-03 aggregate usage rows preserve first successful iteration identity while calls_log stores later fallback detail.
+- [Phase 117]: 117-04: Mode 2 selection uses final provider-visible tool definitions, enabling future template-only registries.
+- [Phase 117]: 117-04: call_model owns public Mode 2 envelope mapping while executeAgentLoop owns internal loop execution.
 
 ## Accumulated Context
 
@@ -181,7 +184,7 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T15:14:50.397Z
+Last session: 2026-05-06T15:34:34.532Z
 Stopped at: Completed 117-02-PLAN.md
 Resume: None
 
