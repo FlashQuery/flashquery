@@ -240,7 +240,20 @@ Plans:
   4. Timeout, iteration, token, and cost guardrails stop before the next model call and report the correct `stop_reason`.
   5. Mode 2 writes one aggregate usage row and exposes per-iteration detail only in `metadata.tools.calls_log`.
   6. Phase-specific runnable tests exist and pass with a deterministic mock provider for native tool loops, parallel calls, guardrail stops, fallback, usage aggregation, and metadata invariants.
-**Plans**: TBD during `$gsd-plan-phase 117`
+**Plans:** 5 plans
+Plans:
+**Wave 1**
+- [ ] 117-01-PLAN.md — Wave 0 validation scaffolding for loop executor, dispatcher, E2E, and directed scenarios
+
+**Wave 2** *(blocked on 117-01 completion)*
+- [ ] 117-02-PLAN.md — Internal native tool dispatcher and catalog handler capture
+- [ ] 117-03-PLAN.md — Mode 2 loop executor, non-recording purpose chat, guardrails, and aggregate accounting
+
+**Wave 3** *(blocked on 117-02 and 117-03 completion)*
+- [ ] 117-04-PLAN.md — `call_model` Mode 2 routing, envelope metadata, and returned messages
+
+**Wave 4** *(blocked on 117-04 completion)*
+- [ ] 117-05-PLAN.md — E2E/directed validation closure, coverage ledgers, and VAL-117 traceability
 **UI hint**: no
 
 ### Phase 118: Template Discovery & Masquerade Dispatch
