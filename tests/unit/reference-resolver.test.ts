@@ -456,6 +456,29 @@ describe('hydrateMessages (REFS-03 partial)', () => {
     // not both to ALPHA (which would happen with a naive replaceAll).
     expect(out[0].content).toBe('First: ALPHA; second: BETA.');
   });
+
+  it('[U-RR-13e] hydrateMessages preserves one literal slash for even-parity active refs', () => {
+    const messages = [{ role: 'user', content: String.raw`active \\{{ref:doc.md}} done` }];
+    const parsed = parseReferences(messages);
+    expect(Array.isArray(parsed)).toBe(true);
+    const [ref] = parsed as ParsedRef[];
+    const resolved: ResolvedRef[] = [
+      {
+        kind: 'resolved',
+        placeholder: ref.placeholder,
+        ref: ref.ref,
+        content: 'DOCBODY',
+        chars: 7,
+        messageIndex: ref.messageIndex,
+        start: ref.start,
+        end: ref.end,
+        literalPrefix: ref.literalPrefix,
+      },
+    ];
+
+    const out = hydrateMessages(messages, resolved);
+    expect(out[0].content).toBe(String.raw`active \DOCBODY done`);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

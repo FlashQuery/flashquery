@@ -121,6 +121,13 @@ def _configured_llm(endpoint: str) -> dict:
                     "provider_name": "mock-openai",
                     "model": "mock-model",
                     "type": "language",
+                    "capabilities": {
+                        "tool_calling": True,
+                        "usage_on_tool_calls": True,
+                        "parallel_tool_calls": True,
+                        "strict_tools": True,
+                        "structured_outputs_with_tools": True,
+                    },
                     "cost_per_million": {"input": 0.15, "output": 0.6},
                 }
             ],

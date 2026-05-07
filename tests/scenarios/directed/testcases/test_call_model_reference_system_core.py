@@ -90,7 +90,7 @@ def _configured_llm(endpoint: str) -> dict:
     return {
         "llm": {
             "providers": [{"name": "mock-openai", "type": "openai-compatible", "endpoint": endpoint, "api_key": "sk-test"}],
-            "models": [{"name": "fast", "provider_name": "mock-openai", "model": "mock-model", "type": "language", "cost_per_million": {"input": 0.15, "output": 0.6}}],
+            "models": [{"name": "fast", "provider_name": "mock-openai", "model": "mock-model", "type": "language", "capabilities": {"tool_calling": True, "usage_on_tool_calls": True, "parallel_tool_calls": True, "strict_tools": True, "structured_outputs_with_tools": True}, "cost_per_million": {"input": 0.15, "output": 0.6}}],
             "purposes": [{"name": "general", "description": "General", "models": ["fast"]}],
         }
     }

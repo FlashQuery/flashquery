@@ -1196,7 +1196,7 @@ export function hydrateMessages<T extends { role: string; content?: string | nul
       if (
         r.start !== undefined &&
         r.end !== undefined &&
-        original.slice(r.start + (r.literalPrefix?.length ?? 0), r.end) === r.placeholder
+        original.slice(r.end - r.placeholder.length, r.end) === r.placeholder
       ) {
         replacements.push({
           start: r.start,
