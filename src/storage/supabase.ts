@@ -332,8 +332,8 @@ CREATE TABLE IF NOT EXISTS fqc_documents (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Phase 32: description column for batch outline metadata (MOD-03 §3c, OUTLINE-05)
-ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS description TEXT DEFAULT NULL;
+-- Phase 32: description column added here, but dropped in Phase 69 (SPEC-19) — omitted to prevent
+-- add/drop cycle that exhausts PostgreSQL's 1600 attnum slots over repeated test runs.
 
 -- Phase 39: needs_frontmatter_repair flag for TSA-01 (read-only background scan)
 ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS needs_frontmatter_repair BOOLEAN DEFAULT FALSE;
@@ -463,12 +463,16 @@ CREATE TABLE IF NOT EXISTS fqc_llm_models (
   type TEXT NOT NULL,
   cost_per_million_input NUMERIC(10, 4) NOT NULL DEFAULT 0,
   cost_per_million_output NUMERIC(10, 4) NOT NULL DEFAULT 0,
+  capabilities JSONB,
+  tags TEXT[] DEFAULT '{}',
   source TEXT NOT NULL DEFAULT 'yaml',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(instance_id, name)
 );
 CREATE INDEX IF NOT EXISTS idx_llm_models_provider ON fqc_llm_models(instance_id, provider_name);
+ALTER TABLE IF EXISTS fqc_llm_models ADD COLUMN IF NOT EXISTS capabilities JSONB;
+ALTER TABLE IF EXISTS fqc_llm_models ADD COLUMN IF NOT EXISTS tags TEXT[] DEFAULT '{}';
 
 -- LLM Config: Purposes (PURP-01, PURP-02, PURP-03)
 -- defaults JSONB stores arbitrary LLM provider params (temperature, max_tokens, etc.)
@@ -478,11 +482,15 @@ CREATE TABLE IF NOT EXISTS fqc_llm_purposes (
   name TEXT NOT NULL,
   description TEXT,
   defaults JSONB,
+  tools JSONB,
+  excluded_tools JSONB,
   source TEXT NOT NULL DEFAULT 'yaml',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(instance_id, name)
 );
+ALTER TABLE IF EXISTS fqc_llm_purposes ADD COLUMN IF NOT EXISTS tools JSONB;
+ALTER TABLE IF EXISTS fqc_llm_purposes ADD COLUMN IF NOT EXISTS excluded_tools JSONB;
 
 -- LLM Config: Purpose-Model fallback chain (PURP-01 ordered list)
 -- position is 1-indexed; UNIQUE(instance_id, purpose_name, position) enforces ordering integrity.
@@ -518,7 +526,34 @@ CREATE INDEX IF NOT EXISTS idx_llm_usage_instance_created ON fqc_llm_usage(insta
 CREATE INDEX IF NOT EXISTS idx_llm_usage_instance_purpose ON fqc_llm_usage(instance_id, purpose_name);
 CREATE INDEX IF NOT EXISTS idx_llm_usage_instance_trace ON fqc_llm_usage(instance_id, trace_id);
 
--- ─── End Phase 98 LLM tables ───────────────────────────────────────────────
+-- Phase 115: Purpose-template bindings (BIND-03)
+-- source: 'yaml' rows are recreated by startup config sync; 'api' rows are runtime-managed;
+-- 'webapp' rows are durable UI-managed rows that block YAML/API ownership.
+CREATE TABLE IF NOT EXISTS fqc_purpose_templates (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  purpose_name TEXT NOT NULL,
+  template_path TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'yaml',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(instance_id, purpose_name, template_path)
+);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'fqc_purpose_templates_source_check'
+  ) THEN
+    ALTER TABLE fqc_purpose_templates
+      ADD CONSTRAINT fqc_purpose_templates_source_check
+      CHECK (source IN ('yaml', 'api', 'webapp'));
+  END IF;
+END $$;
+CREATE INDEX IF NOT EXISTS idx_fqc_purpose_templates_lookup
+  ON fqc_purpose_templates(instance_id, purpose_name);
+
+-- ─── End LLM config tables ─────────────────────────────────────────────────
 
 
 -- Step 3: Create indexes
@@ -882,7 +917,7 @@ class SupabaseManagerImpl implements SupabaseManager {
         }
       }
 
-      logger.info('Schema verification: all 10 required tables present');
+      logger.info('Schema verification: all 11 required tables present');
       logger.debug('  fqc_memory: verified');
       logger.debug('  fqc_vault: verified');
       logger.debug('  fqc_documents: verified');
@@ -893,6 +928,7 @@ class SupabaseManagerImpl implements SupabaseManager {
       logger.debug('  fqc_llm_purposes: verified');
       logger.debug('  fqc_llm_purpose_models: verified');
       logger.debug('  fqc_llm_usage: verified');
+      logger.debug('  fqc_purpose_templates: verified');
       // CLEAN-01, CLEAN-02: fqc_event_log and fqc_routing_rules removed in v1.7
       // CLEAN-01: fqc_projects removed in v1.7 (replaced by path-based location + tag-based categorization)
       logger.info('Supabase: connected');

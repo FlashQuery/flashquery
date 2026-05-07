@@ -23,9 +23,9 @@ This directory contains sample configurations for connecting FlashQuery to three
 - FlashQuery runs as a standalone server on localhost:3100 (or custom port)
 - Best for: Docker deployments, team setups, sharing one server across multiple clients
 - Communication: JSON-RPC over HTTP (streamable-http)
-- Security: DNS rebinding protection + origin header validation
+- Security: Bearer token authentication when `mcp.auth_secret` is configured, plus DNS rebinding protection and origin header validation
 - Claude Desktop does not natively speak HTTP MCP — use `mcp-remote` as a bridge: `npx mcp-remote http://localhost:3100/mcp`
-- Other clients (Claude Code, Cursor) connect directly via URL
+- Claude Code's recommended HTTP setup is `../CLAUDE-CODE-SETUP.md`, which fetches a token from `POST /token` and registers the URL with `claude mcp add -t http`
 
 ## Choosing a Config
 
@@ -43,8 +43,9 @@ This directory contains sample configurations for connecting FlashQuery to three
 1. Choose the config file that matches your setup (table above)
 2. Copy the file to your platform's MCP config location (see platform-specific instructions below)
 3. Replace `/path/to/flashquery` with your actual absolute path
-4. Restart the client
-5. FlashQuery tools should appear in your tool list
+4. For HTTP configs, fetch a token from `POST /token` or run `./setup/setup-claude-mcp.sh`, then expose it as `FLASHQUERY_MCP_TOKEN` before starting the client
+5. Restart the client
+6. FlashQuery tools should appear in your tool list
 
 ## Platform-Specific Instructions
 
@@ -78,8 +79,8 @@ Replace `/path/to/flashquery` with your absolute path.
 
 **Option B — Manual .mcp.json:**
 1. Create or edit `.mcp.json` in your project root (or `~/.claude.json` for global)
-2. Copy the contents of `claude-code-stdio.json` into the file
-3. Replace `/path/to/flashquery` with your absolute path
+2. Copy the contents of `claude-code-stdio.json` for local stdio, or `claude-code-http.json` for a running HTTP server
+3. Replace `/path/to/flashquery` with your absolute path for stdio, or set `FLASHQUERY_MCP_TOKEN` for HTTP
 4. Restart Claude Code
 5. Tools should appear
 
@@ -112,6 +113,11 @@ Steps:
 - HTTP transport: Is FlashQuery running? Start it with `npm run dev` or `node dist/index.js start --config ./flashquery.yml`
 - stdio: Does the path exist? `ls /path/to/flashquery/dist/index.js`
 
+**`401 Unauthorized` on HTTP transport:**
+- Fetch a token with `POST /token` or run `./setup/setup-claude-mcp.sh`.
+- Ensure `FLASHQUERY_MCP_TOKEN` is set in the environment that launches Claude Code or Cursor.
+- If you rotated `MCP_AUTH_SECRET`, fetch a new token and restart the client.
+
 **"Config error: embedding.provider — Invalid option" (or similar) on Claude Desktop:**
 - Claude Desktop spawns FlashQuery from its own working directory, so it never loads your project's `.env` file automatically.
 - Fix: place a `.env` file in the same directory as `flashquery.yml`. FlashQuery's config loader automatically checks for a `.env` sidecar alongside the config file and loads it silently.
@@ -136,4 +142,4 @@ Then update the config URL: `http://localhost:YOUR_PORT/...`
 
 ---
 
-**Questions?** See [ARCHITECTURE.md](../docs/ARCHITECTURE.md) or [README.md](../README.md) for more info.
+**Questions?** See [ARCHITECTURE.md](../ARCHITECTURE.md) or [README.md](../../README.md) for more info.

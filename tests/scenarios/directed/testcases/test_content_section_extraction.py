@@ -164,7 +164,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         c15_result = ctx.client.call_tool(
             "get_document",
-            identifier=identifier,
+            identifiers=identifier,
             sections=["Introduction"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -186,9 +186,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         c16_result = ctx.client.call_tool(
             "get_document",
-            identifier=identifier,
+            identifiers=identifier,
             sections=["Main Content"],
-            include_subheadings=True,
+            include_nested=True,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -209,9 +209,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         c17_result = ctx.client.call_tool(
             "get_document",
-            identifier=identifier,
+            identifiers=identifier,
             sections=["Main Content"],
-            include_subheadings=False,
+            include_nested=False,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -272,6 +272,8 @@ def main() -> None:
                          help="Emit structured JSON to stdout.")
     parser.add_argument("--keep", action="store_true",
                          help="Retain test files for debugging (skip cleanup).")
+    parser.add_argument("--vault-path", type=str, default=None,
+                         help="Override vault path for managed server.")
 
     args = parser.parse_args()
     run = run_test(args)

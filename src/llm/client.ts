@@ -2,9 +2,12 @@ import * as http from 'node:http';
 import * as https from 'node:https';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { logger } from '../logging/logger.js';
+import { isFinishReason } from '../constants/llm.js';
 import { computeCost, recordLlmUsage } from './cost-tracker.js';
 import { syncLlmConfigToDb } from './config-sync.js';
+import { validatePersistedPurposeTemplateAdmissions } from './purpose-template-bindings.js';
 import { PurposeResolver } from './resolver.js';
+import type { LlmChatMessage, LlmChatResult, LlmChatToolCall } from './types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Typed error classes — D-02 (Phase 100)
@@ -53,6 +56,13 @@ export interface LlmCompletionResult {
 }
 
 export interface LlmClient {
+  chat(
+    modelName: string,
+    messages: LlmChatMessage[],
+    parameters?: Record<string, unknown>,
+    traceId?: string | null
+  ): Promise<LlmChatResult>;
+
   complete(
     modelName: string,
     messages: ChatMessage[],
@@ -66,6 +76,19 @@ export interface LlmClient {
     parameters?: Record<string, unknown>,
     traceId?: string | null
   ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }>;
+
+  chatByPurpose(
+    purposeName: string,
+    messages: LlmChatMessage[],
+    parameters?: Record<string, unknown>,
+    traceId?: string | null
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }>;
+
+  chatByPurposeUnrecorded(
+    purposeName: string,
+    messages: LlmChatMessage[],
+    parameters?: Record<string, unknown>
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }>;
 
   getModelForPurpose(
     purposeName: string
@@ -179,6 +202,20 @@ export function mergeParameters(
   return { ...purposeDefaults, ...callerParams };
 }
 
+function normalizeProviderParameters(parameters: Record<string, unknown>): Record<string, unknown> {
+  const normalized = { ...parameters };
+  if (Array.isArray(normalized['tools']) && normalized['tools'].length === 0) {
+    delete normalized['tools'];
+  }
+  delete normalized['signal'];
+  return normalized;
+}
+
+function getAbortSignal(parameters?: Record<string, unknown>): AbortSignal | undefined {
+  const signal = parameters?.['signal'];
+  return signal instanceof AbortSignal ? signal : undefined;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // OpenAICompatibleLlmClient
 // ─────────────────────────────────────────────────────────────────────────────
@@ -191,11 +228,11 @@ export class OpenAICompatibleLlmClient implements LlmClient {
   constructor(config: NonNullable<FlashQueryConfig['llm']>, instanceId: string) {
     this.config = config;
     this.instanceId = instanceId;
-    // Bind completeHttpOnly so the resolver can call it as a function reference
+    // Bind chatHttpOnly so the resolver can call it as a function reference
     // without losing the `this` context. Using the HTTP-only internal method
     // prevents double-writing: the resolver never triggers recordLlmUsage;
     // the outer public complete()/completeByPurpose() handle recording.
-    this.resolver = new PurposeResolver(config, this.completeHttpOnly.bind(this));
+    this.resolver = new PurposeResolver(config, this.chatHttpOnly.bind(this));
   }
 
   /**
@@ -204,11 +241,75 @@ export class OpenAICompatibleLlmClient implements LlmClient {
    * do not produce cost rows. Only the SUCCESSFUL final attempt is recorded
    * (by the public complete() or completeByPurpose() wrappers).
    */
-  private async completeHttpOnly(
+  private normalizeToolCallArguments(
+    providerName: string,
+    args: unknown
+  ): Record<string, unknown> {
+    if (typeof args === 'string') {
+      try {
+        const parsed = JSON.parse(args) as unknown;
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+      } catch {
+        throw new Error(`LLM error: ${providerName} returned invalid tool call arguments JSON.`);
+      }
+      throw new Error(`LLM error: ${providerName} returned invalid tool call arguments JSON.`);
+    }
+
+    if (args && typeof args === 'object' && !Array.isArray(args)) {
+      return args as Record<string, unknown>;
+    }
+
+    return {};
+  }
+
+  private normalizeToolCalls(providerName: string, rawToolCalls: unknown): LlmChatToolCall[] | undefined {
+    if (!Array.isArray(rawToolCalls) || rawToolCalls.length === 0) return undefined;
+
+    return rawToolCalls.map((toolCall) => {
+      const raw = toolCall as {
+        id?: unknown;
+        type?: unknown;
+        function?: { name?: unknown; arguments?: unknown };
+      };
+      return {
+        id: typeof raw.id === 'string' ? raw.id : '',
+        type: 'function',
+        function: {
+          name: typeof raw.function?.name === 'string' ? raw.function.name : '',
+          arguments: this.normalizeToolCallArguments(providerName, raw.function?.arguments),
+        },
+      };
+    });
+  }
+
+  private toTextCompletion(result: LlmChatResult): LlmCompletionResult {
+    if ((result.message.tool_calls?.length ?? 0) > 0) {
+      throw new Error('LLM error: text completion wrapper received tool calls; use chat() for tool-capable responses.');
+    }
+    if (typeof result.message.content !== 'string' || result.message.content.length === 0) {
+      throw new Error(
+        `LLM error: ${result.providerName} returned a 200 response with no completion choices. ` +
+        `Raw: ${JSON.stringify({ message: result.message }).slice(0, 200)}`
+      );
+    }
+
+    return {
+      text: result.message.content,
+      modelName: result.modelName,
+      providerName: result.providerName,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      latencyMs: result.latencyMs,
+    };
+  }
+
+  private async chatHttpOnly(
     modelName: string,
-    messages: ChatMessage[],
+    messages: LlmChatMessage[],
     parameters?: Record<string, unknown>
-  ): Promise<LlmCompletionResult> {
+  ): Promise<LlmChatResult> {
     const normalizedName = modelName.toLowerCase(); // D-08
 
     const model = this.config.models.find((m) => m.name === normalizedName);
@@ -224,14 +325,22 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     }
 
     const apiKey = provider.apiKey;
-    const mergedParams = parameters ? mergeParameters(parameters, {}) : {};
+    const mergedParams = parameters ? normalizeProviderParameters(mergeParameters(parameters, {})) : {};
 
     // T-99-02: timeout-bounded execution
     // Phase 99 default: 30000ms. Per-provider config deferred to a later phase.
     const timeoutMs = (provider as { timeoutMs?: number }).timeoutMs ?? 30000;
 
+    const callerSignal = getAbortSignal(parameters);
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    const timeoutId = setTimeout(() => controller.abort('timeout'), timeoutMs);
+    let abortListener: (() => void) | undefined;
+    if (callerSignal?.aborted) {
+      controller.abort(callerSignal.reason as unknown);
+    } else if (callerSignal) {
+      abortListener = () => controller.abort(callerSignal.reason as unknown);
+      callerSignal.addEventListener('abort', abortListener, { once: true });
+    }
     const startTime = performance.now(); // D-10
 
     try {
@@ -249,8 +358,18 @@ export class OpenAICompatibleLlmClient implements LlmClient {
       } catch (err: unknown) {
         const name = (err as { name?: string }).name;
         if (name === 'AbortError') {
+          const reason = controller.signal.reason as unknown;
+          const reasonText = reason === 'timeout'
+            ? `${timeoutMs}ms timeout`
+            : reason === undefined
+              ? 'abort signal'
+              : reason instanceof Error
+                ? reason.message
+                : typeof reason === 'string'
+                  ? reason
+                  : 'abort signal';
           throw new LlmNetworkError(
-            `LLM error: ${provider.name} request exceeded ${timeoutMs}ms timeout.`,
+            `LLM error: ${provider.name} request aborted by ${reasonText}.`,
             { cause: err }
           );
         }
@@ -302,22 +421,49 @@ export class OpenAICompatibleLlmClient implements LlmClient {
       }
 
       const data = (await response.json()) as {
-        choices: Array<{ message: { content: string } }>;
-        usage: { prompt_tokens: number; completion_tokens: number };
+        choices?: Array<{
+          message?: {
+            role?: string;
+            content?: string | null;
+            name?: string;
+            tool_calls?: unknown;
+          };
+          finish_reason?: unknown;
+        }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
 
-      if (!data.choices || data.choices.length === 0 || !data.choices[0]?.message?.content) {
+      const choice = data.choices?.[0];
+      const rawMessage = choice?.message;
+      const toolCalls = this.normalizeToolCalls(provider.name, rawMessage?.tool_calls);
+      const hasToolCalls = (toolCalls?.length ?? 0) > 0;
+      const content = rawMessage?.content ?? null;
+
+      if (!data.choices || data.choices.length === 0 || !rawMessage) {
         throw new Error(
           `LLM error: ${provider.name} returned a 200 response with no completion choices. ` +
           `Raw: ${JSON.stringify(data).slice(0, 200)}`
         );
       }
-      if (!data.usage) {
+      if ((content === null || content === '') && !hasToolCalls) {
         throw new Error(
-          `LLM error: ${provider.name} returned a 200 response with no usage field. ` +
+          `LLM error: ${provider.name} returned a 200 response with no completion choices. ` +
           `Raw: ${JSON.stringify(data).slice(0, 200)}`
         );
       }
+      if (typeof data.usage?.prompt_tokens !== 'number' || typeof data.usage?.completion_tokens !== 'number') {
+        const message = hasToolCalls
+          ? `LLM error: ${provider.name} returned a tool-call response without usage; check model capabilities. Raw: ${JSON.stringify(data).slice(0, 200)}`
+          : `LLM error: ${provider.name} returned a 200 response with no usage field. Raw: ${JSON.stringify(data).slice(0, 200)}`;
+        throw new Error(message);
+      }
+
+      let finishReason = typeof choice.finish_reason === 'string' && isFinishReason(choice.finish_reason)
+        ? choice.finish_reason
+        : choice.finish_reason === 'function_call'
+          ? 'tool_calls'
+          : 'unknown';
+      if (hasToolCalls) finishReason = 'tool_calls';
 
       const latencyMs = Math.round(performance.now() - startTime); // D-10
       logger.debug(
@@ -326,15 +472,24 @@ export class OpenAICompatibleLlmClient implements LlmClient {
       );
 
       return {
-        text: data.choices[0].message.content,
+        message: {
+          role: 'assistant',
+          content,
+          ...(rawMessage.name ? { name: rawMessage.name } : {}),
+          ...(toolCalls ? { tool_calls: toolCalls } : {}),
+        },
         modelName: normalizedName, // the lowercased alias (D-25)
         providerName: provider.name,
         inputTokens: data.usage.prompt_tokens, // D-10 wire mapping
         outputTokens: data.usage.completion_tokens,
         latencyMs,
+        finishReason,
       };
     } finally {
       clearTimeout(timeoutId); // avoid keeping the event loop alive
+      if (callerSignal && abortListener) {
+        callerSignal.removeEventListener('abort', abortListener);
+      }
     }
   }
 
@@ -344,7 +499,8 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     parameters?: Record<string, unknown>,
     traceId?: string | null
   ): Promise<LlmCompletionResult> {
-    const result = await this.completeHttpOnly(modelName, messages, parameters);
+    const chatResult = await this.chatHttpOnly(modelName, messages, parameters);
+    const result = this.toTextCompletion(chatResult);
     // D-03/D-07: fire-and-forget cost recording — _direct sentinel for direct model calls.
     // Per D-03 this call site lives in client.ts (NOT mcp/tools/llm.ts) so all future
     // internal callers automatically get cost tracking.
@@ -367,13 +523,24 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     return result;
   }
 
+  async chat(
+    modelName: string,
+    messages: LlmChatMessage[],
+    parameters?: Record<string, unknown>,
+    _traceId?: string | null
+  ): Promise<LlmChatResult> {
+    return this.chatHttpOnly(modelName, messages, parameters);
+  }
+
   async completeByPurpose(
     purposeName: string,
     messages: ChatMessage[],
     parameters?: Record<string, unknown>,
     traceId?: string | null
   ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }> {
-    const result = await this.resolver.completeByPurpose(purposeName, messages, parameters);
+    const chatResult = await this.resolver.chatByPurpose(purposeName, messages, parameters);
+    const completion = this.toTextCompletion(chatResult);
+    const result = { ...completion, purposeName: chatResult.purposeName, fallbackPosition: chatResult.fallbackPosition };
     // D-03: fire-and-forget cost recording — actual purpose name for purpose-resolved calls.
     // This call site lives in client.ts (per D-03 architectural decision).
     const model = this.config.models.find((m) => m.name === result.modelName);
@@ -395,6 +562,40 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     return result;
   }
 
+  async chatByPurpose(
+    purposeName: string,
+    messages: LlmChatMessage[],
+    parameters?: Record<string, unknown>,
+    traceId?: string | null
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }> {
+    const result = await this.resolver.chatByPurpose(purposeName, messages, parameters);
+    const model = this.config.models.find((m) => m.name === result.modelName);
+    const costUsd = model
+      ? computeCost(result.inputTokens, result.outputTokens, model.costPerMillion)
+      : 0;
+    recordLlmUsage({
+      instanceId: this.instanceId,
+      purposeName,
+      modelName: result.modelName,
+      providerName: result.providerName,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      costUsd,
+      latencyMs: result.latencyMs,
+      fallbackPosition: result.fallbackPosition,
+      traceId: traceId ?? null,
+    });
+    return result;
+  }
+
+  async chatByPurposeUnrecorded(
+    purposeName: string,
+    messages: LlmChatMessage[],
+    parameters?: Record<string, unknown>
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }> {
+    return this.resolver.chatByPurpose(purposeName, messages, parameters);
+  }
+
   getModelForPurpose(
     purposeName: string
   ): {
@@ -411,6 +612,18 @@ export class OpenAICompatibleLlmClient implements LlmClient {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export class NullLlmClient implements LlmClient {
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async chat(
+    _modelName: string,
+    _messages: LlmChatMessage[],
+    _parameters?: Record<string, unknown>,
+    _traceId?: string | null
+  ): Promise<LlmChatResult> {
+    throw new Error(
+      'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
+    );
+  }
+
   // eslint-disable-next-line @typescript-eslint/require-await
   async complete(
     _modelName: string,
@@ -430,6 +643,29 @@ export class NullLlmClient implements LlmClient {
     _parameters?: Record<string, unknown>,
     _traceId?: string | null
   ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }> {
+    throw new Error(
+      'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async chatByPurpose(
+    _purposeName: string,
+    _messages: LlmChatMessage[],
+    _parameters?: Record<string, unknown>,
+    _traceId?: string | null
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }> {
+    throw new Error(
+      'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/require-await
+  async chatByPurposeUnrecorded(
+    _purposeName: string,
+    _messages: LlmChatMessage[],
+    _parameters?: Record<string, unknown>
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }> {
     throw new Error(
       'No LLM configuration found. Add an llm: section to flashquery.yml to use this tool.'
     );
@@ -481,6 +717,7 @@ export async function initLlm(config: FlashQueryConfig): Promise<void> {
   }
   llmClient = new OpenAICompatibleLlmClient(config.llm, config.instance.id);
   await syncLlmConfigToDb(config);
+  await validatePersistedPurposeTemplateAdmissions(config);
   logger.info(
     `LLM: ${config.llm.providers.length} provider(s), ${config.llm.purposes.length} purpose(s) configured`
   );

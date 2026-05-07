@@ -77,8 +77,36 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
       try {
         const vaultRoot = config.instance.vault.path;
 
-        // Step 1: Wrap string input as array
-        const rawPaths = typeof paths === 'string' ? [paths] : paths;
+        // Step 1: Wrap string input as array.
+        // Guard: if a string looks like a JSON array (starts with '['), attempt to parse it
+        // so that LLM-serialized inputs like '["Roadmap/Features","Reference/Product"]' are
+        // handled correctly instead of creating a single garbled directory name.
+        let rawPaths: string[];
+        if (typeof paths === 'string') {
+          const trimmed = paths.trim();
+          if (trimmed.startsWith('[')) {
+            let parsed: unknown;
+            try {
+              parsed = JSON.parse(trimmed);
+            } catch {
+              return {
+                content: [{ type: 'text' as const, text: `Invalid paths input: looks like a JSON array but could not be parsed. Provide a plain string or a proper JSON array.` }],
+                isError: true,
+              };
+            }
+            if (!Array.isArray(parsed) || !parsed.every((v) => typeof v === 'string')) {
+              return {
+                content: [{ type: 'text' as const, text: `Invalid paths input: JSON-parsed value is not a string array.` }],
+                isError: true,
+              };
+            }
+            rawPaths = parsed;
+          } else {
+            rawPaths = [paths];
+          }
+        } else {
+          rawPaths = paths;
+        }
 
         // Step 2: Normalize root_path and validate it (pre-loop guard, D-04 Pitfall 4)
         // Checks: traversal, symlinks, vault-root targeting, and file-conflict (F-49).

@@ -1,7 +1,8 @@
-ENV_FILE     := docker/.env.docker
-FULL_COMPOSE := docker/docker-compose.yml
-FQ_COMPOSE   := docker/docker-compose.flashquery-only.yml
-DB_COMPOSE   := docker/docker-compose.db-only.yml
+DOCKER_ENV_FILE := docker/.env.docker
+APP_ENV_FILE    := .env
+FULL_COMPOSE    := docker/docker-compose.yml
+FQ_COMPOSE      := docker/docker-compose.flashquery-only.yml
+DB_COMPOSE      := docker/docker-compose.db-only.yml
 
 .PHONY: help \
         up down restart logs status build rebuild shell clean \
@@ -11,6 +12,8 @@ DB_COMPOSE   := docker/docker-compose.db-only.yml
 help:
 	@echo ""
 	@echo "FlashQuery — Docker targets"
+	@echo "  Full stack targets use docker/.env.docker; FlashQuery-only and db-only"
+	@echo "  targets use the root .env."
 	@echo ""
 	@echo "Full stack  (Postgres + Supabase services + FlashQuery):"
 	@echo "  make up        Start full stack in background"
@@ -43,70 +46,70 @@ help:
 # ── Full stack ────────────────────────────────────────────────────────────────
 
 up:
-	docker compose --env-file $(ENV_FILE) -f $(FULL_COMPOSE) up -d
+	docker compose --env-file $(DOCKER_ENV_FILE) -f $(FULL_COMPOSE) up -d
 
 down:
-	docker compose --env-file $(ENV_FILE) -f $(FULL_COMPOSE) down
+	docker compose --env-file $(DOCKER_ENV_FILE) -f $(FULL_COMPOSE) down
 
 restart:
-	docker compose --env-file $(ENV_FILE) -f $(FULL_COMPOSE) restart
+	docker compose --env-file $(DOCKER_ENV_FILE) -f $(FULL_COMPOSE) restart
 
 logs:
-	docker compose --env-file $(ENV_FILE) -f $(FULL_COMPOSE) logs -f
+	docker compose --env-file $(DOCKER_ENV_FILE) -f $(FULL_COMPOSE) logs -f
 
 status:
-	docker compose --env-file $(ENV_FILE) -f $(FULL_COMPOSE) ps
+	docker compose --env-file $(DOCKER_ENV_FILE) -f $(FULL_COMPOSE) ps
 
 build:
-	docker compose --env-file $(ENV_FILE) -f $(FULL_COMPOSE) build
+	docker compose --env-file $(DOCKER_ENV_FILE) -f $(FULL_COMPOSE) build
 
 rebuild:
-	docker compose --env-file $(ENV_FILE) -f $(FULL_COMPOSE) build --no-cache
+	docker compose --env-file $(DOCKER_ENV_FILE) -f $(FULL_COMPOSE) build --no-cache
 
 shell:
-	docker compose --env-file $(ENV_FILE) -f $(FULL_COMPOSE) exec flashquery sh
+	docker compose --env-file $(DOCKER_ENV_FILE) -f $(FULL_COMPOSE) exec flashquery sh
 
 clean:
 	@echo "WARNING: This will stop all containers and delete all volume data."
 	@read -p "Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ] || (echo "Aborted."; exit 1)
-	docker compose --env-file $(ENV_FILE) -f $(FULL_COMPOSE) down -v
+	docker compose --env-file $(DOCKER_ENV_FILE) -f $(FULL_COMPOSE) down -v
 
 # ── FlashQuery only ───────────────────────────────────────────────────────────
 
 fq-up:
-	docker compose --env-file $(ENV_FILE) -f $(FQ_COMPOSE) up -d
+	docker compose --env-file $(APP_ENV_FILE) -f $(FQ_COMPOSE) up -d
 
 fq-down:
-	docker compose --env-file $(ENV_FILE) -f $(FQ_COMPOSE) down
+	docker compose --env-file $(APP_ENV_FILE) -f $(FQ_COMPOSE) down
 
 fq-logs:
-	docker compose --env-file $(ENV_FILE) -f $(FQ_COMPOSE) logs -f
+	docker compose --env-file $(APP_ENV_FILE) -f $(FQ_COMPOSE) logs -f
 
 fq-status:
-	docker compose --env-file $(ENV_FILE) -f $(FQ_COMPOSE) ps
+	docker compose --env-file $(APP_ENV_FILE) -f $(FQ_COMPOSE) ps
 
 fq-build:
-	docker compose --env-file $(ENV_FILE) -f $(FQ_COMPOSE) build
+	docker compose --env-file $(APP_ENV_FILE) -f $(FQ_COMPOSE) build
 
 fq-rebuild:
-	docker compose --env-file $(ENV_FILE) -f $(FQ_COMPOSE) build --no-cache
+	docker compose --env-file $(APP_ENV_FILE) -f $(FQ_COMPOSE) build --no-cache
 
 fq-shell:
-	docker compose --env-file $(ENV_FILE) -f $(FQ_COMPOSE) exec flashquery sh
+	docker compose --env-file $(APP_ENV_FILE) -f $(FQ_COMPOSE) exec flashquery sh
 
 fq-watch:
-	docker compose --env-file $(ENV_FILE) -f $(FQ_COMPOSE) up
+	docker compose --env-file $(APP_ENV_FILE) -f $(FQ_COMPOSE) up
 
 # ── Database only ─────────────────────────────────────────────────────────────
 
 db-up:
-	docker compose --env-file $(ENV_FILE) -f $(DB_COMPOSE) up -d
+	docker compose --env-file $(APP_ENV_FILE) -f $(DB_COMPOSE) up -d
 
 db-down:
-	docker compose --env-file $(ENV_FILE) -f $(DB_COMPOSE) down
+	docker compose --env-file $(APP_ENV_FILE) -f $(DB_COMPOSE) down
 
 db-logs:
-	docker compose --env-file $(ENV_FILE) -f $(DB_COMPOSE) logs -f
+	docker compose --env-file $(APP_ENV_FILE) -f $(DB_COMPOSE) logs -f
 
 db-status:
-	docker compose --env-file $(ENV_FILE) -f $(DB_COMPOSE) ps
+	docker compose --env-file $(APP_ENV_FILE) -f $(DB_COMPOSE) ps

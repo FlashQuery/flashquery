@@ -12,11 +12,12 @@ Local-first data management layer for AI workflows — save and search memories,
 
 ## What it is
 
-FlashQuery is a persistent data layer for AI workflows. It sits between AI tools (Claude, Cursor, ChatGPT) and your data, managing three things:
+FlashQuery is a persistent data layer for AI workflows. It sits between AI tools (Claude, Cursor, ChatGPT) and your data, managing four things:
 
 - **Memories** — semantic, searchable summaries of conversations, indexed with vector embeddings.
 - **Documents** — markdown files in a vault you own and can version in Obsidian.
 - **Relational records** — structured data in your Supabase instance (via plugins).
+- **LLM delegation** — cost-tracked `call_model` calls through configured models and purposes, including document reference hydration and FlashQuery-managed tool loops.
 
 Every interaction an AI has with FlashQuery is logged and searchable. When Claude asks for "memories about the project," FlashQuery retrieves relevant stored summaries using vector search. When it creates a new meeting note, the note is saved both to your vault (as markdown) and indexed in the database. You own all of it — no vendor lock-in, no training on your data.
 
@@ -39,7 +40,7 @@ You need:
   - **Supabase Cloud** — free project at [supabase.com](https://supabase.com), nothing to install
   - **Bundled Docker stack** — Docker Desktop (or Engine + Compose) is all you need;  FlashQuery's setup can provision Supabase for you automatically
   - **Existing self-hosted Supabase** — if you already run one
-- A **model provider** for semantic search and LLM features — [OpenAI](https://platform.openai.com/api-keys), [OpenRouter](https://openrouter.ai/keys), or local [Ollama](https://ollama.ai) all work. The setup script walks you through picking one. OpenAI is the default (`OPENAI_API_KEY` covers both embedding and LLM out of the box); Ollama requires no API key at all. Individual providers for embedding and LLM can be configured independently in `flashquery.yml`
+- An **OpenAI API key** for the default semantic search and LLM configuration. FlashQuery can also use OpenRouter-compatible endpoints or local Ollama models, but those are configured by editing the `llm:` providers, models, and purposes in `flashquery.yml` after setup.
 
 > **Node.js 18:** Will install and start FlashQuery but `npm install` shows an `EBADENGINE` warning and `supabase-js` logs a runtime deprecation notice. Node 20 LTS is required for supported operation.
 
@@ -57,14 +58,14 @@ npm install
 npm run setup
 ```
 
-The interactive script asks a handful of questions and writes three files:
+The interactive script asks a handful of questions and writes these files:
 
 | File | Purpose |
 |---|---|
 | `.env` | Secrets, URLs, vault path, instance identity — gitignored, per-install |
 | `flashquery.yml` | Structural config and defaults — safe to read and commit |
 | `.env.test` | Test credentials synced from `.env` — gitignored, used by `npm run test:integration` |
-| `docker/.env.docker` | Generated only when you choose the bundled Docker stack |
+| `docker/.env.docker` | Generated only when you choose the bundled Docker stack; used by full-stack Docker |
 
 The first question picks your Supabase backend:
 
@@ -72,7 +73,7 @@ The first question picks your Supabase backend:
 2. **Existing self-hosted** — a Supabase instance you already run. Same prompts.
 3. **Bundled Docker stack** — generates all secrets and wires up Supabase locally. Requires Docker Desktop or Docker Engine + Compose.
 
-`npm run setup` is safe to re-run at any time. Existing values become defaults; it warns before letting you change anything sensitive (database URL, instance ID, embedding model).
+`npm run setup` is safe to re-run at any time. Existing values become defaults; it warns before letting you change sensitive routing values such as the database URL or instance ID, and it preserves generated secrets such as `MCP_AUTH_SECRET` unless you rotate them yourself.
 
 ### 3. Start FlashQuery
 
@@ -220,9 +221,11 @@ Config is split across two files deliberately:
 - **`.env`** — everything that varies per install: secrets, URLs, vault path, instance identity. Gitignored.
 - **`flashquery.yml`** — structural config and defaults. References `.env` via `${VAR}`. Safe to commit.
 
-If you chose the bundled Docker stack, there's also **`docker/.env.docker`** — orchestration values (Postgres password, JWT secret, anon/service-role keys) used only by the Docker Compose stack. The FlashQuery app itself reads `.env`.
+If you chose the bundled Docker stack, there's also **`docker/.env.docker`**. Full-stack Docker uses that file as its source of truth for both Supabase orchestration values (Postgres password, JWT secret, anon/service-role keys) and the environment passed into the FlashQuery container. The root `.env` remains the source of truth when FlashQuery runs locally, when you use `make fq-up`, or when you use `make db-up`.
 
-See [`.env.example`](./.env.example) and [`flashquery.example.yml`](./flashquery.example.yml) for all available values with inline documentation.
+See [`.env.example`](./.env.example), [`docker/.env.docker.example`](./docker/.env.docker.example), and [`flashquery.example.yml`](./flashquery.example.yml) for all available values with inline documentation.
+
+The `llm:` section in `flashquery.yml` is split into providers, models, and purposes. Providers define where requests go, models define the model aliases FlashQuery can call, and purposes define why a model is being called, including fallback chains and optional template tools. See [`docs/LLM Providers Models and Purposes.md`](./docs/LLM%20Providers%20Models%20and%20Purposes.md) for the full guide.
 
 ### Non-interactive setup
 
@@ -241,10 +244,7 @@ SUPABASE_SERVICE_ROLE_KEY=...
 DATABASE_URL=postgresql://postgres:...@db.xxx.supabase.co:5432/postgres
 INSTANCE_NAME=My FlashQuery
 VAULT_PATH=./vault
-EMBEDDING_PROVIDER=openai  # openai | openrouter | ollama | none
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_API_KEY=sk-...
-OPENAI_API_KEY=sk-...      # for LLM features; auto-synced when EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=sk-...      # default key for semantic search and LLM features
 LOG_LEVEL=info
 ```
 
@@ -266,6 +266,8 @@ For technical details on all three: [ARCHITECTURE.md § Plugin Propagation Desig
 
 **Using FlashQuery**
 - [**flashquery-plugins**](https://github.com/FlashQuery/flashquery-plugins) — Claude skills and demo apps that showcase what FlashQuery can do
+- [`docs/Document Reference System.md`](./docs/Document%20Reference%20System.md) — passing documents, sections, and templates into delegated model calls
+- [`docs/LLM Providers Models and Purposes.md`](./docs/LLM%20Providers%20Models%20and%20Purposes.md) — configuring model providers, aliases, purposes, fallbacks, and template tools
 - [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) — Claude Code registration, token management, troubleshooting
 - [`docs/SECURITY-TOKENS.md`](./docs/SECURITY-TOKENS.md) — bearer token internals and lifetime configuration
 
@@ -285,7 +287,7 @@ For technical details on all three: [ARCHITECTURE.md § Plugin Propagation Desig
 ### Application
 
 ```bash
-npm run setup            # Interactive first-time setup (generates .env + flashquery.yml)
+npm run setup            # Interactive first-time setup (generates .env, flashquery.yml, and .env.test)
 npm run dev              # Development: run TypeScript directly via tsx, hot-reloads on file changes
 npm run dev:test         # Same as dev but using .env.test credentials (manual integration testing)
 npm run build            # Compile TypeScript to dist/ via tsup (required before npm run start)

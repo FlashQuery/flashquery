@@ -3,6 +3,9 @@ import * as yaml from 'js-yaml';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
+import { validateAllPurposeMode2Admissions } from '../llm/capabilities.js';
+import { HARD_EXCLUDED_NATIVE_TOOLS, TOOL_TIERS } from '../llm/tool-registry.js';
+import { logger } from '../logging/logger.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Zod schemas (snake_case — matches YAML structure)
@@ -85,6 +88,15 @@ const ProviderSchema = z
     type: z.enum(['openai-compatible', 'ollama']),
     endpoint: z.string().url('endpoint must be a valid URL'),
     api_key: z.string().optional(),
+    // DISC-01 / Verification Correction 3: optional flag surfaced in list_models discovery.
+    // Auto-derived from `type: ollama` in the response layer when not explicitly declared.
+    // NOTE: this is a *provider-level* field (not model-level). As of 2026-05-03 it is read
+    // from YAML and emitted only by the `list_models` discovery projection in
+    // src/mcp/tools/llm.ts — it does NOT influence routing, cost computation, recursion,
+    // fallback chains, or any other behavior. It is purely caller-facing metadata for
+    // external LLMs doing routing decisions. If you add a behavioral use of this flag,
+    // update this note and src/mcp/tools/llm.ts:165 accordingly.
+    local: z.boolean().optional(),
   })
   .strip();
 
@@ -95,20 +107,60 @@ const ModelCostSchema = z
   })
   .strip();
 
-const ModelSchema = z
+const ModelCapabilitiesSchema = z
   .object({
-    name: z.string(),
-    provider_name: z.string(),
-    model: z.string(),
-    type: z.enum(['language', 'reasoning', 'embedding', 'vision', 'code', 'audio', 'guardian']),
-    dimensions: z.number().optional(),
-    cost_per_million: ModelCostSchema,
+    tool_calling: z.boolean().optional(),
+    usage_on_tool_calls: z.boolean().optional(),
+    strict_tools: z.boolean().optional(),
+    parallel_tool_calls: z.boolean().optional(),
+    structured_outputs_with_tools: z.boolean().optional(),
   })
-  .strip();
+  .strict();
 
-// PurposeDefaultsSchema is intentionally permissive — values are LLM provider params
-// (temperature, max_tokens, etc.) and we don't constrain their shape.
-const PurposeDefaultsSchema = z.record(z.string(), z.unknown());
+const ModelSchema = z
+  .preprocess((raw) => {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+    const model = { ...(raw as Record<string, unknown>) };
+    if (Array.isArray(model['capabilities'])) {
+      model['tags'] = model['tags'] ?? model['capabilities'];
+      delete model['capabilities'];
+    }
+    return model;
+  }, z.object({
+      name: z.string(),
+      provider_name: z.string(),
+      model: z.string(),
+      type: z.enum(['language', 'reasoning', 'embedding', 'vision', 'code', 'audio', 'guardian']),
+      dimensions: z.number().optional(),
+      cost_per_million: ModelCostSchema,
+      description: z.string().optional(),
+      context_window: z.number().int().positive().optional(),
+      tags: z.array(z.string()).optional(),
+      capabilities: ModelCapabilitiesSchema.optional(),
+    })
+    .strip());
+
+const LOOP_GUARDRAIL_DEFAULT_KEYS = [
+  'timeout_ms',
+  'max_cost_usd',
+  'max_tokens_budget',
+  'max_iterations',
+  'result_summary_chars',
+] as const;
+
+// Purpose defaults are intentionally permissive for provider params, with
+// targeted validation for FlashQuery loop guardrails that affect agent runtime.
+const PurposeDefaultsSchema = z.record(z.string(), z.unknown()).superRefine((defaults, ctx) => {
+  for (const key of LOOP_GUARDRAIL_DEFAULT_KEYS) {
+    if (key in defaults && typeof defaults[key] !== 'number') {
+      ctx.addIssue({
+        code: 'custom',
+        path: [key],
+        message: `${key} must be a number when declared in purpose.defaults`,
+      });
+    }
+  }
+});
 
 const PurposeSchema = z
   .object({
@@ -116,8 +168,11 @@ const PurposeSchema = z
     description: z.string(),
     models: z.array(z.string()),
     defaults: PurposeDefaultsSchema.optional(),
+    tools: z.array(z.string()).optional(),
+    excluded_tools: z.array(z.string()).optional(),
+    templates: z.array(z.string()).optional(),
   })
-  .strip();
+  .strict();
 
 const LlmSchema = z
   .object({
@@ -147,6 +202,13 @@ const LoggingSchema = z
   .strip()
   .prefault({});
 
+const TemplatesSchema = z
+  .object({
+    default_access: z.enum(['permissive', 'restrictive']).default('permissive'),
+  })
+  .strict()
+  .prefault({});
+
 // ConfigSchema: strict schema — only known v1.7 fields accepted
 // Note: legacy field rejection (projects, defaults, vault) is enforced in loadConfig()
 // before this schema runs, providing clear actionable error messages.
@@ -158,6 +220,7 @@ const ConfigSchema = z
     git: GitSchema,
     mcp: McpSchema,
     llm: LlmSchema,
+    templates: TemplatesSchema,
     embedding: EmbeddingSchema.optional(),
     logging: LoggingSchema,
     locking: LockingSchema,
@@ -182,8 +245,9 @@ export interface FlashQueryConfig {
   git: { autoCommit: boolean; autoPush: boolean; remote: string; branch: string };
   mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
   locking: { enabled: boolean; ttlSeconds: number };
+  templates?: { defaultAccess: 'permissive' | 'restrictive' };
   llm?: {
-    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string }>;
+    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean }>;
     models: Array<{
       name: string;
       providerName: string;
@@ -191,8 +255,26 @@ export interface FlashQueryConfig {
       type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
       dimensions?: number;
       costPerMillion: { input: number; output: number };
+      description?: string;
+      contextWindow?: number;
+      tags?: string[];
+      capabilities?: {
+        tool_calling?: boolean;
+        usage_on_tool_calls?: boolean;
+        strict_tools?: boolean;
+        parallel_tool_calls?: boolean;
+        structured_outputs_with_tools?: boolean;
+      };
     }>;
-    purposes: Array<{ name: string; description: string; models: string[]; defaults?: Record<string, unknown> }>;
+    purposes: Array<{
+      name: string;
+      description: string;
+      models: string[];
+      defaults?: Record<string, unknown>;
+      tools?: string[];
+      excludedTools?: string[];
+      templates?: string[];
+    }>;
   };
   embedding?: {
     provider: string;
@@ -243,10 +325,20 @@ function loadEnvFileSilently(envPath: string): void {
     if (eqIdx === -1) continue;
     const key = trimmed.slice(0, eqIdx).trim();
     let value = trimmed.slice(eqIdx + 1).trim();
-    if (
+    // Only strip inline comments from unquoted values (WR-01).
+    // Standard .env convention: quoted values are treated verbatim — a password like
+    // "hunter2 # not a comment" must not be truncated. Check for surrounding quotes
+    // BEFORE applying the inline comment strip so quoted values pass through intact.
+    const isQuoted =
       (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
+      (value.startsWith("'") && value.endsWith("'"));
+    if (!isQuoted) {
+      const commentIdx = value.indexOf(' #');
+      if (commentIdx !== -1) {
+        value = value.slice(0, commentIdx).trim();
+      }
+    }
+    if (isQuoted) {
       value = value.slice(1, -1);
     }
     if (!(key in process.env)) {
@@ -324,15 +416,31 @@ function formatZodErrors(issues: ZodIssue[]): string {
 // LLM config normalization & validation (v3.0)
 // ─────────────────────────────────────────────────────────────────────────────
 
-type RawLlmProvider = { name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; api_key?: string };
+type RawLlmProvider = { name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; api_key?: string; local?: boolean };
 type RawLlmModel = {
   name: string;
   provider_name: string;
   model: string;
   type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
   cost_per_million: { input: number; output: number };
+  capabilities?: {
+    tool_calling?: boolean;
+    usage_on_tool_calls?: boolean;
+    strict_tools?: boolean;
+    parallel_tool_calls?: boolean;
+    structured_outputs_with_tools?: boolean;
+  };
+  tags?: string[];
 };
-type RawLlmPurpose = { name: string; description: string; models: string[]; defaults?: Record<string, unknown> };
+type RawLlmPurpose = {
+  name: string;
+  description: string;
+  models: string[];
+  defaults?: Record<string, unknown>;
+  tools?: string[];
+  excluded_tools?: string[];
+  templates?: string[];
+};
 type RawLlm = { providers: RawLlmProvider[]; models: RawLlmModel[]; purposes: RawLlmPurpose[] };
 
 /**
@@ -362,6 +470,11 @@ type LlmValidationError = { layer: 'provider' | 'model' | 'purpose' | 'cross-ref
 function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
   const errors: LlmValidationError[] = [];
   const namePattern = /^[a-z0-9][a-z0-9_-]*$/;
+  const toolTierNames = new Set<string>(Object.keys(TOOL_TIERS));
+  const nativeToolNames = new Set<string>([
+    ...Object.values(TOOL_TIERS).flat(),
+    ...HARD_EXCLUDED_NATIVE_TOOLS,
+  ]);
 
   // CONF-01: name format validation
   for (const p of llm.providers) {
@@ -425,7 +538,39 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
     }
   }
 
+  for (const pu of llm.purposes) {
+    const tools = pu.tools ?? [];
+    const excludedTools = pu.excluded_tools ?? [];
+    if (excludedTools.length > 0 && tools.length === 0) {
+      errors.push({ layer: 'purpose', name: pu.name, message: `purpose '${pu.name}' excluded_tools requires tools` });
+    }
+
+    for (const tool of [...tools, ...excludedTools]) {
+      if (toolTierNames.has(tool) || nativeToolNames.has(tool)) continue;
+      errors.push({
+        layer: 'purpose',
+        name: pu.name,
+        message: tool.startsWith('tier:')
+          ? `purpose '${pu.name}' unknown tool tier '${tool}'`
+          : `purpose '${pu.name}' unknown native tool '${tool}'`,
+      });
+    }
+  }
+
   return errors;
+}
+
+function warnHardExcludedPurposeTools(llm: RawLlm): void {
+  const hardExcluded = new Set<string>(HARD_EXCLUDED_NATIVE_TOOLS);
+  for (const pu of llm.purposes) {
+    const hardExcludedTools = [...(pu.tools ?? []), ...(pu.excluded_tools ?? [])]
+      .filter((tool) => hardExcluded.has(tool));
+    for (const tool of hardExcludedTools) {
+      logger?.warn(
+        `Config: purpose '${pu.name}' lists hard-excluded native tool '${tool}'; it will be removed from the model-visible registry.`
+      );
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -634,6 +779,7 @@ export function loadConfig(configPath: string): FlashQueryConfig {
         .join('\n');
       throw new Error(message);
     }
+    warnHardExcludedPurposeTools(result.data.llm);
   }
 
   // 8. Convert snake_case to camelCase
@@ -651,6 +797,21 @@ export function loadConfig(configPath: string): FlashQueryConfig {
         camelLlm.purposes[i].defaults = JSON.parse(JSON.stringify(rawDefaults)) as Record<string, unknown>;
       } else {
         delete camelLlm.purposes[i].defaults;
+      }
+    }
+  }
+
+  // Keep structured model capability keys in their YAML/API contract form.
+  // snakeToCamel would otherwise rename `tool_calling` to `toolCalling`,
+  // creating a second behavioral capability surface.
+  if (result.data.llm?.models && Array.isArray((camel['llm'] as { models?: unknown })?.models)) {
+    const camelLlm = camel['llm'] as { models: Array<{ capabilities?: Record<string, unknown> }> };
+    for (let i = 0; i < camelLlm.models.length; i++) {
+      const rawCapabilities = result.data.llm.models[i]?.capabilities;
+      if (rawCapabilities !== undefined) {
+        camelLlm.models[i].capabilities = JSON.parse(JSON.stringify(rawCapabilities)) as Record<string, unknown>;
+      } else {
+        delete camelLlm.models[i].capabilities;
       }
     }
   }
@@ -677,6 +838,11 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // Stored as a runtime-only Map alongside `_deprecationWarnings`. Not part of the
   // public FlashQueryConfig type — consumers use getLlmApiKeyRefs(config) below.
   (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'] = rawLlmApiKeyRefs;
+
+  const capabilityErrors = validateAllPurposeMode2Admissions(config);
+  if (capabilityErrors.length > 0) {
+    throw new Error(capabilityErrors.map((e) => `Config error: [capability] ${e.message}`).join('\n'));
+  }
 
   return config;
 }

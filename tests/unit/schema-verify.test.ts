@@ -103,7 +103,7 @@ describe('verifySchema', () => {
     mockClient = { query: mockQuery } as unknown as pg.Client;
   });
 
-  it('verifies all 10 required tables exist', async () => {
+  it('verifies all 11 required tables exist including fqc_purpose_templates for ATL-I-01', async () => {
     // All tables exist
     mockQuery.mockResolvedValue({
       rows: [{ '?column?': true }],
@@ -112,8 +112,8 @@ describe('verifySchema', () => {
     // Should not throw
     await expect(verifySchema(mockClient)).resolves.toBeUndefined();
 
-    // Verify that tableExists was called 10 times (once per table)
-    expect(mockQuery).toHaveBeenCalledTimes(10);
+    // Verify that tableExists was called 11 times (once per table)
+    expect(mockQuery).toHaveBeenCalledTimes(11);
   });
 
   it('throws error listing missing tables when one table is missing', async () => {
@@ -148,17 +148,33 @@ describe('verifySchema', () => {
     );
   });
 
+  it('throws error when ATL-I-01 fqc_purpose_templates is missing', async () => {
+    let callCount = 0;
+    mockQuery.mockImplementation(() => {
+      // fqc_purpose_templates is checked after fqc_llm_usage.
+      const exists = callCount !== 10;
+      callCount++;
+      return Promise.resolve({
+        rows: [{ '?column?': exists }],
+      });
+    });
+
+    await expect(verifySchema(mockClient)).rejects.toThrow(
+      'Missing required tables after DDL: [fqc_purpose_templates]'
+    );
+  });
+
   it('throws error with all tables missing (fresh database)', async () => {
     mockQuery.mockResolvedValue({
       rows: [{ '?column?': false }],
     });
 
     await expect(verifySchema(mockClient)).rejects.toThrow(
-      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_plugin_registry, fqc_write_locks, fqc_llm_providers, fqc_llm_models, fqc_llm_purposes, fqc_llm_purpose_models, fqc_llm_usage]'
+      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_plugin_registry, fqc_write_locks, fqc_llm_providers, fqc_llm_models, fqc_llm_purposes, fqc_llm_purpose_models, fqc_llm_usage, fqc_purpose_templates]'
     );
 
-    // All 10 tables should be checked
-    expect(mockQuery).toHaveBeenCalledTimes(10);
+    // All 11 tables should be checked
+    expect(mockQuery).toHaveBeenCalledTimes(11);
   });
 
   it('checks tables in the correct order', async () => {
@@ -179,6 +195,7 @@ describe('verifySchema', () => {
       'fqc_llm_purposes',
       'fqc_llm_purpose_models',
       'fqc_llm_usage',
+      'fqc_purpose_templates',
     ];
 
     // Table name is passed as a parameterized argument (callArgs[1]), not in the SQL string

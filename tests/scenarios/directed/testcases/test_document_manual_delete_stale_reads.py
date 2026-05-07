@@ -78,6 +78,8 @@ def _looks_like_clear_error(text: str, error_detail: str | None) -> tuple[bool, 
     haystack = f"{text}\n{error_detail or ''}".lower()
     keywords = [
         "not found",
+        "not_found",          # JSON envelope error key (e.g. "document_not_found")
+        "no document found",  # JSON envelope message prefix
         "missing",
         "no such",
         "does not exist",
@@ -87,6 +89,7 @@ def _looks_like_clear_error(text: str, error_detail: str | None) -> tuple[bool, 
         "deleted",
         "no longer",
         "gone",
+        "enoent",             # filesystem error code in server logs / error field
     ]
     for kw in keywords:
         if kw in haystack:
@@ -179,7 +182,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         read_ok_result = ctx.client.call_tool(
             "get_document",
-            identifier=read_identifier,
+            identifiers=read_identifier,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -246,7 +249,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         read_stale_result = ctx.client.call_tool(
             "get_document",
-            identifier=read_identifier,
+            identifiers=read_identifier,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

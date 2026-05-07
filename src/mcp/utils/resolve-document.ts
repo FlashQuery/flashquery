@@ -25,6 +25,30 @@ export interface ResolvedDocument {
   stalePathNote?: string;
 }
 
+export class DocumentNotFoundError extends Error {
+  constructor(public identifier: string, message = `Document not found: "${identifier}"`) {
+    super(message);
+    this.name = 'DocumentNotFoundError';
+  }
+}
+
+export class AmbiguousDocumentIdentifierError extends Error {
+  constructor(public identifier: string, public matches: string[]) {
+    super(
+      `Ambiguous filename "${identifier}" matches ${matches.length} files:\n${matches.map((m) => `  - ${m}`).join('\n')}\nUse a vault-relative path or fq_id instead.`
+    );
+    this.name = 'AmbiguousDocumentIdentifierError';
+  }
+}
+
+export class DocumentReadError extends Error {
+  constructor(public identifier: string, public path: string, public causeError: unknown) {
+    const detail = causeError instanceof Error ? causeError.message : String(causeError);
+    super(`Error reading document "${identifier}" at "${path}": ${detail}`);
+    this.name = 'DocumentReadError';
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-file mutex map — prevents concurrent pre-scan + background scan on same file
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,7 +99,7 @@ export async function resolveDocumentIdentifier(
     const { data: row, error } = queryResult;
 
     if (error || !row) {
-      throw new Error(`Document not found: no document with id "${identifier}"`);
+      throw new DocumentNotFoundError(identifier, `Document not found: no document with id "${identifier}"`);
     }
 
     const absPath = join(vaultRoot, row.path);
@@ -85,7 +109,7 @@ export async function resolveDocumentIdentifier(
     const resolvedVault = resolve(vaultRoot);
     const rel = relative(resolvedVault, resolvedAbs);
     if (rel.startsWith('..') || rel === '..') {
-      throw new Error(`Document not found: no document with id "${identifier}"`);
+      throw new DocumentNotFoundError(identifier, `Document not found: no document with id "${identifier}"`);
     }
 
     return {
@@ -96,8 +120,15 @@ export async function resolveDocumentIdentifier(
     };
   }
 
-  // ── 2. Path check (contains "/") ──────────────────────────────────────────
-  if (identifier.includes('/')) {
+  // ── 2. Path check (contains "/" or ends with a configured markdown extension) ─
+  // Aligns with classifyResolutionMethod in document-output.ts so the resolver
+  // and error-envelope classifier agree on what counts as a path-shaped identifier.
+  // Extensions come from config (no hardcoded ".md").
+  const lowerId = identifier.toLowerCase();
+  const hasMarkdownExt = config.instance.vault.markdownExtensions.some((ext) =>
+    lowerId.endsWith(ext.toLowerCase())
+  );
+  if (identifier.includes('/') || hasMarkdownExt) {
     const absPath = join(vaultRoot, identifier);
 
     // Security: ensure resolved path is within vault root (T-32-01)
@@ -105,7 +136,7 @@ export async function resolveDocumentIdentifier(
     const resolvedVault = resolve(vaultRoot);
     const rel = relative(resolvedVault, resolvedAbs);
     if (rel.startsWith('..') || rel === '..') {
-      throw new Error(`Document not found: "${identifier}"`);
+      throw new DocumentNotFoundError(identifier);
     }
 
     if (existsSync(absPath)) {
@@ -139,7 +170,7 @@ export async function resolveDocumentIdentifier(
       const fqcId = dbRow.id;
 
       // Scan vault for file with matching fqc_id frontmatter
-      const allFiles = await listMarkdownFiles(vaultRoot, ['.md']);
+      const allFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
       let newPath: string | null = null;
       for (const candidate of allFiles) {
         try {
@@ -177,35 +208,48 @@ export async function resolveDocumentIdentifier(
       }
     }
 
-    throw new Error(`Document not found: "${identifier}"`);
+    throw new DocumentNotFoundError(identifier);
   }
 
-  // ── 3. Filename check (no "/" and not UUID) ───────────────────────────────
-  // First check exact match at vault root
-  const rootAbsPath = join(vaultRoot, identifier);
-  if (existsSync(rootAbsPath)) {
-    return {
-      absPath: rootAbsPath,
-      relativePath: identifier,
-      fqcId: null,
-      resolvedVia: 'filename',
-    };
+  // ── 3. Filename check (no "/", not UUID, and no configured markdown extension) ─
+  // The path branch above already covers identifiers that carry a configured
+  // markdown extension (e.g. "foo.md"). Here we handle bare basenames like
+  // "standup" by appending each configured extension and matching against
+  // the vault scan. We try exact match at vault root first, then scan.
+  const exts = config.instance.vault.markdownExtensions;
+  const allFiles = await listMarkdownFiles(vaultRoot, exts);
+
+  // Try each configured extension as a candidate filename (e.g. "standup.md")
+  for (const ext of exts) {
+    const candidate = `${identifier}${ext}`;
+
+    // Exact match at vault root
+    const rootAbsPath = join(vaultRoot, candidate);
+    if (existsSync(rootAbsPath)) {
+      return {
+        absPath: rootAbsPath,
+        relativePath: candidate,
+        fqcId: null,
+        resolvedVia: 'filename',
+      };
+    }
   }
 
-  // Scan vault for files ending with /{identifier} or equal to identifier
-  const allFiles = await listMarkdownFiles(vaultRoot, ['.md']);
-  const matches = allFiles.filter(
-    (f) => f === identifier || f.endsWith(`/${identifier}`)
-  );
+  // Scan vault for files whose basename matches identifier + any configured extension
+  // (case-insensitive on the extension, exact on the basename per filesystem).
+  const matches = allFiles.filter((f) => {
+    return exts.some((ext) => {
+      const target = `${identifier}${ext}`;
+      return f === target || f.endsWith(`/${target}`);
+    });
+  });
 
   if (matches.length === 0) {
-    throw new Error(`Document not found: "${identifier}"`);
+    throw new DocumentNotFoundError(identifier);
   }
 
   if (matches.length > 1) {
-    throw new Error(
-      `Ambiguous filename "${identifier}" matches ${matches.length} files:\n${matches.map((m) => `  - ${m}`).join('\n')}\nUse a vault-relative path or fq_id instead.`
-    );
+    throw new AmbiguousDocumentIdentifierError(identifier, matches);
   }
 
   const match = matches[0];

@@ -7,6 +7,7 @@ import { initLogger } from '../../src/logging/logger.js';
 import * as loggerMod from '../../src/logging/logger.js';
 import {
   sanitizeFolderName,
+  sanitizeFrontmatterValues,
   initVault,
   vaultManager,
   cleanStaleTempFiles,
@@ -85,6 +86,160 @@ describe('sanitizeFolderName', () => {
 
   it('trims leading and trailing whitespace: "  Leading Spaces  " -> "Leading Spaces"', () => {
     expect(sanitizeFolderName('  Leading Spaces  ')).toBe('Leading Spaces');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sanitizeFrontmatterValues — date corruption fix (IDC-05)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('sanitizeFrontmatterValues', () => {
+  it('converts Date objects to ISO strings', () => {
+    const date = new Date('2026-04-26T00:00:00.000Z');
+    const result = sanitizeFrontmatterValues({ created: date, title: 'Test' });
+    expect(result.created).toBe('2026-04-26T00:00:00.000Z');
+    expect(result.title).toBe('Test');
+  });
+
+  it('preserves string values unchanged', () => {
+    const result = sanitizeFrontmatterValues({ fq_title: 'My Doc', fq_status: 'active' });
+    expect(result.fq_title).toBe('My Doc');
+    expect(result.fq_status).toBe('active');
+  });
+
+  it('preserves number values unchanged', () => {
+    const result = sanitizeFrontmatterValues({ count: 42, score: 3.14 });
+    expect(result.count).toBe(42);
+    expect(result.score).toBe(3.14);
+  });
+
+  it('preserves boolean values unchanged', () => {
+    const result = sanitizeFrontmatterValues({ active: true, archived: false });
+    expect(result.active).toBe(true);
+    expect(result.archived).toBe(false);
+  });
+
+  it('preserves null values unchanged', () => {
+    const result = sanitizeFrontmatterValues({ optional: null });
+    expect(result.optional).toBeNull();
+  });
+
+  it('preserves array values unchanged', () => {
+    const tags = ['crm', 'contact'];
+    const result = sanitizeFrontmatterValues({ fq_tags: tags });
+    expect(result.fq_tags).toEqual(['crm', 'contact']);
+  });
+
+  it('preserves plain object values unchanged (gray-matter serializes as YAML mapping)', () => {
+    const nested = { key: 'value' };
+    const result = sanitizeFrontmatterValues({ metadata: nested });
+    expect(result.metadata).toEqual({ key: 'value' });
+  });
+
+  it('omits undefined values', () => {
+    const result = sanitizeFrontmatterValues({ present: 'yes', missing: undefined });
+    expect(result).toHaveProperty('present', 'yes');
+    expect(result).not.toHaveProperty('missing');
+  });
+
+  it('handles multiple Date fields in one object', () => {
+    const d1 = new Date('2026-01-01T00:00:00.000Z');
+    const d2 = new Date('2026-06-15T12:30:00.000Z');
+    const result = sanitizeFrontmatterValues({ created: d1, updated: d2 });
+    expect(result.created).toBe('2026-01-01T00:00:00.000Z');
+    expect(result.updated).toBe('2026-06-15T12:30:00.000Z');
+  });
+
+  it('does not mutate the input object', () => {
+    const date = new Date('2026-04-26T00:00:00.000Z');
+    const input = { created: date };
+    sanitizeFrontmatterValues(input);
+    expect(input.created).toBeInstanceOf(Date);
+  });
+
+  it('handles empty object', () => {
+    const result = sanitizeFrontmatterValues({});
+    expect(result).toEqual({});
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// writeMarkdown — Date coercion integration (IDC-05)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('writeMarkdown — Date value coercion', () => {
+  beforeEach(async () => {
+    const config = makeConfig(testDir);
+    await initVault(config);
+  });
+
+  it('serializes a Date object in frontmatter as an ISO string (not [object Object])', async () => {
+    const date = new Date('2026-04-26T00:00:00.000Z');
+    await vaultManager.writeMarkdown(
+      'date-coercion.md',
+      { fq_title: 'Date Test', custom_date: date },
+      'body content'
+    );
+    const raw = await readFile(join(testDir, 'date-coercion.md'), 'utf-8');
+    // Must NOT contain corruption pattern
+    expect(raw).not.toContain('[object Object]');
+    // Must contain the ISO string (gray-matter may quote or not, but the value must be present)
+    expect(raw).toContain('2026-04-26');
+  });
+
+  it('does not corrupt YAML when gray-matter round-trips a YAML timestamp back as a Date', async () => {
+    // Reproduce the exact bug trigger:
+    // gray-matter reads an *unquoted* YAML timestamp and parses it as a JS Date object.
+    // That Date then gets spread into the next write's frontmatter object, causing corruption
+    // when js-yaml renders { [dateObject]: undefined } as `'[object Object]': null`.
+    //
+    // We create the initial file with writeFileSync using a raw unquoted YAML timestamp,
+    // because writing a JS string through writeMarkdown produces a quoted YAML string,
+    // which gray-matter reads back as a string (not a Date).
+    mkdirSync(join(testDir), { recursive: true });
+    writeFileSync(
+      join(testDir, 'roundtrip-date.md'),
+      [
+        '---',
+        'fq_title: Roundtrip',
+        'event_date: 2026-04-26T00:00:00.000Z',
+        '---',
+        'initial body',
+      ].join('\n'),
+      'utf-8'
+    );
+
+    // Read back — gray-matter parses the unquoted YAML timestamp as a JS Date object
+    const { data, content } = await vaultManager.readMarkdown('roundtrip-date.md');
+
+    // Confirm gray-matter did convert the value to a Date (prerequisite for the bug)
+    expect(data.event_date).toBeInstanceOf(Date);
+
+    // Now write back using the data returned by readMarkdown (simulating update_document)
+    await vaultManager.writeMarkdown('roundtrip-date.md', data, content);
+
+    // Read the final file and verify no corruption
+    const raw = await readFile(join(testDir, 'roundtrip-date.md'), 'utf-8');
+    expect(raw).not.toContain('[object Object]');
+
+    // The date value should still be present as a valid date string
+    const { data: finalData } = await vaultManager.readMarkdown('roundtrip-date.md');
+    // After the fix, event_date will be a Date (gray-matter parses the ISO string again)
+    // or a string — either way it must not be undefined and not be [object Object]
+    expect(finalData.event_date).toBeTruthy();
+    expect(String(finalData.event_date)).not.toContain('[object Object]');
+  });
+
+  it('preserves ISO string dates without modification', async () => {
+    const isoString = '2026-03-15T08:00:00.000Z';
+    await vaultManager.writeMarkdown(
+      'iso-preserved.md',
+      { fq_title: 'ISO Test', deadline: isoString },
+      'content'
+    );
+    const raw = await readFile(join(testDir, 'iso-preserved.md'), 'utf-8');
+    expect(raw).not.toContain('[object Object]');
+    expect(raw).toContain('2026-03-15');
   });
 });
 

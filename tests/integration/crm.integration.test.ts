@@ -313,8 +313,8 @@ describe.skipIf(SKIP_DB)('CRM E2E Integration', () => {
     contactRecordId = recIdMatch![1];
 
     // 3c: insert_doc_link — add contact wikilink to business doc 'links' property (P-03)
-    // insert_doc_link adds wikilinks to frontmatter property arrays; get_doc_outline
-    // returns all wikilinks scanned from full file content (including frontmatter).
+    // insert_doc_link adds wikilinks to frontmatter property arrays; get_document with
+    // include: ['frontmatter'] returns frontmatter including wikilinks (Phase 107).
     const businessDocPath = 'CRM-E2E-Test/Acme Corp.md';
     const contactDocPath = 'CRM-E2E-Test/Sarah Chen.md';
     const linkResult1 = await getHandler('insert_doc_link')({
@@ -390,20 +390,26 @@ describe.skipIf(SKIP_DB)('CRM E2E Integration', () => {
     expect(updateResult.isError).toBeUndefined();
   });
 
-  // ── Step 5: Relationship Traversal via get_doc_outline ───────────────────
+  // ── Step 5: Relationship Traversal via get_document ─────────────────────
+  // Phase 107: get_doc_outline was hard-deleted; use get_document with include: ['frontmatter']
 
-  it('traverses business-contact relationship via get_doc_outline wikilinks', async () => {
+  it('traverses business-contact relationship via get_document frontmatter wikilinks', async () => {
     const businessDocPath = 'CRM-E2E-Test/Acme Corp.md';
 
-    const outlineResult = await getHandler('get_doc_outline')({
+    const docResult = await getHandler('get_document')({
       identifiers: businessDocPath,
+      include: ['frontmatter'],
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
-    if (outlineResult.isError) {
-      console.error('get_doc_outline error:', outlineResult.content[0].text);
+    if (docResult.isError) {
+      console.error('get_document error:', docResult.content[0].text);
     }
-    expect(outlineResult.isError).toBeUndefined();
-    expect(outlineResult.content[0].text).toContain('Sarah Chen');
+    expect(docResult.isError).toBeUndefined();
+    // The frontmatter envelope should contain the wikilink to Sarah Chen
+    const env = JSON.parse(docResult.content[0].text);
+    // frontmatter field contains the raw frontmatter including the links array with Sarah Chen
+    const frontmatterStr = JSON.stringify(env.frontmatter || '');
+    expect(frontmatterStr).toContain('Sarah Chen');
   });
 
   // ── Step 6: Search Records ────────────────────────────────────────────────
@@ -457,14 +463,15 @@ describe.skipIf(SKIP_DB)('CRM E2E Integration', () => {
   it('contact document contains the interaction timeline entry', async () => {
     const contactDocPath = 'CRM-E2E-Test/Sarah Chen.md';
 
-    // get_document uses 'identifier' parameter
+    // Phase 107: get_document uses 'identifiers' parameter and returns JSON envelope
     const docResult = await getHandler('get_document')({
-      identifier: contactDocPath,
+      identifiers: contactDocPath,
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     // archive_document does not move the file — it stays at original path
     expect(docResult.isError).toBeUndefined();
-    expect(docResult.content[0].text).toContain('Discussed Q3 roadmap');
+    const env = JSON.parse(docResult.content[0].text);
+    expect(env.body).toContain('Discussed Q3 roadmap');
   });
 
   // ── Step 9: Tag Deduplication in CRM Plugin (Phase 48, TAG-05) ──────────────

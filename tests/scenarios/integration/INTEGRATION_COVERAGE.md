@@ -14,14 +14,14 @@ Verifies that content written through one path is discoverable through the expec
 
 | ID     | Behavior                                                             | Covered By                  | Date Updated | Last Passing |
 |--------|----------------------------------------------------------------------|-----------------------------|--------------|--------------|
-| IS-01  | Create document → appears in search_documents results (VALIDATED)                 | write_then_search            | 2026-05-01   | 2026-05-01   |
-| IS-02  | Create memory → appears in search_memories results (VALIDATED)                    | write_then_search            | 2026-05-01   | 2026-05-01   |
-| IS-03  | Create document + memory → both appear in search_all results (VALIDATED)          | cross_domain_search_embeddings | 2026-05-01   | 2026-05-01   |
-| IS-04  | search_all with entity_types=['documents'] returns only documents (VALIDATED)     | cross_domain_search          | 2026-05-01   | 2026-05-01   |
-| IS-05  | search_all with entity_types=['memories'] returns only memories (VALIDATED)       | search_memories_only         | 2026-05-01   | 2026-05-01   |
-| IS-06  | Tagged document appears in tag-filtered search_documents (VALIDATED)              | tag_filtered_documents       | 2026-05-01   | 2026-05-01   |
-| IS-07  | Tagged memory appears in tag-filtered search_memories (VALIDATED)                 | tag_filtered_memories        | 2026-05-01   | 2026-05-01   |
-| IS-08  | Multi-tag filter returns only documents matching all specified tags (VALIDATED)    | multitag_filter              | 2026-05-01   | 2026-05-01   |
+| IS-01  | Create document → appears in search_documents results (VALIDATED)                 | write_then_search            | 2026-05-07   | 2026-05-07   |
+| IS-02  | Create memory → appears in search_memories results (VALIDATED)                    | write_then_search            | 2026-05-07   | 2026-05-07   |
+| IS-03  | Create document + memory → both appear in search_all results (VALIDATED)          | cross_domain_search_embeddings | 2026-05-07   | 2026-05-07   |
+| IS-04  | search_all with entity_types=['documents'] returns only documents (VALIDATED)     | cross_domain_search          | 2026-05-07   | 2026-05-07   |
+| IS-05  | search_all with entity_types=['memories'] returns only memories (VALIDATED)       | search_memories_only         | 2026-05-07   | 2026-05-07   |
+| IS-06  | Tagged document appears in tag-filtered search_documents (VALIDATED)              | tag_filtered_documents       | 2026-05-07   | 2026-05-07   |
+| IS-07  | Tagged memory appears in tag-filtered search_memories (VALIDATED)                 | tag_filtered_memories        | 2026-05-07   | 2026-05-07   |
+| IS-08  | Multi-tag filter returns only documents matching all specified tags (VALIDATED)    | multitag_filter              | 2026-05-07   | 2026-05-07   |
 
 ---
 
@@ -32,14 +32,14 @@ content unaffected.
 
 | ID     | Behavior                                                              | Covered By                      | Date Updated | Last Passing |
 |--------|-----------------------------------------------------------------------|---------------------------------|--------------|--------------|
-| IA-01  | Archive document → absent from search_documents (VALIDATED)                       | archive_removes_from_search  | 2026-05-01   | 2026-05-01   |
-| IA-02  | Archive document → memory with same topic still searchable (VALIDATED)            | archive_removes_from_search  | 2026-05-01   | 2026-05-01   |
-| IA-03  | Archive document → absent from search_all results (VALIDATED)                     | archive_removes_from_search  | 2026-05-01   | 2026-05-01   |
-| IA-04  | Archive memory → absent from search_memories (VALIDATED)                          | archive_memory               | 2026-05-01   | 2026-05-01   |
-| IA-05  | Archive memory → document with same topic still searchable (VALIDATED)            | archive_memory               | 2026-05-01   | 2026-05-01   |
-| IA-06  | Archive one of several tagged documents → others remain discoverable (VALIDATED)  | archive_partial_set          | 2026-05-01   | 2026-05-01   |
-| IA-07  | Archive document → get_document reflects status='archived' (VALIDATED)            | archive_status_field         | 2026-05-01   | 2026-05-01   |
-| IA-08  | Create and archive document in nested vault path → remains correctly archived and retrievable (VALIDATED) | archive_nested_path          | 2026-05-01   | 2026-05-01   |
+| IA-01  | Archive document → absent from search_documents (VALIDATED)                       | archive_removes_from_search  | 2026-05-07   | 2026-05-07   |
+| IA-02  | Archive document → memory with same topic still searchable (VALIDATED)            | archive_removes_from_search  | 2026-05-07   | 2026-05-07   |
+| IA-03  | Archive document → absent from search_all results (VALIDATED)                     | archive_removes_from_search  | 2026-05-07   | 2026-05-07   |
+| IA-04  | Archive memory → absent from search_memories (VALIDATED)                          | archive_memory               | 2026-05-07   | 2026-05-07   |
+| IA-05  | Archive memory → document with same topic still searchable (VALIDATED)            | archive_memory               | 2026-05-07   | 2026-05-07   |
+| IA-06  | Archive one of several tagged documents → others remain discoverable (VALIDATED)  | archive_partial_set          | 2026-05-07   | 2026-05-07   |
+| IA-07  | Archive document → get_document reflects status='archived' (VALIDATED)            | archive_status_field         | 2026-05-07   | 2026-05-07   |
+| IA-08  | Create and archive document in nested vault path → remains correctly archived and retrievable (VALIDATED) | archive_nested_path          | 2026-05-07   | 2026-05-07   |
 
 ---
 
@@ -49,14 +49,28 @@ Verifies behaviors that span more than one FlashQuery domain (documents, memorie
 
 | ID     | Behavior                                                                    | Covered By           | Date Updated | Last Passing |
 |--------|-----------------------------------------------------------------------------|----------------------|--------------|--------------|
-| IX-01  | Document and memory share a tag → search_all with that tag returns both (VALIDATED)      | cross_domain_search_embeddings | 2026-05-01   | 2026-05-01   |
-| IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-05-01   | 2026-05-01   |
-| IX-03  | Create via vault.write, update via update_document → search returns new content (VALIDATED) | update_document_then_search  | 2026-05-01   | 2026-05-01   |
-| IX-04  | Create document, get_document by fqc_id → returns correct content (VALIDATED)           | document_retrieval_by_id     | 2026-05-01   | 2026-05-01   |
-| IX-05  | Create document with tags, apply_tags to add more → all tags searchable (VALIDATED)     | apply_tags_composition       | 2026-05-01   | 2026-05-01   |
-| IX-06  | Get document by vault-relative path → returns same content as fqc_id retrieval (VALIDATED) | get_document_by_path         | 2026-05-01   | 2026-05-01   |
-| IX-07  | Get document returns all metadata fields (title, tags, status, fqc_id, path) (VALIDATED) | get_document_metadata        | 2026-05-01   | 2026-05-01   |
-| IX-08  | Create multiple documents, update each, retrieve all → each returns updated state (VALIDATED) | concurrent_updates           | 2026-05-01   | 2026-05-01   |
+| IX-01  | Document and memory share a tag → search_all with that tag returns both (VALIDATED)      | cross_domain_search_embeddings | 2026-05-07   | 2026-05-07   |
+| IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-05-07   | 2026-05-07   |
+| IX-03  | Create via vault.write, update via update_document → search returns new content (VALIDATED) | update_document_then_search  | 2026-05-07   | 2026-05-07   |
+| IX-04  | Create document, get_document by fqc_id → returns correct content (VALIDATED)           | document_retrieval_by_id     | 2026-05-07   | 2026-05-07   |
+| IX-05  | Create document with tags, apply_tags to add more → all tags searchable (VALIDATED)     | apply_tags_composition       | 2026-05-07   | 2026-05-07   |
+| IX-06  | Get document by vault-relative path → returns same content as fqc_id retrieval (VALIDATED) | get_document_by_path         | 2026-05-07   | 2026-05-07   |
+| IX-07  | Get document returns all metadata fields (title, tags, status, fqc_id, path) (VALIDATED) | get_document_metadata        | 2026-05-07   | 2026-05-07   |
+| IX-08  | Create multiple documents, update each, retrieve all → each returns updated state (VALIDATED) | concurrent_updates           | 2026-05-07   | 2026-05-07   |
+| IX-09  | Evaluation workflow end-to-end: search_documents → get_document batch with include=["frontmatter","headings"] → call_model with {{ref:<chosen>#<chosen-section>}} resolves the targeted section | eval_workflow_search_get_call | 2026-05-07   | 2026-05-07   |
+| IX-10  | Reference reflects current write state: vault.write doc → call_model {{ref:doc.md}} returns body A → update_document body → call_model {{ref:doc.md}} returns body B | llm_ref_reflects_current_write_state | 2026-05-07   | 2026-05-07   |
+| IX-11  | Section coherence: vault.write multi-section doc → call_model {{ref:doc.md#Section}} returns original section → replace_doc_section → call_model {{ref:doc.md#Section}} returns new section | llm_ref_section_after_replace | 2026-05-07   | 2026-05-07   |
+| IX-12  | Pointer dereference cross-interface consistency: get_document(follow_ref:"projections.summary") and call_model {{ref:source->projections.summary}} return identical target body and matching resolved_to | pointer_deref_cross_interface_consistency | 2026-05-07   | 2026-05-07   |
+| IX-13  | Pointer mutation propagates: source has projections.summary→A; call_model {{ref:source->projections.summary}} injects A; update_doc_header re-points to B; next call_model injection is B (covers top-level + nested pointer keys) | pointer_mutation_propagates  | 2026-05-07   | 2026-05-07   |
+| IX-14  | Archive does not block reference resolution: vault.write doc → archive_document → call_model {{ref:doc.md}} resolves successfully and reports correct chars in injected_references[] | llm_ref_resolves_after_archive | 2026-05-07   | 2026-05-07   |
+| IX-15  | Projections matrix — fq_id-source dereference: {{ref:<source-uuid>->projections.summary}} resolves through fq_id-source path, then nested-key pointer traversal, returning target body | projections_id_source_dereference | 2026-05-07   | 2026-05-07   |
+| IX-16  | Projections matrix — fq_id-typed target value: source has projections.key_entities=<target-uuid>; call_model {{ref:source->projections.key_entities}} resolves via fq_id branch and injects target body | projections_fq_id_typed_target | 2026-05-07   | 2026-05-07   |
+| IX-17  | Projections matrix — bare-filename-typed target value: source has projections.decisions=<target-filename>; call_model {{ref:source->projections.decisions}} resolves via filename-search branch and injects target body | projections_filename_typed_target | 2026-05-07   | 2026-05-07   |
+| IX-18  | Projections matrix — follow_ref + sections: get_document(follow_ref:"projections.summary", sections:["<heading>"]) returns the named section of the dereferenced target inside followed_ref.body | projections_follow_ref_with_sections | 2026-05-07   | 2026-05-07   |
+| IX-19  | Projections matrix — durability under move: source has both path-typed and fq_id-typed pointers to same target; move_document target → follow_ref on path-typed pointer returns follow_ref_target_not_found while fq_id-typed pointer still resolves | projections_durability_under_move | 2026-05-07   | 2026-05-07   |
+| IX-20  | Projections matrix — batch follow_ref happy path: get_document(identifiers:[src1,src2,src3], follow_ref:"projections.summary") returns array with each followed_ref.body matching its corresponding target's body in positional order | projections_batch_follow_ref_happy | 2026-05-07   | 2026-05-07   |
+| IX-21  | Projections matrix — batch follow_ref partial failure: 2 sources have the pointer + 1 source lacks it → batch response is success/error/success in positional order with follow_ref_path_not_found on the missing element | projections_batch_follow_ref_partial | 2026-05-07   | 2026-05-07   |
+| IX-22  | Direct `{{ref:...}}` durability under move: vault.write doc at path A → call_model `{{ref:A}}` and `{{ref:<fq_id>}}` both resolve → move_document A→B → call_model `{{ref:A}}` returns a stable reference resolution failure while `{{ref:<fq_id>}}` and `{{ref:B}}` still resolve to the same body | direct_ref_durability_under_move | 2026-05-07   | 2026-05-07   |
 
 ---
 
@@ -67,10 +81,10 @@ discoverable through search after the mutation.
 
 | ID     | Behavior                                                                         | Covered By | Date Updated | Last Passing |
 |--------|----------------------------------------------------------------------------------|------------|--------------|--------------|
-| IC-01  | Append content to document → appended content appears in search_documents (VALIDATED)         | append_then_search           | 2026-05-01   | 2026-05-01   |
-| IC-02  | Update document body → updated content appears in search_documents (VALIDATED)                | update_document_then_search  | 2026-05-01   | 2026-05-01   |
-| IC-03  | Replace section in document → replaced content appears, original absent (VALIDATED)           | replace_section              | 2026-05-01   | 2026-05-01   |
-| IC-04  | Append to document → search reflects appended text immediately after append (VALIDATED)       | append_and_search            | 2026-05-01   | 2026-05-01   |
+| IC-01  | Append content to document → appended content appears in search_documents (VALIDATED)         | append_then_search           | 2026-05-07   | 2026-05-07   |
+| IC-02  | Update document body → updated content appears in search_documents (VALIDATED)                | update_document_then_search  | 2026-05-07   | 2026-05-07   |
+| IC-03  | Replace section in document → replaced content appears, original absent (VALIDATED)           | replace_section              | 2026-05-07   | 2026-05-07   |
+| IC-04  | Append to document → search reflects appended text immediately after append (VALIDATED)       | append_and_search            | 2026-05-07   | 2026-05-07   |
 
 ---
 
@@ -81,19 +95,19 @@ multi-step workflows involving plugin tables, record tools, scan, and frontmatte
 
 | ID     | Behavior                                                                                             | Covered By | Date Updated | Last Passing |
 |--------|------------------------------------------------------------------------------------------------------|------------|--------------|--------------|
-| IR-01  | Mixed reconciliation: auto-track + ignore + deleted + moved all handled in single pass (VALIDATED)               | ir01_plugin_mixed_reconciliation | 2026-05-01   | 2026-05-01   |
-| IR-02  | Full resurrection lifecycle: track → delete → restore → resurrect with FK references intact (VALIDATED)          | ir02_plugin_deletion_lifecycle | 2026-05-01   | 2026-05-01   |
-| IR-03  | Auto-track + pending template review + clear → subsequent tool responses show no pending items (VALIDATED)       | ir03_plugin_autotrack_pending_clear | 2026-05-01   | 2026-05-01   |
-| IR-04  | Document created via MCP in watched folder is immediately visible to same-call reconciliation (VALIDATED)        | ir04_plugin_mcp_immediate_reconciliation | 2026-05-01   | 2026-05-01   |
-| IR-05  | Plugin with no declared policies ignores new docs, follows moved docs, ignores modifications (VALIDATED)         | ir05_plugin_no_policies_defaults | 2026-05-01   | 2026-05-01   |
-| IR-06  | Document moved out with on_moved:untrack, then moved back → resurrects, not re-added (VALIDATED)                 | ir06_plugin_stop_tracking_lifecycle | 2026-05-01   | 2026-05-01   |
-| IR-07  | Cross-plugin resurrection: original plugin resurrects; second plugin independently discovers as added (VALIDATED) | ir07_plugin_cross_plugin_discovery | 2026-05-01   | 2026-05-01   |
-| IR-08  | Bulk auto-track: all new documents processed in single pass with no silent cap (VALIDATED)                       | ir08_plugin_bulk_autotrack   | 2026-05-01   | 2026-05-01   |
-| IR-09  | Multiple state transitions between reconciliation runs: only current state classified (VALIDATED)                | ir09_plugin_state_transitions | 2026-05-01   | 2026-05-01   |
-| IR-10  | Large pending review backlog processable incrementally — subset cleared per invocation, remainder stable (VALIDATED) | ir10_plugin_incremental_pending_review | 2026-05-01   | 2026-05-01   |
-| IR-11  | Document moved between plugin-owned folders reports moved in source table, not added in destination (VALIDATED)  | ir11_plugin_cross_folder_move | 2026-05-01   | 2026-05-01   |
-| IR-12  | Pending review items appear in record tool response even when reconciliation staleness check skips diff (VALIDATED) | ir12_plugin_pending_review_staleness | 2026-05-01   | 2026-05-01   |
-| IR-13  | Frontmatter-based type discovery: document outside all watched folders picked up via fqc_type (VALIDATED)        | ir13_plugin_frontmatter_discovery | 2026-05-01   | 2026-05-01   |
+| IR-01  | Mixed reconciliation: auto-track + ignore + deleted + moved all handled in single pass (VALIDATED)               | ir01_plugin_mixed_reconciliation | 2026-05-07   | 2026-05-07   |
+| IR-02  | Full resurrection lifecycle: track → delete → restore → resurrect with FK references intact (VALIDATED)          | ir02_plugin_deletion_lifecycle | 2026-05-07   | 2026-05-07   |
+| IR-03  | Auto-track + pending template review + clear → subsequent tool responses show no pending items (VALIDATED)       | ir03_plugin_autotrack_pending_clear | 2026-05-07   | 2026-05-07   |
+| IR-04  | Document created via MCP in watched folder is immediately visible to same-call reconciliation (VALIDATED)        | ir04_plugin_mcp_immediate_reconciliation | 2026-05-07   | 2026-05-07   |
+| IR-05  | Plugin with no declared policies ignores new docs, follows moved docs, ignores modifications (VALIDATED)         | ir05_plugin_no_policies_defaults | 2026-05-07   | 2026-05-07   |
+| IR-06  | Document moved out with on_moved:untrack, then moved back → resurrects, not re-added (VALIDATED)                 | ir06_plugin_stop_tracking_lifecycle | 2026-05-07   | 2026-05-07   |
+| IR-07  | Cross-plugin resurrection: original plugin resurrects; second plugin independently discovers as added (VALIDATED) | ir07_plugin_cross_plugin_discovery | 2026-05-07   | 2026-05-07   |
+| IR-08  | Bulk auto-track: all new documents processed in single pass with no silent cap (VALIDATED)                       | ir08_plugin_bulk_autotrack   | 2026-05-07   | 2026-05-07   |
+| IR-09  | Multiple state transitions between reconciliation runs: only current state classified (VALIDATED)                | ir09_plugin_state_transitions | 2026-05-07   | 2026-05-07   |
+| IR-10  | Large pending review backlog processable incrementally — subset cleared per invocation, remainder stable (VALIDATED) | ir10_plugin_incremental_pending_review | 2026-05-07   | 2026-05-07   |
+| IR-11  | Document moved between plugin-owned folders reports moved in source table, not added in destination (VALIDATED)  | ir11_plugin_cross_folder_move | 2026-05-07   | 2026-05-07   |
+| IR-12  | Pending review items appear in record tool response even when reconciliation staleness check skips diff (VALIDATED) | ir12_plugin_pending_review_staleness | 2026-05-07   | 2026-05-07   |
+| IR-13  | Frontmatter-based type discovery: document outside all watched folders picked up via fqc_type (VALIDATED)        | ir13_plugin_frontmatter_discovery | 2026-05-07   | 2026-05-07   |
 
 ---
 
@@ -104,22 +118,22 @@ FlashQuery tools (create_document, move_document, register_plugin, search_docume
 
 | ID     | Behavior                                                                                              | Covered By | Date Updated | Last Passing |
 |--------|-------------------------------------------------------------------------------------------------------|------------|--------------|--------------|
-| IF-01  | create_directory → list_vault(show: "directories") confirms created directory (VALIDATED)                         | create_then_list_directories | 2026-05-01   | 2026-05-01   |
-| IF-02  | create_directory with root_path → list_vault recursive shows full tree (VALIDATED)                               | create_then_list_directories | 2026-05-01   | 2026-05-01   |
-| IF-03  | create_directory → create_document → list_vault(show: "all") shows both directory and document (VALIDATED)       | create_directory_then_document | 2026-05-01   | 2026-05-01   |
-| IF-04  | create_directory → create_document → search_documents finds document by title (VALIDATED)                        | create_directory_then_search | 2026-05-01   | 2026-05-01   |
-| IF-05  | create_directory → remove_directory (empty) → list_vault confirms absence (VALIDATED)                            | directory_lifecycle          | 2026-05-01   | 2026-05-01   |
-| IF-06  | batch create_directory → list_vault recursive → remove leaf directories first → list_vault confirms (VALIDATED)  | directory_lifecycle          | 2026-05-01   | 2026-05-01   |
-| IF-07  | create_directory called twice with same path → list_vault shows no duplicate entries (idempotency) (VALIDATED)   | create_directory_idempotent  | 2026-05-01   | 2026-05-01   |
-| IF-08  | dot-prefixed directory created → list_vault shows it is invisible to default listing (VALIDATED)                 | dot_directory_invisible      | 2026-05-01   | 2026-05-01   |
-| IF-09  | create_directory with name requiring sanitization → list_vault shows sanitized name → create_document in it succeeds (VALIDATED) | sanitized_directory_usable   | 2026-05-01   | 2026-05-01   |
-| IF-10  | create_directory → move_document into new directory → list_vault confirms moved document (VALIDATED)             | move_document_to_new_directory | 2026-05-01   | 2026-05-01   |
-| IF-11  | list_vault(show: "files") excludes directories; list_vault(show: "all") includes both (VALIDATED)                | list_vault_show_modes        | 2026-05-01   | 2026-05-01   |
-| IF-12  | list_vault(show: "all", extensions: [".md"]) — directories unfiltered, only .md files shown (VALIDATED)         | list_vault_extension_filter_with_directories | 2026-05-01   | 2026-05-01   |
-| IF-13  | register_plugin → create_directory scaffold → list_vault confirms dirs → create_document → search_records confirms auto-tracking (VALIDATED) | plugin_init_scaffold         | 2026-05-01   | 2026-05-01   |
-| IF-14  | register_plugin → create_directory scaffold → vault.write in watched folder → reconciliation → search_records (VALIDATED) | plugin_init_with_reconciliation | 2026-05-01   | 2026-05-01   |
-| IF-15  | create_directory → list_vault(format: "table") vs list_vault(format: "detailed") produce correct formats (VALIDATED) | list_vault_format_modes      | 2026-05-01   | 2026-05-01   |
-| IF-16  | create_directory → create_document → list_vault(format: "table") shows file size for the document (VALIDATED)   | list_vault_table_file_size   | 2026-05-01   | 2026-05-01   |
+| IF-01  | create_directory → list_vault(show: "directories") confirms created directory (VALIDATED)                         | create_then_list_directories | 2026-05-07   | 2026-05-07   |
+| IF-02  | create_directory with root_path → list_vault recursive shows full tree (VALIDATED)                               | create_then_list_directories | 2026-05-07   | 2026-05-07   |
+| IF-03  | create_directory → create_document → list_vault(show: "all") shows both directory and document (VALIDATED)       | create_directory_then_document | 2026-05-07   | 2026-05-07   |
+| IF-04  | create_directory → create_document → search_documents finds document by title (VALIDATED)                        | create_directory_then_search | 2026-05-07   | 2026-05-07   |
+| IF-05  | create_directory → remove_directory (empty) → list_vault confirms absence (VALIDATED)                            | directory_lifecycle          | 2026-05-07   | 2026-05-07   |
+| IF-06  | batch create_directory → list_vault recursive → remove leaf directories first → list_vault confirms (VALIDATED)  | directory_lifecycle          | 2026-05-07   | 2026-05-07   |
+| IF-07  | create_directory called twice with same path → list_vault shows no duplicate entries (idempotency) (VALIDATED)   | create_directory_idempotent  | 2026-05-07   | 2026-05-07   |
+| IF-08  | dot-prefixed directory created → list_vault shows it is invisible to default listing (VALIDATED)                 | dot_directory_invisible      | 2026-05-07   | 2026-05-07   |
+| IF-09  | create_directory with name requiring sanitization → list_vault shows sanitized name → create_document in it succeeds (VALIDATED) | sanitized_directory_usable   | 2026-05-07   | 2026-05-07   |
+| IF-10  | create_directory → move_document into new directory → list_vault confirms moved document (VALIDATED)             | move_document_to_new_directory | 2026-05-07   | 2026-05-07   |
+| IF-11  | list_vault(show: "files") excludes directories; list_vault(show: "all") includes both (VALIDATED)                | list_vault_show_modes        | 2026-05-07   | 2026-05-07   |
+| IF-12  | list_vault(show: "all", extensions: [".md"]) — directories unfiltered, only .md files shown (VALIDATED)         | list_vault_extension_filter_with_directories | 2026-05-07   | 2026-05-07   |
+| IF-13  | register_plugin → create_directory scaffold → list_vault confirms dirs → create_document → search_records confirms auto-tracking (VALIDATED) | plugin_init_scaffold         | 2026-05-07   | 2026-05-07   |
+| IF-14  | register_plugin → create_directory scaffold → vault.write in watched folder → reconciliation → search_records (VALIDATED) | plugin_init_with_reconciliation | 2026-05-07   | 2026-05-07   |
+| IF-15  | create_directory → list_vault(format: "table") vs list_vault(format: "detailed") produce correct formats (VALIDATED) | list_vault_format_modes      | 2026-05-07   | 2026-05-07   |
+| IF-16  | create_directory → create_document → list_vault(format: "table") shows file size for the document (VALIDATED)   | list_vault_table_file_size   | 2026-05-07   | 2026-05-07   |
 
 ---
 
@@ -131,15 +145,48 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 
 | ID     | Behavior                                                                                                                                                      | Covered By              | Date Updated | Last Passing |
 |--------|---------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|--------------|--------------|
-| IL-01  | call_model resolver=model returns non-error response with metadata envelope (model_name, provider_name, cost_usd, latency_ms)                                 | llm_call_model_basic         | 2026-05-01   | 2026-05-01   |
-| IL-02  | call_model resolver=purpose returns non-error response; metadata includes resolved_model_name matching the configured model for that purpose                  | llm_call_model_purpose       | 2026-05-01   | 2026-05-01   |
-| IL-03  | Multiple call_model calls sharing a trace_id accumulate distinct rows in fqc_llm_usage; trace_cumulative.total_calls grows monotonically (COST-01)            | llm_cost_accumulation        | 2026-05-01   | 2026-05-01   |
-| IL-04  | call_model writes a row, get_llm_usage summary mode returns total_calls >= 1 with by_purpose direct_model_calls present, recent returns model_name (REPT-01, REPT-02 end-to-end) | llm_usage_query              | 2026-05-01   | 2026-05-01   |
-| IL-05  | call_model resolver=purpose → get_llm_usage by_purpose → named purpose appears in purposes array with calls and primary_model_hit_rate fields                | llm_by_purpose_mode          | 2026-05-01   | 2026-05-01   |
-| IL-06  | call_model resolver=model → get_llm_usage by_purpose → call appears in direct_model_calls; purposes array is empty (resolver=model calls excluded from purposes) | llm_direct_model_calls       | 2026-05-01   | 2026-05-01   |
-| IL-07  | call_model with trace_id + call without trace_id → get_llm_usage summary filtered by trace_id → total_calls=1 (untraced call excluded)                       | llm_trace_id_filter          | 2026-05-01   | 2026-05-01   |
-| IL-08  | call_model → get_llm_usage by_model → models array contains model_name, provider_name, and avg_fallback_position for the called model                         | llm_by_model_mode            | 2026-05-01   | 2026-05-01   |
-| IL-09  | multiple call_model resolver=purpose calls via primary model → get_llm_usage by_purpose → primary_model_hit_rate equals 1                                     | llm_by_purpose_mode          | 2026-05-01   | 2026-05-01   |
+| IL-01  | call_model resolver=model returns non-error response with metadata envelope (model_name, provider_name, cost_usd, latency_ms)                                 | llm_call_model_basic         | 2026-05-07   | 2026-05-07   |
+| IL-02  | call_model resolver=purpose returns non-error response; metadata includes resolved_model_name matching the configured model for that purpose                  | llm_call_model_purpose       | 2026-05-07   | 2026-05-07   |
+| IL-03  | Multiple call_model calls sharing a trace_id accumulate distinct rows in fqc_llm_usage; trace_cumulative.total_calls grows monotonically (COST-01)            | llm_cost_accumulation        | 2026-05-07   | 2026-05-07   |
+| IL-04  | call_model writes a row, get_llm_usage summary mode returns total_calls >= 1 with by_purpose direct_model_calls present, recent returns model_name (REPT-01, REPT-02 end-to-end) | llm_usage_query              | 2026-05-07   | 2026-05-07   |
+| IL-05  | call_model resolver=purpose → get_llm_usage by_purpose → named purpose appears in purposes array with calls and primary_model_hit_rate fields                | llm_by_purpose_mode          | 2026-05-07   | 2026-05-07   |
+| IL-06  | call_model resolver=model → get_llm_usage by_purpose → call appears in direct_model_calls; purposes array is empty (resolver=model calls excluded from purposes) | llm_direct_model_calls       | 2026-05-07   | 2026-05-07   |
+| IL-07  | call_model with trace_id + call without trace_id → get_llm_usage summary filtered by trace_id → total_calls=1 (untraced call excluded)                       | llm_trace_id_filter          | 2026-05-07   | 2026-05-07   |
+| IL-08  | call_model → get_llm_usage by_model → models array contains model_name, provider_name, and avg_fallback_position for the called model                         | llm_by_model_mode            | 2026-05-07   | 2026-05-07   |
+| IL-09  | multiple call_model resolver=purpose calls via primary model → get_llm_usage by_purpose → primary_model_hit_rate equals 1                                     | llm_by_purpose_mode          | 2026-05-07   | 2026-05-07   |
+| IL-10  | call_model with {{ref:path}} placeholder injects document body before LLM dispatch; response metadata includes injected_references[] and prompt_chars (REF-01, REF-07) | llm_reference_syntax_basic   | 2026-05-07   | 2026-05-07   |
+| IL-11  | call_model with {{ref:path#Section}} injects only the named section's content (REF-02)                                                                              | llm_reference_syntax_section | 2026-05-07   | 2026-05-07   |
+| IL-12  | call_model with {{ref:path->pointer}} dereferences frontmatter pointer; response metadata includes resolved_to (REF-02, REF-07)                                     | llm_reference_syntax_pointer | 2026-05-07   | 2026-05-07   |
+| IL-13  | call_model with unresolvable or invalid {{ref:...}} returns isError + reference_resolution_failed with stable reason/detail; no LLM call made (REF-04, REF-06)       | llm_reference_syntax_fail    | 2026-05-07   | 2026-05-07   |
+| IL-14  | call_model without active {{ref:...}} patterns omits injected_references and prompt_chars; active and escaped {{id:...}} remain literal ATL v1 text (REF-03, REF-05) | llm_reference_syntax_noop    | 2026-05-07   | 2026-05-07   |
+| IL-15  | call_model resolver=list_models returns {models: [...]} where each entry has name, type, provider, model_id, input_cost_per_million, output_cost_per_million (DISC-01 required fields), tags, and structured capabilities when declared              | llm_discovery_list           | 2026-05-07   | 2026-05-07   |
+| IL-16  | list_models discovery → model names match config → call_model with one of those names succeeds | llm_discovery_then_call      | 2026-05-07   | 2026-05-07   |
+| IL-17  | list_purposes discovery → purpose names match config → call_model by purpose succeeds | llm_discovery_then_call      | 2026-05-07   | 2026-05-07   |
+| IL-18  | call_model resolver=list_models and resolver=list_purposes both succeed when called WITHOUT name and WITHOUT messages — schema makes them optional for discovery (DISC-04)                            | llm_discovery_list           | 2026-05-07   | 2026-05-07   |
+| IL-19  | call_model resolver=search returns {query, results: {purposes, models}}; case-insensitive substring match; non-matching category returns [] (not omitted) (DISC-03 success + zero-match shape)        | llm_discovery_search         | 2026-05-07   | 2026-05-07   |
+| IL-20  | call_model resolver=search with no parameters.query (or empty-string query) returns isError with "search requires parameters.query (non-empty string)" (DISC-03 missing-query path)                    | llm_discovery_search         | 2026-05-07   | 2026-05-07   |
+| IL-21  | call_model with {{ref:...}} writes a fqc_llm_usage row reflecting the resolved (post-injection) prompt → get_llm_usage summary total_calls increments by 1; recorded prompt size aligns with metadata.prompt_chars | llm_ref_writes_usage_row     | 2026-05-07   | 2026-05-07   |
+| IL-22  | call_model with unresolvable {{ref:...}} fails before LLM dispatch → fqc_llm_usage row count unchanged → get_llm_usage total_calls delta is 0 (no provider call, no row written)                                  | llm_ref_unresolved_no_usage_row | 2026-05-07   | 2026-05-07   |
+| IL-23  | call_model with {{ref:...}} + trace_id → get_llm_usage filtered by that trace_id returns 1 call; the call's metadata still reports injected_references[] and prompt_chars (reference resolution participates in trace tracking) | llm_ref_trace_id_filter      | 2026-05-07   | 2026-05-07   |
+| IL-24  | call_model resolver=search with matching parameters.query → caller picks a purposes[].name from results → subsequent call_model with that purpose succeeds and writes a usage row (discovery→delegate closure via search) | llm_search_then_purpose_call | 2026-05-07   | 2026-05-07   |
+| IL-25  | SUPERSEDED for ATL v1: mixed {{ref:path}} + {{id:<uuid>}} no longer resolves both placeholders; {{id:...}} is literal text and only active {{ref:...}} participates in hydration/metadata | llm_mixed_ref_and_id_placeholders | 2026-05-07   | 2026-05-07   |
+| IL-26  | ATL-DS-01 exact `call_model` `return_messages` envelope assertions (default `messages: []`, hydrated returned inputs, final assistant message, discovery raw shape) are covered by directed Python because the YAML runner only supports substring assertions against `content[0].text`, not exact parsed JSON envelope checks | test_call_model_return_messages.py | 2026-05-05   |              |
+| IL-27  | ATL-I-04 reference resolver integration proves real vault path, fq_id, section, pointer resolved_to, ambiguity guidance, metadata chars, and non-recursive injected content using Supabase-backed document rows | reference-resolver.integration.test.ts | 2026-05-05   | 2026-05-05   |
+| IL-28  | TMPL-01 and TMPL-03: `reference-resolver.integration.test.ts` proves real-vault `fq_template: true` rendering, plain-document ignored params, and document-param resolution/failure through Supabase-backed document rows | reference-resolver.integration.test.ts | 2026-05-06   | 2026-05-06   |
+| IL-29  | TMPL-02 and TMPL-05: `reference-resolver.integration.test.ts` proves alias `_template` reuse and `_items` ordered list injection with `_separator`, `resolved_to_count`, and item metadata | reference-resolver.integration.test.ts | 2026-05-06   | 2026-05-06   |
+| IL-30  | VAL-114: Phase 114 full gate includes build, focused unit tests, Supabase-backed reference resolver integration, and managed directed scenario `test_call_model_template_parameterization` | reference-resolver.integration.test.ts; test_call_model_template_parameterization | 2026-05-06   | 2026-05-06   |
+| IL-31  | ATL-U-08: Config schema accepts first-class purpose orchestration fields, validates known loop guardrail defaults, migrates legacy free-form model capabilities to tags, preserves structured capability booleans, and produces distinct unknown-vs-unsupported admission diagnostics | llm-config.test.ts; llm_discovery_list; test_call_model_agent_loop_capabilities | 2026-05-06   | 2026-05-06   |
+| IL-32  | ATL-I-01: Schema verification creates and verifies `fqc_purpose_templates` plus final Phase 115 model/purpose storage columns for template bindings, tags, capabilities, tools, and excluded tools | supabase-schema-verify.test.ts | 2026-05-06   | 2026-05-06   |
+| IL-33  | ATL-I-02: Config sync persists YAML purpose-template bindings, preserves API/runtime precedence over YAML, logs dangling bindings, and lets YAML bindings reappear after runtime removal | llm-config-sync.test.ts | 2026-05-06   | 2026-05-06   |
+| IL-34  | ATL-I-06: Runtime template binding behavior is covered at the TypeScript integration layer because no public runtime binding YAML tool name exists yet; precedence, removal, and shared capability admission are validated without inventing a scenario-only public API | llm-config-sync.test.ts | 2026-05-06   | 2026-05-06   |
+| IL-35  | ATL-INT-04: Runtime-vs-YAML template binding precedence survives restart and YAML reappears after runtime binding removal; recorded against `llm-config-sync.test.ts` until a public runtime binding scenario surface exists | llm-config-sync.test.ts | 2026-05-06   | 2026-05-06   |
+| IL-36  | VAL-115: Phase 115 full gate includes build, focused unit tests, Supabase-backed schema/config-sync integration, managed directed scenario `test_call_model_agent_loop_capabilities`, and managed YAML scenario `llm_discovery_list` | llm-config.test.ts; llm-config-sync.test.ts; llm-tool.test.ts; schema-verify.test.ts; supabase-schema-verify.test.ts; test_call_model_agent_loop_capabilities; llm_discovery_list | 2026-05-06   | 2026-05-06   |
+| IL-37  | ATL-INT-01: Template-body freshness brackets an `update_document` write with two `call_model` calls; the first sees ALPHA and the second sees BETA without stale ALPHA | llm_template_reference_freshness | 2026-05-07   | 2026-05-07   |
+| IL-38  | ATL-INT-02: Document-parameter freshness brackets a target-document write with two `call_model` calls; the first renders ALPHA and the second renders BETA | llm_template_document_param_freshness | 2026-05-07   | 2026-05-07   |
+| IL-39  | ATL-INT-03: Discovery-to-invocation closure covers public `list_purposes` usage guidance, discovered `template_path`/parameter metadata, direct `{{ref:...}}` template invocation, and purpose invocation | llm_discovery_then_call      | 2026-05-07   | 2026-05-07   |
+| IL-40  | ATL-INT-05: Mixed path, section, pointer, alias, and `_items` template/reference modes compose in one `call_model` flow; parsed directed coverage asserts metadata ordering, parent list entry, same-document sections, and default `_separator` shape | llm_mixed_reference_modes    | 2026-05-07   | 2026-05-07   |
+| IL-41  | Help resolver participates in no-usage-row contract: baseline get_llm_usage → call_model resolver=help returns help body → get_llm_usage total_calls delta is 0 (help is a no-LLM-dispatch resolver and writes no `fqc_llm_usage` row) | llm_help_no_usage_row        | 2026-05-07   | 2026-05-07   |
+| IL-42  | Template metadata freshness reaches discovery surface: vault.write template (`fq_template: true`, `fq_expose_as_tool: true`, `fq_desc: A`) → list_purposes shows description A in template_tools → update_document rewrites frontmatter with `fq_desc: B` → next list_purposes shows description B (template registry reads frontmatter fresh from disk per call) | llm_template_metadata_freshness | 2026-05-07   | 2026-05-07   |
 
 ---
 
@@ -207,7 +254,7 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 
 **How to Remedy**: Add an assertion step after the archive action that calls `get_document` and includes `expect_contains: "archived"` (or `expect_contains: "status: archived"` if the response format uses that form). This directly verifies that the status field is correctly reflected in the retrieval response.
 
-**Resolution (2026-04-29)**: Added a `get_doc_outline` assert step (Step 5) that retrieves the archived document's frontmatter and asserts `expect_contains: "archived"`. Since `get_document` returns only body content (no frontmatter, per MOD-02), `get_doc_outline` is the correct tool for verifying the `fq_status` field — it reads the frontmatter directly from the vault file, which `archive_document` updates to `fq_status: "archived"`. Replaced the near-duplicate second `get_document` step with this more targeted assertion. All 5 steps pass.
+**Resolution (2026-04-29, updated 2026-05-02)**: Added a frontmatter-retrieval assert step (Step 5) that checks `expect_contains: "archived"`. Originally used the now-removed outline tool; migrated in Phase 108 to `op: get_document` with `args: { identifiers, include: ["frontmatter"] }` — the consolidated `get_document` tool returns frontmatter when `include: ["frontmatter"]` is specified. `expect_contains: "archived"` is preserved unchanged. All 5 steps pass.
 
 ---
 
@@ -233,7 +280,7 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 
 **How to Remedy**: Add assertions to the `get_document` steps that check for the presence of each required metadata field. For example: `expect_contains: "Core Concepts"` (title), `expect_contains: "gdm-tag"` (tag), `expect_contains: "active"` (status), and `expect_path_contains: "knowledge/concepts.md"` (path). For fqc_id, assert that a UUID-like string matching `${meta_doc.fq_id}` appears in the response (or assert `expect_contains: "FQC ID:"` as a field label check).
 
-**Resolution (2026-04-29)**: Rewrote the test to verify all 5 named metadata fields using the correct tool for each. Since `get_document` returns only body content (no frontmatter), four `get_doc_outline` assert steps were added — one each for the title value ("Core Concepts"), the `fq_status` field key, the `fq_id` field key, and the tag value ("gdm-tag"). A `search_documents` step verifies the path appears in results (`expect_path_contains: "knowledge/concepts.md"`) alongside the title. A final `get_document` step confirms body content. All 7 steps pass.
+**Resolution (2026-04-29, updated 2026-05-02)**: Rewrote the test to verify all 5 named metadata fields. Originally used four frontmatter-outline assert steps (since `get_document` returned only body content at the time); migrated in Phase 108 to `op: get_document` with `args: { identifiers, include: ["frontmatter"] }` — the consolidated tool now returns frontmatter when `include: ["frontmatter"]` is specified. A `search_documents` step verifies the path appears in results (`expect_path_contains: "knowledge/concepts.md"`) alongside the title. A final `get_document` step confirms body content. All `expect_contains` strings (Core Concepts, fq_status, fq_id, gdm-tag) preserved unchanged. All 7 steps pass.
 
 ---
 

@@ -33,20 +33,47 @@ mcp:
   transport: streamable-http
   port: 3100
   auth_secret: ${MCP_AUTH_SECRET}
+  token_lifetime: 24
 ```
 
-FlashQuery's config loader expands `${MCP_AUTH_SECRET}` from your environment at startup. This aligns with SEC-02: the signing secret is stored in `.env` as an environment variable, not hardcoded in config. The `auth_secret` field supports `${ENV_VAR}` syntax for all environment-based secret management scenarios.
+FlashQuery's config loader expands `${MCP_AUTH_SECRET}` from your environment at startup. This aligns with SEC-02: the signing secret is stored in `.env` as an environment variable, not hardcoded in config. The `auth_secret` field supports `${ENV_VAR}` syntax for all environment-based secret management scenarios. `token_lifetime` controls the `expires_in` value returned by `POST /token` (default `24`, minimum `1`, maximum `8760` hours).
 
 ## Token Generation
 
-On startup, FlashQuery generates a JWT token using HMAC-SHA256 from the resolved `auth_secret` and logs it:
+FlashQuery exposes `POST /token` to issue OAuth-style bearer tokens. Send HTTP Basic Auth where the username can be any non-empty value and the password is the configured `MCP_AUTH_SECRET`:
+
+```bash
+AUTH_BASIC=$(echo -n "client:$MCP_AUTH_SECRET" | base64 | tr -d '\n')
+
+curl -s -X POST http://127.0.0.1:3100/token \
+  -H "Authorization: Basic $AUTH_BASIC" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+The response includes an access token and refresh token:
+
+```json
+{
+  "access_token": "eyJhbGciOi...",
+  "refresh_token": "eyJhbGciOi...",
+  "token_type": "Bearer",
+  "expires_in": 86400,
+  "scope": ""
+}
+```
+
+On startup, FlashQuery also logs redacted auth guidance:
 
 ```
 [INFO] MCP auth: Bearer token required for HTTP transport
-[INFO] MCP auth: Token for clients: eyJhbGciOi...
+[INFO] MCP auth: Generated JWT token for clients:
+[INFO] MCP auth:   Authorization: Bearer eyJhbGci***
+[INFO] MCP auth: Alternatively, send the raw secret:
+[INFO] MCP auth:   Authorization: Bearer ***
 ```
 
-Copy this token and configure your MCP client with it.
+The log is for confirmation and troubleshooting; use `POST /token` or the setup script when configuring HTTP MCP clients.
 
 ## Using the Token
 
@@ -65,7 +92,7 @@ To rotate the token:
 
 1. Change `MCP_AUTH_SECRET` environment variable (or `mcp.auth_secret` value)
 2. Restart FlashQuery
-3. Copy the new token from startup logs
+3. Fetch a fresh token from `POST /token`
 4. Update all MCP clients with the new token
 
 The old token is immediately invalid after restart.
@@ -93,6 +120,8 @@ This is a security risk. Configure `auth_secret` for any non-local deployment.
 - **Algorithm:** HMAC-SHA256 (HS256)
 - **Token format:** JWT (header.payload.signature, base64url encoded)
 - **Token payload:** `{ instance_id, issued_at, version: 1 }` — no expiry claim
+- **Token endpoint:** `POST /token` supports HTTP Basic Auth and an authorization-code grant used by compatible clients
+- **Legacy compatibility:** raw `MCP_AUTH_SECRET` is still accepted as `Authorization: Bearer <secret>`
 - **Validation:** Constant-time signature comparison via `crypto.timingSafeEqual`
 - **No external dependencies:** Uses Node.js built-in `node:crypto` module
 - **Config expansion:** `auth_secret` supports `${ENV_VAR}` syntax for environment-based secret management

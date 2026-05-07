@@ -52,6 +52,53 @@ export function sanitizeFolderName(name: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// sanitizeFrontmatterValues — coerce unsafe value types before YAML serialization
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Coerces frontmatter values to YAML-safe primitives before passing to gray-matter.
+ *
+ * Problem: gray-matter v4 uses js-yaml v3 which renders JS Date objects correctly
+ * as YAML timestamps, BUT when a Date object is used as a computed object key
+ * (e.g. from Object.entries spread of gray-matter-parsed data), it produces the
+ * corruption pattern `'[object Object]': null`. The specific failure mode is the
+ * update_document round-trip: gray-matter reads a YAML date string and converts
+ * it back to a JS Date object; that Date then gets spread into the frontmatter
+ * record and, depending on js-yaml version/path, can produce corrupt output.
+ *
+ * Fix: normalize all Date instances to ISO strings at the write boundary so
+ * matter.stringify always receives serializable primitives.
+ *
+ * Coercion rules:
+ *   - Date       → .toISOString() (ISO 8601 string)
+ *   - undefined  → omit key (gray-matter skips undefined values inconsistently)
+ *   - null / string / number / boolean / Array → pass through unchanged
+ *   - Plain object (non-Date, non-null, non-Array) → pass through (gray-matter
+ *     serializes nested objects as YAML mappings, which is valid)
+ *
+ * This function does NOT recurse into nested objects/arrays — only top-level
+ * frontmatter values are coerced. Nested Date objects in custom user data are
+ * an edge case outside normal FQ usage and are left for gray-matter/js-yaml.
+ */
+export function sanitizeFrontmatterValues(
+  fm: Record<string, unknown>
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(fm)) {
+    if (value === undefined) {
+      // Omit undefined — gray-matter behaviour is inconsistent with undefined values
+      continue;
+    }
+    if (value instanceof Date) {
+      result[key] = value.toISOString();
+    } else {
+      result[key] = value;
+    }
+  }
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WriteMarkdownOptions — optional git commit metadata (GIT-01)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -135,7 +182,10 @@ class VaultManagerImpl implements VaultManager {
     // callers should use extractMinimalFrontmatter() to pass only fq_id + fq_status.
     // This preserves external file integrity per OBS-04. Other fields (content_hash,
     // version, etc.) are DB-only and computed on next scan pass.
-    const fm = { ...frontmatter, [FM.UPDATED]: new Date().toISOString() };
+    const fm = sanitizeFrontmatterValues({
+      ...frontmatter,
+      [FM.UPDATED]: new Date().toISOString(),
+    });
 
     // Serialize using gray-matter (default import — CJS interop)
     const output = matter.stringify(content, fm);

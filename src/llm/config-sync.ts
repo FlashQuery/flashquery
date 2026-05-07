@@ -2,6 +2,85 @@ import { supabaseManager } from '../storage/supabase.js';
 import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { getLlmApiKeyRefs } from '../config/loader.js';
+import { createPurposeTemplateSyncAdapter } from './purpose-template-bindings.js';
+
+export interface ConfigSyncAdapter<T> {
+  table: string;
+  runtimeSources: Array<'api' | 'webapp'>;
+  parseYaml(config: FlashQueryConfig): Promise<T[]> | T[];
+  identity(item: T): Record<string, string>;
+  toRow(item: T): Record<string, unknown>;
+  describeIdentity(item: T): string;
+  runtimeOwnershipWarning?: (item: T, source: 'api' | 'webapp') => string;
+}
+
+export interface ConfigSyncResult {
+  inserted: number;
+  skipped: number;
+}
+
+export async function syncConfigAdapter<T>(
+  config: FlashQueryConfig,
+  adapter: ConfigSyncAdapter<T>
+): Promise<ConfigSyncResult> {
+  const items = await adapter.parseYaml(config);
+  const client = supabaseManager.getClient();
+  const instanceId = config.instance.id;
+
+  const { error: deleteErr } = await client
+    .from(adapter.table)
+    .delete()
+    .eq('instance_id', instanceId)
+    .eq('source', 'yaml');
+  if (deleteErr) {
+    throw new Error(`LLM sync: delete ${adapter.table} (source=yaml) failed: ${deleteErr.message}`);
+  }
+
+  let inserted = 0;
+  let skipped = 0;
+  for (const item of items) {
+    let runtimeOwnedBy: 'api' | 'webapp' | null = null;
+    for (const source of adapter.runtimeSources) {
+      let query = client
+        .from(adapter.table)
+        .select('id')
+        .eq('instance_id', instanceId);
+      for (const [column, value] of Object.entries(adapter.identity(item))) {
+        query = query.eq(column, value);
+      }
+      const { data: existing, error: lookupErr } = await query.eq('source', source).maybeSingle();
+      if (lookupErr) {
+        throw new Error(
+          `LLM sync: ${source} lookup for ${adapter.describeIdentity(item)} failed: ${lookupErr.message}`
+        );
+      }
+      if (existing) {
+        runtimeOwnedBy = source;
+        break;
+      }
+    }
+    if (runtimeOwnedBy) {
+      logger.warn(
+        adapter.runtimeOwnershipWarning?.(item, runtimeOwnedBy) ??
+          `${adapter.describeIdentity(item)} is managed via ${runtimeOwnedBy} — YAML definition skipped`
+      );
+      skipped++;
+      continue;
+    }
+
+    const { error: insertErr } = await client.from(adapter.table).insert(adapter.toRow(item));
+    if (insertErr) {
+      throw new Error(`LLM sync: insert ${adapter.describeIdentity(item)} failed: ${insertErr.message}`);
+    }
+    inserted++;
+  }
+
+  return { inserted, skipped };
+}
+
+export async function syncPurposeTemplateBindings(config: FlashQueryConfig): Promise<ConfigSyncResult> {
+  return syncConfigAdapter(config, createPurposeTemplateSyncAdapter(config));
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // syncLlmConfigToDb — wipe-and-reinsert YAML rows; preserve webapp rows
@@ -125,6 +204,8 @@ export async function syncLlmConfigToDb(config: FlashQueryConfig): Promise<void>
       type: model.type,
       cost_per_million_input: model.costPerMillion.input,
       cost_per_million_output: model.costPerMillion.output,
+      capabilities: model.capabilities ?? null,
+      tags: model.tags ?? [],
       source: 'yaml',
     });
     if (error) throw new Error(`LLM sync: insert model '${model.name}' failed: ${error.message}`);
@@ -156,6 +237,8 @@ export async function syncLlmConfigToDb(config: FlashQueryConfig): Promise<void>
       name: purpose.name,
       description: purpose.description,
       defaults: purpose.defaults ?? null,
+      tools: purpose.tools ?? null,
+      excluded_tools: purpose.excludedTools ?? null,
       source: 'yaml',
     });
     if (error) throw new Error(`LLM sync: insert purpose '${purpose.name}' failed: ${error.message}`);
@@ -182,7 +265,9 @@ export async function syncLlmConfigToDb(config: FlashQueryConfig): Promise<void>
     }
   }
 
+  const templateSync = await syncPurposeTemplateBindings(config);
+
   logger.info(
-    `LLM config synced: ${config.llm.providers.length} provider(s), ${config.llm.models.length} model(s), ${config.llm.purposes.length} purpose(s) (instance=${instanceId})`
+    `LLM config synced: ${config.llm.providers.length} provider(s), ${config.llm.models.length} model(s), ${config.llm.purposes.length} purpose(s), ${templateSync.inserted} purpose-template binding(s) (instance=${instanceId})`
   );
 }

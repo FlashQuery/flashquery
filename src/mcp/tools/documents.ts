@@ -19,13 +19,16 @@ import { scanMutex } from '../../services/scanner.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
   formatKeyValueEntry,
-  formatBatchSeparator,
   formatEmptyResults,
   joinBatchEntries,
   shouldShowProgress,
   progressMessage,
 } from '../utils/response-formats.js';
-import { extractSection, buildSectionResponse } from '../utils/markdown-sections.js';
+import {
+  validateParameterCombinations,
+  resolveAndBuildDocument,
+  DocumentRequestError,
+} from '../utils/document-output.js';
 import { pluginManager, getFolderClaimsMap } from '../../plugins/manager.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 
@@ -163,9 +166,10 @@ export async function reconcileMissingRow(
   vaultRoot: string,
   fqcId: string,
   oldPath: string,
-  supabase: ReturnType<typeof supabaseManager.getClient>
+  supabase: ReturnType<typeof supabaseManager.getClient>,
+  extensions: string[] = ['.md']
 ): Promise<string | null> {
-  const allFiles = await listMarkdownFiles(vaultRoot, ['.md']);
+  const allFiles = await listMarkdownFiles(vaultRoot, extensions);
   let newPath: string | null = null;
   for (const candidate of allFiles) {
     try {
@@ -240,7 +244,7 @@ export async function searchDocumentsSemantic(
   for (const r of rawResults) {
     if (!existsSync(join(vaultRoot, r.path))) {
       try {
-        const newPath = await reconcileMissingRow(vaultRoot, r.id, r.path, supabase);
+        const newPath = await reconcileMissingRow(vaultRoot, r.id, r.path, supabase, config.instance.vault.markdownExtensions);
         if (newPath) r.path = newPath;
       } catch (err) {
         logger.warn(
@@ -323,9 +327,13 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           relativePath = path;
 
           // Guard: reject path traversal attempts (../../etc/passwd patterns)
+          // Uses resolve+relative pattern (same as copy_document) which is robust to
+          // trailing slashes on vaultRoot and avoids normalize+startsWith+sep pitfall (WR-01).
           const absolutePath = join(vaultRoot, relativePath);
-          const normalized = normalize(absolutePath);
-          if (!normalized.startsWith(vaultRoot + sep) && normalized !== vaultRoot) {
+          const resolvedAbs = resolve(absolutePath);
+          const resolvedVault = resolve(vaultRoot);
+          const relToVault = relative(resolvedVault, resolvedAbs);
+          if (relToVault.startsWith('..') || relToVault === '..') {
             return {
               content: [{ type: 'text' as const, text: `Error: path escapes vault root.` }],
               isError: true,
@@ -523,193 +531,142 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
     }
   );
 
-  // ─── Tool 2: get_document (DOC-03, SPEC-01) ──────────────────────────────────
+  // (DocumentRequestError moved to document-output.ts in Phase 109 — imported above)
+
+  // (resolveOneElement body moved to document-output.ts as resolveAndBuildDocument in Phase 109)
+
+  // ─── Tool 2: get_document (consolidated — Phase 107) ─────────────────────
 
   server.registerTool(
     'get_document',
     {
-      description: 'Read a document\'s body content by path, fqc_id, or filename. Returns the full markdown body (without frontmatter). To read only specific sections instead of the full body, pass a sections array with heading names — this is far more token-efficient for large documents. For document structure and frontmatter without body content, use get_doc_outline instead.',
+      description:
+        'Read one or more documents and return a structured JSON envelope. The envelope always contains identifier, title, path, fq_id, modified, and size.chars. Identifiers may be a single string or an array (string[]) for batch retrieval; array input returns an array response with per-element success or error objects (the call itself never fails for partial errors). Use the include parameter to also receive: "body" (full markdown body or extracted sections), "frontmatter" (complete YAML block as JSON object — every field, including user-defined custom fields), or "headings" (heading list with per-heading character counts). Default include is ["body"]. Use sections to extract specific sections by heading name (case-insensitive substring; queries starting with a digit are anchored to the heading start, so "3" matches "3. Scope" but not "13. Conversations"). Multi-element sections returns sections in input order separated by a blank line; repeating a name N times returns the 1st through Nth matches. Use max_depth (1-6) to limit heading levels in the headings list. Use follow_ref (a dot-separated path into the source document\'s frontmatter, e.g. "supersedes" or "projections.summary") to dereference a frontmatter pointer; the target document\'s content is returned nested under "followed_ref" and all body/frontmatter/headings/sections options apply to the target. The output is a JSON string in content[0].text.',
       inputSchema: {
-        identifier: z
-          .string()
-          .describe(
-            'Document identifier — accepts any of: (1) vault-relative path (e.g., "clients/acme/notes.md"), (2) fqc_id UUID, or (3) filename (e.g., "notes.md")'
-          ),
-        sections: z
-          .array(z.string())
+        identifiers: z.union([z.string(), z.array(z.string())]).describe(
+          'Document identifier(s). Single string or array for batch retrieval. ' +
+          'Each element may be a vault-relative path, fq_id UUID, or filename. ' +
+          'Array input always returns an array response with per-element success or error objects (the MCP call never fails on partial errors). ' +
+          'String input returns a flat object response (backward compatible with Phase 107).'
+        ),
+        include: z.array(z.enum(['body', 'frontmatter', 'headings']))
           .optional()
-          .describe('Optional: array of heading names to extract (e.g., ["Configuration", "Examples"]. Omit to get full document.'),
-        include_subheadings: z
-          .boolean()
-          .optional()
-          .default(true)
-          .describe('If true (default), include all nested content under heading until next same-or-higher heading. If false, stop at first subheading.'),
-        occurrence: z
-          .number()
-          .optional()
-          .default(1)
-          .describe('Which occurrence of heading if multiple have same name (1-indexed, default: 1)'),
+          .default(['body'])
+          .describe('Which fields to include in the response. Any combination of "body", "frontmatter", "headings". Default: ["body"].'),
+        sections: z.array(z.string()).optional().describe(
+          'Optional: heading names to extract (case-insensitive substring). Requires "body" in include. Multi-element returns sections in input order separated by blank lines; repeating a name N times returns the 1st through Nth matches.'
+        ),
+        include_nested: z.boolean().optional().default(true).describe(
+          'When extracting sections, include nested subsection content (default: true). When false, stop at the first subheading.'
+        ),
+        occurrence: z.number().optional().default(1).describe(
+          'Which occurrence of a heading when name appears multiple times (1-indexed, default: 1). Valid only when sections has exactly one element.'
+        ),
+        max_depth: z.number().min(1).max(6).optional().default(6).describe(
+          'Maximum heading depth to include when include contains "headings" (1-6, default: 6 — all levels).'
+        ),
+        follow_ref: z.string().min(1).optional().describe(
+          'Optional dot-separated path into the source document\'s frontmatter (e.g., "supersedes" or "projections.summary"). ' +
+          'The string value at that path is resolved as a document identifier; the target document\'s content is returned ' +
+          'nested under "followed_ref" in the response. When used, body/frontmatter/headings/sections/occurrence/max_depth/include_nested ' +
+          'apply to the TARGET document. Pre-resolution errors (path missing, wrong type, target not found) are returned at the top level. ' +
+          'Post-resolution errors (section not found, occurrence out of range) are nested under "followed_ref".'
+        ),
       },
     },
-    async ({ identifier, sections, include_subheadings, occurrence: occurrenceParam }) => {
-      // D-02b: Check shutdown flag immediately
+    async ({ identifiers, include, sections, include_nested, occurrence: occurrenceParam, max_depth, follow_ref: followRef }) => {
       if (getIsShuttingDown()) {
         return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
+          content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed' }],
+          isError: true,
+        };
+      }
+      const occurrence = occurrenceParam ?? 1;
+      const effectiveInclude: Array<'body' | 'frontmatter' | 'headings'> = include && include.length > 0 ? include : ['body'];
+      const sectionsList = sections ?? [];
+      const effectiveMaxDepth = max_depth ?? 6;
+      // WR-02: explicit fallback in case MCP SDK strips the Zod .default(true)
+      const effectiveIncludeNested = include_nested ?? true;
+
+      const paramError = validateParameterCombinations({
+        include: [...effectiveInclude],
+        sections: sectionsList,
+        occurrence,
+      });
+      if (paramError !== null) {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(paramError) }],
           isError: true,
         };
       }
 
-      // WR-01: Explicit occurrence fallback to ensure it's never undefined
-      const occurrence = occurrenceParam ?? 1;
+      // Build the per-element options bundle once
+      const elementOptions = {
+        effectiveInclude: [...effectiveInclude] as Array<'body' | 'frontmatter' | 'headings'>,
+        sectionsList,
+        effectiveIncludeNested,
+        occurrence,
+        effectiveMaxDepth,
+        followRef,
+      };
+      const deps = { config, supabaseManager, embeddingProvider, logger };
 
-      try {
-        // Resolve identifier (UUID / path / filename) to a canonical path
-        const resolved = await resolveDocumentIdentifier(
-          config,
-          supabaseManager.getClient(),
-          identifier,
-          logger
-        );
-
-        // Read file to get current content for hashing
-        const rawContent = await readFile(resolved.absPath, 'utf-8');
-        const parsed = matter(rawContent);
-
-        // Compute hash of the existing file content for targetedScan
-        const contentHash = computeHash(rawContent);
-
-        // Call targetedScan to ensure identity provisioning (replacing ensureProvisioned)
-        const preScan = await targetedScan(
-          config,
-          supabaseManager.getClient(),
-          resolved,
-          contentHash,
-          logger
-        );
-
-        const relativePath = preScan.relativePath;
-        const _absPath = preScan.absPath;
-        const fqcId = preScan.capturedFrontmatter.fqcId;
-
-        // Read raw file — use for both hashing and content display
-        const { data, content } = parsed;
-
-        logger.info(`get_document: read ${relativePath}`);
-
-        // Stale hash check — background re-embed if content changed since last read
-        if (fqcId) {
-          const docTitle = typeof data[FM.TITLE] === 'string' ? data[FM.TITLE] as string : relativePath;
-          const now = new Date().toISOString();
-
-          const { data: row } = await supabaseManager
-            .getClient()
-            .from('fqc_documents')
-            .select('content_hash')
-            .eq('id', fqcId)
-            .single();
-
-          if (row && (row).content_hash !== contentHash) {
-            logger.debug(
-              `get_document: stale hash detected for ${relativePath} — queuing background re-embed`
-            );
-            void (
-              supabaseManager
-                .getClient()
-                .from('fqc_documents')
-                .update({ content_hash: contentHash, updated_at: now })
-                .eq('id', fqcId) as unknown as Promise<unknown>
-            )
-              .then(() => embeddingProvider.embed(`${docTitle}\n\n${content}`))
-              .then((vector) =>
-                supabaseManager
-                  .getClient()
-                  .from('fqc_documents')
-                  .update({
-                    embedding: JSON.stringify(vector),
-                    updated_at: new Date().toISOString(),
-                  })
-                  .eq('id', fqcId)
-              )
-              .catch((err) =>
-                logger.warn(
-                  `get_document: background re-embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
-                )
-              );
-          }
-        }
-
-        // SPEC-01: Handle optional sections parameter
-        let responseText = content;
-
-        if (sections && sections.length > 0) {
-          // Extract requested sections
-          const sectionResponses: string[] = [];
-          const missingHeadings: string[] = [];
-
-          for (const sectionName of sections) {
+      if (Array.isArray(identifiers)) {
+        // FREF-04 / FREF-05: batch — per-element partial failure; outer call never isError
+        const results = await Promise.all(
+          identifiers.map(async (id) => {
             try {
-              const extracted = extractSection(content, sectionName, include_subheadings, occurrence);
-              const formatted = buildSectionResponse(
-                { level: 0, text: sectionName, line: extracted.lineNumber },
-                extracted.section,
-                extracted.lineNumber,
-                extracted.occurrence,
-                extracted.totalOccurrences
-              );
-              sectionResponses.push(formatted);
+              return await resolveAndBuildDocument(id, elementOptions, deps);
             } catch (err) {
-              if (err instanceof Error && err.message.includes('not found')) {
-                missingHeadings.push(sectionName);
-              } else {
-                throw err;
+              if (err instanceof DocumentRequestError) {
+                // section_not_found / follow_ref_*_error etc. — embed envelope at this position
+                return err.envelope;
               }
+              const msg = err instanceof Error ? err.message : String(err);
+              const isNotFound =
+                msg.toLowerCase().includes('not found') ||
+                msg.toLowerCase().includes('missing') ||
+                msg.toLowerCase().includes('enoent');
+              return {
+                error: isNotFound ? 'document_not_found' : 'read_error',
+                message: isNotFound
+                  ? `No document found for identifier: ${id}`
+                  : `Error reading document: ${msg}`,
+                identifier: id,
+              };
             }
-          }
-
-          if (missingHeadings.length > 0) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Sections not found: ${missingHeadings.join(', ')}. Available sections: check document structure.`,
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          responseText = sectionResponses.join('\n' + formatBatchSeparator() + '\n');
-        }
-
-        // Return content only (MOD-02 — no frontmatter in response)
-        // Return metadata in structured fields instead of injecting notes into content (SPEC-08)
+          })
+        );
         return {
-          content: [{ type: 'text' as const, text: responseText }],
-          metadata: {
-            path: relativePath,
-            changed: !!preScan.stalePathNote,
-          },
+          content: [{ type: 'text' as const, text: JSON.stringify(results) }],
+          // NOTE: NO isError — array output embeds per-element errors
+        };
+      }
+
+      // Single-string path — backward-compatible flat object response
+      try {
+        const result = await resolveAndBuildDocument(identifiers, elementOptions, deps);
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
         };
       } catch (err) {
+        if (err instanceof DocumentRequestError) {
+          return {
+            content: [{ type: 'text' as const, text: JSON.stringify(err.envelope) }],
+            isError: true,
+          };
+        }
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_document failed: ${msg}`);
-
-        // Distinguish "not found" errors from other errors (T-60b-04: prevents info leakage)
-        const isNotFound = msg.toLowerCase().includes('not found') ||
-                           msg.toLowerCase().includes('missing') ||
-                           msg.toLowerCase().includes('enoent');
-        const userMsg = isNotFound
-          ? `Document not found: ${identifier}. Check the path, UUID, or filename and try again.`
-          : `Error reading document: ${msg}`;
-
+        const isNotFound =
+          msg.toLowerCase().includes('not found') ||
+          msg.toLowerCase().includes('missing') ||
+          msg.toLowerCase().includes('enoent');
+        const errorEnvelope = isNotFound
+          ? { error: 'document_not_found', message: `No document found for identifier: ${identifiers}`, identifier: identifiers }
+          : { error: 'read_error', message: `Error reading document: ${msg}`, identifier: identifiers };
         return {
-          content: [{ type: 'text' as const, text: userMsg }],
+          content: [{ type: 'text' as const, text: JSON.stringify(errorEnvelope) }],
           isError: true,
         };
       }
@@ -989,11 +946,12 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             archivedFm[FM.ID] = preScan.capturedFrontmatter.fqcId;
 
             // Write archived status to vault (VAULT-FIRST)
+            const archivedTitle = archivedFm[FM.TITLE];
             await vaultManager.writeMarkdown(
               relativePath,
               archivedFm,
               parsed.content,
-              { gitAction: 'update', gitTitle: typeof archivedFm[FM.TITLE] === 'string' ? archivedFm[FM.TITLE] : relativePath }
+              { gitAction: 'update', gitTitle: typeof archivedTitle === 'string' ? archivedTitle : relativePath }
             );
 
             // Step 3: Update Supabase fqc_documents
@@ -1146,7 +1104,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
           // Run filesystem scan
           const vaultRoot = config.instance.vault.path;
-          const files = await listMarkdownFiles(vaultRoot, ['.md']);
+          const files = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
           const metaResults = await Promise.all(files.map((f) => parseDocMeta(vaultRoot, f)));
           const allMeta = metaResults.filter((m): m is DocMeta => m !== null);
           let fsFiltered = allMeta.filter(
@@ -1216,7 +1174,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const vaultRoot = config.instance.vault.path;
 
         // Scan entire vault (filter on frontmatter project field, not directory prefix)
-        const files = await listMarkdownFiles(vaultRoot, ['.md']);
+        const files = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
 
         // Parse frontmatter for each file, skip malformed files
         const metaResults = await Promise.all(files.map((f) => parseDocMeta(vaultRoot, f)));
@@ -1594,7 +1552,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         );
 
         // Build a vault-wide fqc_id index once (expensive but necessary for bulk reconcile)
-        const allFiles = await listMarkdownFiles(vaultRoot, ['.md']);
+        const allFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
         const fqcIdIndex = new Map<string, string>(); // fqc_id → relativePath
         for (const file of allFiles) {
           try {

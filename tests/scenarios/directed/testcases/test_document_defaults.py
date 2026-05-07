@@ -166,7 +166,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         get_a_result = ctx.client.call_tool(
             "get_document",
-            identifier=identifier_a,
+            identifiers=identifier_a,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -295,7 +295,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         get_b_result = ctx.client.call_tool(
             "get_document",
-            identifier=identifier_b,
+            identifiers=identifier_b,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

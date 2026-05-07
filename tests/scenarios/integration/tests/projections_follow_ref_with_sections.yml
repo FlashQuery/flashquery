@@ -1,0 +1,98 @@
+name: projections_follow_ref_with_sections
+description: >
+  Projections matrix — follow_ref + sections. get_document with
+  follow_ref:"projections.summary" AND sections:["<heading>"] returns the
+  named section of the dereferenced target inside followed_ref.body.
+  Verifies that follow_ref composition with section extraction targets
+  the target document (not the source) and emits the extracted section
+  in the nested followed_ref envelope.
+  Covers IX-18.
+coverage: [IX-18]
+
+steps:
+  - label: "Setup: target document with multiple sections, marker only in 'Findings'"
+    action: vault.write
+    name: target_doc
+    path: "Test/ix18/target.md"
+    title: "IX-18 Target"
+    content: |
+      # Overview
+      Overview marker is OVR-18.
+
+      # Findings
+      Findings marker is FND-18.
+
+      # Recommendations
+      Recommendations marker is REC-18.
+    tags: [ix18-tag]
+
+  - label: "Setup: source with projections.summary pointing at the target path"
+    action: vault.write
+    name: source_doc
+    path: "Test/ix18/source.md"
+    title: "IX-18 Source"
+    content: "Source body — should not appear in the response."
+    tags: [ix18-tag]
+    frontmatter:
+      projections:
+        summary: "_integration/Test/ix18/target.md"
+
+  - label: "follow_ref + sections=[Findings]: target's Findings section appears in followed_ref.body"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+        include: ["body"]
+        sections: ["Findings"]
+      expect_contains: "FND-18"
+
+  - label: "Response uses the followed_ref nested envelope"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+        include: ["body"]
+        sections: ["Findings"]
+      expect_contains: '"followed_ref"'
+
+  - label: "extracted_sections array surfaces inside followed_ref"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+        include: ["body"]
+        sections: ["Findings"]
+      expect_contains: '"extracted_sections"'
+
+  - label: "Section scoping holds: Overview marker (OVR-18) does NOT appear when sections=[Findings]"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+        include: ["body"]
+        sections: ["Findings"]
+      expect_not_contains: "OVR-18"
+
+  - label: "Section scoping holds: Recommendations marker (REC-18) does NOT appear either"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+        include: ["body"]
+        sections: ["Findings"]
+      expect_not_contains: "REC-18"
+
+  - label: "Source body does not leak into the response — section extraction targets the target doc"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+        include: ["body"]
+        sections: ["Findings"]
+      expect_not_contains: "Source body — should not appear"

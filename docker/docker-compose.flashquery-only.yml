@@ -10,17 +10,20 @@ name: flashquery
 # - Vault data: mounted via VAULT_PATH environment variable
 # - Log files: mounted via LOG_PATH environment variable
 # - Both vault and logs directories are on host filesystem, accessible by host user
-# - Config: copied to image from flashquery.example.yaml, customized via environment variables
+# - Config: copied to image from flashquery.example.yml, customized via environment variables
 #
 # Usage:
-#   docker compose -f docker/docker-compose.flashquery-only.yml up -d
+#   make fq-up
+#   # or, from the repo root:
+#   docker compose --env-file .env -f docker/docker-compose.flashquery-only.yml up -d
 #
 # Prerequisites:
 #   - .env must contain:
-#       DATABASE_URL    — your external Postgres connection string
-#       SUPABASE_URL    — your external Supabase project URL
-#       SUPABASE_ANON_KEY
+#       DATABASE_URL               — your external Postgres connection string
+#       SUPABASE_URL               — your external Supabase project URL
 #       SUPABASE_SERVICE_ROLE_KEY
+#       OPENAI_API_KEY             — if using the default OpenAI-backed llm config
+#       OLLAMA_URL                 — if using the local-ollama provider
 #   - No local Postgres, PostgREST, GoTrue, Kong, or Studio are started.
 #
 # After startup:
@@ -51,10 +54,12 @@ services:
       - ../.env
     environment:
       # Docker-specific overrides only (these are NOT in .env)
+      # LLM provider vars such as OPENAI_API_KEY, OPENROUTER_API_KEY, and
+      # OLLAMA_URL are inherited from ../.env when present.
       NODE_ENV: production
       VAULT_PATH: /app/vault
       LOG_PATH: /app/logs
-    command: start --transport http --config ./flashquery.yaml
+    command: start --transport http --config ./flashquery.yml
     volumes:
       - ${VAULT_PATH:-./vault}:/app/vault
       - ${LOG_PATH:-./logs}:/app/logs

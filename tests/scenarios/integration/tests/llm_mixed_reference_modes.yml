@@ -1,0 +1,178 @@
+name: llm_mixed_reference_modes
+description: >
+  ATL-INT-05: mixed path, section, pointer, alias, and _items reference/template
+  modes compose in one call_model flow. Active {{id:...}} syntax is not used.
+coverage: [IL-40]
+deps: [llm]
+
+steps:
+  - label: "ATL-INT-05 setup: direct path document"
+    action: vault.write
+    path: "Docs/atl-int-05-direct.md"
+    title: "ATL INT 05 Direct"
+    content: "DIRECT-MARK-05"
+    tags: [atl-int-05]
+
+  - label: "ATL-INT-05 setup: section document"
+    action: vault.write
+    path: "Docs/atl-int-05-section.md"
+    title: "ATL INT 05 Section"
+    content: |
+      # Ignore
+      IGNORE-MARK-05
+
+      # Target
+      SECTION-MARK-05
+    tags: [atl-int-05]
+
+  - label: "ATL-INT-05 setup: pointer target"
+    action: vault.write
+    path: "Docs/atl-int-05-pointer-target.md"
+    title: "ATL INT 05 Pointer Target"
+    content: "POINTER-MARK-05"
+    tags: [atl-int-05]
+
+  - label: "ATL-INT-05 setup: pointer source"
+    action: vault.write
+    path: "Docs/atl-int-05-pointer-source.md"
+    title: "ATL INT 05 Pointer Source"
+    content: "Pointer source"
+    tags: [atl-int-05]
+    frontmatter:
+      projections:
+        summary: "_integration/Docs/atl-int-05-pointer-target.md"
+
+  - label: "ATL-INT-05 setup: alias list plain item"
+    action: vault.write
+    path: "Docs/atl-int-05-list-a.md"
+    title: "ATL INT 05 List A"
+    content: "ALIAS-LIST-A-05"
+    tags: [atl-int-05]
+
+  - label: "ATL-INT-05 setup: alias item template"
+    action: vault.write
+    path: "Templates/atl-int-05-item.md"
+    title: "ATL INT 05 Item Template"
+    content: "ALIAS-TEMPLATE-{{label}}"
+    tags: [atl-int-05]
+    frontmatter:
+      fq_template: true
+      fq_params:
+        label:
+          type: string
+          required: true
+
+  - label: "ATL-INT-05: one call_model flow combines path, section, pointer, alias, and _items"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        template_params:
+          bundle:
+            _items:
+              - "_integration/Docs/atl-int-05-list-a.md"
+              - _template: "_integration/Templates/atl-int-05-item.md"
+                label: "B-05"
+            _separator: "\n---\n"
+        messages:
+          - role: user
+            content: >
+              {{ref:_integration/Docs/atl-int-05-direct.md}}
+              {{ref:_integration/Docs/atl-int-05-section.md#Target}}
+              {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
+              {{ref:@bundle}}
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
+      expect_contains: "DIRECT-MARK-05"
+
+  - label: "ATL-INT-05: section marker is visible"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        template_params:
+          bundle:
+            _items:
+              - "_integration/Docs/atl-int-05-list-a.md"
+              - _template: "_integration/Templates/atl-int-05-item.md"
+                label: "B-05"
+            _separator: "\n---\n"
+        messages:
+          - role: user
+            content: >
+              {{ref:_integration/Docs/atl-int-05-direct.md}}
+              {{ref:_integration/Docs/atl-int-05-section.md#Target}}
+              {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
+              {{ref:@bundle}}
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
+      expect_contains: "SECTION-MARK-05"
+
+  - label: "ATL-INT-05: pointer target marker is visible"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        template_params:
+          bundle:
+            _items:
+              - "_integration/Docs/atl-int-05-list-a.md"
+              - _template: "_integration/Templates/atl-int-05-item.md"
+                label: "B-05"
+            _separator: "\n---\n"
+        messages:
+          - role: user
+            content: >
+              {{ref:_integration/Docs/atl-int-05-direct.md}}
+              {{ref:_integration/Docs/atl-int-05-section.md#Target}}
+              {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
+              {{ref:@bundle}}
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
+      expect_contains: "POINTER-MARK-05"
+
+  - label: "ATL-INT-05: alias _items plain document marker is visible"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        template_params:
+          bundle:
+            _items:
+              - "_integration/Docs/atl-int-05-list-a.md"
+              - _template: "_integration/Templates/atl-int-05-item.md"
+                label: "B-05"
+            _separator: "\n---\n"
+        messages:
+          - role: user
+            content: >
+              {{ref:_integration/Docs/atl-int-05-direct.md}}
+              {{ref:_integration/Docs/atl-int-05-section.md#Target}}
+              {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
+              {{ref:@bundle}}
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
+      expect_contains: "ALIAS-LIST-A-05"
+
+  - label: "ATL-INT-05: alias _items template object marker is visible"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        template_params:
+          bundle:
+            _items:
+              - "_integration/Docs/atl-int-05-list-a.md"
+              - _template: "_integration/Templates/atl-int-05-item.md"
+                label: "B-05"
+            _separator: "\n---\n"
+        messages:
+          - role: user
+            content: >
+              {{ref:_integration/Docs/atl-int-05-direct.md}}
+              {{ref:_integration/Docs/atl-int-05-section.md#Target}}
+              {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
+              {{ref:@bundle}}
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
+      expect_contains: "ALIAS-TEMPLATE-B-05"

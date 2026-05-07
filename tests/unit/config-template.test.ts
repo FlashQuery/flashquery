@@ -85,6 +85,23 @@ function extractCommentedLlmBlock(raw: string): string {
   return out.join('\n');
 }
 
+function withTemplateEnv<T>(fn: () => T): T {
+  const prevOpenAiKey = process.env['OPENAI_API_KEY'];
+  const prevOllamaUrl = process.env['OLLAMA_URL'];
+  process.env['OPENAI_API_KEY'] = 'sk-test-for-template-validation';
+  process.env['OLLAMA_URL'] = 'http://localhost:11434';
+
+  try {
+    return fn();
+  } finally {
+    if (prevOpenAiKey === undefined) delete process.env['OPENAI_API_KEY'];
+    else process.env['OPENAI_API_KEY'] = prevOpenAiKey;
+
+    if (prevOllamaUrl === undefined) delete process.env['OLLAMA_URL'];
+    else process.env['OLLAMA_URL'] = prevOllamaUrl;
+  }
+}
+
 describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
   it('[TMPL-01] flashquery.example.yml LLM block parses through loadConfig() after un-commenting', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
@@ -92,18 +109,14 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     const llmBlock = extractCommentedLlmBlock(rawYaml);
     const combined = BASE_CONFIG_YAML + llmBlock;
     const tmpFile = join(tmpdir(), `fqc-tmpl-test-parse-${Date.now()}.yml`);
-    const prevKey = process.env['OPENAI_API_KEY'];
-    process.env['OPENAI_API_KEY'] = 'sk-test-for-template-validation';
     writeFileSync(tmpFile, combined);
     try {
-      const config = loadConfig(tmpFile);
+      const config = withTemplateEnv(() => loadConfig(tmpFile));
       expect(config.llm).toBeDefined();
       // After Phase 106 B-01 fix: endpoint is the BASE URL (no /v1 suffix); src/llm/client.ts appends /v1/chat/completions itself.
       expect(config.llm?.providers[0].endpoint).toBe('https://api.openai.com');
     } finally {
       unlinkSync(tmpFile);
-      if (prevKey === undefined) delete process.env['OPENAI_API_KEY'];
-      else process.env['OPENAI_API_KEY'] = prevKey;
     }
   });
 
@@ -113,11 +126,9 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     const llmBlock = extractCommentedLlmBlock(rawYaml);
     const combined = BASE_CONFIG_YAML + llmBlock;
     const tmpFile = join(tmpdir(), `fqc-tmpl-test-provname-${Date.now()}.yml`);
-    const prevKey = process.env['OPENAI_API_KEY'];
-    process.env['OPENAI_API_KEY'] = 'sk-test-for-template-validation';
     writeFileSync(tmpFile, combined);
     try {
-      const config = loadConfig(tmpFile);
+      const config = withTemplateEnv(() => loadConfig(tmpFile));
       // After parse: camelCase field is providerName
       expect(config.llm?.models[0].providerName).toBe('openai');
       // Raw extracted block must contain provider_name: and NOT have a bare "provider:" line
@@ -127,31 +138,35 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
       expect(config.llm?.models).toHaveLength(2);
     } finally {
       unlinkSync(tmpFile);
-      if (prevKey === undefined) delete process.env['OPENAI_API_KEY'];
-      else process.env['OPENAI_API_KEY'] = prevKey;
     }
   });
 
-  it('[TMPL-01] flashquery.example.yml has exactly 1 active provider (openai) with correct endpoint', () => {
+  it('[TMPL-01] flashquery.example.yml has 2 active providers — openai (default) and local-ollama (local: true demonstration per Verification Correction 4)', () => {
     const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
     const rawYaml = readFileSync(examplePath, 'utf-8');
     const llmBlock = extractCommentedLlmBlock(rawYaml);
     const combined = BASE_CONFIG_YAML + llmBlock;
     const tmpFile = join(tmpdir(), `fqc-tmpl-test-providers-${Date.now()}.yml`);
-    const prevKey = process.env['OPENAI_API_KEY'];
-    process.env['OPENAI_API_KEY'] = 'sk-test-for-template-validation';
     writeFileSync(tmpFile, combined);
     try {
-      const config = loadConfig(tmpFile);
-      // The helper strips ONE "# " per line, so double-commented "# # " lines remain
-      // commented after stripping — only the default openai provider is active.
-      expect(config.llm?.providers).toHaveLength(1);
-      expect(config.llm?.providers[0].name).toBe('openai');
-      expect(config.llm?.providers[0].endpoint).toBe('https://api.openai.com');
+      const config = withTemplateEnv(() => loadConfig(tmpFile));
+      // Verification Correction 4: live (uncommented) provider with `local: true`
+      // is required so the config example demonstrates the field — not just shows
+      // it inside a commented-out block.
+      expect(config.llm?.providers).toHaveLength(2);
+
+      const openai = config.llm?.providers.find((p) => p.name === 'openai');
+      expect(openai).toBeDefined();
+      expect(openai?.endpoint).toBe('https://api.openai.com');
+      expect(openai?.local).toBeUndefined();
+
+      const ollama = config.llm?.providers.find((p) => p.name === 'local-ollama');
+      expect(ollama).toBeDefined();
+      expect(ollama?.type).toBe('ollama');
+      expect(ollama?.endpoint).toBe('http://localhost:11434');
+      expect(ollama?.local).toBe(true);
     } finally {
       unlinkSync(tmpFile);
-      if (prevKey === undefined) delete process.env['OPENAI_API_KEY'];
-      else process.env['OPENAI_API_KEY'] = prevKey;
     }
   });
 
@@ -161,11 +176,9 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     const llmBlock = extractCommentedLlmBlock(rawYaml);
     const combined = BASE_CONFIG_YAML + llmBlock;
     const tmpFile = join(tmpdir(), `fqc-tmpl-test-models-${Date.now()}.yml`);
-    const prevKey = process.env['OPENAI_API_KEY'];
-    process.env['OPENAI_API_KEY'] = 'sk-test-for-template-validation';
     writeFileSync(tmpFile, combined);
     try {
-      const config = loadConfig(tmpFile);
+      const config = withTemplateEnv(() => loadConfig(tmpFile));
       expect(config.llm?.models).toHaveLength(2);
       // First model: embeddings
       const embedModel = config.llm?.models.find(m => m.name === 'embeddings');
@@ -183,8 +196,6 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
       expect(fastModel?.costPerMillion.output).toBe(0.60);
     } finally {
       unlinkSync(tmpFile);
-      if (prevKey === undefined) delete process.env['OPENAI_API_KEY'];
-      else process.env['OPENAI_API_KEY'] = prevKey;
     }
   });
 
@@ -194,11 +205,9 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     const llmBlock = extractCommentedLlmBlock(rawYaml);
     const combined = BASE_CONFIG_YAML + llmBlock;
     const tmpFile = join(tmpdir(), `fqc-tmpl-test-purposes-${Date.now()}.yml`);
-    const prevKey = process.env['OPENAI_API_KEY'];
-    process.env['OPENAI_API_KEY'] = 'sk-test-for-template-validation';
     writeFileSync(tmpFile, combined);
     try {
-      const config = loadConfig(tmpFile);
+      const config = withTemplateEnv(() => loadConfig(tmpFile));
       expect(config.llm?.purposes).toHaveLength(2);
       const names = config.llm?.purposes.map(p => p.name).sort();
       expect(names).toEqual(['embedding', 'general']);
@@ -206,8 +215,6 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
       expect(llmBlock).not.toMatch(/purposes:[\s\S]*?name:\s*default\b/);
     } finally {
       unlinkSync(tmpFile);
-      if (prevKey === undefined) delete process.env['OPENAI_API_KEY'];
-      else process.env['OPENAI_API_KEY'] = prevKey;
     }
   });
 
@@ -249,5 +256,26 @@ describe('Phase 105 — Config Template Updates (TMPL-01)', () => {
     expect(content).toMatch(/^# OPENROUTER_API_KEY=/m);
     // OPENAI_API_KEY must still be present (D-10 — not regressed)
     expect(content).toMatch(/^OPENAI_API_KEY=/m);
+  });
+
+  it('[DISC-05] flashquery.example.yml shows optional discovery fields on model entries and local on commented Ollama provider', () => {
+    // Correction 4: flashquery.example.yml must annotate the new optional discovery fields
+    // so users know they exist when copying the template (DISC-05, dev plan §6.4.1).
+    const examplePath = resolve(process.cwd(), 'flashquery.example.yml');
+    const content = readFileSync(examplePath, 'utf-8');
+
+    // model entries must show context_window, capabilities, and description fields
+    expect(content).toMatch(/context_window:/);
+    expect(content).toMatch(/capabilities:/);
+    // description: field on at least one model entry
+    // (purposes already have description:, so we check the models section specifically)
+    const modelsSection = content.slice(content.indexOf('\n  models:'));
+    expect(modelsSection).toMatch(/description:/);
+
+    // The commented-out Ollama provider block must include local: true
+    expect(content).toMatch(/local:\s*true/);
+
+    // Comment explaining these fields are surfaced via list_models discovery
+    expect(content).toMatch(/list_models/);
   });
 });

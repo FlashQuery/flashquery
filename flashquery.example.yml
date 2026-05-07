@@ -170,9 +170,20 @@ logging:
 
 
 # ─── LLM (optional) ─────────────────────────────────────────────────────────
-# Three-layer LLM config (v3.0+): providers + models + purposes.
-# Entire section is OPTIONAL — comment out or delete to disable LLM features.
-# See REQUIREMENTS.md (PROV-01..PURP-03, CONF-01..CONF-07) for the full spec.
+# Three-layer LLM config: providers + models + purposes.
+# Entire section is OPTIONAL. Comment out or delete it to disable call_model,
+# semantic search, model delegation, and LLM usage tracking.
+#
+# Providers answer "where do requests go?" They hold endpoint/API-key details
+# for OpenAI-compatible services or Ollama.
+#
+# Models answer "what concrete model can FlashQuery call?" They are named
+# aliases that point to a provider's underlying model ID, with type, cost, and
+# optional capability metadata.
+#
+# Purposes answer "why are we calling a model?" They are stable workflow names
+# with ordered model fallback chains, default parameters, and optional native
+# tools/templates for delegated model runs.
 #
 # Naming rules: lowercase a-z 0-9 _ -, must start with [a-z0-9].
 # Names are auto-lowercased at load time, so "Nano" and "nano" collide.
@@ -183,18 +194,25 @@ logging:
 # all LLM features including semantic search.
 
 llm:
+  # Providers are API endpoints/accounts. Use one provider per endpoint or
+  # account boundary, then point models at them with provider_name.
   providers:
     - name: openai
       type: openai-compatible
       endpoint: https://api.openai.com
       api_key: ${OPENAI_API_KEY}
+    - name: local-ollama
+      type: ollama
+      endpoint: ${OLLAMA_URL}
+      local: true                       # marks provider as local — surfaced as `local: true` in list_models discovery
     # - name: openrouter
     #   type: openai-compatible
     #   endpoint: https://openrouter.ai/api
     #   api_key: ${OPENROUTER_API_KEY}
-    # - name: local-ollama
-    #   type: ollama
-    #   endpoint: http://localhost:11434
+
+  # Models are FlashQuery aliases. Callers use these aliases with
+  # resolver=model, and purposes use them in fallback chains. The `model`
+  # field is the provider's real model ID.
   models:
     - name: embeddings
       provider_name: openai
@@ -215,6 +233,20 @@ llm:
       cost_per_million:
         input: 0.15
         output: 0.60
+      # Optional discovery metadata — surfaced via call_model resolver=list_models.
+      # Omit any field to omit it from the discovery response.
+      description: "Fast, cheap small model for routine tasks"
+      context_window: 128000
+      tags: ["cheap", "fast"]
+      # Capabilities are used for discovery and for admitting tool/template
+      # enabled purposes. Non-OpenAI-compatible providers should declare these
+      # explicitly before exposing tools or templates through a purpose.
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: true
+        parallel_tool_calls: true
+        structured_outputs_with_tools: true
     # - name: smart
     #   provider_name: openrouter
     #   model: anthropic/claude-opus-4-7
@@ -222,6 +254,10 @@ llm:
     #   cost_per_million:
     #     input: 15.00
     #     output: 75.00
+
+  # Purposes are named calling policies. Prefer resolver=purpose for normal
+  # workflows: purposes provide fallback, defaults, intent-based usage
+  # reporting, and a controlled tool/template surface.
   purposes:
     - name: embedding
       description: |
@@ -248,3 +284,30 @@ llm:
     #   defaults:
     #     temperature: 0.3
     #     max_tokens: 1024
+    #     response_format:
+    #       type: json_object
+    #     timeout_ms: 30000
+    #     max_cost_usd: 0.25
+    #     max_tokens_budget: 12000
+    #     max_iterations: 5
+    #     result_summary_chars: 2000
+    #
+    # - name: researcher
+    #   description: |
+    #     Delegated research loop with read-only vault access and a
+    #     purpose-bound template skill.
+    #   models:
+    #     - fast
+    #   # tools expose FlashQuery native MCP tools to the delegated model
+    #   # inside a managed call_model loop. Use tiers or explicit tool names.
+    #   tools:
+    #     - tier:read-only
+    #   # templates listed here are rendered as generated function/tool
+    #   # definitions for the delegated model, not as top-level MCP tools.
+    #   # The backing vault document must include frontmatter:
+    #   #   fq_template: true
+    #   #   fq_expose_as_tool: true
+    #   #   fq_desc: "Description shown to the delegated model"
+    #   #   fq_params: ...  # optional argument schema/template fields
+    #   templates:
+    #     - Templates/research-brief.md

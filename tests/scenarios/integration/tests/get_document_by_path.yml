@@ -18,19 +18,19 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${path_doc.fq_id}"
+        identifiers: "${path_doc.fq_id}"
       expect_contains: "explains the fundamentals"
 
   - label: "Retrieve document by vault-relative path"
     assert:
       op: get_document
       args:
-        identifier: "${path_doc.path}"
+        identifiers: "${path_doc.path}"
       expect_contains: "explains the fundamentals"
 
   - label: "Both retrieval methods return the same content"
     assert:
       op: get_document
       args:
-        identifier: "${path_doc.path}"
+        identifiers: "${path_doc.path}"
       expect_contains: "fundamentals of the system"

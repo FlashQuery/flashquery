@@ -192,6 +192,36 @@ describe('sanitizeDirectorySegment', () => {
     expect(result.replacedChars).toContain(':');
     expect(result.replacedChars).toContain('|');
   });
+
+  it('replaces opening bracket [ with space (U-53)', () => {
+    const result = sanitizeDirectorySegment('[tag]');
+    expect(result.sanitized).toBe('tag');
+    expect(result.changed).toBe(true);
+    expect(result.replacedChars).toContain('[');
+  });
+
+  it('replaces closing bracket ] with space (U-54)', () => {
+    const result = sanitizeDirectorySegment('A]B');
+    expect(result.sanitized).toBe('A B');
+    expect(result.changed).toBe(true);
+    expect(result.replacedChars).toContain(']');
+  });
+
+  it('replaces comma , with space (U-55)', () => {
+    const result = sanitizeDirectorySegment('A,B');
+    expect(result.sanitized).toBe('A B');
+    expect(result.changed).toBe(true);
+    expect(result.replacedChars).toContain(',');
+  });
+
+  it('collapses JSON-array-like segment to trimmed form (U-56)', () => {
+    // The full JSON string passed as a single path segment (edge case)
+    const result = sanitizeDirectorySegment('["Roadmap","Reference"]');
+    expect(result.changed).toBe(true);
+    // All [ ] , " chars replaced; result should not start or end with spaces
+    expect(result.sanitized).not.toMatch(/^\s/);
+    expect(result.sanitized).not.toMatch(/\s$/);
+  });
 });
 
 describe('validateSegment', () => {

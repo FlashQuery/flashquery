@@ -1,0 +1,94 @@
+name: pointer_deref_cross_interface_consistency
+description: >
+  The two pointer dereference interfaces — get_document(follow_ref:"projections.summary")
+  and call_model {{ref:source->projections.summary}} — must return the same
+  target body and identify the same target via resolved_to. This proves the
+  two interfaces share the same resolution semantics: a pointer that resolves
+  via one interface must resolve identically via the other.
+  Covers IX-12.
+coverage: [IX-12]
+deps: [llm]
+
+steps:
+  - label: "Setup: write the target document with a unique marker (TARGET-MARKER-12)"
+    action: vault.write
+    name: target_doc
+    path: "Test/ix12/target.md"
+    title: "IX-12 Target"
+    content: "Target body — the unique marker is TARGET-MARKER-12."
+    tags: [ix12-tag]
+
+  - label: "Setup: write the source document with projections.summary pointing at the target path"
+    action: vault.write
+    name: source_doc
+    path: "Test/ix12/source.md"
+    title: "IX-12 Source"
+    content: "Source body — must NOT be injected when -> is used."
+    tags: [ix12-tag]
+    frontmatter:
+      projections:
+        summary: "_integration/Test/ix12/target.md"
+
+  - label: "Interface A: get_document(follow_ref:'projections.summary') returns the target body in followed_ref"
+    # The follow_ref response shape is { ..., followed_ref: { reference, resolved_to, body, ... } }.
+    # We assert the marker shows up — it appears in followed_ref.body.
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "TARGET-MARKER-12"
+
+  - label: "Interface A: response carries followed_ref.resolved_to pointing to the target path"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "_integration/Test/ix12/target.md"
+
+  - label: "Interface A: response uses the followed_ref nested envelope (not top-level body)"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: '"followed_ref"'
+
+  - label: "Interface B: call_model {{ref:source->projections.summary}} injects the target body"
+    # The LLM should report the target marker, proving the resolved-and-
+    # injected body matches what get_document returned in the prior step.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix12/source.md->projections.summary}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "TARGET-MARKER-12"
+
+  - label: "Interface B: injected_references[].resolved_to matches the same target path"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix12/source.md->projections.summary}} Reply OK."
+      expect_contains: '"resolved_to":"_integration/Test/ix12/target.md"'
+
+  - label: "Cross-interface negative: neither interface leaks the source body"
+    # Both interfaces should serve the TARGET body, not the SOURCE body.
+    # If the resolver mistakenly returned source content, the LLM would see
+    # the literal "must NOT be injected" string.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix12/source.md->projections.summary}} Does the document contain the literal string 'must NOT be injected'? Reply YES or NO."
+      expect_not_contains: "YES"

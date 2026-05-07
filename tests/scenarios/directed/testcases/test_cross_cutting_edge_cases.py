@@ -471,7 +471,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             log_mark = emb_ctx.server.log_position if emb_ctx.server else 0
             get_result = emb_ctx.client.call_tool(
                 "get_document",
-                identifier=created_fqc_id or created_path,
+                identifiers=created_fqc_id or created_path,
             )
             step_logs = emb_ctx.server.logs_since(log_mark) if emb_ctx.server else None
 

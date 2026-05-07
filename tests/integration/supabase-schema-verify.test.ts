@@ -34,6 +34,7 @@ function loadTestConfig(): FlashQueryConfig {
   if (process.env.SUPABASE_URL) config.supabase.url = process.env.SUPABASE_URL;
   if (process.env.SUPABASE_SERVICE_ROLE_KEY) config.supabase.serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (process.env.DATABASE_URL) config.supabase.databaseUrl = process.env.DATABASE_URL;
+  config.supabase.skipDdl = false;
   return config;
 }
 
@@ -60,7 +61,7 @@ describe('Schema Verification (Integration)', () => {
       console.log('⚠️  Skipping schema verify integration tests: failed to initialize or connect to Supabase:', (err as Error).message);
       testSupabaseAvailable = false;
     }
-  });
+  }, 30000);
 
   afterAll(async () => {
     if (client) {
@@ -72,17 +73,17 @@ describe('Schema Verification (Integration)', () => {
   });
 
   // ─────────────────────────────────────────────────────────────────────────
-  // Test 1: Happy path — verifySchema succeeds when all 5 tables exist
+  // Test 1: Happy path — verifySchema succeeds when all required tables exist
   // ─────────────────────────────────────────────────────────────────────────
 
-  it('verifySchema succeeds when all 5 tables exist after DDL', async () => {
+  it('verifySchema succeeds when all required tables exist after DDL', async () => {
     if (!testSupabaseAvailable) {
       console.log('⏭️  Skipping: Supabase not available');
       return;
     }
 
     // Prerequisite: A fresh Supabase instance with DDL already executed (from beforeAll in supabase.test.ts)
-    // verifySchema checks that all 5 required tables exist
+    // verifySchema checks that all required tables exist
     // This is the happy path — should not throw
     await expect(verifySchema(client!)).resolves.toBeUndefined();
   });
@@ -202,13 +203,9 @@ describe('Schema Verification (Integration)', () => {
     }
 
     // Test that verifySchema is called and passes with existing schema
-    // (Schema was already initialized in beforeAll)
-    try {
-      const result = await verifySchema(client!);
-      expect(result).toBeUndefined(); // verifySchema returns undefined on success
-    } catch (err) {
-      console.log('⚠️  Schema verification failed (test environment may have incomplete schema):', (err as Error).message);
-    }
+    // (Schema was already initialized in beforeAll). Once Supabase is available,
+    // schema verification failures should fail this test instead of being logged.
+    await expect(verifySchema(client!)).resolves.toBeUndefined();
 
     // Verify that supabaseManager has a client available (from beforeAll initialization)
     const supaClient = supabaseManager.getClient();
@@ -230,16 +227,7 @@ describe('Schema Verification (Integration)', () => {
     // When skip_ddl is true, verifySchema is called defensively but errors don't block initialization
     // Test this by verifying that we can query the schema (indicating defensive check passed)
 
-    try {
-      const result = await verifySchema(client!);
-      // If verifySchema succeeds, schema is complete
-      expect(result).toBeUndefined();
-    } catch (err) {
-      // If verifySchema fails, that's OK for this test — the point is that
-      // with skip_ddl: true, a verification failure wouldn't block initialization
-      // (The actual test of non-blocking behavior happens in the initialize() path in supabase.ts)
-      console.log('⚠️  Schema verification detected missing tables (expected in some test environments):', (err as Error).message);
-    }
+    await expect(verifySchema(client!)).resolves.toBeUndefined();
   });
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -267,5 +255,90 @@ describe('Schema Verification (Integration)', () => {
       SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_name = 'fqc_memory')
     `);
     expect(result.rows[0].exists).toBe(true);
+  });
+
+  it('ATL-I-01 exposes fqc_purpose_templates columns after DDL', async () => {
+    if (!testSupabaseAvailable) {
+      console.log('⏭️  Skipping: Supabase not available');
+      return;
+    }
+
+    const result = await client!.query(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'fqc_purpose_templates'
+        AND column_name = ANY($1::text[])
+      ORDER BY column_name
+      `,
+      [[
+        'instance_id',
+        'purpose_name',
+        'template_path',
+        'source',
+        'created_at',
+        'updated_at',
+      ]]
+    );
+
+    expect(result.rows.map((row: { column_name: string }) => row.column_name)).toEqual([
+      'created_at',
+      'instance_id',
+      'purpose_name',
+      'source',
+      'template_path',
+      'updated_at',
+    ]);
+  });
+
+  it('ATL-I-01 enforces unique fqc_purpose_templates identity by instance, purpose, and template_path', async () => {
+    if (!testSupabaseAvailable) {
+      console.log('⏭️  Skipping: Supabase not available');
+      return;
+    }
+
+    const result = await client!.query(`
+      SELECT
+        tc.constraint_name,
+        array_to_json(array_agg(kcu.column_name ORDER BY kcu.ordinal_position)) AS columns
+      FROM information_schema.table_constraints tc
+      JOIN information_schema.key_column_usage kcu
+        ON tc.constraint_name = kcu.constraint_name
+       AND tc.table_schema = kcu.table_schema
+      WHERE tc.table_schema = 'public'
+        AND tc.table_name = 'fqc_purpose_templates'
+        AND tc.constraint_type = 'UNIQUE'
+      GROUP BY tc.constraint_name
+    `);
+
+    expect(result.rows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          columns: ['instance_id', 'purpose_name', 'template_path'],
+        }),
+      ])
+    );
+  });
+
+  it('ATL-I-01 constrains fqc_purpose_templates source to yaml, api, or webapp', async () => {
+    if (!testSupabaseAvailable) {
+      console.log('⏭️  Skipping: Supabase not available');
+      return;
+    }
+
+    const result = await client!.query(`
+      SELECT pg_get_constraintdef(c.oid) AS definition
+      FROM pg_constraint c
+      JOIN pg_class t ON t.oid = c.conrelid
+      JOIN pg_namespace n ON n.oid = t.relnamespace
+      WHERE n.nspname = 'public'
+        AND t.relname = 'fqc_purpose_templates'
+        AND c.conname = 'fqc_purpose_templates_source_check'
+    `);
+
+    expect(result.rows[0]?.definition).toContain("'yaml'");
+    expect(result.rows[0]?.definition).toContain("'api'");
+    expect(result.rows[0]?.definition).toContain("'webapp'");
   });
 });

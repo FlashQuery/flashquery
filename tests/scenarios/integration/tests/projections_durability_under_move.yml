@@ -1,0 +1,103 @@
+name: projections_durability_under_move
+description: >
+  Projections matrix — durability under move. A source has TWO pointers to
+  the same target: a path-typed pointer (projections.summary = "<path>") and
+  an fq_id-typed pointer (projections.summary_id = "<uuid>"). After
+  move_document moves the target to a new path:
+    - The path-typed pointer becomes stale; follow_ref returns
+      follow_ref_target_not_found because the old path no longer resolves
+      to a document.
+    - The fq_id-typed pointer is durable; the UUID is preserved across the
+      move, so follow_ref still resolves to the target's body.
+  Verifies that fq_id-typed pointers survive moves while path-typed
+  pointers do not (and that the resolver reports the durability difference
+  correctly).
+  Covers IX-19.
+coverage: [IX-19]
+
+steps:
+  - label: "Setup: target document at original path with marker DUR-19"
+    action: vault.write
+    name: target_doc
+    path: "Test/ix19/orig/target.md"
+    title: "IX-19 Target"
+    content: "Target body — durability marker is DUR-19-MARKER."
+    tags: [ix19-tag]
+
+  - label: "Setup: source with both pointer types — path-typed (summary) and fq_id-typed (summary_id)"
+    action: vault.write
+    name: source_doc
+    path: "Test/ix19/source.md"
+    title: "IX-19 Source"
+    content: "Source body."
+    tags: [ix19-tag]
+    frontmatter:
+      projections:
+        summary: "_integration/Test/ix19/orig/target.md"
+        summary_id: "${target_doc.fq_id}"
+
+  - label: "Pre-move: path-typed pointer resolves successfully"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+      expect_contains: "DUR-19-MARKER"
+
+  - label: "Pre-move: fq_id-typed pointer resolves successfully"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary_id"
+      expect_contains: "DUR-19-MARKER"
+
+  - label: "Move target to a new vault path"
+    action: move_document
+    args:
+      identifier: "${target_doc.fq_id}"
+      destination: "_integration/Test/ix19/moved/target.md"
+
+  - label: "Post-move: path-typed pointer is stale — follow_ref returns follow_ref_target_not_found"
+    # Behavior contract: path-typed pointers are NOT auto-updated by
+    # move_document. The resolver reports follow_ref_target_not_found
+    # because the old path no longer resolves to a document.
+    # Single-identifier follow_ref errors return isError:true at the tool
+    # boundary, so expect_error=true is required for the runner to evaluate
+    # the response-text assertion against the error envelope.
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+      expect_error: true
+      expect_contains: "follow_ref_target_not_found"
+
+  - label: "Post-move: error response identifies resolution_method='path'"
+    # Confirms the classifier picked the path branch on the stale pointer
+    # value — distinguishes from fq_id and filename branches.
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary"
+      expect_error: true
+      expect_contains: '"resolution_method":"path"'
+
+  - label: "Post-move: fq_id-typed pointer still resolves — UUID is durable across moves"
+    # The fq_id is preserved by move_document. The fq_id pointer continues
+    # to find the same target document at its new path.
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary_id"
+      expect_contains: "DUR-19-MARKER"
+
+  - label: "Post-move: fq_id-typed pointer's resolved_to reflects the NEW path"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${source_doc.fq_id}"
+        follow_ref: "projections.summary_id"
+      expect_contains: "_integration/Test/ix19/moved/target.md"

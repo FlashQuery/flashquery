@@ -1,0 +1,81 @@
+name: llm_template_document_param_freshness
+description: >
+  ATL-INT-02: document-parameter freshness after referenced document update.
+  Template rendering resolves a document-type parameter at call time and sees
+  the updated target content.
+coverage: [IL-38]
+deps: [llm]
+
+steps:
+  - label: "ATL-INT-02 setup: create document-parameter template"
+    action: vault.write
+    name: param_template
+    path: "Templates/atl-int-02-param.md"
+    title: "ATL INT 02 Param Template"
+    content: "Parameter target says: {{brief}}"
+    tags: [atl-int-02]
+    frontmatter:
+      fq_template: true
+      fq_params:
+        brief:
+          type: document
+          required: true
+
+  - label: "ATL-INT-02 setup: create parameter target with ALPHA marker"
+    action: vault.write
+    name: param_doc
+    path: "Docs/atl-int-02-param-target.md"
+    title: "ATL INT 02 Param Target"
+    content: "ATL-INT-02-ALPHA"
+    tags: [atl-int-02]
+
+  - label: "ATL-INT-02: first call renders original ALPHA parameter target"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        template_params:
+          _integration/Templates/atl-int-02-param.md:
+            brief: "_integration/Docs/atl-int-02-param-target.md"
+        messages:
+          - role: user
+            content: "{{ref:_integration/Templates/atl-int-02-param.md}} Reply with the marker token."
+      expect_contains: "ATL-INT-02-ALPHA"
+
+  - label: "ATL-INT-02 update: replace parameter target with BETA marker"
+    action: update_document
+    args:
+      identifier: "${param_doc.fq_id}"
+      content: "ATL-INT-02-BETA"
+
+  - label: "ATL-INT-02: document parameter renders updated BETA marker"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        template_params:
+          _integration/Templates/atl-int-02-param.md:
+            brief: "_integration/Docs/atl-int-02-param-target.md"
+        messages:
+          - role: user
+            content: "{{ref:_integration/Templates/atl-int-02-param.md}} Reply with the marker token."
+      expect_contains: "ATL-INT-02-BETA"
+
+  - label: "ATL-INT-02: original ALPHA parameter body is not rendered"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        template_params:
+          _integration/Templates/atl-int-02-param.md:
+            brief: "_integration/Docs/atl-int-02-param-target.md"
+        messages:
+          - role: user
+            content: "{{ref:_integration/Templates/atl-int-02-param.md}} If the parameter contains stale content reply STALE, otherwise reply NO."
+      expect_not_contains: "ATL-INT-02-ALPHA"

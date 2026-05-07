@@ -18,3 +18,36 @@ steps:
           - role: user
             content: "What is the capital of France? Reply with just the city name."
       expect_contains: "Paris"
+
+  - label: "Response metadata resolver field is 'purpose' (IL-02)"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+      expect_contains: '"resolver":"purpose"'
+
+  - label: "Response metadata includes resolved_model_name (IL-02)"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+      expect_contains: '"resolved_model_name"'
+
+  - label: "Response metadata fallback_position is 1 when first model in chain succeeds (IL-02)"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply with just the digit 1."
+      expect_contains: '"fallback_position":1'

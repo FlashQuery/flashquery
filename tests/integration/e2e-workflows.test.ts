@@ -243,7 +243,7 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
     });
 
     it('A1: get_document returns only the requested section (SPEC-01)', async () => {
-      const result = await scAHandlers('get_document')({ identifier: docId, sections: ['Status'] });
+      const result = await scAHandlers('get_document')({ identifiers: docId, sections: ['Status'] });
       expect(isError(result)).toBe(false);
       const text = getText(result);
       expect(text).toContain('Status');
@@ -262,8 +262,9 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       });
       expect(isError(replaceResult)).toBe(false);
 
-      const readResult = await scAHandlers('get_document')({ identifier: docId });
+      const readResult = await scAHandlers('get_document')({ identifiers: docId });
       const text = getText(readResult);
+      // Phase 107: getText returns JSON envelope string; body content still searchable via toContain
       expect(text).toContain('Updated status here.');
       expect(text).toContain('Introduction content here.');
       expect(text).toContain('Planned next steps.');
@@ -295,24 +296,24 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
         position: 'after_heading',
       });
       expect(isError(insertResult)).toBe(false);
-      const readResult = await scAHandlers('get_document')({ identifier: insertDocId });
+      const readResult = await scAHandlers('get_document')({ identifiers: insertDocId });
       const text = getText(readResult);
       expect(text).toContain('- New item');
       expect(text).toContain('- Existing item');
     });
 
     it('A5: get_document with occurrence parameter reads correct duplicate section (SPEC-01)', async () => {
-      const r1 = await scAHandlers('get_document')({ identifier: docDupId, sections: ['Notes'], occurrence: 1 });
+      const r1 = await scAHandlers('get_document')({ identifiers: docDupId, sections: ['Notes'], occurrence: 1 });
       expect(isError(r1)).toBe(false);
       expect(getText(r1)).toContain('First notes section');
-      const r2 = await scAHandlers('get_document')({ identifier: docDupId, sections: ['Notes'], occurrence: 2 });
+      const r2 = await scAHandlers('get_document')({ identifiers: docDupId, sections: ['Notes'], occurrence: 2 });
       expect(isError(r2)).toBe(false);
       expect(getText(r2)).toContain('Second notes section');
     });
 
     it('A6: include_subheadings=true includes nested content; false excludes it (SPEC-01)', async () => {
       const withSubs = await scAHandlers('get_document')({
-        identifier: docSubId, sections: ['Status'], include_subheadings: true,
+        identifiers: docSubId, sections: ['Status'], include_nested: true,
       });
       expect(isError(withSubs)).toBe(false);
       const t1 = getText(withSubs);
@@ -320,7 +321,7 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       expect(t1).toContain('Closed items here');
 
       const noSubs = await scAHandlers('get_document')({
-        identifier: docSubId, sections: ['Status'], include_subheadings: false,
+        identifiers: docSubId, sections: ['Status'], include_nested: false,
       });
       expect(isError(noSubs)).toBe(false);
       const t2 = getText(noSubs);

@@ -102,6 +102,8 @@ describe.sequential('MCP protocol E2E', () => {
     for (const expected of expectedTools) {
       expect(toolNames).toContain(expected);
     }
+    // Phase 107: get_doc_outline was removed — must not appear in the tool list
+    expect(toolNames).not.toContain('get_doc_outline');
   }, 30000);
 
   // ── T-02: save_memory + search_memory round-trip ──────────────────────────
@@ -166,13 +168,15 @@ describe.sequential('MCP protocol E2E', () => {
     // Get the document back
     const getResult = await client.callTool({
       name: 'get_document',
-      arguments: { identifier: createdDocPath },
+      arguments: { identifiers: createdDocPath },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(getResult.isError).toBeFalsy();
     const getDocumentText = getText(getResult);
-    expect(getDocumentText).toContain('E2E test');
-    // Note: get_document returns content only (no frontmatter) — tags are in the metadata
+    // Phase 107: get_document returns a JSON envelope
+    const getEnv = JSON.parse(getDocumentText);
+    expect(getEnv.body).toContain('E2E test');
+    // Note: get_document returns JSON envelope — tags are in frontmatter field
   }, 30000);
 
   // ── T-04: Error handling — missing required param ─────────────────────────
@@ -199,7 +203,7 @@ describe.sequential('MCP protocol E2E', () => {
   it('get_document with nonexistent path returns isError:true', async () => {
     const result = await client.callTool({
       name: 'get_document',
-      arguments: { identifier: 'nonexistent/file.md' },
+      arguments: { identifiers: 'nonexistent/file.md' },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(true);

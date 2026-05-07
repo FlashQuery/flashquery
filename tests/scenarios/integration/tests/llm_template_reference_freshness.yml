@@ -1,0 +1,48 @@
+name: llm_template_reference_freshness
+description: >
+  ATL-INT-01: template freshness after template body update. Two call_model
+  invocations bracket an update_document write to the template itself, proving
+  the resolver does not reuse stale template content.
+coverage: [IL-37]
+deps: [llm]
+
+steps:
+  - label: "ATL-INT-01 setup: create template with ALPHA body"
+    action: vault.write
+    name: freshness_template
+    path: "Templates/atl-int-01-freshness.md"
+    title: "ATL INT 01 Freshness Template"
+    content: "Freshness template body marker: ATL-INT-01-ALPHA"
+    tags: [atl-int-01]
+    frontmatter:
+      fq_template: true
+
+  - label: "ATL-INT-01: first call sees original ALPHA template body"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        messages:
+          - role: user
+            content: "{{ref:_integration/Templates/atl-int-01-freshness.md}} Reply with the marker token."
+      expect_contains: "ATL-INT-01-ALPHA"
+
+  - label: "ATL-INT-01 update: replace template body with BETA marker"
+    action: update_document
+    args:
+      identifier: "${freshness_template.fq_id}"
+      content: "Freshness template body marker: ATL-INT-01-BETA"
+
+  - label: "ATL-INT-01: template reference sees updated BETA marker"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        messages:
+          - role: user
+            content: "{{ref:_integration/Templates/atl-int-01-freshness.md}} Reply with the marker token."
+      expect_contains: "ATL-INT-01-BETA"

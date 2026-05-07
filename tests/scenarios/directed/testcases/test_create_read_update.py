@@ -139,7 +139,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         read_result = ctx.client.call_tool(
             "get_document",
-            identifier=read_identifier,
+            identifiers=read_identifier,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -213,7 +213,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         read2_result = ctx.client.call_tool(
             "get_document",
-            identifier=read_identifier,
+            identifiers=read_identifier,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

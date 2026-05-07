@@ -38,8 +38,8 @@ WORKDIR /app
 COPY --chown=fqc:fqc --from=build /build/dist ./dist
 COPY --chown=fqc:fqc --from=build /build/package*.json ./
 
-# Copy example config for Docker environments (will be customized via volume mount or environment)
-COPY --chown=fqc:fqc flashquery.example.yml ./flashquery.yaml
+# Copy example config for Docker environments (customized via environment)
+COPY --chown=fqc:fqc flashquery.example.yml ./flashquery.yml
 
 # Install production dependencies only (bcrypt v6+ ships prebuilt musl binaries)
 RUN npm ci --omit=dev

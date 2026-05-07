@@ -1,0 +1,62 @@
+name: llm_ref_reflects_current_write_state
+description: >
+  Reference resolution reads the document's current write state, not a stale
+  cached snapshot. After vault.write, call_model {{ref:doc.md}} sees body A;
+  after update_document, the next call_model {{ref:doc.md}} sees body B.
+  Verifies that the resolver does not hold a stale view across mutations
+  (IX-10).
+coverage: [IX-10]
+deps: [llm]
+
+steps:
+  - label: "Setup: write document with body A containing token ALPHA-TOKEN"
+    action: vault.write
+    name: state_doc
+    path: "Test/ref-current-state.md"
+    title: "Ref Current State"
+    content: "The marker is ALPHA-TOKEN."
+    tags: [ix10-tag]
+
+  - label: "call_model {{ref:doc.md}} sees body A and the LLM reports ALPHA-TOKEN"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-current-state.md}} What marker token is in the document? Reply with just the token."
+      expect_contains: "ALPHA-TOKEN"
+
+  - label: "Update the document body to contain BETA-TOKEN instead"
+    action: update_document
+    args:
+      identifier: "${state_doc.fq_id}"
+      content: "The marker is BETA-TOKEN."
+
+  - label: "call_model {{ref:doc.md}} now sees body B and the LLM reports BETA-TOKEN"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-current-state.md}} What marker token is in the document? Reply with just the token."
+      expect_contains: "BETA-TOKEN"
+
+  - label: "Old body content (ALPHA-TOKEN) no longer appears in injected_references metadata"
+    # The injected_references[] entry echoes the resolved body context. After
+    # update, the resolver should fetch the current body — ALPHA-TOKEN must
+    # not leak through. We assert by asking the LLM to also list any old
+    # marker tokens; with only BETA-TOKEN in the source, the model has no
+    # way to mention ALPHA-TOKEN unless the resolver served stale content.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-current-state.md}} Does the document contain the literal string ALPHA-TOKEN? Reply YES or NO."
+      expect_not_contains: "YES"

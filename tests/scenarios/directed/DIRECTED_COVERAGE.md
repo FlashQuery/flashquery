@@ -17,32 +17,78 @@ Core CRUD operations on vault documents via MCP.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| D-01 | Create document with title, content, path, and tags (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| D-02 | Created document is assigned a unique fqc_id (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| D-03 | Created document has status=active (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| D-04 | Created document is readable on disk with correct frontmatter (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| D-05 | Get document by fqc_id returns body content (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| D-06 | Get document by vault-relative path (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-04-16 |
-| D-07 | Get document by filename (no directory) (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-04-16 |
-| D-08 | Update document body (full replacement) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| D-09 | Update document title only (body preserved) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-04-16 |
-| D-10 | Update document tags only (body and title preserved) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-04-16 |
-| D-11 | Update document custom frontmatter (reserved fields protected) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-04-16 |
-| D-12 | Archive document sets status=archived (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-04-16 |
-| D-13 | Archived document excluded from search_documents (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-04-16 |
-| D-14 | Copy document creates new fqc_id, preserves content (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-04-16 |
-| D-15 | Copy document leaves original unchanged (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-04-16 |
-| D-16 | Move document updates path in database (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-04-16 |
-| D-17 | Move document creates intermediate directories (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-04-16 |
-| D-18 | Move document preserves fqc_id and all associations (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-04-16 |
-| D-19 | Create document with custom frontmatter fields (VALIDATED) | test_document_defaults | 2026-04-14 | 2026-04-16 |
-| D-20 | Create document without explicit path (defaults to vault root) (VALIDATED) | test_document_defaults | 2026-04-14 | 2026-04-16 |
-| D-21 | Reserved frontmatter fields cannot be overridden via create (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-04-16 |
-| D-22 | Reserved frontmatter fields cannot be overridden via update (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-04-16 |
-| D-23 | get_document returns clear error when file manually deleted from vault (DB row present, no scan run) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-04-16 |
-| D-24 | search_documents does not surface stale hits for manually-deleted files before reconcile (or marks them clearly) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-04-16 |
-| D-25 | User-defined custom frontmatter fields survive update_document (updating title, body, or tags leaves unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
-| D-26 | User-defined custom frontmatter fields survive archive_document (archiving only changes status; all other fields preserved) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
+| D-01 | Create document with title, content, path, and tags (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| D-02 | Created document is assigned a unique fqc_id (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| D-03 | Created document has status=active (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| D-04 | Created document is readable on disk with correct frontmatter (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| D-05 | Get document by fqc_id returns body content (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| D-06 | Get document by vault-relative path (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-05-07 |
+| D-07 | Get document by filename (no directory) (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-05-07 |
+| D-08 | Update document body (full replacement) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| D-09 | Update document title only (body preserved) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
+| D-10 | Update document tags only (body and title preserved) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
+| D-11 | Update document custom frontmatter (reserved fields protected) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
+| D-12 | Archive document sets status=archived (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-05-07 |
+| D-13 | Archived document excluded from search_documents (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-05-07 |
+| D-14 | Copy document creates new fqc_id, preserves content (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
+| D-15 | Copy document leaves original unchanged (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
+| D-16 | Move document updates path in database (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
+| D-17 | Move document creates intermediate directories (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
+| D-18 | Move document preserves fqc_id and all associations (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
+| D-19 | Create document with custom frontmatter fields (VALIDATED) | test_document_defaults | 2026-04-14 | 2026-05-07 |
+| D-20 | Create document without explicit path (defaults to vault root) (VALIDATED) | test_document_defaults | 2026-04-14 | 2026-05-07 |
+| D-21 | Reserved frontmatter fields cannot be overridden via create (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
+| D-22 | Reserved frontmatter fields cannot be overridden via update (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
+| D-23 | get_document returns clear error when file manually deleted from vault (DB row present, no scan run) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-05-07 |
+| D-24 | search_documents does not surface stale hits for manually-deleted files before reconcile (or marks them clearly) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-05-07 |
+| D-25 | User-defined custom frontmatter fields survive update_document (updating title, body, or tags leaves unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| D-26 | User-defined custom frontmatter fields survive archive_document (archiving only changes status; all other fields preserved) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| D-27 | get_document default response returns JSON envelope with body field (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| D-28 | get_document include=["frontmatter"] returns frontmatter projection in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| D-29 | get_document include=["headings"] returns headings array with level, text, chars (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| D-30 | get_document include=["body","frontmatter","headings"] returns all three fields in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| D-31 | get_document with sections returns extracted_sections metadata array alongside body (body contains assembled section content, not full document) (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-07 |
+| D-31a | get_document multi-section returns extracted_sections in input (request) order, not document order (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-02 |
+| D-31b | get_document sections repeat-name: repeating a name N times returns its 1st..Nth occurrences; each repeated entry selects the next sequential match (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-02 |
+| D-31c | get_document sections interleaved repeated headings each select their own occurrence independently (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-02 |
+| D-31d | get_document extracted_sections separator uses a blank line between adjacent sections (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-02 |
+| D-31e | get_document multi-section with one no_match and one insufficient_occurrences both appear in missing_sections (VALIDATED) | test_consolidated_get_document_errors | 2026-05-05 | 2026-05-02 |
+| D-31f | get_document section_not_found error envelope includes available_headings list (VALIDATED) | test_consolidated_get_document_errors | 2026-05-05 | 2026-05-02 |
+| D-32 | get_document sections matching is case-insensitive (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-07 |
+| D-33 | get_document sections with numeric start anchor ("3. Foo") selects correct section (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-07 |
+| D-33a | get_document sections numeric-anchor edge cases (numeric prefix longer/shorter than actual heading) (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-02 |
+| D-34 | get_document size.chars in metadata envelope equals full document body length (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-07 |
+| D-34a | get_document include_nested=False excludes subheadings from extracted section (VALIDATED) | test_consolidated_get_document_sections | 2026-05-05 | 2026-05-02 |
+| D-35 | get_document with non-existent identifier returns document_not_found error envelope with isError=true (VALIDATED) | test_consolidated_get_document_errors | 2026-05-05 | 2026-05-07 |
+| D-46 | get_document with sections + occurrence=N returns invalid_parameter_combination error (VALIDATED) | test_consolidated_get_document_errors | 2026-05-05 | 2026-05-07 |
+| D-46a | get_document with sections=[X] + include=['headings'] (no body) returns invalid_parameter_combination error with details.conflict='sections_without_body' (Phase 1 Gap 1) (VALIDATED) | test_consolidated_get_document_errors | 2026-05-05 | 2026-05-03 |
+| D-47 | get_document title fallback when fq_title missing — uses file basename (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| D-48 | get_document title coercion when fq_title is a number — returns string representation (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| D-49 | get_document title trim when fq_title has leading/trailing whitespace — returns trimmed string (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-51 | get_document with array identifiers returns array output; each element succeeds independently (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
+| D-52 | get_document batch partial failure — one identifier not found returns error object at position; other succeeds; MCP response is not isError (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
+| D-53 | get_document with follow_ref returns source envelope + followed_ref nested object with resolved target content (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-54 | get_document follow_ref + include: ["headings"] returns headings in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-55 | get_document follow_ref + include: ["frontmatter","headings"] returns both in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-56 | get_document follow_ref + sections extracts sections from target document, returned in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-57 | get_document follow_ref pre-resolution error: follow_ref_path_not_found when frontmatter path does not exist (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-58 | get_document follow_ref pre-resolution error: follow_ref_invalid_type when frontmatter value is not a string (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-59 | get_document follow_ref pre-resolution error: follow_ref_target_not_found when resolved path does not exist in vault (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-60 | get_document batch + follow_ref: per-element partial failure semantics apply (one element missing pointer returns per-element error; other succeeds) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-61 | get_document follow_ref via UUID-typed pointer (Example 11) — projections.summary is a UUID string; resolves via fq_id branch (Phase 2 Gap 1) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
+| D-62 | get_document follow_ref_target_not_found with bare-filename pointer asserts resolution_method == 'filename' (Phase 2 Gap 2) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
+| D-63 | get_document follow_ref_target_not_found with UUID pointer asserts resolution_method == 'fq_id' (Phase 2 Gap 3) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
+| D-64 | get_document batch + follow_ref with 3-element success/failure/success interleaving — positional correspondence holds across all positions (Phase 2 Gap 4) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
+| D-65 | get_document follow_ref + multi-section section_not_found nested under followed_ref (Phase 2 Gap 5) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
+| D-66 | get_document follow_ref + multi-section partial-failure aggregation per OQ #12 — exactly 2 entries (no_match + insufficient_occurrences with requested_count/found_count) (Phase 2 Gap 6) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
+| D-67 | get_document batch + follow_ref pre-resolution error variants (follow_ref_invalid_type + follow_ref_target_not_found per element) (Phase 2 Gap 7) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
+| D-39a | get_document follow_ref + sections without "body" in include -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
+| D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
 
 ## 2. Document Content Operations
 
@@ -50,26 +96,26 @@ Surgical editing tools for modifying document content at specific locations.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| C-01 | Append content to end of document (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-04-16 |
-| C-02 | Insert content at top of document body (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-04-16 |
-| C-03 | Insert content after a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-04-16 |
-| C-04 | Insert content before a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-04-16 |
-| C-05 | Insert content at end of a section (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-04-16 |
-| C-06 | Replace section content (preserves heading line) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-04-16 |
-| C-07 | Replace section with include_subheadings=true (replaces nested) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-04-16 |
-| C-08 | Replace section with include_subheadings=false (preserves nested) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-04-16 |
-| C-09 | Insert at heading with occurrence > 1 (duplicate headings) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-04-16 |
-| C-10 | Update frontmatter header only (body untouched) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-04-16 |
-| C-11 | Update frontmatter with null value removes field (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-04-16 |
-| C-12 | Insert doc link (wiki-style) into frontmatter links array (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-04-16 |
-| C-13 | Insert doc link deduplicates (same link twice = one entry) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-04-16 |
-| C-14 | Insert doc link with custom property name (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-04-16 |
-| C-15 | Get document with sections filter returns only requested sections (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-04-16 |
-| C-16 | Get document sections with include_subheadings=true (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-04-16 |
-| C-17 | Get document sections with include_subheadings=false (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-04-16 |
-| C-18 | User-defined custom frontmatter fields survive content-editing operations (append_to_doc, insert_in_doc, replace_doc_section leave unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
-| C-19 | update_doc_header can explicitly modify user-defined frontmatter fields when named in the update map (MCP-directed override is permitted) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
-| C-20 | update_doc_header targeting only FQC-managed fields (e.g. title) does not modify user-defined custom frontmatter fields (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
+| C-01 | Append content to end of document (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
+| C-02 | Insert content at top of document body (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
+| C-03 | Insert content after a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
+| C-04 | Insert content before a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
+| C-05 | Insert content at end of a section (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
+| C-06 | Replace section content (preserves heading line) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
+| C-07 | Replace section with include_subheadings=true (replaces nested) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
+| C-08 | Replace section with include_subheadings=false (preserves nested) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
+| C-09 | Insert at heading with occurrence > 1 (duplicate headings) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
+| C-10 | Update frontmatter header only (body untouched) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
+| C-11 | Update frontmatter with null value removes field (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
+| C-12 | Insert doc link (wiki-style) into frontmatter links array (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
+| C-13 | Insert doc link deduplicates (same link twice = one entry) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
+| C-14 | Insert doc link with custom property name (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
+| C-15 | Get document with sections filter returns only requested sections (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-07 |
+| C-16 | Get document sections with include_subheadings=true (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-07 |
+| C-17 | Get document sections with include_subheadings=false (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-07 |
+| C-18 | User-defined custom frontmatter fields survive content-editing operations (append_to_doc, insert_in_doc, replace_doc_section leave unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| C-19 | update_doc_header can explicitly modify user-defined frontmatter fields when named in the update map (MCP-directed override is permitted) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| C-20 | update_doc_header targeting only FQC-managed fields (e.g. title) does not modify user-defined custom frontmatter fields (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
 
 ## 3. Document Outline and Structure
 
@@ -77,12 +123,17 @@ Verifying structural introspection of documents.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| O-01 | Get outline of single document returns heading hierarchy (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-02 | Get outline respects max_depth parameter (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-03 | Get outline shows linked files (resolved) (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-04 | Get outline shows unresolved links marked as such (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-05 | Get outline with exclude_headings returns frontmatter only (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-16 |
-| O-06 | Batch outline (array of identifiers) returns DB metadata (VALIDATED) | test_document_outline | 2026-04-14 | 2026-04-29 |
+| O-01 | Get outline of single document returns heading hierarchy (SUPERSEDED: get_doc_outline removed in Phase 107; heading extraction covered by D-29, O-07) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-02 | Get outline respects max_depth parameter (SUPERSEDED: max_depth now covered by O-07 in consolidated get_document) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-03 | Get outline shows linked files (resolved) (SUPERSEDED: link resolution not exposed in Phase 107 consolidated get_document) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-04 | Get outline shows unresolved links marked as such (SUPERSEDED: same as O-03) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-05 | Get outline with exclude_headings returns frontmatter only (SUPERSEDED: standalone frontmatter include covered by D-28) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-16 |
+| O-06 | Batch outline (array of identifiers) returns DB metadata (SUPERSEDED: batch mode removed; single-doc envelope with all three includes covered by D-30) | test_document_outline [RETIRED] | 2026-05-01 | 2026-04-29 |
+| O-07 | get_document headings include level, text, and chars fields; max_depth filters by heading level (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| O-11 | get_document include=['headings'] with max_depth=1 boundary — only H1 headings; H2/H3 excluded (Phase 1 Gap 6) (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| O-08 | get_document headings includes all occurrences of duplicate heading names with distinct chars values (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
+| O-09 | error envelope available_headings lists all headings in the document (VALIDATED) | test_consolidated_get_document_errors | 2026-05-05 | 2026-05-07 |
+| O-10 | occurrence parameter out of range (>= actual count) returns section_not_found with reason insufficient_occurrences in missing_sections (VALIDATED) | test_consolidated_get_document_errors | 2026-05-05 | 2026-05-07 |
 
 ## 4. Search — Documents
 
@@ -90,15 +141,15 @@ All modes and filtering combinations for document search.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| S-01 | Filesystem search by title/query matches document (VALIDATED) | test_search_after_create | 2026-04-13 | 2026-04-16 |
-| S-02 | Filesystem search by tags (any) returns matching documents (VALIDATED) | test_search_after_create | 2026-04-13 | 2026-04-16 |
-| S-03 | Filesystem search by tags (all) requires every tag present (VALIDATED) | test_search_tags_and_limits | 2026-04-14 | 2026-04-16 |
-| S-04 | Filesystem search returns no results for non-matching query (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-04-16 |
-| S-05 | Filesystem search excludes archived documents (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-04-16 |
-| S-06 | Filesystem search respects limit parameter (VALIDATED) | test_search_tags_and_limits | 2026-04-14 | 2026-04-16 |
-| S-07 | Semantic search returns results (requires embedding provider) (VALIDATED) | test_search_modes | 2026-04-14 | 2026-04-16 |
-| S-08 | Mixed mode search combines filesystem and semantic results (VALIDATED) | test_search_modes | 2026-04-14 | 2026-04-16 |
-| S-09 | Search graceful degradation when embeddings disabled (VALIDATED) | test_search_modes | 2026-04-14 | 2026-04-16 |
+| S-01 | Filesystem search by title/query matches document (VALIDATED) | test_search_after_create | 2026-04-13 | 2026-05-07 |
+| S-02 | Filesystem search by tags (any) returns matching documents (VALIDATED) | test_search_after_create | 2026-04-13 | 2026-05-07 |
+| S-03 | Filesystem search by tags (all) requires every tag present (VALIDATED) | test_search_tags_and_limits | 2026-04-14 | 2026-05-07 |
+| S-04 | Filesystem search returns no results for non-matching query (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-05-07 |
+| S-05 | Filesystem search excludes archived documents (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-05-07 |
+| S-06 | Filesystem search respects limit parameter (VALIDATED) | test_search_tags_and_limits | 2026-04-14 | 2026-05-07 |
+| S-07 | Semantic search returns results (requires embedding provider) (VALIDATED) | test_search_modes | 2026-04-14 | 2026-05-07 |
+| S-08 | Mixed mode search combines filesystem and semantic results (VALIDATED) | test_search_modes | 2026-04-14 | 2026-05-07 |
+| S-09 | Search graceful degradation when embeddings disabled (VALIDATED) | test_search_modes | 2026-04-14 | 2026-05-07 |
 
 ## 5. Search — Cross-type (search_all)
 
@@ -106,11 +157,11 @@ Unified search across documents and memories.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| SA-01 | search_all finds documents by query (VALIDATED) | test_search_all_cross_type | 2026-04-16 | 2026-04-16 |
-| SA-02 | search_all finds memories by query (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-04-16 |
-| SA-03 | search_all with entity_types filter restricts results (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-04-16 |
-| SA-04 | search_all with tag filtering (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-04-16 |
-| SA-05 | search_all falls back to filesystem when embeddings disabled (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-04-16 |
+| SA-01 | search_all finds documents by query (VALIDATED) | test_search_all_cross_type | 2026-04-16 | 2026-05-07 |
+| SA-02 | search_all finds memories by query (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
+| SA-03 | search_all with entity_types filter restricts results (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
+| SA-04 | search_all with tag filtering (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
+| SA-05 | search_all falls back to filesystem when embeddings disabled (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
 
 ## 6. Memory Lifecycle
 
@@ -118,21 +169,21 @@ Core CRUD operations on memories.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| M-01 | Save memory with content and tags (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-04-16 |
-| M-02 | Search memory by query returns saved memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-04-16 |
-| M-03 | Search memory by tags (any) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-04-16 |
-| M-04 | Search memory by tags (all) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-04-16 |
-| M-05 | Search memory with threshold parameter filters low-similarity (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-04-16 |
-| M-06 | Update memory creates new version (preserves history) (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-04-16 |
-| M-07 | Update memory without tags preserves existing tags (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-04-16 |
-| M-08 | Get memory by single ID returns full content (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-04-16 |
-| M-09 | Get memory batch (multiple IDs) returns all (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-04-16 |
-| M-10 | List memories by tags returns recent, truncated to 200 chars (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-04-29 |
-| M-11 | List memories respects limit parameter (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-04-16 |
-| M-12 | Archive memory sets status=archived (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-04-16 |
-| M-13 | Archived memory excluded from search_memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-04-16 |
-| M-14 | Archive memory manages status tags automatically (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-04-16 |
-| M-15 | Save memory with plugin_scope (fuzzy matched) (VALIDATED) | test_memory_plugin_scope | 2026-04-14 | 2026-04-29 |
+| M-01 | Save memory with content and tags (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-02 | Search memory by query returns saved memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-03 | Search memory by tags (any) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-04 | Search memory by tags (all) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-05 | Search memory with threshold parameter filters low-similarity (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-06 | Update memory creates new version (preserves history) (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-07 | Update memory without tags preserves existing tags (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-08 | Get memory by single ID returns full content (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-09 | Get memory batch (multiple IDs) returns all (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-10 | List memories by tags returns recent, truncated to 200 chars (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-11 | List memories respects limit parameter (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-12 | Archive memory sets status=archived (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-13 | Archived memory excluded from search_memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-14 | Archive memory manages status tags automatically (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-15 | Save memory with plugin_scope (fuzzy matched) (VALIDATED) | test_memory_plugin_scope | 2026-04-14 | 2026-05-07 |
 
 ## 7. Plugin Lifecycle
 
@@ -140,23 +191,23 @@ Registration, record CRUD, and teardown of plugin schemas.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| P-01 | Register plugin from YAML schema (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-04-16 |
-| P-02 | Register plugin creates tables in database (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-04-16 |
-| P-03 | Get plugin info returns schema, tables, version (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-04-16 |
-| P-04 | Create record in plugin table (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-04-16 |
-| P-05 | Get record by ID returns all fields (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-04-16 |
-| P-06 | Update record changes only specified fields (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-04-16 |
-| P-07 | Archive record sets status=archived (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-04-16 |
-| P-08 | Search records (text mode) finds by field content (VALIDATED) | test_plugin_search | 2026-04-14 | 2026-04-16 |
-| P-09 | Search records with filters (AND logic) (VALIDATED) | test_plugin_search | 2026-04-14 | 2026-04-16 |
-| P-10 | Archived record excluded from search_records (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-04-16 |
-| P-11 | Unregister plugin dry run shows impact without changes (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
-| P-12 | Unregister plugin confirmed drops tables, clears data, and removes all `fqc_pending_plugin_review` rows for the plugin (VALIDATED) | test_plugin_registration | 2026-04-21 | 2026-04-29 |
-| P-13 | Register plugin with schema migration (add column) (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
-| P-14 | Register plugin rejects unsafe migration (remove column) (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
-| P-15 | Plugin instance isolation (same plugin, different instances) (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-04-16 |
-| P-16 | Plugin with both document-backed tables (`track_as`) and non-document-backed tables registers without DDL errors (no duplicate or conflicting implicit columns) (VALIDATED) | test_plugin_mixed_tables | 2026-04-22 | 2026-04-22 |
-| P-17 | Plugin schema that explicitly declares `fqc_id` on a document-backed table (per §8.4.7 — the CRM plugin pattern) registers without a DDL error — the DDL builder de-duplicates the plugin-defined and implicit `fqc_id` columns rather than producing a duplicate column definition (PIR-03 regression guard; test schema MUST include `fqc_id` explicitly in the document-backed table columns — P-16 deliberately omits it, masking this defect) (VALIDATED) | test_plugin_explicit_fqc_id | 2026-04-22 | 2026-04-22 |
+| P-01 | Register plugin from YAML schema (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-05-07 |
+| P-02 | Register plugin creates tables in database (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-05-07 |
+| P-03 | Get plugin info returns schema, tables, version (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-05-07 |
+| P-04 | Create record in plugin table (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-05-07 |
+| P-05 | Get record by ID returns all fields (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-05-07 |
+| P-06 | Update record changes only specified fields (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-05-07 |
+| P-07 | Archive record sets status=archived (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-05-07 |
+| P-08 | Search records (text mode) finds by field content (VALIDATED) | test_plugin_search | 2026-04-14 | 2026-05-07 |
+| P-09 | Search records with filters (AND logic) (VALIDATED) | test_plugin_search | 2026-04-14 | 2026-05-07 |
+| P-10 | Archived record excluded from search_records (VALIDATED) | test_plugin_lifecycle | 2026-04-14 | 2026-05-07 |
+| P-11 | Unregister plugin dry run shows impact without changes (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-05-07 |
+| P-12 | Unregister plugin confirmed drops tables, clears data, and removes all `fqc_pending_plugin_review` rows for the plugin (VALIDATED) | test_plugin_registration | 2026-04-21 | 2026-05-07 |
+| P-13 | Register plugin with schema migration (add column) (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-05-07 |
+| P-14 | Register plugin rejects unsafe migration (remove column) (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-05-07 |
+| P-15 | Plugin instance isolation (same plugin, different instances) (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-05-07 |
+| P-16 | Plugin with both document-backed tables (`track_as`) and non-document-backed tables registers without DDL errors (no duplicate or conflicting implicit columns) (VALIDATED) | test_plugin_mixed_tables | 2026-04-22 | 2026-05-07 |
+| P-17 | Plugin schema that explicitly declares `fqc_id` on a document-backed table (per §8.4.7 — the CRM plugin pattern) registers without a DDL error — the DDL builder de-duplicates the plugin-defined and implicit `fqc_id` columns rather than producing a duplicate column definition (PIR-03 regression guard; test schema MUST include `fqc_id` explicitly in the document-backed table columns — P-16 deliberately omits it, masking this defect) (VALIDATED) | test_plugin_explicit_fqc_id | 2026-04-22 | 2026-05-07 |
 
 ## 8. Tag Operations
 
@@ -164,13 +215,13 @@ Batch tag operations across entity types.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| T-01 | apply_tags adds tags to a document (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-04-16 |
-| T-02 | apply_tags removes tags from a document (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-04-16 |
-| T-03 | apply_tags add is idempotent (adding existing tag is no-op) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-04-16 |
-| T-04 | apply_tags remove is graceful (removing absent tag is no-op) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-04-16 |
-| T-05 | apply_tags works on memory (memory_id parameter) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-04-16 |
-| T-06 | apply_tags batch (multiple identifiers) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-04-16 |
-| T-07 | Tag normalization (whitespace, case) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-04-16 |
+| T-01 | apply_tags adds tags to a document (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-05-07 |
+| T-02 | apply_tags removes tags from a document (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-05-07 |
+| T-03 | apply_tags add is idempotent (adding existing tag is no-op) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-05-07 |
+| T-04 | apply_tags remove is graceful (removing absent tag is no-op) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-05-07 |
+| T-05 | apply_tags works on memory (memory_id parameter) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-05-07 |
+| T-06 | apply_tags batch (multiple identifiers) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-05-07 |
+| T-07 | Tag normalization (whitespace, case) (VALIDATED) | test_tag_operations | 2026-04-14 | 2026-05-07 |
 
 ## 9. File System Operations
 
@@ -180,118 +231,118 @@ Vault scanning, file listing, and directory management.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| F-01 | force_file_scan (sync) indexes new files (VALIDATED) | test_search_after_create | 2026-04-13 | 2026-04-16 |
-| F-02 | force_file_scan (background) returns immediately (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-04-16 |
-| F-03 | force_file_scan detects updated files (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-04-16 |
-| F-04 | force_file_scan detects deleted files (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-04-16 |
-| F-05 | reconcile_documents dry run reports without changes (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-04-16 |
-| F-06 | reconcile_documents detects moved files via fqc_id (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-04-16 |
-| F-07 | reconcile_documents archives permanently gone files (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-04-16 |
-| F-08 | list_vault returns file entries for a directory (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-04-25 |
-| F-09 | list_vault recursive mode returns files from subdirectories (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-04-25 |
-| F-10 | list_vault with extension filter (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-04-25 |
-| F-11 | list_vault with date range filter (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-04-25 |
-| F-12 | remove_directory succeeds on empty directory (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-04-16 |
-| F-13 | remove_directory fails on non-empty directory (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-04-16 |
-| F-14 | remove_directory prevents vault root removal (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-04-16 |
-| F-15 | Path traversal protection (escape attempt blocked) (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-04-16 |
+| F-01 | force_file_scan (sync) indexes new files (VALIDATED) | test_search_after_create | 2026-04-13 | 2026-05-07 |
+| F-02 | force_file_scan (background) returns immediately (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-05-07 |
+| F-03 | force_file_scan detects updated files (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-05-07 |
+| F-04 | force_file_scan detects deleted files (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-05-07 |
+| F-05 | reconcile_documents dry run reports without changes (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-05-07 |
+| F-06 | reconcile_documents detects moved files via fqc_id (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-05-07 |
+| F-07 | reconcile_documents archives permanently gone files (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-05-07 |
+| F-08 | list_vault returns file entries for a directory (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
+| F-09 | list_vault recursive mode returns files from subdirectories (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
+| F-10 | list_vault with extension filter (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
+| F-11 | list_vault with date range filter (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
+| F-12 | remove_directory succeeds on empty directory (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 |
+| F-13 | remove_directory fails on non-empty directory (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 |
+| F-14 | remove_directory prevents vault root removal (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 |
+| F-15 | Path traversal protection (escape attempt blocked) (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 |
 | ~~F-16~~ | ~~discover_document in flagged mode~~ (VALIDATED) | ~~test_discover_document~~ | 2026-04-21 | 2026-04-16 |
 | ~~F-17~~ | ~~discover_document in paths mode~~ (VALIDATED) | ~~test_discover_document~~ | 2026-04-21 | 2026-04-16 |
-| F-18 | force_file_scan preserves user-defined frontmatter fields in newly discovered documents (scan merges FQC identity fields into existing frontmatter rather than replacing it) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-04-18 |
+| F-18 | force_file_scan preserves user-defined frontmatter fields in newly discovered documents (scan merges FQC identity fields into existing frontmatter rather than replacing it) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
 
 ### 9.2 Directory Creation (`create_directory`)
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| F-19 | `create_directory` creates a single directory at the vault root and it exists on the filesystem (VALIDATED) | test_create_directory | 2026-04-25 | 2026-04-25 |
-| F-20 | `create_directory` creates a deep hierarchy (`a/b/c/d`) — all intermediate directories exist (VALIDATED) | test_create_directory | 2026-04-25 | 2026-04-25 |
-| F-21 | `create_directory` reports `(already exists)` for a pre-existing directory; `isError` is `false`; count is 0 (VALIDATED) | test_create_directory | 2026-04-25 | 2026-04-25 |
-| F-22 | `create_directory` with partial overlap — existing segments reported as `(already exists)`, new segments as `(created)` (VALIDATED) | test_create_directory | 2026-04-25 | 2026-04-25 |
-| F-23 | `create_directory` batch creation (array of paths) — all new directories created in one call (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-04-25 |
-| F-24 | `create_directory` batch with mixed results — valid paths created, invalid paths listed in `Failed` section, overall `isError` is `false` (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-04-25 |
-| F-25 | `create_directory` batch where all paths fail — overall `isError` is `true` (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-04-25 |
-| F-26 | `create_directory` with `root_path` — directories created relative to root; root itself created if absent (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-04-25 |
-| F-27 | `create_directory` with `root_path` that already exists — root shown as `(already exists)`, subfolders created (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-04-25 |
-| F-28 | `create_directory` with deep `root_path` (`Plugins/CRM/v2`) — entire root hierarchy created (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-04-25 |
-| F-29 | `create_directory` is idempotent — repeated identical calls all succeed with `(already exists)` (VALIDATED) | test_create_directory | 2026-04-25 | 2026-04-25 |
-| F-30 | Leading `/` stripped — `"/inbox"` creates `inbox/` (VALIDATED) | test_create_directory_normalization | 2026-04-25 | 2026-04-25 |
-| F-31 | Trailing `/` stripped — `"inbox/"` creates `inbox/` (VALIDATED) | test_create_directory_normalization | 2026-04-25 | 2026-04-25 |
-| F-32 | Consecutive slashes collapsed — `"CRM//Contacts///Active"` creates `CRM/Contacts/Active/` (VALIDATED) | test_create_directory_normalization | 2026-04-25 | 2026-04-25 |
+| F-19 | `create_directory` creates a single directory at the vault root and it exists on the filesystem (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
+| F-20 | `create_directory` creates a deep hierarchy (`a/b/c/d`) — all intermediate directories exist (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
+| F-21 | `create_directory` reports `(already exists)` for a pre-existing directory; `isError` is `false`; count is 0 (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
+| F-22 | `create_directory` with partial overlap — existing segments reported as `(already exists)`, new segments as `(created)` (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
+| F-23 | `create_directory` batch creation (array of paths) — all new directories created in one call (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 |
+| F-24 | `create_directory` batch with mixed results — valid paths created, invalid paths listed in `Failed` section, overall `isError` is `false` (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 |
+| F-25 | `create_directory` batch where all paths fail — overall `isError` is `true` (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 |
+| F-26 | `create_directory` with `root_path` — directories created relative to root; root itself created if absent (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-05-07 |
+| F-27 | `create_directory` with `root_path` that already exists — root shown as `(already exists)`, subfolders created (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-05-07 |
+| F-28 | `create_directory` with deep `root_path` (`Plugins/CRM/v2`) — entire root hierarchy created (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-05-07 |
+| F-29 | `create_directory` is idempotent — repeated identical calls all succeed with `(already exists)` (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
+| F-30 | Leading `/` stripped — `"/inbox"` creates `inbox/` (VALIDATED) | test_create_directory_normalization | 2026-04-25 | 2026-05-07 |
+| F-31 | Trailing `/` stripped — `"inbox/"` creates `inbox/` (VALIDATED) | test_create_directory_normalization | 2026-04-25 | 2026-05-07 |
+| F-32 | Consecutive slashes collapsed — `"CRM//Contacts///Active"` creates `CRM/Contacts/Active/` (VALIDATED) | test_create_directory_normalization | 2026-04-25 | 2026-05-07 |
 
 ### 9.3 Directory Creation (`create_directory`) — Sanitization and Rejection
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| F-33 | Illegal character (colon) sanitized — `"Work: Projects"` creates `"Work  Projects/"` with sanitization note in response (VALIDATED) | test_create_directory_sanitization | 2026-04-25 | 2026-04-25 |
-| F-34 | Multiple illegal characters sanitized in one segment — response shows all replacements (VALIDATED) | test_create_directory_sanitization | 2026-04-29 | 2026-04-29 |
-| F-35 | NUL character sanitized (VALIDATED) | test_create_directory_sanitization | 2026-04-25 | 2026-04-25 |
-| F-36 | Control characters (bytes 1–31) sanitized (VALIDATED) | test_create_directory_sanitization | 2026-04-25 | 2026-04-25 |
-| F-37 | Path traversal (`../../etc`) rejected with `isError: true` (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-38 | Vault root (`"/"`, `"."`, `""`) rejected as target (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-39 | Symlink in path rejected — even symlinks pointing within vault (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-40 | File conflict — existing file at path segment blocks directory creation (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-41 | File conflict mid-hierarchy — file at `a/file.md`, request for `a/file.md/sub` rejected (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-42 | Whitespace-only segment rejected (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-43 | Segment exceeding 255 bytes rejected with byte count in message (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-44 | Total resolved path exceeding 4,096 bytes rejected (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-45 | Array exceeding 50 paths rejected immediately — no paths processed (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-04-25 |
-| F-46 | Empty array rejected (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-47 | Wrong type for `paths` (e.g., number) rejected (VALIDATED) | test_create_directory_rejection | 2026-04-29 | 2026-04-29 |
-| F-48 | Invalid `root_path` (traversal) rejects entire call — no paths processed (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-49 | `root_path` pointing to an existing file rejects entire call (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-04-25 |
-| F-50 | Dot-prefixed directory (`.staging/temp`) created successfully (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-04-25 |
-| F-51 | Dot-prefixed directory is invisible to `list_vault` (scanner ignore patterns) (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-04-25 |
+| F-33 | Illegal character (colon) sanitized — `"Work: Projects"` creates `"Work  Projects/"` with sanitization note in response (VALIDATED) | test_create_directory_sanitization | 2026-04-25 | 2026-05-07 |
+| F-34 | Multiple illegal characters sanitized in one segment — response shows all replacements (VALIDATED) | test_create_directory_sanitization | 2026-04-29 | 2026-05-07 |
+| F-35 | NUL character sanitized (VALIDATED) | test_create_directory_sanitization | 2026-04-25 | 2026-05-07 |
+| F-36 | Control characters (bytes 1–31) sanitized (VALIDATED) | test_create_directory_sanitization | 2026-04-25 | 2026-05-07 |
+| F-37 | Path traversal (`../../etc`) rejected with `isError: true` (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-38 | Vault root (`"/"`, `"."`, `""`) rejected as target (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-39 | Symlink in path rejected — even symlinks pointing within vault (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-40 | File conflict — existing file at path segment blocks directory creation (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-41 | File conflict mid-hierarchy — file at `a/file.md`, request for `a/file.md/sub` rejected (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-42 | Whitespace-only segment rejected (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-43 | Segment exceeding 255 bytes rejected with byte count in message (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-44 | Total resolved path exceeding 4,096 bytes rejected (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-45 | Array exceeding 50 paths rejected immediately — no paths processed (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 |
+| F-46 | Empty array rejected (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-47 | Wrong type for `paths` (e.g., number) rejected (VALIDATED) | test_create_directory_rejection | 2026-04-29 | 2026-05-07 |
+| F-48 | Invalid `root_path` (traversal) rejects entire call — no paths processed (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-49 | `root_path` pointing to an existing file rejects entire call (VALIDATED) | test_create_directory_rejection | 2026-04-25 | 2026-05-07 |
+| F-50 | Dot-prefixed directory (`.staging/temp`) created successfully (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-05-07 |
+| F-51 | Dot-prefixed directory is invisible to `list_vault` (scanner ignore patterns) (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-05-07 |
 | F-52 | Shutdown check — call during shutdown returns `isError: true` with shutdown message (DEFERRED — cannot inject in-process shutdown state from subprocess; unit-tested in files-tools.test.ts) | test_create_directory_special | 2026-04-29 | 2026-04-29 |
 
 ### 9.4 Vault Listing (`list_vault`)
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| F-53 | `list_vault` with `show: "files"` (explicit) returns only file entries — no directory entries in non-recursive mode (VALIDATED) | test_list_vault | 2026-04-29 | 2026-04-29 |
-| F-54 | `list_vault` with `show: "files"` in recursive mode returns only file entries (consistent with non-recursive) (VALIDATED) | test_list_vault | 2026-04-29 | 2026-04-29 |
-| F-55 | `list_vault` with `show: "directories"` non-recursive returns only immediate subdirectories (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-04-29 |
-| F-56 | `list_vault` with `show: "directories"` recursive returns complete directory tree sorted by depth then alphabetical (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-04-29 |
-| F-57 | `list_vault` with `show: "directories"` includes empty directories (0 children) (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-04-29 |
-| F-58 | `list_vault` with `show: "directories"` excludes dot-prefixed directories (scanner ignore patterns) (VALIDATED) | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
-| F-59 | `list_vault` with `show: "all"` returns both directory and file entries, directories grouped first (VALIDATED) | test_list_vault_all | 2026-04-25 | 2026-04-25 |
-| F-60 | `list_vault` with `show: "all"` recursive returns entries from entire tree (VALIDATED) | test_list_vault_all | 2026-04-25 | 2026-04-25 |
-| F-61 | `list_vault` with `show: "all"` and `extensions` filter — directories unfiltered, only matching files included (VALIDATED) | test_list_vault_all | 2026-04-29 | 2026-04-29 |
-| F-62 | `list_vault` with `show: "directories"` and `extensions` — extensions silently ignored, only directories returned (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-04-29 |
-| F-63 | `list_vault` with `show: "directories"` and date filter — only directories modified within the date range appear (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-04-29 |
-| F-64 | `list_vault` with `show: "directories"` and `limit` — result truncated at limit with `truncated: true` (VALIDATED) | test_list_vault_directories | 2026-04-25 | 2026-04-25 |
-| F-65 | `list_vault` rejects invalid `show` value (e.g., `"folders"`) with `isError: true` (VALIDATED) | test_list_vault | 2026-04-29 | 2026-04-29 |
+| F-53 | `list_vault` with `show: "files"` (explicit) returns only file entries — no directory entries in non-recursive mode (VALIDATED) | test_list_vault | 2026-04-29 | 2026-05-07 |
+| F-54 | `list_vault` with `show: "files"` in recursive mode returns only file entries (consistent with non-recursive) (VALIDATED) | test_list_vault | 2026-04-29 | 2026-05-07 |
+| F-55 | `list_vault` with `show: "directories"` non-recursive returns only immediate subdirectories (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-05-07 |
+| F-56 | `list_vault` with `show: "directories"` recursive returns complete directory tree sorted by depth then alphabetical (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-05-07 |
+| F-57 | `list_vault` with `show: "directories"` includes empty directories (0 children) (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-05-07 |
+| F-58 | `list_vault` with `show: "directories"` excludes dot-prefixed directories (scanner ignore patterns) (VALIDATED) | test_list_vault_directories | 2026-04-25 | 2026-05-07 |
+| F-59 | `list_vault` with `show: "all"` returns both directory and file entries, directories grouped first (VALIDATED) | test_list_vault_all | 2026-04-25 | 2026-05-07 |
+| F-60 | `list_vault` with `show: "all"` recursive returns entries from entire tree (VALIDATED) | test_list_vault_all | 2026-04-25 | 2026-05-07 |
+| F-61 | `list_vault` with `show: "all"` and `extensions` filter — directories unfiltered, only matching files included (VALIDATED) | test_list_vault_all | 2026-04-29 | 2026-05-07 |
+| F-62 | `list_vault` with `show: "directories"` and `extensions` — extensions silently ignored, only directories returned (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-05-07 |
+| F-63 | `list_vault` with `show: "directories"` and date filter — only directories modified within the date range appear (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-05-07 |
+| F-64 | `list_vault` with `show: "directories"` and `limit` — result truncated at limit with `truncated: true` (VALIDATED) | test_list_vault_directories | 2026-04-25 | 2026-05-07 |
+| F-65 | `list_vault` rejects invalid `show` value (e.g., `"folders"`) with `isError: true` (VALIDATED) | test_list_vault | 2026-04-29 | 2026-05-07 |
 | F-66 | `list_vault` shutdown check — call during shutdown returns `isError: true` (DEFERRED — cannot inject in-process shutdown state from subprocess; unit-tested) | test_list_vault | 2026-04-29 | 2026-04-29 |
-| F-67 | `list_vault` directory entry format includes `path` (trailing `/`), `type`, `children`, `updated`, `created` (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-04-29 |
-| F-68 | `list_vault` default behavior — call with no `show` parameter behaves like `show: "all"` (returns both directories and files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-04-25 |
-| F-69 | `list_vault` with `format: "table"` (default) returns markdown table with header row, separator row, and data rows (VALIDATED) | test_list_vault_format | 2026-04-25 | 2026-04-25 |
-| F-70 | `list_vault` with `format: "table"` includes all five columns: Name, Type, Size, Created, Updated (VALIDATED) | test_list_vault_format | 2026-04-25 | 2026-04-25 |
-| F-71 | `list_vault` with `format: "table"` — file Size column shows human-readable size from `formatFileSize` (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-04-29 |
-| F-72 | `list_vault` with `format: "table"` — directory Size column shows `"N items"` child count (VALIDATED) | test_list_vault_format | 2026-04-25 | 2026-04-25 |
-| F-73 | `list_vault` with `format: "table"` — directory Name column trails with `/` (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-04-29 |
-| F-74 | `list_vault` with `format: "table"` — non-recursive Name shows filename/dirname only; recursive Name shows relative path (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-04-29 |
-| F-75 | `list_vault` with `format: "table"` — dates use `YYYY-MM-DD` format (no time component) (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-04-29 |
-| F-76 | `list_vault` with `format: "detailed"` returns key-value pair entries separated by `---` | test_list_vault_format_detailed | 2026-04-29 | 2026-04-25 |
-| F-77 | `list_vault` with `format: "detailed"` — file entries include `Size` field with human-readable value | test_list_vault_format_detailed | 2026-04-29 | 2026-04-25 |
-| F-78 | `list_vault` with `format: "detailed"` — directory entries include `Children` count and `Type: directory` (VALIDATED) | test_list_vault_format_detailed | 2026-04-25 | 2026-04-25 |
-| F-79 | `list_vault` with `format: "detailed"` — timestamps use ISO 8601 format | test_list_vault_format_detailed | 2026-04-29 | 2026-04-25 |
-| F-80 | `list_vault` with no `format` parameter behaves like `format: "table"` (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-04-29 |
-| F-81 | `list_vault` rejects invalid `format` value (e.g., `"verbose"`) with `isError: true` (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-04-29 |
-| F-82 | `list_vault` with `format: "table"` and `show: "directories"` — table contains only directory rows (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-04-29 |
-| F-83 | `list_vault` with `format: "detailed"` and `show: "all"` — directories grouped first, then files | test_list_vault_format_detailed | 2026-04-29 | 2026-04-25 |
-| F-84 | `list_vault` with non-existent `path` returns `isError: true` (VALIDATED) | test_list_vault | 2026-04-25 | 2026-04-25 |
-| F-85 | `list_vault` with `path` pointing to a file (not directory) returns `isError: true` (VALIDATED) | test_list_vault | 2026-04-25 | 2026-04-25 |
-| F-86 | `list_vault` with no parameters (`list_vault({})`) — `path` defaults to `"/"`, `show` to `"all"`, `format` to `"table"`, `recursive` to `false`. Returns markdown table of top-level vault entries (VALIDATED) | test_list_vault | 2026-04-29 | 2026-04-29 |
-| F-87 | `list_vault` response includes untracked file trailing note when untracked files are present (VALIDATED) | test_list_vault | 2026-04-29 | 2026-04-29 |
-| F-88 | `list_vault` response includes summary line (`Showing N of M entries in {path}/.`) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-04-25 |
-| F-89 | `list_vault` with `date_field: "created"` filters by creation date, not modification date (VALIDATED) | test_list_vault | 2026-04-29 | 2026-04-29 |
-| F-90 | `list_vault` with multiple `extensions` (array) filters files correctly — directories unaffected (VALIDATED) | test_list_vault | 2026-04-29 | 2026-04-29 |
-| F-91 | `list_vault` path traversal (`"../../etc"`) returns `isError: true` (VALIDATED) | test_list_vault | 2026-04-29 | 2026-04-29 |
-| F-92 | `list_vault` with `extensions` as bare string (not array) — Zod validation rejects before handler | test_list_vault_param_validation | 2026-04-29 | 2026-04-25 |
-| F-93 | `list_vault` with `limit: 0` — Zod validation rejects (must be positive integer) | test_list_vault_param_validation | 2026-04-29 | 2026-04-25 |
-| F-94 | `list_vault` with `limit: -5` — Zod validation rejects (must be positive integer) | test_list_vault_param_validation | 2026-04-29 | 2026-04-25 |
-| F-95 | `list_vault` with `date_field: "modified"` — Zod validation rejects (must be `"updated"` or `"created"`) | test_list_vault_param_validation | 2026-04-29 | 2026-04-25 |
-| F-96 | `list_vault` skips inaccessible subdirectory (permission denied) without `isError` — returns results for accessible entries | test_list_vault_fs_resilience | 2026-04-29 | 2026-04-25 |
-| F-97 | `list_vault` skips unreadable file (stat error) without `isError` — returns results for readable files | test_list_vault_fs_resilience | 2026-04-29 | 2026-04-25 |
+| F-67 | `list_vault` directory entry format includes `path` (trailing `/`), `type`, `children`, `updated`, `created` (VALIDATED) | test_list_vault_directories | 2026-04-29 | 2026-05-07 |
+| F-68 | `list_vault` default behavior — call with no `show` parameter behaves like `show: "all"` (returns both directories and files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
+| F-69 | `list_vault` with `format: "table"` (default) returns markdown table with header row, separator row, and data rows (VALIDATED) | test_list_vault_format | 2026-04-25 | 2026-05-07 |
+| F-70 | `list_vault` with `format: "table"` includes all five columns: Name, Type, Size, Created, Updated (VALIDATED) | test_list_vault_format | 2026-04-25 | 2026-05-07 |
+| F-71 | `list_vault` with `format: "table"` — file Size column shows human-readable size from `formatFileSize` (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-05-07 |
+| F-72 | `list_vault` with `format: "table"` — directory Size column shows `"N items"` child count (VALIDATED) | test_list_vault_format | 2026-04-25 | 2026-05-07 |
+| F-73 | `list_vault` with `format: "table"` — directory Name column trails with `/` (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-05-07 |
+| F-74 | `list_vault` with `format: "table"` — non-recursive Name shows filename/dirname only; recursive Name shows relative path (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-05-07 |
+| F-75 | `list_vault` with `format: "table"` — dates use `YYYY-MM-DD` format (no time component) (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-05-07 |
+| F-76 | `list_vault` with `format: "detailed"` returns key-value pair entries separated by `---` | test_list_vault_format_detailed | 2026-04-29 | 2026-05-07 |
+| F-77 | `list_vault` with `format: "detailed"` — file entries include `Size` field with human-readable value | test_list_vault_format_detailed | 2026-04-29 | 2026-05-07 |
+| F-78 | `list_vault` with `format: "detailed"` — directory entries include `Children` count and `Type: directory` (VALIDATED) | test_list_vault_format_detailed | 2026-04-25 | 2026-05-07 |
+| F-79 | `list_vault` with `format: "detailed"` — timestamps use ISO 8601 format | test_list_vault_format_detailed | 2026-04-29 | 2026-05-07 |
+| F-80 | `list_vault` with no `format` parameter behaves like `format: "table"` (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-05-07 |
+| F-81 | `list_vault` rejects invalid `format` value (e.g., `"verbose"`) with `isError: true` (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-05-07 |
+| F-82 | `list_vault` with `format: "table"` and `show: "directories"` — table contains only directory rows (VALIDATED) | test_list_vault_format | 2026-04-29 | 2026-05-07 |
+| F-83 | `list_vault` with `format: "detailed"` and `show: "all"` — directories grouped first, then files | test_list_vault_format_detailed | 2026-04-29 | 2026-05-07 |
+| F-84 | `list_vault` with non-existent `path` returns `isError: true` (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
+| F-85 | `list_vault` with `path` pointing to a file (not directory) returns `isError: true` (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
+| F-86 | `list_vault` with no parameters (`list_vault({})`) — `path` defaults to `"/"`, `show` to `"all"`, `format` to `"table"`, `recursive` to `false`. Returns markdown table of top-level vault entries (VALIDATED) | test_list_vault | 2026-04-29 | 2026-05-07 |
+| F-87 | `list_vault` response includes untracked file trailing note when untracked files are present (VALIDATED) | test_list_vault | 2026-04-29 | 2026-05-07 |
+| F-88 | `list_vault` response includes summary line (`Showing N of M entries in {path}/.`) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
+| F-89 | `list_vault` with `date_field: "created"` filters by creation date, not modification date (VALIDATED) | test_list_vault | 2026-04-29 | 2026-05-07 |
+| F-90 | `list_vault` with multiple `extensions` (array) filters files correctly — directories unaffected (VALIDATED) | test_list_vault | 2026-04-29 | 2026-05-07 |
+| F-91 | `list_vault` path traversal (`"../../etc"`) returns `isError: true` (VALIDATED) | test_list_vault | 2026-04-29 | 2026-05-07 |
+| F-92 | `list_vault` with `extensions` as bare string (not array) — Zod validation rejects before handler | test_list_vault_param_validation | 2026-04-29 | 2026-05-07 |
+| F-93 | `list_vault` with `limit: 0` — Zod validation rejects (must be positive integer) | test_list_vault_param_validation | 2026-04-29 | 2026-05-07 |
+| F-94 | `list_vault` with `limit: -5` — Zod validation rejects (must be positive integer) | test_list_vault_param_validation | 2026-04-29 | 2026-05-07 |
+| F-95 | `list_vault` with `date_field: "modified"` — Zod validation rejects (must be `"updated"` or `"created"`) | test_list_vault_param_validation | 2026-04-29 | 2026-05-07 |
+| F-96 | `list_vault` skips inaccessible subdirectory (permission denied) without `isError` — returns results for accessible entries | test_list_vault_fs_resilience | 2026-04-29 | 2026-05-07 |
+| F-97 | `list_vault` skips unreadable file (stat error) without `isError` — returns results for readable files | test_list_vault_fs_resilience | 2026-04-29 | 2026-05-07 |
 
 ## 10. Briefing and Aggregation
 
@@ -299,9 +350,9 @@ Cross-entity summary tools.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| B-01 | get_briefing returns documents and memories grouped by type (VALIDATED) | test_briefing | 2026-04-14 | 2026-04-16 |
-| B-02 | get_briefing with tag filtering (VALIDATED) | test_briefing | 2026-04-14 | 2026-04-16 |
-| B-03 | get_briefing with plugin_id includes plugin record counts (VALIDATED) | test_briefing | 2026-04-14 | 2026-04-16 |
+| B-01 | get_briefing returns documents and memories grouped by type (VALIDATED) | test_briefing | 2026-04-14 | 2026-05-07 |
+| B-02 | get_briefing with tag filtering (VALIDATED) | test_briefing | 2026-04-14 | 2026-05-07 |
+| B-03 | get_briefing with plugin_id includes plugin record counts (VALIDATED) | test_briefing | 2026-04-14 | 2026-05-07 |
 
 ## 11. Scale and Correctness
 
@@ -311,18 +362,18 @@ Behaviors verifying that FlashQuery maintains correctness when operating at scal
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| SC-01 | Large vault mixed-operation correctness (300+ files with interleaved creates, updates, archives from MCP and external sources) (VALIDATED) | test_large_vault_scale | 2026-04-29 | 2026-04-29 |
-| SC-02 | Large vault search correctness (search indexes remain consistent through constant create/update/archive operations with 300+ files) (VALIDATED) | test_large_vault_scale | 2026-04-29 | 2026-04-29 |
+| SC-01 | Large vault mixed-operation correctness (300+ files with interleaved creates, updates, archives from MCP and external sources) (VALIDATED) | test_large_vault_scale | 2026-04-29 | 2026-05-07 |
+| SC-02 | Large vault search correctness (search indexes remain consistent through constant create/update/archive operations with 300+ files) (VALIDATED) | test_large_vault_scale | 2026-04-29 | 2026-05-07 |
 
 ### Memory Scale Behaviors
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| SC-03 | Large memory collection mixed operations (1000+ memories with rapid save/update/archive/version → updates apply correctly, versions preserved) | test_large_memory_scale | 2026-04-29 | 2026-04-29 |
+| SC-03 | Large memory collection mixed operations (1000+ memories with rapid save/update/archive/version → updates apply correctly, versions preserved) | test_large_memory_scale | 2026-04-29 | 2026-05-07 |
 | SC-04 | Memory batch tagging at scale (1000+ tag operations → tags applied consistently and searchable) | — | 2026-04-15 | |
 | SC-05 | Memory semantic search correctness at scale (1000+ memories with concurrent save/update → results consistent, vector indices stable) | — | 2026-04-15 | |
 | SC-06 | Memory threshold filtering under load (1000+ memories with concurrent writes → similarity threshold filtering accurate) | — | 2026-04-15 | |
-| SC-07 | Memory version history accumulation (100+ versions of same memory → history traversable, no truncation or loss) (VALIDATED) | test_memory_version_history | 2026-04-16 | 2026-04-16 |
+| SC-07 | Memory version history accumulation (100+ versions of same memory → history traversable, no truncation or loss) (VALIDATED) | test_memory_version_history | 2026-04-16 | 2026-05-07 |
 | SC-08 | Plugin-scoped memory isolation at scale (1000+ memories across multiple scopes → each scope returns only its own, no cross-scope leakage) | — | 2026-04-15 | |
 
 ## 12. Cross-cutting Behaviors
@@ -331,17 +382,17 @@ Behaviors that span multiple tools and represent system-level guarantees.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| X-01 | Identifier resolution: fqc_id (UUID) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| X-02 | Identifier resolution: vault-relative path (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-04-16 |
-| X-03 | Identifier resolution: filename only (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-04-16 |
-| X-04 | Write lock contention returns error with guidance (VALIDATED) | test_write_lock_contention | 2026-04-14 | 2026-04-16 |
-| X-05 | Batch identifiers (array input where supported) (VALIDATED) | test_cross_cutting_edge_cases | 2026-04-14 | 2026-04-16 |
-| X-06 | Frontmatter round-trip: create → read → verify all fields (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| X-07 | Tags survive full CRUD cycle (create → update → verify) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| X-08 | fqc_id is stable across updates (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-04-16 |
-| X-09 | Empty search results return "No documents found." (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-04-16 |
-| X-10 | Graceful embedding fallback across all search tools (VALIDATED) | test_search_modes | 2026-04-14 | 2026-04-16 |
-| X-11 | Fire-and-forget embedding does not block tool response (VALIDATED) | test_cross_cutting_edge_cases | 2026-04-14 | 2026-04-16 |
+| X-01 | Identifier resolution: fqc_id (UUID) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| X-02 | Identifier resolution: vault-relative path (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-05-07 |
+| X-03 | Identifier resolution: filename only (VALIDATED) | test_document_identifier_resolution | 2026-04-14 | 2026-05-07 |
+| X-04 | Write lock contention returns error with guidance (VALIDATED) | test_write_lock_contention | 2026-04-14 | 2026-05-07 |
+| X-05 | Batch identifiers (array input where supported) (VALIDATED) | test_cross_cutting_edge_cases | 2026-04-14 | 2026-05-07 |
+| X-06 | Frontmatter round-trip: create → read → verify all fields (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| X-07 | Tags survive full CRUD cycle (create → update → verify) (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| X-08 | fqc_id is stable across updates (VALIDATED) | test_create_read_update | 2026-04-13 | 2026-05-07 |
+| X-09 | Empty search results return "No documents found." (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-05-07 |
+| X-10 | Graceful embedding fallback across all search tools (VALIDATED) | test_search_modes | 2026-04-14 | 2026-05-07 |
+| X-11 | Fire-and-forget embedding does not block tool response (VALIDATED) | test_cross_cutting_edge_cases | 2026-04-14 | 2026-05-07 |
 
 ## 13. Git Behaviors
 
@@ -349,9 +400,9 @@ Behaviors verifying that FlashQuery auto-commits to the vault's git repository w
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| G-01 | Auto-commit on document create (VALIDATED) | test_auto_commit_on_writes | 2026-04-14 | 2026-04-16 |
-| G-02 | Auto-commit on document update (content change) (VALIDATED) | test_auto_commit_on_writes | 2026-04-14 | 2026-04-16 |
-| G-03 | Auto-commit on document archive/remove (VALIDATED) | test_auto_commit_on_writes | 2026-04-14 | 2026-04-16 |
+| G-01 | Auto-commit on document create (VALIDATED) | test_auto_commit_on_writes | 2026-04-14 | 2026-05-07 |
+| G-02 | Auto-commit on document update (content change) (VALIDATED) | test_auto_commit_on_writes | 2026-04-14 | 2026-05-07 |
+| G-03 | Auto-commit on document archive/remove (VALIDATED) | test_auto_commit_on_writes | 2026-04-14 | 2026-05-07 |
 
 ## 14. Plugin Reconciliation
 
@@ -361,120 +412,120 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-01 | Record tool call triggers reconciliation before executing the requested operation (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-04-21 |
-| RO-02 | Reconciliation classifies every document into exactly one of six categories (added/resurrected/deleted/disassociated/moved/modified) plus an unchanged count (VALIDATED) | test_reconciliation_six_categories | 2026-04-29 | 2026-04-29 |
-| RO-03 | Reconciliation is idempotent (re-run with no changes produces all unchanged, zero in other categories) (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-04-21 |
-| RO-04 | New file in watched folder with no plugin row (active or archived) is classified as `added` (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-04-21 |
-| RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
-| RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
-| RO-70 | After background `force_file_scan` completes asynchronously, the next record tool call performs a full reconciliation diff and sees the updated `fqc_documents` state — staleness cache is not prematurely consumed by a pre-scan reconciliation (VALIDATED) | test_reconciliation_background_scan_cache | 2026-04-22 | 2026-04-22 |
-| RO-76 | A record tool call made BEFORE a background `force_file_scan` completes does not consume the staleness cache — after the scan finishes a subsequent record tool call still performs a full diff and sees the scan results (PIR-05 race guard; test MUST include an immediate intermediate record tool call between scan trigger and scan completion — pre-populating 100+ files in the vault ensures the scan takes ≥2s so the intermediate call reliably lands in the race window) (VALIDATED) | test_reconciliation_background_scan_race | 2026-04-22 | 2026-04-22 |
+| RO-01 | Record tool call triggers reconciliation before executing the requested operation (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-05-07 |
+| RO-02 | Reconciliation classifies every document into exactly one of six categories (added/resurrected/deleted/disassociated/moved/modified) plus an unchanged count (VALIDATED) | test_reconciliation_six_categories | 2026-04-29 | 2026-05-07 |
+| RO-03 | Reconciliation is idempotent (re-run with no changes produces all unchanged, zero in other categories) (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-05-07 |
+| RO-04 | New file in watched folder with no plugin row (active or archived) is classified as `added` (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-05-07 |
+| RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-07 |
+| RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-07 |
+| RO-70 | After background `force_file_scan` completes asynchronously, the next record tool call performs a full reconciliation diff and sees the updated `fqc_documents` state — staleness cache is not prematurely consumed by a pre-scan reconciliation (VALIDATED) | test_reconciliation_background_scan_cache | 2026-04-22 | 2026-05-07 |
+| RO-76 | A record tool call made BEFORE a background `force_file_scan` completes does not consume the staleness cache — after the scan finishes a subsequent record tool call still performs a full diff and sees the scan results (PIR-05 race guard; test MUST include an immediate intermediate record tool call between scan trigger and scan completion — pre-populating 100+ files in the vault ensures the scan takes ≥2s so the intermediate call reliably lands in the race window) (VALIDATED) | test_reconciliation_background_scan_race | 2026-04-22 | 2026-05-07 |
 
 ### 14.2 Auto-Track
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-06 | `on_added: auto-track` creates a plugin table row with columns populated from `field_map` (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
-| RO-07 | `on_added: auto-track` writes `fqc_owner` and `fqc_type` into the document's frontmatter on disk (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
-| RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-04-21 |
-| RO-09 | `on_added: auto-track` does NOT modify the document's body content (only frontmatter is changed) (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
-| RO-10 | `on_added: auto-track` without a `template` does NOT create a pending review row (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-04-21 |
-| RO-67 | After auto-track writes `fqc_owner`/`fqc_type` frontmatter to disk, `fqc_documents.content_hash` is updated to reflect the post-write file content (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-29 | 2026-04-29 |
-| RO-68 | After auto-track completes, `last_seen_updated_at` on the new plugin row equals `fqc_documents.updated_at` as of the post-frontmatter-write state — no stale timestamp mismatch (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-29 | 2026-04-29 |
-| RO-69 | Scanner's first pass after auto-track does not re-detect the frontmatter write as a file modification — `fqc_documents.updated_at` is not bumped again because `content_hash` already matches the post-write file (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-04-22 |
-| RO-74 | Auto-tracked document with `on_modified: sync-fields` policy is NOT spuriously classified as `modified` on the next reconciliation pass (past staleness window, after an intervening `force_file_scan`) — "Synced fields on N modified" does not appear in the summary (PIR-02 regression guard; test MUST use `sync-fields` — `ignore` masks this defect because no observable signal is emitted for a silent modified pass) (VALIDATED) | test_reconciliation_spurious_sync_fields | 2026-04-22 | 2026-04-22 |
+| RO-06 | `on_added: auto-track` creates a plugin table row with columns populated from `field_map` (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
+| RO-07 | `on_added: auto-track` writes `fqc_owner` and `fqc_type` into the document's frontmatter on disk (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
+| RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-07 |
+| RO-09 | `on_added: auto-track` does NOT modify the document's body content (only frontmatter is changed) (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
+| RO-10 | `on_added: auto-track` without a `template` does NOT create a pending review row (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
+| RO-67 | After auto-track writes `fqc_owner`/`fqc_type` frontmatter to disk, `fqc_documents.content_hash` is updated to reflect the post-write file content (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-29 | 2026-05-07 |
+| RO-68 | After auto-track completes, `last_seen_updated_at` on the new plugin row equals `fqc_documents.updated_at` as of the post-frontmatter-write state — no stale timestamp mismatch (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-29 | 2026-05-07 |
+| RO-69 | Scanner's first pass after auto-track does not re-detect the frontmatter write as a file modification — `fqc_documents.updated_at` is not bumped again because `content_hash` already matches the post-write file (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-05-07 |
+| RO-74 | Auto-tracked document with `on_modified: sync-fields` policy is NOT spuriously classified as `modified` on the next reconciliation pass (past staleness window, after an intervening `force_file_scan`) — "Synced fields on N modified" does not appear in the summary (PIR-02 regression guard; test MUST use `sync-fields` — `ignore` masks this defect because no observable signal is emitted for a silent modified pass) (VALIDATED) | test_reconciliation_spurious_sync_fields | 2026-04-22 | 2026-05-07 |
 
 ### 14.3 Ignore Policy
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-11 | `on_added: ignore` takes no action — no plugin row created, no frontmatter modified, no mention in tool response (VALIDATED) | test_reconciliation_ignore_policy | 2026-04-21 | 2026-04-21 |
-| RO-12 | Missing policy fields use conservative defaults: `on_added: ignore`, `on_moved: keep-tracking`, `on_modified: ignore` (VALIDATED) | test_reconciliation_ignore_policy | 2026-04-21 | 2026-04-21 |
+| RO-11 | `on_added: ignore` takes no action — no plugin row created, no frontmatter modified, no mention in tool response (VALIDATED) | test_reconciliation_ignore_policy | 2026-04-21 | 2026-05-07 |
+| RO-12 | Missing policy fields use conservative defaults: `on_added: ignore`, `on_moved: keep-tracking`, `on_modified: ignore` (VALIDATED) | test_reconciliation_ignore_policy | 2026-04-21 | 2026-05-07 |
 
 ### 14.4 Deletion and Archival
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-13 | Document with `fqc_documents` status `missing` is classified as `deleted`; plugin row is archived (VALIDATED) | test_reconciliation_deletion | 2026-04-21 | 2026-04-21 |
-| RO-14 | Document with `fqc_documents` status `archived` (MCP-archived) is also classified as `deleted`; plugin row is archived (VALIDATED) | test_reconciliation_deletion | 2026-04-21 | 2026-04-21 |
-| RO-15 | Archiving a plugin row (due to deleted/disassociated/moved+untrack) does not delete the vault file (VALIDATED) | test_reconciliation_deletion | 2026-04-21 | 2026-04-21 |
+| RO-13 | Document with `fqc_documents` status `missing` is classified as `deleted`; plugin row is archived (VALIDATED) | test_reconciliation_deletion | 2026-04-21 | 2026-05-07 |
+| RO-14 | Document with `fqc_documents` status `archived` (MCP-archived) is also classified as `deleted`; plugin row is archived (VALIDATED) | test_reconciliation_deletion | 2026-04-21 | 2026-05-07 |
+| RO-15 | Archiving a plugin row (due to deleted/disassociated/moved+untrack) does not delete the vault file (VALIDATED) | test_reconciliation_deletion | 2026-04-21 | 2026-05-07 |
 
 ### 14.5 Disassociation
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-16 | Removing `fqc_owner`/`fqc_type` from frontmatter triggers `disassociated`; plugin row is archived (VALIDATED) | test_reconciliation_disassociation | 2026-04-21 | 2026-04-21 |
-| RO-17 | Moving a file with frontmatter intact does NOT trigger `disassociated` (reports `moved` instead) (VALIDATED) | test_reconciliation_disassociation | 2026-04-21 | 2026-04-21 |
-| RO-18 | Disassociated document remains `status: active` in `fqc_documents`; only the plugin row is archived (VALIDATED) | test_reconciliation_disassociation | 2026-04-21 | 2026-04-21 |
+| RO-16 | Removing `fqc_owner`/`fqc_type` from frontmatter triggers `disassociated`; plugin row is archived (VALIDATED) | test_reconciliation_disassociation | 2026-04-21 | 2026-05-07 |
+| RO-17 | Moving a file with frontmatter intact does NOT trigger `disassociated` (reports `moved` instead) (VALIDATED) | test_reconciliation_disassociation | 2026-04-21 | 2026-05-07 |
+| RO-18 | Disassociated document remains `status: active` in `fqc_documents`; only the plugin row is archived (VALIDATED) | test_reconciliation_disassociation | 2026-04-21 | 2026-05-07 |
 
 ### 14.6 Resurrection
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-04-21 |
-| RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-04-21 |
-| RO-22 | Template is NOT surfaced on resurrection; `field_map` IS re-applied from current frontmatter (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-04-21 |
-| RO-71 | Resurrected document outside the plugin's watched folders with `on_moved: untrack` — resurrection succeeds unconditionally, then `on_moved` follow-up re-archives the row; net result: plugin row is archived (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-04-22 |
-| RO-72 | Resurrected document outside the plugin's watched folders with `on_moved: keep-tracking` — resurrection succeeds and `on_moved` follow-up keeps the row active at the new out-of-folder path (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-04-22 |
+| RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-07 |
+| RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-07 |
+| RO-22 | Template is NOT surfaced on resurrection; `field_map` IS re-applied from current frontmatter (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-07 |
+| RO-71 | Resurrected document outside the plugin's watched folders with `on_moved: untrack` — resurrection succeeds unconditionally, then `on_moved` follow-up re-archives the row; net result: plugin row is archived (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-07 |
+| RO-72 | Resurrected document outside the plugin's watched folders with `on_moved: keep-tracking` — resurrection succeeds and `on_moved` follow-up keeps the row active at the new out-of-folder path (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-07 |
 
 ### 14.7 Movement
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-24 | `on_moved: keep-tracking` updates stored path silently; plugin row stays active (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
-| RO-25 | `on_moved: untrack` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-04-22 |
-| RO-26 | `on_moved` defaults to `keep-tracking` when not declared (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
-| RO-27 | After `keep-tracking` path update, subsequent reconciliation reports the document as `unchanged` (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-04-21 |
-| RO-64 | `on_moved: untrack` (spec vocabulary) is accepted at plugin registration and at reconciliation time archives the plugin row with frontmatter preserved — NOT silently treated as a no-op (VALIDATED) | test_reconciliation_untrack_policy | 2026-04-22 | 2026-04-22 |
-| RO-65 | A `keep-tracking` document moved outside watched folders is re-discovered via Path 2 (frontmatter `fqc_type`) on subsequent reconciliations and classified as `unchanged` — NOT re-classified as `moved` (VALIDATED) | test_reconciliation_keep_tracking_stability | 2026-04-22 | 2026-04-22 |
+| RO-24 | `on_moved: keep-tracking` updates stored path silently; plugin row stays active (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
+| RO-25 | `on_moved: untrack` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
+| RO-26 | `on_moved` defaults to `keep-tracking` when not declared (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
+| RO-27 | After `keep-tracking` path update, subsequent reconciliation reports the document as `unchanged` (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
+| RO-64 | `on_moved: untrack` (spec vocabulary) is accepted at plugin registration and at reconciliation time archives the plugin row with frontmatter preserved — NOT silently treated as a no-op (VALIDATED) | test_reconciliation_untrack_policy | 2026-04-22 | 2026-05-07 |
+| RO-65 | A `keep-tracking` document moved outside watched folders is re-discovered via Path 2 (frontmatter `fqc_type`) on subsequent reconciliations and classified as `unchanged` — NOT re-classified as `moved` (VALIDATED) | test_reconciliation_keep_tracking_stability | 2026-04-22 | 2026-05-07 |
 
 ### 14.8 Modification and Field Sync
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-28 | `on_modified: sync-fields` re-applies `field_map` from current frontmatter and updates `last_seen_updated_at` (VALIDATED) | test_reconciliation_modification | 2026-04-21 | 2026-04-21 |
-| RO-29 | `on_modified: ignore` takes no action (no field sync) (VALIDATED) | test_reconciliation_modification | 2026-04-21 | 2026-04-21 |
-| RO-30 | `on_modified: ignore` still updates `last_seen_updated_at` (preventing re-evaluation on every subsequent pass) (VALIDATED) | test_reconciliation_modification | 2026-04-21 | 2026-04-21 |
-| RO-59 | `field_map` sets NULL for frontmatter fields not present in the document (VALIDATED) | test_reconciliation_modification | 2026-04-21 | 2026-04-21 |
+| RO-28 | `on_modified: sync-fields` re-applies `field_map` from current frontmatter and updates `last_seen_updated_at` (VALIDATED) | test_reconciliation_modification | 2026-04-21 | 2026-05-07 |
+| RO-29 | `on_modified: ignore` takes no action (no field sync) (VALIDATED) | test_reconciliation_modification | 2026-04-21 | 2026-05-07 |
+| RO-30 | `on_modified: ignore` still updates `last_seen_updated_at` (preventing re-evaluation on every subsequent pass) (VALIDATED) | test_reconciliation_modification | 2026-04-21 | 2026-05-07 |
+| RO-59 | `field_map` sets NULL for frontmatter fields not present in the document (VALIDATED) | test_reconciliation_modification | 2026-04-21 | 2026-05-07 |
 
 ### 14.9 Frontmatter-Based Discovery
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-31 | Document with `fqc_type` in frontmatter is discovered as `added` even outside watched folders (global type registry Path 2) (VALIDATED) | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-04-21 |
-| RO-32 | Scanner syncs `fqc_owner`/`fqc_type` frontmatter fields to `ownership_plugin_id`/`ownership_type` columns on every pass; removing them from frontmatter sets columns to NULL on next scan (VALIDATED) | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-04-21 |
-| RO-73 | Pending review row and tool response for a Path 2 auto-tracked document include the plugin's designated folder for the document type, enabling a skill to identify documents outside their canonical location (VALIDATED) | test_reconciliation_policy_edge_cases | 2026-04-22 | 2026-04-22 |
-| RO-75 | Pending review context JSONB for a Path 2 auto-tracked document includes a `discoveryPath` field with value `'frontmatter-type'`, enabling a skill to distinguish Path 2 discovery from Path 1 (folder) discovery (PIR-04 regression guard; ⚠ not implemented — `discoveryPath` absent from `DocumentInfo` and from all pending review context writes; test MUST assert on the `discoveryPath` key specifically — asserting on the canonical folder string alone passes regardless because `policy.folder` is already in context) (VALIDATED) | test_reconciliation_discovery_path_context | 2026-04-22 | 2026-04-22 |
+| RO-31 | Document with `fqc_type` in frontmatter is discovered as `added` even outside watched folders (global type registry Path 2) (VALIDATED) | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-05-07 |
+| RO-32 | Scanner syncs `fqc_owner`/`fqc_type` frontmatter fields to `ownership_plugin_id`/`ownership_type` columns on every pass; removing them from frontmatter sets columns to NULL on next scan (VALIDATED) | test_reconciliation_frontmatter_discovery | 2026-04-21 | 2026-05-07 |
+| RO-73 | Pending review row and tool response for a Path 2 auto-tracked document include the plugin's designated folder for the document type, enabling a skill to identify documents outside their canonical location (VALIDATED) | test_reconciliation_policy_edge_cases | 2026-04-22 | 2026-05-07 |
+| RO-75 | Pending review context JSONB for a Path 2 auto-tracked document includes a `discoveryPath` field with value `'frontmatter-type'`, enabling a skill to distinguish Path 2 discovery from Path 1 (folder) discovery (PIR-04 regression guard; ⚠ not implemented — `discoveryPath` absent from `DocumentInfo` and from all pending review context writes; test MUST assert on the `discoveryPath` key specifically — asserting on the canonical folder string alone passes regardless because `policy.folder` is already in context) (VALIDATED) | test_reconciliation_discovery_path_context | 2026-04-22 | 2026-05-07 |
 
 ### 14.10 Policy Validation
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-35 | `on_added: auto-track` without `track_as` causes `register_plugin` to reject or warn (VALIDATED) | test_reconciliation_policy_validation | 2026-04-21 | 2026-04-21 |
-| RO-36 | All policy field validation (value ranges, required companions like `track_as`) happens at `register_plugin` time, not at reconciliation time (VALIDATED) | test_reconciliation_policy_validation | 2026-04-21 | 2026-04-21 |
-| RO-60 | `access: read-only` emits a warning in the tool response when a tool call attempts to write to a document in that folder (VALIDATED) | test_reconciliation_policy_validation | 2026-04-21 | 2026-04-21 |
-| RO-66 | Registering a plugin with an unrecognized `on_moved` value (any string outside the defined vocabulary) produces a parse-time error or warning at `register_plugin` time — not silently accepted (VALIDATED) | test_reconciliation_policy_edge_cases | 2026-04-22 | 2026-04-22 |
+| RO-35 | `on_added: auto-track` without `track_as` causes `register_plugin` to reject or warn (VALIDATED) | test_reconciliation_policy_validation | 2026-04-21 | 2026-05-07 |
+| RO-36 | All policy field validation (value ranges, required companions like `track_as`) happens at `register_plugin` time, not at reconciliation time (VALIDATED) | test_reconciliation_policy_validation | 2026-04-21 | 2026-05-07 |
+| RO-60 | `access: read-only` emits a warning in the tool response when a tool call attempts to write to a document in that folder (VALIDATED) | test_reconciliation_policy_validation | 2026-04-21 | 2026-05-07 |
+| RO-66 | Registering a plugin with an unrecognized `on_moved` value (any string outside the defined vocabulary) produces a parse-time error or warning at `register_plugin` time — not silently accepted (VALIDATED) | test_reconciliation_policy_edge_cases | 2026-04-22 | 2026-05-07 |
 
 ### 14.11 Pending Plugin Review
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-38 | `clear_pending_reviews` with empty `fqc_ids` returns current pending list without deleting; with non-empty `fqc_ids` clears those items and returns remainder (VALIDATED) | test_reconciliation_pending_review | 2026-04-21 | 2026-04-21 |
-| RO-39 | `clear_pending_reviews` is idempotent (clearing already-cleared `fqc_ids` is a no-op) (VALIDATED) | test_reconciliation_pending_review | 2026-04-21 | 2026-04-21 |
-| RO-40 | Pending review rows cascade-delete when the referenced `fqc_documents` row is deleted (VALIDATED) | test_reconciliation_pending_review | 2026-04-21 | 2026-04-21 |
-| RO-41 | `unregister_plugin` clears all `fqc_pending_plugin_review` rows for the plugin (VALIDATED) | test_reconciliation_pending_review | 2026-04-21 | 2026-04-21 |
+| RO-38 | `clear_pending_reviews` with empty `fqc_ids` returns current pending list without deleting; with non-empty `fqc_ids` clears those items and returns remainder (VALIDATED) | test_reconciliation_pending_review | 2026-04-21 | 2026-05-07 |
+| RO-39 | `clear_pending_reviews` is idempotent (clearing already-cleared `fqc_ids` is a no-op) (VALIDATED) | test_reconciliation_pending_review | 2026-04-21 | 2026-05-07 |
+| RO-40 | Pending review rows cascade-delete when the referenced `fqc_documents` row is deleted (VALIDATED) | test_reconciliation_pending_review | 2026-04-21 | 2026-05-07 |
+| RO-41 | `unregister_plugin` clears all `fqc_pending_plugin_review` rows for the plugin (VALIDATED) | test_reconciliation_pending_review | 2026-04-21 | 2026-05-07 |
 
 ### 14.12 Bulk and Multi-Table
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-52 | Tool response summarizes bulk reconciliation by count (not enumeration) when items per category exceed threshold (VALIDATED) | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
-| RO-54 | Auto-track frontmatter writes do not cause spurious `modified` flags on the next reconciliation pass (VALIDATED) | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
-| RO-56 | Reconciliation scans all document-backed tables for a plugin in a single pass (not just the table implied by the current tool call) and does NOT scan non-document-backed plugin tables (even if they have an `fqc_id` column) (VALIDATED) | test_reconciliation_multi_table, test_reconciliation_non_doc_table_isolation | 2026-04-21 | 2026-04-22 |
-| RO-58 | Auto-track routes the new plugin row to the correct table based on `track_as` for the matched folder (VALIDATED) | test_reconciliation_multi_table | 2026-04-21 | 2026-04-21 |
-| RO-51 | Reconciliation discovers and classifies ALL documents in a watched folder without silent truncation — the full candidate set is returned even when the folder contains more than 1,000 documents (VALIDATED) | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-04-22 |
-| RO-62 | Reconciliation does not falsely classify active plugin rows as `deleted` when their `fqc_documents` rows exist but were excluded by a query row-limit cap on candidate discovery (VALIDATED) | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-04-22 |
-| RO-63 | Path 2 (frontmatter type) discovery returns all matching documents even when more than 1,000 documents share the same `ownership_type` (VALIDATED) | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-04-22 |
+| RO-52 | Tool response summarizes bulk reconciliation by count (not enumeration) when items per category exceed threshold (VALIDATED) | test_reconciliation_multi_table | 2026-04-21 | 2026-05-07 |
+| RO-54 | Auto-track frontmatter writes do not cause spurious `modified` flags on the next reconciliation pass (VALIDATED) | test_reconciliation_multi_table | 2026-04-21 | 2026-05-07 |
+| RO-56 | Reconciliation scans all document-backed tables for a plugin in a single pass (not just the table implied by the current tool call) and does NOT scan non-document-backed plugin tables (even if they have an `fqc_id` column) (VALIDATED) | test_reconciliation_multi_table, test_reconciliation_non_doc_table_isolation | 2026-04-21 | 2026-05-07 |
+| RO-58 | Auto-track routes the new plugin row to the correct table based on `track_as` for the matched folder (VALIDATED) | test_reconciliation_multi_table | 2026-04-21 | 2026-05-07 |
+| RO-51 | Reconciliation discovers and classifies ALL documents in a watched folder without silent truncation — the full candidate set is returned even when the folder contains more than 1,000 documents (VALIDATED) | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-05-07 |
+| RO-62 | Reconciliation does not falsely classify active plugin rows as `deleted` when their `fqc_documents` rows exist but were excluded by a query row-limit cap on candidate discovery (VALIDATED) | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-05-07 |
+| RO-63 | Path 2 (frontmatter type) discovery returns all matching documents even when more than 1,000 documents share the same `ownership_type` (VALIDATED) | test_reconciliation_discovery_at_scale | 2026-04-22 | 2026-05-07 |
 
 ## 15. LLM Tools
 
@@ -484,52 +535,168 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-01 | `call_model` with `resolver=model` — `metadata.fallback_position` in the response JSON is the value `null` (not absent, not `0`, not `1`) | test_call_model_by_model | 2026-04-30 | 2026-05-01 |
-| L-02 | `call_model` with `resolver=purpose` where the primary model handles the request — `metadata.fallback_position` is the integer `1` | test_call_model_by_purpose | 2026-04-30 | 2026-05-01 |
-| L-03 | `call_model` — `metadata.resolver` and `metadata.name` in the response match the exact strings sent in the request (e.g. sending `resolver="purpose"`, `name="general"` → response contains `"resolver": "purpose"` and `"name": "general"`) | test_llm_cost_tracking | 2026-04-30 | 2026-05-01 |
+| L-01 | `call_model` with `resolver=model` — `metadata.fallback_position` in the response JSON is the value `null` (not absent, not `0`, not `1`) | test_call_model_by_model | 2026-04-30 | 2026-05-07 |
+| L-02 | `call_model` with `resolver=purpose` where the primary model handles the request — `metadata.fallback_position` is the integer `1` | test_call_model_by_purpose | 2026-04-30 | 2026-05-07 |
+| L-03 | `call_model` — `metadata.resolver` and `metadata.name` in the response match the exact strings sent in the request (e.g. sending `resolver="purpose"`, `name="general"` → response contains `"resolver": "purpose"` and `"name": "general"`) | test_llm_cost_tracking | 2026-04-30 | 2026-05-07 |
 
 ### 15.2 `call_model` — Resolution and Naming
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-04 | `call_model` with an uppercase model name (e.g. `"FAST"`) resolves to the `fast` model and returns a successful response — case normalization applied at runtime before lookup | test_call_model_resolution_edge_cases | 2026-04-30 | 2026-04-30 |
-| L-05 | `call_model` with an unknown model name (e.g. `"nonexistent-model"`) returns `isError: true`; response text includes the unknown name and a list of available model names | test_call_model_errors | 2026-04-30 | 2026-05-01 |
-| L-06 | `call_model` with an unknown purpose name (e.g. `"nonexistent-purpose"`) returns `isError: true`; response text includes the unknown name and a list of available purpose names | test_call_model_errors | 2026-04-30 | 2026-05-01 |
-| L-07 | `call_model` targeting a purpose whose `models:` list is empty returns `isError: true`; response text identifies the purpose name (purpose is defined in config but has no model assigned — the "defined but unassigned" state) | test_call_model_resolution_edge_cases | 2026-04-30 | 2026-04-30 |
+| L-04 | `call_model` with an uppercase model name (e.g. `"FAST"`) resolves to the `fast` model and returns a successful response — case normalization applied at runtime before lookup | test_call_model_resolution_edge_cases | 2026-04-30 | 2026-05-07 |
+| L-05 | `call_model` with an unknown model name (e.g. `"nonexistent-model"`) returns `isError: true`; response text includes the unknown name and a list of available model names | test_call_model_errors | 2026-04-30 | 2026-05-07 |
+| L-06 | `call_model` with an unknown purpose name (e.g. `"nonexistent-purpose"`) returns `isError: true`; response text includes the unknown name and a list of available purpose names | test_call_model_errors | 2026-04-30 | 2026-05-07 |
+| L-07 | `call_model` targeting a purpose whose `models:` list is empty returns `isError: true`; response text identifies the purpose name (purpose is defined in config but has no model assigned — the "defined but unassigned" state) | test_call_model_resolution_edge_cases | 2026-04-30 | 2026-05-07 |
 
 ### 15.3 `call_model` — Parameter Handling
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-08 | Caller-supplied `parameters` override purpose `defaults` — configure a purpose with `defaults: {temperature: 0.0}`, call it with `parameters: {temperature: 1.0}`, call succeeds and the provider receives `temperature: 1.0` (verified by confirming the call does not error; exact value passthrough may require a provider that echoes parameters, or can be inferred from response variability) | test_call_model_params | 2026-04-30 | 2026-05-01 |
-| L-09 | Provider-unsupported parameter in `parameters` causes the provider's own error to be returned as-is — response has `isError: true` and the error text originates from the provider (not a FlashQuery-generated wrapper message); use a parameter name the target provider is known to reject (e.g. `"bad_param_xyz": true`) | test_call_model_bad_provider_param | 2026-04-30 | 2026-04-30 |
+| L-08 | Caller-supplied `parameters` override purpose `defaults` — configure a purpose with `defaults: {temperature: 0.0}`, call it with `parameters: {temperature: 1.0}`, call succeeds and the provider receives `temperature: 1.0` (verified by confirming the call does not error; exact value passthrough may require a provider that echoes parameters, or can be inferred from response variability) | test_call_model_params | 2026-04-30 | 2026-05-07 |
+| L-09 | Provider-unsupported parameter in `parameters` causes the provider's own error to be returned as-is — response has `isError: true` and the error text originates from the provider (not a FlashQuery-generated wrapper message); use a parameter name the target provider is known to reject (e.g. `"bad_param_xyz": true`) | test_call_model_bad_provider_param | 2026-04-30 | 2026-05-07 |
 
 ### 15.4 `call_model` — Cost Tracking Fields
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-10 | `metadata.cost_usd` is greater than `0` after a successful `call_model` to a model configured with non-zero `cost_per_million` input or output rates (verifies the token-count × rate computation returns a non-zero result for a real provider response) | test_call_model_cost_strict | 2026-04-30 | 2026-04-30 |
-| L-11 | `metadata.latency_ms` is a positive integer (> 0) in every successful `call_model` response — verifies the round-trip timer is wired and returns a real measurement, not a zero or null placeholder | test_call_model_cost_strict | 2026-04-30 | 2026-04-30 |
+| L-10 | `metadata.cost_usd` is greater than `0` after a successful `call_model` to a model configured with non-zero `cost_per_million` input or output rates (verifies the token-count × rate computation returns a non-zero result for a real provider response) | test_call_model_cost_strict | 2026-04-30 | 2026-05-07 |
+| L-11 | `metadata.latency_ms` is a positive integer (> 0) in every successful `call_model` response — verifies the round-trip timer is wired and returns a real measurement, not a zero or null placeholder | test_call_model_cost_strict | 2026-04-30 | 2026-05-07 |
+| L-40 | `metadata.cost_usd` exact arithmetic — for a `call_model` to a model with explicit non-trivial `cost_per_million.input` and `cost_per_million.output` (e.g. `0.59` / `0.79`), the returned `cost_usd` equals `(metadata.tokens_used.input × input_cost_per_million + metadata.tokens_used.output × output_cost_per_million) / 1_000_000` within absolute tolerance ±1e-9. Reads the configured rates from the test's `flashquery.yml` (do not hardcode rates in assertion). Verifies the formula, not just `> 0` (L-10) — a regression flipping `+` to `*` or swapping input/output rates would still pass L-10 silently. | test_call_model_cost_arithmetic_strict | 2026-05-03 | 2026-05-07 |
+| L-41 | `metadata.cost_usd === 0` exactly (strict numeric equality, not `< 1e-9`) when the resolved model is configured with `cost_per_million.input: 0` AND `cost_per_million.output: 0` — exercises the local/Ollama zero-cost path. Configure a single test model `local-zero` with both rates set to `0`, call it via `resolver=model`, assert `metadata.cost_usd === 0`. Distinct from L-10/L-40 which use non-zero rates. | test_call_model_zero_cost | 2026-05-03 | 2026-05-07 |
+| L-42 | `metadata.tokens_used.input` and `metadata.tokens_used.output` are both positive integers (`Number.isInteger(...) && value > 0`) on every successful `call_model` response — provides direct evidence the provider returned real token counts. Distinct from L-33d (shape-equivalence with no-reference baseline) — this is a positivity + type assertion that fires regardless of whether references are present. | test_call_model_cost_arithmetic_strict | 2026-05-03 | 2026-05-07 |
+| L-43 | `metadata.cost_usd` precision is preserved beyond display rounding — for a small-token call (~10 input + ~10 output at rates 0.59/0.79), the returned `cost_usd` value, when stringified, retains at least 9 significant digits OR is mathematically equal to the unrounded formula in L-40 (i.e. `cost_usd !== Number(cost_usd.toFixed(8))` is acceptable, but `cost_usd === Number(cost_usd.toFixed(4))` fails). Catches a regression that applied `toFixed(8)` (used only for log output at [llm.ts:512](../../../src/mcp/tools/llm.ts#L512)) to the API field itself. | test_call_model_cost_arithmetic_strict | 2026-05-03 | 2026-05-07 |
+| L-44 | `metadata.prompt_chars` exactly equals the **sum of the `content` string lengths of every message in the dispatched prompt, after `{{ref:...}}` and `{{id:...}}` placeholder substitution**. Test setup: send 2 messages (one system, one user) where the user message contains exactly one `{{ref:doc.md}}` placeholder; compute the expected prompt_chars as `system.content.length + (user.content WITH placeholder replaced by target body).length`; assert `metadata.prompt_chars === expected` (strict `===`). Tightens L-33b (integer presence) and L-33c (`<=` invariant) to exact equality. | test_call_model_prompt_chars_exact | 2026-05-03 | 2026-05-07 |
+| L-45 | `metadata.prompt_chars === metadata.injected_references[0].chars` when the dispatched prompt is a single message whose `content` is **exactly one `{{ref:doc.md}}` placeholder** with no surrounding text (no system message, no leading/trailing whitespace). Boundary case for the L-33c `<=` invariant: collapses to `===` when there is no other text in the prompt. Catches a regression where placeholder delimiters or whitespace accidentally counted toward `prompt_chars`. | test_call_model_prompt_chars_exact | 2026-05-03 | 2026-05-07 |
+| L-46 | `get_llm_usage` round-trip cost equality (within tolerance) — after a successful `call_model` returns `metadata.cost_usd: X` and `metadata.trace_id: T`, calling `get_llm_usage` with `mode=recent`, `limit=1`, `trace_id=T` returns one entry whose `cost_usd` matches `X` within absolute tolerance ±1e-9 (`abs(response.entries[0].cost_usd − X) ≤ 1e-9`). Verifies the persisted Supabase row preserves cost precision through the storage round-trip. Strict byte-equality is intentionally not required: the envelope value carries IEEE-754 binary FP noise from the JS-side multiplication, while the persisted row is stored in `NUMERIC(18,10)` (per `src/storage/supabase.ts:511`) which strips the FP tail. Both representations are correct; matches L-47's tolerance approach for `total_cost_usd`. L-40 separately pins formula-exactness within ±1e-9. | test_get_llm_usage_round_trip | 2026-05-04 | 2026-05-07 |
 
 ### 15.5 `get_llm_usage` — Filter Parameters
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-12 | `get_llm_usage` `purpose_name` filter — make calls to two distinct purposes (e.g. `general` and a second purpose), then query with `purpose_name=general`; response contains only records for `general` and no records for the second purpose | test_llm_usage_filters | 2026-04-30 | 2026-04-30 |
-| L-13 | `get_llm_usage` `model_name` filter — make calls that resolve to two distinct model aliases, then query with `model_name=<first model>`; response contains only records for that model and no records for the other | test_llm_usage_filters | 2026-04-30 | 2026-04-30 |
+| L-12 | `get_llm_usage` `purpose_name` filter — make calls to two distinct purposes (e.g. `general` and a second purpose), then query with `purpose_name=general`; response contains only records for `general` and no records for the second purpose | test_llm_usage_filters | 2026-04-30 | 2026-05-07 |
+| L-13 | `get_llm_usage` `model_name` filter — make calls that resolve to two distinct model aliases, then query with `model_name=<first model>`; response contains only records for that model and no records for the other | test_llm_usage_filters | 2026-04-30 | 2026-05-07 |
+| L-67 | A `call_model` invocation that fails with `error: "reference_resolution_failed"` (per L-30/L-31) writes **NO row** to `fqc_llm_usage` for that call. Test setup: capture `get_llm_usage` count via `mode=summary` BEFORE the failed call (note `total_calls=N`); make a `call_model` call with `{{ref:nonexistent.md}}` (assert `isError: true` with `reference_resolution_failed`); call `get_llm_usage` with `mode=summary` AFTER (assert `total_calls === N`, unchanged — the failed call is NOT recorded). Verifies fail-fast aborts before LLM dispatch (§5.5 + OQ #7) and that no usage row is persisted for never-dispatched calls. | test_get_llm_usage_round_trip | 2026-05-03 | 2026-05-07 |
 
 ### 15.6 `get_llm_usage` — Recent Mode with Limit
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-14 | `get_llm_usage` with `mode=recent` and `limit=N` returns exactly `N` entries when more than `N` records exist — seed `N+1` `call_model` calls, then query with `limit=N`; assert `entries` array length equals exactly `N` (not N+1, not N-1) | test_llm_usage_filters | 2026-04-30 | 2026-04-30 |
+| L-14 | `get_llm_usage` with `mode=recent` and `limit=N` returns exactly `N` entries when more than `N` records exist — seed `N+1` `call_model` calls, then query with `limit=N`; assert `entries` array length equals exactly `N` (not N+1, not N-1) | test_llm_usage_filters | 2026-04-30 | 2026-05-07 |
 
 ### 15.7 `call_model` — Trace ID and Cumulative Totals
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-15 | `call_model` with a `trace_id` — `metadata.trace_id` in the response JSON echoes the supplied trace_id exactly, and `metadata.trace_cumulative.total_calls` equals `1` after the first call with that trace_id | test_call_model_trace | 2026-05-01 | 2026-05-01 |
-| L-16 | `call_model` called twice with the same `trace_id` — `metadata.trace_cumulative.total_calls` equals `2` after the second call, and `metadata.trace_cumulative.total_tokens.input` is strictly greater than the input tokens of the first call alone | test_call_model_trace | 2026-05-01 | 2026-05-01 |
+| L-15 | `call_model` with a `trace_id` — `metadata.trace_id` in the response JSON echoes the supplied trace_id exactly, and `metadata.trace_cumulative.total_calls` equals `1` after the first call with that trace_id | test_call_model_trace | 2026-05-01 | 2026-05-07 |
+| L-16 | `call_model` called twice with the same `trace_id` — `metadata.trace_cumulative.total_calls` equals `2` after the second call, and `metadata.trace_cumulative.total_tokens.input` is strictly greater than the input tokens of the first call alone | test_call_model_trace | 2026-05-01 | 2026-05-07 |
+| L-47 | `metadata.trace_cumulative.total_cost_usd` exact arithmetic across multiple calls. Make 3 sequential `call_model` calls with the same `trace_id=T`, capturing each response's `metadata.cost_usd` (call them `c1`, `c2`, `c3`). On the 3rd response, assert `metadata.trace_cumulative.total_cost_usd` equals `c1 + c2 + c3` within absolute tolerance ±1e-9. Tightens L-16 (which only asserts strict-greater monotonicity) to exact arithmetic equality — catches a regression that double-counts the latest call (e.g. snapshot+latest both summed) or drops a row. | test_call_model_trace_arithmetic | 2026-05-03 | 2026-05-07 |
+| L-48 | `metadata.trace_cumulative.total_tokens.input` and `metadata.trace_cumulative.total_tokens.output` exact integer sums. After 3 sequential `call_model` calls with the same `trace_id=T`, capturing each response's `metadata.tokens_used.input` and `.output`, assert on the 3rd response that `metadata.trace_cumulative.total_tokens.input === sum of the three per-call inputs` AND `metadata.trace_cumulative.total_tokens.output === sum of the three per-call outputs` (strict integer `===`, no tolerance — token counts are integers). | test_call_model_trace_arithmetic | 2026-05-03 | 2026-05-07 |
+
+### 15.8 `call_model` — Reference Syntax (Phase 109/111)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-24 | call_model with {{ref:path}} resolves and forwards full body; injected_references[0] has ref=full placeholder + chars=body length | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-25 | call_model with {{ref:path#Section}} resolves section only; injected_references chars matches section length | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-26 | call_model with {{ref:path->pointer}} dereferences frontmatter pointer; injected_references entry has resolved_to and chars equals target body length | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-27 | SUPERSEDED for ATL v1: call_model with {{id:uuid}} remains literal text; fq_id lookup now uses {{ref:<fq_id>}} | test_call_model_reference_system_core, test_call_model_references | 2026-05-05 | 2026-05-07 |
+| L-27a | SUPERSEDED for ATL v1: call_model with {{id:uuid#Section}} remains literal text; fq_id + section lookup now uses {{ref:<fq_id>#Section}} | test_call_model_reference_system_core, test_call_model_references | 2026-05-05 | 2026-05-07 |
+| L-27b | SUPERSEDED for ATL v1: call_model with {{id:uuid->pointer}} remains literal text; fq_id + pointer lookup now uses {{ref:<fq_id>->pointer}} | test_call_model_reference_system_core, test_call_model_references | 2026-05-05 | 2026-05-07 |
+| L-28 | call_model with multiple references across messages — all resolved, injected_references[] lists each in order | test_call_model_multi_ref | 2026-05-03 | 2026-05-07 |
+| L-29 | injected_references entry for -> dereference includes resolved_to (path-only refs do NOT) | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-30 | call_model with {{ref:nonexistent.md}} returns reference_resolution_failed | test_call_model_ref_errors | 2026-05-03 | 2026-05-07 |
+| L-31 | call_model with one valid + one invalid reference fails entire call (fail-fast, no LLM dispatch); valid ref absent from failed_references[] (Phase 3 Gap 6) (VALIDATED) | test_call_model_ref_errors | 2026-05-03 | 2026-05-07 |
+| L-31a | call_model with TWO invalid references aggregates both into failed_references[] (Phase 3 Gap 1, OQ #7) (VALIDATED) | test_call_model_ref_errors | 2026-05-03 | 2026-05-03 |
+| L-32 | call_model with {{ref:path->missing.pointer}} returns reference_resolution_failed with pointer-specific reason | test_call_model_ref_errors | 2026-05-03 | 2026-05-07 |
+| L-33 | call_model with no reference patterns is forwarded byte-for-byte unchanged; no injected_references / prompt_chars in response | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-33a | injected_references[].chars is integer matching resolved content length exactly | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-33b | response metadata includes top-level prompt_chars integer | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-33c | sum(injected_references[].chars) <= prompt_chars invariant | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-33d | tokens.input/output and cost_usd unchanged shape from no-reference baseline | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-33e | injected_references[] entries do NOT contain a tokens field (negative assertion) | test_call_model_references | 2026-05-03 | 2026-05-07 |
+| L-49 | `call_model` with `{{ref:source.md->ptr}}` where `source.md` frontmatter contains `ptr: "Research/.projections/target.md"` (path-style value with `/` and `.md`) — call succeeds, `metadata.injected_references[0].resolved_to === "Research/.projections/target.md"` exactly (the configured path), and `metadata.injected_references[0].chars` equals the byte-length of `target.md`'s body. Verifies the path-resolution branch of §6.6 fires for `->` derefs in `call_model`. | test_call_model_pointer_resolutions | 2026-05-03 | 2026-05-07 |
+| L-50 | `call_model` with `{{ref:source.md->ptr}}` where `source.md` frontmatter contains `ptr: "<UUID-of-target>"` (UUID-format value, no `/`, no `.md`) — call succeeds, `metadata.injected_references[0].resolved_to` is the **vault-relative path** of the resolved target document (NOT the UUID string), and `metadata.injected_references[0].chars` equals the target's body length. Verifies fq_id-resolution branch of §6.6 fires for `->` derefs and `resolved_to` always normalizes to a path regardless of how the pointer was expressed. Uses the same UUID resolution branch as D-61 but on the call_model surface. | test_call_model_pointer_resolutions | 2026-05-03 | 2026-05-07 |
+| L-51 | `call_model` with `{{ref:source.md->ptr}}` where `source.md` frontmatter contains `ptr: "target"` (bare basename — no `/`, no markdown extension, no UUID format) — call succeeds, `metadata.injected_references[0].resolved_to` is the vault-relative path of the matched target document (not the bare basename). Verifies the filename-search branch of §6.6 (third row: "anything else → filename search") fires for `->` derefs in `call_model`. Note: per §6.6's normative table, a value ending in a configured markdown extension (e.g. `"target.md"`) is classified as **path lookup at the vault root**, not filename search — to exercise the filename branch the pointer value must omit the extension. The vault file itself is a normal `.md` file in any folder; the resolver walks the vault and matches `<value>.md` by basename. Parallels D-62 on the call_model surface. | test_call_model_pointer_resolutions | 2026-05-04 | 2026-05-07 |
+| L-52 | `call_model` with `{{ref:source.md->supersedes}}` (top-level pointer — single segment, no dot) where `source.md` frontmatter contains `supersedes: "Old/predecessor.md"` at the top level — call succeeds, `metadata.injected_references[0].resolved_to === "Old/predecessor.md"`, `chars` equals predecessor body length. Verifies §6.2 "top-level property (no dot)" traversal in `call_model`. | test_call_model_pointer_resolutions | 2026-05-03 | 2026-05-07 |
+| L-53 | `call_model` with `{{ref:source.md->a.b.c}}` (deep-nested pointer — ≥2 dots) where `source.md` frontmatter has `a: { b: { c: "Nested/deep-target.md" } }` — call succeeds, `metadata.injected_references[0].resolved_to === "Nested/deep-target.md"`. Verifies §6.5 "deeper nesting is technically possible" — reference resolution does NOT silently cap traversal depth at 1 or 2 segments. | test_call_model_pointer_resolutions | 2026-05-03 | 2026-05-07 |
+| L-54 | `call_model` with `{{ref:source.md->missing.path}}` where `source.md` exists with frontmatter but the path `missing.path` does not exist in that frontmatter — returns `isError: true` with `error: "reference_resolution_failed"`, `failed_references[0].reason === "reference_path_not_found"`, and `failed_references[0].detail` contains `"not found in frontmatter"`. Distinct from L-32 — pins the structured reason taxonomy, not just the error code. | test_call_model_ref_error_taxonomy | 2026-05-07 | 2026-05-07 |
+| L-55 | `call_model` with `{{ref:source.md->ptr}}` where `source.md` frontmatter has `ptr: 42` (or `ptr: ["a", "b"]`, or any non-string scalar/object) — returns `isError: true` with `error: "reference_resolution_failed"`, `failed_references[0].reason === "reference_path_not_string"`, and `failed_references[0].detail` contains durable semantic phrasing such as `"expected a string"` or `"string identifier"`. Verifies the non-string-validation branch of §6.5 + OQ #11. | test_call_model_ref_error_taxonomy | 2026-05-07 | 2026-05-07 |
+| L-56 | `call_model` with `{{ref:source.md->ptr}}` where `source.md` exists, `ptr` resolves to a well-formed identifier (e.g. `"Nonexistent/missing-target.md"`), but no document at that identifier exists in the vault — returns `isError: true` with `error: "reference_resolution_failed"`, `failed_references[0].reason === "pointer_target_not_found"`, and `failed_references[0].detail` indicates the target was not found. Verifies the post-resolution target-missing branch is distinct from the pre-resolution path-missing (L-54) and value-not-string (L-55) branches. | test_call_model_ref_error_taxonomy | 2026-05-07 | 2026-05-07 |
+| L-57 | `call_model` with a placeholder containing both `#` and `->` (e.g. `{{ref:doc.md->ptr#Sec}}` or `{{ref:doc.md#Sec->ptr}}`) — returns `isError: true` with `error: "reference_resolution_failed"`, `failed_references[0].reason === "invalid_reference_syntax"`, and `failed_references[0].detail === "# and -> are mutually exclusive"`. No external LLM dispatch occurs (parse-time failure per §5.2). Test BOTH orderings (`->` before `#` AND `#` before `->`) — both must fail with this exact reason/detail pair. | test_call_model_ref_error_taxonomy | 2026-05-07 | 2026-05-07 |
+| L-58 | `call_model` with `{{ref:doc.md#Section}}` (section ref, no `->`) — `metadata.injected_references[0]` does NOT contain a `resolved_to` key (`'resolved_to' in entry === false`, not `null`, not empty string — key is absent from the JSON object). Extends L-29 (which only covered the bare `{{ref:path}}` negative case) — the section-ref negative is implied by reference-resolver.ts:44 ("ONLY for -> dereferences") but not directly asserted. | test_call_model_ref_error_taxonomy | 2026-05-03 | 2026-05-07 |
+| L-59 | `call_model` with **two `->` references against the same source document but different pointer paths** in two messages — e.g. message 1 contains `{{ref:source.md->projections.summary}}` and message 2 contains `{{ref:source.md->projections.action_items}}`, where both pointer paths exist in `source.md` frontmatter and resolve to two distinct target docs. Call succeeds, `metadata.injected_references[]` has exactly 2 entries (one per placeholder, in document-traversal order), each entry has its own `resolved_to` reflecting its target's path, and the two `resolved_to` values are different. Stresses lookup behavior when one source has multiple pointers. | test_call_model_multi_pointer_refs | 2026-05-03 | 2026-05-07 |
+| L-60 | `call_model` with **the same `->` placeholder text repeated in two different messages** — e.g. both message 1 (system role) and message 2 (user role) contain the literal string `{{ref:source.md->ptr}}`. Call succeeds, `metadata.injected_references[]` has exactly 2 entries (NOT deduplicated to 1), each with the same `ref`, `resolved_to`, and `chars` values. Pins per-occurrence resolution semantics — protects against a regression toward dedup-at-resolve. | test_call_model_multi_pointer_refs | 2026-05-03 | 2026-05-07 |
+| L-61 | SUPERSEDED for ATL v1: `call_model` with `{{id:<unknown-uuid>->ptr}}` remains literal text; fq_id + pointer lookup now uses `{{ref:<fq_id>->pointer}}`, and unknown source IDs are exercised through the `ref:` resolver family instead of `id:` syntax. | test_call_model_ref_error_taxonomy | 2026-05-07 | 2026-05-07 |
+| L-62 | `call_model` with `{{ref:source.md->ptr}}` where `source.md` exists in the vault but contains **no frontmatter at all** (no `---` block, or empty `---\n---`). Returns `isError: true` with `error: "reference_resolution_failed"`, `failed_references[0].reason === "reference_path_not_found"`, and `failed_references[0].detail` contains `"not found in frontmatter"` (treated as path-missing — the empty-frontmatter case folds into the L-54 reason taxonomy, NOT a separate "no frontmatter" reason). Pins the boundary behavior so a future implementation doesn't accidentally introduce a distinct error code for this case. | test_call_model_ref_error_taxonomy | 2026-05-07 | 2026-05-07 |
+
+### 15.9 Discovery Resolvers (Phase 111)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-39 | search resolver without parameters.query → clear error | test_discovery_resolver_errors | 2026-05-03 | 2026-05-07 |
+| L-39a | resolver=model without name → schema validation error | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39b | resolver=purpose without name → schema validation error | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39c | resolver=list_models with no llm: section → llm_not_configured | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39d | resolver=list_purposes with no llm: section → llm_not_configured | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39e | resolver=search with no llm: section → llm_not_configured (guard before param validation) | test_discovery_resolver_errors | 2026-05-03 | 2026-05-03 |
+| L-39f | configured-but-empty models[] returns {models: []} (NOT llm_not_configured) | test_discovery_resolvers | 2026-05-03 | 2026-05-07 |
+| L-39g | configured-but-empty purposes[] returns {purposes: []} | test_discovery_resolvers | 2026-05-03 | 2026-05-07 |
+| L-39h | call_model with no args (only resolver) returns model list (VALIDATED) | test_discovery_resolvers | 2026-05-03 | 2026-05-07 |
+| L-39h_purposes | call_model({resolver: "list_purposes"}) with no args returns populated purposes[] (uniformity with list_models) (Phase 4 Gap 9) (VALIDATED) | test_discovery_resolvers | 2026-05-03 | 2026-05-07 |
+| L-39i | legacy free-form `capabilities: ["tools", "vision"]` is returned as `tags: ["tools", "vision"]`; the `capabilities` response field is omitted unless structured model capabilities were declared | test_discovery_optional_fields | 2026-05-07 | 2026-05-07 |
+| L-39j | legacy free-form `capabilities: []` is preserved as `tags: []`; the `capabilities` response field is omitted unless structured model capabilities were declared | test_discovery_optional_fields | 2026-05-07 | 2026-05-07 |
+| L-39k | undeclared capabilities/context_window/description OMITTED from response | test_discovery_optional_fields | 2026-05-03 | 2026-05-07 |
+| L-39l | context_window value preserved when declared; key omitted when not | test_discovery_optional_fields | 2026-05-03 | 2026-05-07 |
+| L-39m | custom legacy free-form capability strings pass through verbatim as tags (no taxonomy validation) | test_discovery_optional_fields | 2026-05-07 | 2026-05-07 |
+| L-39n | description present when declared, omitted when not | test_discovery_optional_fields | 2026-05-03 | 2026-05-07 |
+| L-39o | search response entries follow same omit-when-undeclared rule as list_models | test_discovery_optional_fields | 2026-05-03 | 2026-05-07 |
+| L-63 | `call_model` with `resolver=list_models` returns each model's `input_cost_per_million` and `output_cost_per_million` **byte-for-byte equal** to the configured YAML values for non-trivial decimals. Configure a model with `cost_per_million: { input: 0.594321, output: 1.234567 }` (6+ significant digits, neither a round number); assert response entry has `input_cost_per_million === 0.594321` AND `output_cost_per_million === 1.234567` (strict `===`, no float coercion drift, no rounding). Verifies §8.3 "hard per-million-token costs from the configuration table." | test_discovery_list_models_costs | 2026-05-03 | 2026-05-07 |
+| L-64 | `call_model` with `resolver=list_purposes` returns each purpose's `input_cost_per_million` and `output_cost_per_million` equal to the **first (primary) model in the purpose's `models:` chain**, not the second, not an average. Setup: configure two models `fast` (rates 0.59/0.79) and `mid` (rates 3.0/15.0); configure purpose `analysis` with `models: ["fast", "mid"]`; assert the `analysis` entry in `list_purposes` has `input_cost_per_million === 0.59` AND `output_cost_per_million === 0.79` (matches `fast`, NOT `mid`, NOT `(0.59+3.0)/2`). Verifies §8.3 "Purpose-level costs reflect the primary model's rates." | test_discovery_list_models_costs | 2026-05-03 | 2026-05-07 |
+| L-65 | `call_model` with `resolver=list_models` for a model configured with `cost_per_million: { input: 0, output: 0 }` returns response entry containing the literal keys `"input_cost_per_million": 0` AND `"output_cost_per_million": 0` (key present, value strictly `=== 0`). The cost keys are NOT omitted (cost fields are required per §8.2.1) and are NOT `null`. Verifies the omit-when-absent rule (L-39k) does NOT apply to required cost fields — zero is treated as a declared value, not absence. Pairs with L-41 (zero-cost on the call_model surface). | test_call_model_zero_cost | 2026-05-03 | 2026-05-07 |
+| L-66a | `call_model` with `resolver=list_models` returns `"local": true` on a model entry whose **provider** has `local: true` declared explicitly in the YAML config (NOT a model-level field — `local` is on the provider entry per [src/config/loader.ts:90](../../../src/config/loader.ts#L90)). Setup: configure a provider `custom-edge` with `type: openai-compatible`, `local: true`; configure a model that points at that provider; call `resolver=list_models`; assert that model's response entry has the literal key `"local"` with value `true` (`response.models[i].local === true`). Verifies the explicit-declaration branch of the auto-derivation logic at [src/mcp/tools/llm.ts:181](../../../src/mcp/tools/llm.ts#L181). | test_discovery_local_flag | 2026-05-03 | 2026-05-03 |
+| L-66b | `call_model` with `resolver=list_models` returns `"local": true` on a model entry whose provider has `type: "ollama"` AND no explicit `local` declaration — the field is auto-derived from the provider type. Setup: configure a provider with `type: ollama` and NO `local` key; configure a model that points at that provider; call `resolver=list_models`; assert response entry has `"local": true`. Verifies the type-based auto-derivation branch at [src/mcp/tools/llm.ts:183-184](../../../src/mcp/tools/llm.ts#L183-L184). Important: this fires WITHOUT the provider declaring `local` — declaring `type: ollama` is sufficient. | test_discovery_local_flag | 2026-05-03 | 2026-05-03 |
+| L-66c | `call_model` with `resolver=list_models` OMITS the `"local"` key entirely on a model entry whose provider has `type: "openai-compatible"` AND no explicit `local: true` declaration — the key is absent from the JSON object (`'local' in entry === false`), NOT present-and-false (`response.models[i].local === false` is wrong) and NOT present-and-null. Setup: configure an OpenAI/openrouter-style provider with no `local` field; configure a model that points at that provider; call `resolver=list_models`; assert `'local' not in response.models[i]`. Verifies the omit-when-not-local invariant — there is NO `"local": false` form anywhere in the discovery surface. | test_discovery_local_flag | 2026-05-03 | 2026-05-03 |
+| L-66d | **Behavioral non-influence guard.** The `provider.local` flag MUST NOT affect any FlashQuery behavior other than the `list_models` discovery output. Setup: configure two identical providers `paid-A` and `paid-B` (same `type: openai-compatible`, same endpoint, same models pointing at each) where the only difference is `paid-A` declares `local: true` and `paid-B` does not. Make `call_model` calls against models on both providers and verify: (a) `metadata.cost_usd` is computed identically (no zero-cost shortcut for local-flagged providers — cost still comes from `cost_per_million` × tokens), (b) routing/dispatch reaches the configured endpoint identically (no local-flag-based bypass), (c) `get_llm_usage` records the same fields for both. This is a regression guard tied to the code comment at [src/config/loader.ts:90](../../../src/config/loader.ts#L90) and [src/mcp/tools/llm.ts:165](../../../src/mcp/tools/llm.ts#L165) stating `local` is "read but not used to make decisions." If this row starts failing, the comment is stale and a behavioral coupling has been introduced. | test_discovery_local_flag | 2026-05-03 | 2026-05-03 |
+
+### 15.10 `call_model` — Phase 112 Response Messages
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-73 | `call_model` successful model/purpose envelopes always include root `messages`; when `return_messages` is false or omitted, `messages` is exactly `[]` | test_call_model_return_messages | 2026-05-05 | 2026-05-07 |
+| L-74 | `call_model` with `return_messages: true` returns post-hydration input messages plus a final assistant message with string `name`; returned input content contains resolved reference text and no `{{ref:` placeholder | test_call_model_return_messages | 2026-05-05 | 2026-05-07 |
+| L-75 | Discovery resolvers (`list_models`, `list_purposes`, `search`) ignore `return_messages` and keep their raw response shapes with no root `messages` envelope | test_call_model_return_messages | 2026-05-05 | 2026-05-07 |
+| L-76 | ATL-DS-02 reference grammar resolves path, email-like filename path, bare filename, fq_id, section, same-doc different sections, and pointer forms through public call_model; injected_references entries preserve literal ref substrings, order, chars, and resolved_to on divergence | test_call_model_reference_system_core | 2026-05-05 | 2026-05-07 |
+| L-77 | ATL-DS-03 escape and literal behavior: odd-parity escaped refs stay literal and excluded from metadata, even-parity refs hydrate with one literal slash preserved, triple-escaped refs remain one-slash literals, malformed openers stay literal, and {{id:...}} remains literal | test_call_model_reference_system_core | 2026-05-05 | 2026-05-07 |
+| L-78 | Host-only safety: assistant and tool messages containing {{ref:...}} are treated as ordinary data and are not scanned, hydrated, or added to injected_references metadata | test_call_model_reference_system_core | 2026-05-05 | 2026-05-07 |
+| L-79 | Typed reference failures return reference_resolution_failed with stable failed_references[].reason and detail for invalid syntax, ambiguous identifiers, and missing pointer paths before LLM dispatch | test_call_model_reference_system_core | 2026-05-05 | 2026-05-07 |
+
+### 15.11 `call_model` — Template Parameterization
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| L-71 | TMPL-01: `call_model.template_params` renders a path-keyed document with `fq_template: true` through public `call_model`, while a plain document ignores supplied template params and remains a plain reference | test_call_model_template_parameterization | 2026-05-06 | 2026-05-07 |
+| L-72 | TMPL-02: `call_model.template_params` alias entries with `_template` render the same template multiple times with distinct parameter values and template metadata | test_call_model_template_parameterization | 2026-05-06 | 2026-05-07 |
+| L-80 | TMPL-03: Template `string` and `document` params validate required values and document identifiers, returning typed `template_missing_required_param` and `template_param_doc_not_found` failures before provider dispatch | test_call_model_template_parameterization | 2026-05-06 | 2026-05-07 |
+| L-81 | TMPL-04: Template substitution is deterministic and non-recursive; substituted values containing `{{ref:...}}` remain literal and do not add recursive metadata or failures | test_call_model_template_parameterization | 2026-05-06 | 2026-05-07 |
+| L-82 | TMPL-05: Alias `_items` injects an ordered list of document/template items with `_separator`, `resolved_to_count`, and ordered `items` metadata | test_call_model_template_parameterization | 2026-05-06 | 2026-05-07 |
+| L-83 | VAL-114: Managed public scenario gate `test_call_model_template_parameterization` validates path-keyed templates, alias templates, `_items`, typed failures, plain-doc bypass, and non-recursive substitution | test_call_model_template_parameterization | 2026-05-06 | 2026-05-07 |
+| L-84 | ATL-DS-14: Capability admission failures for Mode 2 purposes are user-visible and actionable, including `tool_calling`, `usage_on_tool_calls`, and `structured_outputs_with_tools` diagnostics that distinguish `declared unsupported` from `unknown declaration` and fail before provider dispatch when `response_format` is incompatible with model-visible tools | test_call_model_agent_loop_capabilities | 2026-05-06 | 2026-05-07 |
+| L-85 | VAL-116: Purpose `call_model` exposes assembled native provider tools only when the final registry is non-empty, omits provider `tools` and Mode 2 `metadata.tools` when exclusions empty the set, and returns public `metadata.tools` diagnostics for hard-excluded native tools such as `call_model` when at least one model-visible tool remains | test_call_model_native_tool_registry | 2026-05-06 | 2026-05-07 |
+| L-86 | ATL-DS-09: Public Mode 2 native loop returns final assistant response after a delegated `get_document` tool call, appends `tool_call_id` tool history, and exposes `metadata.tools.stop_reason`, `metadata.tools.calls_log`, aggregate tokens, and cost metadata | test_call_model_agent_loop_native | 2026-05-06 | 2026-05-07 |
+| L-87 | ATL-DS-12: Public Mode 2 directed guardrail coverage asserts `max_iterations`, `max_tokens`, `max_cost`, `timeout` (wall-clock deadline crossing the chat HTTP round-trip), `error` (single-model purpose driven to fallback exhaustion via HTTP 500), zero public usage rows when no iteration completes, and completed-iteration accounting. Cooperative `shutdown` mid-loop, three-checkpoint timeout differentiation (pre-LLM-call / pre-tool-dispatch / post-tool-dispatch), estimate ladder, and per-model fallback cost remain covered by unit/E2E gates rather than this directed scenario — see L-90 for the cooperative-shutdown future test. | test_call_model_agent_loop_budgets; tests/unit/llm-agent-loop.test.ts; tests/e2e/call-model-agent-loop.e2e.test.ts | 2026-05-06 | 2026-05-07 |
+| L-88 | ATL-DS-13: Public Mode 2 usage aggregation keeps `metadata.tools.calls_log` token sums equal to top-level `metadata.tokens`, records one aggregate usage row when Supabase test config is available, hides per-iteration usage rows, and preserves per-model fallback cost accounting | test_call_model_agent_loop_usage | 2026-05-06 | 2026-05-07 |
+| L-89 | VAL-117: Phase 117 final validation passes deterministic unit, E2E, and directed scenario gates: directed scenarios cover public native loop, budget stops (max-tokens, max-cost, max-iterations, timeout, provider error), usage aggregation, and calls-log arithmetic; unit/E2E gates cover caller-provided tools rejection / deferred Mode 3, cooperative shutdown, dispatch-time timeout, zero usage rows, input/output estimate ladder coverage, and per-model fallback cost | test_call_model_agent_loop_native; test_call_model_agent_loop_budgets; test_call_model_agent_loop_usage; tests/unit/llm-agent-loop.test.ts; tests/unit/llm-tool.test.ts; tests/e2e/call-model-agent-loop.e2e.test.ts | 2026-05-06 | 2026-05-07 |
+| L-90 | ATL-DS-12 step 6 cooperative shutdown directed coverage drives a Mode 2 loop into `stop_reason: 'shutdown'` through the public MCP boundary by signaling `FQCServer.signal_graceful_shutdown()` mid-call after the mock provider receives the first chat request. The public envelope asserts `metadata.tools.stop_reason == 'shutdown'`, `calls_log` length ≥ 1, aggregate tokens/cost reflect only the completed tool-call iteration, the response is the empty guardrail value after an unfulfilled tool-call turn, and no second provider request is made. | test_call_model_agent_loop_shutdown | 2026-05-07 | 2026-05-07 |
+| L-91 | ATL-DS-07: `list_purposes` exposes fresh template-tool discovery diagnostics, including generated `flashquery_*` names, canonical `template_path`, descriptions, parameters, empty conflicts, and dangling template paths when applicable | test_call_model_template_discovery | 2026-05-06 | 2026-05-07 |
+| L-92 | ATL-DS-08: Template tool-name collisions surface `template_tool_conflicts` diagnostics and block `call_model` with `tool_registry_collision` before provider invocation | test_call_model_template_tool_conflicts | 2026-05-06 | 2026-05-07 |
+| L-93 | ATL-DS-10: Public template-tool Mode 2 loop dispatches `flashquery_skill_research_skill`, hydrates string and document parameters into a tool result, appends tool history, and lets the delegated model return a final response | test_call_model_agent_loop_template_tool | 2026-05-06 | 2026-05-07 |
+| L-94 | ATL-DS-11: Public mixed native/template Mode 2 loop exposes `search_documents` and `flashquery_skill_research_skill` together, dispatches both in one assistant turn, and records `kind: native` plus `kind: template` calls-log entries | test_call_model_agent_loop_mixed_tools | 2026-05-06 | 2026-05-07 |
+| L-95 | VAL-118: Phase 118 final validation passes deterministic unit, integration, E2E, directed scenario, lint, and build gates for fresh discovery, generated names, collision diagnostics, reverse-map dispatch, template invocation, typed template-tool errors, and mixed native/template loops | tests/unit/llm-template-tools.test.ts; tests/integration/template-tools.integration.test.ts; tests/e2e/call-model-template-tools.e2e.test.ts; test_call_model_template_discovery; test_call_model_template_tool_conflicts; test_call_model_agent_loop_template_tool; test_call_model_agent_loop_mixed_tools | 2026-05-06 | 2026-05-07 |
+| L-96 | DISC-01: Public `list_purposes` discovery exposes native tool names, native tool diagnostics, template tools, template warnings, template conflicts, and dangling template paths through MCP JSON only | test_discovery_resolvers | 2026-05-07 | 2026-05-07 |
+| L-97 | DISC-02: Public `list_models` discovery exposes structured capability diagnostics with `supported`, `unknown_declaration`, and `declared_unsupported` states plus remediation guidance | test_discovery_resolvers | 2026-05-07 | 2026-05-07 |
+| L-98 | DISC-03: Public `search` discovery matches model and purpose metadata for capability keys, usage-on-tool-calls, template diagnostics, dangling template paths, and help metadata without requiring messages | test_discovery_resolvers | 2026-05-07 | 2026-05-07 |
+| L-99 | ATL-DS-15 / DISC-04: Public `resolver="help"` returns raw JSON with stable top-level keys, resolver list, Mode 1/Mode 2/reference/template/tool/guardrail/discovery/example sections, and no CallModelEnvelope-only keys | test_call_model_help_resolver | 2026-05-07 | 2026-05-07 |
+| L-100 | VAL-119: Phase 119 final validation passes lint, focused unit tests, managed public discovery/help directed scenarios, and build for discovery diagnostics, search metadata, and the help resolver | tests/unit/llm-tool.test.ts; tests/unit/llm-template-tools.test.ts; tests/unit/llm-tool-registry.test.ts; test_discovery_resolvers; test_call_model_help_resolver | 2026-05-07 | 2026-05-07 |
 
 ---
 
@@ -551,12 +718,113 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| LLM Tools | 14 | 14 | 0 |
-| **Total** | **298** | **294** | **4** |
+| LLM Tools | 109 | 108 | 1 |
+| **Total** | **393** | **388** | **5** |
 
 ---
 
 ## Behavior - Testcase Validation
+
+### test_get_llm_usage_round_trip — L-46, L-67
+
+**Behaviors covered**
+- L-46: `get_llm_usage` round-trip cost equality within ±1e-9 tolerance.
+- L-67: a failed `call_model` (`reference_resolution_failed`) writes NO row to `fqc_llm_usage`.
+
+**Resolution (2026-05-04)**: L-46 was over-specified. The original spec required strict byte-equality between `metadata.cost_usd` (the envelope value, an IEEE-754 float carrying FP noise like `0.000009640000000000001`) and the persisted Supabase row (stored in `NUMERIC(18,10)` per `src/storage/supabase.ts:511`, which strips the FP tail to `0.00000964`). Both representations are mathematically correct; neither side is buggy. The spec ([§4.4 Principle 6](../../../../flashquery-product/Roadmap/Features/Call-Model-With-Reference/Call-Model-With-Reference.md), [§4.6](../../../../flashquery-product/Roadmap/Features/Call-Model-With-Reference/Call-Model-With-Reference.md)) only guarantees that cost is "exact and authoritative" via the formula, which L-40 already pins within ±1e-9. Softened L-46 to match: `abs(entry.cost_usd − X) ≤ 1e-9`, mirroring L-47's tolerance approach for `total_cost_usd`. Test now passes 6/6 steps.
+
+---
+
+### test_call_model_pointer_resolutions — L-49, L-50, L-51, L-52, L-53
+
+**Behaviors covered**
+- L-49: path-style pointer value resolves to that path.
+- L-50: UUID-style pointer value normalizes `resolved_to` to the target's vault path (not the UUID).
+- L-51: extensionless bare-basename pointer value resolves via the §6.6 filename-search branch.
+- L-52: top-level (single-segment) pointer resolves.
+- L-53: deep-nested (`a.b.c`) pointer resolves without depth cap.
+
+**Resolution (2026-05-04)**: L-51 was authored from §6.2's misleading example (which showed `"call-model-decisions.md"` as a "filename" resolution), not §6.6's normative table. Per §6.6, a pointer value ending in a configured markdown extension is **classified as a vault-relative path lookup at the vault root** — there is intentionally no filename-search fallback when the path lookup fails. The implementation matches §6.6 (per `src/mcp/utils/resolve-document.ts:190-211`, `test_follow_ref_get_document.py:209-211` "post-Deviation 5"). Two coordinated fixes: (1) updated [§6.2 of the spec](../../../../flashquery-product/Roadmap/Features/Call-Model-With-Reference/Call-Model-With-Reference.md) to drop the misleading `.md` example and add an explicit note on the path-vs-filename classification; (2) rewrote L-51 to use an extensionless basename (`"target51_<run>"`), which actually exercises the filename-search branch (§6.6 third row). The vault file remains a normal `.md` file in a nested folder; the resolver walks the vault and matches `<value>.md` by basename. Test now passes 5/5 steps.
+
+---
+
+### test_call_model_ref_error_taxonomy — L-54, L-55, L-56, L-57, L-58, L-61, L-62
+
+**Behaviors covered**
+- L-54: missing pointer path → "not found in frontmatter" reason.
+- L-55: pointer resolves to non-string → reason indicates non-string value.
+- L-56: pointer resolves to nonexistent target → "not found" reason.
+- L-57a/b: placeholder with both `->` and `#` → exact "mutually exclusive" reason.
+- L-58: section ref (no `->`) omits `resolved_to` in injected entry.
+- L-61: `{{id:<unknown-uuid>->ptr}}` → source-document-not-found.
+- L-62: source with no frontmatter → "not found in frontmatter" reason.
+
+**Resolution (2026-05-04)**: L-55 was over-specified against stale spec prose. The implementation uses a single template across all non-string types (`"Reference path 'X' resolved to a <found_type>, expected a string identifier"` per `src/mcp/utils/document-output.ts:464`) — semantically equivalent to the spec's older `"value at path is not a string"` wording but uses different phrasing. The §4.5 Error 5 example wire format in the spec was also stale (it showed `"is an object, not a string"`, which the implementation never adopted). Three coordinated fixes: (1) loosened the L-55 assertion to accept either `"expected a string"` or `"string identifier"` substring — both are durable, semantically pin the failure mode, and tolerate reasonable future rewording; (2) updated [§4.5 Error 5 example](../../../../flashquery-product/Roadmap/Features/Call-Model-With-Reference/Call-Model-With-Reference.md) to match the actual implementation message and added a note recommending the structured `found_type` field over message-string parsing; (3) updated [§5.5 prose](../../../../flashquery-product/Roadmap/Features/Call-Model-With-Reference/Call-Model-With-Reference.md) to describe the failure mode as "non-string type" rather than the older "not a string" phrasing. Test now passes 8/8 steps.
+
+---
+
+### test_call_model_reference_system_core — L-27, L-27a, L-27b, L-76, L-77, L-78, L-79
+
+**Behaviors covered**
+- L-27/L-27a/L-27b: ATL v1 supersedes active `{{id:...}}`; fq_id lookup is expressed through `{{ref:<fq_id>}}`.
+- L-76: path, filename, fq_id, section, and pointer references hydrate through public `call_model`.
+- L-77: escape parity, malformed opener literals, and literal `{{id:...}}` behavior.
+- L-78: assistant/tool messages are not host-authored reference targets.
+- L-79: stable typed failures include `reason` and `detail` before provider dispatch.
+
+**Resolution (2026-05-05)**: Added managed directed coverage for ATL-DS-02 and ATL-DS-03 via `test_call_model_reference_system_core`. The scenario uses a deterministic OpenAI-compatible mock provider, seeds vault documents, forces a scan, and validates hydration metadata plus fail-fast behavior on the public MCP surface. It covers email-like paths, bare filename and fq_id `resolved_to`, literal `ref` substrings, same-document multi-section ordering, odd/even/triple escape parity, alias/operator syntax details, and legacy `{{id:...}}` literal semantics. Test passes 5/5 steps.
+
+---
+
+### test_call_model_native_tool_registry — L-85
+
+**Behaviors covered**
+- L-85: VAL-116 public native registry behavior for non-empty provider tools, empty-tool omission, and hard-exclusion diagnostics.
+
+**Resolution (2026-05-06)**: Added managed directed coverage via `test_call_model_native_tool_registry`. The scenario uses a deterministic OpenAI-compatible mock provider, configures one purpose with `tools: [get_document, call_model]`, verifies the public envelope exposes `metadata.tools.native_tool_names == ["get_document"]` plus `diagnostics.hard_excluded` for `call_model`, and verifies the provider request includes the `get_document` function tool. A second purpose uses `excluded_tools: [get_document]` and verifies the mock provider request omits `tools` entirely rather than receiving `tools: []`. Test passes 2/2 steps.
+
+---
+
+### test_call_model_agent_loop_native / budgets / usage — L-86, L-87, L-88, L-89
+
+**Behaviors covered**
+- L-86: ATL-DS-09 public native loop behavior with delegated `get_document`, final assistant response, `tool_call_id` history, `stop_reason`, `calls_log`, tokens, cost, and aggregate usage metadata.
+- L-87: ATL-DS-12 directed budget behavior covers max-token, max-cost, max-iteration, wall-clock timeout, provider-error stop, zero public usage rows when no iteration completes, and completed-iteration accounting. Three-checkpoint timeout differentiation (pre-LLM-call / pre-tool-dispatch / post-tool-dispatch), estimate ladders, and per-model fallback cost are validated by the Phase 117 unit/E2E gates rather than this directed testcase. Cooperative shutdown is covered by L-90.
+- L-88: ATL-DS-13 aggregate usage behavior: one public aggregate row when Supabase test config is available, no visible per-iteration rows, and `calls_log` token arithmetic matching top-level `metadata.tokens`.
+- L-89: VAL-117 final gate tying the Phase 117 unit, E2E, and directed scenario commands to the ATL Test Plan blocker cases.
+- L-90: ATL-DS-12 step 6 cooperative shutdown directed coverage now uses `FQCServer.signal_graceful_shutdown()` to send SIGTERM without waiting while a background public `call_model` request is in flight. The scenario asserts `stop_reason: 'shutdown'`, completed-iteration calls_log preservation, aggregate token/cost accounting, and one provider request.
+
+**Resolution (2026-05-06)**: Added final Phase 117 coverage rows and ran the focused validation gate: `npm run test:e2e -- tests/e2e/call-model-agent-loop.e2e.test.ts`, `python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_native.py --managed`, `python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_budgets.py --managed`, and `python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_usage.py --managed`. All use deterministic local OpenAI-compatible mock providers; no real OpenAI, OpenRouter, or Ollama provider is used for correctness assertions.
+
+**Resolution update (2026-05-07)**: Added `test_call_model_agent_loop_shutdown` for L-90 and ran `python3 tests/scenarios/directed/run_suite.py --managed test_call_model_agent_loop_shutdown`. The scenario passes 1/1 steps and records public cooperative shutdown evidence with a deterministic delayed mock provider.
+
+---
+
+### Phase 118 template discovery and masquerade dispatch — L-91, L-92, L-93, L-94, L-95
+
+**Behaviors covered**
+- L-91: ATL-DS-07 public template discovery and purpose listing diagnostics.
+- L-92: ATL-DS-08 collision diagnostics and pre-provider `call_model` blocking.
+- L-93: ATL-DS-10 template-tool loop with string/document params and recoverable `template_missing_required_param`.
+- L-94: ATL-DS-11 mixed native/template loop with native/template calls-log kinds.
+- L-95: VAL-118 final green validation gate across unit, integration, E2E, directed, lint, and build checks.
+
+**Resolution (2026-05-06)**: Added final Phase 118 coverage rows and ran the full gate: `npm run lint && npm test -- tests/unit/llm-template-tools.test.ts tests/unit/llm-tool-registry.test.ts tests/unit/llm-tool-dispatcher.test.ts tests/unit/llm-agent-loop.test.ts tests/unit/llm-tool.test.ts && npm run test:integration -- tests/integration/template-tools.integration.test.ts && npm run test:e2e -- tests/e2e/call-model-template-tools.e2e.test.ts && python3 tests/scenarios/directed/testcases/test_call_model_template_discovery.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_template_tool_conflicts.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_template_tool.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_mixed_tools.py --managed && npm run build`. All gates passed with deterministic local mock providers.
+
+---
+
+### Phase 119 discovery diagnostics and help resolver — L-96, L-97, L-98, L-99, L-100
+
+**Behaviors covered**
+- L-96: DISC-01 public `list_purposes` diagnostics for native tools, template tools, warnings, conflicts, and dangling bindings.
+- L-97: DISC-02 public `list_models` capability diagnostics with supported/unknown/unsupported states.
+- L-98: DISC-03 public `search` metadata matching for capability keys, template diagnostics, dangling paths, and help terms.
+- L-99: ATL-DS-15 / DISC-04 raw JSON help resolver shape and section coverage.
+- L-100: VAL-119 final green validation gate across lint, unit, directed, and build checks.
+
+**Resolution (2026-05-07)**: Added final Phase 119 coverage rows and ran the full gate: `npm run lint && npm test -- tests/unit/llm-tool.test.ts tests/unit/llm-template-tools.test.ts tests/unit/llm-tool-registry.test.ts && python3 tests/scenarios/directed/testcases/test_discovery_resolvers.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_help_resolver.py --managed && npm run build`. All gates passed with managed public MCP scenarios; no directed assertion reads private provider request capture or implementation modules.
+
+---
 
 ### test_document_outline ✓ RESOLVED 2026-04-29
 
@@ -1163,6 +1431,60 @@ Covers: L-10, L-11
 ### test_llm_usage_filters
 Covers: L-12, L-13, L-14
 
+### test_call_model_trace_arithmetic
+Covers: L-47, L-48
+
+### test_call_model_references
+Covers: L-24, L-25, L-26, L-27, L-27a, L-27b, L-29, L-33, L-33a, L-33b, L-33c, L-33d, L-33e
+
+### test_call_model_multi_ref
+Covers: L-28
+
+### test_call_model_ref_errors
+Covers: L-30, L-31, L-32
+
+### test_call_model_cost_arithmetic_strict
+Covers: L-40, L-42, L-43
+
+### test_call_model_prompt_chars_exact
+Covers: L-44, L-45
+
+### test_call_model_zero_cost
+Covers: L-41, L-65
+
+### test_get_llm_usage_round_trip
+Covers: L-67 (passing); L-46 (failing — see Behavior - Testcase Validation section)
+
+### test_call_model_pointer_resolutions
+Covers: L-49, L-50, L-52, L-53 (passing); L-51 (failing — see Behavior - Testcase Validation section)
+
+### test_call_model_ref_error_taxonomy
+Covers: L-54, L-56, L-57, L-58, L-61, L-62 (passing); L-55 (failing — see Behavior - Testcase Validation section)
+
+### test_call_model_multi_pointer_refs
+Covers: L-59, L-60
+
+### test_discovery_list_models_costs
+Covers: L-63, L-64
+
+### test_discovery_local_flag
+Covers: L-66a, L-66b, L-66c, L-66d
+
+### test_call_model_return_messages
+Covers: L-73, L-74, L-75, ATL-DS-01
+
+### test_get_llm_usage_arithmetic
+Covers: L-68, L-69, L-70
+
+### test_call_model_agent_loop_capabilities
+Covers: L-84, ATL-DS-14, VAL-115
+
+### test_discovery_resolvers
+Covers: L-39f, L-39g, L-39h, L-39h_purposes, L-96, L-97, L-98, VAL-119
+
+### test_call_model_help_resolver
+Covers: L-99, ATL-DS-15, VAL-119
+
 ---
 
 ## PIR Regression Guard Tests — Resolution (2026-04-22)
@@ -1246,14 +1568,17 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-18 | get_llm_usage summary mode returns total_calls, total_spend_usd, avg_cost_per_call_usd, avg_latency_ms, top_purpose, top_model_name, vs_prior_period (REPT-02) | test_get_llm_usage_summary | 2026-04-29 |  |
-| L-19 | get_llm_usage by_purpose excludes _direct rows from purposes array; surfaces them in direct_model_calls (REPT-02 / D-08) | test_get_llm_usage_by_purpose | 2026-04-29 |  |
-| L-20 | get_llm_usage by_model returns per-model entries with pct_of_total_calls, avg_fallback_position, spend_usd, avg_cost_per_call_usd, avg_latency_ms (REPT-02 / D-10, D-11) | test_get_llm_usage_by_model | 2026-04-29 |  |
-| L-21 | get_llm_usage recent returns newest-first entries respecting `limit` parameter; each entry has D-12 fields | test_get_llm_usage_recent | 2026-04-29 |  |
-| L-22 | get_llm_usage `trace_id` filter narrows results to matching calls only (REPT-01) | test_get_llm_usage_trace | 2026-04-29 |  |
+| L-18 | get_llm_usage summary mode returns total_calls, total_spend_usd, avg_cost_per_call_usd, avg_latency_ms, top_purpose, top_model_name, vs_prior_period (REPT-02) | test_get_llm_usage_summary | 2026-04-29 | 2026-05-07 |
+| L-19 | get_llm_usage by_purpose excludes _direct rows from purposes array; surfaces them in direct_model_calls (REPT-02 / D-08) | test_get_llm_usage_by_purpose | 2026-04-29 | 2026-05-07 |
+| L-20 | get_llm_usage by_model returns per-model entries with pct_of_total_calls, avg_fallback_position, spend_usd, avg_cost_per_call_usd, avg_latency_ms (REPT-02 / D-10, D-11) | test_get_llm_usage_by_model | 2026-04-29 | 2026-05-07 |
+| L-21 | get_llm_usage recent returns newest-first entries respecting `limit` parameter; each entry has D-12 fields | test_get_llm_usage_recent | 2026-04-29 | 2026-05-07 |
+| L-22 | get_llm_usage `trace_id` filter narrows results to matching calls only (REPT-01) | test_get_llm_usage_trace | 2026-04-29 | 2026-05-07 |
+| L-68 | `get_llm_usage` `mode=summary` aggregation arithmetic — `total_spend_usd` exactly equals the sum of `cost_usd` across every matched row within absolute tolerance ±1e-9. Setup: seed exactly N=3 `call_model` calls within the queried period, capturing each response's `metadata.cost_usd` (`c1`, `c2`, `c3`); call `get_llm_usage` with `mode=summary` and a period covering all three; assert `response.total_spend_usd` is within ±1e-9 of `c1 + c2 + c3`. Tightens L-18 (which only verifies `total_spend_usd` is a number ≥ 0) to actual aggregation correctness — catches a regression that double-counts or drops rows. | test_get_llm_usage_arithmetic | 2026-05-03 | 2026-05-07 |
+| L-69 | `get_llm_usage` `mode=summary` `total_calls` exact integer count — after seeding exactly N=3 `call_model` calls within the queried period, `response.total_calls === 3` (strict integer `===`, not `>= 3`). Tightens L-18's `total_calls >= 2` shape check. Catches a regression where one matched row is dropped or an unrelated row is included. Use a fresh trace_id or an isolated period to ensure no other calls are matched. | test_get_llm_usage_arithmetic | 2026-05-03 | 2026-05-07 |
+| L-70 | `get_llm_usage` `mode=by_purpose` per-purpose subtotal aggregation — sum of `spend_usd` across every entry in `response.purposes[]` PLUS sum of `spend_usd` across every entry in `response.direct_model_calls[]` equals the `total_spend_usd` from the same period's `mode=summary` query within ±1e-9. Setup: seed N≥2 calls across at least 2 distinct purposes plus at least 1 direct model call; query both `mode=summary` and `mode=by_purpose` with the same period; assert `(sum of purposes[].spend_usd) + (sum of direct_model_calls[].spend_usd) ≈ summary.total_spend_usd`. Verifies that the by_purpose split is a true partition of the summary total, not a separate aggregation that could drift. | test_get_llm_usage_arithmetic | 2026-05-03 | 2026-05-07 |
 
 ### 15.2 Embedding Migration (Phase 104)
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| L-23 | Embedding semantic search works end-to-end when routed through the `embedding` purpose — save_memory + search_memory return results matching the seed entry (EMBED-01) | test_embedding_migration | 2026-04-29 |  |
+| L-23 | Embedding semantic search works end-to-end when routed through the `embedding` purpose — save_memory + search_memory return results matching the seed entry (EMBED-01) | test_embedding_migration | 2026-04-29 | 2026-05-07 |

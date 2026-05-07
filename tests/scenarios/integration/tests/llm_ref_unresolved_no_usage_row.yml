@@ -1,0 +1,54 @@
+name: llm_ref_unresolved_no_usage_row
+description: >
+  call_model with an unresolvable {{ref:...}} fails before LLM dispatch — no
+  provider call is made and no fqc_llm_usage row is written. After such a
+  call, get_llm_usage(mode=summary, trace_id=<unique>) returns total_calls=0
+  (the row delta is zero). Negative-side counterpart to IL-21.
+coverage: [IL-22]
+deps: [llm]
+
+steps:
+  - label: "call_model with unresolvable {{ref:...}} + unique trace_id returns isError"
+    # Confirm the call returns the reference_resolution_failed error path,
+    # not a successful LLM dispatch that happens to log no usage. The
+    # failure mode IS the precondition for the no-row guarantee.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        trace_id: "il22-${run.id}"
+        messages:
+          - role: user
+            content: "{{ref:Nonexistent/never-existed.md}} Reply OK."
+      expect_contains: "reference_resolution_failed"
+      expect_error: true
+
+  - label: "get_llm_usage filtered by trace_id (period='all') — total_calls is 0 (no row written)"
+    # IL-22 is fundamentally about the WRITE side: a failed-resolution call
+    # must not record a usage row. Filtering by the unique trace_id used
+    # above isolates this assertion from any other traffic in the same
+    # run. period='all' removes the time-window upper bound so this
+    # assertion does not get a false-pass from the period.to=now() race
+    # against fire-and-forget Postgres timestamps (see IL-21 for the
+    # mirror image of the same race).
+    assert:
+      op: get_llm_usage
+      args:
+        mode: summary
+        period: all
+        trace_id: "il22-${run.id}"
+      expect_contains: '"total_calls": 0'
+
+  - label: "get_llm_usage recent mode (period='all') for the trace returns no calls"
+    # Cross-check: if no row was written, recent mode for this trace
+    # should not list any model_name entry tied to this trace_id.
+    # We assert the trace-scoped recent block does not include model_name,
+    # which would only appear if a row had been recorded for this trace.
+    assert:
+      op: get_llm_usage
+      args:
+        mode: recent
+        period: all
+        trace_id: "il22-${run.id}"
+      expect_not_contains: '"model_name"'

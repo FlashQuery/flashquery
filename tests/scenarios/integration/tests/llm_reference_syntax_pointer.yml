@@ -1,0 +1,57 @@
+name: llm_reference_syntax_pointer
+description: >
+  call_model with {{ref:path->pointer}} dereferences the frontmatter pointer
+  to a target document and injects the target's body. Response metadata
+  includes resolved_to with the target's vault path (REFS-01, REFS-04).
+coverage: [IL-12]
+deps: [llm]
+
+steps:
+  - label: "Setup: create the target document"
+    action: vault.write
+    path: "Test/ref-target.md"
+    title: "Ref Target"
+    content: "Target body — the magic word is BANANA."
+
+  - label: "Setup: create the source document with a frontmatter pointer to the target"
+    action: vault.write
+    path: "Test/ref-source.md"
+    title: "Ref Source"
+    content: |
+      ---
+      fq_target_ref: "_integration/Test/ref-target.md"
+      ---
+      Source body — should NOT be injected when using ->.
+
+  - label: "call_model with {{ref:source->fq_target_ref}} dereferences and injects target body"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-source.md->fq_target_ref}} What word appears in the document? Reply with just the word in uppercase."
+      expect_contains: "BANANA"
+
+  - label: "Response metadata includes resolved_to for -> dereference"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-source.md->fq_target_ref}} Reply OK."
+      expect_contains: '"resolved_to"'
+
+  - label: "TC3-W4: resolved_to has the concrete dereferenced path (value, not just key)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ref-source.md->fq_target_ref}} Reply OK."
+      expect_contains: '"resolved_to":"_integration/Test/ref-target.md"'

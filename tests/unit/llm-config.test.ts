@@ -1,8 +1,15 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+
+vi.mock('../../src/logging/logger.js', () => ({
+  logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
 import { loadConfig } from '../../src/config/loader.js';
+import { modelCapabilitiesWithDefaults } from '../../src/llm/capabilities.js';
+import { logger } from '../../src/logging/logger.js';
 
 // Minimal base config YAML — each test appends its own llm: section to a copy of this.
 const BASE_CONFIG_YAML = `
@@ -39,6 +46,8 @@ describe('loadConfig() — LLM three-layer schema', () => {
     const prevKey = process.env['OPENAI_API_KEY'];
     process.env['OPENAI_API_KEY'] = 'sk-test-abc';
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: openai
@@ -80,6 +89,8 @@ llm:
   it('[U-02] accepts valid names matching [a-z0-9][a-z0-9_-]*: fast, local-ollama, auto_tag', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: fast
@@ -133,6 +144,8 @@ llm:
   it('[U-03] accepts a purpose with empty models: [] list (deferred to runtime per PURP-02)', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: openai
@@ -167,6 +180,8 @@ llm:
     process.env['TEST_FQC_LLM_KEY'] = 'sk-expanded';
     process.env['TEST_FQC_LLM_ENDPOINT'] = 'https://example.invalid/v1';
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: testprovider
@@ -204,6 +219,8 @@ llm:
   it('[U-05] accepts cost_per_million: { input: 0, output: 0 } for local/free models per MOD-02', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
 llm:
   providers:
     - name: local
@@ -459,6 +476,380 @@ llm:
     }
   });
 
+  it('[ATL-U-08] parses purpose tools, excluded_tools, templates, provider defaults, and numeric loop guardrails', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-purpose-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million:
+        input: 2.5
+        output: 10.0
+  purposes:
+    - name: researcher
+      description: Research with bounded loop controls
+      models:
+        - gpt-4o
+      tools:
+        - search_memory
+      excluded_tools:
+        - get_memory
+      templates:
+        - Templates/research.md
+      defaults:
+        temperature: 0.2
+        vendor_flag: enabled
+        response_format:
+          type: json_object
+        timeout_ms: 30000
+        max_cost_usd: 0.25
+        max_tokens_budget: 12000
+        max_iterations: 5
+        result_summary_chars: 2000
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      const purpose = config.llm?.purposes[0];
+      expect(purpose?.tools).toEqual(['search_memory']);
+      expect(purpose?.excludedTools).toEqual(['get_memory']);
+      expect(purpose?.templates).toEqual(['Templates/research.md']);
+      expect(purpose?.defaults?.['temperature']).toBe(0.2);
+      expect(purpose?.defaults?.['vendor_flag']).toBe('enabled');
+      expect(purpose?.defaults?.['timeout_ms']).toBe(30000);
+      expect(purpose?.defaults?.['max_cost_usd']).toBe(0.25);
+      expect(purpose?.defaults?.['max_tokens_budget']).toBe(12000);
+      expect(purpose?.defaults?.['max_iterations']).toBe(5);
+      expect(purpose?.defaults?.['result_summary_chars']).toBe(2000);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects excluded_tools without tools', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-excluded-without-tools-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      excluded_tools: [search_memory]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/\[purpose\].*excluded_tools requires tools/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects unknown purpose tool tier names', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-tier-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      tools: [tier:unknown]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/\[purpose\].*unknown tool tier 'tier:unknown'/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects unknown native tools in tools', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-tool-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      tools: [not_a_tool]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/\[purpose\].*unknown native tool 'not_a_tool'/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects unknown native tools in excluded_tools', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-excluded-tool-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      tools: [tier:read-only]
+      excluded_tools: [not_a_tool]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/\[purpose\].*unknown native tool 'not_a_tool'/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] preserves hard-excluded native tool declarations for registry diagnostics', () => {
+    vi.mocked(logger.warn).mockClear();
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-hard-excluded-tools-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [gpt-4o]
+      tools: [call_model, register_plugin]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.purposes[0].tools).toEqual(['call_model', 'register_plugin']);
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("purpose 'agentic' lists hard-excluded native tool 'call_model'"));
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("purpose 'agentic' lists hard-excluded native tool 'register_plugin'"));
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] defaults top-level templates.default_access to permissive', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-templates-default-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    writeFileSync(tmpFile, BASE_CONFIG_YAML);
+    try {
+      expect(loadConfig(tmpFile).templates?.defaultAccess).toBe('permissive');
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] accepts only permissive or restrictive for templates.default_access', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-templates-invalid-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: open
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/templates\.default_access/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects unknown top-level purpose keys including tols and audit_document', () => {
+    const buildYaml = (field: string) => BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million:
+        input: 2.5
+        output: 10.0
+  purposes:
+    - name: default
+      description: General
+      models:
+        - gpt-4o
+      ${field}: true
+`;
+
+    for (const field of ['tols', 'audit_document']) {
+      const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-${field}-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+      writeFileSync(tmpFile, buildYaml(field));
+      try {
+        expect(() => loadConfig(tmpFile)).toThrow(new RegExp(field));
+      } finally {
+        unlinkSync(tmpFile);
+      }
+    }
+  });
+
+  it('[ATL-U-08] rejects non-number loop guardrail defaults while preserving provider parameters', () => {
+    const buildYaml = (key: string) => BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million:
+        input: 2.5
+        output: 10.0
+  purposes:
+    - name: default
+      description: General
+      models:
+        - gpt-4o
+      defaults:
+        temperature: 0.1
+        vendor_flag: passthrough
+        ${key}: bad
+`;
+
+    for (const key of ['timeout_ms', 'max_cost_usd', 'max_tokens_budget', 'max_iterations', 'result_summary_chars']) {
+      const tmpFile = join(tmpdir(), `fqc-atl-u08-guardrail-${key}-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+      writeFileSync(tmpFile, buildYaml(key));
+      try {
+        expect(() => loadConfig(tmpFile)).toThrow(new RegExp(key));
+      } finally {
+        unlinkSync(tmpFile);
+      }
+    }
+  });
+
+  it('[ATL-U-08] migrates legacy string capabilities to tags and preserves structured behavioral capabilities', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-capabilities-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: legacy
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      capabilities:
+        - tools
+        - vision
+    - name: structured
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million: { input: 2.5, output: 10.0 }
+      tags: ["vision"]
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: false
+        parallel_tool_calls: true
+        structured_outputs_with_tools: true
+  purposes:
+    - name: default
+      description: General
+      models: [legacy, structured]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].tags).toEqual(['tools', 'vision']);
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
+      expect(config.llm?.models[1].tags).toEqual(['vision']);
+      expect(config.llm?.models[1].capabilities).toEqual({
+        tool_calling: true,
+        usage_on_tool_calls: true,
+        strict_tools: false,
+        parallel_tool_calls: true,
+        structured_outputs_with_tools: true,
+      });
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('[CONF-06] rejects pre-v3.0 flat llm: { provider, model } config with migration error', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const prevKey = process.env['OPENAI_API_KEY'];
@@ -476,6 +867,359 @@ llm:
       unlinkSync(tmpFile);
       if (prevKey === undefined) delete process.env['OPENAI_API_KEY'];
       else process.env['OPENAI_API_KEY'] = prevKey;
+    }
+  });
+});
+
+describe('loadConfig() — DISC-05 optional model fields', () => {
+  it('[U-DISC-05-01] parses optional discovery metadata plus structured behavioral capabilities', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-01-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      description: "A fast small model for routine tasks"
+      context_window: 131072
+      tags: ["vision"]
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: true
+        parallel_tool_calls: false
+        structured_outputs_with_tools: true
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].description).toBe('A fast small model for routine tasks');
+      expect(config.llm?.models[0].contextWindow).toBe(131072);
+      expect(config.llm?.models[0].tags).toEqual(['vision']);
+      expect(config.llm?.models[0].capabilities).toEqual({
+        tool_calling: true,
+        usage_on_tool_calls: true,
+        strict_tools: true,
+        parallel_tool_calls: false,
+        structured_outputs_with_tools: true,
+      });
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[U-DISC-05-02] omits optional model metadata when not declared (undefined, NOT null/empty)', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-02-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].description).toBeUndefined();
+      expect(config.llm?.models[0].contextWindow).toBeUndefined();
+      expect(config.llm?.models[0].tags).toBeUndefined();
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[U-DISC-05-03] migrates an explicitly empty legacy capability list to empty tags', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-03-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      capabilities:
+        []
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].tags).toEqual([]);
+      expect(config.llm?.models[0].tags).not.toBeUndefined();
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[U-DISC-05-04] declaring description only leaves context_window, tags, and capabilities undefined', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-04-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      description: "Just description"
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].description).toBe('Just description');
+      expect(config.llm?.models[0].contextWindow).toBeUndefined();
+      expect(config.llm?.models[0].tags).toBeUndefined();
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[U-DISC-05-05] rejects context_window: -1 and 0 and 1.5 at parse time (positive integer constraint)', () => {
+    const buildYaml = (cw: string) => BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      context_window: ${cw}
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    for (const bad of ['-1', '0', '1.5']) {
+      const tmpFile = join(tmpdir(), `fqc-disc05-05-${bad}-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+      writeFileSync(tmpFile, buildYaml(bad));
+      try {
+        expect(() => loadConfig(tmpFile)).toThrow();
+      } finally {
+        unlinkSync(tmpFile);
+      }
+    }
+  });
+
+  it('[U-DISC-05-06] migrates custom legacy capability strings to tags', () => {
+    const tmpFile = join(tmpdir(), `fqc-disc05-06-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: fast
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      capabilities:
+        - tools
+        - legacy-custom-tag
+        - vision-experimental
+  purposes:
+    - name: default
+      description: General
+      models: [fast]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.models[0].tags).toEqual(['tools', 'legacy-custom-tag', 'vision-experimental']);
+      expect(config.llm?.models[0].capabilities).toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+});
+
+describe('loadConfig() — ATL-U-08 capability admission', () => {
+  it('[ATL-U-08] defaults official OpenAI structured capabilities to true', () => {
+    const caps = modelCapabilitiesWithDefaults(
+      { capabilities: undefined },
+      { name: 'openai', type: 'openai-compatible' }
+    );
+    expect(caps).toEqual({
+      tool_calling: true,
+      usage_on_tool_calls: true,
+      strict_tools: true,
+      parallel_tool_calls: true,
+      structured_outputs_with_tools: true,
+    });
+  });
+
+  it('[ATL-U-08] leaves openrouter, custom OpenAI-compatible, and ollama capabilities as unknown declarations', () => {
+    for (const provider of [
+      { name: 'openrouter', type: 'openai-compatible' as const },
+      { name: 'custom', type: 'openai-compatible' as const },
+      { name: 'local-ollama', type: 'ollama' as const },
+    ]) {
+      const caps = modelCapabilitiesWithDefaults({ capabilities: undefined }, provider);
+      expect(caps.tool_calling).toBeUndefined();
+      expect(caps.usage_on_tool_calls).toBeUndefined();
+      expect(caps.structured_outputs_with_tools).toBeUndefined();
+    }
+  });
+
+  it('[ATL-U-08] rejects tool-exposing purposes when a fallback model has unknown declaration diagnostics with remediation', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unknown-admission-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openrouter
+      type: openai-compatible
+      endpoint: https://openrouter.ai/api
+  models:
+    - name: router-model
+      provider_name: openrouter
+      model: anthropic/claude-sonnet-4.5
+      type: language
+      cost_per_million: { input: 3, output: 15 }
+  purposes:
+    - name: agentic
+      description: Agentic purpose
+      models: [router-model]
+      tools: [search_memory]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/unknown declaration.*capabilities\.tool_calling: true\|false.*capabilities\.usage_on_tool_calls: true\|false/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects template-exposing purposes when a fallback model declares unsupported usage_on_tool_calls', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-unsupported-admission-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: weak
+      provider_name: openai
+      model: gpt-4o-mini
+      type: language
+      cost_per_million: { input: 0.15, output: 0.6 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: false
+  purposes:
+    - name: templated
+      description: Template tool purpose
+      models: [weak]
+      templates: [Templates/research-skill.md]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/declared unsupported.*usage_on_tool_calls/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] rejects permissive default template exposure when capabilities are unknown', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-permissive-mode2-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+llm:
+  providers:
+    - name: local
+      type: ollama
+      endpoint: http://localhost:11434
+  models:
+    - name: llama
+      provider_name: local
+      model: llama3.2
+      type: language
+      cost_per_million: { input: 0, output: 0 }
+  purposes:
+    - name: plain
+      description: Plain purpose with default template exposure
+      models: [llama]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/unknown declaration.*capabilities\.tool_calling: true\|false/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('[ATL-U-08] treats restrictive/no-binding purposes as Mode 1 even when capabilities are unknown', () => {
+    const tmpFile = join(tmpdir(), `fqc-atl-u08-mode1-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: local
+      type: ollama
+      endpoint: http://localhost:11434
+  models:
+    - name: llama
+      provider_name: local
+      model: llama3.2
+      type: language
+      cost_per_million: { input: 0, output: 0 }
+  purposes:
+    - name: plain
+      description: Plain Mode 1 purpose
+      models: [llama]
+      defaults:
+        response_format:
+          type: json_object
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(loadConfig(tmpFile).llm?.purposes[0].name).toBe('plain');
+    } finally {
+      unlinkSync(tmpFile);
     }
   });
 });

@@ -1,0 +1,69 @@
+name: llm_discovery_local_model_managed
+description: >
+  Managed-fixture-only discovery check for Ollama-backed local models. The
+  managed runner applies this test's extra_config before starting FlashQuery,
+  adding a model whose provider.type is ollama. list_models must auto-derive
+  local: true for that model. This fixture is intentionally managed-only because
+  external servers, including Docker full-stack runs, cannot receive per-test
+  extra_config after they are already running.
+coverage: [IL-15]
+deps: [llm]
+server_modes: [managed]
+
+extra_config:
+  llm:
+    providers:
+      - name: openai
+        type: openai-compatible
+        endpoint: https://api.openai.com
+        api_key: ${OPENAI_API_KEY}
+      - name: local-ollama
+        type: ollama
+        endpoint: http://localhost:11434
+    models:
+      - name: embeddings
+        provider_name: openai
+        model: text-embedding-3-small
+        type: embedding
+        dimensions: 1536
+        cost_per_million:
+          input: 0.02
+          output: 0.00
+      - name: fast
+        provider_name: openai
+        model: gpt-4o-mini
+        type: language
+        cost_per_million:
+          input: 0.15
+          output: 0.60
+      - name: local
+        provider_name: local-ollama
+        model: llama3.2:latest
+        type: language
+        cost_per_million:
+          input: 0
+          output: 0
+    purposes:
+      - name: embedding
+        description: "Generates vector embeddings for semantic search"
+        models:
+          - embeddings
+      - name: general
+        description: "General purpose"
+        models:
+          - fast
+
+steps:
+  - label: "list_models includes the managed-fixture local model"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"name":"local"'
+
+  - label: "list_models auto-derives local:true for Ollama-backed models"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"local":true'

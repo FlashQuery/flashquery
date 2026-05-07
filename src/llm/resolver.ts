@@ -6,6 +6,7 @@ import {
   type ChatMessage,
   type LlmCompletionResult,
 } from './client.js';
+import type { LlmChatMessage, LlmChatResult } from './types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LlmFallbackError — D-06
@@ -58,31 +59,34 @@ function delay(ms: number): Promise<void> {
 
 export class PurposeResolver {
   private config: NonNullable<FlashQueryConfig['llm']>;
-  private completeFn: (
+  private chatFn: (
     modelName: string,
-    messages: ChatMessage[],
+    messages: LlmChatMessage[],
     parameters?: Record<string, unknown>
-  ) => Promise<LlmCompletionResult>;
+  ) => Promise<LlmChatResult | LlmCompletionResult>;
 
   constructor(
     config: NonNullable<FlashQueryConfig['llm']>,
-    completeFn: (
+    chatFn: (
       modelName: string,
-      messages: ChatMessage[],
+      messages: LlmChatMessage[],
       parameters?: Record<string, unknown>
-    ) => Promise<LlmCompletionResult>
+    ) => Promise<LlmChatResult | LlmCompletionResult>
   ) {
     this.config = config;
-    this.completeFn = completeFn;
+    this.chatFn = chatFn;
   }
 
-  // LLM-02 + LLM-03: walk the chain, classify errors, merge params.
-  // Return type adds purposeName (lowercased) and fallbackPosition (1-indexed).
-  async completeByPurpose(
+  private async resolveByPurpose<T>(
     purposeName: string,
-    messages: ChatMessage[],
-    parameters?: Record<string, unknown>
-  ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }> {
+    messages: LlmChatMessage[],
+    parameters: Record<string, unknown> | undefined,
+    fn: (
+      modelName: string,
+      messages: LlmChatMessage[],
+      parameters?: Record<string, unknown>
+    ) => Promise<T>
+  ): Promise<T & { purposeName: string; fallbackPosition: number }> {
     const normalizedName = purposeName.toLowerCase(); // CONF-07 normalization at runtime
     const purpose = this.config.purposes.find((p) => p.name === normalizedName);
 
@@ -98,7 +102,7 @@ export class PurposeResolver {
       const mergedParams = mergeParameters(parameters ?? {}, purpose.defaults ?? {});
 
       try {
-        const result = await this.completeFn(modelName, messages, mergedParams);
+        const result = await fn(modelName, messages, mergedParams);
         return { ...result, purposeName: normalizedName, fallbackPosition: i + 1 };
       } catch (err: unknown) {
         const model = this.config.models.find((m) => m.name === modelName);
@@ -124,6 +128,53 @@ export class PurposeResolver {
 
     // All models exhausted (or empty models list — PURP-02 returns 0-attempt LlmFallbackError)
     throw new LlmFallbackError(normalizedName, attempts);
+  }
+
+  // LLM-02 + LLM-03: walk the chain, classify errors, merge params.
+  // Return type adds purposeName (lowercased) and fallbackPosition (1-indexed).
+  async chatByPurpose(
+    purposeName: string,
+    messages: LlmChatMessage[],
+    parameters?: Record<string, unknown>
+  ): Promise<LlmChatResult & { purposeName: string; fallbackPosition: number }> {
+    const result = await this.resolveByPurpose(purposeName, messages, parameters, this.chatFn);
+    if ('message' in result) return result;
+    return {
+      message: { role: 'assistant', content: result.text },
+      modelName: result.modelName,
+      providerName: result.providerName,
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      latencyMs: result.latencyMs,
+      finishReason: 'stop',
+      purposeName: result.purposeName,
+      fallbackPosition: result.fallbackPosition,
+    };
+  }
+
+  async completeByPurpose(
+    purposeName: string,
+    messages: ChatMessage[],
+    parameters?: Record<string, unknown>
+  ): Promise<LlmCompletionResult & { purposeName: string; fallbackPosition: number }> {
+    return this.resolveByPurpose(purposeName, messages, parameters, async (modelName, chatMessages, mergedParams) => {
+      const result = await this.chatFn(modelName, chatMessages, mergedParams);
+      if ('text' in result) return result;
+      if ((result.message.tool_calls?.length ?? 0) > 0) {
+        throw new Error('LLM error: text completion wrapper received tool calls; use chat() for tool-capable responses.');
+      }
+      if (typeof result.message.content !== 'string' || result.message.content.length === 0) {
+        throw new Error(`LLM error: ${result.providerName} returned a 200 response with no completion choices.`);
+      }
+      return {
+        text: result.message.content,
+        modelName: result.modelName,
+        providerName: result.providerName,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        latencyMs: result.latencyMs,
+      };
+    });
   }
 
   // LLM-04: pure config lookup — no network call.

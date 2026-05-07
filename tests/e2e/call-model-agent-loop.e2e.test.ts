@@ -1,0 +1,485 @@
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import * as http from 'node:http';
+import { describe, expect, it } from 'vitest';
+
+type MockResponse = {
+  status?: number;
+  body: Record<string, unknown>;
+};
+
+class ScriptedOpenAiProvider {
+  readonly requests: Record<string, unknown>[] = [];
+  private server?: http.Server;
+  private script: MockResponse[];
+
+  constructor(script: MockResponse[]) {
+    this.script = [...script];
+  }
+
+  get endpoint(): string {
+    const address = this.server?.address();
+    if (!address || typeof address === 'string') throw new Error('Mock provider is not started.');
+    return `http://127.0.0.1:${address.port}`;
+  }
+
+  async start(): Promise<void> {
+    this.server = http.createServer(async (req, res) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      const rawBody = Buffer.concat(chunks).toString('utf-8');
+      this.requests.push(JSON.parse(rawBody) as Record<string, unknown>);
+      const next = this.script.shift() ?? finalTextResponse('fallback final', 1, 1);
+      const payload = JSON.stringify(next.body);
+      res.writeHead(next.status ?? 200, {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload),
+      });
+      res.end(payload);
+    });
+    await new Promise<void>((resolveStart) => this.server!.listen(0, '127.0.0.1', resolveStart));
+  }
+
+  async stop(): Promise<void> {
+    if (!this.server) return;
+    await new Promise<void>((resolveStop) => this.server!.close(() => resolveStop()));
+  }
+}
+
+function finalTextResponse(content: string, promptTokens: number, completionTokens: number): MockResponse {
+  return {
+    body: {
+      id: 'chatcmpl-final',
+      object: 'chat.completion',
+      model: 'agent-model',
+      choices: [{ index: 0, message: { role: 'assistant', content }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens },
+    },
+  };
+}
+
+function toolCallResponse(toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }>, promptTokens = 12, completionTokens = 4): MockResponse {
+  return {
+    body: {
+      id: 'chatcmpl-tools',
+      object: 'chat.completion',
+      model: 'agent-model',
+      choices: [{
+        index: 0,
+        message: {
+          role: 'assistant',
+          content: null,
+          tool_calls: toolCalls.map((call) => ({
+            id: call.id,
+            type: 'function',
+            function: { name: call.name, arguments: JSON.stringify(call.args) },
+          })),
+        },
+        finish_reason: 'tool_calls',
+      }],
+      usage: { prompt_tokens: promptTokens, completion_tokens: completionTokens },
+    },
+  };
+}
+
+async function withManagedMcp<T>(provider: ScriptedOpenAiProvider, fn: (client: Client) => Promise<T>): Promise<T> {
+  const tempDir = await mkdtemp(join(tmpdir(), 'fqc-agent-loop-e2e-'));
+  const configPath = join(tempDir, 'flashquery.yml');
+  const vaultPath = join(tempDir, 'vault');
+  const entryPoint = resolve('src/index.ts');
+  const projectRoot = resolve('.');
+  const instanceId = `agent-loop-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const config = `
+instance:
+  name: Agent Loop E2E
+  id: ${instanceId}
+  vault:
+    path: ${JSON.stringify(vaultPath)}
+    markdown_extensions: ['.md']
+server:
+  host: 127.0.0.1
+  port: 0
+supabase:
+  url: ${JSON.stringify(process.env.SUPABASE_URL ?? '')}
+  service_role_key: ${JSON.stringify(process.env.SUPABASE_SERVICE_ROLE_KEY ?? '')}
+  database_url: ${JSON.stringify(process.env.DATABASE_URL ?? '')}
+git:
+  auto_commit: false
+  auto_push: false
+embedding:
+  provider: none
+  model: ''
+  dimensions: 1536
+logging:
+  level: error
+  output: stdout
+llm:
+  providers:
+    - name: mock
+      type: openai-compatible
+      endpoint: ${JSON.stringify(provider.endpoint)}
+      api_key: sk-test
+  models:
+    - name: fast
+      provider_name: mock
+      model: agent-model
+      type: language
+      cost_per_million: { input: 1, output: 2 }
+    - name: agent-model
+      provider_name: mock
+      model: agent-model
+      type: language
+      cost_per_million: { input: 1, output: 2 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: true
+        parallel_tool_calls: true
+        structured_outputs_with_tools: true
+    - name: fallback-agent-model
+      provider_name: mock
+      model: fallback-agent-model
+      type: language
+      cost_per_million: { input: 10, output: 20 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: true
+        parallel_tool_calls: true
+        structured_outputs_with_tools: true
+    - name: structured-incompatible-model
+      provider_name: mock
+      model: structured-incompatible-model
+      type: language
+      cost_per_million: { input: 1, output: 2 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: true
+        parallel_tool_calls: true
+        structured_outputs_with_tools: false
+  purposes:
+    - name: agentic
+      description: Agent loop test purpose
+      models: [agent-model, fallback-agent-model]
+      tools: [get_document, search_documents]
+      defaults:
+        max_iterations: 4
+        timeout_ms: 10000
+        max_tokens: 64
+    - name: structured_fail
+      description: ATL-E2E-08 structured output compatibility failure
+      models: [structured-incompatible-model]
+      tools: [get_document]
+      defaults:
+        max_iterations: 2
+        timeout_ms: 10000
+`;
+  await writeFile(configPath, config);
+
+  const transport = new StdioClientTransport({
+    command: 'npx',
+    args: ['tsx', entryPoint, 'start', '--config', configPath],
+    stderr: 'pipe',
+    env: process.env as Record<string, string>,
+    cwd: projectRoot,
+  });
+  const stderrLines: string[] = [];
+  transport.stderr?.on('data', (data: Buffer) => {
+    stderrLines.push(data.toString('utf-8'));
+  });
+  const client = new Client({ name: 'agent-loop-e2e', version: '1.0.0' });
+  try {
+    await client.connect(transport);
+    return await fn(client);
+  } catch (error) {
+    const stderr = stderrLines.join('').trim();
+    if (stderr.length > 0) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)}\nSubprocess stderr:\n${stderr}`);
+    }
+    throw error;
+  } finally {
+    await client.close().catch(() => undefined);
+    await transport.close().catch(() => undefined);
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+async function callModel(client: Client, args: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const result = await client.callTool({ name: 'call_model', arguments: args }) as {
+    content: Array<{ type: string; text: string }>;
+    isError?: boolean;
+  };
+  expect(result.isError).toBeFalsy();
+  return JSON.parse(result.content[0].text) as Record<string, unknown>;
+}
+
+describe('call_model agent-loop public E2E contracts', () => {
+  it('ATL-E2E-01 preserves Mode 1 envelope compatibility, return_messages, and raw discovery shape', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('ATL-E2E-01 mode one complete', 9, 4),
+      finalTextResponse('ATL-E2E-01 default envelope complete', 7, 3),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const envelope = await callModel(client, {
+          resolver: 'model',
+          name: 'fast',
+          messages: [{ role: 'user', content: 'ATL-E2E-01 mode one compatibility.' }],
+          return_messages: true,
+        });
+        expect(envelope).toMatchObject({
+          response: 'ATL-E2E-01 mode one complete',
+          messages: [
+            expect.objectContaining({ role: 'user', content: 'ATL-E2E-01 mode one compatibility.' }),
+            expect.objectContaining({ role: 'assistant', content: 'ATL-E2E-01 mode one complete' }),
+          ],
+          metadata: expect.any(Object),
+        });
+        expect((envelope.metadata as { tools?: unknown }).tools).toBeUndefined();
+
+        const defaultEnvelope = await callModel(client, {
+          resolver: 'model',
+          name: 'fast',
+          messages: [{ role: 'user', content: 'ATL-E2E-01 default Mode 1 shape.' }],
+        });
+        expect(defaultEnvelope).toMatchObject({
+          response: 'ATL-E2E-01 default envelope complete',
+          metadata: expect.any(Object),
+          messages: [],
+        });
+        expect(Array.isArray(defaultEnvelope.messages)).toBe(true);
+        expect((defaultEnvelope.messages as unknown[])).toHaveLength(0);
+
+        const discoveryResult = await client.callTool({
+          name: 'call_model',
+          arguments: { resolver: 'list_models', return_messages: true },
+        }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+        expect(discoveryResult.isError).toBeFalsy();
+        const discovery = JSON.parse(discoveryResult.content[0].text) as Record<string, unknown>;
+        expect(discovery).toMatchObject({
+          models: expect.arrayContaining([
+            expect.objectContaining({ name: 'fast', provider: 'mock' }),
+          ]),
+        });
+        expect(discovery).not.toHaveProperty('response');
+        expect(discovery).not.toHaveProperty('messages');
+        expect(discovery).not.toHaveProperty('metadata');
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-02 runs a native tool loop and returns final_response calls_log metadata', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      toolCallResponse([{ id: 'call_search_1', name: 'search_documents', args: { query: 'ATL-E2E-02' } }]),
+      finalTextResponse('native loop complete', 21, 8),
+    ]);
+    await provider.start();
+    try {
+      const envelope = await withManagedMcp(provider, (client) => callModel(client, {
+        resolver: 'purpose',
+        name: 'agentic',
+        messages: [{ role: 'user', content: 'ATL-E2E-02 use search_documents then answer.' }],
+        return_messages: true,
+      }));
+      expect(envelope).toMatchObject({
+        response: 'native loop complete',
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: 'assistant', name: 'agentic', tool_calls: expect.any(Array) }),
+          expect.objectContaining({ role: 'tool', tool_call_id: 'call_search_1' }),
+        ]),
+        metadata: {
+          tools: {
+            stop_reason: 'final_response',
+            calls_log: expect.any(Array),
+          },
+          tokens: expect.any(Object),
+          cost_usd: expect.any(Number),
+        },
+      });
+      expect(provider.requests[1]).toMatchObject({
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: 'assistant', name: 'agentic', tool_calls: expect.any(Array) }),
+          expect.objectContaining({ role: 'tool', tool_call_id: 'call_search_1' }),
+        ]),
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-03 dispatches parallel tool calls with one recoverable failure and one success', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      toolCallResponse([
+        { id: 'call_doc_ok', name: 'get_document', args: { identifiers: 'Existing.md' } },
+        { id: 'call_doc_missing', name: 'get_document', args: { identifiers: 'Missing.md' } },
+      ]),
+      finalTextResponse('parallel recovery complete', 33, 9),
+    ]);
+    await provider.start();
+    try {
+      const envelope = await withManagedMcp(provider, (client) => callModel(client, {
+        resolver: 'purpose',
+        name: 'agentic',
+        messages: [{ role: 'user', content: 'ATL-E2E-03 parallel tool calls.' }],
+      }));
+      expect(envelope.metadata).toMatchObject({
+        tools: {
+          stop_reason: 'final_response',
+          calls_log: expect.arrayContaining([
+            expect.objectContaining({
+              tool_calls: expect.arrayContaining([
+                expect.objectContaining({ tool_call_id: 'call_doc_ok' }),
+                expect.objectContaining({ tool_call_id: 'call_doc_missing' }),
+              ]),
+            }),
+          ]),
+        },
+      });
+      expect(envelope.messages).toEqual([]);
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-06 covers max_iterations, shutdown, provider error, dispatch-time timeout, zero usage, estimate, fallback cost, and per-model stop accounting', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      toolCallResponse([{ id: 'call_loop_forever', name: 'get_document', args: { identifiers: 'Loop.md' } }]),
+      toolCallResponse([{ id: 'call_loop_again', name: 'get_document', args: { identifiers: 'Loop.md' } }]),
+    ]);
+    await provider.start();
+    try {
+      const envelope = await withManagedMcp(provider, (client) => callModel(client, {
+        resolver: 'purpose',
+        name: 'agentic',
+        messages: [{ role: 'user', content: 'ATL-E2E-06 stop before next model call.' }],
+        parameters: { max_iterations: 1, max_tokens_budget: 1, max_cost_usd: 0.000001, timeout_ms: 1000 },
+      }));
+      expect(envelope.metadata).toMatchObject({
+        tools: {
+          stop_reason: expect.stringMatching(/max_iterations|timeout|max_tokens|max_cost|shutdown|error/),
+          calls_log: expect.any(Array),
+        },
+        tokens: expect.any(Object),
+        cost_usd: expect.any(Number),
+      });
+      expect(envelope.response).toBe('');
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-06 rejects caller-provided tools while Mode 3 cooperative dispatch is deferred', async () => {
+    const provider = new ScriptedOpenAiProvider([finalTextResponse('should not dispatch', 1, 1)]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const result = await client.callTool({
+          name: 'call_model',
+          arguments: {
+            resolver: 'purpose',
+            name: 'agentic',
+            messages: [{ role: 'user', content: 'caller-provided Mode 3 external tool should be rejected.' }],
+            parameters: {
+              tools: [{ type: 'function', function: { name: 'external_search', parameters: { type: 'object' } } }],
+            },
+          },
+        }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/caller-provided|Mode 3|deferred/i);
+      });
+      expect(provider.requests.length).toBe(0);
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-08 rejects response_format with model-visible tools before provider dispatch when capabilities are incompatible', async () => {
+    const provider = new ScriptedOpenAiProvider([finalTextResponse('should not dispatch', 1, 1)]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const result = await client.callTool({
+          name: 'call_model',
+          arguments: {
+            resolver: 'purpose',
+            name: 'structured_fail',
+            messages: [{ role: 'user', content: 'ATL-E2E-08 incompatible provider capability should fail.' }],
+            parameters: {
+              response_format: { type: 'json_object' },
+            },
+          },
+        }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/response_format|structured_outputs_with_tools|capabil/i);
+      });
+      expect(provider.requests).toHaveLength(0);
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-08 omits empty tools from Mode 1 provider requests', async () => {
+    const provider = new ScriptedOpenAiProvider([finalTextResponse('empty tools omitted', 5, 2)]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const envelope = await callModel(client, {
+          resolver: 'model',
+          name: 'fast',
+          messages: [{ role: 'user', content: 'ATL-E2E-08 Mode 1 empty tools normalization.' }],
+          parameters: { tools: [] },
+        });
+        expect(envelope.response).toBe('empty tools omitted');
+      });
+      expect(provider.requests).toHaveLength(1);
+      expect(provider.requests[0]).not.toHaveProperty('tools');
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-07 preserves message history across fallback and computes aggregate fallback cost with per-model rates', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      toolCallResponse([{ id: 'call_first_model', name: 'search_documents', args: { query: 'fallback' } }], 10, 4),
+      { status: 500, body: { error: { message: 'provider error for fallback exercise' } } },
+      finalTextResponse('fallback final', 20, 5),
+    ]);
+    await provider.start();
+    try {
+      const envelope = await withManagedMcp(provider, (client) => callModel(client, {
+        resolver: 'purpose',
+        name: 'agentic',
+        messages: [{ role: 'user', content: 'ATL-E2E-07 fallback should keep tool history.' }],
+        return_messages: true,
+      }));
+      expect(envelope.metadata).toMatchObject({
+        resolved_model_name: 'agent-model',
+        provider_name: 'mock',
+        fallback_position: 1,
+        cost_usd: expect.closeTo(((10 * 1) + (4 * 2) + (20 * 10) + (5 * 20)) / 1_000_000, 12),
+        tools: {
+          stop_reason: 'final_response',
+          calls_log: expect.arrayContaining([
+            expect.objectContaining({ model_name: 'agent-model' }),
+            expect.objectContaining({ model_name: 'fallback-agent-model' }),
+          ]),
+        },
+      });
+      expect(provider.requests.at(-1)).toMatchObject({
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: 'assistant', name: 'agentic', tool_calls: expect.any(Array) }),
+          expect.objectContaining({ role: 'tool', tool_call_id: 'call_first_model' }),
+        ]),
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+});

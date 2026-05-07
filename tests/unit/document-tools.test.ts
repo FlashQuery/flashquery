@@ -49,6 +49,42 @@ vi.mock('../../src/embedding/provider.js', () => ({
 }));
 
 vi.mock('../../src/mcp/utils/resolve-document.js', () => ({
+  DocumentNotFoundError: class DocumentNotFoundError extends Error {
+    identifier: string;
+
+    constructor(identifier: string, message = `Document not found: "${identifier}"`) {
+      super(message);
+      this.name = 'DocumentNotFoundError';
+      this.identifier = identifier;
+    }
+  },
+  AmbiguousDocumentIdentifierError: class AmbiguousDocumentIdentifierError extends Error {
+    identifier: string;
+    matches: string[];
+
+    constructor(identifier: string, matches: string[]) {
+      super(
+        `Ambiguous filename "${identifier}" matches ${matches.length} files:\n${matches.map((m) => `  - ${m}`).join('\n')}\nUse a vault-relative path or fq_id instead.`
+      );
+      this.name = 'AmbiguousDocumentIdentifierError';
+      this.identifier = identifier;
+      this.matches = matches;
+    }
+  },
+  DocumentReadError: class DocumentReadError extends Error {
+    identifier: string;
+    path: string;
+    causeError: unknown;
+
+    constructor(identifier: string, path: string, causeError: unknown) {
+      const detail = causeError instanceof Error ? causeError.message : String(causeError);
+      super(`Error reading document "${identifier}" at "${path}": ${detail}`);
+      this.name = 'DocumentReadError';
+      this.identifier = identifier;
+      this.path = path;
+      this.causeError = causeError;
+    }
+  },
   resolveDocumentIdentifier: vi.fn().mockImplementation(async (_config: unknown, _supabase: unknown, identifier: string) => ({
     absPath: `/tmp/test-vault/${identifier}`,
     relativePath: identifier,
@@ -654,7 +690,7 @@ describe('get_document', () => {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: null, error: null }),
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
           }),
         }),
         update: vi.fn().mockReturnValue({
@@ -677,19 +713,29 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Personal/Journal/My Document.md' }) as {
+    const result = await handler({ identifiers: 'Personal/Journal/My Document.md' }) as {
       content: Array<{ type: string; text: string }>;
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
     expect(fsPromises.readFile).toHaveBeenCalled();
-    // MOD-02: response returns content only, not frontmatter
-    expect(result.content[0].text).toContain('Hello');
-    expect(result.content[0].text).toContain('document body');
+    // Phase 107: response is a JSON envelope; body field contains content without frontmatter
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toContain('Hello');
+    expect(env.body).toContain('document body');
+    // Envelope completeness check — always-present fields
+    expect(env).toMatchObject({
+      identifier: expect.any(String),
+      title: expect.any(String),
+      path: expect.any(String),
+      fq_id: expect.any(String),
+      modified: expect.any(String),
+      size: { chars: expect.any(Number) },
+    });
   });
 
-  it('returns isError: true when file does not exist (ENOENT → Document not found message)', async () => {
+  it('returns isError: true when file does not exist (ENOENT → document_not_found error)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -697,15 +743,16 @@ describe('get_document', () => {
     vi.mocked(fsPromises.readFile).mockRejectedValueOnce(new Error("ENOENT: no such file or directory, open '/tmp/test-vault/nonexistent.md'"));
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'nonexistent.md' }) as {
+    const result = await handler({ identifiers: 'nonexistent.md' }) as {
       content: Array<{ type: string; text: string }>;
       isError?: boolean;
     };
 
     expect(result.isError).toBe(true);
-    // ENOENT is a "not found" error — should return specific Document not found message
-    expect(result.content[0].text).toContain('Document not found');
-    expect(result.content[0].text).toContain('nonexistent.md');
+    // Phase 107: error is a JSON envelope with error code
+    const err = JSON.parse(result.content[0].text);
+    expect(err.error).toBe('document_not_found');
+    expect(err.message).toContain('nonexistent.md');
   });
 
   it('returns document content without mentioning embedding status', async () => {
@@ -720,18 +767,19 @@ describe('get_document', () => {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { content_hash: 'mock-sha256-hash-abc123' }, error: null }),
+            maybeSingle: vi.fn().mockResolvedValue({ data: { content_hash: 'mock-sha256-hash-abc123' }, error: null }),
           }),
         }),
       }),
     } as unknown as ReturnType<typeof supabaseManager.getClient>);
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Personal/My Doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'Personal/My Doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
-    // MOD-02: returns content only, no ## Content header
-    expect(result.content[0].text).toContain('Hello world');
+    // Phase 107: response is a JSON envelope; body field contains the content
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toContain('Hello world');
     expect(result.content[0].text).not.toContain('stale');
     expect(result.content[0].text).not.toContain('embedding');
     // Hash matched — no re-embed triggered
@@ -752,7 +800,7 @@ describe('get_document', () => {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            single: vi.fn().mockResolvedValue({ data: { content_hash: 'old-hash-different' }, error: null }),
+            maybeSingle: vi.fn().mockResolvedValue({ data: { content_hash: 'old-hash-different' }, error: null }),
           }),
         }),
         update: mockUpdate,
@@ -760,20 +808,20 @@ describe('get_document', () => {
     } as unknown as ReturnType<typeof supabaseManager.getClient>);
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Personal/Changed Doc.md' }) as {
+    const result = await handler({ identifiers: 'Personal/Changed Doc.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     // Response should be successful (get_document returns content even with stale hash)
     expect(result).toBeDefined();
     expect((result as Record<string, unknown>).content).toBeDefined();
-    // Content should be the actual file body
-    expect((result.content as Array<{ text: string }>)[0].text).toContain('Updated content');
+    // Phase 107: body field contains the actual file body
+    const env = JSON.parse((result.content as Array<{ text: string }>)[0].text);
+    expect(env.body).toContain('Updated content');
   });
 
-  it('calls resolveDocumentIdentifier and ensureProvisioned with the identifier', async () => {
+  it('calls resolveDocumentIdentifier and targetedScan with the identifier', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -783,7 +831,7 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'docs/test.md' }) as { isError?: boolean };
+    const result = await handler({ identifiers: 'docs/test.md' }) as { isError?: boolean };
 
     expect(result.isError).toBeUndefined();
     expect(resolveDocumentModule.resolveDocumentIdentifier).toHaveBeenCalledWith(
@@ -802,14 +850,15 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'legacy/old.md' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'legacy/old.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
-    // MOD-02: content only
-    expect(result.content[0].text).toContain('Provisioned body');
+    // Phase 107: JSON envelope; body field contains the content
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toContain('Provisioned body');
   });
 
-  it('returns metadata.changed when resolver reports stale path (SPEC-08)', async () => {
+  it('returns envelope.path reflecting resolved path when resolver reports stale path (Phase 107)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -832,19 +881,18 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'old/path.md' }) as {
+    const result = await handler({ identifiers: 'old/path.md' }) as {
       content: Array<{ text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
-    // SPEC-08: content is verbatim, no note injection
-    expect(result.content[0].text).toBe('Content at new location');
-    expect(result.content[0].text).not.toContain('Document was moved');
-    // SPEC-08: metadata conveys path change
-    expect(result.metadata?.changed).toBe(true);
-    expect(result.metadata?.path).toBe('new/path.md');
+    // Phase 107: JSON envelope — body field is verbatim content, no note injection
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toContain('Content at new location');
+    expect(env.body).not.toContain('Document was moved');
+    // Phase 107: path in the envelope reflects the resolved (current) path
+    expect(env.path).toBe('new/path.md');
   });
 
   it('returns isError when resolveDocumentIdentifier throws "not found" error', async () => {
@@ -857,15 +905,16 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'nonexistent/doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'nonexistent/doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(true);
-    // "not found" in error message → Document not found user message
-    expect(result.content[0].text).toContain('Document not found');
-    expect(result.content[0].text).toContain('nonexistent/doc.md');
+    // Phase 107: JSON error envelope with error code
+    const err = JSON.parse(result.content[0].text);
+    expect(err.error).toBe('document_not_found');
+    expect(err.message).toContain('nonexistent/doc.md');
   });
 
-  it('returns isError with generic message when non-not-found error occurs', async () => {
+  it('returns isError with read_error when non-not-found error occurs', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -875,15 +924,18 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'vault/.obsidian' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'vault/.obsidian' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(true);
-    // Non-"not found" error → generic "Error reading document" message
-    expect(result.content[0].text).toContain('Error reading document');
-    expect(result.content[0].text).toContain('Permission denied');
+    // Phase 107: Non-"not found" error → JSON envelope with read_error code
+    const err = JSON.parse(result.content[0].text);
+    expect(err.error).toBe('read_error');
+    expect(err.message).toContain('Permission denied');
+    // WR-01: read_error envelope must include identifier (same as document_not_found)
+    expect(err.identifier).toBe('vault/.obsidian');
   });
 
-  it('Case 3c: vault file missing + NO DB row found → falls through to ENOENT error as before', async () => {
+  it('Case 3c: vault file missing + NO DB row found → falls through to document_not_found error', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -908,17 +960,18 @@ describe('get_document', () => {
     vi.mocked(fsPromises.readFile).mockRejectedValueOnce(new Error("ENOENT: no such file or directory, open '/tmp/test-vault/Work/Ghost Doc.md'"));
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Work/Ghost Doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
+    const result = await handler({ identifiers: 'Work/Ghost Doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(true);
-    // ENOENT is a "not found" class error → Document not found message
-    expect(result.content[0].text).toContain('Document not found');
-    expect(result.content[0].text).toContain('Work/Ghost Doc.md');
+    // Phase 107: ENOENT is a "not found" class error → JSON envelope with document_not_found code
+    const err = JSON.parse(result.content[0].text);
+    expect(err.error).toBe('document_not_found');
+    expect(err.message).toContain('Work/Ghost Doc.md');
   });
 
-  // ─── SPEC-08: get_document metadata response format ───────────────────────
+  // ─── Phase 107: get_document JSON envelope format ─────────────────────────
 
-  it('SPEC-08: returns metadata field with path and changed properties', async () => {
+  it('Phase 107: returns JSON envelope with path in envelope (no separate metadata field)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -941,19 +994,20 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Work/Note.md' }) as {
+    const result = await handler({ identifiers: 'Work/Note.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
-    expect(result.metadata).toBeDefined();
-    expect(result.metadata?.path).toBe('Work/Note.md');
-    expect(result.metadata?.changed).toBe(false);
+    // Phase 107: metadata is in the JSON envelope, not a separate 'metadata' top-level field
+    const env = JSON.parse(result.content[0].text);
+    expect(env.path).toBe('Work/Note.md');
+    expect(env.identifier).toBeDefined();
+    expect(env.title).toBeDefined();
   });
 
-  it('SPEC-08: metadata.changed is true when stale path detected', async () => {
+  it('Phase 107: envelope.path reflects resolved path when stale path detected', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -976,18 +1030,17 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'old/path.md' }) as {
+    const result = await handler({ identifiers: 'old/path.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
-    expect(result.metadata?.changed).toBe(true);
-    expect(result.metadata?.path).toBe('new/path.md');
+    const env = JSON.parse(result.content[0].text);
+    expect(env.path).toBe('new/path.md');
   });
 
-  it('SPEC-08: content is verbatim (no note injection)', async () => {
+  it('Phase 107: body field is verbatim content (no note injection)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -1012,20 +1065,19 @@ describe('get_document', () => {
     );
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Work/Note.md' }) as {
+    const result = await handler({ identifiers: 'Work/Note.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toBe(expectedContent);
-    expect(result.content[0].text).not.toContain('---');
-    expect(result.content[0].text).not.toContain('Note:');
-    expect(result.content[0].text).not.toContain('Path changed');
+    // Phase 107: body is verbatim content, no note injection
+    const env = JSON.parse(result.content[0].text);
+    expect(env.body).toBe(expectedContent);
+    expect(env.body).not.toContain('Path changed');
   });
 
-  it('SPEC-08: stale path still triggers background re-embed', async () => {
+  it('Phase 107: envelope path is returned (background re-embed path is irrelevant to response shape)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -1050,15 +1102,14 @@ describe('get_document', () => {
     vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
 
     const handler = getHandler('get_document');
-    const result = await handler({ identifier: 'Work/Note.md' }) as {
+    const result = await handler({ identifiers: 'Work/Note.md' }) as {
       content: Array<{ type: string; text: string }>;
-      metadata?: { path: string; changed: boolean };
       isError?: boolean;
     };
 
-    // Verify that response includes metadata field
-    expect(result.metadata).toBeDefined();
-    expect(result.metadata?.path).toBe('Work/Note.md');
+    // Phase 107: path is in the JSON envelope
+    const env = JSON.parse(result.content[0].text);
+    expect(env.path).toBe('Work/Note.md');
   });
 
   // ─── SPEC-18: content_hash removal in write paths ──────────────────────────
@@ -1206,6 +1257,177 @@ describe('get_document', () => {
     }
 
     expect(capturedFm.custom_user_field).toBe('user_value');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests: get_document — batch array path (WR-03)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('get_document batch array path', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+        update: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            then: vi.fn().mockResolvedValue({ error: null }),
+          }),
+        }),
+      }),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
+  });
+
+  it('[U-BATCH-01] both identifiers succeed: response is a JSON array with no isError', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc1.md',
+        relativePath: 'Doc1.md',
+        fqcId: 'uuid-doc1',
+        resolvedVia: 'path' as const,
+      })
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc2.md',
+        relativePath: 'Doc2.md',
+        fqcId: 'uuid-doc2',
+        resolvedVia: 'path' as const,
+      });
+
+    vi.mocked(fsPromises.readFile)
+      .mockResolvedValueOnce('---\nfq_title: Document One\nfq_id: uuid-doc1\nfq_status: active\n---\nBody one.' as unknown as Buffer)
+      .mockResolvedValueOnce('---\nfq_title: Document Two\nfq_id: uuid-doc2\nfq_status: active\n---\nBody two.' as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    const result = await handler({ identifiers: ['Doc1.md', 'Doc2.md'] }) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    // Batch outer response: no isError
+    expect(result.isError).toBeUndefined();
+    const results = JSON.parse(result.content[0].text);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveLength(2);
+    // Each element is a document envelope
+    expect(results[0].error).toBeUndefined();
+    expect(results[1].error).toBeUndefined();
+    expect(results[0].identifier).toBeDefined();
+    expect(results[1].identifier).toBeDefined();
+    expect(results[0].body).toBeDefined();
+    expect(results[1].body).toBeDefined();
+  });
+
+  it('[U-BATCH-02] one identifier not found: per-element error at correct position, other element succeeds, no outer isError', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc1.md',
+        relativePath: 'Doc1.md',
+        fqcId: 'uuid-doc1',
+        resolvedVia: 'path' as const,
+      })
+      .mockRejectedValueOnce(new Error('ENOENT: no such file or directory'));
+
+    vi.mocked(fsPromises.readFile).mockResolvedValueOnce(
+      '---\nfq_title: Document One\nfq_id: uuid-doc1\nfq_status: active\n---\nBody one.' as unknown as Buffer
+    );
+
+    const handler = getHandler('get_document');
+    const result = await handler({ identifiers: ['Doc1.md', 'missing.md'] }) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    // Outer response: no isError even with partial failure
+    expect(result.isError).toBeUndefined();
+    const results = JSON.parse(result.content[0].text);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveLength(2);
+    // Position 0 succeeds
+    expect(results[0].error).toBeUndefined();
+    expect(results[0].identifier).toBeDefined();
+    // Position 1 has per-element error with correct identifier
+    expect(results[1].error).toBe('document_not_found');
+    expect(results[1].identifier).toBe('missing.md');
+  });
+
+  it('[U-BATCH-03] DocumentRequestError embedded per-element in batch mode', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    // Both docs resolve and read, but first has a section that doesn't exist
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc1.md',
+        relativePath: 'Doc1.md',
+        fqcId: 'uuid-doc1',
+        resolvedVia: 'path' as const,
+      })
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Doc2.md',
+        relativePath: 'Doc2.md',
+        fqcId: 'uuid-doc2',
+        resolvedVia: 'path' as const,
+      });
+
+    vi.mocked(fsPromises.readFile)
+      .mockResolvedValueOnce('---\nfq_title: Document One\nfq_id: uuid-doc1\nfq_status: active\n---\nNo headings here.' as unknown as Buffer)
+      .mockResolvedValueOnce('---\nfq_title: Document Two\nfq_id: uuid-doc2\nfq_status: active\n---\nBody two.' as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    // Request section that doesn't exist in Doc1
+    const result = await handler({ identifiers: ['Doc1.md', 'Doc2.md'], sections: ['NonExistent'] }) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    // Outer response: no isError — errors embedded per-element
+    expect(result.isError).toBeUndefined();
+    const results = JSON.parse(result.content[0].text);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results).toHaveLength(2);
+    // Position 0: section_not_found embedded at element level
+    expect(results[0].error).toBe('section_not_found');
+    expect(results[0].identifier).toBe('Doc1.md');
+    // Position 1: also section_not_found (same section requested for both)
+    expect(results[1].error).toBe('section_not_found');
+    expect(results[1].identifier).toBe('Doc2.md');
+  });
+
+  it('[U-BATCH-04] generic non-not-found error produces read_error with identifier per element', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockRejectedValueOnce(new Error('Permission denied'));
+
+    const handler = getHandler('get_document');
+    const result = await handler({ identifiers: ['locked.md'] }) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.isError).toBeUndefined();
+    const results = JSON.parse(result.content[0].text);
+    expect(Array.isArray(results)).toBe(true);
+    expect(results[0].error).toBe('read_error');
+    expect(results[0].identifier).toBe('locked.md');
+    expect(results[0].message).toContain('Permission denied');
   });
 });
 
@@ -2138,5 +2360,235 @@ describe('search_documents tag_match (TAGMATCH-01, TAGMATCH-06)', () => {
       filter_tags: ['tag-b'],
       filter_tag_match: 'any',
     }));
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests: get_document follow_ref handler branch (FREF-01, FREF-03)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('get_document follow_ref handler branch (FREF-01, FREF-03)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Default Supabase mock: no existing row (forces targetedScan path)
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+        }),
+        update: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            then: vi.fn().mockResolvedValue({ error: null }),
+          }),
+        }),
+      }),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    vi.mocked(embeddingProvider.embed).mockResolvedValue(Array(1536).fill(0.1));
+    // Default targetedScan mock: returns a valid preScan object for the source doc
+    vi.mocked(resolveDocumentModule.targetedScan).mockImplementation(
+      async (_config: unknown, _supabase: unknown, resolved: unknown) => ({
+        ...(resolved as Record<string, unknown>),
+        capturedFrontmatter: {
+          fqcId: 'some-uuid',
+          created: new Date().toISOString(),
+          status: 'active',
+          contentHash: 'mock-sha256-hash-abc123',
+        },
+        stalePathNote: undefined,
+      })
+    );
+  });
+
+  it('[U-FR-08] follow_ref success: source envelope + nested followed_ref object; no top-level body', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    // Source document has projections.summary frontmatter pointing to the target
+    const sourceRaw = [
+      '---',
+      'fq_title: Source Document',
+      'fq_id: source-uuid-1234',
+      'fq_updated: 2026-05-01T00:00:00.000Z',
+      'projections:',
+      '  summary: Meetings/.projections/standup-s12-summary.md',
+      '---',
+      '# Source Body',
+      'This is the source document.',
+    ].join('\n');
+
+    // Target document — plain markdown, no fq_id in frontmatter
+    const targetRaw = [
+      '---',
+      'fq_title: Target Summary',
+      'fq_updated: 2026-05-01T12:00:00.000Z',
+      '---',
+      '# Summary',
+      'This is the target document content.',
+    ].join('\n');
+
+    // First resolveDocumentIdentifier call (source), second call (target)
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/source.md',
+        relativePath: 'source.md',
+        fqcId: 'source-uuid-1234',
+        resolvedVia: 'path' as const,
+      })
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/Meetings/.projections/standup-s12-summary.md',
+        relativePath: 'Meetings/.projections/standup-s12-summary.md',
+        fqcId: null,
+        resolvedVia: 'path' as const,
+      });
+
+    // First readFile call (source), second call (target)
+    vi.mocked(fsPromises.readFile)
+      .mockResolvedValueOnce(sourceRaw as unknown as Buffer)
+      .mockResolvedValueOnce(targetRaw as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    const result = await handler({
+      identifiers: 'source.md',
+      follow_ref: 'projections.summary',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    const env = JSON.parse(result.content[0].text);
+
+    // Source envelope fields should be present
+    expect(env.identifier).toBe('source.md');
+    expect(env.title).toBe('Source Document');
+    expect(env.path).toBe('source.md');
+
+    // followed_ref must be present and contain target details
+    expect(env.followed_ref).toBeDefined();
+    expect(env.followed_ref.reference).toBe('projections.summary');
+    expect(env.followed_ref.resolved_to).toBe('Meetings/.projections/standup-s12-summary.md');
+    expect(env.followed_ref.size).toBeDefined();
+    expect(env.followed_ref.size.chars).toBeGreaterThan(0);
+
+    // No top-level body field when follow_ref is in use (body lives inside followed_ref)
+    expect(env.body).toBeUndefined();
+    // Body lives inside followed_ref
+    expect(env.followed_ref.body).toBeDefined();
+    expect(env.followed_ref.body).toContain('target document content');
+  });
+
+  it('[U-FR-09] follow_ref_path_not_found is flat (pre-resolution): no followed_ref key in error envelope', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    // Source document has NO projections key in frontmatter
+    const sourceRaw = [
+      '---',
+      'fq_title: Simple Document',
+      'fq_id: simple-uuid-5678',
+      'type: meeting-notes',
+      '---',
+      '# Simple Body',
+      'No projections frontmatter here.',
+    ].join('\n');
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier).mockResolvedValueOnce({
+      absPath: '/tmp/test-vault/simple.md',
+      relativePath: 'simple.md',
+      fqcId: 'simple-uuid-5678',
+      resolvedVia: 'path' as const,
+    });
+
+    vi.mocked(fsPromises.readFile).mockResolvedValueOnce(sourceRaw as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    const result = await handler({
+      identifiers: 'simple.md',
+      follow_ref: 'projections.summary',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    // Pre-resolution error: isError must be true
+    expect(result.isError).toBe(true);
+    const env = JSON.parse(result.content[0].text);
+
+    // Error envelope is flat (no followed_ref key)
+    expect(env.error).toBe('follow_ref_path_not_found');
+    expect(env.identifier).toBe('simple.md');
+    expect(env.reference).toBe('projections.summary');
+    expect(env.traversal).toBeDefined();
+    expect(env.traversal.failed_at).toBe('projections');
+
+    // CRITICAL: no followed_ref key — pre-resolution errors stay at top level
+    expect(env.followed_ref).toBeUndefined();
+  });
+
+  it('[U-FR-10] section_not_found on target nests under followed_ref (post-resolution)', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    // Source document with projections.summary pointing to a target
+    const sourceRaw = [
+      '---',
+      'fq_title: Source With Ref',
+      'fq_id: source-ref-uuid',
+      'projections:',
+      '  summary: target-doc.md',
+      '---',
+      '# Source Body',
+    ].join('\n');
+
+    // Target document — has no NonExistentSection heading
+    const targetRaw = [
+      '---',
+      'fq_title: Target Doc',
+      '---',
+      '# Introduction',
+      'Target content with only an Introduction section.',
+    ].join('\n');
+
+    vi.mocked(resolveDocumentModule.resolveDocumentIdentifier)
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/source-with-ref.md',
+        relativePath: 'source-with-ref.md',
+        fqcId: 'source-ref-uuid',
+        resolvedVia: 'path' as const,
+      })
+      .mockResolvedValueOnce({
+        absPath: '/tmp/test-vault/target-doc.md',
+        relativePath: 'target-doc.md',
+        fqcId: null,
+        resolvedVia: 'path' as const,
+      });
+
+    vi.mocked(fsPromises.readFile)
+      .mockResolvedValueOnce(sourceRaw as unknown as Buffer)
+      .mockResolvedValueOnce(targetRaw as unknown as Buffer);
+
+    const handler = getHandler('get_document');
+    const result = await handler({
+      identifiers: 'source-with-ref.md',
+      follow_ref: 'projections.summary',
+      sections: ['NonExistentSection'],
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    // Post-resolution error: isError must be true
+    expect(result.isError).toBe(true);
+    const env = JSON.parse(result.content[0].text);
+
+    // Top-level error fields
+    expect(env.error).toBe('section_not_found');
+    expect(env.identifier).toBe('source-with-ref.md'); // SOURCE identifier at top level
+
+    // CRITICAL: nested under followed_ref (post-resolution nesting)
+    expect(env.followed_ref).toBeDefined();
+    expect(env.followed_ref.reference).toBe('projections.summary');
+    expect(env.followed_ref.resolved_to).toBe('target-doc.md');
+    expect(env.followed_ref.missing_sections).toBeDefined();
+    expect(env.followed_ref.missing_sections.length).toBeGreaterThan(0);
+
+    // No top-level missing_sections (only nested under followed_ref)
+    expect(env.missing_sections).toBeUndefined();
   });
 });

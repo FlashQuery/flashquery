@@ -20,6 +20,8 @@ import { registerPendingReviewTools } from './tools/pending-review.js';
 import { registerFileTools } from './tools/files.js';
 import { registerLlmTools } from './tools/llm.js';
 import { registerLlmUsageTools } from './tools/llm-usage.js';
+import { getNativeToolCatalog, wrapServerWithToolCatalog } from './tool-catalog.js';
+import { validateAndCacheNativeToolSchemas } from '../llm/tool-registry.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 
 // ── HTTP Error Code and Message Mapping (D-04) ──
@@ -445,6 +447,7 @@ function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
   // Apply correlation ID wrapping BEFORE tool registration so all 26 tools
   // automatically inherit context without modifying individual tool files.
   wrapServerWithCorrelationIds(server);
+  wrapServerWithToolCatalog(server);
   registerMemoryTools(server, config);
   registerDocumentTools(server, config);
   registerPluginTools(server, config);
@@ -455,6 +458,7 @@ function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
   registerFileTools(server, config);
   registerLlmTools(server, config);
   registerLlmUsageTools(server, config);
+  validateAndCacheNativeToolSchemas(getNativeToolCatalog(server));
   return server;
 }
 

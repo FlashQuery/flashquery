@@ -313,7 +313,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if created_docs and num_updates > 0:
             sample_fqc_id = created_docs[0][0]
             log_mark = ctx.server.log_position if ctx.server else 0
-            get_result = ctx.client.call_tool("get_document", identifier=sample_fqc_id)
+            get_result = ctx.client.call_tool("get_document", identifiers=sample_fqc_id)
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
             content_updated = "updated in-place" in get_result.text

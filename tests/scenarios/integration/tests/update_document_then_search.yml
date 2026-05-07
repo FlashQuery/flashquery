@@ -40,7 +40,7 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${report_doc.fq_id}"
+        identifiers: "${report_doc.fq_id}"
       expect_contains: "northern and southern survey teams"
 
   - label: "Original draft title no longer appears in search results"

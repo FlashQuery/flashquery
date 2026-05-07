@@ -211,7 +211,7 @@ export function validateToolResponse(response: unknown): { valid: boolean; error
 }
 
 /**
- * Format a heading entry for get_doc_outline output
+ * Format a heading entry for markdown outline-style output
  * Each heading as a structured block with level, text, and line number
  *
  * @example
@@ -227,7 +227,7 @@ export function formatHeadingEntry(heading: { level: number; text: string; line:
 }
 
 /**
- * Format linked document entry for get_doc_outline
+ * Format linked document entry for markdown outline-style output
  * Shows title and resolution status (resolved or unresolved)
  *
  * @example

@@ -300,9 +300,10 @@ class SkipResult:
     Compatible with the output handling in main() (to_dict, to_json, summary_lines).
     """
 
-    def __init__(self, name: str, unmet: list[str]) -> None:
+    def __init__(self, name: str, unmet: list[str], reason: str | None = None) -> None:
         self.name = name
         self.unmet = unmet
+        self.reason = reason or f"Unsatisfied deps: {', '.join(self.unmet)}"
 
     @property
     def status(self) -> str:
@@ -319,14 +320,14 @@ class SkipResult:
             "exit_code": 0,
             "total_ms": 0,
             "steps": [],
-            "skip_reason": f"Unsatisfied deps: {', '.join(self.unmet)}",
+            "skip_reason": self.reason,
         }
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent)
 
     def summary_lines(self) -> list[str]:
-        return [f"[SKIP] {self.name} — requires: {', '.join(self.unmet)}"]
+        return [f"[SKIP] {self.name} — {self.reason}"]
 
 
 # ---------------------------------------------------------------------------
@@ -410,8 +411,15 @@ def _evaluate_assertions(
     """
     Apply all expect_* keys in assert_spec to result.
     Records one step on run. Returns True if every check passes.
+
+    expect_error: true — asserts the tool returned isError. The step passes
+    when the tool errors as expected; fails when it succeeds unexpectedly.
+    expect_contains and expect_not_contains are still evaluated against the
+    error response text when expect_error is true.
     """
-    if not result.ok:
+    expect_error = bool(assert_spec.get("expect_error", False))
+
+    if not result.ok and not expect_error:
         run.step(
             label=label,
             passed=False,
@@ -420,6 +428,19 @@ def _evaluate_assertions(
             tool_result=result,
         )
         return False
+
+    if result.ok and expect_error:
+        run.step(
+            label=label,
+            passed=False,
+            detail=f"Expected tool error but tool succeeded: {result.text[:300]}",
+            timing_ms=result.timing_ms,
+            tool_result=result,
+        )
+        return False
+
+    # Both normal success (ok=True, expect_error=False) and expected error
+    # (ok=False, expect_error=True) reach here — evaluate content assertions.
 
     if "expect_contains" in assert_spec:
         result.expect_contains(str(assert_spec["expect_contains"]))
@@ -1241,6 +1262,14 @@ def main() -> None:
         deps_raw = test_def.get("deps", [])
         deps: list[str] = [deps_raw] if isinstance(deps_raw, str) else list(deps_raw or [])
 
+        server_modes_raw = test_def.get("server_modes")
+        server_modes: list[str] = (
+            [str(server_modes_raw)]
+            if isinstance(server_modes_raw, str)
+            else [str(m) for m in (server_modes_raw or [])]
+        )
+        current_server_mode = "managed" if args.managed else "external"
+
         coverage_raw = test_def.get("coverage")
         coverage_ids: list[str] = (
             [str(c) for c in (coverage_raw if isinstance(coverage_raw, list) else [coverage_raw])]
@@ -1257,6 +1286,7 @@ def main() -> None:
             "deps": deps,
             "coverage": coverage_ids,
             "yaml_path": yaml_path_display,
+            "server_modes": server_modes,
         }
 
         print(f"\n{'='*60}", file=sys.stderr)
@@ -1267,7 +1297,32 @@ def main() -> None:
             print(f"  Coverage: {', '.join(coverage_ids)}", file=sys.stderr)
         if deps:
             print(f"  Deps:     {', '.join(deps)}", file=sys.stderr)
+        if server_modes:
+            print(f"  Modes:    {', '.join(server_modes)}", file=sys.stderr)
         print(f"{'='*60}", file=sys.stderr)
+
+        if server_modes and current_server_mode not in server_modes:
+            result_obj: TestRun | SkipResult = SkipResult(
+                test_def.get("name", path.stem),
+                [current_server_mode],
+                reason=(
+                    f"Server mode '{current_server_mode}' not in allowed modes: "
+                    f"{', '.join(server_modes)}"
+                ),
+            )
+            run_dict = result_obj.to_dict()
+            server_logs = run_dict.pop("server_logs", None) or []
+            full_results.append({
+                "run": run_dict,
+                "server_logs": server_logs,
+                "yaml_meta": yaml_meta,
+            })
+            if args.output_json:
+                print(result_obj.to_json())
+            else:
+                for line in result_obj.summary_lines():
+                    print(line, file=sys.stderr)
+            continue
 
         # --- Check deps for external server (managed server checks at startup) ---
         unmet: list[str] = []

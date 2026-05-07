@@ -1,0 +1,109 @@
+name: llm_mixed_ref_and_id_placeholders
+description: >
+  Superseded ATL v1 mixed placeholder behavior. A single user message containing
+  BOTH an active {{ref:path}} placeholder and a legacy {{id:<uuid>}} placeholder
+  hydrates only the {{ref:path}} placeholder. The {{id:<uuid>}} text remains
+  literal in returned hydrated messages and does not produce an injected
+  reference entry or inject the id-target document body.
+  Covers IL-25.
+coverage: [IL-25]
+deps: [llm]
+
+steps:
+  - label: "Setup: doc A — referenced by path, marker is PATHMARK-25"
+    action: vault.write
+    name: doc_a
+    path: "Test/il25/path-ref.md"
+    title: "IL-25 Path Ref"
+    content: "Doc A body — the path marker is PATHMARK-25."
+    tags: [il25-tag]
+
+  - label: "Setup: doc B — referenced by id, marker is IDMARK-25"
+    action: vault.write
+    name: doc_b
+    path: "Test/il25/id-ref.md"
+    title: "IL-25 ID Ref"
+    content: "Doc B body — the id marker is IDMARK-25."
+    tags: [il25-tag]
+
+  - label: "Mixed superseded behavior: active {{ref:path}} is hydrated"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_contains: "PATHMARK-25"
+
+  - label: "Mixed superseded behavior: legacy {{id:<uuid>}} remains literal in returned messages"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_contains: "{{id:"
+
+  - label: "Mixed superseded behavior: legacy id target body is not injected"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_not_contains: "IDMARK-25"
+
+  - label: "Metadata: injected_references[] entry for the {{ref:path}} placeholder is reported"
+    # The path-typed entry's ref field echoes the literal {{ref:path}}
+    # placeholder including delimiters (per L-24 directed test contract).
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_contains: "{{ref:_integration/Test/il25/path-ref.md}}"
+
+  - label: "Metadata: injected_references[] does not include a legacy {{id:<uuid>}} entry"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_not_contains: "{{id:"
+
+  - label: "Metadata: prompt_chars is present (combined resolved prompt)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_contains: '"prompt_chars"'
+
+  - label: "Metadata: response is not an error — neither placeholder failed to resolve"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_not_contains: "reference_resolution_failed"

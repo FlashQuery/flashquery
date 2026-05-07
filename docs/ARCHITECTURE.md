@@ -1,7 +1,7 @@
 # FlashQuery — Architecture
 
 **Version:** 0.1.0
-**Last Updated:** 2026-04-15
+**Last Updated:** 2026-05-07
 
 FlashQuery is a local-first data management layer for AI workflows. It exposes MCP tools that let AI agents save memories, create and search documents, and query relational data, with all storage under the user's control. This document describes the system's structure, data flow, and deployment model. For hands-on setup, start with the [README](../README.md); for production concerns, see [`DEPLOYMENT.md`](./DEPLOYMENT.md).
 
@@ -9,11 +9,12 @@ FlashQuery is a local-first data management layer for AI workflows. It exposes M
 
 ## Overview
 
-FlashQuery manages three kinds of data:
+FlashQuery manages three kinds of data and one delegated execution surface:
 
 - **Memories** — semantic summaries of conversations and insights, indexed with vector embeddings for search.
 - **Documents** — markdown files in a local vault, Obsidian-compatible, optionally versioned with git.
 - **Relational records** — structured data accessed through plugin tables in Supabase.
+- **LLM delegation** — configured model and purpose calls through `call_model`, including document reference hydration, cost tracking, and FlashQuery-managed native/template tool loops.
 
 All three are stored in places the user owns: the vault directory on local disk, and a Postgres database the user provides (Supabase Cloud, a self-hosted Supabase stack, or the bundled Docker stack that ships under `docker/`). FlashQuery runs as an MCP server, so any AI tool that speaks MCP — Claude Code, Claude Cowork, Claude Desktop, Cursor, and others — can connect to it.
 
@@ -31,13 +32,14 @@ All three are stored in places the user owns: the vault directory on local disk,
 - **CLI entry point** (`src/index.ts`) — parses command-line args, loads config, starts the requested subcommand (`start`, `backup`, `scan`, `doctor`).
 - **Config loader** (`src/config/loader.ts`) — reads `flashquery.yml` from the current directory (or `~/.config/flashquery/`), expands `${VAR}` references against the environment, validates against the Zod schema.
 - **MCP server** (`src/mcp/server.ts`) — implements the MCP protocol, binds the HTTP listener (when using streamable-http), routes tool requests to handlers, issues and verifies bearer tokens.
-- **Tool handlers** (`src/mcp/tools/`) — individual implementations for every MCP tool (documents, memories, plugin records, vault operations, search).
+- **Tool handlers** (`src/mcp/tools/`) — individual implementations for every MCP tool (documents, memories, plugin records, vault operations, search, and LLM delegation).
+- **LLM runtime** (`src/llm/`) — provider client, config sync, cost tracking, document reference hydration, purpose template bindings, and the managed agent loop used by tool-enabled `call_model` purposes.
 - **Storage layer** (`src/storage/`) — Supabase/Postgres client, vault filesystem I/O, schema verification.
 - **Embedding provider** (`src/embedding/provider.ts`) — generates vectors via OpenAI, OpenRouter, or Ollama.
 
 ### External — Data stores
 
-- **Postgres with pgvector** — relational records, memory vectors, document metadata and embeddings. The application expects a Supabase-shaped schema (tables prefixed `fqc_*`, service-role access for DDL).
+- **Postgres with pgvector** — relational records, memory vectors, document metadata and embeddings, LLM config mirrors, purpose-template bindings, and usage telemetry. The application expects a Supabase-shaped schema (tables prefixed `fqc_*`, service-role access for DDL).
 - **Local vault** — a directory of markdown files on disk. Optionally a git repository (enables auto-commit on writes).
 
 ### High-level diagram
@@ -76,6 +78,16 @@ All three are stored in places the user owns: the vault directory on local disk,
 4. The handler calls into the storage layers it needs — typically the embedding provider (to generate a vector), the Supabase client (to write the row), and the vault (if the tool produces a file).
 5. The handler returns a response: `{"content": [{"type": "text", "text": "Memory saved with ID ..."}]}`.
 6. The AI tool receives the response and continues its workflow.
+
+### Delegated LLM flow
+
+`call_model` uses the same MCP request path, then adds a model-dispatch layer:
+
+1. The caller selects a model alias or purpose name from the `llm:` section of `flashquery.yml`.
+2. Host-authored document references in `system` and `user` messages (`{{ref:...}}`, `{{id:...}}`, or late-bound `{{ref:@alias}}`) are resolved against the vault before the provider call.
+3. Mode 1 calls a configured provider directly and returns a `response`, `messages`, and `metadata` envelope.
+4. Mode 2 is selected for purpose calls that expose model-visible native tools or template tools. FlashQuery runs the delegated model in a bounded internal loop, dispatches approved tool calls against its own MCP handlers, and returns aggregate loop metadata under `metadata.tools`.
+5. Usage is recorded once per completed `call_model` invocation in `fqc_llm_usage`; per-iteration loop detail stays in the response envelope and runtime logs.
 
 ### Concurrency
 
@@ -167,11 +179,25 @@ FlashQuery's configuration is split across two files by design:
 - **`./.env`** holds per-install values: secrets (API keys, JWT signing keys), endpoint URLs, the vault path, the instance name and ID, and any environment-specific overrides. Gitignored. Every value in this file is something that varies between installations.
 - **`./flashquery.yml`** holds the structural contract: which fields exist, their defaults, and `${VAR}` references into `.env` for the values that live there. Safe to read; can be committed if you want a shared structural config across a team.
 
-The setup script (`./setup/setup.sh`, invoked via `npm run setup`) generates both files from the annotated templates in the repo — [`./.env.example`](./.env.example) and [`./flashquery.example.yml`](./flashquery.example.yml) — and substitutes user input into `.env` while copying the yaml verbatim. Re-running the script picks up existing values as defaults and warns before changing anything sensitive.
+The setup script (`./setup/setup.sh`, invoked via `npm run setup`) generates both files from the annotated templates in the repo — [`../.env.example`](../.env.example) and [`../flashquery.example.yml`](../flashquery.example.yml) — and substitutes user input into `.env` while copying the yaml verbatim. Re-running the script picks up existing values as defaults, preserves generated secrets, and warns before changing sensitive routing values such as the database URL or instance ID.
 
-If you're running the bundled Supabase stack in `docker/`, a third file — **`./docker/.env.docker`** — holds Docker-orchestration-specific values (Postgres password, shared JWT secret, anon key, service-role key). The root `.env` and `docker/.env.docker` each stand on their own: overlap values like `SUPABASE_URL` and `VAULT_PATH` are duplicated in both, and `setup/setup.sh` keeps them in sync.
+If you're running the bundled Supabase stack in `docker/`, a third file — **`./docker/.env.docker`** — is generated from [`../docker/.env.docker.example`](../docker/.env.docker.example). Full-stack Docker uses that file as its source of truth for Supabase orchestration values (Postgres password, shared JWT secret, anon key, service-role key) and for the environment passed into the FlashQuery container. The root `.env` remains the source of truth for local FlashQuery runs, FlashQuery-only Docker, and database-only Docker.
 
-For the full list of fields and their meanings, see the inline comments in `.env.example` and `flashquery.example.yml`.
+The root `.env` and `docker/.env.docker` each stand on their own. Shared values such as `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VAULT_PATH`, instance identity, and default LLM provider variables are duplicated in both when you choose the bundled Docker path, and `setup/setup.sh` keeps them in sync.
+
+For the full list of fields and their meanings, see the inline comments in `.env.example`, `docker/.env.docker.example`, and `flashquery.example.yml`.
+
+### LLM and template configuration
+
+The optional `llm:` section uses a three-layer shape:
+
+- `providers:` name OpenAI-compatible or Ollama endpoints and their API key source.
+- `models:` define aliases, provider mapping, underlying model IDs, type, cost, optional context window, tags, and tool capability declarations.
+- `purposes:` define fallback chains and defaults. A purpose can also expose FlashQuery-managed native tools with `tools`, remove items from a tier with `excluded_tools`, and bind vault templates with `templates`.
+
+Purpose tool exposure supports `tier:read-only`, `tier:read-write`, and explicit native tool names. Hard-excluded tools such as `call_model`, `register_plugin`, `unregister_plugin`, and `get_plugin_info` are removed from delegated model-visible registries even if listed.
+
+Vault templates are ordinary documents with `fq_template: true` frontmatter. Purpose-bound templates can be exposed as generated provider-safe tools named `flashquery_<namespace>_<slug>`, or injected by host-authored references through `template_params`.
 
 ---
 
@@ -201,7 +227,7 @@ Postgres runs in Docker via `docker/docker-compose.db-only.yml`, but FlashQuery 
 
 **When to use:** iterating on FlashQuery code with hot reload, debugging from your editor, or running integration tests in CI.
 
-**How to set up:** `cd docker && docker compose -f docker-compose.db-only.yml up -d`, then configure `.env` to point at `localhost:5432` for `DATABASE_URL` and run `npm run dev` from the repo root.
+**How to set up:** run `make db-up` from the repo root, or run `docker compose --env-file .env -f docker/docker-compose.db-only.yml up -d`. Configure `.env` to point at `localhost:5432` for `DATABASE_URL`, make sure `POSTGRES_PASSWORD` matches that URL, and run `npm run dev` from the repo root.
 
 ### Production concerns
 
@@ -230,7 +256,7 @@ FlashQuery does not follow symbolic links in the vault. Symlinks are skipped dur
 
 ### Multiple instances on the same vault
 
-Running two FlashQuery instances against the same vault simultaneously can race on document updates and leave plugin references temporarily inconsistent. Recommendation: one instance per vault. Multi-instance coordination via advisory locks is a roadmap item.
+Running two FlashQuery instances against the same vault simultaneously can still race at the filesystem level. Database-backed write locks coordinate shared `documents`, `memory`, and `records` writes when enabled, but they do not make the vault itself a fully multi-writer filesystem. Recommendation: one primary writer per vault; use additional instances only when you understand the lock boundaries.
 
 ### Plugin table consistency after external edits
 
@@ -253,6 +279,11 @@ flashquery/
 │   │   ├── supabase.ts               # Postgres + pgvector client
 │   │   ├── vault.ts                  # Markdown file I/O
 │   │   └── schema-verify.ts          # DDL check at startup
+│   ├── llm/
+│   │   ├── client.ts                 # Provider dispatch and purpose fallback
+│   │   ├── agent-loop.ts             # Managed tool loop for delegated models
+│   │   ├── reference-resolver.ts     # call_model document/template hydration
+│   │   └── config-sync.ts            # YAML-to-DB LLM config mirroring
 │   └── embedding/
 │       └── provider.ts               # OpenAI / OpenRouter / Ollama
 ├── tests/
@@ -276,11 +307,7 @@ flashquery/
 ├── flashquery.example.yml            # Structural config template
 ├── .env.example                      # Application env template
 ├── README.md                         # Quick start and entry point
-└── docs/
-    ├── ARCHITECTURE.md               # This file
-    ├── DEPLOYMENT.md                 # Production deployment guide (also in docs/)
-    ├── SECURITY-TOKENS.md            # Bearer token auth reference
-    └── client-configs/               # MCP client configuration examples
+└── docs/ARCHITECTURE.md              # This file
 ```
 
 ---
@@ -289,8 +316,10 @@ flashquery/
 
 - [README](../README.md) — getting started, MCP client connection basics
 - [`DEPLOYMENT.md`](./DEPLOYMENT.md) — reverse-proxy setup, service supervision, backups, logging
+- [`Document Reference System.md`](./Document%20Reference%20System.md) — reference placeholders, section references, pointer dereferences, and templates
+- [`LLM Providers Models and Purposes.md`](./LLM%20Providers%20Models%20and%20Purposes.md) — provider/model/purpose configuration and purpose template tools
 - [`SECURITY-TOKENS.md`](./SECURITY-TOKENS.md) — bearer token authentication
 - [`client-configs/README.md`](./client-configs/README.md) — worked MCP client configuration examples
 - [`tests/scenarios/README.md`](../tests/scenarios/README.md) — scenario testing framework
-- [`.env.example`](./.env.example) and [`flashquery.example.yml`](./flashquery.example.yml) — annotated config templates
-- [`CONTRIBUTING.md`](./CONTRIBUTING.md) — development setup and contribution guidelines
+- [`.env.example`](../.env.example) and [`flashquery.example.yml`](../flashquery.example.yml) — annotated config templates
+- [`CONTRIBUTING.md`](../CONTRIBUTING.md) — development setup and contribution guidelines

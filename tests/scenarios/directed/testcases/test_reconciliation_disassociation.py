@@ -540,7 +540,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         get_doc_result = ctx.client.call_tool(
             "get_document",
-            identifier=doc_disassoc_path,
+            identifiers=doc_disassoc_path,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

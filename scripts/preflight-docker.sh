@@ -7,7 +7,16 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 ENV_FILE=".env.preflight"
-printf 'POSTGRES_PASSWORD=ci-stub\nSUPABASE_ANON_KEY=ci-stub\nSUPABASE_SERVICE_ROLE_KEY=ci-stub\n' > "$ENV_FILE"
+cat > "$ENV_FILE" <<'EOF'
+POSTGRES_PASSWORD=ci-stub
+SUPABASE_ANON_KEY=ci-stub
+SUPABASE_SERVICE_ROLE_KEY=ci-stub
+MCP_AUTH_SECRET=ci-stub
+INSTANCE_NAME=FlashQuery
+INSTANCE_ID=flashquery-docker-preflight
+OPENAI_API_KEY=
+OLLAMA_URL=http://localhost:11434
+EOF
 
 cleanup() { rm -f "$ENV_FILE"; }
 trap cleanup EXIT

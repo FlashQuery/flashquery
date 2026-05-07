@@ -1,0 +1,162 @@
+name: llm_discovery_then_call
+description: >
+  Discovery -> call_model round-trip. Verifies that names returned by list_models
+  and list_purposes are usable as `name` in subsequent call_model invocations
+  via resolver=model and resolver=purpose. ATL-INT-03 also verifies the public
+  list_purposes usage block and discovered template_path/template_params surface
+  can be used directly in follow-up call_model requests.
+coverage: [IL-16, IL-17, IL-39]
+deps: [llm]
+
+steps:
+  - label: "IL-16 step 1: list_models returns the configured 'fast' model with its name field bound to 'fast' (TC4-W5: value-bound, not bare)"
+    assert:
+      op: call_model
+      args:
+        resolver: list_models
+      expect_contains: '"name":"fast"'
+
+  - label: "IL-16 step 2: call_model with resolver=model and name=fast succeeds (returns no isError)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "Reply with the single word: OK"
+      expect_not_contains: '"isError":true'
+
+  - label: "IL-16 step 3: call_model response includes resolved_model_name=fast (round-trip integrity, TC4-W5: value-bound)"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "Reply OK"
+      expect_contains: '"resolved_model_name":"fast"'
+
+  - label: "IL-17 step 1: list_purposes returns the configured 'general' purpose with its name field bound to 'general' (TC4-W5: value-bound, not bare)"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"name":"general"'
+
+  - label: "IL-17 step 2: call_model with resolver=purpose and name=general succeeds"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply OK"
+      expect_not_contains: '"isError":true'
+
+  - label: "IL-17 step 3: call_model response via purpose includes resolved_model_name=fast — purpose 'general' resolves to its primary model alias 'fast' (round-trip integrity, TC4-W5: value-bound)"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "Reply OK"
+      expect_contains: '"resolved_model_name":"fast"'
+
+  - label: "ATL-INT-03 setup: create exposed template tool with one declared parameter"
+    action: vault.write
+    path: "Templates/atl-int-03-discovery.md"
+    title: "ATL INT 03 Discovery Template"
+    content: "ATL-INT-03 template says {{topic}}"
+    tags: [atl-int-03]
+    frontmatter:
+      fq_template: true
+      fq_expose_as_tool: true
+      fq_namespace: atl
+      fq_desc: ATL-INT-03 discovered template tool
+      fq_params:
+        topic:
+          type: string
+          required: true
+
+  - label: "ATL-INT-03 setup: scan exposed template into discovery"
+    action: scan_vault
+
+  - label: "ATL-INT-03 step 1: public discovery exposes usage reference_syntax guidance"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"reference_syntax":"{{ref:<template_identifier>}}"'
+
+  - label: "ATL-INT-03 step 2: public discovery exposes template_params_example guidance"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"template_params_example"'
+
+  - label: "ATL-INT-03 step 3: public discovery exposes resolver guidance including help"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"help"'
+
+  - label: "ATL-INT-03 step 4: public discovery exposes usage note"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"note"'
+
+  - label: "ATL-INT-03 step 5: public discovery exposes the canonical discovered template_path"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"template_path":"_integration/Templates/atl-int-03-discovery.md"'
+
+  - label: "ATL-INT-03 step 6: public discovery exposes the declared template parameter"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"topic"'
+
+  - label: "ATL-INT-03 step 7: discovered canonical template_path is invokable via direct {{ref:...}}"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        template_params:
+          _integration/Templates/atl-int-03-discovery.md:
+            topic: BOOTSTRAP
+        messages:
+          - role: user
+            content: "{{ref:_integration/Templates/atl-int-03-discovery.md}} Reply with the rendered marker."
+      expect_contains: "ATL-INT-03 template says BOOTSTRAP"
+
+  - label: "ATL-INT-03 step 8: public discovery still exposes the callable general purpose"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"name":"general"'
+
+  - label: "ATL-INT-03 step 9: invoking the discovered purpose succeeds through call_model"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "ATL-INT-03 discovered purpose invocation. Reply with ATL-INT-03-OK."
+      expect_not_contains: '"isError":true'

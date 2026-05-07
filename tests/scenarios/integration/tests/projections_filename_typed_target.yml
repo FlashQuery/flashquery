@@ -1,0 +1,76 @@
+name: projections_filename_typed_target
+description: >
+  Projections matrix — bare-filename-typed target value. When source has
+  projections.decisions=<bare-filename> (no slash, but ends in .md so it
+  classifies as 'path' OR — when extension-less — as 'filename'), call_model
+  {{ref:source->projections.decisions}} resolves via the filename-search
+  branch and injects the target body.
+
+  This test uses an extension-less basename for the pointer value so the
+  classifier picks the filename branch (per Deviation 5: values ending in
+  any configured markdown extension classify as 'path'; otherwise the
+  classifier falls back to 'filename'). The target document's basename
+  equals the pointer value, allowing the filename-search branch to resolve.
+  Covers IX-17.
+coverage: [IX-17]
+deps: [llm]
+
+steps:
+  - label: "Setup: target document at a unique basename so filename lookup is unambiguous"
+    # The basename "ix17-decisions-doc" is unique across the integration
+    # vault — there is no other doc with that stem, so filename-search will
+    # match exactly one document.
+    action: vault.write
+    name: target_doc
+    path: "Test/ix17/ix17-decisions-doc.md"
+    title: "IX-17 Decisions"
+    content: "Decisions body — the marker is DEC-17-MARKER."
+    tags: [ix17-tag]
+
+  - label: "Setup: source with projections.decisions = <bare basename> (extension-less)"
+    # Extension-less value (no '/' and not ending in .md) takes the
+    # 'filename' classification branch, exercising filename search.
+    action: vault.write
+    name: source_doc
+    path: "Test/ix17/source.md"
+    title: "IX-17 Source"
+    content: "Source body — must NOT be injected."
+    tags: [ix17-tag]
+    frontmatter:
+      projections:
+        decisions: "ix17-decisions-doc"
+
+  - label: "call_model with {{ref:source->projections.decisions}} resolves via filename branch"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix17/source.md->projections.decisions}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "DEC-17-MARKER"
+
+  - label: "Response metadata: resolved_to is the target's full vault path"
+    # The filename-search branch resolves the bare basename to the full
+    # vault path; that resolved path is what appears in resolved_to.
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix17/source.md->projections.decisions}} Reply OK."
+      expect_contains: '"resolved_to":"_integration/Test/ix17/ix17-decisions-doc.md"'
+
+  - label: "Source body does not leak — only target body is injected"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix17/source.md->projections.decisions}} Does the document contain the literal string 'must NOT be injected'? Reply YES or NO."
+      expect_not_contains: "YES"

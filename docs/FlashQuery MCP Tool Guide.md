@@ -53,7 +53,6 @@ Every vault document has a `fqc_id` — a UUID stored in its frontmatter. This I
 ### Category 6 — Cross-Resource Tools
 - [search_all](#search_all)
 - [get_briefing](#get_briefing)
-- [get_doc_outline](#get_doc_outline)
 
 ### Category 7 — Vault Maintenance
 - [force_file_scan](#force_file_scan)
@@ -90,7 +89,7 @@ The `path` parameter controls vault placement. If omitted, the file lands at the
 | `content` | string | yes | Document body (markdown). Pass `""` to create an empty document. |
 | `path` | string | no | Vault-relative path (e.g., `"clients/acme/intake.md"`). Defaults to vault root. |
 | `tags` | string[] | no | Tags for categorization |
-| `frontmatter` | object | no | Additional frontmatter fields. Cannot override `fqc_id`, `status`, `created`, or `fqc_instance`. |
+| `frontmatter` | object | no | Additional frontmatter fields. Cannot override `fq_id`, `fq_status`, `fq_created`, or `fq_instance` (these are FlashQuery-managed). |
 
 **Returns**
 
@@ -129,45 +128,78 @@ mcp__flashquery__create_document({
 
 **Overview**
 
-`get_document` reads a document's body content and returns it as a string. It exists as a dedicated read tool because documents can be large — the `sections` parameter lets you extract only the headings you need, dramatically reducing the tokens you consume. Without section filtering, reading large documents wastes context. The `identifier` accepts a path, UUID, or filename, making it convenient from any reference you have in hand.
+`get_document` reads one or more documents and returns a structured JSON envelope. Use `include` to pick what you want back: any combination of `body`, `frontmatter`, and `headings`. The `identifier` parameter accepts a single string (path, `fqc_id`, or filename) or an array for batch retrieval — array input always returns an array response with per-element success or error objects, so a partial failure never fails the whole call.
 
-For document structure without body content, use `get_doc_outline` instead. For navigation across a search result set, use `search_documents` first.
+This is the consolidated read tool: it replaces both the body-only `get_document` of earlier versions and the standalone `get_doc_outline` (removed in v3.1). For frontmatter and heading metadata without body content, call `get_document` with `include: ["frontmatter", "headings"]`. For navigation across a search result set, use `search_documents` first.
 
 **Parameters**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `identifier` | string | yes | Document path, `fqc_id` UUID, or filename |
-| `sections` | string[] | no | Heading names to extract (e.g., `["Configuration", "Examples"]`). Omit to get the full document. |
-| `include_subheadings` | boolean | no | If `true` (default), include all nested content under each matching heading. If `false`, stop at the first subheading. |
-| `occurrence` | number | no | Which occurrence of a heading when the same heading name appears multiple times (1-indexed). Default: `1` |
+| `identifiers` | string \| string[] | yes | Document path, `fqc_id` UUID, or filename. Array input returns an array response with per-element success/error objects. |
+| `include` | `("body" \| "frontmatter" \| "headings")[]` | no | Which fields to include. Default: `["body"]`. |
+| `sections` | string[] | no | Heading names to extract (case-insensitive substring; queries starting with a digit anchor to the heading start, so `"3"` matches `"3. Scope"` but not `"13. Conversations"`). Multi-element returns sections in input order separated by a blank line; repeating a name N times returns the 1st through Nth occurrences. Requires `"body"` in `include`. |
+| `include_nested` | boolean | no | When extracting sections, include nested subsection content. Default: `true`. When `false`, stop at the first subheading. |
+| `occurrence` | number | no | Which occurrence of a heading when the same name appears multiple times (1-indexed). Default: `1`. Only valid when `sections` has exactly one element. |
+| `max_depth` | number | no | Maximum heading depth to include when `headings` is requested (1–6, default `6`). |
+| `follow_ref` | string | no | Dot-separated path into the source document's frontmatter (e.g., `"supersedes"` or `"projections.summary"`). The string value at that path is resolved as a document identifier; the target document's content is returned nested under `followed_ref` in the response. When used, `body`/`frontmatter`/`headings`/`sections`/`occurrence`/`max_depth`/`include_nested` apply to the **target** document. |
 
 **Returns**
 
-Document body content without frontmatter. Metadata includes path and change status.
+A JSON envelope. Every successful response includes a metadata block with `identifier`, `title`, `path`, `fq_id`, `modified`, and `size.chars` (full body length in characters) — regardless of which `include` fields were requested. The `title` field is always a non-empty string: the trimmed `fq_title` frontmatter when present, otherwise the filename basename without extension.
+
+When `include` contains `body` and `sections` is set, the envelope adds `extracted_sections` with the matched heading text, character counts, and content. If any requested section cannot be resolved, the entire call fails with `section_not_found` listing every failed query in `missing_sections[]` — no partial body is returned.
 
 **Examples**
 
-Read the full document:
+Read the full document body (default):
 ```
 mcp__flashquery__get_document({
-  identifier: "clients/acme/intake.md"
+  identifiers: "clients/acme/intake.md"
+})
+```
+
+Get just the heading outline and frontmatter — no body:
+```
+mcp__flashquery__get_document({
+  identifiers: "clients/acme/intake.md",
+  include: ["frontmatter", "headings"]
 })
 ```
 
 Read only the "Background" and "Next Steps" sections:
 ```
 mcp__flashquery__get_document({
-  identifier: "a1b2c3d4-0000-0000-0000-000000000000",
-  sections: ["Background", "Next Steps"],
-  include_subheadings: true
+  identifiers: "a1b2c3d4-0000-0000-0000-000000000000",
+  include: ["body"],
+  sections: ["Background", "Next Steps"]
+})
+```
+
+Batch — read three documents in one call (per-element errors don't fail the whole call):
+```
+mcp__flashquery__get_document({
+  identifiers: ["doc-a.md", "doc-b.md", "missing-doc"],
+  include: ["frontmatter"]
+})
+```
+
+Follow a frontmatter pointer — read the document that this one's `supersedes` field points to, returning only its summary section:
+```
+mcp__flashquery__get_document({
+  identifiers: "research/2025-experiment.md",
+  follow_ref: "supersedes",
+  include: ["body"],
+  sections: ["Summary"]
 })
 ```
 
 **Usage Notes**
-- Prefer `sections` to limit context — loading a large document just to read one heading wastes tokens.
-- UUID identifiers are the most reliable across renames and moves.
-- Use `get_doc_outline` first to discover what headings exist before fetching specific sections.
+- Prefer `include: ["frontmatter", "headings"]` over a body read when you only need structure — much smaller response.
+- Prefer `sections` to limit body context when you know the heading names — loading a large document just to read one heading wastes tokens.
+- UUID identifiers (`fq_id`) are the most reliable across renames and moves.
+- `follow_ref` works with both single and array `identifiers` — same reference path is applied to every document in a batch; documents lacking the pointer return per-element errors while the others succeed (the "show me all the summaries" pattern).
+- Pre-resolution `follow_ref` errors (path missing, wrong type, target not found) are returned at the top level. Post-resolution errors (`section_not_found`, `occurrence_out_of_range`) are nested under `followed_ref`.
 
 ---
 
@@ -187,7 +219,7 @@ For targeted section edits, prefer `replace_doc_section` or `insert_in_doc` — 
 | `content` | string | no | New document body (markdown). Replaces entire body. If omitted, body is preserved unchanged. |
 | `title` | string | no | New title. If omitted, existing title is preserved. |
 | `tags` | string[] | no | Replacement tag list. Replaces all existing tags. If omitted, tags are preserved. |
-| `frontmatter` | object | no | Additional frontmatter fields to merge. Cannot override `fqc_id`, `fqc_instance`, `created`, or `status`. |
+| `frontmatter` | object | no | Additional frontmatter fields to merge. Cannot override `fq_id`, `fq_instance`, `fq_created`, or `fq_status` (these are FlashQuery-managed). |
 
 **Returns**
 
@@ -1430,50 +1462,6 @@ mcp__flashquery__get_briefing({
 
 ---
 
-### get_doc_outline
-
-**Overview**
-
-`get_doc_outline` returns a document's frontmatter and heading hierarchy without loading the body. It exists because reading a large document just to learn its structure is wasteful — often you need to know what sections exist before deciding which ones to fetch with `get_document`. Batch mode (array of identifiers) returns DB metadata for triage without any file I/O.
-
-**Parameters**
-
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `identifiers` | string or string[] | yes | One or more document identifiers. Single string = full structural outline (file-based). Array = DB metadata for batch triage. |
-| `max_depth` | number | no | Maximum heading level to include (1–6). Default: `6` (all levels). |
-| `exclude_headings` | boolean | no | If `true`, omit headings from response (metadata only). Default: `false`. |
-
-**Returns**
-
-Frontmatter fields, heading outline with hierarchy, and linked file references.
-
-**Examples**
-
-Inspect one document's structure:
-```
-mcp__flashquery__get_doc_outline({
-  identifiers: "clients/acme/intake.md"
-})
-```
-
-Triage multiple documents (top-level headings only):
-```
-mcp__flashquery__get_doc_outline({
-  identifiers: [
-    "a1b2c3d4-0000-0000-0000-000000000000",
-    "e5f6g7h8-0000-0000-0000-000000000000"
-  ],
-  max_depth: 2
-})
-```
-
-**Usage Notes**
-- The parameter is `identifiers` (plural), not `identifier`. Accepts a single string or array.
-- Use this before calling `get_document` with `sections` — it tells you what headings exist to target.
-
----
-
 ## Category 7 — Vault Maintenance
 
 These tools manage the health of the vault index and its physical file structure. Use them after bulk file operations, when the index falls out of sync, or when setting up or tearing down organizational folder structures.
@@ -1762,30 +1750,70 @@ llm:
 
 `call_model` sends a message array to any configured LLM model and returns its text response plus a diagnostic envelope with token counts, computed cost, and latency. It exists to give skills and agents a single, observable, cost-tracked path to call language models without managing HTTP clients, API keys, or retry logic themselves.
 
-Two calling modes are available:
+Six calling modes are available, selected via `resolver`:
 
-- **`resolver: "model"`** — Calls a specific model alias directly. No fallback. Fastest when you know which model to use and don't need resilience.
-- **`resolver: "purpose"`** — Walks the purpose's fallback chain in order until one model succeeds. The first model in the chain is tried; if it fails with a transient error (5xx, network, 429), the next model is tried automatically. Permanent errors (400, 401, 403) stop the chain immediately. Use this when reliability matters more than controlling exactly which model runs.
+| `resolver` | What it does |
+|------------|--------------|
+| `"model"` | Calls a specific model alias directly. No fallback. Fastest when you know which model to use and don't need resilience. |
+| `"purpose"` | Walks the purpose's fallback chain in order until one model succeeds. Transient errors (5xx, network, 429) advance the chain; permanent errors (400, 401, 403) stop it immediately. Use this when reliability matters more than controlling exactly which model runs. |
+| `"list_models"` | Discovery — returns `{ models: [...] }` with every configured model and its hard cost metrics. Does **not** call any provider. `name` and `messages` are optional. |
+| `"list_purposes"` | Discovery — returns `{ purposes: [...], usage: {...} }` with every configured purpose, model chain, native/template tool diagnostics, and cost rates derived from the primary model. `name` and `messages` are optional. |
+| `"search"` | Discovery — case-insensitive substring search over model, purpose, capability, native tool, template tool, and help metadata. Pass the query in `parameters.query`. Returns `{ query, results: { purposes: [...], models: [...] } }`. |
+| `"help"` | Discovery — returns the full public `call_model` protocol contract as raw JSON. Does **not** call any provider and does not write usage rows. |
 
 The optional `trace_id` parameter correlates multiple `call_model` calls into a logical trace. When provided, the response envelope includes cumulative token counts, cost, and latency across all calls sharing that ID — useful for tracking the total cost of a multi-step skill run.
+
+**Reference syntax in messages.** When `resolver` is `"model"` or `"purpose"`, host-authored `system` and `user` message `content` strings can include reference placeholders that FlashQuery resolves and replaces with vault content **before** dispatching to the LLM. `assistant` and `tool` messages are not scanned for host references. This lets a calling LLM delegate to a cheaper model without first reading the document into its own context — pass the reference, FlashQuery injects the resolved content for the downstream call.
+
+These placeholder forms are recognized:
+
+| Form | Resolves to |
+|------|-------------|
+| `{{ref:path}}` | Full body of the document at `path` (vault-relative or filename) |
+| `{{ref:path#Section}}` | Single section's body, matched case-insensitively (same rules as `get_document` `sections`) |
+| `{{ref:path->pointer}}` | The document pointed to by the source's frontmatter `pointer` field (dot-paths supported, e.g. `projections.summary`) |
+| `{{ref:@alias}}` | A late-bound alias resolved from the top-level `template_params` object |
+| `{{id:uuid}}` | Same as `{{ref:path}}` but resolved by `fqc_id` UUID |
+| `{{id:uuid#Section}}` | Same as `{{ref:path#Section}}` resolved by UUID |
+| `{{id:uuid->pointer}}` | Same as `{{ref:path->pointer}}` resolved by UUID |
+
+`#` and `->` are mutually exclusive within a single placeholder. Messages with no `{{ref:...}}` or `{{id:...}}` patterns are forwarded unchanged — the existing call path is fully preserved.
+
+Prefix a placeholder with a backslash to pass it through literally, for example `\{{ref:docs/example.md}}`.
+
+**Template parameters.** `template_params` is keyed by template path or alias name. A simple alias can point to a string value, document identifier, or an object with special fields:
+- `_template` — template or document identifier used by `{{ref:@alias}}`.
+- `_items` — ordered list of document or template identifiers injected at one alias slot.
+- `_separator` — string placed between `_items` outputs.
+
+Template documents can expose declared parameters via frontmatter (`fq_template: true`, `fq_params`, and optionally `fq_expose_as_tool`, `fq_namespace`, and `fq_desc`). Parameter hydration is fail-fast: missing required parameters, invalid document parameters, invalid `_items`, or unsupported template schemas return `reference_resolution_failed` before any provider call.
+
+When references are resolved, the response envelope adds two metadata fields:
+- `injected_references[]` — per-reference `{ ref, chars }` (and `resolved_to` for `->` dereferences). Use `chars / prompt_chars` for per-reference cost attribution.
+- `prompt_chars` — total character count of the resolved messages sent to the provider.
+
+If any reference cannot be resolved (path missing, section not found, pointer absent, etc.), the call **fails fast with `reference_resolution_failed`** — no LLM call is made. The error includes a `failed_references[]` array detailing each failure reason.
 
 **Parameters**
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `resolver` | `"model"` or `"purpose"` | yes | Calling mode — see above. |
-| `name` | string | yes | Model alias name (when `resolver: "model"`) or purpose name (when `resolver: "purpose"`). Both are lowercased before lookup. |
-| `messages` | array | yes | OpenAI-style messages array. At least one message required. Each item: `{ role: "system" \| "user" \| "assistant" \| "tool", content: string }`. |
-| `parameters` | object | no | Optional LLM parameters passed to the provider (e.g. `temperature`, `max_tokens`, `top_p`). When using `resolver: "purpose"`, these are merged with the purpose's `defaults:`, with caller values winning. |
+| `resolver` | `"model"` \| `"purpose"` \| `"list_models"` \| `"list_purposes"` \| `"search"` \| `"help"` | yes | Calling mode — see above. |
+| `name` | string | conditional | Model alias name (when `resolver: "model"`) or purpose name (when `resolver: "purpose"`). Both are lowercased before lookup. Ignored for discovery resolvers (`list_models`, `list_purposes`, `search`, `help`). |
+| `messages` | array | conditional | OpenAI-style messages array. **Required** for `resolver: "model"` and `"purpose"` (at least one message). Ignored for discovery resolvers. Each item: `{ role: "system" \| "user" \| "assistant" \| "tool", content: string }`. Message `content` may include `{{ref:...}}` / `{{id:...}}` placeholders (see Reference syntax above). `role: "tool"` messages must use `tool_call_id` and cannot include `name`. |
+| `parameters` | object | conditional | Optional LLM parameters passed to the provider (e.g. `temperature`, `max_tokens`, `top_p`). When using `resolver: "purpose"`, merged with the purpose's `defaults:` (caller values win). For `resolver: "search"`, **`parameters.query` is required** — the substring to match against model/purpose names and descriptions. |
+| `return_messages` | boolean | no | For `model`/`purpose` calls, when `true`, returns post-hydration input messages plus the final assistant message in the envelope's `messages` array. Ignored by discovery resolvers. |
+| `template_params` | object | no | Template parameters keyed by template path or alias for host-authored reference hydration. Ignored by discovery resolvers. |
 | `trace_id` | string | no | Correlation ID for grouping related calls. When provided, the response includes cumulative stats across all calls sharing this ID. |
 
 **Returns**
 
-A JSON object with two keys — `response` (the model's text output) and `metadata` (diagnostic envelope):
+A JSON object with three keys — `response` (the model's text output), `messages` (empty by default unless `return_messages: true` or provider tool calls need to be preserved), and `metadata` (diagnostic envelope):
 
 ```json
 {
   "response": "Here is a concise summary: ...",
+  "messages": [],
   "metadata": {
     "resolver": "purpose",
     "name": "general",
@@ -1829,6 +1857,154 @@ When `trace_id` is provided, two additional fields appear **inside** `metadata`:
 ```
 
 When `trace_id` is omitted, `trace_id` and `trace_cumulative` are **absent entirely** from the metadata object — they are not present as `null`.
+
+When messages contain resolved `{{ref:...}}` or `{{id:...}}` placeholders, the metadata gets two more fields:
+
+```json
+{
+  "response": "...",
+  "metadata": {
+    "resolver": "purpose",
+    "name": "general",
+    "resolved_model_name": "fast",
+    "provider_name": "openai",
+    "fallback_position": 1,
+    "tokens": { "input": 1820, "output": 410 },
+    "cost_usd": 0.000519,
+    "latency_ms": 1240,
+    "injected_references": [
+      { "ref": "{{ref:clients/acme/intake.md}}", "chars": 4820 },
+      { "ref": "{{ref:templates/proposal.md->primary_section}}", "chars": 1130, "resolved_to": "templates/proposal-standard.md" }
+    ],
+    "prompt_chars": 6210
+  }
+}
+```
+
+`prompt_chars` is the total character count across all message `content` strings **after** reference resolution. `injected_references[i].chars` is each reference's resolved-content length — divide by `prompt_chars` to attribute input cost back to a specific reference. When messages contain no placeholders, both `injected_references` and `prompt_chars` are absent from the metadata.
+
+**Mode 2 managed tool loop.** When `resolver: "purpose"` targets a purpose that exposes model-visible tools through `purpose.tools`, `purpose.templates`, or the global template access policy, FlashQuery runs a managed tool loop instead of returning raw assistant tool calls. Native tools are drawn from the immutable MCP tool registry snapshot; template tools are generated from eligible vault templates. Caller-provided provider tools are rejected for now with `Mode 3 caller-provided tools are deferred; remove caller-provided tools for FlashQuery-managed Mode 2.`
+
+Mode 2 is controlled through purpose defaults or call `parameters`:
+- `timeout_ms` — whole-loop wall-clock deadline.
+- `max_iterations` — maximum model round trips.
+- `max_tokens_budget` — pre-call aggregate token budget guard.
+- `max_cost_usd` — pre-call aggregate cost budget guard.
+- `result_summary_chars` — tool-result summary length for `calls_log` entries.
+
+Mode 2 responses still use the normal `response`/`messages`/`metadata` envelope. In addition, `metadata.tools` is present and may include:
+```json
+{
+  "native_tool_names": ["get_document"],
+  "template_tool_names": ["flashquery_template_research_brief"],
+  "diagnostics": {
+    "expanded_tiers": [],
+    "explicit_tools": ["get_document"],
+    "excluded": [],
+    "hard_excluded": [],
+    "unknown": [],
+    "template_tools": [],
+    "template_tool_warnings": [],
+    "template_tool_conflicts": [],
+    "dangling_template_paths": []
+  },
+  "stop_reason": "final_response",
+  "iterations": 2,
+  "calls_log": [],
+  "aggregate_usage": {
+    "tokens": { "input": 1500, "output": 320 },
+    "cost_usd": 0.000414,
+    "latency_ms": 1800
+  }
+}
+```
+
+**Discovery resolver responses.** When `resolver` is `list_models`, `list_purposes`, `search`, or `help`, the response shape is different: `response`, `messages`, and `metadata` are omitted (no model was called), and the discovery data is returned at the top level.
+
+`list_models` returns:
+```json
+{
+  "models": [
+    {
+      "name": "fast",
+      "type": "language",
+      "provider": "openai",
+      "model_id": "gpt-4o-mini",
+      "input_cost_per_million": 0.15,
+      "output_cost_per_million": 0.60,
+      "description": "Fast, cheap small model for routine tasks",
+      "context_window": 128000,
+      "capabilities": { "tool_calling": true, "usage_on_tool_calls": true },
+      "capability_diagnostics": []
+    },
+    {
+      "name": "local",
+      "type": "language",
+      "provider": "local-ollama",
+      "model_id": "llama3.2:latest",
+      "input_cost_per_million": 0,
+      "output_cost_per_million": 0,
+      "capability_diagnostics": [],
+      "local": true
+    }
+  ]
+}
+```
+
+The optional fields `description`, `context_window`, `tags`, and `capabilities` are present **only when declared in `flashquery.yml`** (omit-when-undeclared — explicitly-declared empty values are preserved). `capability_diagnostics` is always included. The `local: true` flag is auto-derived for any model whose provider has `type: ollama`, or set explicitly via the provider's `local: true` field.
+
+`list_purposes` returns:
+```json
+{
+  "purposes": [
+    {
+      "name": "general",
+      "description": "General-purpose language model for everyday tasks",
+      "models": ["fast"],
+      "input_cost_per_million": 0.15,
+      "output_cost_per_million": 0.60,
+      "defaults": { "temperature": 0.7 },
+      "native_tools": [],
+      "native_tool_diagnostics": {
+        "expanded_tiers": [],
+        "explicit_tools": [],
+        "excluded": [],
+        "hard_excluded": [],
+        "unknown": []
+      },
+      "template_tools": [],
+      "template_tool_warnings": [],
+      "template_tool_conflicts": [],
+      "dangling_template_paths": []
+    }
+  ],
+  "usage": {
+    "reference_syntax": "{{ref:<template_identifier>}}",
+    "resolvers": {
+      "purpose": "Call a named purpose fallback chain. Requires name and messages.",
+      "model": "Call a configured model alias directly. Requires name and messages.",
+      "help": "Return the full call_model protocol help contract."
+    }
+  }
+}
+```
+
+Cost rates on a purpose come from the **primary** model (the first entry in its `models:` chain).
+
+`search` returns both arrays, scoped to matches against name and description:
+```json
+{
+  "query": "fast",
+  "results": {
+    "purposes": [],
+    "models": [
+      { "name": "fast", "type": "language", "provider": "openai", "model_id": "gpt-4o-mini", "input_cost_per_million": 0.15, "output_cost_per_million": 0.60 }
+    ]
+  }
+}
+```
+
+Empty arrays mean no matches in that category.
 
 **Examples**
 
@@ -1888,16 +2064,96 @@ mcp__flashquery__call_model({
 // → trace_cumulative in each response shows the running total across both calls
 ```
 
+Pass document content by reference instead of reading it into the calling LLM's context first:
+```
+mcp__flashquery__call_model({
+  resolver: "purpose",
+  name: "general",
+  messages: [
+    { role: "system", content: "Summarize the intake document in three bullets." },
+    { role: "user", content: "{{ref:clients/acme/intake.md}}" }
+  ]
+})
+// → response.metadata.injected_references[0] = { ref: "{{ref:clients/acme/intake.md}}", chars: 4820 }
+// → response.metadata.prompt_chars = 4880
+```
+
+Inject only a specific section, by path or UUID:
+```
+mcp__flashquery__call_model({
+  resolver: "model",
+  name: "fast",
+  messages: [
+    { role: "user", content: "What does this section say about pricing?\n\n{{ref:proposals/template.md#Pricing}}" }
+  ]
+})
+```
+
+Follow a frontmatter pointer (e.g., the `supersedes` field on this document points to the previous version):
+```
+mcp__flashquery__call_model({
+  resolver: "purpose",
+  name: "general",
+  messages: [
+    { role: "user", content: "Compare:\n\nNew: {{id:b6c8e9d4-...}}\n\nPrevious: {{id:b6c8e9d4-...->supersedes}}" }
+  ]
+})
+// → response.metadata.injected_references shows resolved_to for the dereferenced pointer
+```
+
+Discovery — list everything available, with no model call:
+```
+mcp__flashquery__call_model({
+  resolver: "list_models"
+})
+// → returns { models: [...] } with cost rates for every configured model
+```
+
+Discovery — search for a model or purpose by substring:
+```
+mcp__flashquery__call_model({
+  resolver: "search",
+  parameters: { query: "vision" }
+})
+// → returns { query: "vision", results: { purposes: [...], models: [...] } } with name+description matches
+```
+
+Discovery — get the complete public protocol contract:
+```
+mcp__flashquery__call_model({
+  resolver: "help"
+})
+// → returns raw JSON with summary, reference_syntax, template_bindings, modes, envelope, errors, discovery, and examples
+```
+
+Two-step "discover-then-delegate" pattern — the calling LLM picks a cheap model for a simple task:
+```
+// Step 1 — see what's available
+const discovery = mcp__flashquery__call_model({ resolver: "list_purposes" })
+// → calling LLM sees costs, picks "general" as cheapest viable purpose
+
+// Step 2 — delegate using a reference (no need to read the doc into caller's context)
+mcp__flashquery__call_model({
+  resolver: "purpose",
+  name: "general",
+  messages: [
+    { role: "user", content: "Extract the action items from {{ref:meetings/2026-04-30.md}}" }
+  ]
+})
+```
+
 **Error responses**
 
 | Condition | `isError` | Response text |
 |-----------|-----------|--------------|
-| `llm:` absent from config | `true` | `"LLM is not configured. Add an llm: section to flashquery.yml to use this tool."` |
+| `llm:` absent from config | `true` | `"LLM is not configured. Add an llm: section to flashquery.yml to use this tool."` for all resolvers except `help`; `help` still returns unconfigured protocol guidance as raw JSON. |
 | Unknown model alias | `true` | `"Model 'X' not found. Available models: fast, smart"` |
 | Unknown purpose name | `true` | `"Purpose 'X' not found. Available purposes: general, drafting"` |
 | Purpose chain exhausted | `true` | Multi-line (see below) |
 | HTTP 401 from provider | `true` | `"call_model failed: LLM error: openai API returned 401 Unauthorized. Check the API key in flashquery.yml."` |
 | Provider rate-limited (429) | `true` | `"call_model failed: LLM error: openai rate limit exceeded. Wait and retry."` |
+| Reference cannot be resolved | `true` | `"reference_resolution_failed"` with `failed_references[]` listing per-reference reasons (path missing, section not found, pointer absent, `#` and `->` mixed, etc.). **No LLM call is made.** |
+| `resolver: "search"` without `parameters.query` | `true` | `"search requires parameters.query (non-empty string)"` |
 
 When a purpose chain exhausts all models, the error lists every attempt:
 ```
@@ -1907,10 +2163,15 @@ call_model failed: purpose 'general' — all 2 models exhausted
 ```
 
 **Usage Notes**
-- `resolved_model_name` in the response is the model alias (e.g. `"fast"`), not the underlying API model string (e.g. `"gpt-4o-mini"`). Use `get_plugin_info` or read `flashquery.yml` directly if you need the raw model name.
+- `resolved_model_name` in the response is the model alias (e.g. `"fast"`), not the underlying API model string (e.g. `"gpt-4o-mini"`). Use `resolver: "list_models"` if you need to inspect the underlying `model_id` and cost rates.
 - Use `resolver: "purpose"` for production workflows — it survives provider outages automatically. Use `resolver: "model"` only when you need deterministic model selection (e.g. benchmarking, testing specific models).
 - When using `resolver: "purpose"`, `parameters` are merged with the purpose's `defaults:` — caller values win. Omit `parameters` to use the purpose defaults unchanged.
-- Prompt safety is the caller's responsibility — messages are forwarded to the provider as-is.
+- **Pass-by-reference is the cheapest way to delegate.** When a calling LLM needs to hand work to a smaller model, use `{{ref:...}}` / `{{id:...}}` placeholders so FlashQuery resolves the document content server-side. The caller never has to read the document into its own context — saving tokens both ways.
+- **Discovery before delegation is free.** `list_models`, `list_purposes`, `search`, and `help` make no provider calls. Use them to let a calling LLM make cost-aware routing decisions before committing to a full call.
+- Reference resolution is **fail-fast** — if any placeholder can't be resolved, the call returns `reference_resolution_failed` with details and **no LLM call is made**. This protects against silently sending a half-resolved prompt.
+- `#` (section extraction) and `->` (frontmatter pointer dereference) are **mutually exclusive** within a single placeholder. Use them in separate placeholders if you need both effects.
+- For sizing, FlashQuery does **not** pre-check provider context windows — the caller is responsible. Use `list_models` to see each model's `context_window` (when declared), and use `get_document` to size a reference (`size.chars`) before injecting it.
+- Prompt safety is the caller's responsibility — messages are forwarded to the provider as-is after reference resolution.
 - Do not call `call_model` with embedding-type model aliases — embedding models are used by FlashQuery's internal semantic search and do not return useful text completions.
 - The `trace_id` field is free-form. Use a descriptive string (e.g. `"skill-name-YYYYMMDD"`) so `get_llm_usage` can filter by it later.
 
@@ -2151,3 +2412,25 @@ mcp__flashquery__get_llm_usage({
 - Direct model calls (`resolver: "model"`) are stored with `purpose_name: "_direct"` and appear under `direct_model_calls` in `by_purpose` mode. To filter to them explicitly, pass `purpose_name: "_direct"`.
 - `to_date` requires `from_date`. Providing `to_date` alone returns an error.
 - `limit` applies only to `recent` mode and defaults to `20`. For `summary`, `by_purpose`, and `by_model`, all matching rows are aggregated regardless of count.
+
+---
+
+## Appendix: Deprecated Tools
+
+These tools are still registered for backwards compatibility but no longer perform useful work. Each call returns a fixed deprecation message pointing to the current replacement. They will be removed in a future major version.
+
+### list_projects
+
+**Status:** Deprecated since v1.7 (projects model removed).
+
+**Replacement:** Use `list_vault` to browse the vault tree, or `search_documents` with tag filters to find documents by category.
+
+**Behavior:** Returns a single text response — `"Projects model removed in v1.7. Scoping is now path-based (user-managed folder structure) + tag-based (characteristics). Use \`fqc scan\` to discover and index vault files."` — with no `isError` flag. Accepts no parameters.
+
+### get_project_info
+
+**Status:** Deprecated since v1.7 (projects model removed).
+
+**Replacement:** Use `search_documents` with tag filters, or `get_briefing` for a tag-scoped overview.
+
+**Behavior:** Returns a single text response — `"Projects model removed in v1.7. Scoping is now path-based (user-managed folder structure) + tag-based (characteristics). Use \`search_documents\` with tags to find related documents."` — with no `isError` flag. Accepts an optional `project` parameter that is ignored.

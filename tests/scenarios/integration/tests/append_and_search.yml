@@ -41,26 +41,26 @@ steps:
     assert:
       op: get_document
       args:
-        identifier: "${log_doc.fq_id}"
+        identifiers: "${log_doc.fq_id}"
       expect_contains: "New event: User logged in"
 
   - label: "Original content still present after append"
     assert:
       op: get_document
       args:
-        identifier: "${log_doc.fq_id}"
+        identifiers: "${log_doc.fq_id}"
       expect_contains: "Initial log entry"
 
   - label: "Retrieve document: original content preserved"
     assert:
       op: get_document
       args:
-        identifier: "${log_doc.fq_id}"
+        identifiers: "${log_doc.fq_id}"
       expect_contains: "Initial log entry at session start."
 
   - label: "Retrieve document: appended entry is present"
     assert:
       op: get_document
       args:
-        identifier: "${log_doc.fq_id}"
+        identifiers: "${log_doc.fq_id}"
       expect_contains: "New event: User logged in from 192.168.1.100"
