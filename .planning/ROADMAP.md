@@ -296,13 +296,13 @@ Plans:
   4. `help` explains Mode 1, Mode 2, references, templates, tools, guardrails, and discovery usage in a machine-readable shape.
   5. Discovery calls remain outside the `CallModelEnvelope` and ignore `return_messages`.
   6. Phase-specific runnable tests exist and pass for `list_purposes`, `list_models`, discovery `search`, `help`, and public diagnostics.
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 Plans:
 **Wave 0**
 - [x] 119-01-PLAN.md — RED contracts for help, discovery diagnostics, search metadata, and directed help skeleton
 
 **Wave 1** *(blocked on 119-01 completion)*
-- [ ] 119-02-PLAN.md — Help resolver, discovery content helpers, capability diagnostics, and resolver dispatch
+- [x] 119-02-PLAN.md — Help resolver, discovery content helpers, capability diagnostics, and resolver dispatch
 
 **Wave 2** *(blocked on 119-02 completion)*
 - [ ] 119-03-PLAN.md — Public directed scenarios, coverage ledgers, validation sign-off, and full gate

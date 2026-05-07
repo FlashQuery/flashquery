@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
 status: executing
-stopped_at: Completed 119-01-PLAN.md
-last_updated: "2026-05-06T23:58:38.052Z"
-last_activity: 2026-05-06
+stopped_at: Completed 119-02-PLAN.md
+last_updated: "2026-05-07T00:06:21.000Z"
+last_activity: 2026-05-07
 progress:
   total_phases: 23
   completed_phases: 7
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 ## Current Position
 
 Phase: 119 (discovery-diagnostics-help-resolver) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
-Last activity: 2026-05-06
+Last activity: 2026-05-07
 
 ## Performance Metrics
 
@@ -75,6 +75,7 @@ Last activity: 2026-05-06
 | Phase 117 P05 | 13min | 2 tasks | 5 files |
 | Phase 118 P05 | 12min | 2 tasks | 10 files |
 | Phase 119 P01 | 6min | 3 tasks | 6 files |
+| Phase 119 P02 | 5min | 2 tasks | 7 files |
 
 ## Decisions
 
@@ -111,6 +112,8 @@ Last activity: 2026-05-06
 - [Phase 118]: Public template validation now treats provider request capture as auxiliary; directed assertions use the public `call_model` envelope and calls-log metadata.
 - [Phase 119]: Plan 01 intentionally leaves focused validation RED so Plan 02 can implement exact public discovery/help contracts.
 - [Phase 119]: Help resolver tests require raw JSON outside CallModelEnvelope and assert stable top-level key order.
+- [Phase 119]: The help resolver short-circuits before the LLM client guard so unconfigured clients can still retrieve protocol help.
+- [Phase 119]: Search indexes names, descriptions, resolver/help keys, and structured diagnostic metadata without indexing document or template bodies.
 
 ## Accumulated Context
 
@@ -192,8 +195,8 @@ Last activity: 2026-05-06
 
 ## Session Continuity
 
-Last session: 2026-05-06T23:58:38.028Z
-Stopped at: Completed 119-01-PLAN.md
+Last session: 2026-05-07T00:06:21.000Z
+Stopped at: Completed 119-02-PLAN.md
 Resume: None
 
 ## Deferred Items
