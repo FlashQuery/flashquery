@@ -1,0 +1,64 @@
+name: llm_help_no_usage_row
+description: >
+  IL-41: the help resolver participates in the no-usage-row contract. call_model
+  with resolver=help is a discovery resolver — it short-circuits before any LLM
+  dispatch (src/mcp/tools/llm.ts:347) and must not write a fqc_llm_usage row.
+  Generalizes IL-22 (unresolved {{ref:...}} → no row) to the help resolver path.
+
+  Two assertions: (1) call_model resolver=help returns a recognizable help body
+  (asserted via the stable top-level "reference_syntax" key from
+  src/llm/help-content.ts), (2) get_llm_usage(period=all) reports total_calls=0
+  — proving help did not write a row. The integration runner clears all fqc_*
+  tables between tests, so a fresh-slate total_calls=0 is the proof of "delta=0"
+  without needing to capture a baseline mid-test.
+coverage: [IL-41]
+
+steps:
+  - label: "IL-41 step 1: call_model resolver=help returns help body without name or messages (DISC-04 — help is a discovery resolver)"
+    # Help is a no-LLM-dispatch resolver. Per src/mcp/tools/llm.ts:301 and
+    # DISC-04, name and messages are optional for discovery resolvers. The
+    # response body is structured help content from buildCallModelHelpContent
+    # in src/llm/help-content.ts; "reference_syntax" is a stable top-level
+    # key in that JSON shape and uniquely identifies a help response (it does
+    # not appear in list_purposes/list_models/search shapes).
+    assert:
+      op: call_model
+      args:
+        resolver: help
+      expect_contains: '"reference_syntax"'
+      expect_not_contains: '"isError":true'
+
+  - label: "IL-41 step 2: help body includes the resolvers contract (proves a real help response, not an empty/stub)"
+    # Anchor a second stable substring to defend against a stub help response
+    # that happens to include the word reference_syntax in some other context.
+    # "raw_discovery_resolvers" is built into summary by buildSummary() in
+    # src/llm/help-content.ts:43 and is a help-only structural marker.
+    assert:
+      op: call_model
+      args:
+        resolver: help
+      expect_contains: '"raw_discovery_resolvers"'
+
+  - label: "IL-41 step 3: get_llm_usage(period=all) reports total_calls=0 — help wrote no fqc_llm_usage row"
+    # The integration runner clears fqc_llm_usage between tests, so any
+    # non-zero count would mean either (a) a row was written by the help
+    # call above, or (b) something else wrote a row in this test — and
+    # nothing else above calls a model. A fresh-slate total_calls=0 after
+    # one help invocation is the proof that help is a no-row resolver.
+    assert:
+      op: get_llm_usage
+      args:
+        mode: summary
+        period: all
+      expect_contains: '"total_calls": 0'
+
+  - label: "IL-41 step 4: get_llm_usage(mode=recent, period=all) returns no model_name entries — no row to surface"
+    # Cross-check: recent mode would expose any row that was written, even one
+    # not counted by summary. Asserting no model_name field appears confirms
+    # no row exists for any model after the help call.
+    assert:
+      op: get_llm_usage
+      args:
+        mode: recent
+        period: all
+      expect_not_contains: '"model_name"'

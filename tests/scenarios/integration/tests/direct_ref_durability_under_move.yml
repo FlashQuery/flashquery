@@ -1,0 +1,107 @@
+name: direct_ref_durability_under_move
+description: >
+  IX-22: direct {{ref:...}} durability under move — path-typed identifier vs
+  fq_id-typed identifier divergence after move_document. Pre-move, both
+  {{ref:<old_path>}} and {{ref:<fq_id>}} resolve to the same body. After moving
+  the target to a new path, {{ref:<old_path>}} fails with reference_resolution_failed
+  (inner reason document_not_found at the call_model surface) while
+  {{ref:<fq_id>}} continues to resolve — the fq_id is durable across moves —
+  and {{ref:<new_path>}} resolves to the same body.
+
+  Companion to IX-19 (projections_durability_under_move) which covers follow_ref
+  pointer durability via get_document. IX-22 covers the call_model reference
+  resolver surface specifically — a different observable path.
+coverage: [IX-22]
+deps: [llm]
+
+steps:
+  - label: "IX-22 setup: target document at original path with marker IX-22-BODY-MARKER"
+    action: vault.write
+    name: target_doc
+    path: "Test/ix22/orig/marker.md"
+    title: "IX-22 Move-Durability Target"
+    content: "Target body — durability marker is IX-22-BODY-MARKER."
+    tags: [ix22-tag]
+
+  - label: "IX-22 pre-move: {{ref:<old_path>}} resolves to body marker"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix22/orig/marker.md}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "IX-22-BODY-MARKER"
+
+  - label: "IX-22 pre-move: {{ref:<fq_id>}} resolves to body marker"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:${target_doc.fq_id}}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "IX-22-BODY-MARKER"
+
+  - label: "IX-22 action: move target from /orig/ to /moved/"
+    action: move_document
+    args:
+      identifier: "${target_doc.fq_id}"
+      destination: "_integration/Test/ix22/moved/marker.md"
+
+  - label: "IX-22 post-move: {{ref:<old_path>}} returns isError"
+    # After the move, the old path no longer resolves to a document. Path-typed
+    # references must surface this as an error envelope, not silently fall back
+    # to filename matching (the input includes a directory prefix, so it is a
+    # path identifier per DRS §4.4 — only the path branch is tried).
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix22/orig/marker.md}} Reply OK."
+      expect_error: true
+      expect_contains: "reference_resolution_failed"
+
+  - label: "IX-22 post-move: failure reason is document_not_found"
+    # The wrapper code is reference_resolution_failed; the inner reason at the
+    # call_model {{ref:...}} surface for a missing path is document_not_found.
+    # (Distinct from the get_document follow_ref surface, which uses
+    # reference_path_not_found per src/llm/reference-resolver.ts:1128 — those
+    # are two different observable paths with different reason taxonomies.)
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix22/orig/marker.md}} Reply OK."
+      expect_error: true
+      expect_contains: "document_not_found"
+
+  - label: "IX-22 post-move: {{ref:<fq_id>}} still resolves — fq_id is durable across moves"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:${target_doc.fq_id}}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "IX-22-BODY-MARKER"
+
+  - label: "IX-22 post-move: {{ref:<new_path>}} resolves to the same body marker"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/ix22/moved/marker.md}} What marker token appears in the document? Reply with just the token."
+      expect_contains: "IX-22-BODY-MARKER"

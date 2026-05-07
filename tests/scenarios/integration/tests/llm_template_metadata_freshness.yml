@@ -1,0 +1,97 @@
+name: llm_template_metadata_freshness
+description: >
+  IL-42: template metadata freshness reaches the discovery surface. When a
+  template's frontmatter metadata changes (specifically fq_desc), the next
+  call_model resolver=list_purposes call must reflect the new metadata —
+  list_purposes reads template frontmatter fresh from disk per call via
+  assembleTemplateToolRegistry → discoverAllTemplateCandidates → readFile
+  (src/llm/template-tools.ts:393, :249, :221) with no cache.
+
+  Companion to IL-37 (template *body* freshness for {{ref:...}} injection):
+  IL-42 covers the *metadata* surface for list_purposes discovery. Composes
+  update_doc_header (frontmatter mutation) with list_purposes (discovery read).
+
+  Requires deps: [llm] because list_purposes (unlike help) is gated on the
+  unconfigured-LLM guard at src/mcp/tools/llm.ts:355 — only resolver=help
+  short-circuits earlier (line 347).
+coverage: [IL-42]
+deps: [llm]
+
+steps:
+  - label: "IL-42 setup: write template with fq_template, fq_expose_as_tool, fq_desc=IL-42-DESC-MARKER-A"
+    action: vault.write
+    name: freshness_tmpl
+    path: "Templates/il-42-metadata-freshness.md"
+    title: "IL-42 Metadata Freshness Template"
+    content: "Body: hello {{topic}}."
+    tags: [il-42-tag]
+    frontmatter:
+      fq_template: true
+      fq_expose_as_tool: true
+      fq_namespace: il42
+      fq_desc: "IL-42-DESC-MARKER-A"
+      fq_params:
+        topic:
+          type: string
+          required: true
+
+  - label: "IL-42 setup: scan exposed template into discovery"
+    # Mirrors llm_discovery_then_call.yml's pattern. Not strictly required —
+    # discoverAllTemplateCandidates walks the filesystem on each list_purposes
+    # call — but consistent with adjacent template-discovery tests.
+    action: scan_vault
+
+  - label: "IL-42 step 1: list_purposes exposes template_path for the new template"
+    # Confirms the template was discovered and is visible in the discovery
+    # surface. The canonical path includes the auto-applied _integration/ prefix.
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"template_path":"_integration/Templates/il-42-metadata-freshness.md"'
+
+  - label: "IL-42 step 2: list_purposes shows initial fq_desc value MARKER-A"
+    # Pre-update state: the description on disk is MARKER-A; list_purposes
+    # must surface it.
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: "IL-42-DESC-MARKER-A"
+
+  - label: "IL-42 action: update_doc_header replaces fq_desc with IL-42-DESC-MARKER-B"
+    # Updates frontmatter without touching the body — the right tool for
+    # this composition (update_document replaces body, not frontmatter).
+    action: update_doc_header
+    args:
+      identifier: "${freshness_tmpl.fq_id}"
+      updates:
+        fq_desc: "IL-42-DESC-MARKER-B"
+
+  - label: "IL-42 step 3: list_purposes now surfaces updated fq_desc value MARKER-B"
+    # Post-update state: list_purposes re-reads frontmatter from disk and the
+    # template's description must now be MARKER-B.
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: "IL-42-DESC-MARKER-B"
+
+  - label: "IL-42 step 4: list_purposes no longer contains the old MARKER-A description"
+    # Stale-cache canary: if list_purposes returned cached frontmatter, MARKER-A
+    # would still appear. The absence of MARKER-A is the freshness proof.
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_not_contains: "IL-42-DESC-MARKER-A"
+
+  - label: "IL-42 step 5: template_path remains stable across the metadata update (template identity is path-keyed)"
+    # Confirms the update did not move or rename the template — only its
+    # description changed. The same template_path appears in list_purposes
+    # before and after the update.
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"template_path":"_integration/Templates/il-42-metadata-freshness.md"'

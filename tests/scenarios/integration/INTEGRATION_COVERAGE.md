@@ -70,6 +70,7 @@ Verifies behaviors that span more than one FlashQuery domain (documents, memorie
 | IX-19  | Projections matrix — durability under move: source has both path-typed and fq_id-typed pointers to same target; move_document target → follow_ref on path-typed pointer returns follow_ref_target_not_found while fq_id-typed pointer still resolves | projections_durability_under_move | 2026-05-07   | 2026-05-07   |
 | IX-20  | Projections matrix — batch follow_ref happy path: get_document(identifiers:[src1,src2,src3], follow_ref:"projections.summary") returns array with each followed_ref.body matching its corresponding target's body in positional order | projections_batch_follow_ref_happy | 2026-05-07   | 2026-05-07   |
 | IX-21  | Projections matrix — batch follow_ref partial failure: 2 sources have the pointer + 1 source lacks it → batch response is success/error/success in positional order with follow_ref_path_not_found on the missing element | projections_batch_follow_ref_partial | 2026-05-07   | 2026-05-07   |
+| IX-22  | Direct `{{ref:...}}` durability under move: vault.write doc at path A → call_model `{{ref:A}}` and `{{ref:<fq_id>}}` both resolve → move_document A→B → call_model `{{ref:A}}` returns a stable reference resolution failure while `{{ref:<fq_id>}}` and `{{ref:B}}` still resolve to the same body | direct_ref_durability_under_move | 2026-05-07   | 2026-05-07   |
 
 ---
 
@@ -184,6 +185,8 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 | IL-38  | ATL-INT-02: Document-parameter freshness brackets a target-document write with two `call_model` calls; the first renders ALPHA and the second renders BETA | llm_template_document_param_freshness | 2026-05-07   | 2026-05-07   |
 | IL-39  | ATL-INT-03: Discovery-to-invocation closure covers public `list_purposes` usage guidance, discovered `template_path`/parameter metadata, direct `{{ref:...}}` template invocation, and purpose invocation | llm_discovery_then_call      | 2026-05-07   | 2026-05-07   |
 | IL-40  | ATL-INT-05: Mixed path, section, pointer, alias, and `_items` template/reference modes compose in one `call_model` flow; parsed directed coverage asserts metadata ordering, parent list entry, same-document sections, and default `_separator` shape | llm_mixed_reference_modes    | 2026-05-07   | 2026-05-07   |
+| IL-41  | Help resolver participates in no-usage-row contract: baseline get_llm_usage → call_model resolver=help returns help body → get_llm_usage total_calls delta is 0 (help is a no-LLM-dispatch resolver and writes no `fqc_llm_usage` row) | llm_help_no_usage_row        | 2026-05-07   | 2026-05-07   |
+| IL-42  | Template metadata freshness reaches discovery surface: vault.write template (`fq_template: true`, `fq_expose_as_tool: true`, `fq_desc: A`) → list_purposes shows description A in template_tools → update_document rewrites frontmatter with `fq_desc: B` → next list_purposes shows description B (template registry reads frontmatter fresh from disk per call) | llm_template_metadata_freshness | 2026-05-07   | 2026-05-07   |
 
 ---
 
