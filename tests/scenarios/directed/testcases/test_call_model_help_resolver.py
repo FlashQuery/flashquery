@@ -68,17 +68,51 @@ def _check_help(client: FQCClient) -> tuple[bool, str]:
     except Exception as exc:
         return False, f"JSON parse error: {exc}; text={result.text[:500]}"
 
-    # Help is raw JSON and not a CallModelEnvelope: no model response, metadata,
-    # usage, or returned messages should appear even when return_messages is set.
+    # ATL-DS-15: Help is raw JSON and not a CallModelEnvelope: no model
+    # response, metadata, usage, or returned messages should appear even when
+    # return_messages is set.
     forbidden_envelope_keys = ["response", "metadata", "usage", "messages"]
+    reference_forms = body.get("reference_syntax", {}).get("forms", [])
+    template_fields = body.get("template_bindings", {}).get("template_params", {}).get("alias_fields", {})
+    mode_1 = body.get("modes", {}).get("mode_1", {})
+    mode_2 = body.get("modes", {}).get("mode_2", {})
+    discovery = body.get("discovery", {})
+    examples = body.get("examples", {})
     ok = (
         list(body.keys()) == EXPECTED_KEYS
         and body.get("discovery", {}).get("resolvers") == EXPECTED_RESOLVERS
+        and any("{{ref:path/to/doc.md}}" == form.get("syntax") for form in reference_forms)
+        and any("{{ref:path/to/doc.md#Section}}" == form.get("syntax") for form in reference_forms)
+        and any("{{ref:path/to/doc.md->frontmatter.path}}" == form.get("syntax") for form in reference_forms)
+        and any("{{ref:@alias}}" == form.get("syntax") for form in reference_forms)
+        and template_fields.get("_template")
+        and template_fields.get("_items")
+        and mode_1.get("resolver_values") == ["model", "purpose"]
+        and mode_1.get("required") == ["name", "messages"]
+        and mode_2.get("resolver_value") == "purpose"
+        and "purpose.templates" in mode_2.get("enabled_by", [])
+        and "max_iterations" in mode_2.get("controls", {})
+        and "max_tokens_budget" in mode_2.get("controls", {})
+        and "max_cost_usd" in mode_2.get("controls", {})
+        and "metadata_tools" in body.get("envelope", {})
+        and "reference_resolution_failed" in body.get("errors", {})
+        and discovery.get("list_models", {}).get("returns") == ["models", "capability_diagnostics"]
+        and "template_tool_conflicts" in discovery.get("list_purposes", {}).get("returns", [])
+        and "help" in discovery
+        and "direct_model" in examples
+        and "parameterized_template" in examples
+        and "mode_2_tools" in examples
         and all(key not in body for key in forbidden_envelope_keys)
     )
     detail = json.dumps({
         "keys": list(body.keys()),
         "resolvers": body.get("discovery", {}).get("resolvers"),
+        "reference_forms": [form.get("syntax") for form in reference_forms],
+        "template_alias_fields": list(template_fields.keys()),
+        "mode_1": mode_1,
+        "mode_2_controls": mode_2.get("controls", {}),
+        "list_purposes_returns": discovery.get("list_purposes", {}).get("returns"),
+        "examples": list(examples.keys()),
         "forbidden_present": [key for key in forbidden_envelope_keys if key in body],
     }, sort_keys=True)
     return ok, detail
