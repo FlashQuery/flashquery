@@ -29,6 +29,21 @@ steps:
     content: "ATL-INT-02-ALPHA"
     tags: [atl-int-02]
 
+  - label: "ATL-INT-02: first call renders original ALPHA parameter target"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        template_params:
+          _integration/Templates/atl-int-02-param.md:
+            brief: "_integration/Docs/atl-int-02-param-target.md"
+        messages:
+          - role: user
+            content: "{{ref:_integration/Templates/atl-int-02-param.md}} Reply with the marker token."
+      expect_contains: "ATL-INT-02-ALPHA"
+
   - label: "ATL-INT-02 update: replace parameter target with BETA marker"
     action: update_document
     args:

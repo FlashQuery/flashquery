@@ -152,12 +152,29 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 nested_literal = f"{root}/docs/nested-literal.md"
                 item_a = f"{root}/docs/item-a.md"
                 item_b = f"{root}/docs/item-b.md"
+                section_combo = f"{root}/docs/section-combo.md"
+                pointer_source = f"{root}/docs/pointer-source.md"
+                pointer_target = f"{root}/docs/pointer-target.md"
 
                 target_id = _write_doc(server.vault_path, target, "TARGET BODY\n", fq_title="Target")
                 _write_doc(server.vault_path, plain, "Plain {{name}} remains.\n", fq_title="Plain")
                 _write_doc(server.vault_path, nested_literal, "literal {{ref:missing.md}} remains\n", fq_title="Nested Literal")
                 _write_doc(server.vault_path, item_a, "ALPHA\n", fq_title="Item A")
                 _write_doc(server.vault_path, item_b, "BRAVO\n", fq_title="Item B")
+                _write_doc(
+                    server.vault_path,
+                    section_combo,
+                    "# Top\nTOP-SECTION\n\n# List\nLIST-SECTION\n",
+                    fq_title="Section Combo",
+                )
+                _write_doc(server.vault_path, pointer_target, "POINTER BODY\n", fq_title="Pointer Target")
+                _write_doc(
+                    server.vault_path,
+                    pointer_source,
+                    "Pointer source\n",
+                    fq_title="Pointer Source",
+                    projections={"summary": pointer_target},
+                )
                 _write_doc(
                     server.vault_path,
                     template,
@@ -280,6 +297,64 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "plain object item input metadata": plain_items and plain_items[0].get("input") == plain and plain_items[0].get("template") is not True,
                 }
                 run.step("ATL-DS-05 alias templates and _items render in order", all(checks.values()), f"checks={checks}, injected={injected}", tool_result=alias)
+
+                # ── Step ATL-INT-05: parsed mixed-mode metadata shape ───────
+                mixed_content = (
+                    f"Plain {_ref(plain)}\n"
+                    f"Section {_ref(section_combo + '#Top')}\n"
+                    f"Pointer {_ref(pointer_source + '->projections.summary')}\n"
+                    "Alias {{ref:@review}}\n"
+                    "List {{ref:@bundle_default}}\n"
+                )
+                mixed = _call(
+                    client,
+                    mixed_content,
+                    template_params={
+                        "review": {"_template": item_template, "label": "Standalone"},
+                        "bundle_default": {
+                            "_items": [
+                                f"{section_combo}#List",
+                                item_a,
+                            ],
+                        },
+                    },
+                )
+                env = _json(mixed)
+                text = env.get("response", "")
+                injected = env.get("metadata", {}).get("injected_references", [])
+                refs = [entry.get("ref") for entry in injected if isinstance(entry, dict)]
+                expected_refs = [
+                    _ref(plain),
+                    _ref(section_combo + "#Top"),
+                    _ref(pointer_source + "->projections.summary"),
+                    "{{ref:@review}}",
+                    "{{ref:@bundle_default}}",
+                ]
+                bundle_default = injected[4] if len(injected) > 4 and isinstance(injected[4], dict) else {}
+                bundle_items = bundle_default.get("items", [])
+                bundle_item_chars = [
+                    item.get("chars") for item in bundle_items if isinstance(item, dict) and isinstance(item.get("chars"), int)
+                ]
+                expected_default_chars = sum(bundle_item_chars) + max(len(bundle_item_chars) - 1, 0) * len("\n\n")
+                checks = {
+                    "call ok": mixed.ok,
+                    "five placeholders in original order": refs == expected_refs,
+                    "alias template separate from list alias": injected[3].get("template") is True if len(injected) > 3 and isinstance(injected[3], dict) else False,
+                    "list alias parent at placeholder position": bundle_default.get("ref") == "{{ref:@bundle_default}}",
+                    "list alias is one parent entry": len(injected) == 5 and isinstance(bundle_items, list) and len(bundle_items) == 2,
+                    "list items ordered": bundle_items and bundle_items[0].get("input") == f"{section_combo}#List" and bundle_items[1].get("input") == item_a,
+                    "same document sections distinct": (
+                        len(injected) > 1
+                        and isinstance(injected[1], dict)
+                        and bundle_items
+                        and injected[1].get("ref") == _ref(section_combo + "#Top")
+                        and bundle_items[0].get("input") == f"{section_combo}#List"
+                        and injected[1].get("chars") != bundle_items[0].get("chars")
+                    ),
+                    "default separator rendered": "LIST-SECTION\n\n\nALPHA" in text,
+                    "default separator chars": bundle_default.get("chars") == expected_default_chars,
+                }
+                run.step("ATL-INT-05 parsed metadata preserves placeholder order, parent list entry, same-doc sections, and default separator", all(checks.values()), f"checks={checks}, injected={injected}", tool_result=mixed)
 
                 # ── Step ATL-DS-06: fail-fast template failures ──────────────
                 before_fail_calls = mock_provider.call_count

@@ -91,10 +91,11 @@ async function withManagedMcp<T>(provider: ScriptedOpenAiProvider, fn: (client: 
   const vaultPath = join(tempDir, 'vault');
   const entryPoint = resolve('src/index.ts');
   const projectRoot = resolve('.');
+  const instanceId = `agent-loop-e2e-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const config = `
 instance:
   name: Agent Loop E2E
-  id: agent-loop-e2e
+  id: ${instanceId}
   vault:
     path: ${JSON.stringify(vaultPath)}
     markdown_extensions: ['.md']
@@ -220,6 +221,7 @@ describe('call_model agent-loop public E2E contracts', () => {
   it('ATL-E2E-01 preserves Mode 1 envelope compatibility, return_messages, and raw discovery shape', async () => {
     const provider = new ScriptedOpenAiProvider([
       finalTextResponse('ATL-E2E-01 mode one complete', 9, 4),
+      finalTextResponse('ATL-E2E-01 default envelope complete', 7, 3),
     ]);
     await provider.start();
     try {
@@ -239,6 +241,19 @@ describe('call_model agent-loop public E2E contracts', () => {
           metadata: expect.any(Object),
         });
         expect((envelope.metadata as { tools?: unknown }).tools).toBeUndefined();
+
+        const defaultEnvelope = await callModel(client, {
+          resolver: 'model',
+          name: 'fast',
+          messages: [{ role: 'user', content: 'ATL-E2E-01 default Mode 1 shape.' }],
+        });
+        expect(defaultEnvelope).toMatchObject({
+          response: 'ATL-E2E-01 default envelope complete',
+          metadata: expect.any(Object),
+          messages: [],
+        });
+        expect(Array.isArray(defaultEnvelope.messages)).toBe(true);
+        expect((defaultEnvelope.messages as unknown[])).toHaveLength(0);
 
         const discoveryResult = await client.callTool({
           name: 'call_model',
@@ -405,6 +420,26 @@ describe('call_model agent-loop public E2E contracts', () => {
         expect(result.content[0].text).toMatch(/response_format|structured_outputs_with_tools|capabil/i);
       });
       expect(provider.requests).toHaveLength(0);
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-08 omits empty tools from Mode 1 provider requests', async () => {
+    const provider = new ScriptedOpenAiProvider([finalTextResponse('empty tools omitted', 5, 2)]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const envelope = await callModel(client, {
+          resolver: 'model',
+          name: 'fast',
+          messages: [{ role: 'user', content: 'ATL-E2E-08 Mode 1 empty tools normalization.' }],
+          parameters: { tools: [] },
+        });
+        expect(envelope.response).toBe('empty tools omitted');
+      });
+      expect(provider.requests).toHaveLength(1);
+      expect(provider.requests[0]).not.toHaveProperty('tools');
     } finally {
       await provider.stop();
     }
