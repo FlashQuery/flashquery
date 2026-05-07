@@ -1,0 +1,64 @@
+name: llm_template_reference_freshness
+description: >
+  ATL-INT-01: reference/template freshness after document update. A template
+  reference renders the current body of a document parameter target after
+  update_document, proving the resolver does not reuse stale document content.
+coverage: [IL-37]
+deps: [llm]
+
+steps:
+  - label: "ATL-INT-01 setup: create template with a document parameter"
+    action: vault.write
+    name: freshness_template
+    path: "Templates/atl-int-01-freshness.md"
+    title: "ATL INT 01 Freshness Template"
+    content: "Freshness template sees: {{source}}"
+    tags: [atl-int-01]
+    frontmatter:
+      fq_template: true
+      fq_params:
+        source:
+          type: document
+          required: true
+
+  - label: "ATL-INT-01 setup: create source document with ALPHA marker"
+    action: vault.write
+    name: freshness_source
+    path: "Docs/atl-int-01-source.md"
+    title: "ATL INT 01 Source"
+    content: "ATL-INT-01-ALPHA"
+    tags: [atl-int-01]
+
+  - label: "ATL-INT-01 update: replace source document with BETA marker"
+    action: update_document
+    args:
+      identifier: "${freshness_source.fq_id}"
+      content: "ATL-INT-01-BETA"
+
+  - label: "ATL-INT-01: template reference sees updated BETA marker"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        template_params:
+          _integration/Templates/atl-int-01-freshness.md:
+            source: "_integration/Docs/atl-int-01-source.md"
+        messages:
+          - role: user
+            content: "{{ref:_integration/Templates/atl-int-01-freshness.md}} Reply with the marker token."
+      expect_contains: "ATL-INT-01-BETA"
+
+  - label: "ATL-INT-01: stale ALPHA marker is not visible after update"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        template_params:
+          _integration/Templates/atl-int-01-freshness.md:
+            source: "_integration/Docs/atl-int-01-source.md"
+        messages:
+          - role: user
+            content: "{{ref:_integration/Templates/atl-int-01-freshness.md}} If the source contains ATL-INT-01-ALPHA reply ALPHA, otherwise reply NO."
+      expect_not_contains: "ALPHA"

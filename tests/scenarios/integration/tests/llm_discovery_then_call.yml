@@ -3,8 +3,9 @@ description: >
   Discovery -> call_model round-trip. Verifies that names returned by list_models
   and list_purposes are usable as `name` in subsequent call_model invocations
   via resolver=model and resolver=purpose. Covers IL-16 (list_models -> call by
-  model name) and IL-17 (list_purposes -> call by purpose name).
-coverage: [IL-16, IL-17]
+  model name), IL-17 (list_purposes -> call by purpose name), and ATL-INT-03
+  discovery-to-invocation closure.
+coverage: [IL-16, IL-17, IL-39]
 deps: [llm]
 
 steps:
@@ -65,3 +66,21 @@ steps:
           - role: user
             content: "Reply OK"
       expect_contains: '"resolved_model_name":"fast"'
+
+  - label: "ATL-INT-03 step 1: public discovery exposes the callable general purpose"
+    assert:
+      op: call_model
+      args:
+        resolver: list_purposes
+      expect_contains: '"name":"general"'
+
+  - label: "ATL-INT-03 step 2: invoking the discovered purpose succeeds through call_model"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: general
+        messages:
+          - role: user
+            content: "ATL-INT-03 discovered purpose invocation. Reply with ATL-INT-03-OK."
+      expect_contains: "ATL-INT-03-OK"
