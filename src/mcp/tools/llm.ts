@@ -29,6 +29,7 @@ import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
 import { executeAgentLoop } from '../../llm/agent-loop.js';
 import { assertResponseFormatAllowedWithTools, modelCapabilitiesWithDefaults } from '../../llm/capabilities.js';
+import { buildListModelsContent, buildListPurposesContent, buildSearchContent } from '../../llm/discovery-content.js';
 import { buildCallModelHelpContent, CALL_MODEL_RESOLVERS } from '../../llm/help-content.js';
 import type { CallModelEnvelope, CallModelMessage, CallModelMetadata, LlmChatResult } from '../../llm/types.js';
 import {
@@ -373,95 +374,8 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         params.resolver === 'list_purposes' ||
         params.resolver === 'search'
       ) {
-        const llmConf = config.llm;
-        const cfgModels = llmConf?.models ?? [];
-        const cfgPurposes = llmConf?.purposes ?? [];
-
-        // Build a provider lookup map ONCE so modelToResponse can derive the `local` flag
-        // (Verification Correction 3 — Option A: auto-derive). Map key = provider name.
-        const providersByName = new Map((llmConf?.providers ?? []).map((p) => [p.name, p]));
-
-        // Project a model config entry to the discovery response shape.
-        // Field mapping: providerName -> provider, model -> model_id, costPerMillion.* -> input/output_cost_per_million.
-        // Optional fields use !== undefined (NOT truthiness) so capabilities: [] is preserved.
-        // `local` is auto-derived: explicit provider.local: true overrides; otherwise type === 'ollama'
-        // implies local: true; non-Ollama providers without explicit declaration OMIT the key.
-        // NOTE: `provider.local` is a *provider-level* config field (declared on the provider entry
-        // in flashquery.yml, NOT on the model entry). As of 2026-05-03 it is read here and ONLY
-        // here — it has no influence on routing, cost computation, recursion, fallback chains, or
-        // any other FlashQuery behavior. It is purely caller-facing metadata for external LLMs
-        // doing routing decisions. If you add a behavioral use of this flag, update this note and
-        // src/config/loader.ts:90 accordingly. See also DIRECTED_COVERAGE.md L-66a/b/c.
-        const modelToResponse = (m: typeof cfgModels[number]): Record<string, unknown> => {
-          const entry: Record<string, unknown> = {
-            name: m.name,
-            type: m.type,
-            provider: m.providerName,
-            model_id: m.model,
-            input_cost_per_million: m.costPerMillion.input,
-            output_cost_per_million: m.costPerMillion.output,
-          };
-          if (m.description !== undefined) entry['description'] = m.description;
-          if (m.contextWindow !== undefined) entry['context_window'] = m.contextWindow;
-          if (m.tags !== undefined) entry['tags'] = m.tags;
-          if (m.capabilities !== undefined) entry['capabilities'] = m.capabilities;
-          // Auto-derive `local` per spec §8.3 example + dev plan §6.4.1.
-          const prov = providersByName.get(m.providerName);
-          if (prov?.local === true) {
-            entry['local'] = true;
-          } else if (prov?.type === 'ollama') {
-            entry['local'] = true;
-          }
-          return entry;
-        };
-
-        // Build a name->model lookup once for purpose primary-model cost lookup.
-        const modelsByName = new Map<string, typeof cfgModels[number]>();
-        for (const m of cfgModels) modelsByName.set(m.name, m);
-
-        // Project a purpose config entry to the discovery response shape.
-        // Cost rates come from the primary model (models[0]); 0/0 if missing or empty list.
-        const strictToolsForPurpose = (purpose: typeof cfgPurposes[number]): boolean => {
-          const primaryModelName = purpose.models[0];
-          const primaryModel = primaryModelName ? modelsByName.get(primaryModelName) : undefined;
-          const selectedProvider = primaryModel
-            ? config.llm?.providers.find((provider) => provider.name === primaryModel.providerName)
-            : undefined;
-          const capabilities = primaryModel && selectedProvider
-            ? modelCapabilitiesWithDefaults(primaryModel, selectedProvider)
-            : {};
-          return capabilities.strict_tools === true;
-        };
-
-        const purposeToResponse = async (
-          p: typeof cfgPurposes[number],
-          runtimeTemplateBindings: RuntimeTemplateBinding[]
-        ): Promise<Record<string, unknown>> => {
-          const primaryName = p.models[0];
-          const primary = primaryName ? modelsByName.get(primaryName) : undefined;
-          const templateRegistry = await assembleTemplateToolRegistry({
-            config,
-            purposeName: p.name,
-            runtimeBindings: runtimeTemplateBindings,
-            strictTools: strictToolsForPurpose(p),
-          });
-          const entry: Record<string, unknown> = {
-            name: p.name,
-            description: p.description,
-            models: p.models,
-            input_cost_per_million: primary?.costPerMillion.input ?? 0,
-            output_cost_per_million: primary?.costPerMillion.output ?? 0,
-            template_tools: templateRegistry.diagnostics.template_tools,
-            template_tool_conflicts: templateRegistry.diagnostics.template_tool_conflicts,
-            dangling_template_paths: templateRegistry.diagnostics.dangling_template_paths,
-          };
-          if (p.defaults !== undefined) entry['defaults'] = p.defaults;
-          return entry;
-        };
-
         if (params.resolver === 'list_models') {
-          const models = cfgModels.map(modelToResponse);
-          return { content: [{ type: 'text' as const, text: JSON.stringify({ models }) }] };
+          return { content: [{ type: 'text' as const, text: JSON.stringify(buildListModelsContent(config)) }] };
         }
 
         const queryRaw = params.parameters?.['query'];
@@ -480,45 +394,33 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
               isError: true,
             };
           }
-          const purposes = await Promise.all(cfgPurposes.map((purpose) =>
-            purposeToResponse(purpose, runtimeTemplateBindingsResult.bindings)
-          ));
-          return { content: [{ type: 'text' as const, text: JSON.stringify({ purposes }) }] };
+          const payload = await buildListPurposesContent({
+            config,
+            nativeToolCatalog,
+            runtimeTemplateBindings: runtimeTemplateBindingsResult.bindings,
+          });
+          return { content: [{ type: 'text' as const, text: JSON.stringify(payload) }] };
         }
 
         // params.resolver === 'search'
-        const q = (queryRaw as string).toLowerCase();
-        const matchedModels = cfgModels
-          .filter((m) =>
-            m.name.toLowerCase().includes(q) ||
-            (m.description ?? '').toLowerCase().includes(q)
-          )
-          .map(modelToResponse);
-        const matchedPurposeConfigs = cfgPurposes.filter((p) =>
-            p.name.toLowerCase().includes(q) ||
-            p.description.toLowerCase().includes(q)
-          );
-        let matchedPurposes: Array<Record<string, unknown>> = [];
-        if (matchedPurposeConfigs.length > 0) {
-          const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
-          if (!runtimeTemplateBindingsResult.ok) {
-            return {
-              content: [{ type: 'text' as const, text: `call_model failed: ${runtimeTemplateBindingsResult.message}` }],
-              isError: true,
-            };
-          }
-          matchedPurposes = await Promise.all(matchedPurposeConfigs.map((purpose) =>
-            purposeToResponse(purpose, runtimeTemplateBindingsResult.bindings)
-          ));
+        const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
+        if (!runtimeTemplateBindingsResult.ok) {
+          return {
+            content: [{ type: 'text' as const, text: `call_model failed: ${runtimeTemplateBindingsResult.message}` }],
+            isError: true,
+          };
         }
+        const payload = await buildSearchContent({
+          config,
+          nativeToolCatalog,
+          runtimeTemplateBindings: runtimeTemplateBindingsResult.bindings,
+          query: queryRaw as string,
+        });
         return {
           content: [
             {
               type: 'text' as const,
-              text: JSON.stringify({
-                query: queryRaw,
-                results: { purposes: matchedPurposes, models: matchedModels },
-              }),
+              text: JSON.stringify(payload),
             },
           ],
         };

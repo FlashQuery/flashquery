@@ -11,6 +11,13 @@ export type StructuredModelCapabilities = {
 export type CapabilityAdmissionResult =
   | { ok: true }
   | { ok: false; message: string };
+export type CapabilityDiagnosticState = 'supported' | 'unknown_declaration' | 'declared_unsupported';
+export interface ModelCapabilityDiagnostic {
+  capability: keyof StructuredModelCapabilities;
+  state: CapabilityDiagnosticState;
+  message: string;
+  remediation?: string;
+}
 type CapabilityAdmissionFailure = Extract<CapabilityAdmissionResult, { ok: false }>;
 
 type LlmConfig = NonNullable<FlashQueryConfig['llm']>;
@@ -56,6 +63,42 @@ function diagnosticForCapability(
     ? ` — declare 'capabilities.${capability}: true|false' on this model`
     : '';
   return `${state}: model '${modelName}' lacks ${capability}${remediation}`;
+}
+
+export function buildModelCapabilityDiagnostics(
+  model: Pick<LlmModel, 'name' | 'capabilities'>,
+  provider: LlmProvider
+): ModelCapabilityDiagnostic[] {
+  const caps = modelCapabilitiesWithDefaults(model, provider);
+  return ([
+    'tool_calling',
+    'usage_on_tool_calls',
+    'strict_tools',
+    'parallel_tool_calls',
+    'structured_outputs_with_tools',
+  ] as const).map((capability) => {
+    const value = caps[capability];
+    if (value === true) {
+      return {
+        capability,
+        state: 'supported',
+        message: `model '${model.name}' declares ${capability} support`,
+      };
+    }
+    if (value === false) {
+      return {
+        capability,
+        state: 'declared_unsupported',
+        message: `model '${model.name}' declares ${capability} unsupported`,
+      };
+    }
+    return {
+      capability,
+      state: 'unknown_declaration',
+      message: `model '${model.name}' has no ${capability} declaration`,
+      remediation: `declare 'capabilities.${capability}: true|false' on this model`,
+    };
+  });
 }
 
 export function validatePurposeMode2Admission(
