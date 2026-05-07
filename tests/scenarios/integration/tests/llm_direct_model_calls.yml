@@ -3,7 +3,9 @@ description: >
   call_model with resolver=model records a usage row under the reserved _direct
   purpose. get_llm_usage by_purpose must show the call in direct_model_calls
   and produce an empty purposes array — verifying that direct model calls are
-  segregated from purpose-resolved calls. Covers IL-06.
+  segregated from purpose-resolved calls. The usage assertions are trace-scoped
+  so this test remains valid against persistent external servers that may have
+  usage rows from earlier tests. Covers IL-06.
 coverage: [IL-06]
 deps: [llm]
 
@@ -14,6 +16,7 @@ steps:
       args:
         resolver: model
         name: fast
+        trace_id: "il06-${run.id}"
         messages:
           - role: user
             content: "Reply with just the digit 1."
@@ -23,7 +26,8 @@ steps:
       op: get_llm_usage
       args:
         mode: by_purpose
-        period: "24h"
+        period: all
+        trace_id: "il06-${run.id}"
       expect_not_contains: '"purpose_name": "_direct"'
 
   - label: "by_purpose direct_model_calls entry exists and has recorded calls"
@@ -31,7 +35,8 @@ steps:
       op: get_llm_usage
       args:
         mode: by_purpose
-        period: "24h"
+        period: all
+        trace_id: "il06-${run.id}"
       expect_contains: '"direct_model_calls"'
 
   - label: "by_purpose purposes array is empty (direct calls are not purpose-resolved) (IL-06)"
@@ -39,5 +44,6 @@ steps:
       op: get_llm_usage
       args:
         mode: by_purpose
-        period: "24h"
+        period: all
+        trace_id: "il06-${run.id}"
       expect_contains: '"purposes": []'

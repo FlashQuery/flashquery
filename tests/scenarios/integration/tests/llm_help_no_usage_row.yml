@@ -8,9 +8,9 @@ description: >
   Two assertions: (1) call_model resolver=help returns a recognizable help body
   (asserted via the stable top-level "reference_syntax" key from
   src/llm/help-content.ts), (2) get_llm_usage(period=all) reports total_calls=0
-  — proving help did not write a row. The integration runner clears all fqc_*
-  tables between tests, so a fresh-slate total_calls=0 is the proof of "delta=0"
-  without needing to capture a baseline mid-test.
+  for the help call's unique trace_id — proving help did not write a row. The
+  trace-scoped assertion keeps the test valid against persistent external
+  servers that may have usage rows from earlier tests.
 coverage: [IL-41]
 
 steps:
@@ -25,6 +25,7 @@ steps:
       op: call_model
       args:
         resolver: help
+        trace_id: "il41-${run.id}"
       expect_contains: '"reference_syntax"'
       expect_not_contains: '"isError":true'
 
@@ -37,28 +38,28 @@ steps:
       op: call_model
       args:
         resolver: help
+        trace_id: "il41-${run.id}"
       expect_contains: '"raw_discovery_resolvers"'
 
-  - label: "IL-41 step 3: get_llm_usage(period=all) reports total_calls=0 — help wrote no fqc_llm_usage row"
-    # The integration runner clears fqc_llm_usage between tests, so any
-    # non-zero count would mean either (a) a row was written by the help
-    # call above, or (b) something else wrote a row in this test — and
-    # nothing else above calls a model. A fresh-slate total_calls=0 after
-    # one help invocation is the proof that help is a no-row resolver.
+  - label: "IL-41 step 3: get_llm_usage(period=all, trace_id) reports total_calls=0 — help wrote no fqc_llm_usage row"
+    # The trace_id filter scopes the assertion to this test's help calls so the
+    # check works against both fresh managed servers and persistent external
+    # servers that may already contain LLM usage rows.
     assert:
       op: get_llm_usage
       args:
         mode: summary
         period: all
+        trace_id: "il41-${run.id}"
       expect_contains: '"total_calls": 0'
 
-  - label: "IL-41 step 4: get_llm_usage(mode=recent, period=all) returns no model_name entries — no row to surface"
-    # Cross-check: recent mode would expose any row that was written, even one
-    # not counted by summary. Asserting no model_name field appears confirms
-    # no row exists for any model after the help call.
+  - label: "IL-41 step 4: get_llm_usage(mode=recent, period=all, trace_id) returns no model_name entries — no row to surface"
+    # Cross-check: recent mode would expose any row written with this trace_id,
+    # even one not counted by summary.
     assert:
       op: get_llm_usage
       args:
         mode: recent
         period: all
+        trace_id: "il41-${run.id}"
       expect_not_contains: '"model_name"'

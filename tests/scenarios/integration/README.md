@@ -123,6 +123,7 @@ description: >                    # optional — appears in run output and repor
   Human-readable explanation of what this test verifies.
 coverage: [IS-01, IS-02]          # optional — IDs updated in INTEGRATION_COVERAGE.md
 deps: [embeddings]                # optional — capabilities this test requires (see Deps)
+server_modes: [managed]           # optional — restrict to managed and/or external
 
 steps:
   - ...                           # flat list of action and assert steps
@@ -134,6 +135,11 @@ steps:
 coverage: IS-01           # single ID — equivalent to coverage: [IS-01]
 deps: embeddings          # single dep — equivalent to deps: [embeddings]
 ```
+
+`server_modes` can restrict a test to `managed`, `external`, or both. Use this
+when a test depends on managed-only fixtures such as per-test `extra_config`.
+Tests whose `server_modes` do not include the current runner mode are recorded
+as `SKIP`, not `FAIL`.
 
 ---
 

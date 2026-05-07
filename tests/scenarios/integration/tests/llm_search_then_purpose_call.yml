@@ -58,6 +58,12 @@ steps:
             content: "Reply with one word: OK."
       expect_contains: '"resolved_model_name":"fast"'
 
+  - label: "Wait for delegated call's fire-and-forget usage row to commit"
+    # Local Docker/Supabase can expose a small race between the call_model
+    # response and the asynchronous fqc_llm_usage insert becoming visible to
+    # aggregation queries.
+    sleep: 0.5
+
   - label: "Closure: get_llm_usage filtered by this trace_id reports total_calls of at least 1"
     # period='all' avoids the period.to=now() race against fire-and-forget
     # writes (same approach as IL-21). The trace_id filter scopes the

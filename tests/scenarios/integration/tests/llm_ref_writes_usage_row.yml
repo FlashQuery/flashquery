@@ -43,6 +43,12 @@ steps:
             content: "{{ref:_integration/Test/ref-usage-row.md}} Reply OK."
       expect_contains: '"prompt_chars"'
 
+  - label: "Wait for first call's fire-and-forget usage row to commit"
+    # External/local Docker runs use a persistent FlashQuery server against
+    # local Postgres. Give the fire-and-forget usage write a small window to
+    # land before the second call asks trace_cumulative to include it.
+    sleep: 0.5
+
   - label: "Second call_model with {{ref:...}} + same trace_id — trace_cumulative.total_calls grows past 1"
     # Server-side cumulative check, immune to the period.to clock-skew
     # race. If the first call's row had not been written, total_calls
