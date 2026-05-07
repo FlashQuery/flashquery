@@ -1,6 +1,6 @@
 import type { FlashQueryConfig } from '../config/loader.js';
 import { buildModelCapabilityDiagnostics, modelCapabilitiesWithDefaults } from './capabilities.js';
-import { CALL_MODEL_RESOLVERS } from './help-content.js';
+import { buildCallModelUsageContent, CALL_MODEL_RESOLVERS } from './help-content.js';
 import {
   assembleNativeToolRegistry,
   mergeModelVisibleToolRegistries,
@@ -150,7 +150,7 @@ export function buildListModelsContent(config: FlashQueryConfig): Record<string,
 
 export async function buildListPurposesContent(options: DiscoveryBuildOptions): Promise<Record<string, unknown>> {
   const purposes = await Promise.all((options.config.llm?.purposes ?? []).map((purpose) => purposeToResponse(options, purpose)));
-  return { purposes };
+  return { purposes, usage: buildCallModelUsageContent() };
 }
 
 function lowerSearchText(value: unknown): string {

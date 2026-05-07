@@ -11,6 +11,8 @@ import argparse
 import json
 import os
 import sys
+import time
+import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
@@ -53,7 +55,27 @@ EXPECTED_KEYS = [
 EXPECTED_RESOLVERS = ["model", "purpose", "list_models", "list_purposes", "search", "help"]
 
 
-def _check_help(client: FQCClient) -> tuple[bool, str]:
+def _flatten_help_errors(errors: dict) -> set[str]:
+    values: set[str] = set()
+    for value in errors.values():
+        if isinstance(value, str):
+            values.add(value)
+        elif isinstance(value, list):
+            values.update(item for item in value if isinstance(item, str))
+    return values
+
+
+def _usage_snapshot(client: FQCClient, trace_id: str) -> tuple[dict | None, str | None]:
+    result = client.call_tool("get_llm_usage", mode="summary", period="24h", trace_id=trace_id)
+    if not result.ok:
+        return None, f"get_llm_usage returned isError; text={result.text[:500]}"
+    try:
+        return json.loads(result.text), None
+    except Exception as exc:
+        return None, f"get_llm_usage JSON parse error: {exc}; text={result.text[:500]}"
+
+
+def _check_help(client: FQCClient, *, expect_configured: bool) -> tuple[bool, str]:
     result = client.call_tool(
         "call_model",
         resolver="help",
@@ -72,6 +94,7 @@ def _check_help(client: FQCClient) -> tuple[bool, str]:
     # response, metadata, usage, or returned messages should appear even when
     # return_messages is set.
     forbidden_envelope_keys = ["response", "metadata", "usage", "messages"]
+    summary = body.get("summary", {})
     reference_forms = body.get("reference_syntax", {}).get("forms", [])
     template_fields = body.get("template_bindings", {}).get("template_params", {}).get("alias_fields", {})
     mode_1 = body.get("modes", {}).get("mode_1", {})
@@ -104,8 +127,18 @@ def _check_help(client: FQCClient) -> tuple[bool, str]:
         and "mode_2_tools" in examples
         and all(key not in body for key in forbidden_envelope_keys)
     )
+    if expect_configured:
+        ok = ok and "FlashQuery LLM is not configured" not in summary.get("purpose", "")
+        ok = ok and "configuration_example" not in summary
+    else:
+        ok = (
+            ok
+            and summary.get("purpose", "").startswith("FlashQuery LLM is not configured")
+            and "llm:" in summary.get("configuration_example", {}).get("yaml", "")
+        )
     detail = json.dumps({
         "keys": list(body.keys()),
+        "summary": summary,
         "resolvers": body.get("discovery", {}).get("resolvers"),
         "reference_forms": [form.get("syntax") for form in reference_forms],
         "template_alias_fields": list(template_fields.keys()),
@@ -118,6 +151,72 @@ def _check_help(client: FQCClient) -> tuple[bool, str]:
     return ok, detail
 
 
+def _check_help_no_usage_delta(client: FQCClient) -> tuple[bool, str]:
+    trace_id = f"atl-ds-15-help-{uuid.uuid4().hex}"
+    before, before_error = _usage_snapshot(client, trace_id)
+    if before_error:
+        return False, before_error
+
+    help_result = client.call_tool("call_model", resolver="help", trace_id=trace_id)
+    if not help_result.ok:
+        return False, f"help returned isError; text={help_result.text[:500]}"
+    time.sleep(1)
+
+    after, after_error = _usage_snapshot(client, trace_id)
+    if after_error:
+        return False, after_error
+
+    ok = (
+        isinstance(before, dict)
+        and isinstance(after, dict)
+        and before.get("total_calls") == after.get("total_calls") == 0
+        and before.get("total_spend_usd") == after.get("total_spend_usd") == 0
+        and before.get("avg_latency_ms") == after.get("avg_latency_ms") == 0
+    )
+    return ok, json.dumps({"trace_id": trace_id, "before": before, "after": after}, sort_keys=True)
+
+
+def _check_help_error_enumeration(client: FQCClient) -> tuple[bool, str]:
+    help_result = client.call_tool("call_model", resolver="help")
+    if not help_result.ok:
+        return False, f"help returned isError; text={help_result.text[:500]}"
+    try:
+        help_body = json.loads(help_result.text)
+    except Exception as exc:
+        return False, f"help JSON parse error: {exc}; text={help_result.text[:500]}"
+
+    ghost_ref = f"Missing/help_error_{uuid.uuid4().hex[:8]}.md"
+    error_result = client.call_tool(
+        "call_model",
+        resolver="model",
+        name="fast",
+        messages=[{"role": "user", "content": f"Please read {{{{ref:{ghost_ref}}}}}."}],
+    )
+    try:
+        error_body = json.loads(error_result.text) if error_result.text else {}
+    except Exception as exc:
+        return False, f"error JSON parse error: {exc}; text={error_result.text[:500]}"
+
+    help_errors = _flatten_help_errors(help_body.get("errors", {}))
+    failed = error_body.get("failed_references", [])
+    failed_reasons = {
+        item.get("reason")
+        for item in failed
+        if isinstance(item, dict) and isinstance(item.get("reason"), str)
+    }
+    ok = (
+        not error_result.ok
+        and error_body.get("error") in help_errors
+        and bool(failed_reasons)
+        and failed_reasons.issubset(help_errors)
+    )
+    return ok, json.dumps({
+        "runtime_error": error_body.get("error"),
+        "failed_reasons": sorted(failed_reasons),
+        "help_errors": sorted(help_errors),
+    }, sort_keys=True)
+
+
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     project_dir = Path(args.fqc_dir) if args.fqc_dir else _find_project_dir()
@@ -128,9 +227,30 @@ def run_test(args: argparse.Namespace) -> TestRun:
     try:
         with FQCServer(fqc_dir=args.fqc_dir, extra_config=HELP_LLM_CONFIG, ready_timeout=120) as server:
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
-            ok, detail = _check_help(client)
+            ok, detail = _check_help(client, expect_configured=True)
             run.step(
-                "ATL-DS-15 resolver help returns raw JSON without CallModelEnvelope keys",
+                "ATL-DS-15 resolver help returns raw configured JSON without CallModelEnvelope keys",
+                ok,
+                detail,
+            )
+            ok, detail = _check_help_no_usage_delta(client)
+            run.step(
+                "ATL-DS-15 resolver help writes no public usage or trace rows",
+                ok,
+                detail,
+            )
+            ok, detail = _check_help_error_enumeration(client)
+            run.step(
+                "ATL-DS-15 public errors returned by call_model are enumerated by help.errors",
+                ok,
+                detail,
+            )
+
+        with FQCServer(fqc_dir=args.fqc_dir, ready_timeout=120) as server:
+            client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
+            ok, detail = _check_help(client, expect_configured=False)
+            run.step(
+                "ATL-DS-15 resolver help returns unconfigured summary plus llm.yml snippet",
                 ok,
                 detail,
             )

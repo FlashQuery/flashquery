@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -8,6 +9,8 @@ import { computeCost } from '../../src/llm/cost-tracker.js';
 import { NullLlmClient, type LlmClient, type LlmCompletionResult } from '../../src/llm/client.js';
 import { LlmFallbackError } from '../../src/llm/resolver.js';
 import { LLM_PARTICIPANT_NAMES } from '../../src/constants/llm.js';
+import { REFERENCE_FAILURE_REASONS } from '../../src/constants/reference-failures.js';
+import { buildCallModelHelpContent, CALL_MODEL_HELP_ERROR_CODES, CALL_MODEL_RESOLVERS } from '../../src/llm/help-content.js';
 import { getNativeToolCatalog } from '../../src/mcp/tool-catalog.js';
 import { executeAgentLoop } from '../../src/llm/agent-loop.js';
 import {
@@ -2113,6 +2116,31 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     }
   });
 
+  it('[ATL-U-16] list_purposes includes the public usage block with every resolver', async () => {
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const result = await handler({ resolver: 'list_purposes' });
+    const payload = JSON.parse(result.content[0].text) as {
+      usage: {
+        reference_syntax: string;
+        template_params_example: { template_params: Record<string, string> };
+        resolvers: Record<string, string>;
+        note: string;
+      };
+    };
+
+    expect(result.isError).toBeUndefined();
+    expect(payload.usage.reference_syntax).toBe('{{ref:<template_identifier>}}');
+    expect(payload.usage.template_params_example).toEqual({
+      template_params: {
+        topic: 'value',
+        output_doc: 'value',
+      },
+    });
+    expect(Object.keys(payload.usage.resolvers)).toEqual(['purpose', 'model', 'list_purposes', 'list_models', 'search', 'help']);
+    expect(Object.keys(payload.usage.resolvers).sort()).toEqual([...CALL_MODEL_RESOLVERS].sort());
+    expect(payload.usage.note).toContain('Use list_purposes first');
+  });
+
   it('[ATL-U-16] list_purposes exposes configured native tool names before resolver=purpose invocation', async () => {
     const config = {
       ...DISC_CONFIG,
@@ -2296,6 +2324,7 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
         expect(Array.isArray(body.models)).toBe(true);
       } else if (resolver === 'list_purposes') {
         expect(Array.isArray(body.purposes)).toBe(true);
+        expect(body.usage).toMatchObject({ reference_syntax: '{{ref:<template_identifier>}}' });
       } else {
         expect(Object.keys(body)).toEqual([
           'summary',
@@ -2309,7 +2338,9 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
         ]);
       }
       expect(body.metadata).toBeUndefined();
-      expect(body.usage).toBeUndefined();
+      if (resolver !== 'list_purposes') {
+        expect(body.usage).toBeUndefined();
+      }
       expect(body.messages).toBeUndefined();
     }
     // search (which requires parameters.query) — same rule, but messages
@@ -2352,6 +2383,28 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     expect(help.metadata).toBeUndefined();
     expect(help.usage).toBeUndefined();
     expect(help.messages).toBeUndefined();
+    expect((help.summary as { purpose: string }).purpose).toMatch(/^FlashQuery LLM is not configured/);
+    expect((help.summary as { configuration_example: { filename: string; yaml: string } }).configuration_example).toMatchObject({
+      filename: 'flashquery.yml',
+    });
+    expect((help.summary as { configuration_example: { yaml: string } }).configuration_example.yaml).toContain('llm:');
+  });
+
+  it('[ATL-U-16] resolver=help configured summary omits the unconfigured configuration snippet', async () => {
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      getModelForPurpose: vi.fn(),
+    } as unknown as LlmClient;
+    const handler = captureCallModelHandler(DISC_CONFIG);
+    const result = await handler({ resolver: 'help' });
+    const help = JSON.parse(result.content[0].text) as {
+      summary: { purpose: string; configuration_example?: unknown };
+    };
+
+    expect(result.isError).toBeUndefined();
+    expect(help.summary.purpose).not.toContain('FlashQuery LLM is not configured');
+    expect(help.summary.configuration_example).toBeUndefined();
   });
 
   it('[ATL-U-16] help discovery lists every supported resolver value', async () => {
@@ -2362,6 +2415,48 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
     };
 
     expect(help.discovery.resolvers).toEqual(['model', 'purpose', 'list_models', 'list_purposes', 'search', 'help']);
+  });
+
+  it('[ATL-U-16] help error codes and reference failure reasons are drift-guarded', () => {
+    const help = buildCallModelHelpContent() as {
+      errors: {
+        codes: string[];
+        reference_failure_reasons: string[];
+        reference_resolution_failed: string;
+        provider_errors: string[];
+      };
+    };
+    const dispatcherSource = readFileSync('src/mcp/tools/llm.ts', 'utf8');
+
+    expect(help.errors.codes).toEqual([...CALL_MODEL_HELP_ERROR_CODES]);
+    for (const code of CALL_MODEL_HELP_ERROR_CODES) {
+      expect(dispatcherSource, code).toContain(code);
+    }
+    expect(help.errors.reference_failure_reasons).toEqual([...REFERENCE_FAILURE_REASONS]);
+    expect(help.errors.reference_resolution_failed).toContain('before any model call');
+    expect(help.errors.provider_errors).toEqual(['http_error', 'network_error', 'fallback_exhausted']);
+  });
+
+  it('[ATL-U-16] help reference syntax forms correspond to parser coverage', () => {
+    const help = buildCallModelHelpContent() as {
+      reference_syntax: {
+        forms: Array<{ syntax: string }>;
+        escape: { syntax: string };
+      };
+    };
+    const referenceTests = readFileSync('tests/unit/reference-resolver.test.ts', 'utf8');
+    const forms = help.reference_syntax.forms.map((form) => form.syntax);
+
+    expect(forms).toContain('{{ref:path/to/doc.md}}');
+    expect(forms).toContain('{{ref:path/to/doc.md#Section}}');
+    expect(forms).toContain('{{ref:path/to/doc.md->frontmatter.path}}');
+    expect(forms).toContain('{{ref:@alias}}');
+    expect(help.reference_syntax.escape.syntax).toBe('\\{{ref:path/to/doc.md}}');
+    expect(referenceTests).toContain('{{ref:path.md}}');
+    expect(referenceTests).toContain('{{ref:Research/doc.md#Open Questions}}');
+    expect(referenceTests).toContain('{{ref:Research/doc.md->projections.summary}}');
+    expect(referenceTests).toContain('{{ref:@alias');
+    expect(referenceTests).toContain(String.raw`\{{ref:doc.md}}`);
   });
 
   it('[ATL-U-16] search indexes discovery diagnostics for capabilities, templates, and help', async () => {

@@ -342,15 +342,16 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         };
       }
 
+      const client = llmClient;
+
       if (params.resolver === 'help') {
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(buildCallModelHelpContent()) }],
+          content: [{ type: 'text' as const, text: JSON.stringify(buildCallModelHelpContent({ configured: !!client && !(client instanceof NullLlmClient) })) }],
         };
       }
 
       // Step 1: Unconfigured guard (D-04, TOOL-03 / U-30 / L-13)
       // Access llmClient inside handler body, never at module level (Pitfall 1).
-      const client = llmClient;
       if (!client || client instanceof NullLlmClient) {
         return {
           content: [

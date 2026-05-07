@@ -1,16 +1,85 @@
+import { REFERENCE_FAILURE_REASONS } from '../constants/reference-failures.js';
+
 export const CALL_MODEL_RESOLVERS = ['model', 'purpose', 'list_models', 'list_purposes', 'search', 'help'] as const;
+
+export const CALL_MODEL_USAGE_RESOLVER_ORDER = ['purpose', 'model', 'list_purposes', 'list_models', 'search', 'help'] as const;
+
+export const CALL_MODEL_HELP_ERROR_CODES = ['reference_resolution_failed', 'tool_registry_collision'] as const;
 
 export type CallModelResolver = typeof CALL_MODEL_RESOLVERS[number];
 
-export function buildCallModelHelpContent(): Record<string, unknown> {
+export interface CallModelHelpOptions {
+  configured?: boolean;
+}
+
+export function buildCallModelUsageContent(): Record<string, unknown> {
   return {
-    summary: {
-      tool: 'call_model',
-      version: 'v1',
-      purpose: 'Delegate language-model work through configured models or purposes, with raw discovery resolvers for planning calls.',
-      raw_discovery_resolvers: ['list_models', 'list_purposes', 'search', 'help'],
-      llm_execution_resolvers: ['model', 'purpose'],
+    reference_syntax: '{{ref:<template_identifier>}}',
+    template_params_example: {
+      template_params: {
+        topic: 'value',
+        output_doc: 'value',
+      },
     },
+    resolvers: {
+      purpose: "Call a named purpose fallback chain. Requires name and messages.",
+      model: "Call a configured model alias directly. Requires name and messages.",
+      list_purposes: "List configured purposes, tool/template diagnostics, and this usage block.",
+      list_models: "List configured models and structured capability diagnostics.",
+      search: "Search model, purpose, capability, tool, template, and help metadata. Requires parameters.query.",
+      help: "Return the full call_model protocol help contract.",
+    },
+    note: "Use list_purposes first to discover purpose names, tool/template availability, and the next call_model request grammar.",
+  };
+}
+
+function buildSummary(configured: boolean): Record<string, unknown> {
+  const summary: Record<string, unknown> = {
+    tool: 'call_model',
+    version: 'v1',
+    purpose: configured
+      ? 'Delegate language-model work through configured models or purposes, with raw discovery resolvers for planning calls.'
+      : 'FlashQuery LLM is not configured. Add an llm: section to flashquery.yml to use this tool.',
+    raw_discovery_resolvers: ['list_models', 'list_purposes', 'search', 'help'],
+    llm_execution_resolvers: ['model', 'purpose'],
+  };
+
+  if (!configured) {
+    summary['configuration_example'] = {
+      filename: 'flashquery.yml',
+      yaml: [
+        'llm:',
+        '  providers:',
+        '    - name: openai',
+        '      type: openai-compatible',
+        '      endpoint: https://api.openai.com',
+        '      api_key_env: OPENAI_API_KEY',
+        '  models:',
+        '    - name: fast',
+        '      provider_name: openai',
+        '      model: gpt-4o-mini',
+        '      type: language',
+        '      cost_per_million:',
+        '        input: 0.15',
+        '        output: 0.6',
+        '      capabilities:',
+        '        tool_calling: true',
+        '        usage_on_tool_calls: true',
+        '  purposes:',
+        '    - name: general',
+        '      description: General assistant',
+        '      models: [fast]',
+      ].join('\n'),
+    };
+  }
+
+  return summary;
+}
+
+export function buildCallModelHelpContent(options: CallModelHelpOptions = {}): Record<string, unknown> {
+  const configured = options.configured ?? true;
+  return {
+    summary: buildSummary(configured),
     reference_syntax: {
       prefix: '{{ref:...}}',
       forms: [
@@ -80,11 +149,13 @@ export function buildCallModelHelpContent(): Record<string, unknown> {
       metadata_tools: 'Present only for Mode 2 and includes native_tool_names, template_tool_names, diagnostics, calls_log, stop_reason, and aggregate_usage.',
     },
     errors: {
+      codes: [...CALL_MODEL_HELP_ERROR_CODES],
       validation: [
         "name is required for resolver='model' or resolver='purpose'",
         "messages is required (non-empty array) for resolver='model' or resolver='purpose'",
         'search requires parameters.query (non-empty string)',
       ],
+      reference_failure_reasons: [...REFERENCE_FAILURE_REASONS],
       reference_resolution_failed: 'Returned before any model call when host-authored references cannot be parsed or hydrated.',
       mode_2_ineligible: 'Returned when purpose/model capabilities or response_format constraints cannot support tool use.',
       provider_errors: ['http_error', 'network_error', 'fallback_exhausted'],

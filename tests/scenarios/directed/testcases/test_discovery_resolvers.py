@@ -238,6 +238,26 @@ def _check_purpose_diagnostics(client: FQCClient) -> tuple[bool, str]:
     return ok, json.dumps({"purpose": purpose}, sort_keys=True)[:3000]
 
 
+def _check_list_purposes_usage(client: FQCClient) -> tuple[bool, str]:
+    result = client.call_tool("call_model", resolver="list_purposes")
+    if not result.ok:
+        return False, f"isError true. text={result.text[:500]}"
+    body, error = _load_json_result(result)
+    if error:
+        return False, error
+    usage = body.get("usage", {})
+    resolvers = usage.get("resolvers", {})
+    ok = (
+        usage.get("reference_syntax") == "{{ref:<template_identifier>}}"
+        and isinstance(usage.get("template_params_example", {}).get("template_params"), dict)
+        and list(resolvers.keys()) == ["purpose", "model", "list_purposes", "list_models", "search", "help"]
+        and "help" in resolvers
+        and isinstance(usage.get("note"), str)
+        and "list_purposes" in usage.get("note")
+    )
+    return ok, json.dumps({"usage": usage}, sort_keys=True)
+
+
 def _check_search_hits(client: FQCClient) -> tuple[bool, str]:
     expectations = {
         "tool_calling": "models",
@@ -338,6 +358,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
             ok, detail = _check_purpose_diagnostics(client)
             run.step(
                 label="VAL-119: list_purposes exposes native_tools, native_tool_diagnostics, template diagnostics, conflicts, and dangling paths",
+                passed=ok,
+                detail=detail,
+            )
+
+            ok, detail = _check_list_purposes_usage(client)
+            run.step(
+                label="VAL-119: list_purposes exposes usage block with reference syntax, template params, resolvers, and note",
                 passed=ok,
                 detail=detail,
             )
