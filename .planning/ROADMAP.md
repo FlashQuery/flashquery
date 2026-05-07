@@ -319,7 +319,15 @@ Plans:
   4. Coverage matrices contain accepted ATL rows with final IDs and traceability back to the test plan, including scenario rows that were added incrementally during Phases 112-119.
   5. Phase 120 verifies that Phases 112-119 each shipped their own runnable unit/integration/E2E/scenario tests as applicable; any missing phase-local public-behavior scenario blocks milestone completion unless the phase had no public surface.
   6. Full milestone preflight command set is documented and passes or has explicitly recorded environmental skips.
-**Plans**: TBD during `$gsd-plan-phase 120`
+**Plans**: 4 plans
+Plans:
+**Wave 1**
+- [ ] 120-01-PLAN.md — Cross-phase E2E closure for ATL-E2E-01/08 and existing ATL E2E gate
+- [ ] 120-02-PLAN.md — YAML integration closure for ATL-INT-01/02/03/05 and integration matrix rows
+- [ ] 120-03-PLAN.md — Directed matrix closure, L-90 disposition, and focused ATL directed suite
+
+**Wave 2** *(blocked on 120-01, 120-02, and 120-03 completion)*
+- [ ] 120-04-PLAN.md — Final evidence audit, ATL traceability, milestone preflight, and roadmap/requirements/state closure
 **UI hint**: no
 
 ### Phase 98: Three-Layer Config Schema, DB Schema & Config Sync
