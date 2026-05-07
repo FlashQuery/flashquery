@@ -46,7 +46,7 @@ On success it prints confirmation and tells you to restart Claude Code to load t
 
 ## Token lifetime
 
-FlashQuery bearer tokens are valid until `MCP_AUTH_SECRET` is rotated — they do not expire on a time limit. Once Claude Code stores the token, the registration persists indefinitely. You only need to re-run `./setup/setup-claude-mcp.sh` if you change `MCP_AUTH_SECRET` (e.g., you ran `setup/setup.sh` again and a new secret was generated, or you manually rotated it for security reasons).
+FlashQuery bearer tokens are signed with `MCP_AUTH_SECRET`. The `/token` response includes an `expires_in` value based on `mcp.token_lifetime`, and the raw secret remains accepted as a legacy bearer token for compatibility. In practice, re-run `./setup/setup-claude-mcp.sh` when a client token stops working or whenever you rotate `MCP_AUTH_SECRET` (for example after re-running `setup/setup.sh` or manually rotating the secret).
 
 ---
 

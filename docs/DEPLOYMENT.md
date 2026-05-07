@@ -4,7 +4,7 @@ This guide covers production and semi-production deployment concerns for FlashQu
 
 For **how to get started quickly** — local dev, Docker Compose bundled stack, or pointing at Supabase Cloud — see the [README](../README.md) and the Quick Start there.
 
-For **the full set of deployment paths** (Full Docker, DB-Only Docker, Manual Postgres, Standalone), see [ARCHITECTURE.md § Deployment Paths](./ARCHITECTURE.md#deployment-paths). This guide builds on those and is specifically about what changes when you move a working install into production.
+For **the full set of deployment paths** (bundled Docker stack, external Supabase, or database-only Docker), see [ARCHITECTURE.md § Deployment Paths](./ARCHITECTURE.md#deployment-paths). This guide builds on those and is specifically about what changes when you move a working install into production.
 
 ## Table of Contents
 
@@ -58,14 +58,13 @@ The repo ships a `pre-push` Claude skill (`.claude/skills/pre-push/`) that enfor
 
 ## Choosing a deployment path
 
-FlashQuery supports four base deployment shapes (detailed in [ARCHITECTURE.md](./ARCHITECTURE.md#deployment-paths)):
+FlashQuery supports three base deployment shapes (detailed in [ARCHITECTURE.md](./ARCHITECTURE.md#deployment-paths)):
 
 | Path | Supabase lives | FlashQuery lives | Good for |
 |------|----------------|-------------------|----------|
-| **Full Docker** | Bundled in `docker/` | Bundled container | Self-hosted single-box deployments |
-| **DB-Only Docker** | Bundled Postgres+pgvector | Runs directly on host | Developers who want to debug FlashQuery easily |
-| **Manual Postgres** | External (Supabase Cloud or self-managed) | Runs directly on host | Production with managed DB |
-| **Standalone** | None — file-based | Runs directly on host | Demos only; memories don't persist |
+| **Bundled Docker stack** | Bundled Supabase stack in `docker/` | Container or host process | Fully local/self-hosted single-box deployments |
+| **External Supabase** | Supabase Cloud or self-hosted Supabase | Host process or managed service | Production with a managed or existing database |
+| **Database-only Docker** | Bundled Postgres+pgvector | Runs directly on host | Developers and CI jobs that want database isolation |
 
 This deployment guide is mostly about layering production concerns (a reverse proxy, process supervision, backups) on top of one of these. Pick the path that matches your environment from ARCHITECTURE.md first, then come back here.
 
@@ -365,6 +364,6 @@ There are no Prometheus metrics or structured-tracing endpoints today. If you ne
 ## Related documentation
 
 - [README](../README.md) — getting started in under five minutes
-- [ARCHITECTURE.md](./ARCHITECTURE.md) — system design and the four deployment paths this guide builds on
+- [ARCHITECTURE.md](./ARCHITECTURE.md) — system design and the deployment paths this guide builds on
 - [docs/SECURITY-TOKENS.md](./SECURITY-TOKENS.md) — bearer token generation, lifetime, troubleshooting
 - [`.env.example`](../.env.example) and [`flashquery.example.yml`](../flashquery.example.yml) — annotated config templates

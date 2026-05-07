@@ -1750,32 +1750,43 @@ llm:
 
 `call_model` sends a message array to any configured LLM model and returns its text response plus a diagnostic envelope with token counts, computed cost, and latency. It exists to give skills and agents a single, observable, cost-tracked path to call language models without managing HTTP clients, API keys, or retry logic themselves.
 
-Five calling modes are available, selected via `resolver`:
+Six calling modes are available, selected via `resolver`:
 
 | `resolver` | What it does |
 |------------|--------------|
 | `"model"` | Calls a specific model alias directly. No fallback. Fastest when you know which model to use and don't need resilience. |
 | `"purpose"` | Walks the purpose's fallback chain in order until one model succeeds. Transient errors (5xx, network, 429) advance the chain; permanent errors (400, 401, 403) stop it immediately. Use this when reliability matters more than controlling exactly which model runs. |
 | `"list_models"` | Discovery — returns `{ models: [...] }` with every configured model and its hard cost metrics. Does **not** call any provider. `name` and `messages` are optional. |
-| `"list_purposes"` | Discovery — returns `{ purposes: [...] }` with every configured purpose, its model chain, and cost rates derived from the primary model. `name` and `messages` are optional. |
-| `"search"` | Discovery — case-insensitive substring search over model and purpose names + descriptions. Pass the query in `parameters.query`. Returns `{ query, results: { purposes: [...], models: [...] } }`. |
+| `"list_purposes"` | Discovery — returns `{ purposes: [...], usage: {...} }` with every configured purpose, model chain, native/template tool diagnostics, and cost rates derived from the primary model. `name` and `messages` are optional. |
+| `"search"` | Discovery — case-insensitive substring search over model, purpose, capability, native tool, template tool, and help metadata. Pass the query in `parameters.query`. Returns `{ query, results: { purposes: [...], models: [...] } }`. |
+| `"help"` | Discovery — returns the full public `call_model` protocol contract as raw JSON. Does **not** call any provider and does not write usage rows. |
 
 The optional `trace_id` parameter correlates multiple `call_model` calls into a logical trace. When provided, the response envelope includes cumulative token counts, cost, and latency across all calls sharing that ID — useful for tracking the total cost of a multi-step skill run.
 
-**Reference syntax in messages.** When `resolver` is `"model"` or `"purpose"`, message `content` strings can include reference placeholders that FlashQuery resolves and replaces with vault content **before** dispatching to the LLM. This lets a calling LLM delegate to a cheaper model without first reading the document into its own context — pass the reference, FlashQuery injects the resolved content for the downstream call.
+**Reference syntax in messages.** When `resolver` is `"model"` or `"purpose"`, host-authored `system` and `user` message `content` strings can include reference placeholders that FlashQuery resolves and replaces with vault content **before** dispatching to the LLM. `assistant` and `tool` messages are not scanned for host references. This lets a calling LLM delegate to a cheaper model without first reading the document into its own context — pass the reference, FlashQuery injects the resolved content for the downstream call.
 
-Six placeholder forms are recognized:
+These placeholder forms are recognized:
 
 | Form | Resolves to |
 |------|-------------|
 | `{{ref:path}}` | Full body of the document at `path` (vault-relative or filename) |
 | `{{ref:path#Section}}` | Single section's body, matched case-insensitively (same rules as `get_document` `sections`) |
 | `{{ref:path->pointer}}` | The document pointed to by the source's frontmatter `pointer` field (dot-paths supported, e.g. `projections.summary`) |
+| `{{ref:@alias}}` | A late-bound alias resolved from the top-level `template_params` object |
 | `{{id:uuid}}` | Same as `{{ref:path}}` but resolved by `fqc_id` UUID |
 | `{{id:uuid#Section}}` | Same as `{{ref:path#Section}}` resolved by UUID |
 | `{{id:uuid->pointer}}` | Same as `{{ref:path->pointer}}` resolved by UUID |
 
 `#` and `->` are mutually exclusive within a single placeholder. Messages with no `{{ref:...}}` or `{{id:...}}` patterns are forwarded unchanged — the existing call path is fully preserved.
+
+Prefix a placeholder with a backslash to pass it through literally, for example `\{{ref:docs/example.md}}`.
+
+**Template parameters.** `template_params` is keyed by template path or alias name. A simple alias can point to a string value, document identifier, or an object with special fields:
+- `_template` — template or document identifier used by `{{ref:@alias}}`.
+- `_items` — ordered list of document or template identifiers injected at one alias slot.
+- `_separator` — string placed between `_items` outputs.
+
+Template documents can expose declared parameters via frontmatter (`fq_template: true`, `fq_params`, and optionally `fq_expose_as_tool`, `fq_namespace`, and `fq_desc`). Parameter hydration is fail-fast: missing required parameters, invalid document parameters, invalid `_items`, or unsupported template schemas return `reference_resolution_failed` before any provider call.
 
 When references are resolved, the response envelope adds two metadata fields:
 - `injected_references[]` — per-reference `{ ref, chars }` (and `resolved_to` for `->` dereferences). Use `chars / prompt_chars` for per-reference cost attribution.
@@ -1787,19 +1798,22 @@ If any reference cannot be resolved (path missing, section not found, pointer ab
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `resolver` | `"model"` \| `"purpose"` \| `"list_models"` \| `"list_purposes"` \| `"search"` | yes | Calling mode — see above. |
-| `name` | string | conditional | Model alias name (when `resolver: "model"`) or purpose name (when `resolver: "purpose"`). Both are lowercased before lookup. **Optional** for the discovery resolvers (`list_models`, `list_purposes`, `search`) — pass it to filter, omit to list everything. |
-| `messages` | array | conditional | OpenAI-style messages array. **Required** for `resolver: "model"` and `"purpose"` (at least one message). **Optional and ignored** for the discovery resolvers — you don't need to pass an empty array. Each item: `{ role: "system" \| "user" \| "assistant" \| "tool", content: string }`. Message `content` may include `{{ref:...}}` / `{{id:...}}` placeholders (see Reference syntax above). |
+| `resolver` | `"model"` \| `"purpose"` \| `"list_models"` \| `"list_purposes"` \| `"search"` \| `"help"` | yes | Calling mode — see above. |
+| `name` | string | conditional | Model alias name (when `resolver: "model"`) or purpose name (when `resolver: "purpose"`). Both are lowercased before lookup. Ignored for discovery resolvers (`list_models`, `list_purposes`, `search`, `help`). |
+| `messages` | array | conditional | OpenAI-style messages array. **Required** for `resolver: "model"` and `"purpose"` (at least one message). Ignored for discovery resolvers. Each item: `{ role: "system" \| "user" \| "assistant" \| "tool", content: string }`. Message `content` may include `{{ref:...}}` / `{{id:...}}` placeholders (see Reference syntax above). `role: "tool"` messages must use `tool_call_id` and cannot include `name`. |
 | `parameters` | object | conditional | Optional LLM parameters passed to the provider (e.g. `temperature`, `max_tokens`, `top_p`). When using `resolver: "purpose"`, merged with the purpose's `defaults:` (caller values win). For `resolver: "search"`, **`parameters.query` is required** — the substring to match against model/purpose names and descriptions. |
+| `return_messages` | boolean | no | For `model`/`purpose` calls, when `true`, returns post-hydration input messages plus the final assistant message in the envelope's `messages` array. Ignored by discovery resolvers. |
+| `template_params` | object | no | Template parameters keyed by template path or alias for host-authored reference hydration. Ignored by discovery resolvers. |
 | `trace_id` | string | no | Correlation ID for grouping related calls. When provided, the response includes cumulative stats across all calls sharing this ID. |
 
 **Returns**
 
-A JSON object with two keys — `response` (the model's text output) and `metadata` (diagnostic envelope):
+A JSON object with three keys — `response` (the model's text output), `messages` (empty by default unless `return_messages: true` or provider tool calls need to be preserved), and `metadata` (diagnostic envelope):
 
 ```json
 {
   "response": "Here is a concise summary: ...",
+  "messages": [],
   "metadata": {
     "resolver": "purpose",
     "name": "general",
@@ -1869,7 +1883,43 @@ When messages contain resolved `{{ref:...}}` or `{{id:...}}` placeholders, the m
 
 `prompt_chars` is the total character count across all message `content` strings **after** reference resolution. `injected_references[i].chars` is each reference's resolved-content length — divide by `prompt_chars` to attribute input cost back to a specific reference. When messages contain no placeholders, both `injected_references` and `prompt_chars` are absent from the metadata.
 
-**Discovery resolver responses.** When `resolver` is `list_models`, `list_purposes`, or `search`, the response shape is different: `response` is omitted (no model was called), and the model/purpose data is returned at the top level.
+**Mode 2 managed tool loop.** When `resolver: "purpose"` targets a purpose that exposes model-visible tools through `purpose.tools`, `purpose.templates`, or the global template access policy, FlashQuery runs a managed tool loop instead of returning raw assistant tool calls. Native tools are drawn from the immutable MCP tool registry snapshot; template tools are generated from eligible vault templates. Caller-provided provider tools are rejected for now with `Mode 3 caller-provided tools are deferred; remove caller-provided tools for FlashQuery-managed Mode 2.`
+
+Mode 2 is controlled through purpose defaults or call `parameters`:
+- `timeout_ms` — whole-loop wall-clock deadline.
+- `max_iterations` — maximum model round trips.
+- `max_tokens_budget` — pre-call aggregate token budget guard.
+- `max_cost_usd` — pre-call aggregate cost budget guard.
+- `result_summary_chars` — tool-result summary length for `calls_log` entries.
+
+Mode 2 responses still use the normal `response`/`messages`/`metadata` envelope. In addition, `metadata.tools` is present and may include:
+```json
+{
+  "native_tool_names": ["get_document"],
+  "template_tool_names": ["flashquery_template_research_brief"],
+  "diagnostics": {
+    "expanded_tiers": [],
+    "explicit_tools": ["get_document"],
+    "excluded": [],
+    "hard_excluded": [],
+    "unknown": [],
+    "template_tools": [],
+    "template_tool_warnings": [],
+    "template_tool_conflicts": [],
+    "dangling_template_paths": []
+  },
+  "stop_reason": "final_response",
+  "iterations": 2,
+  "calls_log": [],
+  "aggregate_usage": {
+    "tokens": { "input": 1500, "output": 320 },
+    "cost_usd": 0.000414,
+    "latency_ms": 1800
+  }
+}
+```
+
+**Discovery resolver responses.** When `resolver` is `list_models`, `list_purposes`, `search`, or `help`, the response shape is different: `response`, `messages`, and `metadata` are omitted (no model was called), and the discovery data is returned at the top level.
 
 `list_models` returns:
 ```json
@@ -1884,7 +1934,8 @@ When messages contain resolved `{{ref:...}}` or `{{id:...}}` placeholders, the m
       "output_cost_per_million": 0.60,
       "description": "Fast, cheap small model for routine tasks",
       "context_window": 128000,
-      "capabilities": ["tools", "vision"]
+      "capabilities": { "tool_calling": true, "usage_on_tool_calls": true },
+      "capability_diagnostics": []
     },
     {
       "name": "local",
@@ -1893,13 +1944,14 @@ When messages contain resolved `{{ref:...}}` or `{{id:...}}` placeholders, the m
       "model_id": "llama3.2:latest",
       "input_cost_per_million": 0,
       "output_cost_per_million": 0,
+      "capability_diagnostics": [],
       "local": true
     }
   ]
 }
 ```
 
-The optional fields `description`, `context_window`, and `capabilities` are present **only when declared in `flashquery.yml`** (omit-when-undeclared — explicitly-declared empty values like `capabilities: []` are preserved). The `local: true` flag is auto-derived for any model whose provider has `type: ollama`, or set explicitly via the provider's `local: true` field.
+The optional fields `description`, `context_window`, `tags`, and `capabilities` are present **only when declared in `flashquery.yml`** (omit-when-undeclared — explicitly-declared empty values are preserved). `capability_diagnostics` is always included. The `local: true` flag is auto-derived for any model whose provider has `type: ollama`, or set explicitly via the provider's `local: true` field.
 
 `list_purposes` returns:
 ```json
@@ -1911,9 +1963,29 @@ The optional fields `description`, `context_window`, and `capabilities` are pres
       "models": ["fast"],
       "input_cost_per_million": 0.15,
       "output_cost_per_million": 0.60,
-      "defaults": { "temperature": 0.7 }
+      "defaults": { "temperature": 0.7 },
+      "native_tools": [],
+      "native_tool_diagnostics": {
+        "expanded_tiers": [],
+        "explicit_tools": [],
+        "excluded": [],
+        "hard_excluded": [],
+        "unknown": []
+      },
+      "template_tools": [],
+      "template_tool_warnings": [],
+      "template_tool_conflicts": [],
+      "dangling_template_paths": []
     }
-  ]
+  ],
+  "usage": {
+    "reference_syntax": "{{ref:<template_identifier>}}",
+    "resolvers": {
+      "purpose": "Call a named purpose fallback chain. Requires name and messages.",
+      "model": "Call a configured model alias directly. Requires name and messages.",
+      "help": "Return the full call_model protocol help contract."
+    }
+  }
 }
 ```
 
@@ -2046,6 +2118,14 @@ mcp__flashquery__call_model({
 // → returns { query: "vision", results: { purposes: [...], models: [...] } } with name+description matches
 ```
 
+Discovery — get the complete public protocol contract:
+```
+mcp__flashquery__call_model({
+  resolver: "help"
+})
+// → returns raw JSON with summary, reference_syntax, template_bindings, modes, envelope, errors, discovery, and examples
+```
+
 Two-step "discover-then-delegate" pattern — the calling LLM picks a cheap model for a simple task:
 ```
 // Step 1 — see what's available
@@ -2066,14 +2146,14 @@ mcp__flashquery__call_model({
 
 | Condition | `isError` | Response text |
 |-----------|-----------|--------------|
-| `llm:` absent from config | `true` | `"LLM is not configured. Add an llm: section to flashquery.yml to use this tool."` (applies to all resolvers including discovery) |
+| `llm:` absent from config | `true` | `"LLM is not configured. Add an llm: section to flashquery.yml to use this tool."` for all resolvers except `help`; `help` still returns unconfigured protocol guidance as raw JSON. |
 | Unknown model alias | `true` | `"Model 'X' not found. Available models: fast, smart"` |
 | Unknown purpose name | `true` | `"Purpose 'X' not found. Available purposes: general, drafting"` |
 | Purpose chain exhausted | `true` | Multi-line (see below) |
 | HTTP 401 from provider | `true` | `"call_model failed: LLM error: openai API returned 401 Unauthorized. Check the API key in flashquery.yml."` |
 | Provider rate-limited (429) | `true` | `"call_model failed: LLM error: openai rate limit exceeded. Wait and retry."` |
 | Reference cannot be resolved | `true` | `"reference_resolution_failed"` with `failed_references[]` listing per-reference reasons (path missing, section not found, pointer absent, `#` and `->` mixed, etc.). **No LLM call is made.** |
-| `resolver: "search"` without `parameters.query` | `true` | `"call_model failed: search resolver requires parameters.query"` |
+| `resolver: "search"` without `parameters.query` | `true` | `"search requires parameters.query (non-empty string)"` |
 
 When a purpose chain exhausts all models, the error lists every attempt:
 ```
@@ -2087,7 +2167,7 @@ call_model failed: purpose 'general' — all 2 models exhausted
 - Use `resolver: "purpose"` for production workflows — it survives provider outages automatically. Use `resolver: "model"` only when you need deterministic model selection (e.g. benchmarking, testing specific models).
 - When using `resolver: "purpose"`, `parameters` are merged with the purpose's `defaults:` — caller values win. Omit `parameters` to use the purpose defaults unchanged.
 - **Pass-by-reference is the cheapest way to delegate.** When a calling LLM needs to hand work to a smaller model, use `{{ref:...}}` / `{{id:...}}` placeholders so FlashQuery resolves the document content server-side. The caller never has to read the document into its own context — saving tokens both ways.
-- **Discovery before delegation is free.** `list_models`, `list_purposes`, and `search` make no provider calls. Use them to let a calling LLM make cost-aware routing decisions before committing to a full call.
+- **Discovery before delegation is free.** `list_models`, `list_purposes`, `search`, and `help` make no provider calls. Use them to let a calling LLM make cost-aware routing decisions before committing to a full call.
 - Reference resolution is **fail-fast** — if any placeholder can't be resolved, the call returns `reference_resolution_failed` with details and **no LLM call is made**. This protects against silently sending a half-resolved prompt.
 - `#` (section extraction) and `->` (frontmatter pointer dereference) are **mutually exclusive** within a single placeholder. Use them in separate placeholders if you need both effects.
 - For sizing, FlashQuery does **not** pre-check provider context windows — the caller is responsible. Use `list_models` to see each model's `context_window` (when declared), and use `get_document` to size a reference (`size.chars`) before injecting it.
