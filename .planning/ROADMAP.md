@@ -324,7 +324,7 @@ Plans:
 **Wave 1**
 - [x] 120-01-PLAN.md — Cross-phase E2E closure for ATL-E2E-01/08 and existing ATL E2E gate
 - [x] 120-02-PLAN.md — YAML integration closure for ATL-INT-01/02/03/05 and integration matrix rows
-- [ ] 120-03-PLAN.md — Directed matrix closure, L-90 disposition, and focused ATL directed suite
+- [x] 120-03-PLAN.md — Directed matrix closure, L-90 disposition, and focused ATL directed suite
 
 **Wave 2** *(blocked on 120-01, 120-02, and 120-03 completion)*
 - [ ] 120-04-PLAN.md — Final evidence audit, ATL traceability, milestone preflight, and roadmap/requirements/state closure
