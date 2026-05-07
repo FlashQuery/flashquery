@@ -1,7 +1,7 @@
 # Requirements: FlashQuery Core v3.2 Agentic LLM Tools
 
 **Defined:** 2026-05-05
-**Last Updated:** 2026-05-07 after Phase 119 discovery diagnostics validation
+**Last Updated:** 2026-05-07 after Phase 120 cross-phase ATL validation closure
 **Core Value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
 
 ## v3.2 Requirements
@@ -89,11 +89,11 @@
 - [x] **VAL-117**: Phase 117 ships runnable unit, E2E, and directed scenario tests with a deterministic mock provider validating native tool loops, parallel tool calls, guardrail stops, fallback, usage aggregation, and calls-log metadata.
 - [x] **VAL-118**: Phase 118 ships runnable unit, integration, E2E, and directed scenario tests validating fresh template discovery, masquerade tool naming, collision diagnostics, reverse-map dispatch, and mixed native/template loops.
 - [x] **VAL-119**: Phase 119 ships runnable unit and directed scenario tests validating discovery diagnostics, structured capability reporting, discovery search behavior, and the `help` resolver.
-- [ ] **VAL-120**: Phase 120 ships runnable cross-phase E2E, directed, and YAML integration suites proving the full ATL workflows and updating coverage matrices with final scenario IDs.
+- [x] **VAL-120**: Phase 120 ships runnable cross-phase E2E, directed, and YAML integration suites proving the full ATL workflows and updating coverage matrices with final scenario IDs.
 - [x] **TEST-01**: Every implementation phase includes its own runnable validation before the phase can be marked complete; tests are not deferred wholesale to Phase 120.
 - [x] **TEST-02**: A deterministic OpenAI-compatible mock provider exists early enough for the first phase that needs provider/tool-loop validation and is reused by later E2E/scenario tests.
 - [x] **TEST-03**: Phase plans identify exact test commands or scenario invocations required for that phase's acceptance.
-- [ ] **TEST-04**: Scenario tests are added in the same phase as the public behavior they validate; Phase 120 only fills cross-phase gaps and finalizes coverage matrices.
+- [x] **TEST-04**: Scenario tests are added in the same phase as the public behavior they validate; Phase 120 only fills cross-phase gaps and finalizes coverage matrices.
 
 ## Future Requirements
 
@@ -181,11 +181,11 @@
 | VAL-117 | Phase 117 | Complete |
 | VAL-118 | Phase 118 | Complete |
 | VAL-119 | Phase 119 | Complete |
-| VAL-120 | Phase 120 | Pending |
+| VAL-120 | Phase 120 | Complete |
 | TEST-01 | Phase 112 | Complete |
 | TEST-02 | Phase 112 | Complete |
 | TEST-03 | Phase 112 | Complete |
-| TEST-04 | Phase 120 | Pending |
+| TEST-04 | Phase 120 | Complete |
 
 **Coverage:**
 - v3.2 requirements: 62 total
@@ -194,4 +194,4 @@
 
 ---
 *Requirements defined: 2026-05-05*
-*Last updated: 2026-05-07 after Phase 119 discovery diagnostics validation*
+*Last updated: 2026-05-07 after Phase 120 cross-phase ATL validation closure*

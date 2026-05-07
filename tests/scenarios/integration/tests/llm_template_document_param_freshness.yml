@@ -41,6 +41,7 @@ steps:
       args:
         resolver: model
         name: fast
+        return_messages: true
         template_params:
           _integration/Templates/atl-int-02-param.md:
             brief: "_integration/Docs/atl-int-02-param-target.md"
@@ -55,10 +56,11 @@ steps:
       args:
         resolver: model
         name: fast
+        return_messages: true
         template_params:
           _integration/Templates/atl-int-02-param.md:
             brief: "_integration/Docs/atl-int-02-param-target.md"
         messages:
           - role: user
-            content: "{{ref:_integration/Templates/atl-int-02-param.md}} If the parameter contains ATL-INT-02-ALPHA reply ALPHA, otherwise reply NO."
-      expect_not_contains: "ALPHA"
+            content: "{{ref:_integration/Templates/atl-int-02-param.md}} If the parameter contains stale content reply STALE, otherwise reply NO."
+      expect_not_contains: "ATL-INT-02-ALPHA"

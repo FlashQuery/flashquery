@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.2
 milestone_name: Agentic LLM Tools
-status: executing
-stopped_at: Completed 120-03-PLAN.md
+status: completed
+stopped_at: Completed 120-04-PLAN.md
 last_updated: "2026-05-07T04:46:41.802Z"
 last_activity: 2026-05-07
 progress:
   total_phases: 23
   completed_phases: 8
   total_plans: 40
-  completed_plans: 39
-  percent: 98
+  completed_plans: 40
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-05)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 120 — cross-phase-atl-validation-coverage-closure
+**Current focus:** v3.2 Agentic LLM Tools — completed; ready for verification/release handoff
 
 ## Current Position
 
-Phase: 120 (cross-phase-atl-validation-coverage-closure) — EXECUTING
+Phase: 120 (cross-phase-atl-validation-coverage-closure) — COMPLETE
 Plan: 4 of 4
-Status: Ready to execute
+Status: Ready for verification
 Last activity: 2026-05-07
 
 ## Performance Metrics
@@ -80,6 +80,7 @@ Last activity: 2026-05-07
 | Phase 120 P01 | 12 min | 3 tasks | 1 files |
 | Phase 120 P02 | 16 min | 3 tasks | 5 files |
 | Phase 120 P03 | 52 | 3 tasks | 8 files |
+| Phase 120 P04 | 49 | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -119,6 +120,10 @@ Last activity: 2026-05-07
 - [Phase 119]: The help resolver short-circuits before the LLM client guard so unconfigured clients can still retrieve protocol help.
 - [Phase 119]: Search indexes names, descriptions, resolver/help keys, and structured diagnostic metadata without indexing document or template bodies.
 - [Phase 119]: Public directed validation asserts discovery/help behavior through MCP response JSON only, not provider request capture or source inspection.
+- [Phase 120]: VAL-120 and TEST-04 closed only after final lint, unit, integration, E2E, directed, YAML integration, and build gates were recorded in `120-VALIDATION.md`.
+- [Phase 120]: ATL-INT-04 remains a TypeScript integration-layer exception in `llm-config-sync.test.ts` because no public runtime binding YAML tool exists.
+- [Phase 120]: L-90 cooperative shutdown is closed by `test_call_model_agent_loop_shutdown`, which drives public `call_model` to `stop_reason: "shutdown"` through non-blocking SIGTERM.
+- [Phase 120]: The YAML ATL-INT-02 freshness scenario asserts hydration via `return_messages: true` to avoid depending on live-model echo behavior.
 
 ## Accumulated Context
 
@@ -200,8 +205,8 @@ Last activity: 2026-05-07
 
 ## Session Continuity
 
-Last session: 2026-05-07T04:46:41.757Z
-Stopped at: Completed 120-03-PLAN.md
+Last session: 2026-05-07T05:18:00.000Z
+Stopped at: Completed 120-04-PLAN.md
 Resume: None
 
 ## Deferred Items

@@ -21,7 +21,7 @@
 - ✅ **v2.9 Filesystem Primitive Tools** — Phases 90-97 (shipped 2026-04-25)
 - ✅ **v3.0 Native LLM Access** — Phases 98-106 (shipped 2026-04-30)
 - ✅ **v3.1 Call Model With Reference** — Phases 107-110 + 111 (CMR verification fixes) (shipped 2026-05-05)
-- ◆ **v3.2 Agentic LLM Tools** — Phases 112-120 (executing; Phase 119 complete)
+- ✅ **v3.2 Agentic LLM Tools** — Phases 112-120 (shipped 2026-05-07)
 
 ## Phases
 
@@ -89,21 +89,21 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 </details>
 
 <details open>
-<summary>◆ v3.2 Agentic LLM Tools (Phases 112-120) — PLANNING</summary>
+<summary>✅ v3.2 Agentic LLM Tools (Phases 112-120) — SHIPPED 2026-05-07</summary>
 
 **Milestone Goal:** Extend `call_model` from reference-aware text completion into a FlashQuery-managed agent loop that can expose safe native tools and document/template tools to delegated models.
 
 - [x] **Phase 112: Chat Primitive & Envelope Migration** - Provider-normalized `chat()` primitive, text wrapper compatibility, `return_messages`, round-trippable message shape, provider response normalization, and runnable validation (CHAT-01 through CHAT-06, VAL-112, TEST-01 through TEST-03) — Complete 2026-05-05
 - [x] **Phase 113: Document Reference System Core** - Reference grammar, span scanner, escape parity, identifier ambiguity, typed failure taxonomy, non-recursive hydration, and runnable validation (REF-01 through REF-08, VAL-113) — Complete 2026-05-05
 - [x] **Phase 114: Template Parameterization** - Template detection, `template_params`, alias entries, document parameters, placeholder substitution, `_items` list injection, and runnable validation (TMPL-01 through TMPL-05, VAL-114) — Complete 2026-05-06
-- [ ] **Phase 115: Purpose Config, Bindings & Capabilities** - Purpose orchestration fields, loop defaults validation, `fqc_purpose_templates`, generic config sync, structured model capabilities, Mode 2 admission, and runnable validation (BIND-01 through BIND-05, CAP-01 through CAP-05, VAL-115)
+- [x] **Phase 115: Purpose Config, Bindings & Capabilities** - Purpose orchestration fields, loop defaults validation, `fqc_purpose_templates`, generic config sync, structured model capabilities, Mode 2 admission, and runnable validation (BIND-01 through BIND-05, CAP-01 through CAP-05, VAL-115) — Complete 2026-05-06
 - [x] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions, and runnable validation (TOOL-01 through TOOL-04, VAL-116) — Complete 2026-05-06
 - [x] **Phase 117: Agent Loop Executor** - Mode 2 loop orchestration, internal native dispatch, parallel tool calls, guardrails, fallback, aggregate usage writes, calls log metadata, and runnable validation (LOOP-01 through LOOP-07, TOOL-05, TOOL-06, VAL-117) — Complete 2026-05-06
 - [x] **Phase 118: Template Discovery & Masquerade Dispatch** - Fresh vault template discovery, generated provider-safe `flashquery_<namespace>_<slug>` tools, collision-safe reverse map, template tool dispatch, and runnable validation (TMPL-06 through TMPL-08, VAL-118) — Complete 2026-05-06
 - [x] **Phase 119: Discovery Diagnostics & Help Resolver** - Extended `list_purposes`, structured capability diagnostics in `list_models`, discovery `search`, v1 `help` resolver, and runnable validation (DISC-01 through DISC-04, VAL-119) — Complete 2026-05-07
-- [ ] **Phase 120: Cross-Phase ATL Validation & Coverage Closure** - End-to-end workflow suites, YAML integration closure, scenario matrix updates, and final coverage audit (VAL-120, TEST-04)
+- [x] **Phase 120: Cross-Phase ATL Validation & Coverage Closure** - End-to-end workflow suites, YAML integration closure, scenario matrix updates, and final coverage audit (VAL-120, TEST-04) — Complete 2026-05-07
 
-**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (60/62 requirements complete).
+**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (62/62 requirements complete).
 
 </details>
 
@@ -327,7 +327,7 @@ Plans:
 - [x] 120-03-PLAN.md — Directed matrix closure, L-90 disposition, and focused ATL directed suite
 
 **Wave 2** *(blocked on 120-01, 120-02, and 120-03 completion)*
-- [ ] 120-04-PLAN.md — Final evidence audit, ATL traceability, milestone preflight, and roadmap/requirements/state closure
+- [x] 120-04-PLAN.md — Final evidence audit, ATL traceability, milestone preflight, and roadmap/requirements/state closure
 **UI hint**: no
 
 ### Phase 98: Three-Layer Config Schema, DB Schema & Config Sync
