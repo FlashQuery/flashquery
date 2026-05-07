@@ -1,3 +1,8 @@
+---
+name: document-maintenance
+description: Review and update FlashQuery README.md and docs/ARCHITECTURE.md at natural phase, milestone, release, feature, CLI, config, or deployment checkpoints. Use this skill when code changes may require documentation updates, when completing a phase or milestone, when preparing release documentation, or when the user asks to check whether FlashQuery docs are current.
+---
+
 # Document Maintenance Skill
 
 **Version:** 1.0.0

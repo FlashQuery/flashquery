@@ -1,12 +1,10 @@
 name: llm_mixed_ref_and_id_placeholders
 description: >
-  Mixed placeholder resolution. A single user message containing BOTH
-  {{ref:path}} and {{id:<uuid>}} placeholders resolves both: the
-  injected_references[] array reports two entries (one path-typed, one
-  id-typed) in input order, and prompt_chars reflects the combined
-  resolved prompt size. Both bodies reach the LLM. Verifies that the
-  resolver handles heterogeneous placeholders in a single call without
-  one shadowing the other.
+  Superseded ATL v1 mixed placeholder behavior. A single user message containing
+  BOTH an active {{ref:path}} placeholder and a legacy {{id:<uuid>}} placeholder
+  hydrates only the {{ref:path}} placeholder. The {{id:<uuid>}} text remains
+  literal in returned hydrated messages and does not produce an injected
+  reference entry or inject the id-target document body.
   Covers IL-25.
 coverage: [IL-25]
 deps: [llm]
@@ -28,30 +26,41 @@ steps:
     content: "Doc B body — the id marker is IDMARK-25."
     tags: [il25-tag]
 
-  - label: "Mixed: both bodies are injected — LLM sees PATHMARK-25"
-    # Single message contains both a {{ref:path}} and a {{id:<uuid>}}.
-    # Both resolution paths must succeed; the LLM should be able to echo
-    # both markers in the same response.
+  - label: "Mixed superseded behavior: active {{ref:path}} is hydrated"
     assert:
       op: call_model
       args:
         resolver: model
         name: fast
+        return_messages: true
         messages:
           - role: user
-            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} List both marker tokens (PATHMARK-25 and IDMARK-25) in the documents, separated by a comma."
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
       expect_contains: "PATHMARK-25"
 
-  - label: "Mixed: same call — LLM also sees IDMARK-25"
+  - label: "Mixed superseded behavior: legacy {{id:<uuid>}} remains literal in returned messages"
     assert:
       op: call_model
       args:
         resolver: model
         name: fast
+        return_messages: true
         messages:
           - role: user
-            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} List both marker tokens (PATHMARK-25 and IDMARK-25) in the documents, separated by a comma."
-      expect_contains: "IDMARK-25"
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_contains: "{{id:"
+
+  - label: "Mixed superseded behavior: legacy id target body is not injected"
+    assert:
+      op: call_model
+      args:
+        resolver: model
+        name: fast
+        return_messages: true
+        messages:
+          - role: user
+            content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
+      expect_not_contains: "IDMARK-25"
 
   - label: "Metadata: injected_references[] entry for the {{ref:path}} placeholder is reported"
     # The path-typed entry's ref field echoes the literal {{ref:path}}
@@ -66,12 +75,7 @@ steps:
             content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
       expect_contains: "{{ref:_integration/Test/il25/path-ref.md}}"
 
-  - label: "Metadata: injected_references[] entry for the {{id:<uuid>}} placeholder is reported"
-    # Variable substitution does not apply to expect_contains, so we cannot
-    # assert on the exact UUID. Instead assert on the literal "{{id:" prefix
-    # — its presence in the response text proves an id-typed entry's ref
-    # field echoed the placeholder (per L-27 directed test contract: the
-    # ref field carries the full placeholder including delimiters).
+  - label: "Metadata: injected_references[] does not include a legacy {{id:<uuid>}} entry"
     assert:
       op: call_model
       args:
@@ -80,7 +84,7 @@ steps:
         messages:
           - role: user
             content: "{{ref:_integration/Test/il25/path-ref.md}} {{id:${doc_b.fq_id}}} Reply OK."
-      expect_contains: "{{id:"
+      expect_not_contains: "{{id:"
 
   - label: "Metadata: prompt_chars is present (combined resolved prompt)"
     assert:

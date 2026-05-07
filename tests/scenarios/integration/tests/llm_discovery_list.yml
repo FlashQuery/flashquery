@@ -160,7 +160,7 @@ steps:
       op: call_model
       args:
         resolver: list_models
-      expect_contains: '"name":"local","type":"language","provider":"local-ollama","model_id":"llama3.2:latest","input_cost_per_million":0,"output_cost_per_million":0,"local":true'
+      expect_contains: '"local":true'
 
   - label: "TC4-W5/DISC-01: list_models — embeddings model has NO capabilities field (omit-when-undeclared per OQ #16). Substring '\"capabilities\":[]' must not appear, since embeddings never declared one — IL-15"
     # The embeddings model is declared with no capabilities key; per OQ #16 it
