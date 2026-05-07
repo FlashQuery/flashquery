@@ -1,6 +1,6 @@
 ---
 name: pre-release
-description: Run the FlashQuery pre-release workflow before cutting a new version, or audit an already-drafted changelog entry before publishing. Use this skill whenever the user wants to prepare a release, update the changelog for a new version, decide what version number to use, cut a release, ship a version, or says things like "let's release this", "what version should this be", "update the changelog", "prepare the release notes", "is this ready to ship", or "bump the version". Also use it when the user wants to validate, audit, or double-check an existing changelog entry before tagging — phrases like "validate the changelog", "audit the release", "is the changelog ready to publish", "double-check the release notes", "pre-publish check", "review the changelog entry", or "verify before I tag". This skill contains two workflows: one for drafting a new release entry (Phases 1–7), and one for auditing an already-written entry before publishing (Pre-Publish Audit). Invoke it for any release-related checkpoint.
+description: Run the FlashQuery pre-release workflow before cutting a new version, or audit an already-drafted changelog entry before publishing. Use this skill when the user wants to prepare a release, update the changelog, decide a version number, cut or ship a release, bump the version, prepare release notes, check whether a release is ready, validate a changelog entry, audit release notes, or do a final pre-publish check before tagging.
 ---
 
 # FlashQuery Pre-Release Workflow

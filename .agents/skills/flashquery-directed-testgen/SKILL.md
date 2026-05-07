@@ -1,20 +1,6 @@
 ---
 name: flashquery-directed-testgen
-description: >
-  Create, validate, run, debug, and register FlashQuery directed scenario test cases against
-  the coverage matrix. Use this skill whenever the user wants to create a new directed scenario
-  test, write a test case, add test coverage, cover a specific coverage point, or references
-  DIRECTED_COVERAGE.md goals. Also trigger when the user says "create a test for X", "cover D-06",
-  "write a test that exercises archive", "add coverage for memory lifecycle", "test the
-  move_document tool", or any request to build a directed scenario test for FlashQuery. Even
-  casual mentions like "let's cover more of the matrix" or "pick a coverage point and write a test"
-  should trigger this skill. This skill handles the entire lifecycle: writing the script, verifying
-  it addresses the coverage goals, running it, debugging failures automatically, and updating
-  DIRECTED_COVERAGE.md when the test passes. Also use this skill when the user wants to build
-  multiple tests in one session — e.g. "write tests for D-06, D-07, M-12 and the move_document
-  tool", "cover everything in the Plugins category", "build tests for these behaviors in parallel".
-  The skill has a batch mode that groups behaviors into independent tests and runs them in parallel
-  subagents.
+description: Create, validate, run, debug, and register FlashQuery directed scenario tests against DIRECTED_COVERAGE.md. Use this skill when the user wants to write a directed scenario test, add directed coverage, cover a coverage ID such as D-06, test a tool behavior like archive or move_document, or says "create a test for X", "cover more of the matrix", "pick a coverage point and write a test", or "build tests for these behaviors". Handles the full lifecycle from script authoring through passing run and coverage matrix update, including batch mode for multiple independent tests.
 ---
 
 # FlashQuery Directed TestGen
