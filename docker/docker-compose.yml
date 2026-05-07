@@ -30,9 +30,6 @@ services:
   # Postgres 15 with pgvector (pre-built in supabase/postgres image)
   # =========================================================================
   postgres:
-    env_file:
-      - path: ../.env
-        required: false
     image: supabase/postgres:15.8.1.085
     restart: unless-stopped
     environment:
@@ -152,9 +149,6 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
-    env_file:
-      - path: ../.env
-        required: false
     environment:
       # Docker-specific overrides (these differ from .env values)
       NODE_ENV: production
