@@ -187,14 +187,14 @@ Then:
 ```bash
 launchctl load ~/Library/LaunchAgents/dev.flashquery.plist
 launchctl start dev.flashquery
-tail -f ~/flashquery-core/logs/flashquery.stdout.log
+tail -f ~/flashquery/logs/flashquery.stdout.log
 ```
 
 launchd doesn't load `.env` files automatically. Either list the environment variables inline in the plist, or wrap `node …` in a tiny shell script that `source`s the `.env` before exec'ing.
 
 ### Docker (any OS)
 
-The bundled `docker-compose.yml` already has `restart: unless-stopped` on the FlashQuery container, so supervision is handled. Use this path when you want consistent service management across hosts without dealing with systemd or launchd.
+The bundled Docker compose files already set `restart: unless-stopped` on the FlashQuery container, so supervision is handled. Use this path when you want consistent service management across hosts without dealing with systemd or launchd.
 
 ---
 
@@ -344,7 +344,7 @@ FlashQuery logs to stdout by default (`logging.output: "stdout"` in `flashquery.
 
 - **systemd**: stdout goes to the journal — query with `journalctl -u flashquery`.
 - **launchd**: redirect stdout/stderr to files via the plist's `StandardOutPath` / `StandardErrorPath`.
-- **Docker**: `docker logs flashquery-core` or integrate with your log-collection stack (Loki, ELK, CloudWatch, etc.).
+- **Docker**: `docker logs flashquery` or integrate with your log-collection stack (Loki, ELK, CloudWatch, etc.).
 
 If you prefer file-based logging:
 
@@ -365,5 +365,7 @@ There are no Prometheus metrics or structured-tracing endpoints today. If you ne
 
 - [README](../README.md) — getting started in under five minutes
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — system design and the deployment paths this guide builds on
+- [Document Reference System.md](./Document%20Reference%20System.md) — document references, section references, pointer dereferences, and templates
+- [LLM Providers Models and Purposes.md](./LLM%20Providers%20Models%20and%20Purposes.md) — provider/model/purpose configuration and purpose template tools
 - [docs/SECURITY-TOKENS.md](./SECURITY-TOKENS.md) — bearer token generation, lifetime, troubleshooting
-- [`.env.example`](../.env.example) and [`flashquery.example.yml`](../flashquery.example.yml) — annotated config templates
+- [`.env.example`](../.env.example), [`docker/.env.docker.example`](../docker/.env.docker.example), and [`flashquery.example.yml`](../flashquery.example.yml) — annotated config templates

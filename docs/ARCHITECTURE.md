@@ -179,11 +179,13 @@ FlashQuery's configuration is split across two files by design:
 - **`./.env`** holds per-install values: secrets (API keys, JWT signing keys), endpoint URLs, the vault path, the instance name and ID, and any environment-specific overrides. Gitignored. Every value in this file is something that varies between installations.
 - **`./flashquery.yml`** holds the structural contract: which fields exist, their defaults, and `${VAR}` references into `.env` for the values that live there. Safe to read; can be committed if you want a shared structural config across a team.
 
-The setup script (`./setup/setup.sh`, invoked via `npm run setup`) generates both files from the annotated templates in the repo — [`./.env.example`](./.env.example) and [`./flashquery.example.yml`](./flashquery.example.yml) — and substitutes user input into `.env` while copying the yaml verbatim. Re-running the script picks up existing values as defaults and warns before changing anything sensitive.
+The setup script (`./setup/setup.sh`, invoked via `npm run setup`) generates both files from the annotated templates in the repo — [`../.env.example`](../.env.example) and [`../flashquery.example.yml`](../flashquery.example.yml) — and substitutes user input into `.env` while copying the yaml verbatim. Re-running the script picks up existing values as defaults, preserves generated secrets, and warns before changing sensitive routing values such as the database URL or instance ID.
 
-If you're running the bundled Supabase stack in `docker/`, a third file — **`./docker/.env.docker`** — holds Docker-orchestration-specific values (Postgres password, shared JWT secret, anon key, service-role key). The root `.env` and `docker/.env.docker` each stand on their own: overlap values like `SUPABASE_URL` and `VAULT_PATH` are duplicated in both, and `setup/setup.sh` keeps them in sync.
+If you're running the bundled Supabase stack in `docker/`, a third file — **`./docker/.env.docker`** — is generated from [`../docker/.env.docker.example`](../docker/.env.docker.example). Full-stack Docker uses that file as its source of truth for Supabase orchestration values (Postgres password, shared JWT secret, anon key, service-role key) and for the environment passed into the FlashQuery container. The root `.env` remains the source of truth for local FlashQuery runs, FlashQuery-only Docker, and database-only Docker.
 
-For the full list of fields and their meanings, see the inline comments in `.env.example` and `flashquery.example.yml`.
+The root `.env` and `docker/.env.docker` each stand on their own. Shared values such as `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VAULT_PATH`, instance identity, and default LLM provider variables are duplicated in both when you choose the bundled Docker path, and `setup/setup.sh` keeps them in sync.
+
+For the full list of fields and their meanings, see the inline comments in `.env.example`, `docker/.env.docker.example`, and `flashquery.example.yml`.
 
 ### LLM and template configuration
 
@@ -225,7 +227,7 @@ Postgres runs in Docker via `docker/docker-compose.db-only.yml`, but FlashQuery 
 
 **When to use:** iterating on FlashQuery code with hot reload, debugging from your editor, or running integration tests in CI.
 
-**How to set up:** `cd docker && docker compose -f docker-compose.db-only.yml up -d`, then configure `.env` to point at `localhost:5432` for `DATABASE_URL` and run `npm run dev` from the repo root.
+**How to set up:** run `make db-up` from the repo root, or run `docker compose --env-file .env -f docker/docker-compose.db-only.yml up -d`. Configure `.env` to point at `localhost:5432` for `DATABASE_URL`, make sure `POSTGRES_PASSWORD` matches that URL, and run `npm run dev` from the repo root.
 
 ### Production concerns
 
@@ -314,6 +316,8 @@ flashquery/
 
 - [README](../README.md) — getting started, MCP client connection basics
 - [`DEPLOYMENT.md`](./DEPLOYMENT.md) — reverse-proxy setup, service supervision, backups, logging
+- [`Document Reference System.md`](./Document%20Reference%20System.md) — reference placeholders, section references, pointer dereferences, and templates
+- [`LLM Providers Models and Purposes.md`](./LLM%20Providers%20Models%20and%20Purposes.md) — provider/model/purpose configuration and purpose template tools
 - [`SECURITY-TOKENS.md`](./SECURITY-TOKENS.md) — bearer token authentication
 - [`client-configs/README.md`](./client-configs/README.md) — worked MCP client configuration examples
 - [`tests/scenarios/README.md`](../tests/scenarios/README.md) — scenario testing framework
