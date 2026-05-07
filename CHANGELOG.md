@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-05-07
+
+This release turns `call_model` into a bounded agentic delegation surface.
+Purposes can now expose native FlashQuery tools and template-backed skills to
+delegated models, with capability admission, loop guardrails, usage accounting,
+and discovery diagnostics built into the protocol.
+
+### Added
+- Managed tool loops for `call_model` purpose calls, including native FlashQuery
+  tool dispatch, final assistant envelopes, bounded iteration/cost/token/time
+  guardrails, cooperative shutdown handling, and `metadata.tools` diagnostics.
+- Purpose-level native tool exposure via configured tool tiers, explicit tool
+  names, and `excluded_tools`, with protected tools kept out of delegated
+  model-visible registries.
+- Template parameterization for document references via `template_params`,
+  including path-keyed templates, aliases with `_template`, ordered `_items`
+  lists, document parameters, defaults, and typed template validation failures
+  before provider dispatch.
+- Template-backed model-visible tools generated from vault documents with
+  `fq_template`, `fq_expose_as_tool`, `fq_namespace`, `fq_desc`, and `fq_params`
+  frontmatter.
+- Purpose template binding storage and startup sync through
+  `fqc_purpose_templates`, preserving runtime-over-YAML precedence and restoring
+  YAML bindings after runtime removal.
+- `call_model` `return_messages` support for execution calls, returning hydrated
+  input messages plus the final assistant message when requested.
+- `call_model` `resolver: "help"` for a no-network protocol help payload
+  covering execution, discovery, references, templates, tools, guardrails, and
+  examples.
+- Richer discovery diagnostics in `list_models`, `list_purposes`, and `search`,
+  including capability states, native tool diagnostics, template tool metadata,
+  dangling template paths, collisions, and help metadata.
+
+### Changed
+- **BREAKING:** `{{id:...}}` placeholders are now treated as literal text. Use
+  `{{ref:<fq_id>}}`, `{{ref:path}}`, `{{ref:path#Section}}`, or
+  `{{ref:path->pointer}}` for active document hydration.
+- `call_model` purpose execution now validates model capabilities before
+  provider dispatch when tools, templates, usage-on-tool-calls, or structured
+  outputs with tools are requested.
+- `list_purposes` now exposes fresh template-tool metadata from vault
+  frontmatter on each discovery call.
+- LLM configuration examples now include first-class purpose tooling, template
+  bindings, structured capability fields, local provider metadata, and loop
+  guardrail defaults.
+- Docker and setup guidance now align with the LLM configuration model and
+  bundled environment templates.
+
+### Fixed
+- Preserve unknown-purpose errors and make discovery/help diagnostics actionable
+  instead of collapsing distinct configuration failures.
+- Harden template tool dispatch with provider-safe generated names, reserved
+  `flashquery_` prefix handling, collision diagnostics, symlink rejection, and
+  reverse-map routing.
+- Preserve optional template parameters in strict schemas and reject plain
+  documents masquerading as invalid templates.
+- Keep aggregate usage rows correct for managed tool loops, including trace
+  filtering, direct model calls, and no-usage-row discovery/help/reference-failure
+  paths.
+- Keep the full-stack Docker Compose configuration on Docker-specific
+  environment wiring.
+- Fix the config-template preflight test harness so active `${OLLAMA_URL}`
+  example providers validate with the documented default.
+
 ## [1.3.0] - 2026-05-05
 
 This release introduces pass-by-reference document injection in `call_model`,
@@ -240,7 +304,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/FlashQuery/flashquery/compare/v1.3.0...v2.0.0
 [1.3.0]: https://github.com/FlashQuery/flashquery/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/FlashQuery/flashquery/compare/v1.1.1...v1.2.0
 [1.1.1]: https://github.com/FlashQuery/flashquery/compare/v1.1.0...v1.1.1
