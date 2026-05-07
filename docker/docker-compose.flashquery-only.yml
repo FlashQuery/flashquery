@@ -10,7 +10,7 @@ name: flashquery
 # - Vault data: mounted via VAULT_PATH environment variable
 # - Log files: mounted via LOG_PATH environment variable
 # - Both vault and logs directories are on host filesystem, accessible by host user
-# - Config: copied to image from flashquery.example.yaml, customized via environment variables
+# - Config: copied to image from flashquery.example.yml, customized via environment variables
 #
 # Usage:
 #   docker compose -f docker/docker-compose.flashquery-only.yml up -d
@@ -54,7 +54,7 @@ services:
       NODE_ENV: production
       VAULT_PATH: /app/vault
       LOG_PATH: /app/logs
-    command: start --transport http --config ./flashquery.yaml
+    command: start --transport http --config ./flashquery.yml
     volumes:
       - ${VAULT_PATH:-./vault}:/app/vault
       - ${LOG_PATH:-./logs}:/app/logs

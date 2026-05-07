@@ -7,8 +7,9 @@ name: flashquery
 #   docker compose -f docker/docker-compose.yml up -d
 #
 # Prerequisites:
-#   - Copy .env.example to .env and fill in values
-#   - POSTGRES_PASSWORD must be set in .env (no default — fail loudly)
+#   - Run `npm run setup` and choose the bundled Docker stack, or copy
+#     docker/.env.docker.example to docker/.env.docker and fill in values
+#   - POSTGRES_PASSWORD must be set in docker/.env.docker (no default — fail loudly)
 #   - VAULT_PATH defaults to ./vault (relative to repo root)
 #
 # After startup:
@@ -161,7 +162,12 @@ services:
       LOG_PATH: /app/logs
       LOG_LEVEL: ${LOG_LEVEL:-info}
       MCP_AUTH_SECRET: ${MCP_AUTH_SECRET:-ci-smoke-test-secret}
-    command: start --transport http --config ./flashquery.yaml
+      INSTANCE_NAME: ${INSTANCE_NAME:-FlashQuery}
+      INSTANCE_ID: ${INSTANCE_ID:-flashquery-docker-01}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OLLAMA_URL: ${OLLAMA_URL:-http://localhost:11434}
+    command: start --transport http --config ./flashquery.yml
     volumes:
       - ${VAULT_PATH:-./vault}:/app/vault
       - ${LOG_PATH:-./logs}:/app/logs
