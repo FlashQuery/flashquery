@@ -12,11 +12,12 @@ Local-first data management layer for AI workflows — save and search memories,
 
 ## What it is
 
-FlashQuery is a persistent data layer for AI workflows. It sits between AI tools (Claude, Cursor, ChatGPT) and your data, managing three things:
+FlashQuery is a persistent data layer for AI workflows. It sits between AI tools (Claude, Cursor, ChatGPT) and your data, managing four things:
 
 - **Memories** — semantic, searchable summaries of conversations, indexed with vector embeddings.
 - **Documents** — markdown files in a vault you own and can version in Obsidian.
 - **Relational records** — structured data in your Supabase instance (via plugins).
+- **LLM delegation** — cost-tracked `call_model` calls through configured models and purposes, including document reference hydration and FlashQuery-managed tool loops.
 
 Every interaction an AI has with FlashQuery is logged and searchable. When Claude asks for "memories about the project," FlashQuery retrieves relevant stored summaries using vector search. When it creates a new meeting note, the note is saved both to your vault (as markdown) and indexed in the database. You own all of it — no vendor lock-in, no training on your data.
 
@@ -39,7 +40,7 @@ You need:
   - **Supabase Cloud** — free project at [supabase.com](https://supabase.com), nothing to install
   - **Bundled Docker stack** — Docker Desktop (or Engine + Compose) is all you need;  FlashQuery's setup can provision Supabase for you automatically
   - **Existing self-hosted Supabase** — if you already run one
-- A **model provider** for semantic search and LLM features — [OpenAI](https://platform.openai.com/api-keys), [OpenRouter](https://openrouter.ai/keys), or local [Ollama](https://ollama.ai) all work. The setup script walks you through picking one. OpenAI is the default (`OPENAI_API_KEY` covers both embedding and LLM out of the box); Ollama requires no API key at all. Individual providers for embedding and LLM can be configured independently in `flashquery.yml`
+- An **OpenAI API key** for the default semantic search and LLM configuration. FlashQuery can also use OpenRouter-compatible endpoints or local Ollama models, but those are configured by editing the `llm:` providers, models, and purposes in `flashquery.yml` after setup.
 
 > **Node.js 18:** Will install and start FlashQuery but `npm install` shows an `EBADENGINE` warning and `supabase-js` logs a runtime deprecation notice. Node 20 LTS is required for supported operation.
 
@@ -241,10 +242,7 @@ SUPABASE_SERVICE_ROLE_KEY=...
 DATABASE_URL=postgresql://postgres:...@db.xxx.supabase.co:5432/postgres
 INSTANCE_NAME=My FlashQuery
 VAULT_PATH=./vault
-EMBEDDING_PROVIDER=openai  # openai | openrouter | ollama | none
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_API_KEY=sk-...
-OPENAI_API_KEY=sk-...      # for LLM features; auto-synced when EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=sk-...      # default key for semantic search and LLM features
 LOG_LEVEL=info
 ```
 

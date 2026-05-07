@@ -24,9 +24,6 @@
 #   INSTANCE_NAME=My FlashQuery
 #   INSTANCE_ID=i-123456
 #   VAULT_PATH=./vault
-#   EMBEDDING_PROVIDER=openai
-#   EMBEDDING_MODEL=text-embedding-3-small
-#   EMBEDDING_API_KEY=sk-...
 #   OPENAI_API_KEY=sk-...
 #   LOG_LEVEL=info
 # ============================================================================
@@ -287,7 +284,6 @@ if [ -f ".env" ]; then
   echo "  • INSTANCE_ID       — every DB row is tagged with this"
   echo "  • SUPABASE_URL      — points FlashQuery at a specific backend"
   echo "  • DATABASE_URL      — ditto"
-  echo "  • EMBEDDING_MODEL   — changes make existing embeddings invalid"
 else
   echo "This script will generate ./.env and ./flashquery.yml for your"
   echo "FlashQuery Core installation. If you're using the bundled Docker"
@@ -299,8 +295,7 @@ echo ""
 load_env_keys ".env" \
   SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY DATABASE_URL \
   INSTANCE_NAME INSTANCE_ID VAULT_PATH \
-  EMBEDDING_PROVIDER EMBEDDING_API_KEY EMBEDDING_MODEL OLLAMA_URL \
-  OPENAI_API_KEY \
+  OPENAI_API_KEY OLLAMA_URL \
   MCP_AUTH_SECRET LOG_LEVEL NODE_ENV
 load_env_keys "docker/.env.docker" \
   POSTGRES_PASSWORD SUPABASE_JWT_SECRET SUPABASE_ANON_KEY LOG_PATH
@@ -316,8 +311,7 @@ if [ -n "$ANSWERS_FILE" ]; then
     SUPABASE_CHOICE \
     SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY DATABASE_URL \
     INSTANCE_NAME INSTANCE_ID VAULT_PATH \
-    EMBEDDING_PROVIDER EMBEDDING_API_KEY EMBEDDING_MODEL OLLAMA_URL \
-    OPENAI_API_KEY \
+    OPENAI_API_KEY OLLAMA_URL \
     LOG_LEVEL NODE_ENV
   printf "%b[non-interactive] Using answers file: %s%b\n" "$CYAN" "$ANSWERS_FILE" "$RESET"
 fi
@@ -437,63 +431,14 @@ echo "--- Vault ---"
 echo "Path to your markdown vault (Obsidian-compatible directory)."
 prompt_required VAULT_PATH "Vault path (absolute or relative)" "${VAULT_PATH:-./vault}"
 
-# ─── Step 4: Embedding ───────────────────────────────────────────────────────
+# ─── Step 4: LLM provider key ────────────────────────────────────────────────
 echo ""
-echo "--- Embedding Provider (semantic search) ---"
-echo "  openai     — OpenAI API (requires EMBEDDING_API_KEY)"
-echo "  openrouter — OpenRouter API (requires EMBEDDING_API_KEY)"
-echo "  ollama     — Local Ollama (no API key needed)"
-echo "  none       — Disable semantic search entirely"
-prompt_enum EMBEDDING_PROVIDER "Embedding provider" "openai|openrouter|ollama|none" "${EMBEDDING_PROVIDER:-openai}"
-
-case "$EMBEDDING_PROVIDER" in
-  openai)      DEFAULT_MODEL="text-embedding-3-small" ;;
-  openrouter)  DEFAULT_MODEL="openai/text-embedding-3-small" ;;
-  ollama)      DEFAULT_MODEL="nomic-embed-text" ;;
-  none)        DEFAULT_MODEL="" ;;
-esac
-if [ -n "${EMBEDDING_MODEL:-}" ]; then
-  DEFAULT_MODEL="$EMBEDDING_MODEL"
-fi
-
-if [ "$EMBEDDING_PROVIDER" = "none" ]; then
-  EMBEDDING_MODEL=""
-  EMBEDDING_API_KEY=""
-else
-  OLD_EMBEDDING_MODEL="${EMBEDDING_MODEL:-}"
-  prompt_required EMBEDDING_MODEL "Embedding model" "$DEFAULT_MODEL"
-  warn_on_change "$OLD_EMBEDDING_MODEL" "$EMBEDDING_MODEL" "EMBEDDING_MODEL" \
-    "Existing embeddings were generated with the old model and won't match the new one. Semantic search on previously-indexed documents may return poor or empty results until they are re-embedded. Also verify that 'dimensions' in flashquery.yml matches the new model's native size (1536 for text-embedding-3-small, 3072 for text-embedding-3-large, 768 for nomic-embed-text)." \
-    || EMBEDDING_MODEL="$OLD_EMBEDDING_MODEL"
-  if [ "$EMBEDDING_PROVIDER" = "ollama" ]; then
-    EMBEDDING_API_KEY="${EMBEDDING_API_KEY:-}"  # Ollama uses no key; keep whatever's there
-    prompt_required OLLAMA_URL "Ollama base URL" "${OLLAMA_URL:-http://localhost:11434}"
-  else
-    OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"  # keep default; not used for this provider
-    prompt_required EMBEDDING_API_KEY "Embedding API key" "${EMBEDDING_API_KEY:-}"
-  fi
-fi
-
-# ─── Step 4b: LLM provider key ───────────────────────────────────────────────
-# flashquery.yml ships with the llm: section enabled and OpenAI as the default
-# LLM provider (call_model, and future AI features like projections and
-# auto-tagging). OpenAI embedding users can reuse their embedding key — it is
-# synced automatically. Other providers need a separate OpenAI key here, or can
-# comment out the llm: section in flashquery.yml to disable LLM features.
-if [ "$EMBEDDING_PROVIDER" = "openai" ]; then
-  OPENAI_API_KEY="${EMBEDDING_API_KEY:-}"
-else
-  echo ""
-  echo "--- LLM Provider ---"
-  echo "flashquery.yml ships with OpenAI as the default LLM provider (call_model"
-  echo "and future AI features like projections and auto-tagging)."
-  echo "OpenRouter and Ollama are also supported — edit the llm: section in"
-  echo "flashquery.yml to use a different provider. The commented examples in"
-  echo "the file show how to configure each one."
-  echo "Leave blank if you plan to use a non-OpenAI provider or want to set"
-  echo "it up later."
-  prompt_with_default OPENAI_API_KEY "OpenAI API key (for LLM features)" "${OPENAI_API_KEY:-}"
-fi
+echo "--- LLM Provider ---"
+echo "flashquery.yml ships with OpenAI as the default provider for semantic"
+echo "search and call_model. OpenRouter-compatible endpoints and Ollama are"
+echo "also supported by editing the llm: section in flashquery.yml after setup."
+echo "Leave blank if you plan to configure a non-OpenAI provider later."
+prompt_with_default OPENAI_API_KEY "OpenAI API key" "${OPENAI_API_KEY:-}"
 
 # ─── Step 5: Logging ─────────────────────────────────────────────────────────
 echo ""
@@ -548,12 +493,8 @@ fi
 # doesn't exist yet (user may have filled in values we shouldn't overwrite).
 ENV_TEST_WRITTEN=""
 if [ "$SUPABASE_CHOICE" = "3" ] || [ ! -f ".env.test" ]; then
-  # OPENAI_API_KEY in .env.test comes from EMBEDDING_API_KEY when using openai/openrouter.
-  # Ollama and "none" providers leave it blank — embedding tests will skip.
-  TEST_OPENAI_API_KEY=""
-  if [ "$EMBEDDING_PROVIDER" = "openai" ] || [ "$EMBEDDING_PROVIDER" = "openrouter" ]; then
-    TEST_OPENAI_API_KEY="${EMBEDDING_API_KEY:-}"
-  fi
+  # OPENAI_API_KEY in .env.test mirrors the default LLM/embedding provider key.
+  TEST_OPENAI_API_KEY="${OPENAI_API_KEY:-}"
   TEST_OLLAMA_URL="${OLLAMA_URL:-http://localhost:11434}"
 
   cat > ".env.test" <<EOF
