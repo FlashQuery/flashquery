@@ -29,6 +29,7 @@ import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost } from '../../llm/cost-tracker.js';
 import { executeAgentLoop } from '../../llm/agent-loop.js';
 import { assertResponseFormatAllowedWithTools, modelCapabilitiesWithDefaults } from '../../llm/capabilities.js';
+import { buildCallModelHelpContent, CALL_MODEL_RESOLVERS } from '../../llm/help-content.js';
 import type { CallModelEnvelope, CallModelMessage, CallModelMetadata, LlmChatResult } from '../../llm/types.js';
 import {
   assembleNativeToolRegistry,
@@ -296,20 +297,20 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
     {
       description:
         "Call any configured LLM model directly (resolver='model') or via a named purpose with fallback chain (resolver='purpose'). " +
-        "Discovery resolvers (resolver='list_models'/'list_purposes'/'search') return configuration data with no LLM call — name and messages are not required for these. " +
+        "Discovery resolvers (resolver='list_models'/'list_purposes'/'search'/'help') return configuration data with no LLM call — name and messages are not required for these. " +
         "For 'search', supply parameters.query as the search string (case-insensitive substring match on name and description). " +
         "Returns the model's text response plus a diagnostic envelope with provider, token usage, computed cost (USD), and latency. " +
         "When trace_id is provided, the call is recorded with that ID and the response includes cumulative stats across all calls sharing that trace_id. " +
         "When trace_id is omitted, the trace_id and trace_cumulative fields are absent from the metadata object entirely — the keys are not present, not null. " +
         "Note: messages are forwarded to the provider as-is — prompt safety is the caller's responsibility.",
       inputSchema: {
-        resolver: z.enum(['model', 'purpose', 'list_models', 'list_purposes', 'search']).describe(
+        resolver: z.enum(CALL_MODEL_RESOLVERS).describe(
           "'model' to call a specific model alias directly; 'purpose' to walk a named purpose's fallback chain. " +
-          "'list_models' / 'list_purposes' / 'search' return configuration data without making an LLM call (no messages required)."
+          "'list_models' / 'list_purposes' / 'search' / 'help' return configuration data without making an LLM call (no messages required)."
         ),
         name: z.string().optional().describe(
           'Model alias (when resolver=model) or purpose name (when resolver=purpose). ' +
-          'Ignored for discovery resolvers (list_models/list_purposes/search).'
+          'Ignored for discovery resolvers (list_models/list_purposes/search/help).'
         ),
         messages: z
           .array(callModelMessageSchema)
@@ -337,6 +338,12 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
         return {
           content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed.' }],
           isError: true,
+        };
+      }
+
+      if (params.resolver === 'help') {
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(buildCallModelHelpContent()) }],
         };
       }
 
