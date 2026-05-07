@@ -4,7 +4,9 @@ name: flashquery
 # Starts FlashQuery (HTTP transport) + Postgres/pgvector + PostgREST + GoTrue + Kong + Studio
 #
 # Usage:
-#   docker compose -f docker/docker-compose.yml up -d
+#   make up
+#   # or, from the repo root:
+#   docker compose --env-file docker/.env.docker -f docker/docker-compose.yml up -d
 #
 # Prerequisites:
 #   - Run `npm run setup` and choose the bundled Docker stack, or copy
@@ -13,13 +15,14 @@ name: flashquery
 #   - VAULT_PATH defaults to ./vault (relative to repo root)
 #
 # After startup:
-#   - FlashQuery HTTP MCP endpoint: http://localhost:3100/mcp  ← only port exposed to host
+#   - FlashQuery HTTP MCP endpoint: http://localhost:3100/mcp
+#   - Supabase API gateway: http://localhost:8000
+#   - Postgres: localhost:5432
 #
-# Supabase services (postgres, postgrest, gotrue, kong, studio) are internal to
-# the Compose network — they communicate by service name and are NOT bound to host
-# ports. This prevents conflicts with any external Supabase instance running on
-# the host. If you need direct host access to a service (e.g. Supabase Studio at
-# :3001 or Postgres at :5432 for a SQL client), uncomment its ports: block below.
+# PostgREST, GoTrue, and Studio are internal to the Compose network by default.
+# Kong exposes the Supabase API gateway on :8000, and Postgres is exposed on
+# :5432 for host-side tools and tests. If you need direct host access to an
+# internal service, uncomment that service's ports: block below.
 
 services:
 
@@ -164,6 +167,8 @@ services:
       MCP_AUTH_SECRET: ${MCP_AUTH_SECRET:-ci-smoke-test-secret}
       INSTANCE_NAME: ${INSTANCE_NAME:-FlashQuery}
       INSTANCE_ID: ${INSTANCE_ID:-flashquery-docker-01}
+      # LLM provider variables consumed by flashquery.yml. Providers use these
+      # values for endpoints/API keys; models and purposes are selected in YAML.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OLLAMA_URL: ${OLLAMA_URL:-http://localhost:11434}

@@ -512,13 +512,18 @@ MCP_AUTH_SECRET=${MCP_AUTH_SECRET}
 # Required for disk-verify steps in the scenario test suite
 VAULT_PATH=${VAULT_PATH}
 
-# Required for embedding tests AND LLM directed scenarios
+# Required for embedding tests and LLM integration/directed scenarios that use
+# the default OpenAI-backed test provider/model/purpose configuration.
+# If you customize test fixtures to use a different provider, define the key
+# referenced by that provider's api_key field instead.
 OPENAI_API_KEY=${TEST_OPENAI_API_KEY}
 
-# Optional — only needed for Ollama embedding tests
+# Optional — used by tests or fixtures that configure an Ollama llm.provider.
+# Ollama usually does not require an API key.
 OLLAMA_URL=${TEST_OLLAMA_URL}
 
-# Optional — only needed for multi-provider LLM directed scenarios
+# Optional — used by multi-provider tests or fixtures that configure an
+# OpenRouter llm.provider with api_key: \${OPENROUTER_API_KEY}.
 # OPENROUTER_API_KEY=
 EOF
   ENV_TEST_WRITTEN=1
@@ -567,8 +572,10 @@ if [ "$SUPABASE_CHOICE" = "3" ]; then
   echo "       ./setup/setup-claude-mcp.sh"
   echo "       # or read MCP_AUTH_SECRET from .env for manual client config."
   echo ""
-  echo "  4. Supabase Studio (admin UI) will be available at:"
-  echo "       http://localhost:3001"
+  echo "  4. Supabase API gateway will be available at:"
+  echo "       http://localhost:8000"
+  echo "       # Supabase Studio is internal by default; expose :3001 in"
+  echo "       # docker/docker-compose.yml if you want the admin UI."
   echo ""
 else
   echo "Next steps:"
