@@ -122,6 +122,11 @@ llm:
       endpoint: ${JSON.stringify(provider.endpoint)}
       api_key: sk-test
   models:
+    - name: fast
+      provider_name: mock
+      model: agent-model
+      type: language
+      cost_per_million: { input: 1, output: 2 }
     - name: agent-model
       provider_name: mock
       model: agent-model
@@ -144,6 +149,17 @@ llm:
         strict_tools: true
         parallel_tool_calls: true
         structured_outputs_with_tools: true
+    - name: structured-incompatible-model
+      provider_name: mock
+      model: structured-incompatible-model
+      type: language
+      cost_per_million: { input: 1, output: 2 }
+      capabilities:
+        tool_calling: true
+        usage_on_tool_calls: true
+        strict_tools: true
+        parallel_tool_calls: true
+        structured_outputs_with_tools: false
   purposes:
     - name: agentic
       description: Agent loop test purpose
@@ -153,6 +169,13 @@ llm:
         max_iterations: 4
         timeout_ms: 10000
         max_tokens: 64
+    - name: structured_fail
+      description: ATL-E2E-08 structured output compatibility failure
+      models: [structured-incompatible-model]
+      tools: [get_document]
+      defaults:
+        max_iterations: 2
+        timeout_ms: 10000
 `;
   await writeFile(configPath, config);
 
@@ -163,10 +186,20 @@ llm:
     env: process.env as Record<string, string>,
     cwd: projectRoot,
   });
+  const stderrLines: string[] = [];
+  transport.stderr?.on('data', (data: Buffer) => {
+    stderrLines.push(data.toString('utf-8'));
+  });
   const client = new Client({ name: 'agent-loop-e2e', version: '1.0.0' });
   try {
     await client.connect(transport);
     return await fn(client);
+  } catch (error) {
+    const stderr = stderrLines.join('').trim();
+    if (stderr.length > 0) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)}\nSubprocess stderr:\n${stderr}`);
+    }
+    throw error;
   } finally {
     await client.close().catch(() => undefined);
     await transport.close().catch(() => undefined);
@@ -184,6 +217,49 @@ async function callModel(client: Client, args: Record<string, unknown>): Promise
 }
 
 describe('call_model agent-loop public E2E contracts', () => {
+  it('ATL-E2E-01 preserves Mode 1 envelope compatibility, return_messages, and raw discovery shape', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('ATL-E2E-01 mode one complete', 9, 4),
+    ]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const envelope = await callModel(client, {
+          resolver: 'model',
+          name: 'fast',
+          messages: [{ role: 'user', content: 'ATL-E2E-01 mode one compatibility.' }],
+          return_messages: true,
+        });
+        expect(envelope).toMatchObject({
+          response: 'ATL-E2E-01 mode one complete',
+          messages: [
+            expect.objectContaining({ role: 'user', content: 'ATL-E2E-01 mode one compatibility.' }),
+            expect.objectContaining({ role: 'assistant', content: 'ATL-E2E-01 mode one complete' }),
+          ],
+          metadata: expect.any(Object),
+        });
+        expect((envelope.metadata as { tools?: unknown }).tools).toBeUndefined();
+
+        const discoveryResult = await client.callTool({
+          name: 'call_model',
+          arguments: { resolver: 'list_models', return_messages: true },
+        }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+        expect(discoveryResult.isError).toBeFalsy();
+        const discovery = JSON.parse(discoveryResult.content[0].text) as Record<string, unknown>;
+        expect(discovery).toMatchObject({
+          models: expect.arrayContaining([
+            expect.objectContaining({ name: 'fast', provider: 'mock' }),
+          ]),
+        });
+        expect(discovery).not.toHaveProperty('response');
+        expect(discovery).not.toHaveProperty('messages');
+        expect(discovery).not.toHaveProperty('metadata');
+      });
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
   it('ATL-E2E-02 runs a native tool loop and returns final_response calls_log metadata', async () => {
     const provider = new ScriptedOpenAiProvider([
       toolCallResponse([{ id: 'call_search_1', name: 'search_documents', args: { query: 'ATL-E2E-02' } }]),
@@ -304,6 +380,31 @@ describe('call_model agent-loop public E2E contracts', () => {
         expect(result.content[0].text).toMatch(/caller-provided|Mode 3|deferred/i);
       });
       expect(provider.requests.length).toBe(0);
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('ATL-E2E-08 rejects response_format with model-visible tools before provider dispatch when capabilities are incompatible', async () => {
+    const provider = new ScriptedOpenAiProvider([finalTextResponse('should not dispatch', 1, 1)]);
+    await provider.start();
+    try {
+      await withManagedMcp(provider, async (client) => {
+        const result = await client.callTool({
+          name: 'call_model',
+          arguments: {
+            resolver: 'purpose',
+            name: 'structured_fail',
+            messages: [{ role: 'user', content: 'ATL-E2E-08 incompatible provider capability should fail.' }],
+            parameters: {
+              response_format: { type: 'json_object' },
+            },
+          },
+        }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/response_format|structured_outputs_with_tools|capabil/i);
+      });
+      expect(provider.requests).toHaveLength(0);
     } finally {
       await provider.stop();
     }
