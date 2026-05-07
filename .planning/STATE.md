@@ -4,14 +4,14 @@ milestone: v3.2
 milestone_name: Agentic LLM Tools
 status: executing
 stopped_at: Completed 119-02-PLAN.md
-last_updated: "2026-05-07T00:06:21.000Z"
+last_updated: "2026-05-07T00:16:51.000Z"
 last_activity: 2026-05-07
 progress:
   total_phases: 23
   completed_phases: 7
   total_plans: 36
-  completed_plans: 34
-  percent: 94
+  completed_plans: 35
+  percent: 97
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-05)
 
 Phase: 119 (discovery-diagnostics-help-resolver) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Validation gate green; summary pending
 Last activity: 2026-05-07
 
 ## Performance Metrics
@@ -76,6 +76,7 @@ Last activity: 2026-05-07
 | Phase 118 P05 | 12min | 2 tasks | 10 files |
 | Phase 119 P01 | 6min | 3 tasks | 6 files |
 | Phase 119 P02 | 5min | 2 tasks | 7 files |
+| Phase 119 P03 | 7min | 2 tasks | 7 files |
 
 ## Decisions
 
@@ -114,6 +115,7 @@ Last activity: 2026-05-07
 - [Phase 119]: Help resolver tests require raw JSON outside CallModelEnvelope and assert stable top-level key order.
 - [Phase 119]: The help resolver short-circuits before the LLM client guard so unconfigured clients can still retrieve protocol help.
 - [Phase 119]: Search indexes names, descriptions, resolver/help keys, and structured diagnostic metadata without indexing document or template bodies.
+- [Phase 119]: Public directed validation asserts discovery/help behavior through MCP response JSON only, not provider request capture or source inspection.
 
 ## Accumulated Context
 
@@ -195,8 +197,8 @@ Last activity: 2026-05-07
 
 ## Session Continuity
 
-Last session: 2026-05-07T00:06:21.000Z
-Stopped at: Completed 119-02-PLAN.md
+Last session: 2026-05-07T00:16:51.000Z
+Stopped at: Completed 119-03 validation gate
 Resume: None
 
 ## Deferred Items

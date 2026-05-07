@@ -692,6 +692,11 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-93 | ATL-DS-10: Public template-tool Mode 2 loop dispatches `flashquery_skill_research_skill`, hydrates string and document parameters into a tool result, appends tool history, and lets the delegated model return a final response | test_call_model_agent_loop_template_tool | 2026-05-06 | 2026-05-06 |
 | L-94 | ATL-DS-11: Public mixed native/template Mode 2 loop exposes `search_documents` and `flashquery_skill_research_skill` together, dispatches both in one assistant turn, and records `kind: native` plus `kind: template` calls-log entries | test_call_model_agent_loop_mixed_tools | 2026-05-06 | 2026-05-06 |
 | L-95 | VAL-118: Phase 118 final validation passes deterministic unit, integration, E2E, directed scenario, lint, and build gates for fresh discovery, generated names, collision diagnostics, reverse-map dispatch, template invocation, typed template-tool errors, and mixed native/template loops | tests/unit/llm-template-tools.test.ts; tests/integration/template-tools.integration.test.ts; tests/e2e/call-model-template-tools.e2e.test.ts; test_call_model_template_discovery; test_call_model_template_tool_conflicts; test_call_model_agent_loop_template_tool; test_call_model_agent_loop_mixed_tools | 2026-05-06 | 2026-05-06 |
+| L-96 | DISC-01: Public `list_purposes` discovery exposes native tool names, native tool diagnostics, template tools, template warnings, template conflicts, and dangling template paths through MCP JSON only | test_discovery_resolvers | 2026-05-07 | 2026-05-07 |
+| L-97 | DISC-02: Public `list_models` discovery exposes structured capability diagnostics with `supported`, `unknown_declaration`, and `declared_unsupported` states plus remediation guidance | test_discovery_resolvers | 2026-05-07 | 2026-05-07 |
+| L-98 | DISC-03: Public `search` discovery matches model and purpose metadata for capability keys, usage-on-tool-calls, template diagnostics, dangling template paths, and help metadata without requiring messages | test_discovery_resolvers | 2026-05-07 | 2026-05-07 |
+| L-99 | ATL-DS-15 / DISC-04: Public `resolver="help"` returns raw JSON with stable top-level keys, resolver list, Mode 1/Mode 2/reference/template/tool/guardrail/discovery/example sections, and no CallModelEnvelope-only keys | test_call_model_help_resolver | 2026-05-07 | 2026-05-07 |
+| L-100 | VAL-119: Phase 119 final validation passes lint, focused unit tests, managed public discovery/help directed scenarios, and build for discovery diagnostics, search metadata, and the help resolver | tests/unit/llm-tool.test.ts; tests/unit/llm-template-tools.test.ts; tests/unit/llm-tool-registry.test.ts; test_discovery_resolvers; test_call_model_help_resolver | 2026-05-07 | 2026-05-07 |
 
 ---
 
@@ -803,6 +808,19 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 - L-95: VAL-118 final green validation gate across unit, integration, E2E, directed, lint, and build checks.
 
 **Resolution (2026-05-06)**: Added final Phase 118 coverage rows and ran the full gate: `npm run lint && npm test -- tests/unit/llm-template-tools.test.ts tests/unit/llm-tool-registry.test.ts tests/unit/llm-tool-dispatcher.test.ts tests/unit/llm-agent-loop.test.ts tests/unit/llm-tool.test.ts && npm run test:integration -- tests/integration/template-tools.integration.test.ts && npm run test:e2e -- tests/e2e/call-model-template-tools.e2e.test.ts && python3 tests/scenarios/directed/testcases/test_call_model_template_discovery.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_template_tool_conflicts.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_template_tool.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_agent_loop_mixed_tools.py --managed && npm run build`. All gates passed with deterministic local mock providers.
+
+---
+
+### Phase 119 discovery diagnostics and help resolver — L-96, L-97, L-98, L-99, L-100
+
+**Behaviors covered**
+- L-96: DISC-01 public `list_purposes` diagnostics for native tools, template tools, warnings, conflicts, and dangling bindings.
+- L-97: DISC-02 public `list_models` capability diagnostics with supported/unknown/unsupported states.
+- L-98: DISC-03 public `search` metadata matching for capability keys, template diagnostics, dangling paths, and help terms.
+- L-99: ATL-DS-15 / DISC-04 raw JSON help resolver shape and section coverage.
+- L-100: VAL-119 final green validation gate across lint, unit, directed, and build checks.
+
+**Resolution (2026-05-07)**: Added final Phase 119 coverage rows and ran the full gate: `npm run lint && npm test -- tests/unit/llm-tool.test.ts tests/unit/llm-template-tools.test.ts tests/unit/llm-tool-registry.test.ts && python3 tests/scenarios/directed/testcases/test_discovery_resolvers.py --managed && python3 tests/scenarios/directed/testcases/test_call_model_help_resolver.py --managed && npm run build`. All gates passed with managed public MCP scenarios; no directed assertion reads private provider request capture or implementation modules.
 
 ---
 
@@ -1458,6 +1476,12 @@ Covers: L-68, L-69, L-70
 
 ### test_call_model_agent_loop_capabilities
 Covers: L-84, ATL-DS-14, VAL-115
+
+### test_discovery_resolvers
+Covers: L-39f, L-39g, L-39h, L-39h_purposes, L-96, L-97, L-98, VAL-119
+
+### test_call_model_help_resolver
+Covers: L-99, ATL-DS-15, VAL-119
 
 ---
 

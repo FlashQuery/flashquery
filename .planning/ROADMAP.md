@@ -21,7 +21,7 @@
 - ✅ **v2.9 Filesystem Primitive Tools** — Phases 90-97 (shipped 2026-04-25)
 - ✅ **v3.0 Native LLM Access** — Phases 98-106 (shipped 2026-04-30)
 - ✅ **v3.1 Call Model With Reference** — Phases 107-110 + 111 (CMR verification fixes) (shipped 2026-05-05)
-- ◆ **v3.2 Agentic LLM Tools** — Phases 112-120 (executing)
+- ◆ **v3.2 Agentic LLM Tools** — Phases 112-120 (executing; Phase 119 complete)
 
 ## Phases
 
@@ -100,10 +100,10 @@ Requirements snapshot: [milestones/v3.1-REQUIREMENTS.md](milestones/v3.1-REQUIRE
 - [x] **Phase 116: Model-Visible Tool Registry** - Purpose-level native tool exposure, exclusions, hard-exclusion warnings, schema translation, strict tool definitions, and runnable validation (TOOL-01 through TOOL-04, VAL-116) — Complete 2026-05-06
 - [x] **Phase 117: Agent Loop Executor** - Mode 2 loop orchestration, internal native dispatch, parallel tool calls, guardrails, fallback, aggregate usage writes, calls log metadata, and runnable validation (LOOP-01 through LOOP-07, TOOL-05, TOOL-06, VAL-117) — Complete 2026-05-06
 - [x] **Phase 118: Template Discovery & Masquerade Dispatch** - Fresh vault template discovery, generated provider-safe `flashquery_<namespace>_<slug>` tools, collision-safe reverse map, template tool dispatch, and runnable validation (TMPL-06 through TMPL-08, VAL-118) — Complete 2026-05-06
-- [ ] **Phase 119: Discovery Diagnostics & Help Resolver** - Extended `list_purposes`, structured capability diagnostics in `list_models`, discovery `search`, v1 `help` resolver, and runnable validation (DISC-01 through DISC-04, VAL-119)
+- [x] **Phase 119: Discovery Diagnostics & Help Resolver** - Extended `list_purposes`, structured capability diagnostics in `list_models`, discovery `search`, v1 `help` resolver, and runnable validation (DISC-01 through DISC-04, VAL-119) — Complete 2026-05-07
 - [ ] **Phase 120: Cross-Phase ATL Validation & Coverage Closure** - End-to-end workflow suites, YAML integration closure, scenario matrix updates, and final coverage audit (VAL-120, TEST-04)
 
-**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (54/62 requirements complete).
+**Requirements snapshot:** [REQUIREMENTS.md](REQUIREMENTS.md) (60/62 requirements complete).
 
 </details>
 
@@ -296,7 +296,7 @@ Plans:
   4. `help` explains Mode 1, Mode 2, references, templates, tools, guardrails, and discovery usage in a machine-readable shape.
   5. Discovery calls remain outside the `CallModelEnvelope` and ignore `return_messages`.
   6. Phase-specific runnable tests exist and pass for `list_purposes`, `list_models`, discovery `search`, `help`, and public diagnostics.
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 Plans:
 **Wave 0**
 - [x] 119-01-PLAN.md — RED contracts for help, discovery diagnostics, search metadata, and directed help skeleton
@@ -305,7 +305,7 @@ Plans:
 - [x] 119-02-PLAN.md — Help resolver, discovery content helpers, capability diagnostics, and resolver dispatch
 
 **Wave 2** *(blocked on 119-02 completion)*
-- [ ] 119-03-PLAN.md — Public directed scenarios, coverage ledgers, validation sign-off, and full gate
+- [x] 119-03-PLAN.md — Public directed scenarios, coverage ledgers, validation sign-off, and full gate
 **UI hint**: no
 
 ### Phase 120: Cross-Phase ATL Validation & Coverage Closure
