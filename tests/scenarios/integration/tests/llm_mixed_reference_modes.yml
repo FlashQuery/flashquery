@@ -82,7 +82,7 @@ steps:
               {{ref:_integration/Docs/atl-int-05-section.md#Target}}
               {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
               {{ref:@bundle}}
-              List the visible marker tokens.
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
       expect_contains: "DIRECT-MARK-05"
 
   - label: "ATL-INT-05: section marker is visible"
@@ -105,7 +105,7 @@ steps:
               {{ref:_integration/Docs/atl-int-05-section.md#Target}}
               {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
               {{ref:@bundle}}
-              List the visible marker tokens.
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
       expect_contains: "SECTION-MARK-05"
 
   - label: "ATL-INT-05: pointer target marker is visible"
@@ -128,7 +128,7 @@ steps:
               {{ref:_integration/Docs/atl-int-05-section.md#Target}}
               {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
               {{ref:@bundle}}
-              List the visible marker tokens.
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
       expect_contains: "POINTER-MARK-05"
 
   - label: "ATL-INT-05: alias _items plain document marker is visible"
@@ -151,7 +151,7 @@ steps:
               {{ref:_integration/Docs/atl-int-05-section.md#Target}}
               {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
               {{ref:@bundle}}
-              List the visible marker tokens.
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
       expect_contains: "ALIAS-LIST-A-05"
 
   - label: "ATL-INT-05: alias _items template object marker is visible"
@@ -174,5 +174,5 @@ steps:
               {{ref:_integration/Docs/atl-int-05-section.md#Target}}
               {{ref:_integration/Docs/atl-int-05-pointer-source.md->projections.summary}}
               {{ref:@bundle}}
-              List the visible marker tokens.
+              Find every uppercase marker token in the referenced content that ends with -05. Reply only with those marker tokens, separated by spaces.
       expect_contains: "ALIAS-TEMPLATE-B-05"
