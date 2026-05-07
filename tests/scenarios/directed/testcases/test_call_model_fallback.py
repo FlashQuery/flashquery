@@ -56,6 +56,7 @@ CONFIGURED_LLM = {
                 "model": "anything",
                 "type": "language",
                 "cost_per_million": {"input": 0, "output": 0},
+                "capabilities": {"tool_calling": True, "usage_on_tool_calls": True},
             },
         ],
         "purposes": [
