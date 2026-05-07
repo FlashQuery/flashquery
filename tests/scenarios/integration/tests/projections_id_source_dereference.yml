@@ -1,9 +1,9 @@
 name: projections_id_source_dereference
 description: >
-  Projections matrix — fq_id-source dereference. The {{id:<source-uuid>->projections.summary}}
+  Projections matrix — fq_id-source dereference. The {{ref:<source-uuid>->projections.summary}}
   placeholder resolves through the fq_id branch (looking up the source by UUID),
   then traverses the nested-key pointer (projections.summary) to find the
-  target document, and finally injects the target body. Confirms id-typed
+  target document, and finally injects the target body. Confirms fq_id-typed
   source resolution composes correctly with nested-key pointer traversal.
   Covers IX-15.
 coverage: [IX-15]
@@ -29,7 +29,7 @@ steps:
       projections:
         summary: "_integration/Test/ix15/target.md"
 
-  - label: "call_model with {{id:<source-uuid>->projections.summary}} injects target body"
+  - label: "call_model with {{ref:<source-uuid>->projections.summary}} injects target body"
     # Resolver looks up source by fq_id (UUID branch), then traverses the
     # nested key projections.summary to find the target path, then injects
     # the target body. The marker confirms the target body was injected.
@@ -40,7 +40,7 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{id:${source_doc.fq_id}->projections.summary}} What marker token appears in the document? Reply with just the token."
+            content: "{{ref:${source_doc.fq_id}->projections.summary}} What marker token appears in the document? Reply with just the token."
       expect_contains: "TGT-15-MARKER"
 
   - label: "Response metadata: injected_references entry has resolved_to with target path"
@@ -51,16 +51,16 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{id:${source_doc.fq_id}->projections.summary}} Reply OK."
+            content: "{{ref:${source_doc.fq_id}->projections.summary}} Reply OK."
       expect_contains: '"resolved_to":"_integration/Test/ix15/target.md"'
 
-  - label: "injected_references[].ref echoes the literal {{id:<uuid>->...}} placeholder"
+  - label: "injected_references[].ref echoes the literal {{ref:<uuid>->...}} placeholder"
     # Variable substitution does not apply to expect_contains, so we cannot
     # assert the exact UUID here. The "->projections.summary}}" suffix is a
     # stable signature: the resolver echoes the full placeholder in
     # injected_references[].ref (per L-27b directed test contract), so the
     # closing "->projections.summary}}" tail uniquely identifies an
-    # id-source-with-pointer placeholder echo.
+    # fq_id-source-with-pointer placeholder echo.
     assert:
       op: call_model
       args:
@@ -68,7 +68,7 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{id:${source_doc.fq_id}->projections.summary}} Reply OK."
+            content: "{{ref:${source_doc.fq_id}->projections.summary}} Reply OK."
       expect_contains: "->projections.summary}}"
 
   - label: "Source body must not leak — only target body is injected via -> dereference"
@@ -79,5 +79,5 @@ steps:
         name: fast
         messages:
           - role: user
-            content: "{{id:${source_doc.fq_id}->projections.summary}} Does the document contain the literal string 'must NOT be injected'? Reply YES or NO."
+            content: "{{ref:${source_doc.fq_id}->projections.summary}} Does the document contain the literal string 'must NOT be injected'? Reply YES or NO."
       expect_not_contains: "YES"
