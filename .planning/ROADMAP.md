@@ -322,7 +322,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
 **Wave 1**
-- [ ] 120-01-PLAN.md — Cross-phase E2E closure for ATL-E2E-01/08 and existing ATL E2E gate
+- [x] 120-01-PLAN.md — Cross-phase E2E closure for ATL-E2E-01/08 and existing ATL E2E gate
 - [ ] 120-02-PLAN.md — YAML integration closure for ATL-INT-01/02/03/05 and integration matrix rows
 - [ ] 120-03-PLAN.md — Directed matrix closure, L-90 disposition, and focused ATL directed suite
 
