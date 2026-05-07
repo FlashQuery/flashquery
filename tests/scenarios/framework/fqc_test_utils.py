@@ -508,6 +508,13 @@ class FQCServer:
             import shutil
             shutil.rmtree(self.vault_path, ignore_errors=True)
 
+    def signal_graceful_shutdown(self) -> bool:
+        """Send SIGTERM without waiting so in-flight public calls can drain."""
+        if not self._process or self._process.poll() is not None:
+            return False
+        self._process.send_signal(signal.SIGTERM)
+        return True
+
     def __enter__(self) -> "FQCServer":
         self.start()
         return self
