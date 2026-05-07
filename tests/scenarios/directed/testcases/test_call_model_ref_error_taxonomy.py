@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test: call_model reference resolution error taxonomy — pin failure reasons.
+Test: call_model reference resolution error taxonomy — pin reason codes and details.
 Coverage: L-54, L-55, L-56, L-57, L-58, L-61, L-62
 Modes:
     --managed   Required (starts dedicated FQC subprocess)
@@ -129,18 +129,22 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             resp = json.loads(r.text) if r.text else {}
             failed = resp.get("failed_references", [])
-            reason54 = (failed[0].get("reason") if failed else "") or ""
+            entry54 = failed[0] if failed else {}
+            reason54 = (entry54.get("reason") if entry54 else "") or ""
+            detail54 = (entry54.get("detail") if entry54 else "") or ""
             checks = {
                 "isError true": (not r.ok),
                 "error == reference_resolution_failed":
                     resp.get("error") == "reference_resolution_failed",
                 "failed has 1 entry": isinstance(failed, list) and len(failed) == 1,
-                "reason contains 'not found in frontmatter'":
-                    "not found in frontmatter" in reason54.lower(),
+                "reason == reference_path_not_found":
+                    reason54 == "reference_path_not_found",
+                "detail contains 'not found in frontmatter'":
+                    "not found in frontmatter" in detail54.lower(),
             }
-            run.step(label="L-54: missing pointer path → 'not found in frontmatter' reason",
+            run.step(label="L-54: missing pointer path → path-not-found reason code",
                      passed=all(checks.values()),
-                     detail=f"checks={checks}, reason={reason54!r}",
+                     detail=f"checks={checks}, reason={reason54!r}, detail={detail54!r}",
                      timing_ms=r.timing_ms, tool_result=r)
 
             # ── L-55: pointer resolves to non-string → "not a string" reason ──
@@ -151,27 +155,24 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             resp = json.loads(r.text) if r.text else {}
             failed = resp.get("failed_references", [])
-            reason55 = (failed[0].get("reason") if failed else "") or ""
-            # The implementation uses a single template across all non-string
-            # types: "Reference path 'X' resolved to a <found_type>, expected a
-            # string identifier" (per src/mcp/utils/document-output.ts:464).
-            # Match on the durable semantic phrasing — "expected a string" or
-            # "string identifier" — rather than the spec prose's older "not a
-            # string" wording. Either substring proves the failure communicates
-            # "expected string, got something else."
-            reason55_lc = reason55.lower()
+            entry55 = failed[0] if failed else {}
+            reason55 = (entry55.get("reason") if entry55 else "") or ""
+            detail55 = (entry55.get("detail") if entry55 else "") or ""
+            detail55_lc = detail55.lower()
             checks = {
                 "isError true": (not r.ok),
                 "error == reference_resolution_failed":
                     resp.get("error") == "reference_resolution_failed",
                 "failed has 1 entry": isinstance(failed, list) and len(failed) == 1,
-                "reason indicates non-string value":
-                    "expected a string" in reason55_lc
-                    or "string identifier" in reason55_lc,
+                "reason == reference_path_not_string":
+                    reason55 == "reference_path_not_string",
+                "detail indicates non-string value":
+                    "expected a string" in detail55_lc
+                    or "string identifier" in detail55_lc,
             }
-            run.step(label="L-55: pointer to non-string scalar → reason indicates non-string value",
+            run.step(label="L-55: pointer to non-string scalar → non-string reason code",
                      passed=all(checks.values()),
-                     detail=f"checks={checks}, reason={reason55!r}",
+                     detail=f"checks={checks}, reason={reason55!r}, detail={detail55!r}",
                      timing_ms=r.timing_ms, tool_result=r)
 
             # ── L-56: pointer resolves to nonexistent target document ──
@@ -182,24 +183,27 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             resp = json.loads(r.text) if r.text else {}
             failed = resp.get("failed_references", [])
-            reason56 = (failed[0].get("reason") if failed else "") or ""
+            entry56 = failed[0] if failed else {}
+            reason56 = (entry56.get("reason") if entry56 else "") or ""
+            detail56 = (entry56.get("detail") if entry56 else "") or ""
             checks = {
                 "isError true": (not r.ok),
                 "error == reference_resolution_failed":
                     resp.get("error") == "reference_resolution_failed",
                 "failed has 1 entry": isinstance(failed, list) and len(failed) == 1,
-                # spec: "target document not found" or normative equivalent.
-                # Use "not found" as substring check to be tolerant of wording.
-                "reason indicates target not found":
-                    "not found" in reason56.lower(),
+                "reason == pointer_target_not_found":
+                    reason56 == "pointer_target_not_found",
+                "detail indicates target not found":
+                    "not found" in detail56.lower(),
             }
-            run.step(label="L-56: pointer → nonexistent target → 'target document not found' reason",
+            run.step(label="L-56: pointer → nonexistent target → target-not-found reason code",
                      passed=all(checks.values()),
-                     detail=f"checks={checks}, reason={reason56!r}",
+                     detail=f"checks={checks}, reason={reason56!r}, detail={detail56!r}",
                      timing_ms=r.timing_ms, tool_result=r)
 
             # ── L-57a: placeholder with both -> and # (ptr#Sec ordering) ──
-            EXPECTED_57 = "invalid reference syntax: # and -> are mutually exclusive"
+            EXPECTED_57_REASON = "invalid_reference_syntax"
+            EXPECTED_57_DETAIL = "# and -> are mutually exclusive"
             r = client.call_tool(
                 "call_model", resolver="model", name="fast",
                 messages=[{"role": "user",
@@ -207,17 +211,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             resp = json.loads(r.text) if r.text else {}
             failed = resp.get("failed_references", [])
-            reason57a = (failed[0].get("reason") if failed else "") or ""
+            entry57a = failed[0] if failed else {}
+            reason57a = (entry57a.get("reason") if entry57a else "") or ""
+            detail57a = (entry57a.get("detail") if entry57a else "") or ""
             checks = {
                 "isError true": (not r.ok),
                 "error == reference_resolution_failed":
                     resp.get("error") == "reference_resolution_failed",
                 "failed has 1 entry": isinstance(failed, list) and len(failed) == 1,
-                "reason exact match (ptr#Sec ordering)": reason57a == EXPECTED_57,
+                "reason exact match (ptr#Sec ordering)": reason57a == EXPECTED_57_REASON,
+                "detail exact match (ptr#Sec ordering)": detail57a == EXPECTED_57_DETAIL,
             }
-            run.step(label="L-57a: '->ptr#Sec' ordering → exact 'mutually exclusive' reason",
+            run.step(label="L-57a: '->ptr#Sec' ordering → invalid syntax reason code",
                      passed=all(checks.values()),
-                     detail=f"checks={checks}, reason={reason57a!r}, expected={EXPECTED_57!r}",
+                     detail=f"checks={checks}, reason={reason57a!r}, detail={detail57a!r}",
                      timing_ms=r.timing_ms, tool_result=r)
 
             # ── L-57b: placeholder with both -> and # (#Sec->ptr ordering) ──
@@ -228,17 +235,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             resp = json.loads(r.text) if r.text else {}
             failed = resp.get("failed_references", [])
-            reason57b = (failed[0].get("reason") if failed else "") or ""
+            entry57b = failed[0] if failed else {}
+            reason57b = (entry57b.get("reason") if entry57b else "") or ""
+            detail57b = (entry57b.get("detail") if entry57b else "") or ""
             checks = {
                 "isError true": (not r.ok),
                 "error == reference_resolution_failed":
                     resp.get("error") == "reference_resolution_failed",
                 "failed has 1 entry": isinstance(failed, list) and len(failed) == 1,
-                "reason exact match (#Sec->ptr ordering)": reason57b == EXPECTED_57,
+                "reason exact match (#Sec->ptr ordering)": reason57b == EXPECTED_57_REASON,
+                "detail exact match (#Sec->ptr ordering)": detail57b == EXPECTED_57_DETAIL,
             }
-            run.step(label="L-57b: '#Sec->ptr' ordering → exact 'mutually exclusive' reason",
+            run.step(label="L-57b: '#Sec->ptr' ordering → invalid syntax reason code",
                      passed=all(checks.values()),
-                     detail=f"checks={checks}, reason={reason57b!r}, expected={EXPECTED_57!r}",
+                     detail=f"checks={checks}, reason={reason57b!r}, detail={detail57b!r}",
                      timing_ms=r.timing_ms, tool_result=r)
 
             # ── L-58: section ref (no ->) → no resolved_to in injected entry ──
@@ -263,32 +273,23 @@ def run_test(args: argparse.Namespace) -> TestRun:
                      detail=f"checks={checks}, entry_keys={list(entry.keys())}",
                      timing_ms=r.timing_ms, tool_result=r)
 
-            # ── L-61: {{id:<unknown-uuid>->ptr}} → source-doc-not-found ──
+            # ── L-61: {{id:<unknown-uuid>->ptr}} remains literal under ATL v1 ──
             unknown_uuid = str(_uuid.uuid4())
             placeholder_61 = f"{{{{id:{unknown_uuid}->ptr}}}}"
             r = client.call_tool(
                 "call_model", resolver="model", name="fast",
                 messages=[{"role": "user", "content": f"{placeholder_61} reply"}],
             )
-            resp = json.loads(r.text) if r.text else {}
-            failed = resp.get("failed_references", [])
-            reason61 = (failed[0].get("reason") if failed else "") or ""
-            ref61 = (failed[0].get("ref") if failed else "") or ""
+            resp = json.loads(r.text) if r.ok else {}
+            metadata = resp.get("metadata", {}) if isinstance(resp, dict) else {}
             checks = {
-                "isError true": (not r.ok),
-                "error == reference_resolution_failed":
-                    resp.get("error") == "reference_resolution_failed",
-                "failed has 1 entry": isinstance(failed, list) and len(failed) == 1,
-                "failed[0].ref is full literal placeholder":
-                    ref61 == placeholder_61,
-                "reason indicates source / not found / id":
-                    "not found" in reason61.lower()
-                    or "source" in reason61.lower()
-                    or "id" in reason61.lower(),
+                "ok": r.ok,
+                "no injected_references key": "injected_references" not in metadata,
+                "prompt_chars absent": "prompt_chars" not in metadata,
             }
-            run.step(label="L-61: '{{id:<unknown-uuid>->ptr}}' → source-document-not-found",
+            run.step(label="L-61: '{{id:<unknown-uuid>->ptr}}' remains literal text",
                      passed=all(checks.values()),
-                     detail=f"checks={checks}, ref={ref61!r}, reason={reason61!r}",
+                     detail=f"checks={checks}, metadata_keys={list(metadata.keys())}",
                      timing_ms=r.timing_ms, tool_result=r)
 
             # ── L-62: source has no frontmatter at all → "not found in frontmatter" ──
@@ -299,18 +300,22 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             resp = json.loads(r.text) if r.text else {}
             failed = resp.get("failed_references", [])
-            reason62 = (failed[0].get("reason") if failed else "") or ""
+            entry62 = failed[0] if failed else {}
+            reason62 = (entry62.get("reason") if entry62 else "") or ""
+            detail62 = (entry62.get("detail") if entry62 else "") or ""
             checks = {
                 "isError true": (not r.ok),
                 "error == reference_resolution_failed":
                     resp.get("error") == "reference_resolution_failed",
                 "failed has 1 entry": isinstance(failed, list) and len(failed) == 1,
-                "reason contains 'not found in frontmatter'":
-                    "not found in frontmatter" in reason62.lower(),
+                "reason == reference_path_not_found":
+                    reason62 == "reference_path_not_found",
+                "detail contains 'not found in frontmatter'":
+                    "not found in frontmatter" in detail62.lower(),
             }
-            run.step(label="L-62: source with no frontmatter → 'not found in frontmatter' reason",
+            run.step(label="L-62: source with no frontmatter → path-not-found reason code",
                      passed=all(checks.values()),
-                     detail=f"checks={checks}, reason={reason62!r}",
+                     detail=f"checks={checks}, reason={reason62!r}, detail={detail62!r}",
                      timing_ms=r.timing_ms, tool_result=r)
 
             # ── Cleanup: remove raw-written files before FQCServer exits ──

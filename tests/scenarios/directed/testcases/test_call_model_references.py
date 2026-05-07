@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test: call_model resolver=model with {{ref:...}} and {{id:...}} references in messages.
+Test: call_model resolver=model with {{ref:...}} references and superseded {{id:...}} literal handling.
 Coverage: L-24, L-25, L-26, L-27, L-27a, L-27b, L-29, L-33, L-33a, L-33b, L-33c, L-33d, L-33e
 Modes:
     --managed   Required (starts dedicated FQC subprocess)
@@ -218,7 +218,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                      detail=f"checks={checks}",
                      timing_ms=r.timing_ms, tool_result=r)
 
-            # ── L-27: {{id:uuid}} full body ────────────────────────────
+            # ── L-27: {{id:uuid}} remains literal under ATL v1 ─────────
             r = client.call_tool(
                 "call_model", resolver="model", name="fast",
                 messages=[{"role": "user", "content":
@@ -226,21 +226,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             resp = json.loads(r.text) if r.ok else {}
             metadata = resp.get("metadata", {}) if isinstance(resp, dict) else {}
-            injected = metadata.get("injected_references", [])
             checks = {
                 "ok": r.ok,
-                "injected has 1 entry":
-                    isinstance(injected, list) and len(injected) == 1,
-                "entry.ref is full placeholder":
-                    injected and injected[0].get("ref") == f"{{{{id:{body_fq_id}}}}}",
-                "chars matches on-disk body": injected and injected[0].get("chars") == body_chars,
+                "no injected_references key": "injected_references" not in metadata,
+                "prompt_chars absent": "prompt_chars" not in metadata,
             }
-            run.step(label="L-27: {{id:uuid}} resolves full body",
+            run.step(label="L-27: {{id:uuid}} remains literal text",
                      passed=all(checks.values()),
                      detail=f"checks={checks}",
                      timing_ms=r.timing_ms, tool_result=r)
 
-            # ── L-27a: {{id:uuid#Section}} ─────────────────────────────
+            # ── L-27a: {{id:uuid#Section}} remains literal under ATL v1 ─
             r = client.call_tool(
                 "call_model", resolver="model", name="fast",
                 messages=[{"role": "user", "content":
@@ -248,26 +244,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             resp = json.loads(r.text) if r.ok else {}
             metadata = resp.get("metadata", {}) if isinstance(resp, dict) else {}
-            injected = metadata.get("injected_references", [])
-            section_text_len = len("## Target\n\nsection content here")
             checks = {
                 "ok": r.ok,
-                "injected has 1 entry":
-                    isinstance(injected, list) and len(injected) == 1,
-                # Parallels L-25's approximate-match assertion — proves the section
-                # content was actually extracted, not just that one entry exists.
-                "entry chars == section length (approximate match)":
-                    injected and abs(injected[0].get("chars", 0) - section_text_len) <= 4,
+                "no injected_references key": "injected_references" not in metadata,
+                "prompt_chars absent": "prompt_chars" not in metadata,
             }
-            run.step(label="L-27a: {{id:uuid#Section}} resolves section",
+            run.step(label="L-27a: {{id:uuid#Section}} remains literal text",
                      passed=all(checks.values()),
-                     detail=f"checks={checks}, expected_len~{section_text_len}",
+                     detail=f"checks={checks}",
                      timing_ms=r.timing_ms, tool_result=r)
 
-            # ── L-27b: {{id:uuid->pointer}} dereferences via fq_id + pointer ──
-            # source_fq_id was injected into the raw write above and indexed by
-            # force_file_scan, so the resolver can look up the source via UUID
-            # and follow projections.summary to the target body.
+            # ── L-27b: {{id:uuid->pointer}} remains literal under ATL v1 ──
             r = client.call_tool(
                 "call_model", resolver="model", name="fast",
                 messages=[{"role": "user", "content":
@@ -275,24 +262,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             resp = json.loads(r.text) if r.ok else {}
             metadata = resp.get("metadata", {}) if isinstance(resp, dict) else {}
-            injected = metadata.get("injected_references", [])
             checks = {
                 "ok": r.ok,
-                "injected has 1 entry":
-                    isinstance(injected, list) and len(injected) == 1,
-                "entry.ref is full placeholder":
-                    injected and injected[0].get("ref")
-                    == f"{{{{id:{source_fq_id}->projections.summary}}}}",
-                "entry has resolved_to":
-                    injected and "resolved_to" in injected[0],
-                "resolved_to contains target_path":
-                    injected and target_path in (injected[0].get("resolved_to") or ""),
-                # chars is content.length of the resolved body which may include a
-                # trailing newline (same approximate-match pattern as L-25).
-                "chars approximately matches target body length":
-                    injected and abs(injected[0].get("chars", 0) - len(target_body)) <= 4,
+                "no injected_references key": "injected_references" not in metadata,
+                "prompt_chars absent": "prompt_chars" not in metadata,
             }
-            run.step(label="L-27b: {{id:uuid->pointer}} resolves via fq_id + pointer",
+            run.step(label="L-27b: {{id:uuid->pointer}} remains literal text",
                      passed=all(checks.values()),
                      detail=f"checks={checks}",
                      timing_ms=r.timing_ms, tool_result=r)

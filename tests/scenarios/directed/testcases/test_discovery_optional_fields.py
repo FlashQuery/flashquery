@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Test: discovery optional fields — omit-when-undeclared, preserve-declared-empty,
-free-form capabilities taxonomy.
+legacy free-form capabilities mapped to tags.
 Coverage: L-39i, L-39j, L-39k, L-39l, L-39m, L-39n, L-39o
 Modes: --managed
 Usage: python test_discovery_optional_fields.py --managed
@@ -108,14 +108,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             bare = _find(models, "bare") or {}
             custom = _find(models, "custom-caps") or {}
 
-            # L-39i: ["tools", "vision"] verbatim
-            ok = with_tools.get("capabilities") == ["tools", "vision"]
-            run.step(label="L-39i: declared capabilities returned verbatim",
+            # L-39i: legacy free-form capabilities are exposed as tags.
+            ok = with_tools.get("tags") == ["tools", "vision"] and "capabilities" not in with_tools
+            run.step(label="L-39i: declared legacy capabilities returned as tags",
                      passed=ok, detail=f"with-tools={with_tools!r}")
 
-            # L-39j: capabilities: [] preserved (NOT omitted)
-            ok = "capabilities" in empty_caps and empty_caps.get("capabilities") == []
-            run.step(label="L-39j: declared-empty capabilities preserved",
+            # L-39j: capabilities: [] is preserved as tags: [].
+            ok = "tags" in empty_caps and empty_caps.get("tags") == [] and "capabilities" not in empty_caps
+            run.step(label="L-39j: declared-empty legacy capabilities preserved as empty tags",
                      passed=ok, detail=f"empty-caps={empty_caps!r}")
 
             # L-39k: bare model OMITS capabilities, context_window, description
@@ -132,9 +132,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run.step(label="L-39l: context_window value preserved; absent when undeclared",
                      passed=ok, detail=f"with-tools.cw={with_tools.get('context_window')}, bare cw absent={'context_window' not in bare}")
 
-            # L-39m: custom (non-conventional) capability strings pass through
-            ok = custom.get("capabilities") == ["custom_feature_x", "experimental_y"]
-            run.step(label="L-39m: custom capability strings pass through verbatim",
+            # L-39m: custom non-conventional strings pass through as tags.
+            ok = custom.get("tags") == ["custom_feature_x", "experimental_y"] and "capabilities" not in custom
+            run.step(label="L-39m: custom legacy capability strings pass through as tags",
                      passed=ok, detail=f"custom={custom!r}")
 
             # L-39n: description present on with-tools; omitted on bare

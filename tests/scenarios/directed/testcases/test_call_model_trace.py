@@ -49,6 +49,10 @@ CONFIGURED_LLM = {
                 "model": "gpt-4o-mini",
                 "type": "language",
                 "cost_per_million": {"input": 0.15, "output": 0.6},
+                "capabilities": {
+                    "tool_calling": True,
+                    "usage_on_tool_calls": True,
+                },
             },
             {
                 "name": "broken-primary",
@@ -56,6 +60,10 @@ CONFIGURED_LLM = {
                 "model": "anything",
                 "type": "language",
                 "cost_per_million": {"input": 0, "output": 0},
+                "capabilities": {
+                    "tool_calling": True,
+                    "usage_on_tool_calls": True,
+                },
             },
         ],
         "purposes": [
