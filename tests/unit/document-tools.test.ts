@@ -735,7 +735,7 @@ describe('get_document', () => {
     });
   });
 
-  it('returns isError: true when file does not exist (ENOENT → document_not_found error)', async () => {
+  it('returns expected JSON error when file does not exist (ENOENT → not_found error)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -748,10 +748,10 @@ describe('get_document', () => {
       isError?: boolean;
     };
 
-    expect(result.isError).toBe(true);
-    // Phase 107: error is a JSON envelope with error code
+    expect(result.isError).toBe(false);
+    // Phase 121: expected errors use the canonical helper envelope.
     const err = JSON.parse(result.content[0].text);
-    expect(err.error).toBe('document_not_found');
+    expect(err.error).toBe('not_found');
     expect(err.message).toContain('nonexistent.md');
   });
 
@@ -907,14 +907,14 @@ describe('get_document', () => {
     const handler = getHandler('get_document');
     const result = await handler({ identifiers: 'nonexistent/doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
-    expect(result.isError).toBe(true);
-    // Phase 107: JSON error envelope with error code
+    expect(result.isError).toBe(false);
+    // Phase 121: JSON expected-error envelope with canonical error code
     const err = JSON.parse(result.content[0].text);
-    expect(err.error).toBe('document_not_found');
+    expect(err.error).toBe('not_found');
     expect(err.message).toContain('nonexistent/doc.md');
   });
 
-  it('returns isError with read_error when non-not-found error occurs', async () => {
+  it('returns runtime_error with isError when non-not-found error occurs', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -927,12 +927,11 @@ describe('get_document', () => {
     const result = await handler({ identifiers: 'vault/.obsidian' }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(true);
-    // Phase 107: Non-"not found" error → JSON envelope with read_error code
+    // Phase 121: Non-"not found" error → runtime helper envelope
     const err = JSON.parse(result.content[0].text);
-    expect(err.error).toBe('read_error');
+    expect(err.error).toBe('runtime_error');
     expect(err.message).toContain('Permission denied');
-    // WR-01: read_error envelope must include identifier (same as document_not_found)
-    expect(err.identifier).toBe('vault/.obsidian');
+    expect(err.details.identifier).toBe('vault/.obsidian');
   });
 
   it('Case 3c: vault file missing + NO DB row found → falls through to document_not_found error', async () => {
@@ -962,10 +961,10 @@ describe('get_document', () => {
     const handler = getHandler('get_document');
     const result = await handler({ identifiers: 'Work/Ghost Doc.md' }) as { content: Array<{ text: string }>; isError?: boolean };
 
-    expect(result.isError).toBe(true);
-    // Phase 107: ENOENT is a "not found" class error → JSON envelope with document_not_found code
+    expect(result.isError).toBe(false);
+    // Phase 121: ENOENT is a "not found" class error → expected helper envelope
     const err = JSON.parse(result.content[0].text);
-    expect(err.error).toBe('document_not_found');
+    expect(err.error).toBe('not_found');
     expect(err.message).toContain('Work/Ghost Doc.md');
   });
 
@@ -1360,7 +1359,7 @@ describe('get_document batch array path', () => {
     expect(results[0].error).toBeUndefined();
     expect(results[0].identifier).toBeDefined();
     // Position 1 has per-element error with correct identifier
-    expect(results[1].error).toBe('document_not_found');
+    expect(results[1].error).toBe('not_found');
     expect(results[1].identifier).toBe('missing.md');
   });
 
@@ -1408,7 +1407,7 @@ describe('get_document batch array path', () => {
     expect(results[1].identifier).toBe('Doc2.md');
   });
 
-  it('[U-BATCH-04] generic non-not-found error produces read_error with identifier per element', async () => {
+  it('[U-BATCH-04] generic non-not-found error produces runtime_error with identifier per element', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -1425,7 +1424,7 @@ describe('get_document batch array path', () => {
     expect(result.isError).toBeUndefined();
     const results = JSON.parse(result.content[0].text);
     expect(Array.isArray(results)).toBe(true);
-    expect(results[0].error).toBe('read_error');
+    expect(results[0].error).toBe('runtime_error');
     expect(results[0].identifier).toBe('locked.md');
     expect(results[0].message).toContain('Permission denied');
   });
@@ -2508,8 +2507,8 @@ describe('get_document follow_ref handler branch (FREF-01, FREF-03)', () => {
       follow_ref: 'projections.summary',
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
-    // Pre-resolution error: isError must be true
-    expect(result.isError).toBe(true);
+    // Pre-resolution expected error: helper-backed response, not runtime failure
+    expect(result.isError).toBe(false);
     const env = JSON.parse(result.content[0].text);
 
     // Error envelope is flat (no followed_ref key)
@@ -2573,8 +2572,8 @@ describe('get_document follow_ref handler branch (FREF-01, FREF-03)', () => {
       sections: ['NonExistentSection'],
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
-    // Post-resolution error: isError must be true
-    expect(result.isError).toBe(true);
+    // Post-resolution expected error: helper-backed response, not runtime failure
+    expect(result.isError).toBe(false);
     const env = JSON.parse(result.content[0].text);
 
     // Top-level error fields
