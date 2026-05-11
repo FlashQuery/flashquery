@@ -23,6 +23,9 @@ import {
   joinBatchEntries,
   shouldShowProgress,
   progressMessage,
+  jsonExpectedError,
+  jsonRuntimeError,
+  jsonToolResult,
 } from '../utils/response-formats.js';
 import {
   validateParameterCombinations,
@@ -594,10 +597,11 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         occurrence,
       });
       if (paramError !== null) {
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(paramError) }],
-          isError: true,
-        };
+        return jsonExpectedError({
+          error: 'invalid_input',
+          message: paramError.message,
+          details: paramError.details,
+        });
       }
 
       // Build the per-element options bundle once
@@ -628,7 +632,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
                 msg.toLowerCase().includes('missing') ||
                 msg.toLowerCase().includes('enoent');
               return {
-                error: isNotFound ? 'document_not_found' : 'read_error',
+                error: isNotFound ? 'not_found' : 'runtime_error',
                 message: isNotFound
                   ? `No document found for identifier: ${id}`
                   : `Error reading document: ${msg}`,
@@ -637,24 +641,25 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             }
           })
         );
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(results) }],
-          // NOTE: NO isError — array output embeds per-element errors
-        };
+        return jsonToolResult(results);
       }
 
       // Single-string path — backward-compatible flat object response
       try {
         const result = await resolveAndBuildDocument(identifiers, elementOptions, deps);
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(result) }],
-        };
+        return jsonToolResult(result);
       } catch (err) {
         if (err instanceof DocumentRequestError) {
-          return {
-            content: [{ type: 'text' as const, text: JSON.stringify(err.envelope) }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: String(err.envelope.error ?? 'invalid_input'),
+            message: String(err.envelope.message ?? 'document request failed'),
+            identifier: typeof err.envelope.identifier === 'string' ? err.envelope.identifier : undefined,
+            details: Object.fromEntries(
+              Object.entries(err.envelope).filter(
+                ([key]) => !['error', 'message', 'identifier'].includes(key)
+              )
+            ),
+          });
         }
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_document failed: ${msg}`);
@@ -662,13 +667,14 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           msg.toLowerCase().includes('not found') ||
           msg.toLowerCase().includes('missing') ||
           msg.toLowerCase().includes('enoent');
-        const errorEnvelope = isNotFound
-          ? { error: 'document_not_found', message: `No document found for identifier: ${identifiers}`, identifier: identifiers }
-          : { error: 'read_error', message: `Error reading document: ${msg}`, identifier: identifiers };
-        return {
-          content: [{ type: 'text' as const, text: JSON.stringify(errorEnvelope) }],
-          isError: true,
-        };
+        if (isNotFound) {
+          return jsonExpectedError({
+            error: 'not_found',
+            message: `No document found for identifier: ${identifiers}`,
+            identifier: identifiers,
+          });
+        }
+        return jsonRuntimeError(`Error reading document: ${msg}`, { identifier: identifiers });
       }
     }
   );

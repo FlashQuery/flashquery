@@ -175,6 +175,12 @@ describe.sequential('MCP protocol E2E', () => {
     const getDocumentText = getText(getResult);
     // Phase 107: get_document returns a JSON envelope
     const getEnv = JSON.parse(getDocumentText);
+    expect(getEnv).toMatchObject({
+      identifier: createdDocPath,
+      path: createdDocPath,
+      title: 'E2E Test Document',
+      size: { chars: expect.any(Number) },
+    });
     expect(getEnv.body).toContain('E2E test');
     // Note: get_document returns JSON envelope — tags are in frontmatter field
   }, 30000);
@@ -200,13 +206,18 @@ describe.sequential('MCP protocol E2E', () => {
 
   // ── T-07: Error handling — nonexistent document ───────────────────────────
 
-  it('get_document with nonexistent path returns isError:true', async () => {
+  it('get_document with nonexistent path returns an expected JSON error', async () => {
     const result = await client.callTool({
       name: 'get_document',
       arguments: { identifiers: 'nonexistent/file.md' },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
+    const errorPayload = JSON.parse(getText(result));
+    expect(errorPayload).toMatchObject({
+      error: 'not_found',
+      identifier: 'nonexistent/file.md',
+    });
   }, 30000);
 
   // ── T-08: Multi-memory search relevance ranking ───────────────────────────
