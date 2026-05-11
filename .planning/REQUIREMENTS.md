@@ -17,10 +17,10 @@
 
 - [ ] **FND-01**: Developer can define every MCP tool's canonical name, categories, host eligibility, delegated eligibility, tier, and hard-exclusion reason in one central metadata registry.
 - [ ] **FND-02**: Host MCP registration, config validation, delegated native tool assembly, and legacy-name suggestions all consume the same central tool metadata instead of duplicating tool-name arrays.
-- [ ] **FND-03**: Developer can use shared JSON response helpers to emit success payloads, canonical error envelopes, warning arrays, batch envelopes, and entity identification blocks for documents, memories, records, plugins, and LLM calls.
-- [ ] **FND-04**: All expected validation, not-found, permission, conflict, unsupported, and partial-batch errors return structured JSON with `isError: false`; only unexpected runtime failures set `isError: true`.
-- [ ] **FND-05**: All canonical error and warning codes are lowercase snake_case and use the shared vocabulary unless a tool-specific namespaced extension is explicitly justified.
-- [ ] **FND-06**: All migrated entity-returning tools include their required identification block even when optional payload is controlled by `include`.
+- [x] **FND-03**: Developer can use shared JSON response helpers to emit success payloads, canonical error envelopes, warning arrays, batch envelopes, and entity identification blocks for documents, memories, records, plugins, and LLM calls.
+- [x] **FND-04**: All expected validation, not-found, permission, conflict, unsupported, and partial-batch errors return structured JSON with `isError: false`; only unexpected runtime failures set `isError: true`.
+- [x] **FND-05**: All canonical error and warning codes are lowercase snake_case and use the shared vocabulary unless a tool-specific namespaced extension is explicitly justified.
+- [x] **FND-06**: All migrated entity-returning tools include their required identification block even when optional payload is controlled by `include`.
 - [ ] **FND-07**: Frontmatter access in migrated tool code uses centralized `FM.*` constants rather than raw `fq_*` string literals.
 - [ ] **FND-08**: Tool descriptions follow the required four-block template: summary, when-to-use signals, when-not-to-use alternative, and example invocation.
 
@@ -81,10 +81,10 @@
 
 ### Test And Scenario Governance
 
-- [ ] **TEST-01**: Every phase plan instantiates a phase-local traceability table that maps touched requirements to unit, integration, E2E, directed scenario, and integration scenario coverage before coding starts.
-- [ ] **TEST-02**: Every implementation phase adds or updates unit tests for schema validation, parameter parsing, output helpers, and error paths relevant to that phase.
-- [ ] **TEST-03**: Every implementation phase adds or updates integration tests covering at least one happy path and one expected-error path through the real handler plus filesystem/database layer where applicable.
-- [ ] **TEST-04**: Every implementation phase adds or updates E2E MCP protocol coverage for at least one touched host tool or tool group.
+- [x] **TEST-01**: Every phase plan instantiates a phase-local traceability table that maps touched requirements to unit, integration, E2E, directed scenario, and integration scenario coverage before coding starts.
+- [x] **TEST-02**: Every implementation phase adds or updates unit tests for schema validation, parameter parsing, output helpers, and error paths relevant to that phase.
+- [x] **TEST-03**: Every implementation phase adds or updates integration tests covering at least one happy path and one expected-error path through the real handler plus filesystem/database layer where applicable.
+- [x] **TEST-04**: Every implementation phase adds or updates E2E MCP protocol coverage for at least one touched host tool or tool group.
 - [ ] **TEST-05**: Every implementation phase adds or updates directed scenario coverage rows and runnable directed scenario cases for the public behavior it changes.
 - [ ] **TEST-06**: Every implementation phase adds or updates integration scenario coverage rows and runnable YAML integration workflows for cross-tool behavior it changes.
 - [ ] **TEST-07**: Removed and merged tools have explicit test migration decisions: port, rewrite, absence assertion, or documented dependency-gated skip.
@@ -119,10 +119,10 @@
 |-------------|-------|--------|
 | FND-01 | Phase 121 | Pending |
 | FND-02 | Phase 121 | Pending |
-| FND-03 | Phase 121 | Pending |
-| FND-04 | Phase 121 | Pending |
-| FND-05 | Phase 121 | Pending |
-| FND-06 | Phase 121 | Pending |
+| FND-03 | Phase 121 | Complete |
+| FND-04 | Phase 121 | Complete |
+| FND-05 | Phase 121 | Complete |
+| FND-06 | Phase 121 | Complete |
 | FND-07 | Phase 121 | Pending |
 | FND-08 | Phase 121 | Pending |
 | CFG-01 | Phase 122 | Pending |
@@ -165,10 +165,10 @@
 | SYS-04 | Phase 128 | Pending |
 | SYS-05 | Phase 128 | Pending |
 | SYS-06 | Phase 128 | Pending |
-| TEST-01 | Phase 121 | Pending |
-| TEST-02 | Phase 121 | Pending |
-| TEST-03 | Phase 121 | Pending |
-| TEST-04 | Phase 121 | Pending |
+| TEST-01 | Phase 121 | Complete |
+| TEST-02 | Phase 121 | Complete |
+| TEST-03 | Phase 121 | Complete |
+| TEST-04 | Phase 121 | Complete |
 | TEST-05 | Phase 121 | Pending |
 | TEST-06 | Phase 121 | Pending |
 | TEST-07 | Phase 128 | Pending |

@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: MCP Tools Consolidation
-status: planning
-last_updated: "2026-05-11T20:32:14.133Z"
+status: executing
+stopped_at: v3.3 milestone initialized
+last_updated: "2026-05-11T21:05:12.889Z"
 last_activity: 2026-05-11
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 0
+  total_plans: 3
+  completed_plans: 2
+  percent: 67
 ---
 
 # FlashQuery Core — State
@@ -20,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-11)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** v3.3 MCP Tools Consolidation — requirements and roadmap created; ready to plan Phase 121
+**Current focus:** Phase 121 — foundation-metadata-response-helpers-test-harness
 
 ## Current Position
 
-Phase: 121 (Foundation: Metadata, Response Helpers, Test Harness) — not started
-Plan: —
-Status: Requirements and roadmap defined
-Last activity: 2026-05-11 — Milestone v3.3 roadmap created
+Phase: 121 (foundation-metadata-response-helpers-test-harness) — EXECUTING
+Plan: 3 of 3
+Status: Ready to execute
+Last activity: 2026-05-11
 
 ## Performance Metrics
 
@@ -79,6 +80,7 @@ Last activity: 2026-05-11 — Milestone v3.3 roadmap created
 | Phase 120 P02 | 16 min | 3 tasks | 5 files |
 | Phase 120 P03 | 52 | 3 tasks | 8 files |
 | Phase 120 P04 | 49 | 3 tasks | 5 files |
+| Phase 121 P02 | 6min | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -122,6 +124,9 @@ Last activity: 2026-05-11 — Milestone v3.3 roadmap created
 - [Phase 120]: ATL-INT-04 remains a TypeScript integration-layer exception in `llm-config-sync.test.ts` because no public runtime binding YAML tool exists.
 - [Phase 120]: L-90 cooperative shutdown is closed by `test_call_model_agent_loop_shutdown`, which drives public `call_model` to `stop_reason: "shutdown"` through non-blocking SIGTERM.
 - [Phase 120]: The YAML ATL-INT-02 freshness scenario asserts hydration via `return_messages: true` to avoid depending on live-model echo behavior.
+- [Phase 121]: 121-02: Kept legacy key-value response helpers exported while adding JSON helper APIs for migrated tools.
+- [Phase 121]: 121-02: Used get_document as the representative helper-backed path because it already had a JSON-oriented envelope.
+- [Phase 121]: 121-02: Mapped get_document validation and missing-document responses to expected JSON errors with isError false.
 
 ## Accumulated Context
 
@@ -232,7 +237,7 @@ Last activity: 2026-05-11 — Milestone v3.3 roadmap created
 
 ## Session Continuity
 
-Last session: 2026-05-11T20:32:14.133Z
+Last session: 2026-05-11T21:03:27.817Z
 Stopped at: v3.3 milestone initialized
 Resume: Plan Phase 121
 

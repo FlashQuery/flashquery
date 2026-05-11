@@ -42,7 +42,7 @@
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
-| 121 | Foundation: Metadata, Response Helpers, Test Harness | Establish shared contracts and phase-local coverage workflow before migrating tools. | FND-01..08, TEST-01..06 | 6 |
+| 121 | Foundation: Metadata, Response Helpers, Test Harness | 2/3 | In Progress|  |
 | 122 | Host Tool Exposure Config | Add `host_mcp_tools` and unify host/delegated selector resolution. | CFG-01..06 | 5 |
 | 123 | Document Read + Standard Output Migration | Standardize existing document read/list/archive/copy/move outputs and canonical errors. | DOC-01, DOC-02, DOC-05 | 5 |
 | 124 | Document Write Primitives | Implement `write_document`, section/edit expansions, and `apply_tags` structured cross-domain output. | DOC-03, DOC-04, DOC-06..08 | 6 |
@@ -69,7 +69,7 @@
 5. Phase-local traceability format exists and points to concrete unit, integration, E2E, directed scenario, and integration scenario coverage targets.
 6. Phase validation runs the new foundation unit/integration/E2E/scenario checks that prove later phases have a stable test pattern.
 
-**Plans:** TBD by `$gsd-plan-phase 121`
+**Plans:** 2/3 plans executed
 
 **UI hint:** no
 
