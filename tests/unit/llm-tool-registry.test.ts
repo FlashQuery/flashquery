@@ -53,10 +53,14 @@ const READ_WRITE_EXTRA_TOOLS = [
 ];
 
 const HARD_EXCLUDED_TOOLS = [
-  'call_model',
   'register_plugin',
   'unregister_plugin',
   'get_plugin_info',
+  'clear_pending_reviews',
+  'call_model',
+  'force_file_scan',
+  'reconcile_documents',
+  'maintain_vault',
 ];
 
 const ALL_CATALOG_TOOL_NAMES = [
@@ -293,7 +297,16 @@ describe('assembleNativeToolRegistry', () => {
 
   it('removes hard-excluded native tools and reports exact diagnostics', () => {
     const result = assembleNativeToolRegistry(
-      makeConfig(['tier:read-only', 'call_model', 'register_plugin', 'unregister_plugin', 'get_plugin_info']),
+      makeConfig([
+        'tier:read-only',
+        'call_model',
+        'register_plugin',
+        'unregister_plugin',
+        'get_plugin_info',
+        'clear_pending_reviews',
+        'force_file_scan',
+        'reconcile_documents',
+      ]),
       'research',
       CATALOG
     );
@@ -304,11 +317,17 @@ describe('assembleNativeToolRegistry', () => {
     expect(result.nativeToolNames).not.toContain('register_plugin');
     expect(result.nativeToolNames).not.toContain('unregister_plugin');
     expect(result.nativeToolNames).not.toContain('get_plugin_info');
+    expect(result.nativeToolNames).not.toContain('clear_pending_reviews');
+    expect(result.nativeToolNames).not.toContain('force_file_scan');
+    expect(result.nativeToolNames).not.toContain('reconcile_documents');
     expect(result.diagnostics.hardExcluded).toEqual([
-      { tool: 'call_model', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'register_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'unregister_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'get_plugin_info', reason: 'Tool is not safe for delegated model-visible native access.' },
+      { tool: 'call_model', reason: 'Tool can recursively call models and is not safe for delegated native access.' },
+      { tool: 'register_plugin', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'unregister_plugin', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'get_plugin_info', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'clear_pending_reviews', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
+      { tool: 'force_file_scan', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
+      { tool: 'reconcile_documents', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
     ]);
   });
 
@@ -334,7 +353,15 @@ describe('assembleNativeToolRegistry', () => {
 
   it('omits providerTools when hard-excluded catalog entries are requested', () => {
     const result = assembleNativeToolRegistry(
-      makeConfig(['call_model', 'register_plugin', 'unregister_plugin', 'get_plugin_info']),
+      makeConfig([
+        'call_model',
+        'register_plugin',
+        'unregister_plugin',
+        'get_plugin_info',
+        'clear_pending_reviews',
+        'force_file_scan',
+        'reconcile_documents',
+      ]),
       'research',
       CATALOG,
       { strictTools: true }
@@ -343,10 +370,13 @@ describe('assembleNativeToolRegistry', () => {
     expect(result.nativeToolNames).toEqual([]);
     expect(result.providerTools).toBeUndefined();
     expect(result.diagnostics.hardExcluded).toEqual([
-      { tool: 'call_model', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'register_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'unregister_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'get_plugin_info', reason: 'Tool is not safe for delegated model-visible native access.' },
+      { tool: 'call_model', reason: 'Tool can recursively call models and is not safe for delegated native access.' },
+      { tool: 'register_plugin', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'unregister_plugin', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'get_plugin_info', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'clear_pending_reviews', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
+      { tool: 'force_file_scan', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
+      { tool: 'reconcile_documents', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
     ]);
   });
 

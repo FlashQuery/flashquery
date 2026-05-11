@@ -6,6 +6,10 @@ import type {
   TemplateToolRegistryAssembly,
   TemplateToolReverseMap,
 } from './template-tools.js';
+import {
+  getDelegatedHardExcludedTools,
+  getToolNamesByTier,
+} from '../mcp/tool-metadata.js';
 
 export interface NativeToolResponse {
   content: Array<{ type: 'text'; text: string }>;
@@ -78,50 +82,20 @@ export interface OpenAiToolDefinitionOptions {
   strict: boolean;
 }
 
-const READ_ONLY_TOOL_NAMES = [
-  'search_documents',
-  'get_document',
-  'search_memory',
-  'get_memory',
-  'list_memories',
-  'search_records',
-  'get_record',
-  'search_all',
-  'get_briefing',
-] as const;
-
-const READ_WRITE_EXTRA_TOOL_NAMES = [
-  'create_document',
-  'update_document',
-  'append_to_doc',
-  'move_document',
-  'save_memory',
-  'update_memory',
-  'create_record',
-  'update_record',
-  'apply_tags',
-  'archive_document',
-  'archive_memory',
-  'archive_record',
-  'create_directory',
-  'remove_directory',
-] as const;
-
 export const TOOL_TIERS = {
-  'tier:read-only': [...READ_ONLY_TOOL_NAMES],
-  'tier:read-write': [...READ_ONLY_TOOL_NAMES, ...READ_WRITE_EXTRA_TOOL_NAMES],
+  'tier:read-only': getToolNamesByTier('tier:read-only'),
+  'tier:read-write': getToolNamesByTier('tier:read-write'),
 } as const satisfies Record<string, readonly string[]>;
 
 export type ToolTierName = keyof typeof TOOL_TIERS;
 
-export const HARD_EXCLUDED_NATIVE_TOOLS = [
-  'call_model',
-  'register_plugin',
-  'unregister_plugin',
-  'get_plugin_info',
-] as const;
+const DELEGATED_HARD_EXCLUDED_TOOLS = getDelegatedHardExcludedTools();
 
-const HARD_EXCLUDED_REASON = 'Tool is not safe for delegated model-visible native access.';
+export const HARD_EXCLUDED_NATIVE_TOOLS = DELEGATED_HARD_EXCLUDED_TOOLS.map((entry) => entry.tool);
+
+const HARD_EXCLUDED_REASON_BY_TOOL = new Map(
+  DELEGATED_HARD_EXCLUDED_TOOLS.map((entry) => [entry.tool, entry.reason])
+);
 const TEMPLATE_TOOL_NAME_PREFIX = 'flashquery_';
 
 function isToolTierName(tool: string): tool is ToolTierName {
@@ -290,7 +264,10 @@ export function assembleNativeToolRegistry(
 
   const nativeToolNames = afterExclusions.filter((tool) => {
     if (!hardExcludedNames.has(tool)) return true;
-    diagnostics.hardExcluded.push({ tool, reason: HARD_EXCLUDED_REASON });
+    diagnostics.hardExcluded.push({
+      tool,
+      reason: HARD_EXCLUDED_REASON_BY_TOOL.get(tool) ?? 'Tool is not safe for delegated model-visible native access.',
+    });
     return false;
   });
   const providerTools = nativeToolNames.map((toolName) => {
