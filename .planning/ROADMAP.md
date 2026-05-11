@@ -1,0 +1,231 @@
+# Roadmap: FlashQuery Core
+
+## Milestones
+
+- ✅ **v1.0 MVP** — Phases 1-9 (shipped 2026-03-25)
+- ✅ **v1.5 Full MVP** — Phases 10-16 (shipped 2026-03-27)
+- ✅ **v1.6 Prep for Open Source** — Phases 17-21 (shipped 2026-03-30)
+- ✅ **v1.7 Issues Resolution & Pre-Release Hardening** — Phases 22-25 (shipped 2026-03-31)
+- ✅ **v1.8 Bug Fixes: Plugin Scope & Token Security** — Phases 28-29 (shipped 2026-04-01)
+- ✅ **v1.9 MCP Tool Overhaul** — Phases 30-33 (shipped 2026-04-06)
+- ✅ **v2.0 Doc Sync Overhaul** — Phases 36-40 (shipped 2026-04-07)
+- ✅ **v2.1 Test Suite Recovery** — Phases 41-44 (shipped 2026-04-07)
+- ✅ **v2.2 Status Model Refactor & Infrastructure Hardening** — Phases 45-48 (shipped 2026-04-08)
+- ✅ **v2.3 HTTP Authentication & Interoperability** — Phases 49-52 (shipped 2026-04-09)
+- ✅ **v2.4 Plugin Discovery & Document Interoperability** — Phases 54-60b + code review (shipped 2026-04-12)
+- ✅ **v2.5 New MCP Document Tools** — Phases 61-68 (shipped 2026-04-13)
+- ✅ **v2.5.1 Gap Closure & Test Maintenance** — Phases 69-71 (shipped 2026-04-14)
+- ✅ **v2.6 Test Infrastructure & Quality** — Phases 72-80 (shipped 2026-04-15)
+- ✅ **v2.7 Name Change & Pre-Launch Preparation** — Phase 83 (shipped 2026-04-16)
+- ✅ **v2.8 Plugin Callback Overhaul** — Phases 84-89 (shipped 2026-04-21)
+- ✅ **v2.9 Filesystem Primitive Tools** — Phases 90-97 (shipped 2026-04-25)
+- ✅ **v3.0 Native LLM Access** — Phases 98-106 (shipped 2026-04-30)
+- ✅ **v3.1 Call Model With Reference** — Phases 107-111 (shipped 2026-05-05)
+- ✅ **v3.2 Agentic LLM Tools** — Phases 112-120 (shipped 2026-05-07)
+- 🚧 **v3.3 MCP Tools Consolidation** — Phases 121-128 (planning)
+
+## Current Milestone: v3.3 MCP Tools Consolidation
+
+**Goal:** Consolidate, update, and standardize all FlashQuery MCP tools with a smaller final surface, consistent JSON contracts, shared host/delegated selection rules, and complete phase-local test coverage.
+
+**Planning sources:**
+- MCP Tool Consolidation Requirements.md
+- MCP Tool Consolidation Test Plan.md
+- `tests/scenarios/directed/*`
+- `tests/scenarios/integration/*`
+
+**Milestone test rule:** Every implementation phase must create or update unit, integration, E2E, directed scenario, and integration scenario coverage for the behavior it changes before that phase can complete. Phase 128 is an audit and cleanup phase, not a deferred test dump.
+
+## Proposed Roadmap
+
+**8 phases** | **56 requirements mapped** | All covered
+
+| # | Phase | Goal | Requirements | Success Criteria |
+|---|-------|------|--------------|------------------|
+| 121 | Foundation: Metadata, Response Helpers, Test Harness | Establish shared contracts and phase-local coverage workflow before migrating tools. | FND-01..08, TEST-01..06 | 6 |
+| 122 | Host Tool Exposure Config | Add `host_mcp_tools` and unify host/delegated selector resolution. | CFG-01..06 | 5 |
+| 123 | Document Read + Standard Output Migration | Standardize existing document read/list/archive/copy/move outputs and canonical errors. | DOC-01, DOC-02, DOC-05 | 5 |
+| 124 | Document Write Primitives | Implement `write_document`, section/edit expansions, and `apply_tags` structured cross-domain output. | DOC-03, DOC-04, DOC-06..08 | 6 |
+| 125 | Unified Search + Memory Consolidation | Replace search/memory legacy surfaces with `search`, `write_memory`, `get_memory`, and `archive_memory`. | SRCH-01..06, MEM-01..04 | 6 |
+| 126 | Plugin + Record Consolidation | Standardize plugin tools and merge record create/update into `write_record`. | REC-01..07 | 5 |
+| 127 | Removal, Directory, And Vault Maintenance | Add `remove_document`, `manage_directory`, and `maintain_vault` with safe filesystem/git semantics. | DOC-09, SYS-01..03 | 6 |
+| 128 | Legacy Surface Removal + Final Audit | Remove merged/dead tools, preserve transitional macro gates, and close coverage/preflight. | DOC-10, MEM-05, SYS-04..06, TEST-07, TEST-08 | 6 |
+
+## Phase Details
+
+### Phase 121: Foundation: Metadata, Response Helpers, Test Harness
+
+**Goal:** FlashQuery has the shared metadata, response, frontmatter, and coverage scaffolding needed to migrate tools consistently.
+
+**Depends on:** Phase 120
+
+**Requirements:** FND-01, FND-02, FND-03, FND-04, FND-05, FND-06, FND-07, FND-08, TEST-01, TEST-02, TEST-03, TEST-04, TEST-05, TEST-06
+
+**Success Criteria** (what must be TRUE):
+1. Tool metadata has one canonical source for names, categories, host eligibility, delegated eligibility, tiers, and hard exclusions.
+2. Shared JSON response helpers can emit success payloads, error envelopes, warnings, batch envelopes, and all required entity identification blocks.
+3. Canonical expected-error handling and `isError` semantics are covered by focused unit tests and at least one representative handler integration test.
+4. Frontmatter field usage in new/migrated foundation code goes through `FM.*` constants.
+5. Phase-local traceability format exists and points to concrete unit, integration, E2E, directed scenario, and integration scenario coverage targets.
+6. Phase validation runs the new foundation unit/integration/E2E/scenario checks that prove later phases have a stable test pattern.
+
+**Plans:** TBD by `$gsd-plan-phase 121`
+
+**UI hint:** no
+
+### Phase 122: Host Tool Exposure Config
+
+**Goal:** Host MCP tool exposure and delegated model tool exposure resolve from the same selector grammar and metadata registry.
+
+**Depends on:** Phase 121
+
+**Requirements:** CFG-01, CFG-02, CFG-03, CFG-04, CFG-05, CFG-06
+
+**Success Criteria** (what must be TRUE):
+1. `host_mcp_tools.tools` and `host_mcp_tools.excluded_tools` parse, validate, and default to today's all-tools-enabled host behavior.
+2. Tier, category, explicit-name, additive `doc-write` -> `doc-read`, and final exclusion semantics are implemented for host registration.
+3. Delegated native tool assembly starts from the host-enabled set and still applies purpose/model eligibility and hard exclusions.
+4. Legacy removed tool names in purpose config fail startup with actionable replacement suggestions.
+5. Suspicious category combinations warn without blocking startup.
+
+**Required phase coverage:** Unit tests for selector expansion and validation; integration tests for server registration/listTools; E2E protocol coverage for host-filtered tool listing; directed and integration scenarios for host/delegated filtering.
+
+**Plans:** TBD by `$gsd-plan-phase 122`
+
+**UI hint:** no
+
+### Phase 123: Document Read + Standard Output Migration
+
+**Goal:** Existing document read/list/archive/copy/move tools return structured JSON and canonical errors while preserving shipped behavior.
+
+**Depends on:** Phase 122
+
+**Requirements:** DOC-01, DOC-02, DOC-05
+
+**Success Criteria** (what must be TRUE):
+1. `get_document` single-result expected errors match canonical batch error envelopes and use `isError: false`.
+2. `archive_document` returns ordered identification blocks with persisted `archived_at`, idempotent re-archive behavior, and per-element batch errors.
+3. `copy_document` and `move_document` return document identification blocks for the affected destination/current document.
+4. `list_vault` returns structured entries instead of table text, with documented optional metadata/tracking payload.
+5. Unit, integration, E2E, directed scenario, and integration scenario coverage are updated in the same phase for every touched read/list/archive/copy/move behavior.
+
+**Plans:** TBD by `$gsd-plan-phase 123`
+
+**UI hint:** no
+
+### Phase 124: Document Write Primitives
+
+**Goal:** Document writes are consolidated into explicit primitives with structured output and markdown-aware edit semantics.
+
+**Depends on:** Phase 123
+
+**Requirements:** DOC-03, DOC-04, DOC-06, DOC-07, DOC-08
+
+**Success Criteria** (what must be TRUE):
+1. `write_document(mode:"create")` creates documents and rejects path conflicts, accidental `identifier`, and reserved frontmatter fields.
+2. `write_document(mode:"update")` updates one resolved document and absorbs frontmatter-only update behavior without changing omitted fields.
+3. `insert_in_doc` and `replace_doc_section` expose explicit nested-section behavior and return structured mutation metadata.
+4. `apply_tags` uses explicit document/memory targets and returns ordered per-target results with disabled-domain failures in place.
+5. Legacy create/update/header/append behavior is ported into new tests before those legacy tools are removed later.
+6. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
+
+**Plans:** TBD by `$gsd-plan-phase 124`
+
+**UI hint:** no
+
+### Phase 125: Unified Search + Memory Consolidation
+
+**Goal:** Search and memory tools collapse into a consistent, structured surface that supports mixed document/memory workflows.
+
+**Depends on:** Phase 124
+
+**Requirements:** SRCH-01, SRCH-02, SRCH-03, SRCH-04, SRCH-05, SRCH-06, MEM-01, MEM-02, MEM-03, MEM-04
+
+**Success Criteria** (what must be TRUE):
+1. `search` replaces legacy document/memory search surfaces with filesystem, semantic, mixed, and list-mode behavior.
+2. Search defaults, empty-query validation, archived filtering, disabled-category degradation, score/source merge, and global limit ordering match the source spec.
+3. `write_memory(mode:"create")` and `write_memory(mode:"update")` replace save/update semantics, including latest-version transaction behavior.
+4. `get_memory` and `archive_memory` use `memory_ids`, ordered batch semantics, optional content include behavior, and structured memory identification blocks.
+5. Legacy memory/search coverage is ported to the consolidated tools before removal.
+6. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
+
+**Plans:** TBD by `$gsd-plan-phase 125`
+
+**UI hint:** no
+
+### Phase 126: Plugin + Record Consolidation
+
+**Goal:** Plugin and record tools use structured plugin/record envelopes, explicit actions, and unified record writes.
+
+**Depends on:** Phase 125
+
+**Requirements:** REC-01, REC-02, REC-03, REC-04, REC-05, REC-06, REC-07
+
+**Success Criteria** (what must be TRUE):
+1. Plugin register/unregister/info tools return plugin identification blocks and include-controlled detail payloads.
+2. `write_record(mode:"create")` and `write_record(mode:"update")` replace create/update record tools while validating plugin table schema.
+3. `get_record`, `archive_record`, and `search_records` return structured envelopes and preserve plugin reconciliation behavior.
+4. `clear_pending_reviews` uses explicit list/clear actions and structured item envelopes.
+5. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
+
+**Plans:** TBD by `$gsd-plan-phase 126`
+
+**UI hint:** no
+
+### Phase 127: Removal, Directory, And Vault Maintenance
+
+**Goal:** Destructive and administrative filesystem operations are explicit, structured, git-aware, and safely tested.
+
+**Depends on:** Phase 126
+
+**Requirements:** DOC-09, SYS-01, SYS-02, SYS-03
+
+**Success Criteria** (what must be TRUE):
+1. `remove_document` archives lifecycle state before trash-folder move or hard deletion and returns ordered batch results with git policy honored.
+2. `manage_directory(action:"create")` and `manage_directory(action:"remove")` replace directory create/remove tools with ordered per-path results and directory-scoped locking.
+3. `maintain_vault` replaces scan/reconcile tools with sync, repair, repair+sync, dry-run, background job, status, and conflict behavior.
+4. High-risk destructive/admin behavior has explicit expected-error coverage, including non-empty directory conflicts, invalid trash paths, missing documents, and concurrent maintenance.
+5. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
+6. Scenario tests prove real user workflows across write/search/remove/maintenance, not just handler-level calls.
+
+**Plans:** TBD by `$gsd-plan-phase 127`
+
+**UI hint:** no
+
+### Phase 128: Legacy Surface Removal + Final Audit
+
+**Goal:** The final host/delegated MCP surface is reduced, documented, tested, and free of stale merged/dead tools.
+
+**Depends on:** Phase 127
+
+**Requirements:** DOC-10, MEM-05, SYS-04, SYS-05, SYS-06, TEST-07, TEST-08
+
+**Success Criteria** (what must be TRUE):
+1. Removed/merged tools are absent from host `listTools`, delegated tool assembly, docs, skills, config validation, and scenario coverage references unless explicitly transitional.
+2. `call_model` and `get_llm_usage` remain compliant and document reference resolution continues to work independently of hidden document MCP categories.
+3. Dead project tools and stale imports/tests are deleted without reintroducing the old project-tool surface.
+4. Transitional `get_briefing` and `insert_doc_link` have structured output, clear macro-dependent removal gates, and no accidental final-tool classification.
+5. Coverage ledgers and scenario matrices show every v3.3 requirement mapped to implemented unit, integration, E2E, directed scenario, and integration scenario evidence.
+6. Final validation runs lint, unit, integration, E2E, directed scenarios, YAML integration scenarios, build, and a coverage audit with no untriaged v3.3 gaps.
+
+**Plans:** TBD by `$gsd-plan-phase 128`
+
+**UI hint:** no
+
+## Coverage Summary
+
+| Phase | Requirement Count | Coverage Obligation |
+|-------|-------------------|---------------------|
+| 121 | 14 | Foundation unit/integration/E2E plus scenario scaffolding and traceability format |
+| 122 | 6 | Host/delegated selector unit, registration integration, listTools E2E, filtering scenarios |
+| 123 | 3 | Document read/list/archive/copy/move coverage across all five test layers |
+| 124 | 5 | Document write/edit/tag coverage across all five test layers |
+| 125 | 10 | Search + memory coverage across all five test layers |
+| 126 | 7 | Plugin + record coverage across all five test layers |
+| 127 | 4 | Remove/directory/maintenance coverage across all five test layers |
+| 128 | 7 | Absence assertions, transitional gates, full preflight, and final coverage audit |
+
+**Total:** 56 requirements, 56 mapped, 0 unmapped.
+
+---
+*Roadmap created: 2026-05-11 for v3.3 MCP Tools Consolidation*

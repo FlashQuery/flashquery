@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-05-11T20:32:14.133Z"
 last_activity: 2026-05-11
 progress:
-  total_phases: 0
+  total_phases: 8
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,23 +17,23 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-05)
+See: .planning/PROJECT.md (updated 2026-05-11)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** v3.2 Agentic LLM Tools — completed; ready for verification/release handoff
+**Current focus:** v3.3 MCP Tools Consolidation — requirements and roadmap created; ready to plan Phase 121
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 121 (Foundation: Metadata, Response Helpers, Test Harness) — not started
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-11 — Milestone v3.3 started
+Status: Requirements and roadmap defined
+Last activity: 2026-05-11 — Milestone v3.3 roadmap created
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 53 (this milestone)
+- Total plans completed: 0 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -41,15 +41,14 @@ Last activity: 2026-05-11 — Milestone v3.3 started
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 112 | 5 | - | - |
-| 113 | 4 | - | - |
-| 114 | 5 | - | - |
-| 115 | 5 | - | - |
-| 116 | 4 | - | - |
-| 117 | 5 | - | - |
-| 118 | 5 | - | - |
-| 119 | 3 | - | - |
-| 120 | TBD | - | - |
+| 121 | TBD | - | - |
+| 122 | TBD | - | - |
+| 123 | TBD | - | - |
+| 124 | TBD | - | - |
+| 125 | TBD | - | - |
+| 126 | TBD | - | - |
+| 127 | TBD | - | - |
+| 128 | TBD | - | - |
 
 *Updated after each plan completion*
 | Phase 107 P04 | 15m | 2 tasks | 9 files |
@@ -202,11 +201,40 @@ Last activity: 2026-05-11 — Milestone v3.3 started
 - Mode 2 writes one aggregate `fqc_llm_usage` row; detailed per-iteration loop data remains in `metadata.tools.calls_log`.
 - Audit document writes, MCP Broker support, cooperative Mode 3, response references, and path-scoped delegated writes are deferred.
 
+### Milestone v3.3 Initialization (2026-05-11)
+
+**Milestone:** MCP Tools Consolidation — consolidate, update, and standardize all FlashQuery MCP tools with central metadata, host/delegated selector parity, canonical JSON envelopes, merged primitive tools, and same-phase unit/integration/E2E/scenario coverage.
+
+**Phase structure:**
+
+| Phase | Name | Requirements |
+|-------|------|--------------|
+| 121 | Foundation: Metadata, Response Helpers, Test Harness | FND-01 through FND-08, TEST-01 through TEST-06 |
+| 122 | Host Tool Exposure Config | CFG-01 through CFG-06 |
+| 123 | Document Read + Standard Output Migration | DOC-01, DOC-02, DOC-05 |
+| 124 | Document Write Primitives | DOC-03, DOC-04, DOC-06 through DOC-08 |
+| 125 | Unified Search + Memory Consolidation | SRCH-01 through SRCH-06, MEM-01 through MEM-04 |
+| 126 | Plugin + Record Consolidation | REC-01 through REC-07 |
+| 127 | Removal, Directory, And Vault Maintenance | DOC-09, SYS-01 through SYS-03 |
+| 128 | Legacy Surface Removal + Final Audit | DOC-10, MEM-05, SYS-04 through SYS-06, TEST-07, TEST-08 |
+
+**Dependencies:** 121 → 122 → 123 → 124 → 125 → 126 → 127 → 128.
+
+**Critical architectural constraints for this milestone:**
+
+- The source requirements and test plan are spec-complete; no additional external research is needed before phase planning.
+- Every phase must create or update unit, integration, E2E, directed scenario, and integration scenario coverage for the behavior it changes.
+- Phase 128 is a final absence/audit/preflight phase, not a deferred test implementation phase.
+- Tool names, categories, multi-category membership, host eligibility, delegated eligibility, tiers, and hard exclusions must live in one central metadata registry.
+- Host MCP surface selection and delegated model tool-belt selection must use the same selector grammar and metadata source.
+- Removed and merged tools are hard cutovers: no compatibility aliases, only helpful validation suggestions.
+- Synchronization internals stay hidden from normal MCP tools; `maintain_vault` is the dedicated admin exception.
+
 ## Session Continuity
 
-Last session: 2026-05-07T05:17:51.295Z
-Stopped at: Completed 120-04-PLAN.md
-Resume: None
+Last session: 2026-05-11T20:32:14.133Z
+Stopped at: v3.3 milestone initialized
+Resume: Plan Phase 121
 
 ## Deferred Items
 
