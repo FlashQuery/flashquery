@@ -15,14 +15,14 @@
 
 ### Foundation And Shared Contracts
 
-- [ ] **FND-01**: Developer can define every MCP tool's canonical name, categories, host eligibility, delegated eligibility, tier, and hard-exclusion reason in one central metadata registry.
-- [ ] **FND-02**: Host MCP registration, config validation, delegated native tool assembly, and legacy-name suggestions all consume the same central tool metadata instead of duplicating tool-name arrays.
+- [x] **FND-01**: Developer can define every MCP tool's canonical name, categories, host eligibility, delegated eligibility, tier, and hard-exclusion reason in one central metadata registry.
+- [x] **FND-02**: Host MCP registration, config validation, delegated native tool assembly, and legacy-name suggestions all consume the same central tool metadata instead of duplicating tool-name arrays.
 - [x] **FND-03**: Developer can use shared JSON response helpers to emit success payloads, canonical error envelopes, warning arrays, batch envelopes, and entity identification blocks for documents, memories, records, plugins, and LLM calls.
 - [x] **FND-04**: All expected validation, not-found, permission, conflict, unsupported, and partial-batch errors return structured JSON with `isError: false`; only unexpected runtime failures set `isError: true`.
 - [x] **FND-05**: All canonical error and warning codes are lowercase snake_case and use the shared vocabulary unless a tool-specific namespaced extension is explicitly justified.
 - [x] **FND-06**: All migrated entity-returning tools include their required identification block even when optional payload is controlled by `include`.
-- [ ] **FND-07**: Frontmatter access in migrated tool code uses centralized `FM.*` constants rather than raw `fq_*` string literals.
-- [ ] **FND-08**: Tool descriptions follow the required four-block template: summary, when-to-use signals, when-not-to-use alternative, and example invocation.
+- [x] **FND-07**: Frontmatter access in migrated tool code uses centralized `FM.*` constants rather than raw `fq_*` string literals.
+- [x] **FND-08**: Tool descriptions follow the required four-block template: summary, when-to-use signals, when-not-to-use alternative, and example invocation.
 
 ### Host And Delegated Tool Exposure
 
@@ -85,8 +85,8 @@
 - [x] **TEST-02**: Every implementation phase adds or updates unit tests for schema validation, parameter parsing, output helpers, and error paths relevant to that phase.
 - [x] **TEST-03**: Every implementation phase adds or updates integration tests covering at least one happy path and one expected-error path through the real handler plus filesystem/database layer where applicable.
 - [x] **TEST-04**: Every implementation phase adds or updates E2E MCP protocol coverage for at least one touched host tool or tool group.
-- [ ] **TEST-05**: Every implementation phase adds or updates directed scenario coverage rows and runnable directed scenario cases for the public behavior it changes.
-- [ ] **TEST-06**: Every implementation phase adds or updates integration scenario coverage rows and runnable YAML integration workflows for cross-tool behavior it changes.
+- [x] **TEST-05**: Every implementation phase adds or updates directed scenario coverage rows and runnable directed scenario cases for the public behavior it changes.
+- [x] **TEST-06**: Every implementation phase adds or updates integration scenario coverage rows and runnable YAML integration workflows for cross-tool behavior it changes.
 - [ ] **TEST-07**: Removed and merged tools have explicit test migration decisions: port, rewrite, absence assertion, or documented dependency-gated skip.
 - [ ] **TEST-08**: The milestone closes only after scenario coverage ledgers, unit/integration/E2E suites, lint, build, and final coverage audit all agree that no v3.3 requirement is unverified.
 
@@ -117,14 +117,14 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FND-01 | Phase 121 | Pending |
-| FND-02 | Phase 121 | Pending |
+| FND-01 | Phase 121 | Complete |
+| FND-02 | Phase 121 | Complete |
 | FND-03 | Phase 121 | Complete |
 | FND-04 | Phase 121 | Complete |
 | FND-05 | Phase 121 | Complete |
 | FND-06 | Phase 121 | Complete |
-| FND-07 | Phase 121 | Pending |
-| FND-08 | Phase 121 | Pending |
+| FND-07 | Phase 121 | Complete |
+| FND-08 | Phase 121 | Complete |
 | CFG-01 | Phase 122 | Pending |
 | CFG-02 | Phase 122 | Pending |
 | CFG-03 | Phase 122 | Pending |
@@ -169,8 +169,8 @@
 | TEST-02 | Phase 121 | Complete |
 | TEST-03 | Phase 121 | Complete |
 | TEST-04 | Phase 121 | Complete |
-| TEST-05 | Phase 121 | Pending |
-| TEST-06 | Phase 121 | Pending |
+| TEST-05 | Phase 121 | Complete |
+| TEST-06 | Phase 121 | Complete |
 | TEST-07 | Phase 128 | Pending |
 | TEST-08 | Phase 128 | Pending |
 

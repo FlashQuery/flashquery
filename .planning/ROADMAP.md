@@ -42,7 +42,7 @@
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
-| 121 | Foundation: Metadata, Response Helpers, Test Harness | 3/3 | Complete   | 2026-05-11 |
+| 121 | Foundation: Metadata, Response Helpers, Test Harness | 3/3 | Complete    | 2026-05-11 |
 | 122 | Host Tool Exposure Config | Add `host_mcp_tools` and unify host/delegated selector resolution. | CFG-01..06 | 5 |
 | 123 | Document Read + Standard Output Migration | Standardize existing document read/list/archive/copy/move outputs and canonical errors. | DOC-01, DOC-02, DOC-05 | 5 |
 | 124 | Document Write Primitives | Implement `write_document`, section/edit expansions, and `apply_tags` structured cross-domain output. | DOC-03, DOC-04, DOC-06..08 | 6 |
