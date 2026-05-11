@@ -143,7 +143,17 @@ function normalizeJsonSchemaNode(schema: unknown, options: ToolSchemaNormalizati
 
   if (normalized['type'] === 'object') {
     const properties = isRecord(normalized['properties']) ? normalized['properties'] : {};
-    normalized['properties'] = properties;
+    const originallyRequired = Array.isArray(normalized['required'])
+      ? new Set(normalized['required'].filter((key): key is string => typeof key === 'string'))
+      : new Set<string>();
+    normalized['properties'] = options.strict
+      ? Object.fromEntries(
+        Object.entries(properties).map(([key, property]) => [
+          key,
+          originallyRequired.has(key) ? property : { anyOf: [property, { type: 'null' }] },
+        ])
+      )
+      : properties;
     normalized['additionalProperties'] = false;
     if (options.strict) {
       normalized['required'] = Object.keys(properties);

@@ -413,9 +413,14 @@ describe('assembleNativeToolRegistry', () => {
             properties: {
               query: { type: 'string', description: 'Search query' },
               tags: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Optional tags',
+                anyOf: [
+                  {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Optional tags',
+                  },
+                  { type: 'null' },
+                ],
               },
               mode: { type: 'string', enum: ['fast', 'deep'] },
               nested: {
@@ -527,8 +532,24 @@ describe('toOpenAiToolDefinition', () => {
       required: ['query', 'filters'],
       properties: {
         filters: {
-          additionalProperties: false,
-          required: ['tags'],
+          anyOf: [
+            {
+              additionalProperties: false,
+              required: ['tags'],
+              properties: {
+                tags: {
+                  anyOf: [
+                    {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    { type: 'null' },
+                  ],
+                },
+              },
+            },
+            { type: 'null' },
+          ],
         },
       },
     });
@@ -588,7 +609,7 @@ describe('validateAndCacheNativeToolSchemas', () => {
 });
 
 describe('normalizeToolJsonSchema', () => {
-  it('requires every root property in strict mode', () => {
+  it('requires every root property in strict mode and makes originally optional fields nullable', () => {
     const normalized = normalizeToolJsonSchema(
       {
         type: 'object',
@@ -605,7 +626,7 @@ describe('normalizeToolJsonSchema', () => {
       type: 'object',
       properties: {
         query: { type: 'string' },
-        tags: { type: 'array', items: { type: 'string' } },
+        tags: { anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }] },
       },
       required: ['query', 'tags'],
       additionalProperties: false,
