@@ -57,6 +57,30 @@ const CURRENT_DELEGATED_TIER_ORDER = [
 
 const CURRENT_DELEGATED_TIER_TOOLS = new Set<string>(CURRENT_DELEGATED_TIER_ORDER);
 
+const TRANSITIONAL_CURRENT_TOOLS = new Set<string>([
+  'get_briefing',
+  'insert_doc_link',
+]);
+
+const REMOVED_CURRENT_TOOLS = new Set<string>([
+  'append_to_doc',
+  'create_directory',
+  'create_document',
+  'create_record',
+  'force_file_scan',
+  'list_memories',
+  'reconcile_documents',
+  'remove_directory',
+  'save_memory',
+  'search_all',
+  'search_documents',
+  'search_memory',
+  'update_doc_header',
+  'update_document',
+  'update_memory',
+  'update_record',
+]);
+
 function description(summary: string, useWhen: string, doNotUseWhen: string, example: string): string {
   return `Summary: ${summary}\nUse when: ${useWhen}\nDo not use when: ${doNotUseWhen}\nExample: ${example}`;
 }
@@ -158,15 +182,15 @@ export const TOOL_METADATA = [
 
   current('force_file_scan', ['system'], 'admin', legacyDescription('force_file_scan', 'maintain_vault', 'Force a vault file scan.'), SYSTEM_ADMIN_REASON),
   current('reconcile_documents', ['system'], 'admin', legacyDescription('reconcile_documents', 'maintain_vault', 'Reconcile database document rows with vault files.'), SYSTEM_ADMIN_REASON),
-  current('create_directory', ['doc-write', 'system'], 'read-write', legacyDescription('create_directory', 'manage_directory', 'Create vault directories.')),
-  current('remove_directory', ['doc-write', 'system'], 'read-write', legacyDescription('remove_directory', 'manage_directory', 'Remove empty vault directories.')),
+  current('create_directory', ['doc-write'], 'read-write', legacyDescription('create_directory', 'manage_directory', 'Create vault directories.')),
+  current('remove_directory', ['doc-write'], 'read-write', legacyDescription('remove_directory', 'manage_directory', 'Remove empty vault directories.')),
 
   future('write_document', ['doc-write'], 'read-write', D.writeDocument),
   future('search', ['doc-read', 'memory'], 'read-only', D.search),
   future('write_memory', ['memory'], 'read-write', D.writeMemory),
   future('write_record', ['plugin'], 'read-write', D.writeRecord),
   future('remove_document', ['doc-write'], 'read-write', D.removeDocument),
-  future('manage_directory', ['doc-write', 'system'], 'read-write', D.manageDirectory),
+  future('manage_directory', ['doc-write'], 'read-write', D.manageDirectory),
   future('maintain_vault', ['system'], 'admin', D.maintainVault, SYSTEM_ADMIN_REASON),
 
   dead('list_projects', ['system'], legacyDescription('list_projects', undefined, 'List configured legacy projects.')),
@@ -216,7 +240,7 @@ export function getDelegatedHardExcludedTools(): Array<{ tool: string; reason: s
 
 export function getLegacyToolSuggestion(name: string): { replacement: string; message: string } | undefined {
   const entry = getToolMetadata(name);
-  if (!entry?.replacement) return undefined;
+  if (entry?.status !== 'removed' || !entry.replacement) return undefined;
 
   return {
     replacement: entry.replacement,
@@ -280,7 +304,7 @@ function filterAvailable(names: string[], options: ExpandToolSelectorsOptions): 
 }
 
 function isAvailable(entry: ToolMetadata, options: ExpandToolSelectorsOptions): boolean {
-  if (options.includeUnavailable !== true && entry.status !== 'final' && entry.status !== 'transitional') return false;
+  if (options.includeUnavailable !== true && entry.status === 'dead') return false;
   if (options.hostEligible !== undefined && entry.hostEligible !== options.hostEligible) return false;
   if (options.delegatedEligible !== undefined && entry.delegatedEligible !== options.delegatedEligible) return false;
   return true;
@@ -295,12 +319,7 @@ function current(
 ): ToolMetadata {
   return {
     name,
-    status: name === 'get_document' || name === 'list_vault' || name === 'get_memory' || name === 'archive_memory' ||
-      name === 'copy_document' || name === 'move_document' || name === 'archive_document' || name === 'insert_in_doc' ||
-      name === 'replace_doc_section' || name === 'apply_tags' || name === 'get_record' || name === 'archive_record' ||
-      name === 'search_records' || name === 'register_plugin' || name === 'unregister_plugin' ||
-      name === 'get_plugin_info' || name === 'clear_pending_reviews' || name === 'call_model' ||
-      name === 'get_llm_usage' || name === 'list_vault' ? 'final' : 'transitional',
+    status: currentToolStatus(name),
     categories,
     tier,
     hostEligible: true,
@@ -361,8 +380,6 @@ function legacyReplacement(name: string): string | undefined {
     update_document: 'write_document',
     append_to_doc: 'insert_in_doc',
     update_doc_header: 'write_document',
-    get_briefing: 'call_macro',
-    insert_doc_link: 'call_macro',
     save_memory: 'write_memory',
     search_memory: 'search',
     update_memory: 'write_memory',
@@ -375,4 +392,10 @@ function legacyReplacement(name: string): string | undefined {
     remove_directory: 'manage_directory',
   };
   return replacements[name];
+}
+
+function currentToolStatus(name: string): ToolStatus {
+  if (REMOVED_CURRENT_TOOLS.has(name)) return 'removed';
+  if (TRANSITIONAL_CURRENT_TOOLS.has(name)) return 'transitional';
+  return 'final';
 }

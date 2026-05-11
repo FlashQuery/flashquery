@@ -665,7 +665,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             identifier: identifiers,
           });
         }
-        return jsonRuntimeError(`Error reading document: ${msg}`, { identifier: identifiers });
+        return jsonRuntimeError({ message: `Error reading document: ${msg}`, identifier: identifiers });
       }
     }
   );

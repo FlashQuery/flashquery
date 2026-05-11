@@ -27,9 +27,23 @@ describe('tool metadata registry', () => {
 
   it('covers current, final, transitional, removed, and dead tool names', () => {
     expect(requireToolMetadata('get_document').status).toBe('final');
-    expect(requireToolMetadata('create_document').status).toBe('transitional');
+    expect(requireToolMetadata('create_document').status).toBe('removed');
+    expect(requireToolMetadata('search_documents').status).toBe('removed');
+    expect(requireToolMetadata('get_briefing').status).toBe('transitional');
+    expect(requireToolMetadata('insert_doc_link').status).toBe('transitional');
     expect(requireToolMetadata('write_document').status).toBe('final');
     expect(requireToolMetadata('list_projects').status).toBe('dead');
+    expect(TOOL_METADATA.filter((entry) => entry.status === 'removed').length).toBeGreaterThan(10);
+  });
+
+  it('keeps hard-cutover replacements separate from transitional legacy tools', () => {
+    for (const entry of TOOL_METADATA.filter((tool) => tool.status === 'removed')) {
+      expect(entry.replacement, `${entry.name} replacement`).toBeTruthy();
+    }
+
+    for (const entry of TOOL_METADATA.filter((tool) => tool.status === 'transitional')) {
+      expect(entry.replacement, `${entry.name} replacement`).toBeUndefined();
+    }
   });
 
   it('uses the four-block XC-8 description template for every entry', () => {
@@ -79,6 +93,19 @@ describe('tool metadata registry', () => {
     expect(expanded).toContain('archive_document');
   });
 
+  it('keeps directory tools out of the system category', () => {
+    expect(requireToolMetadata('create_directory').categories).toEqual(['doc-write']);
+    expect(requireToolMetadata('remove_directory').categories).toEqual(['doc-write']);
+    expect(requireToolMetadata('manage_directory').categories).toEqual(['doc-write']);
+
+    const systemTools = expandToolSelectors(['category:system'], { hostEligible: true });
+
+    expect(systemTools).toEqual(expect.arrayContaining(['force_file_scan', 'reconcile_documents']));
+    expect(systemTools).not.toContain('create_directory');
+    expect(systemTools).not.toContain('remove_directory');
+    expect(systemTools).not.toContain('manage_directory');
+  });
+
   it('lists delegated hard exclusions with per-tool reasons', () => {
     const exclusions = getDelegatedHardExcludedTools();
 
@@ -96,6 +123,12 @@ describe('tool metadata registry', () => {
       replacement: 'write_document',
       message: expect.stringContaining("Tool 'create_document' has been replaced by 'write_document'"),
     });
+    expect(getLegacyToolSuggestion('search_documents')).toEqual({
+      replacement: 'search',
+      message: expect.stringContaining("Tool 'search_documents' has been replaced by 'search'"),
+    });
+    expect(getLegacyToolSuggestion('get_briefing')).toBeUndefined();
+    expect(getLegacyToolSuggestion('insert_doc_link')).toBeUndefined();
     expect(getLegacyToolSuggestion('get_document')).toBeUndefined();
   });
 });

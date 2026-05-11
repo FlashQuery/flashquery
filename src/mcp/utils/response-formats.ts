@@ -86,8 +86,22 @@ export function jsonExpectedError(error: ErrorEnvelope): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(error) }], isError: false };
 }
 
-export function jsonRuntimeError(message: string, details?: Record<string, unknown>): ToolResult {
-  return jsonRuntimeErrorFromEnvelope({ error: 'runtime_error', message, details });
+export function jsonRuntimeError(message: string, details?: Record<string, unknown>): ToolResult;
+export function jsonRuntimeError(error: Omit<ErrorEnvelope, 'error'> & { error?: string }): ToolResult;
+export function jsonRuntimeError(
+  messageOrError: string | (Omit<ErrorEnvelope, 'error'> & { error?: string }),
+  details?: Record<string, unknown>
+): ToolResult {
+  if (typeof messageOrError === 'string') {
+    return jsonRuntimeErrorFromEnvelope({ error: 'runtime_error', message: messageOrError, details });
+  }
+
+  return jsonRuntimeErrorFromEnvelope({
+    error: messageOrError.error ?? 'runtime_error',
+    message: messageOrError.message,
+    ...(messageOrError.identifier === undefined ? {} : { identifier: messageOrError.identifier }),
+    ...(messageOrError.details === undefined ? {} : { details: messageOrError.details }),
+  });
 }
 
 function jsonRuntimeErrorFromEnvelope(error: ErrorEnvelope): ToolResult {

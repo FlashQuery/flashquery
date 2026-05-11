@@ -9,7 +9,7 @@ Scenario:
     failure.
 
 Coverage points: D-foundation-json-1, D-foundation-json-2, D-foundation-tools-1,
-D-foundation-frontmatter-1
+D-foundation-frontmatter-1, D-foundation-description-1
 
 Modes:
     Default     Connects to an already-running FQC instance.
@@ -33,6 +33,7 @@ COVERAGE = [
     "D-foundation-json-2",
     "D-foundation-tools-1",
     "D-foundation-frontmatter-1",
+    "D-foundation-description-1",
 ]
 
 import argparse
@@ -164,6 +165,39 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail=missing_detail,
             timing_ms=missing_result.timing_ms,
             tool_result=missing_result,
+            server_logs=step_logs,
+        )
+
+        log_mark = ctx.server.log_position if ctx.server else 0
+        description_passed = False
+        description_detail = ""
+        try:
+            if not ctx.client.session_id:
+                ctx.client.initialize()
+            list_tools_raw = ctx.client._post_mcp({
+                "jsonrpc": "2.0",
+                "id": ctx.client._next_id(),
+                "method": "tools/list",
+            })
+            tools = ((list_tools_raw.get("result") or {}).get("tools") or [])
+            get_document_tool = next((tool for tool in tools if tool.get("name") == "get_document"), None)
+            description_text = (get_document_tool or {}).get("description") or ""
+            required_blocks = ["Summary:", "Use when:", "Do not use when:", "Example:"]
+            missing_blocks = [block for block in required_blocks if block not in description_text]
+            description_passed = get_document_tool is not None and not missing_blocks
+            if get_document_tool is None:
+                description_detail = "get_document was absent from tools/list"
+            elif missing_blocks:
+                description_detail = f"get_document description missing blocks: {', '.join(missing_blocks)}"
+        except Exception as exc:
+            description_detail = f"tools/list description check failed: {exc}"
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        run.step(
+            label="D-foundation-description-1: tools/list exposes XC-8 registered description blocks",
+            passed=description_passed,
+            detail=description_detail,
+            timing_ms=0,
             server_logs=step_logs,
         )
 

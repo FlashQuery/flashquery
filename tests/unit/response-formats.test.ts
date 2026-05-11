@@ -56,6 +56,17 @@ describe('JSON MCP response helpers', () => {
     });
   });
 
+  it('can emit runtime errors with canonical top-level identifiers', () => {
+    const result = jsonRuntimeError({ message: 'Denied', identifier: 'vault/.obsidian' });
+
+    expect(result.isError).toBe(true);
+    expect(parseToolText(result)).toEqual({
+      error: 'runtime_error',
+      message: 'Denied',
+      identifier: 'vault/.obsidian',
+    });
+  });
+
   it('adds warnings only when provided', () => {
     expect(withWarnings({ results: [] }, ['memory_disabled'])).toEqual({
       results: [],

@@ -931,7 +931,7 @@ describe('get_document', () => {
     const err = JSON.parse(result.content[0].text);
     expect(err.error).toBe('runtime_error');
     expect(err.message).toContain('Permission denied');
-    expect(err.details.identifier).toBe('vault/.obsidian');
+    expect(err.identifier).toBe('vault/.obsidian');
   });
 
   it('Case 3c: vault file missing + NO DB row found → falls through to document_not_found error', async () => {

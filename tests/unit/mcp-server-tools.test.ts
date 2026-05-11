@@ -68,24 +68,21 @@ describe('MCP tool registration metadata', () => {
     expect(() => assertRegisteredToolsHaveMetadata(catalog)).not.toThrow();
   });
 
-  it('keeps registered tool descriptions distinct while metadata owns the XC-8 template', () => {
+  it('uses metadata descriptions for the registered native catalog', () => {
     const server = makeCatalogServer();
     registerAllCurrentTools(server);
     const catalog = getNativeToolCatalog(server);
-    const descriptions = new Set<string>();
 
     for (const tool of catalog) {
       const metadata = requireToolMetadata(tool.name);
 
       expect(tool.description.trim(), `${tool.name} registered description`).not.toBe('');
-      descriptions.add(tool.description);
+      expect(tool.description, `${tool.name} registered description`).toBe(metadata.description);
       expect(metadata.hostEligible, `${tool.name} should be host eligible while registered`).toBe(true);
-      expect(metadata.description, `${tool.name} metadata description`).toContain('Summary:');
-      expect(metadata.description, `${tool.name} metadata description`).toContain('Use when:');
-      expect(metadata.description, `${tool.name} metadata description`).toContain('Do not use when:');
-      expect(metadata.description, `${tool.name} metadata description`).toContain('Example:');
+      expect(tool.description, `${tool.name} registered description`).toContain('Summary:');
+      expect(tool.description, `${tool.name} registered description`).toContain('Use when:');
+      expect(tool.description, `${tool.name} registered description`).toContain('Do not use when:');
+      expect(tool.description, `${tool.name} registered description`).toContain('Example:');
     }
-
-    expect(descriptions.size).toBeGreaterThan(25);
   });
 });
