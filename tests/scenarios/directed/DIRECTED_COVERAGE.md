@@ -1487,6 +1487,22 @@ Covers: L-99, ATL-DS-15, VAL-119
 
 ---
 
+## 14. Foundation Harness
+
+Phase 121 foundation behaviors for MCP tool consolidation metadata, response helpers, frontmatter constants, and scenario assertion scaffolding.
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| D-foundation-json-1 | Directed scenario helpers parse MCP `content[0].text` JSON and assert dotted/array JSON paths against helper-backed tool responses. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+| D-foundation-json-2 | Expected JSON error envelopes can be asserted without treating `isError:false` responses as transport/runtime failures. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+| D-foundation-tools-1 | Foundation metadata registry coverage ties registered tool behavior to central tool metadata and descriptions. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+| D-foundation-frontmatter-1 | Foundation frontmatter constant guardrails prevent new unmanaged raw `fq_*` field literals outside explicit legacy/fixture allowlists. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+
+### test_foundation_json_response
+Covers: D-foundation-json-1, D-foundation-json-2, D-foundation-tools-1, D-foundation-frontmatter-1
+
+---
+
 ## PIR Regression Guard Tests — Resolution (2026-04-22)
 
 All four PIR regression guard tests were written on 2026-04-22 to expose confirmed unfixed bugs, then fixed and verified passing the same day. The notes below document why each existing test missed the bug, what the regression guard tests differently, and what was ultimately fixed.
