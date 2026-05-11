@@ -1,0 +1,38 @@
+# Test configuration for host-filtered MCP listTools E2E coverage
+
+instance:
+  id: 'e2e-host-filtered-test'
+  name: 'E2E Host Filtered Test'
+  vault:
+    path: vault-e2e
+    markdownExtensions:
+      - .md
+
+mcp:
+  transport: stdio
+  port: 3111
+
+supabase:
+  url: ${SUPABASE_URL}
+  service_role_key: ${SUPABASE_SERVICE_ROLE_KEY}
+  database_url: ${DATABASE_URL}
+
+host_mcp_tools:
+  tools:
+    - category:doc-read
+    - category:llm
+  excluded_tools:
+    - get_briefing
+
+git:
+  autoCommit: false
+  autoPush: false
+  remote: origin
+  branch: main
+
+logging:
+  level: info
+
+locking:
+  enabled: false
+  ttlSeconds: 30

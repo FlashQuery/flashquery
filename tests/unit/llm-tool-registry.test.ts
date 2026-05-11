@@ -173,13 +173,13 @@ describe('TOOL_TIERS', () => {
     expect(catalog).toHaveLength(1);
     expect(catalog[0]).toMatchObject({
       name: 'get_document',
-      description: 'Get document',
+      description: expect.stringContaining('Summary: Read one or more vault documents'),
       inputSchema,
     });
     expect(catalog[0].handler).toEqual(expect.any(Function));
     expect(originalRegisterTool).toHaveBeenCalledWith(
       'get_document',
-      { description: 'Get document', inputSchema },
+      { description: expect.stringContaining('Summary: Read one or more vault documents'), inputSchema },
       handler
     );
 
@@ -228,6 +228,39 @@ describe('TOOL_TIERS', () => {
 });
 
 describe('assembleNativeToolRegistry', () => {
+  it('treats host-disabled explicit tools as unavailable during delegated assembly', () => {
+    const hostFilteredCatalog = CATALOG.filter((tool) => ['get_document', 'call_model'].includes(tool.name));
+    const result = assembleNativeToolRegistry(
+      makeConfig(['tier:read-write', 'save_memory']),
+      'research',
+      hostFilteredCatalog
+    );
+
+    expect(result.nativeToolNames).toEqual(['get_document']);
+    expect(result.nativeToolNames).not.toContain('save_memory');
+    expect(result.diagnostics.unknown).toEqual(expect.arrayContaining(['save_memory']));
+  });
+
+  it('keeps call_model hard-excluded even when host-enabled and explicitly requested', () => {
+    const hostFilteredCatalog = CATALOG.filter((tool) => ['call_model'].includes(tool.name));
+    const result = assembleNativeToolRegistry(makeConfig(['call_model']), 'research', hostFilteredCatalog);
+
+    expect(result.nativeToolNames).toEqual([]);
+    expect(result.diagnostics.hardExcluded).toEqual([
+      { tool: 'call_model', reason: 'Tool can recursively call models and is not safe for delegated native access.' },
+    ]);
+  });
+
+  it('does not regain memory tools from tier selectors when the host catalog is doc-read only', () => {
+    const hostFilteredCatalog = CATALOG.filter((tool) => ['get_document', 'list_vault', 'search_documents'].includes(tool.name));
+    const result = assembleNativeToolRegistry(makeConfig(['tier:read-only']), 'research', hostFilteredCatalog);
+
+    expect(result.nativeToolNames).toEqual(['search_documents', 'get_document']);
+    expect(result.nativeToolNames).not.toContain('search_memory');
+    expect(result.nativeToolNames).not.toContain('get_memory');
+    expect(result.nativeToolNames).not.toContain('list_memories');
+  });
+
   it('returns stable empty native diagnostics when a purpose declares no native tools', () => {
     const result = assembleNativeToolRegistry(makeConfig(), 'research', CATALOG);
 

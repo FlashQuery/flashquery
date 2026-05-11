@@ -374,17 +374,19 @@ expect(toolNames).not.toContain('save_memory');
 
 All claims in this research were verified or cited in this session — no user confirmation needed.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should warning storage use `_deprecationWarnings` or a new `_startupWarnings` key?**
    - What we know: `getDeprecationWarnings` reads `_deprecationWarnings` and loader already uses that mechanism for `.yaml` extension warnings. [VERIFIED: src/config/loader.ts]
    - What's unclear: Product names these as suspicious category warnings, not deprecation warnings. [CITED: product requirements §3.10.4]
-   - Recommendation: Add a new `getStartupWarnings(config)` or `getToolExposureWarnings(config)` if the planner wants semantic clarity; otherwise append to `_deprecationWarnings` for minimal churn. [VERIFIED: src/config/loader.ts]
+   - Resolution: Plan 01 directs the executor to attach resolved exposure warnings without raw stdout writes and allows either appending to `_deprecationWarnings` or exporting a semantic startup-warning accessor. This is sufficient for execution because CFG-06 requires warning behavior, not a specific private storage key.
+   - Planner decision: Prefer `getStartupWarnings(config)` or `getToolExposureWarnings(config)` if the change is small; otherwise append to `_deprecationWarnings` while preserving existing extension warnings.
 
 2. **How strict should Phase 122 be about future final tool names not implemented yet?**
    - What we know: metadata contains future final tools with `hostEligible: false` and `delegatedEligible: false`. [VERIFIED: src/mcp/tool-metadata.ts]
    - What's unclear: A user selecting `write_document` before Phase 124 should get an actionable unavailable-tool error, not silent omission. [VERIFIED: 122-CONTEXT.md]
-   - Recommendation: Fail explicit future/unavailable host selections with "not available in this build/phase" messaging and replacement guidance where present. [VERIFIED: src/mcp/tool-metadata.ts]
+   - Resolution: Plan 01 requires validation errors for unknown selectors, future host-ineligible tools such as `write_document`, and dead tools such as `list_projects`. Current registered tools whose metadata status is `removed` but `hostEligible: true` remain valid host selectors until their later removal phases, because Phase 122 must preserve today's default all-tools-enabled host surface.
+   - Planner decision: Explicit future/unavailable host selections must fail config validation with actionable "not available in this build" style messaging and replacement guidance where present. Explicit current host-eligible removed-status selectors such as `create_document` may be used in `host_mcp_tools` while they remain registered, but should still hard-fail in delegated purpose config per CFG-05. They must not silently expand to an empty set.
 
 ## Environment Availability
 

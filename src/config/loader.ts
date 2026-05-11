@@ -5,6 +5,11 @@ import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { validateAllPurposeMode2Admissions } from '../llm/capabilities.js';
 import { HARD_EXCLUDED_NATIVE_TOOLS, TOOL_TIERS } from '../llm/tool-registry.js';
+import { getLegacyToolSuggestion } from '../mcp/tool-metadata.js';
+import {
+  resolveHostToolExposure,
+  type ResolvedHostToolExposure,
+} from '../mcp/tool-exposure.js';
 import { logger } from '../logging/logger.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -209,6 +214,13 @@ const TemplatesSchema = z
   .strict()
   .prefault({});
 
+const HostMcpToolsSchema = z
+  .object({
+    tools: z.array(z.string()).optional(),
+    excluded_tools: z.array(z.string()).optional(),
+  })
+  .strict();
+
 // ConfigSchema: strict schema — only known v1.7 fields accepted
 // Note: legacy field rejection (projects, defaults, vault) is enforced in loadConfig()
 // before this schema runs, providing clear actionable error messages.
@@ -220,6 +232,7 @@ const ConfigSchema = z
     git: GitSchema,
     mcp: McpSchema,
     llm: LlmSchema,
+    host_mcp_tools: HostMcpToolsSchema.optional(),
     templates: TemplatesSchema,
     embedding: EmbeddingSchema.optional(),
     logging: LoggingSchema,
@@ -245,6 +258,7 @@ export interface FlashQueryConfig {
   git: { autoCommit: boolean; autoPush: boolean; remote: string; branch: string };
   mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
   locking: { enabled: boolean; ttlSeconds: number };
+  hostMcpTools?: { tools?: string[]; excludedTools?: string[] };
   templates?: { defaultAccess: 'permissive' | 'restrictive' };
   llm?: {
     providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean }>;
@@ -471,9 +485,11 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
   const errors: LlmValidationError[] = [];
   const namePattern = /^[a-z0-9][a-z0-9_-]*$/;
   const toolTierNames = new Set<string>(Object.keys(TOOL_TIERS));
+  const transitionalPurposeToolNames = new Set<string>(['get_briefing', 'insert_doc_link']);
   const nativeToolNames = new Set<string>([
     ...Object.values(TOOL_TIERS).flat(),
     ...HARD_EXCLUDED_NATIVE_TOOLS,
+    ...transitionalPurposeToolNames,
   ]);
 
   // CONF-01: name format validation
@@ -546,6 +562,15 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
     }
 
     for (const tool of [...tools, ...excludedTools]) {
+      const suggestion = getLegacyToolSuggestion(tool);
+      if (suggestion) {
+        errors.push({
+          layer: 'purpose',
+          name: pu.name,
+          message: `purpose '${pu.name}' ${suggestion.message}`,
+        });
+        continue;
+      }
       if (toolTierNames.has(tool) || nativeToolNames.has(tool)) continue;
       errors.push({
         layer: 'purpose',
@@ -824,6 +849,14 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     instance: instanceData,
   };
 
+  let resolvedHostToolExposure: ResolvedHostToolExposure;
+  try {
+    resolvedHostToolExposure = resolveHostToolExposure(config.hostMcpTools);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Config error: [host_mcp_tools] ${message}`, { cause: error });
+  }
+
   // 9.5. Resolve relative vault path to absolute path (relative to config file directory)
   if (!isAbsolute(config.instance.vault.path)) {
     config.instance.vault.path = resolve(configDir, config.instance.vault.path);
@@ -832,7 +865,9 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // 10. Emit warnings (deferred until after validation — caller logs them)
   (config as unknown as Record<string, unknown>)['_deprecationWarnings'] = [
     ...(extensionWarning ? [extensionWarning] : []),
+    ...resolvedHostToolExposure.warnings,
   ];
+  (config as unknown as Record<string, unknown>)['_resolvedHostToolExposure'] = resolvedHostToolExposure;
 
   // Attach raw LLM api_key refs (used by syncLlmConfigToDb in src/llm/config-sync.ts).
   // Stored as a runtime-only Map alongside `_deprecationWarnings`. Not part of the
@@ -853,6 +888,14 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 
 export function getDeprecationWarnings(config: FlashQueryConfig): string[] {
   return ((config as unknown as Record<string, unknown>)['_deprecationWarnings'] as string[]) ?? [];
+}
+
+export function getResolvedHostToolExposure(config: FlashQueryConfig): ResolvedHostToolExposure {
+  const resolved = (config as unknown as Record<string, unknown>)['_resolvedHostToolExposure'];
+  if (resolved && typeof resolved === 'object') {
+    return resolved as ResolvedHostToolExposure;
+  }
+  return resolveHostToolExposure(config.hostMcpTools);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

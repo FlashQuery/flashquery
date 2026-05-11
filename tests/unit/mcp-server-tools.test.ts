@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { registerMemoryTools } from '../../src/mcp/tools/memory.js';
@@ -16,6 +16,7 @@ import {
   assertRegisteredToolsHaveMetadata,
   requireToolMetadata,
 } from '../../src/mcp/tool-metadata.js';
+import { resolveHostToolExposure } from '../../src/mcp/tool-exposure.js';
 
 const mockConfig: FlashQueryConfig = {
   instance: { id: 'test', vault: { path: '/tmp/vault' } },
@@ -44,6 +45,35 @@ function registerAllCurrentTools(server: McpServer): void {
 }
 
 describe('MCP tool registration metadata', () => {
+  it('skips host-disabled tools before native catalog capture and SDK registration', () => {
+    const originalRegisterTool = vi.fn();
+    const server = wrapServerWithToolCatalog({
+      registerTool: originalRegisterTool,
+    } as unknown as McpServer, { hostEnabledToolNames: new Set(['get_document']) });
+
+    server.registerTool('get_document', { description: 'Get document', inputSchema: {} }, vi.fn() as never);
+    server.registerTool('save_memory', { description: 'Save memory', inputSchema: {} }, vi.fn() as never);
+
+    expect(getNativeToolCatalog(server).map((tool) => tool.name)).toEqual(['get_document']);
+    expect(originalRegisterTool).toHaveBeenCalledTimes(1);
+    expect(originalRegisterTool).toHaveBeenCalledWith('get_document', expect.any(Object), expect.any(Function));
+  });
+
+  it('registers all modules against a host-filtered doc-read catalog', () => {
+    const server = wrapServerWithToolCatalog(
+      new McpServer({ name: 'test', version: '0.1.0' }),
+      { hostEnabledToolNames: new Set(resolveHostToolExposure({ tools: ['category:doc-read'] }).hostEnabledToolNames) }
+    );
+
+    registerAllCurrentTools(server);
+
+    const names = getNativeToolCatalog(server).map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(['get_document', 'list_vault']));
+    expect(names).not.toContain('save_memory');
+    expect(names).not.toContain('create_document');
+    expect(names).not.toContain('call_model');
+  });
+
   it('registers current tool modules into the native catalog', () => {
     const server = makeCatalogServer();
 

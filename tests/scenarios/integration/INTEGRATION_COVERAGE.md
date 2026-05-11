@@ -17,6 +17,10 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-foundation-json-1 | YAML integration runner parses MCP `content[0].text` JSON and asserts dotted/array JSON paths against helper-backed tool responses. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
 | INT-foundation-json-2 | Expected JSON error envelopes are asserted through normal success flow without requiring `expect_error`. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
 | INT-foundation-tools-1 | Foundation metadata/response helper coverage is represented in runnable integration workflow traceability. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
+| INT-foundation-tools-2 | YAML `host_mcp_tools` config filters the public MCP tools/list surface. | foundation_host_tool_exposure | 2026-05-11   | 2026-05-11   |
+| INT-foundation-tools-3 | Host-filtered listTools establishes the public catalog boundary consumed by delegated native assembly. | foundation_host_tool_exposure | 2026-05-11   | 2026-05-11   |
+| INT-foundation-tools-4 | Suspicious host category combinations remain warning-only startup diagnostics. | foundation_host_tool_exposure | 2026-05-11   | 2026-05-11   |
+| INT-foundation-tools-5 | Removed legacy purpose tool names fail config startup with replacement guidance. | foundation_host_tool_exposure | 2026-05-11   | 2026-05-11   |
 | INT-foundation-frontmatter-1 | Foundation frontmatter constant guardrails are represented in integration coverage traceability for later migration phases. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
 
 ---

@@ -22,6 +22,7 @@ import { startMcpServerFixture, stopMcpServerFixture } from '../helpers/mcp-serv
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const FIXTURE_PATH = resolve(__dirname, '../fixtures/flashquery.e2e.yaml');
+const HOST_FILTERED_FIXTURE_PATH = resolve(__dirname, '../fixtures/flashquery.e2e.host-filtered.yaml');
 const ENTRY_POINT = resolve(__dirname, '../../src/index.ts');
 const VAULT_E2E = resolve(__dirname, '../fixtures/vault-e2e');
 
@@ -104,6 +105,37 @@ describe.sequential('MCP protocol E2E', () => {
     }
     // Phase 107: get_doc_outline was removed — must not appear in the tool list
     expect(toolNames).not.toContain('get_doc_outline');
+  }, 30000);
+
+  it('listTools reflects host_mcp_tools filtered registration', async () => {
+    let filteredClient: Client | undefined;
+    let filteredTransport: StdioClientTransport | undefined;
+
+    try {
+      const fixture = await startMcpServerFixture({ configPath: HOST_FILTERED_FIXTURE_PATH });
+      filteredClient = fixture.client;
+      filteredTransport = fixture.transport;
+
+      const { tools } = await filteredClient.listTools();
+      const toolNames = tools.map((tool: { name: string }) => tool.name);
+
+      expect(toolNames).toEqual(expect.arrayContaining([
+        'get_document',
+        'list_vault',
+        'search_documents',
+        'search_all',
+        'call_model',
+      ]));
+      expect(toolNames).not.toContain('save_memory');
+      expect(toolNames).not.toContain('create_document');
+      expect(toolNames).not.toContain('archive_document');
+      expect(toolNames).not.toContain('force_file_scan');
+      expect(toolNames).not.toContain('get_briefing');
+    } finally {
+      if (filteredClient && filteredTransport) {
+        await stopMcpServerFixture(filteredClient, filteredTransport);
+      }
+    }
   }, 30000);
 
   // ── T-02: save_memory + search_memory round-trip ──────────────────────────

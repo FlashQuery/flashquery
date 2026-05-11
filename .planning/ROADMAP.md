@@ -43,7 +43,7 @@
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
 | 121 | Foundation: Metadata, Response Helpers, Test Harness | 3/3 | Complete    | 2026-05-11 |
-| 122 | Host Tool Exposure Config | Add `host_mcp_tools` and unify host/delegated selector resolution. | CFG-01..06 | 5 |
+| 122 | Host Tool Exposure Config | 4/4 | Complete    | 2026-05-11 |
 | 123 | Document Read + Standard Output Migration | Standardize existing document read/list/archive/copy/move outputs and canonical errors. | DOC-01, DOC-02, DOC-05 | 5 |
 | 124 | Document Write Primitives | Implement `write_document`, section/edit expansions, and `apply_tags` structured cross-domain output. | DOC-03, DOC-04, DOC-06..08 | 6 |
 | 125 | Unified Search + Memory Consolidation | Replace search/memory legacy surfaces with `search`, `write_memory`, `get_memory`, and `archive_memory`. | SRCH-01..06, MEM-01..04 | 6 |
@@ -90,13 +90,13 @@
 
 **Required phase coverage:** Unit tests for selector expansion and validation; integration tests for server registration/listTools; E2E protocol coverage for host-filtered tool listing; directed and integration scenarios for host/delegated filtering.
 
-**Plans:** 4 plans
+**Plans:** 4/4 plans complete
 
 Plans:
-- [ ] 122-01-PLAN.md — Create host selector/config resolution and phase traceability.
-- [ ] 122-02-PLAN.md — Gate MCP registration and prove host-filtered `listTools`.
-- [ ] 122-03-PLAN.md — Enforce delegated host intersection and legacy-name validation.
-- [ ] 122-04-PLAN.md — Add scenario coverage and phase validation evidence.
+- [x] 122-01-PLAN.md — Create host selector/config resolution and phase traceability.
+- [x] 122-02-PLAN.md — Gate MCP registration and prove host-filtered `listTools`.
+- [x] 122-03-PLAN.md — Enforce delegated host intersection and legacy-name validation.
+- [x] 122-04-PLAN.md — Add scenario coverage and phase validation evidence.
 
 **UI hint:** no
 

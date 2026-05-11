@@ -234,7 +234,7 @@ from fqc_client import (
     get_json_path,
     parse_mcp_json,
 )
-from fqc_test_utils import TestContext, TestRun, expectation_detail
+from fqc_test_utils import FQCServer, TestContext, TestRun, expectation_detail
 
 
 # ---------------------------------------------------------------------------
@@ -705,8 +705,64 @@ def _execute_assert(
         run.step(label=label, passed=False, detail=str(e), timing_ms=0)
         return False
 
-    result = ctx.client.call_tool(op, **args)
+    if op == "mcp.list_tools":
+        result = _list_tools(ctx.client)
+    else:
+        result = ctx.client.call_tool(op, **args)
     return _evaluate_assertions(result, assert_spec, label, run)
+
+
+def _list_tools(client: FQCClient) -> ToolResult:
+    """Return MCP tools/list as a ToolResult so YAML assertions can inspect public tool discovery."""
+    if not client.session_id:
+        client.initialize()
+    t0 = time.monotonic()
+    try:
+        raw = client._post_mcp({
+            "jsonrpc": "2.0",
+            "id": client._next_id(),
+            "method": "tools/list",
+        })
+    except Exception as exc:
+        elapsed = int((time.monotonic() - t0) * 1000)
+        return ToolResult(
+            tool="mcp.list_tools",
+            ok=False,
+            text="",
+            timing_ms=elapsed,
+            arguments={},
+            error=f"HTTP request failed: {exc}",
+            server_url=client.base_url,
+            config_source=client.config_source,
+        )
+
+    elapsed = int((time.monotonic() - t0) * 1000)
+    if "error" in raw:
+        err_msg = raw["error"].get("message", str(raw["error"]))
+        return ToolResult(
+            tool="mcp.list_tools",
+            ok=False,
+            text="",
+            timing_ms=elapsed,
+            arguments={},
+            raw_response=raw,
+            error=f"JSON-RPC error: {err_msg}",
+            server_url=client.base_url,
+            config_source=client.config_source,
+        )
+
+    tools = (raw.get("result") or {}).get("tools") or []
+    names = [tool.get("name") for tool in tools if isinstance(tool, dict)]
+    return ToolResult(
+        tool="mcp.list_tools",
+        ok=True,
+        text=json.dumps({"tools": names}, sort_keys=True),
+        timing_ms=elapsed,
+        arguments={},
+        raw_response=raw,
+        server_url=client.base_url,
+        config_source=client.config_source,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -781,6 +837,12 @@ def run_yaml_test(
                     # Assert failures don't abort — collect the full picture
                     _execute_assert(step, ctx, run, variables)
 
+                elif "startup_error" in step:
+                    _execute_startup_error(step, args, run)
+
+                elif "startup_success" in step:
+                    _execute_startup_success(step, args, run)
+
                 elif "sleep" in step:
                     import time
                     secs = float(step["sleep"])
@@ -793,7 +855,7 @@ def run_yaml_test(
                         label=f"step {i}: unrecognized",
                         passed=False,
                         detail=(
-                            f"Each step must have an 'action', 'assert', or 'sleep' key. "
+                            f"Each step must have an 'action', 'assert', 'startup_error', 'startup_success', or 'sleep' key. "
                             f"Got: {list(step.keys())}"
                         ),
                         timing_ms=0,
@@ -817,6 +879,69 @@ def run_yaml_test(
 
     run.record_cleanup(cleanup_errors)
     return run
+
+
+def _execute_startup_error(step: dict, args: argparse.Namespace, run: TestRun) -> None:
+    spec = step.get("startup_error") or {}
+    label = step.get("label") or "startup error"
+    extra_config = spec.get("extra_config") or {}
+    expected = spec.get("expect_contains")
+    expected_items = expected if isinstance(expected, list) else [expected]
+    expected_items = [str(item) for item in expected_items if item is not None]
+    server = FQCServer(
+        fqc_dir=args.fqc_dir,
+        port_range=getattr(args, "port_range", None),
+        ready_timeout=8,
+        extra_config=extra_config,
+    )
+    try:
+        server.start()
+        run.step(label=label, passed=False, detail="Expected startup failure, but server became ready.", timing_ms=0)
+    except Exception as exc:
+        text = f"{exc}\n" + "\n".join(server.captured_logs)
+        missing = [item for item in expected_items if item not in text]
+        run.step(
+            label=label,
+            passed=not missing,
+            detail="" if not missing else f"Startup error missing expected text: {', '.join(missing)}",
+            timing_ms=0,
+        )
+    finally:
+        server.stop()
+
+
+def _execute_startup_success(step: dict, args: argparse.Namespace, run: TestRun) -> None:
+    spec = step.get("startup_success") or {}
+    label = step.get("label") or "startup success"
+    extra_config = spec.get("extra_config") or {}
+    expected = spec.get("expect_tools_contains") or []
+    expected_items = expected if isinstance(expected, list) else [expected]
+    expected_items = [str(item) for item in expected_items if item is not None]
+    server = FQCServer(
+        fqc_dir=args.fqc_dir,
+        port_range=getattr(args, "port_range", None),
+        ready_timeout=30,
+        extra_config=extra_config,
+    )
+    try:
+        server.start()
+        client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
+        try:
+            client.initialize()
+            raw = client._post_mcp({
+                "jsonrpc": "2.0",
+                "id": client._next_id(),
+                "method": "tools/list",
+            })
+            names = [tool.get("name") for tool in ((raw.get("result") or {}).get("tools") or []) if isinstance(tool, dict)]
+            missing = [item for item in expected_items if item not in names]
+            run.step(label=label, passed=not missing, detail="" if not missing else f"Missing expected tools: {', '.join(missing)}", timing_ms=0)
+        finally:
+            client.close()
+    except Exception as exc:
+        run.step(label=label, passed=False, detail=f"Expected startup success, got: {exc}", timing_ms=0)
+    finally:
+        server.stop()
 
 
 # ---------------------------------------------------------------------------

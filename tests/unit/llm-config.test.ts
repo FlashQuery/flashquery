@@ -250,6 +250,76 @@ llm:
     }
   });
 
+  it('hard-fails removed legacy purpose tool names with replacement suggestions and no aliases', () => {
+    const tmpFile = join(tmpdir(), `fqc-llm-legacy-tools-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million:
+        input: 1
+        output: 1
+  purposes:
+    - name: default
+      description: General
+      models: [gpt-4o]
+      tools: [search_documents, save_memory, force_file_scan]
+      excluded_tools: [create_document]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow("Tool 'search_documents' has been replaced by 'search'");
+      expect(() => loadConfig(tmpFile)).toThrow("Tool 'create_document' has been replaced by 'write_document'");
+      expect(() => loadConfig(tmpFile)).toThrow("Tool 'save_memory' has been replaced by 'write_memory'");
+      expect(() => loadConfig(tmpFile)).toThrow("Tool 'force_file_scan' has been replaced by 'maintain_vault'");
+      expect(() => loadConfig(tmpFile)).toThrow('FlashQuery does not alias legacy tool names');
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('keeps transitional purpose tool names valid until their removal gates', () => {
+    const tmpFile = join(tmpdir(), `fqc-llm-transitional-tools-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million:
+        input: 1
+        output: 1
+  purposes:
+    - name: default
+      description: General
+      models: [gpt-4o]
+      tools: [get_briefing, insert_doc_link]
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.purposes[0].tools).toEqual(['get_briefing', 'insert_doc_link']);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('[U-06] preserves arbitrary keys in purpose.defaults per PURP-01/PURP-03', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
@@ -498,9 +568,9 @@ llm:
       models:
         - gpt-4o
       tools:
-        - search_memory
-      excluded_tools:
         - get_memory
+      excluded_tools:
+        - search_records
       templates:
         - Templates/research.md
       defaults:
@@ -518,8 +588,8 @@ llm:
     try {
       const config = loadConfig(tmpFile);
       const purpose = config.llm?.purposes[0];
-      expect(purpose?.tools).toEqual(['search_memory']);
-      expect(purpose?.excludedTools).toEqual(['get_memory']);
+      expect(purpose?.tools).toEqual(['get_memory']);
+      expect(purpose?.excludedTools).toEqual(['search_records']);
       expect(purpose?.templates).toEqual(['Templates/research.md']);
       expect(purpose?.defaults?.['temperature']).toBe(0.2);
       expect(purpose?.defaults?.['vendor_flag']).toBe('enabled');
@@ -556,7 +626,7 @@ llm:
     - name: agentic
       description: Agentic purpose
       models: [gpt-4o]
-      excluded_tools: [search_memory]
+      excluded_tools: [get_memory]
 `;
     writeFileSync(tmpFile, yaml);
     try {
@@ -1123,7 +1193,7 @@ llm:
     - name: agentic
       description: Agentic purpose
       models: [router-model]
-      tools: [search_memory]
+      tools: [get_memory]
 `;
     writeFileSync(tmpFile, yaml);
     try {

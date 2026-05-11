@@ -22,7 +22,7 @@ import { registerLlmTools } from './tools/llm.js';
 import { registerLlmUsageTools } from './tools/llm-usage.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from './tool-catalog.js';
 import { validateAndCacheNativeToolSchemas } from '../llm/tool-registry.js';
-import type { FlashQueryConfig } from '../config/loader.js';
+import { getResolvedHostToolExposure, type FlashQueryConfig } from '../config/loader.js';
 
 // ── HTTP Error Code and Message Mapping (D-04) ──
 
@@ -447,7 +447,8 @@ function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
   // Apply correlation ID wrapping BEFORE tool registration so all 26 tools
   // automatically inherit context without modifying individual tool files.
   wrapServerWithCorrelationIds(server);
-  wrapServerWithToolCatalog(server);
+  const hostEnabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
+  wrapServerWithToolCatalog(server, { hostEnabledToolNames });
   registerMemoryTools(server, config);
   registerDocumentTools(server, config);
   registerPluginTools(server, config);

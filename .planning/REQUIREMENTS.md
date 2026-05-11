@@ -26,12 +26,12 @@
 
 ### Host And Delegated Tool Exposure
 
-- [ ] **CFG-01**: User can configure `host_mcp_tools.tools` and `host_mcp_tools.excluded_tools` with the same selector grammar used by delegated LLM purpose tools.
-- [ ] **CFG-02**: User can select tools by `tier:read-only`, `tier:read-write`, `category:<category>`, or explicit tool name, with `excluded_tools` applied as the final deny layer.
-- [ ] **CFG-03**: `doc-write` selection automatically includes the `doc-read` tool set, while `doc-read` remains valid as a standalone read-only deployment.
-- [ ] **CFG-04**: MCP `listTools` exposes only selected host-eligible tools, and delegated model tool belts can only start from tools enabled on the host surface.
-- [ ] **CFG-05**: Purpose config that references legacy removed tool names fails startup with a helpful old-name to new-name suggestion instead of silently rewriting aliases.
-- [ ] **CFG-06**: Suspicious category combinations produce startup warnings without refusing to start.
+- [x] **CFG-01**: User can configure `host_mcp_tools.tools` and `host_mcp_tools.excluded_tools` with the same selector grammar used by delegated LLM purpose tools.
+- [x] **CFG-02**: User can select tools by `tier:read-only`, `tier:read-write`, `category:<category>`, or explicit tool name, with `excluded_tools` applied as the final deny layer.
+- [x] **CFG-03**: `doc-write` selection automatically includes the `doc-read` tool set, while `doc-read` remains valid as a standalone read-only deployment.
+- [x] **CFG-04**: MCP `listTools` exposes only selected host-eligible tools, and delegated model tool belts can only start from tools enabled on the host surface.
+- [x] **CFG-05**: Purpose config that references legacy removed tool names fails startup with a helpful old-name to new-name suggestion instead of silently rewriting aliases.
+- [x] **CFG-06**: Suspicious category combinations produce startup warnings without refusing to start.
 
 ### Document Tool Consolidation
 
@@ -125,12 +125,12 @@
 | FND-06 | Phase 121 | Complete |
 | FND-07 | Phase 121 | Complete |
 | FND-08 | Phase 121 | Complete |
-| CFG-01 | Phase 122 | Pending |
-| CFG-02 | Phase 122 | Pending |
-| CFG-03 | Phase 122 | Pending |
-| CFG-04 | Phase 122 | Pending |
-| CFG-05 | Phase 122 | Pending |
-| CFG-06 | Phase 122 | Pending |
+| CFG-01 | Phase 122 | Complete |
+| CFG-02 | Phase 122 | Complete |
+| CFG-03 | Phase 122 | Complete |
+| CFG-04 | Phase 122 | Complete |
+| CFG-05 | Phase 122 | Complete |
+| CFG-06 | Phase 122 | Complete |
 | DOC-01 | Phase 123 | Pending |
 | DOC-02 | Phase 123 | Pending |
 | DOC-03 | Phase 124 | Pending |

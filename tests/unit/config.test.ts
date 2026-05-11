@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadConfig, getDeprecationWarnings } from '../../src/config/loader.js';
+import { loadConfig, getDeprecationWarnings, getResolvedHostToolExposure } from '../../src/config/loader.js';
 
 const FIXTURE_PATH = new URL('../fixtures/flashquery.test.yml', import.meta.url).pathname;
 
@@ -60,6 +60,75 @@ logging:
       expect((config as Record<string, unknown>)['defaults']).toBeUndefined();
       expect((config as Record<string, unknown>)['projects']).toBeUndefined();
       expect((config as Record<string, unknown>)['vault']).toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('loads host_mcp_tools with camelCase config and resolved host exposure', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-host-tools-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "host-tools-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+host_mcp_tools:
+  tools:
+    - category:doc-read
+  excluded_tools:
+    - list_vault
+`);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.hostMcpTools).toEqual({
+        tools: ['category:doc-read'],
+        excludedTools: ['list_vault'],
+      });
+      expect(getResolvedHostToolExposure(config).hostEnabledToolNames).toContain('get_document');
+      expect(getResolvedHostToolExposure(config).hostEnabledToolNames).not.toContain('list_vault');
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('defaults omitted host_mcp_tools to all host-eligible tools and stores warnings without stdout writes', () => {
+    const config = loadConfig(FIXTURE_PATH);
+
+    expect(getResolvedHostToolExposure(config).hostEnabledToolNames).toEqual(expect.arrayContaining([
+      'get_document',
+      'save_memory',
+      'call_model',
+    ]));
+    expect(getDeprecationWarnings(config)).toEqual(expect.any(Array));
+  });
+
+  it('rejects invalid host_mcp_tools selectors with a host-scoped config error', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-host-tools-invalid-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "host-tools-invalid"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+host_mcp_tools:
+  tools:
+    - not_a_tool
+`);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow("Config error: [host_mcp_tools] unknown tool selector 'not_a_tool'");
     } finally {
       unlinkSync(tmpFile);
     }

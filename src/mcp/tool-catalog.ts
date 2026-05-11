@@ -8,6 +8,9 @@ type ToolRegistrationConfig = {
 };
 
 type RegisterToolFunction = McpServer['registerTool'];
+type ToolCatalogOptions = {
+  hostEnabledToolNames?: ReadonlySet<string>;
+};
 
 const toolCatalogs = new WeakMap<McpServer, NativeToolDefinition[]>();
 const wrappedServers = new WeakSet<McpServer>();
@@ -24,7 +27,7 @@ export function getNativeToolCatalog(server: McpServer): NativeToolDefinition[] 
   return newCatalog;
 }
 
-export function wrapServerWithToolCatalog(server: McpServer): McpServer {
+export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalogOptions = {}): McpServer {
   if (wrappedServers.has(server)) return server;
 
   const catalog = getNativeToolCatalog(server);
@@ -32,6 +35,10 @@ export function wrapServerWithToolCatalog(server: McpServer): McpServer {
 
   // Preserve the SDK call surface exactly while recording model-visible metadata.
   server.registerTool = ((name: string, config: ToolRegistrationConfig, cb: unknown) => {
+    if (options.hostEnabledToolNames && !options.hostEnabledToolNames.has(name)) {
+      return undefined;
+    }
+
     const metadataDescription = getToolMetadata(name)?.description;
     const registeredConfig = metadataDescription === undefined
       ? config
