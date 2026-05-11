@@ -246,8 +246,16 @@ Note the structure: `args:` is nested inside the `assert:` block, not at the ste
 | `expect_count_eq` | integer | Result count must equal N |
 | `expect_count_gte` | integer | Result count must be ≥ N |
 | `expect_count_lte` | integer | Result count must be ≤ N |
+| `expect_json_path` | string or string[] | Parsed JSON response must contain value(s) at dotted paths with `[index]` support |
+| `expect_json_equals` | `{path, value}` | Parsed JSON value at `path` must equal `value` |
+| `expect_json_contains` | `{path, value}` | Parsed JSON string/list/object at `path` must contain `value` |
+| `expect_json_array_length` | `{path, equals}` | Parsed JSON array at `path` must have the exact length |
 
 `expect_path` and `expect_path_contains` are purely label-cosmetic aliases for `expect_contains` — they both do a plain substring match against the full response text and don't do any path parsing. The only difference is the label shown in the report: `"path 'x' in results"` vs `"path containing 'x' in results"`.
+
+JSON assertions parse the MCP `content[0].text` payload. Paths support dotted
+object keys and zero-based array indexes, for example `identifier`,
+`results[0].error`, or `[1].message`.
 
 **How result counting works.** The `expect_count_*` and `expect_empty` checks count `Title:` lines in the response text. FlashQuery document results each include a `Title:` line; memory results do not. This means count checks reliably count documents, but will always count 0 memories regardless of how many are returned. Use `expect_contains` / `expect_not_contains` to assert on memory content.
 

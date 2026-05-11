@@ -8,6 +8,19 @@ Coverage IDs use the prefix `INT-` to avoid collision with the directed test IDs
 
 ---
 
+## INT — Foundation Harness
+
+Phase 121 foundation workflows for MCP tool consolidation metadata, response helpers, frontmatter constants, and YAML assertion scaffolding.
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| INT-foundation-json-1 | YAML integration runner parses MCP `content[0].text` JSON and asserts dotted/array JSON paths against helper-backed tool responses. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
+| INT-foundation-json-2 | Expected JSON error envelopes are asserted through normal success flow without requiring `expect_error`. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
+| INT-foundation-tools-1 | Foundation metadata/response helper coverage is represented in runnable integration workflow traceability. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
+| INT-foundation-frontmatter-1 | Foundation frontmatter constant guardrails are represented in integration coverage traceability for later migration phases. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
+
+---
+
 ## IS — Search Coherence
 
 Verifies that content written through one path is discoverable through the expected search paths.

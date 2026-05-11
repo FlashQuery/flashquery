@@ -1,0 +1,59 @@
+name: foundation_json_response
+description: >
+  Phase 121 foundation workflow proving the YAML integration runner can parse
+  helper-backed MCP JSON responses, assert dotted/array JSON paths, and keep
+  expected not_found errors as isError=false payloads.
+coverage:
+  - INT-foundation-json-1
+  - INT-foundation-json-2
+  - INT-foundation-tools-1
+  - INT-foundation-frontmatter-1
+
+steps:
+  - label: "Write a document fixture"
+    action: vault.write
+    name: foundation_doc
+    path: "foundation/json-response.md"
+    title: "Foundation JSON Response"
+    content: "Foundation JSON response body for YAML assertions."
+    tags: [foundation-json-response]
+
+  - label: "Helper-backed get_document success has JSON identification"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${foundation_doc.fq_id}"
+      expect_json_path:
+        - identifier
+        - fq_id
+        - size.chars
+      expect_json_equals:
+        path: path
+        value: "${foundation_doc.path}"
+      expect_json_contains:
+        path: body
+        value: "YAML assertions"
+
+  - label: "Expected missing document returns not_found JSON without expect_error"
+    assert:
+      op: get_document
+      args:
+        identifiers: "_integration/foundation/missing-json-response.md"
+      expect_json_equals:
+        path: error
+        value: not_found
+      expect_json_path: message
+
+  - label: "Batch JSON path assertions support arrays"
+    assert:
+      op: get_document
+      args:
+        identifiers:
+          - "${foundation_doc.fq_id}"
+          - "_integration/foundation/missing-json-response.md"
+      expect_json_array_length:
+        path: ""
+        equals: 2
+      expect_json_equals:
+        path: "[1].error"
+        value: not_found

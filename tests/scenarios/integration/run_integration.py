@@ -225,7 +225,15 @@ def _clean_test_tables(project_dir: Path) -> None:
 # Reuse the existing scenario test framework unchanged
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "framework"))
 
-from fqc_client import FQCClient, ToolResult, _find_project_dir, _load_env_file, config_summary
+from fqc_client import (
+    FQCClient,
+    ToolResult,
+    _find_project_dir,
+    _load_env_file,
+    config_summary,
+    get_json_path,
+    parse_mcp_json,
+)
 from fqc_test_utils import TestContext, TestRun, expectation_detail
 
 
@@ -486,6 +494,65 @@ def _evaluate_assertions(
     if "expect_count_eq" in assert_spec:
         result.expect_count_eq(int(assert_spec["expect_count_eq"]))
 
+    if "expect_json_path" in assert_spec:
+        paths = assert_spec["expect_json_path"]
+        if not isinstance(paths, list):
+            paths = [paths]
+        for path in paths:
+            result.expect_json_path(str(path))
+
+    if "expect_json_equals" in assert_spec:
+        spec = assert_spec["expect_json_equals"] or {}
+        path = str(spec.get("path", ""))
+        expected = spec.get("value")
+        result.expect_json_equals(path, expected)
+
+    if "expect_json_contains" in assert_spec:
+        spec = assert_spec["expect_json_contains"] or {}
+        path = str(spec.get("path", ""))
+        expected = spec.get("value")
+        try:
+            actual = get_json_path(parse_mcp_json(result), path)
+            if isinstance(actual, list):
+                passed = expected in actual
+            elif isinstance(actual, str):
+                passed = str(expected) in actual
+            elif isinstance(actual, dict):
+                passed = expected in actual.values() or expected in actual.keys()
+            else:
+                passed = actual == expected
+        except Exception as exc:
+            actual = f"{type(exc).__name__}: {exc}"
+            passed = False
+        result.expectations.append({
+            "check": "json_contains",
+            "path": path,
+            "expected": expected,
+            "actual": actual,
+            "passed": passed,
+            "label": f"json path {path} contains {expected!r}",
+        })
+
+    if "expect_json_array_length" in assert_spec:
+        spec = assert_spec["expect_json_array_length"] or {}
+        path = str(spec.get("path", ""))
+        expected = int(spec.get("equals"))
+        try:
+            actual = get_json_path(parse_mcp_json(result), path)
+            actual_length = len(actual) if isinstance(actual, list) else None
+            passed = actual_length == expected
+        except Exception as exc:
+            actual_length = f"{type(exc).__name__}: {exc}"
+            passed = False
+        result.expectations.append({
+            "check": "json_array_length",
+            "path": path,
+            "expected": expected,
+            "actual": actual_length,
+            "passed": passed,
+            "label": f"json array at {path} has length {expected}",
+        })
+
     all_passed = not result.expectations or all(
         e["passed"] for e in result.expectations
     )
@@ -621,7 +688,13 @@ def _execute_assert(
     variables: dict[str, dict],
 ) -> bool:
     """Execute an assert step. Returns True if all assertions pass."""
-    assert_spec: dict = step["assert"]
+    try:
+        assert_spec = _substitute(step["assert"], variables)
+    except ValueError as e:
+        label = step.get("label") or "assert"
+        run.step(label=label, passed=False, detail=str(e), timing_ms=0)
+        return False
+
     op: str = assert_spec.get("op", "")
     label: str = step.get("label") or f"assert: {op}"
     raw_args: dict = assert_spec.get("args") or {}
