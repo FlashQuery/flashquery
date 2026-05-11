@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   TOOL_METADATA,
+  assertRegisteredToolsHaveMetadata,
   expandToolSelectors,
   getDelegatedHardExcludedTools,
   getLegacyToolSuggestion,
@@ -16,6 +17,12 @@ describe('tool metadata registry', () => {
     expect(new Set(names).size).toBe(names.length);
     expect(getToolMetadata('get_document')?.name).toBe('get_document');
     expect(() => requireToolMetadata('missing_tool')).toThrow("Missing MCP tool metadata for 'missing_tool'.");
+  });
+
+  it('reports registered tools missing metadata', () => {
+    expect(() => assertRegisteredToolsHaveMetadata([{ name: 'missing_registered_tool' }])).toThrow(
+      'Missing MCP tool metadata for registered tools: missing_registered_tool'
+    );
   });
 
   it('covers current, final, transitional, removed, and dead tool names', () => {

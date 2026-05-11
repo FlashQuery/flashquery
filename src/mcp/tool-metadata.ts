@@ -224,6 +224,16 @@ export function getLegacyToolSuggestion(name: string): { replacement: string; me
   };
 }
 
+export function assertRegisteredToolsHaveMetadata(catalog: Array<{ name: string }>): void {
+  const missing = catalog
+    .map((tool) => tool.name)
+    .filter((name) => getToolMetadata(name) === undefined);
+
+  if (missing.length > 0) {
+    throw new Error(`Missing MCP tool metadata for registered tools: ${missing.sort().join(', ')}`);
+  }
+}
+
 export function expandToolSelectors(
   selectors: readonly ToolSelector[],
   options: ExpandToolSelectorsOptions = {}
