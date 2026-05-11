@@ -8,11 +8,13 @@ FlashQuery Core is an open source, local-first data management layer for individ
 
 **v3.0 complete (2026-04-30).** Native LLM Access milestone closed: three-layer provider/model/purpose config, completions client with fallback chains, `call_model` MCP tool, cost tracking, embedding migration, config template hardened (B-01 BLOCKER fixed), and v3.0 audit gaps resolved (Phase 106). 1306 unit tests passing. Ready for `/gsd-complete-milestone v3.0`.
 
-## Current State: v3.3 planning — MCP Tools Consolidation
+## Current State: v3.3 execution — MCP Tools Consolidation
 
 **Last shipped:** v3.2 Agentic LLM Tools (62/62 requirements complete; phases 112-120 shipped 2026-05-07). `call_model` now supports provider-normalized chat, host-authored document reference hydration, template parameterization, purpose-scoped native/template tools, guarded Mode 2 agent loops, template masquerade dispatch, and discovery/help diagnostics.
 
 **Current tool-surface challenge:** FlashQuery's MCP surface has grown organically across document, memory, plugin/record, LLM, and system milestones. Many tools still return prose or key-value text, naming and batch conventions are inconsistent, several tools duplicate each other, and host/delegated tool exposure uses separate logic.
+
+**Phase 121 complete (2026-05-11):** Foundation metadata, JSON response helpers, frontmatter guardrails, and scenario JSON assertion scaffolding are in place for the remaining v3.3 tool migration phases.
 
 ## Current Milestone: v3.3 MCP Tools Consolidation
 
@@ -309,4 +311,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-11 — started v3.3 MCP Tools Consolidation milestone*
+*Last updated: 2026-05-11 — completed Phase 121 foundation for v3.3 MCP Tools Consolidation*
