@@ -42,7 +42,7 @@
 
 | # | Phase | Goal | Requirements | Success Criteria |
 |---|-------|------|--------------|------------------|
-| 121 | Foundation: Metadata, Response Helpers, Test Harness | 2/3 | In Progress|  |
+| 121 | Foundation: Metadata, Response Helpers, Test Harness | 3/3 | Complete   | 2026-05-11 |
 | 122 | Host Tool Exposure Config | Add `host_mcp_tools` and unify host/delegated selector resolution. | CFG-01..06 | 5 |
 | 123 | Document Read + Standard Output Migration | Standardize existing document read/list/archive/copy/move outputs and canonical errors. | DOC-01, DOC-02, DOC-05 | 5 |
 | 124 | Document Write Primitives | Implement `write_document`, section/edit expansions, and `apply_tags` structured cross-domain output. | DOC-03, DOC-04, DOC-06..08 | 6 |
@@ -69,7 +69,7 @@
 5. Phase-local traceability format exists and points to concrete unit, integration, E2E, directed scenario, and integration scenario coverage targets.
 6. Phase validation runs the new foundation unit/integration/E2E/scenario checks that prove later phases have a stable test pattern.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 **UI hint:** no
 
