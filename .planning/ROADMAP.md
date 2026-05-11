@@ -90,7 +90,13 @@
 
 **Required phase coverage:** Unit tests for selector expansion and validation; integration tests for server registration/listTools; E2E protocol coverage for host-filtered tool listing; directed and integration scenarios for host/delegated filtering.
 
-**Plans:** TBD by `$gsd-plan-phase 122`
+**Plans:** 4 plans
+
+Plans:
+- [ ] 122-01-PLAN.md — Create host selector/config resolution and phase traceability.
+- [ ] 122-02-PLAN.md — Gate MCP registration and prove host-filtered `listTools`.
+- [ ] 122-03-PLAN.md — Enforce delegated host intersection and legacy-name validation.
+- [ ] 122-04-PLAN.md — Add scenario coverage and phase validation evidence.
 
 **UI hint:** no
 
