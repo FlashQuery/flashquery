@@ -5,7 +5,7 @@
  * Part of Phase 90: Centralize frontmatter field names into FM constants.
  */
 import { describe, it, expect } from 'vitest';
-import { FM } from '../../src/constants/frontmatter-fields.js';
+import { FM, type FrontmatterFieldName } from '../../src/constants/frontmatter-fields.js';
 
 describe('FM constants', () => {
   it('each constant has the correct string value', () => {
@@ -17,11 +17,29 @@ describe('FM constants', () => {
     expect(FM.OWNER).toBe('fq_owner');
     expect(FM.TYPE).toBe('fq_type');
     expect(FM.INSTANCE).toBe('fq_instance');
+    expect(FM.ARCHIVED_AT).toBe('fq_archived_at');
     expect(FM.ID).toBe('fq_id');
+  });
+
+  it('FrontmatterFieldName includes consolidation-managed constants', () => {
+    const archivedAtField: FrontmatterFieldName = FM.ARCHIVED_AT;
+
+    expect(archivedAtField).toBe('fq_archived_at');
   });
 
   it('key ordering matches preferred write order', () => {
     const keys = Object.keys(FM);
-    expect(keys).toEqual(['TITLE', 'STATUS', 'TAGS', 'CREATED', 'UPDATED', 'OWNER', 'TYPE', 'INSTANCE', 'ID']);
+    expect(keys).toEqual([
+      'TITLE',
+      'STATUS',
+      'TAGS',
+      'CREATED',
+      'UPDATED',
+      'OWNER',
+      'TYPE',
+      'INSTANCE',
+      'ARCHIVED_AT',
+      'ID',
+    ]);
   });
 });

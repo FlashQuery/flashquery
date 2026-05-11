@@ -17,6 +17,7 @@ export const FM = {
   OWNER:    'fq_owner',
   TYPE:     'fq_type',
   INSTANCE: 'fq_instance',
+  ARCHIVED_AT: 'fq_archived_at',
   ID:       'fq_id',
 } as const;
 
