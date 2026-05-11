@@ -227,5 +227,27 @@
 
 **Total:** 56 requirements, 56 mapped, 0 unmapped.
 
+## Per-Phase Verification Contract
+
+Every phase must instantiate this contract in its `PLAN.md` before coding begins and close it in that phase's validation artifact before transition. A phase is not complete if any required test layer is missing, deferred without an explicit dependency gate, or only promised for Phase 128.
+
+| Phase | Unit tests | Integration tests | E2E MCP tests | Directed scenarios | Integration scenarios |
+|-------|------------|-------------------|---------------|--------------------|-----------------------|
+| 121 | Metadata registry, selector primitives, JSON helpers, error envelopes, identification builders | Representative migrated handler response-format smoke test | Protocol JSON parse/error round-trip for representative tool | Foundation rows for JSON envelopes, canonical errors, and metadata | Foundation workflow proving response helper + handler + MCP envelope alignment |
+| 122 | Host selector grammar, additive doc-write/doc-read, exclusions, legacy-name suggestions, warning combinations | Server registration/listTools under filtered configs; delegated assembly starts from host-enabled set | Host-filtered `listTools` run and expected hidden tools absent | Host/delegated filtering behavior rows | Config-to-host-to-delegated workflow rows |
+| 123 | `get_document`, `archive_document`, `copy_document`, `move_document`, `list_vault` output/error helpers | Handler + filesystem/DB happy and expected-error paths for touched document read/list/archive/move/copy tools | MCP round-trip for at least one touched document read/list/archive tool | Document read/list/archive/copy/move rows updated or added | Cross-tool document read/list/archive/search workflows updated |
+| 124 | `write_document`, `insert_in_doc`, `replace_doc_section`, `apply_tags` schema and error cases | Handler + filesystem/DB happy and expected-error paths for create/update/edit/tag behavior | MCP write/get, edit/get, and tag/read round-trips for touched tool group | Document write/edit/tag rows updated or added | Write -> search/get/call_model reference and tag workflows updated |
+| 125 | `search`, `write_memory`, `get_memory`, `archive_memory` parsing, ranking, batch, version, and category-degradation rules | Search/memory handler + DB/vector/filesystem happy and expected-error paths | MCP search and memory write/get/archive round-trips | Search and memory consolidation rows updated or added | Write memory/document -> search -> archive/search workflows updated |
+| 126 | Plugin identification, include handling, `write_record`, record batch/archive/search, pending-review actions | Plugin/record handler + DB/schema happy and expected-error paths | MCP plugin info and record write/get/search round-trips | Plugin and record rows updated or added | Plugin register -> write_record -> search/get/archive workflows updated |
+| 127 | `remove_document`, `manage_directory`, `maintain_vault` validation, locks, conflicts, trash/git options, job status | Filesystem/git/DB maintenance happy and expected-error paths, including conflict cases | MCP remove/manage_directory/maintain_vault round-trips | Removal, directory, and vault-maintenance rows updated or added | Write -> remove/search, directory lifecycle, maintenance workflow rows updated |
+| 128 | Absence assertions for removed tools, transitional legacy gates, `call_model`/`get_llm_usage` regression guards | Final registration/delegated-surface integration checks and stale import/source cleanup checks | Final `listTools` absence/presence round-trip and reference-resolution regression | Coverage ledger rows closed; removed rows ported/retired with evidence | YAML integration suite closed with every v3.3 workflow accounted for |
+
+**Required validation evidence per phase:**
+- The phase `PLAN.md` must include a traceability table mapping each touched requirement to concrete test files/scenario rows.
+- The phase validation artifact must record exact commands run and their results.
+- Directed and integration scenario coverage files must be updated in the same phase as behavior changes.
+- Missing Supabase or external-provider prerequisites may skip execution only through the existing test helper skip mechanisms; the test case and coverage row must still be authored.
+- Phase 128 may audit, remove stale tests, and prove absence/regression coverage, but it must not be the first phase where behavior-specific tests are created.
+
 ---
 *Roadmap created: 2026-05-11 for v3.3 MCP Tools Consolidation*
