@@ -91,9 +91,6 @@ export function validateWriteDocumentInput(input: WriteDocumentInput): ErrorEnve
     }
   }
 
-  const tagConflict = resolveTagsFrontmatterConflict(input.tags, input.frontmatter);
-  if (tagConflict) return tagConflict;
-
   return null;
 }
 

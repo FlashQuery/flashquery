@@ -42,6 +42,7 @@ import {
 import {
   buildDocumentWriteResult,
   mergeWriteDocumentFrontmatter,
+  resolveTagsFrontmatterConflict,
   resolveTitleFrontmatterConflict,
   validateReservedFrontmatter,
   validateWriteDocumentInput,
@@ -319,6 +320,8 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
       if (reservedError) return jsonExpectedError(reservedError);
       const titleError = resolveTitleFrontmatterConflict(title, frontmatter);
       if (titleError) return jsonExpectedError(titleError);
+      const tagsError = resolveTagsFrontmatterConflict(tags, frontmatter);
+      if (tagsError) return jsonExpectedError(tagsError);
 
       if (config.locking.enabled) {
         const locked = await acquireLock(
