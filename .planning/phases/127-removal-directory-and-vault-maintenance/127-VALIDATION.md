@@ -32,15 +32,15 @@ created: 2026-05-12
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 127-01-01 | 01 | 1 | DOC-09/SYS-01/SYS-02/SYS-03 | T-127-01-* | Traceability, config, metadata, and helpers exist before behavior work | unit | `npm test -- tests/unit/config.test.ts tests/unit/tool-metadata.test.ts` | ✅ | ⬜ pending |
-| 127-02-01 | 02 | 2 | SYS-01/SYS-02 | T-127-02-* | Directory actions validate paths, preserve order, and use locks | unit | `npm test -- tests/unit/manage-directory.test.ts tests/unit/files-tools.test.ts tests/unit/write-lock.test.ts` | ✅ | ⬜ pending |
-| 127-02-02 | 02 | 2 | SYS-01/SYS-02 | T-127-02-* | Directory create/remove work through real filesystem integration | integration | `npm run test:integration -- tests/integration/manage-directory.integration.test.ts` | ✅ | ⬜ pending |
-| 127-03-01 | 03 | 3 | SYS-03 | T-127-03-* | Maintenance action normalization, conflict, status boundary, and shutdown policy are testable | unit | `npm test -- tests/unit/maintain-vault.test.ts tests/unit/scanner.test.ts tests/unit/shutdown.test.ts` | ✅ | ⬜ pending |
-| 127-03-02 | 03 | 3 | SYS-03 | T-127-03-* | Sync, repair, combined ordering, background, conflict, and shutdown behavior work through integration | integration | `npm run test:integration -- tests/integration/maintain-vault.integration.test.ts tests/integration/shutdown.integration.test.ts` | ✅ | ⬜ pending |
-| 127-04-01 | 04 | 4 | DOC-09 | T-127-04-* | Removal archives before move/delete, rejects unsafe trash paths, and honors git policy | unit | `npm test -- tests/unit/remove-document.test.ts tests/unit/vault.test.ts tests/unit/git-manager.test.ts` | ✅ | ⬜ pending |
-| 127-04-02 | 04 | 4 | DOC-09 | T-127-04-* | Removal followed by maintenance does not reclassify intentionally archived documents as missing/stale | integration | `npm run test:integration -- tests/integration/remove-document.integration.test.ts tests/integration/maintain-vault.integration.test.ts` | ✅ | ⬜ pending |
-| 127-05-01 | 05 | 5 | DOC-09/SYS-01/SYS-02/SYS-03 | T-127-05-* | MCP and scenarios use final tool names and JSON envelopes | e2e/scenario | `npm run test:e2e -- tests/e2e/protocol.test.ts && python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup removal_directory_maintenance && python3 tests/scenarios/integration/run_integration.py --managed removal_directory_maintenance` | ✅ | ⬜ pending |
-| 127-06-01 | 06 | 6 | DOC-09/SYS-01/SYS-02/SYS-03 | T-127-06-* | Final validation records all commands and local audits | audit | `npm run build` plus grep audits in `127-06-PLAN.md` | ✅ | ⬜ pending |
+| 127-01-01 | 01 | 1 | DOC-09/SYS-01/SYS-02/SYS-03 | T-127-01-* | Traceability, config, metadata, and helpers exist before behavior work | unit | `npm test -- tests/unit/config.test.ts tests/unit/tool-metadata.test.ts` | ✅ | ✅ green |
+| 127-02-01 | 02 | 2 | SYS-01/SYS-02 | T-127-02-* | Directory actions validate paths, preserve order, and use locks | unit | `npm test -- tests/unit/manage-directory.test.ts tests/unit/files-tools.test.ts tests/unit/write-lock.test.ts` | ✅ | ✅ green |
+| 127-02-02 | 02 | 2 | SYS-01/SYS-02 | T-127-02-* | Directory create/remove work through real filesystem integration | integration | `npm run test:integration -- tests/integration/manage-directory.integration.test.ts` | ✅ | ✅ green |
+| 127-03-01 | 03 | 3 | SYS-03 | T-127-03-* | Maintenance action normalization, conflict, status boundary, and shutdown policy are testable | unit | `npm test -- tests/unit/maintain-vault.test.ts tests/unit/scanner.test.ts tests/unit/shutdown.test.ts` | ✅ | ✅ green |
+| 127-03-02 | 03 | 3 | SYS-03 | T-127-03-* | Sync, repair, combined ordering, background, conflict, and shutdown behavior work through integration | integration | `npm run test:integration -- tests/integration/maintain-vault.integration.test.ts tests/integration/shutdown.integration.test.ts` | ✅ | ✅ green |
+| 127-04-01 | 04 | 4 | DOC-09 | T-127-04-* | Removal archives before move/delete, rejects unsafe trash paths, and honors git policy | unit | `npm test -- tests/unit/remove-document.test.ts tests/unit/vault.test.ts tests/unit/git-manager.test.ts` | ✅ | ✅ green |
+| 127-04-02 | 04 | 4 | DOC-09 | T-127-04-* | Removal followed by maintenance does not reclassify intentionally archived documents as missing/stale | integration | `npm run test:integration -- tests/integration/remove-document.integration.test.ts tests/integration/maintain-vault.integration.test.ts` | ✅ | ✅ green |
+| 127-05-01 | 05 | 5 | DOC-09/SYS-01/SYS-02/SYS-03 | T-127-05-* | MCP and scenarios use final tool names and JSON envelopes | e2e/scenario | `npm run test:e2e -- tests/e2e/protocol.test.ts && python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup removal_directory_maintenance && python3 tests/scenarios/integration/run_integration.py --managed removal_directory_maintenance` | ✅ | ✅ green |
+| 127-06-01 | 06 | 6 | DOC-09/SYS-01/SYS-02/SYS-03 | T-127-06-* | Final validation records all commands and local audits | audit | `npm run build` plus grep audits in `127-06-PLAN.md` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -284,3 +284,66 @@ No matches.
 ```
 
 **Blockers:** None. Phase 127 production code uses `FM.*` constants for managed frontmatter access; raw `fq_*` occurrences are descriptions, comments, fixtures, or expected serialized field names.
+
+## Source Coverage Audit
+
+**Task 3 completed:** 2026-05-12T21:10:00Z
+
+### GOAL
+
+| Item | Decision | Evidence |
+|------|----------|----------|
+| `remove_document` | COVERED | Unit, integration, E2E, directed, YAML integration, build, and local audit evidence are recorded above and linked from `TRACEABILITY.md`. |
+| `manage_directory` | COVERED | Create/remove unit, integration, E2E, directed, YAML integration, build, and local audit evidence are recorded above and linked from `TRACEABILITY.md`. |
+| `maintain_vault` | COVERED | Sync/repair/status unit, integration, E2E, directed, YAML integration, build, and local audit evidence are recorded above and linked from `TRACEABILITY.md`. |
+| final verification | COVERED | Focused unit, integration, E2E, directed scenario, YAML integration, local audits, and build all passed in Task 1/Task 2 evidence. |
+| Phase 128-only broad global cleanup | EXCLUDED | Scoped to Phase 128. Phase 127 only validates local absence/ported coverage and classifies remaining broad legacy source/test surfaces. |
+
+### REQ
+
+| Item | Decision | Evidence |
+|------|----------|----------|
+| `DOC-09` / `remove_document` | COVERED | `tests/unit/remove-document.test.ts`, `tests/integration/remove-document.integration.test.ts`, `tests/e2e/protocol.test.ts`, directed `D-rdoc-*`, YAML `INT-rdoc-*`, and `127-VALIDATION.md`. |
+| `SYS-01` / `manage_directory(action:"create")` | COVERED | `tests/unit/manage-directory.test.ts`, `tests/integration/manage-directory.integration.test.ts`, `tests/e2e/protocol.test.ts`, directed `D-mdir-*`, YAML `INT-mdir-*`, and `127-VALIDATION.md`. |
+| `SYS-02` / `manage_directory(action:"remove")` | COVERED | `tests/unit/manage-directory.test.ts`, `tests/integration/manage-directory.integration.test.ts`, `tests/e2e/protocol.test.ts`, directed `D-mdir-*`, YAML `INT-mdir-*`, and `127-VALIDATION.md`. |
+| `SYS-03` / `maintain_vault` | COVERED | `tests/unit/maintain-vault.test.ts`, `tests/integration/maintain-vault.integration.test.ts`, `tests/e2e/protocol.test.ts`, directed `D-mvault-*`, YAML `INT-mvault-*`, and `127-VALIDATION.md`. |
+| traceability | COVERED | `TRACEABILITY.md` now links all four requirements to `127-VALIDATION.md` final evidence. |
+| config/trash | COVERED | `tests/unit/config.test.ts` ran in the focused unit gate; prior Plan 127-01 and Plan 127-04 evidence remain linked. |
+| metadata/legacy tool migration | COVERED | `tests/unit/tool-metadata.test.ts`, `tests/e2e/protocol.test.ts`, and the Task 2 legacy-name audit validate local Phase 127 metadata/exposure behavior. |
+| E2E/protocol | COVERED | `npm run test:e2e -- tests/e2e/protocol.test.ts` passed with 25 tests. |
+| directed scenario | COVERED | `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup removal_directory_maintenance` passed 37/37 steps with zero residue. |
+| integration scenario | COVERED | `python3 tests/scenarios/integration/run_integration.py --managed removal_directory_maintenance` passed 17/17 steps. |
+| final verification | COVERED | Task 1 and Task 2 sections record exact commands, results, and audit classifications. |
+| Phase 128-only broad global cleanup | EXCLUDED | Scoped to Phase 128. Phase 127 does not delete global legacy handlers/tests/docs outside local final-tool validation. |
+
+### RESEARCH
+
+| Item | Decision | Evidence |
+|------|----------|----------|
+| `remove_document` archive-before-trash/delete and git-aware behavior | COVERED | Plan 127-04 implementation evidence, focused integration gate, E2E protocol gate, and scenario gates. |
+| `manage_directory` ordered create/remove and directory-scoped locking | COVERED | Plan 127-02 implementation evidence, focused unit/integration gates, E2E protocol gate, and scenario gates. |
+| `maintain_vault` sync/repair/status/background/conflict behavior | COVERED | Plan 127-03 implementation evidence, focused unit/integration gates, E2E protocol gate, and scenario gates. |
+| traceability | COVERED | Phase-local `TRACEABILITY.md` is closed with final `127-VALIDATION.md` links. |
+| config/trash | COVERED | Config tests and remove_document integration cover `trash_folder` behavior and invalid traversal rejection. |
+| metadata/legacy tool migration | COVERED | Tool metadata/unit tests, host exposure E2E, and local audit classifications cover Phase 127 migration boundaries. |
+| E2E/protocol | COVERED | `tests/e2e/protocol.test.ts` passed and covers final Phase 127 MCP surface. |
+| directed scenario | COVERED | `tests/scenarios/directed/testcases/test_removal_directory_maintenance.py` passed under managed strict cleanup. |
+| integration scenario | COVERED | `tests/scenarios/integration/tests/removal_directory_maintenance.yml` passed under managed execution. |
+| final verification | COVERED | This `127-VALIDATION.md` section records the final validation evidence. |
+| Phase 128-only broad global cleanup | EXCLUDED | Scoped to Phase 128 per `127-CONTEXT.md` deferred boundary. |
+
+### CONTEXT
+
+| Item | Decision | Evidence |
+|------|----------|----------|
+| `remove_document` | COVERED | Phase 127 implementation summaries plus Task 1 final verification prove the destructive document flow. |
+| `manage_directory` | COVERED | Phase 127 implementation summaries plus Task 1 final verification prove directory lifecycle behavior. |
+| `maintain_vault` | COVERED | Phase 127 implementation summaries plus Task 1 final verification prove administrative maintenance behavior. |
+| traceability | COVERED | `TRACEABILITY.md` rows are complete and reference `127-VALIDATION.md`. |
+| config/trash | COVERED | `trash_folder` config and `FM.ORIGINAL_PATH` are covered by unit and integration evidence. |
+| metadata/legacy tool migration | COVERED | Local host exposure excludes Phase 127 replaced names; remaining global cleanup is classified for Phase 128. |
+| E2E/protocol | COVERED | MCP protocol gate passed and records final tool round trips. |
+| directed scenario | COVERED | Directed scenario gate passed with strict cleanup. |
+| integration scenario | COVERED | YAML integration scenario gate passed. |
+| final verification | COVERED | Focused verification and audits are recorded in this file. |
+| Phase 128-only broad global cleanup | EXCLUDED | Scoped to Phase 128. |
