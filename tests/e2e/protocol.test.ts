@@ -337,6 +337,75 @@ describe.sequential('MCP protocol E2E', () => {
       },
     });
 
+    const getRecordResult = await client.callTool({
+      name: 'get_record',
+      arguments: {
+        plugin_id: WRITE_RECORD_PLUGIN_ID,
+        table: 'contacts',
+        id: created.id,
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(getRecordResult.isError).toBeFalsy();
+    const gotRecord = JSON.parse(getText(getRecordResult));
+    expect(gotRecord).toMatchObject({
+      id: created.id,
+      plugin_id: WRITE_RECORD_PLUGIN_ID,
+      table: 'contacts',
+      data: {
+        email: 'ada-protocol@example.test',
+      },
+    });
+
+    const searchResult = await client.callTool({
+      name: 'search_records',
+      arguments: {
+        plugin_id: WRITE_RECORD_PLUGIN_ID,
+        table: 'contacts',
+        query: 'Protocol Ada',
+        include: ['data'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(searchResult.isError).toBeFalsy();
+    const searchPayload = JSON.parse(getText(searchResult));
+    expect(searchPayload).toMatchObject({
+      plugin_id: WRITE_RECORD_PLUGIN_ID,
+      table: 'contacts',
+      total: 1,
+      results: [
+        expect.objectContaining({
+          id: created.id,
+          data: expect.objectContaining({ name: 'Protocol Ada' }),
+        }),
+      ],
+    });
+
+    const archiveResult = await client.callTool({
+      name: 'archive_record',
+      arguments: {
+        targets: [{ plugin_id: WRITE_RECORD_PLUGIN_ID, table: 'contacts', id: created.id }],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(archiveResult.isError).toBeFalsy();
+    expect(JSON.parse(getText(archiveResult))).toEqual([
+      expect.objectContaining({
+        id: created.id,
+        plugin_id: WRITE_RECORD_PLUGIN_ID,
+        table: 'contacts',
+        status: 'archived',
+      }),
+    ]);
+
+    const postArchiveSearch = await client.callTool({
+      name: 'search_records',
+      arguments: {
+        plugin_id: WRITE_RECORD_PLUGIN_ID,
+        table: 'contacts',
+        query: 'Protocol Ada',
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(postArchiveSearch.isError).toBeFalsy();
+    expect(JSON.parse(getText(postArchiveSearch))).toMatchObject({ total: 0, results: [] });
+
     const invalidResult = await client.callTool({
       name: 'write_record',
       arguments: {

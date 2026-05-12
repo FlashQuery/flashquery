@@ -26,6 +26,7 @@ import {
   addReconciliationPayload,
   buildRecordResult,
   parseRecordInclude,
+  type RecordResult,
   type RecordInclude,
 } from '../utils/record-output.js';
 
@@ -142,6 +143,39 @@ function buildPendingReviewPayload(
       type: item.review_type,
       context: item.context,
     })),
+  };
+}
+
+function buildSearchEnvelope(input: {
+  plugin_id?: string;
+  table?: string;
+  query?: string;
+  tag?: string;
+  rows: Array<Record<string, unknown>>;
+  include: RecordInclude[];
+  tableSpec: PluginTableSpec;
+  semantic?: boolean;
+  warnings?: string[];
+}): Record<string, unknown> {
+  const results = input.rows.map((row) => {
+    const result = buildRecordResult(
+      row as { id: string; created_at: string; updated_at: string; [key: string]: unknown },
+      { plugin_id: (row.plugin_id as string | undefined) ?? input.plugin_id ?? '', table: (row.table as string | undefined) ?? input.table ?? '', tableSpec: input.tableSpec },
+      input.include
+    ) as RecordResult & { score?: number };
+    if (input.semantic && typeof row.similarity === 'number') {
+      result.score = row.similarity;
+    }
+    return result;
+  });
+  return {
+    ...(input.plugin_id === undefined ? {} : { plugin_id: input.plugin_id }),
+    ...(input.table === undefined ? {} : { table: input.table }),
+    query: input.query ?? '',
+    ...(input.tag === undefined ? {} : { tag: input.tag }),
+    total: results.length,
+    results,
+    ...(input.warnings && input.warnings.length > 0 ? { warnings: input.warnings } : {}),
   };
 }
 
@@ -413,9 +447,10 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         plugin_instance: z.string().optional().describe('Plugin instance identifier. Omit for single-instance plugins.'),
         table: z.string().describe('Table name as defined in plugin schema'),
         id: z.string().describe('Record UUID'),
+        include: z.array(z.enum(['data', 'schema_metadata'])).optional().describe('Optional payload sections. Defaults to ["data"].'),
       },
     },
-    async ({ plugin_id, plugin_instance, table, id }) => {
+    async ({ plugin_id, plugin_instance, table, id, include }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -432,19 +467,17 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
       try {
         // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
-        let reconciliationSummary = '';
-        let reconciliationWarning = '';
+        let reconciliation: Record<string, unknown> | undefined;
         try {
           const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
           const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
-          reconciliationSummary = formatReconciliationSummary(actionSummary);
+          reconciliation = buildReconciliationPayload(actionSummary);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           logger.warn(`[record tool] reconciliation warning: ${msg}`);
-          reconciliationWarning = `\nReconciliation warning: ${msg}`;
         }
 
-        const { fullTableName } = resolveAndValidateTable(plugin_id, instanceName, table);
+        const { fullTableName, tableSpec } = resolveAndValidateTable(plugin_id, instanceName, table);
 
         const supabase = supabaseManager.getClient();
         const getResult = (await supabase
@@ -458,17 +491,28 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         if (error || !data) {
           const msg = `Record '${id}' not found in ${fullTableName}`;
           logger.warn(`get_record: ${msg}`);
-          return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+          return jsonExpectedError({
+            error: 'not_found',
+            message: msg,
+            identifier: id,
+            details: { plugin_id, table },
+          });
         }
 
         logger.info(`get_record: retrieved ${id} from ${fullTableName}`);
         const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
-        const pendingNote = pendingItems.length > 0
-          ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
-          : '';
-        return {
-          content: [{ type: 'text' as const, text: `${JSON.stringify(data, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}` }],
-        };
+        const payload = addPendingReviewPayload(
+          addReconciliationPayload(
+            buildRecordResult(
+              data as { id: string; created_at: string; updated_at: string; [key: string]: unknown },
+              { plugin_id, table, tableSpec },
+              parseRecordInclude(include as RecordInclude[] | undefined, 'get')
+            ),
+            reconciliation
+          ),
+          buildPendingReviewPayload(pendingItems)
+        );
+        return jsonToolResult(payload);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_record failed: ${msg}`);
@@ -594,13 +638,15 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
     {
       description: 'Soft-delete a record by setting its status to \'archived\'. The record remains in the database but is excluded from search results. Use this when a record is no longer active but should be preserved for history — e.g. closing a deal, archiving a completed task.',
       inputSchema: {
-        plugin_id: z.string().describe('Plugin identifier'),
-        plugin_instance: z.string().optional().describe('Plugin instance identifier. Omit for single-instance plugins.'),
-        table: z.string().describe('Table name as defined in plugin schema'),
-        id: z.string().describe('Record UUID'),
+        targets: z.array(z.object({
+          plugin_id: z.string().describe('Plugin identifier'),
+          plugin_instance: z.string().optional().describe('Plugin instance identifier. Omit for single-instance plugins.'),
+          table: z.string().describe('Table name as defined in plugin schema'),
+          id: z.string().describe('Record UUID'),
+        })).describe('Ordered archive targets'),
       },
     },
-    async ({ plugin_id, plugin_instance, table, id }) => {
+    async ({ targets }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -612,6 +658,14 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           ],
           isError: true,
         };
+      }
+
+      if (!Array.isArray(targets)) {
+        return jsonExpectedError({
+          error: 'invalid_input',
+          message: 'archive_record requires targets: [{ plugin_id, table, id }]',
+          details: { field: 'targets' },
+        });
       }
 
       if (config.locking.enabled) {
@@ -629,43 +683,72 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
       }
       try {
-        // ── Reconciliation preamble (D-07) ──
-        const instanceName = plugin_instance ?? 'default';
-        let reconciliationSummary = '';
-        let reconciliationWarning = '';
-        try {
-          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
-          reconciliationSummary = formatReconciliationSummary(actionSummary);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          logger.warn(`[record tool] reconciliation warning: ${msg}`);
-          reconciliationWarning = `\nReconciliation warning: ${msg}`;
-        }
-
-        const { fullTableName } = resolveAndValidateTable(plugin_id, instanceName, table);
-
         const supabase = supabaseManager.getClient();
-        const { error } = await supabase
-          .from(fullTableName)
-          .update({ status: 'archived', updated_at: new Date().toISOString() })
-          .eq('id', id)
-          .eq('instance_id', config.instance.id);
+        const results: Array<Record<string, unknown>> = [];
 
-        if (error) {
-          const msg = error.message;
-          logger.error(`archive_record failed: ${msg}`);
-          return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        for (const target of targets as Array<{ plugin_id: string; plugin_instance?: string; table: string; id: string }>) {
+          const instanceName = target.plugin_instance ?? 'default';
+          try {
+            let reconciliation: Record<string, unknown> | undefined;
+            try {
+              const result = await reconcilePluginDocuments(target.plugin_id, instanceName, config.supabase.databaseUrl);
+              const actionSummary = await executeReconciliationActions(result, target.plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
+              reconciliation = buildReconciliationPayload(actionSummary);
+            } catch (err) {
+              logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
+            }
+
+            const { fullTableName, tableSpec } = resolveAndValidateTable(target.plugin_id, instanceName, target.table);
+            const supportsArchivedAt = tableSpec.columns.some((column) => column.name === 'archived_at');
+            const archivedAt = new Date().toISOString();
+            const updatePayload = {
+              status: 'archived',
+              updated_at: archivedAt,
+              ...(supportsArchivedAt ? { archived_at: archivedAt } : {}),
+            };
+            const updateResult = (await supabase
+              .from(fullTableName)
+              .update(updatePayload)
+              .eq('id', target.id)
+              .eq('instance_id', config.instance.id)
+              .select('*')
+              .single()) as { data: Record<string, unknown> | null; error: { message: string } | null };
+
+            if (updateResult.error || !updateResult.data) {
+              results.push({
+                error: 'not_found',
+                message: `Record '${target.id}' not found in ${fullTableName}`,
+                identifier: target.id,
+                details: { plugin_id: target.plugin_id, table: target.table },
+              });
+              continue;
+            }
+
+            const payload = addReconciliationPayload(
+              buildRecordResult(
+                updateResult.data as { id: string; created_at: string; updated_at: string; [key: string]: unknown },
+                { plugin_id: target.plugin_id, table: target.table, tableSpec },
+                []
+              ),
+              reconciliation
+            );
+            results.push({
+              ...payload,
+              status: 'archived',
+              archived_at: supportsArchivedAt ? archivedAt : null,
+              ...(supportsArchivedAt ? {} : { warnings: ['archived_at_unavailable'] }),
+            });
+          } catch (err) {
+            results.push({
+              error: 'not_found',
+              message: err instanceof Error ? err.message : String(err),
+              identifier: target.id,
+              details: { plugin_id: target.plugin_id, table: target.table },
+            });
+          }
         }
 
-        logger.info(`archive_record: archived ${id} in ${fullTableName}`);
-        const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
-        const pendingNote = pendingItems.length > 0
-          ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
-          : '';
-        return {
-          content: [{ type: 'text' as const, text: `Archived record ${id} in ${fullTableName}${reconciliationSummary}${reconciliationWarning}${pendingNote}` }],
-        };
+        return jsonToolResult(results);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`archive_record failed: ${msg}`);
@@ -686,9 +769,9 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
       description:
         'Search records in a plugin table by field filters, text query, or semantic similarity. Automatically uses vector search (pgvector) for tables with embedding fields, or text matching otherwise. Use this when the user wants to find, filter, or query plugin data — e.g. "find contacts tagged VIP" or "search opportunities mentioning renewal".',
       inputSchema: {
-        plugin_id: z.string().describe('Plugin identifier'),
+        plugin_id: z.string().optional().describe('Plugin identifier'),
         plugin_instance: z.string().optional().describe('Plugin instance identifier. Omit for single-instance plugins.'),
-        table: z.string().describe('Table name as defined in plugin schema'),
+        table: z.string().optional().describe('Table name as defined in plugin schema'),
         filters: z
           .record(z.string(), z.unknown())
           .optional()
@@ -697,10 +780,13 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           .string()
           .optional()
           .describe('Text search query (semantic if table has embed_fields, ILIKE otherwise)'),
+        tag: z.string().optional().describe('Tag to search in taggable plugin tables'),
+        taggable_tables_only: z.boolean().optional().describe('When true, search all registered tables with a tags/tag column'),
+        include: z.array(z.enum(['data', 'schema_metadata'])).optional().describe('Optional payload sections for results'),
         limit: z.number().optional().describe('Max results (default: 10)'),
       },
     },
-    async ({ plugin_id, plugin_instance, table, filters, query, limit }) => {
+    async ({ plugin_id, plugin_instance, table, filters, query, tag, taggable_tables_only, include, limit }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -731,16 +817,70 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
       try {
         // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
-        let reconciliationSummary = '';
-        let reconciliationWarning = '';
+        const effectiveInclude = parseRecordInclude(include as RecordInclude[] | undefined, 'search');
+        const maxResults = limit ?? 10;
+
+        if (taggable_tables_only === true) {
+          const entries = pluginManager.getAllEntries();
+          const taggable = entries.flatMap((entry) =>
+            entry.schema.tables
+              .filter((candidate) => candidate.columns.some((column) => column.name === 'tags' || column.name === 'tag'))
+              .map((candidate) => ({ entry, tableSpec: candidate }))
+          );
+          if (taggable.length === 0) {
+            return jsonToolResult({
+              query: query ?? '',
+              ...(tag === undefined ? {} : { tag }),
+              total: 0,
+              results: [],
+              warnings: ['plugin_no_taggable_tables'],
+            });
+          }
+
+          const rows: Array<Record<string, unknown>> = [];
+          for (const item of taggable) {
+            const fullTableName = resolveTableName(item.entry.plugin_id, item.entry.plugin_instance, item.tableSpec.name);
+            const tagColumn = item.tableSpec.columns.some((column) => column.name === 'tags') ? 'tags' : 'tag';
+            const { data, error } = await supabaseManager.getClient()
+              .from(fullTableName)
+              .select('*')
+              .eq('instance_id', config.instance.id)
+              .eq('status', 'active')
+              .contains(tagColumn, tag === undefined ? [] : [tag])
+              .limit(maxResults);
+            if (error) {
+              logger.warn(`search_records taggable query failed for ${fullTableName}: ${error.message}`);
+              continue;
+            }
+            rows.push(...(data ?? []).map((row) => ({
+              ...row,
+              plugin_id: item.entry.plugin_id,
+              table: item.tableSpec.name,
+            })));
+          }
+
+          return jsonToolResult(buildSearchEnvelope({
+            query: query as string | undefined,
+            tag: tag as string | undefined,
+            rows: rows.slice(0, maxResults),
+            include: effectiveInclude,
+            tableSpec: taggable[0]!.tableSpec,
+          }));
+        }
+
+        if (typeof plugin_id !== 'string' || typeof table !== 'string') {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'plugin_id and table are required unless taggable_tables_only is true',
+            details: { fields: ['plugin_id', 'table'] },
+          });
+        }
+
         try {
           const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
-          reconciliationSummary = formatReconciliationSummary(actionSummary);
+          await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
         } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          logger.warn(`[record tool] reconciliation warning: ${msg}`);
-          reconciliationWarning = `\nReconciliation warning: ${msg}`;
+          logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
         }
 
         const { fullTableName, tableSpec } = resolveAndValidateTable(
@@ -749,7 +889,6 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           table
         );
 
-        const maxResults = limit ?? 10;
         const hasQuery = typeof query === 'string' && query.length > 0;
         const hasEmbedFields = tableSpec.embed_fields && tableSpec.embed_fields.length > 0;
 
@@ -771,28 +910,14 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
 
           const { data, error } = await qb.limit(maxResults);
           if (error) {
-            return {
-              content: [{ type: 'text' as const, text: `Error: ${error.message}` }],
-              isError: true,
-            };
+            return jsonRuntimeError(error.message);
           }
 
           const rows = data ?? [];
           logger.info(
             `search_records: filters-only found ${rows.length} record(s) in ${fullTableName}`
           );
-          const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
-          const pendingNote = pendingItems.length > 0
-            ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
-            : '';
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}`,
-              },
-            ],
-          };
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec }));
         }
 
         // ── Semantic path (query + embed_fields) ──────────────────────────
@@ -834,18 +959,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             logger.info(
               `search_records: semantic found ${rows.length} record(s) in ${fullTableName}`
             );
-            const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
-            const pendingNote = pendingItems.length > 0
-              ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
-              : '';
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}`,
-                },
-              ],
-            };
+            return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, semantic: true }));
           } finally {
             await pgClient.end();
           }
@@ -869,24 +983,10 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           }
           const { data, error } = await qb.limit(maxResults);
           if (error) {
-            return {
-              content: [{ type: 'text' as const, text: `Error: ${error.message}` }],
-              isError: true,
-            };
+            return jsonRuntimeError(error.message);
           }
           const rows = data ?? [];
-          const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
-          const pendingNote = pendingItems.length > 0
-            ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
-            : '';
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}`,
-              },
-            ],
-          };
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec }));
         }
 
         const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
@@ -920,18 +1020,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           const result = await pgClient.query(sql, params);
           const rows = result.rows ?? [];
           logger.info(`search_records: ILIKE found ${rows.length} record(s) in ${fullTableName}`);
-          const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
-          const pendingNote = pendingItems.length > 0
-            ? `\n${pendingItems.length} pending review item(s). Call clear_pending_reviews to process.`
-            : '';
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Found ${rows.length} record(s):\n${JSON.stringify(rows, null, 2)}${reconciliationSummary}${reconciliationWarning}${pendingNote}`,
-              },
-            ],
-          };
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec }));
         } finally {
           await pgClient.end();
         }

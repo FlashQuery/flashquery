@@ -565,7 +565,7 @@ describe('get_record', () => {
     expect(result.content[0].text).toContain('rec-123');
   });
 
-  it('returns isError for unknown id', async () => {
+  it('returns expected not_found for unknown id', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerRecordTools(server, config);
@@ -580,7 +580,7 @@ describe('get_record', () => {
       id: 'unknown-id',
     }) as { isError?: boolean };
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
   });
 
   it('filters by instance_id for tenant isolation', async () => {
@@ -752,13 +752,18 @@ describe('archive_record', () => {
     registerRecordTools(server, config);
 
     vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
-    const { mockUpdate } = makeSupabaseMock({});
+    const { mockUpdate } = makeSupabaseMock({
+      selectData: {
+        id: 'rec-123',
+        title: 'Task',
+        created_at: '2026-05-12T00:00:00.000Z',
+        updated_at: '2026-05-12T01:00:00.000Z',
+      },
+    });
 
     const handler = getHandler('archive_record');
     const result = await handler({
-      plugin_id: 'crm',
-      table: 'tasks',
-      id: 'rec-123',
+      targets: [{ plugin_id: 'crm', table: 'tasks', id: 'rec-123' }],
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
@@ -767,30 +772,24 @@ describe('archive_record', () => {
     );
   });
 
-  it('returns isError for unknown id (supabase error)', async () => {
+  it('returns per-target not_found for unknown id', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerRecordTools(server, config);
 
     vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
 
-    // Make the update chain return an error
-    const mockUpdateResult = vi.fn().mockResolvedValue({ error: { message: 'Record not found' } });
-    const mockEq2 = vi.fn().mockReturnValue({ then: vi.fn(), ...mockUpdateResult() });
-    // Actually we need to set up a simpler chain for archive (no .select().single() — just .eq().eq())
-    const mockEq1 = vi.fn().mockReturnValue({ eq: vi.fn().mockResolvedValue({ error: { message: 'Not found' } }) });
-    const mockUpdate = vi.fn().mockReturnValue({ eq: mockEq1 });
-    const mockFrom = vi.fn().mockReturnValue({ update: mockUpdate, insert: vi.fn(), select: vi.fn() });
-    vi.mocked(supabaseManager.getClient).mockReturnValue({ from: mockFrom } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    makeSupabaseMock({ updateError: { message: 'Not found' } });
 
     const handler = getHandler('archive_record');
     const result = await handler({
-      plugin_id: 'crm',
-      table: 'tasks',
-      id: 'bad-id',
-    }) as { isError?: boolean };
+      targets: [{ plugin_id: 'crm', table: 'tasks', id: 'bad-id' }],
+    }) as { content: Array<{ text: string }>; isError?: boolean };
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0]?.text ?? '[]')).toEqual([
+      expect.objectContaining({ error: 'not_found', identifier: 'bad-id' }),
+    ]);
   });
 
   it('defaults plugin_instance to "default" when not provided', async () => {
@@ -799,29 +798,49 @@ describe('archive_record', () => {
     registerRecordTools(server, config);
 
     vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
-    makeSupabaseMock({});
+    makeSupabaseMock({
+      selectData: {
+        id: 'rec-1',
+        title: 'Task',
+        created_at: '2026-05-12T00:00:00.000Z',
+        updated_at: '2026-05-12T01:00:00.000Z',
+      },
+    });
 
     const handler = getHandler('archive_record');
-    await handler({ plugin_id: 'crm', table: 'tasks', id: 'rec-1' });
+    await handler({ targets: [{ plugin_id: 'crm', table: 'tasks', id: 'rec-1' }] });
 
     expect(pluginManager.getTableSpec).toHaveBeenCalledWith('crm', 'default', 'tasks');
   });
 
-  it('returns success message with table name', async () => {
+  it('returns ordered JSON result with archived_at warning when unavailable', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerRecordTools(server, config);
 
     vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
-    makeSupabaseMock({});
+    makeSupabaseMock({
+      selectData: {
+        id: 'rec-archive',
+        title: 'Task',
+        created_at: '2026-05-12T00:00:00.000Z',
+        updated_at: '2026-05-12T01:00:00.000Z',
+      },
+    });
 
     const handler = getHandler('archive_record');
-    const result = await handler({ plugin_id: 'crm', table: 'tasks', id: 'rec-archive' }) as {
+    const result = await handler({ targets: [{ plugin_id: 'crm', table: 'tasks', id: 'rec-archive' }] }) as {
       content: Array<{ text: string }>;
     };
 
-    expect(result.content[0].text).toContain('Archived');
-    expect(result.content[0].text).toContain('rec-archive');
+    expect(JSON.parse(result.content[0]?.text ?? '[]')).toEqual([
+      expect.objectContaining({
+        id: 'rec-archive',
+        status: 'archived',
+        archived_at: null,
+        warnings: ['archived_at_unavailable'],
+      }),
+    ]);
   });
 });
 
@@ -862,6 +881,27 @@ describe('search_records', () => {
     expect(result.isError).toBeUndefined();
     // pg.Client should NOT be created for filters-only
     expect(pg.Client).not.toHaveBeenCalled();
+  });
+
+  it('returns plugin_no_taggable_tables warning for empty taggable search', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+    vi.mocked(pluginManager.getAllEntries).mockReturnValue([]);
+
+    const result = await getHandler('search_records')({
+      tag: 'vip',
+      taggable_tables_only: true,
+    }) as { content: Array<{ text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0]?.text ?? '{}')).toEqual({
+      query: '',
+      tag: 'vip',
+      total: 0,
+      results: [],
+      warnings: ['plugin_no_taggable_tables'],
+    });
   });
 
   it('uses pg.Client + embeddingProvider for semantic path (query + embed_fields)', async () => {
@@ -1179,7 +1219,7 @@ describe('record tools — reconciliation preamble (D-07)', () => {
     // update_record
     await getHandler('update_record')({ plugin_id: 'crm', table: 'tasks', id: 'r1', fields: {} });
     // archive_record
-    await getHandler('archive_record')({ plugin_id: 'crm', table: 'tasks', id: 'r1' });
+    await getHandler('archive_record')({ targets: [{ plugin_id: 'crm', table: 'tasks', id: 'r1' }] });
     // search_records (filters-only path)
     const mockLimit = vi.fn().mockResolvedValue({ data: [], error: null });
     const mockEqChain = vi.fn().mockReturnValue({ limit: mockLimit, eq: vi.fn().mockReturnValue({ limit: mockLimit }) });
