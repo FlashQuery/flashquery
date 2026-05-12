@@ -18,6 +18,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rm } from 'node:fs/promises';
 import { startMcpServerFixture, stopMcpServerFixture } from '../helpers/mcp-server-fixture.js';
+import { cleanupTestRows, setupTestSupabase } from '../helpers/supabase.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -25,6 +26,7 @@ const FIXTURE_PATH = resolve(__dirname, '../fixtures/flashquery.e2e.yaml');
 const HOST_FILTERED_FIXTURE_PATH = resolve(__dirname, '../fixtures/flashquery.e2e.host-filtered.yaml');
 const ENTRY_POINT = resolve(__dirname, '../../src/index.ts');
 const VAULT_E2E = resolve(__dirname, '../fixtures/vault-e2e');
+const E2E_INSTANCE_ID = 'e2e-shutdown-test';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared client — single FQC subprocess for all tests
@@ -35,6 +37,8 @@ let transport: StdioClientTransport;
 
 beforeAll(async () => {
   try {
+    await rm(VAULT_E2E, { recursive: true, force: true });
+    await cleanupTestRows(await setupTestSupabase(), E2E_INSTANCE_ID);
     const fixture = await startMcpServerFixture();
     client = fixture.client;
     transport = fixture.transport;
@@ -51,8 +55,9 @@ afterAll(async () => {
   // Clean up the E2E test vault
   try {
     await rm(VAULT_E2E, { recursive: true, force: true });
+    await cleanupTestRows(await setupTestSupabase(), E2E_INSTANCE_ID);
   } catch (err) {
-    console.warn(`Failed to clean up test vault at ${VAULT_E2E}:`, err);
+    console.warn(`Failed to clean up E2E test state for ${VAULT_E2E}:`, err);
     // Don't throw — cleanup failure shouldn't fail the test suite
   }
 });
@@ -278,6 +283,36 @@ describe.sequential('MCP protocol E2E', () => {
       path: 'e2e-json/moved-document.md',
       fq_id: createdDocFqId,
     });
+  }, 30000);
+
+  it('list_vault returns parseable JSON entries over the MCP protocol', async () => {
+    const result = await client.callTool({
+      name: 'list_vault',
+      arguments: {
+        path: 'e2e-json',
+        show: 'all',
+        include: ['metadata', 'tracking'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBe(false);
+    const payload = JSON.parse(getText(result));
+    expect(payload).toMatchObject({
+      path: 'e2e-json',
+      entries: expect.any(Array),
+    });
+    expect(payload.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: 'e2e-json/copy-document-copy.md',
+        type: 'file',
+        fq_id: expect.any(String),
+      }),
+      expect.objectContaining({
+        path: 'e2e-json/moved-document.md',
+        type: 'file',
+        fq_id: createdDocFqId,
+      }),
+    ]));
   }, 30000);
 
   // ── T-04: Error handling — missing required param ─────────────────────────
