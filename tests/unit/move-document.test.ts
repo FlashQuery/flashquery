@@ -59,6 +59,23 @@ describe('move_document JSON output contract', () => {
     });
   });
 
+  it('represents lock contention as an expected JSON conflict', () => {
+    const result = jsonExpectedError({
+      error: 'conflict',
+      message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+      identifier: 'Source.md',
+      details: { reason: 'lock_contention' },
+    });
+
+    const payload = JSON.parse(result.content[0]!.text) as ErrorEnvelope;
+
+    expect(result.isError).toBe(false);
+    expect(payload).toMatchObject({
+      error: 'conflict',
+      details: { reason: 'lock_contention' },
+    });
+  });
+
   it('represents plugin ownership as warning codes rather than appended prose', () => {
     const result = jsonToolResult(withWarnings(
       documentIdentification({
@@ -87,7 +104,11 @@ describe('move_document JSON output contract', () => {
     expect(moveSection).toContain('Supabase path update affected no document row');
     expect(moveSection).toContain('plugin_ownership_path_expectation');
     expect(moveSection).toContain('path_exists');
+    expect(moveSection).toContain("details: { reason: 'lock_contention' }");
+    expect(moveSection).toContain("details: { reason: 'untracked_document' }");
+    expect(moveSection).toContain('return jsonRuntimeError({ message: `Error moving document: ${msg}`, identifier });');
     expect(moveSection).not.toContain('Document moved successfully');
     expect(moveSection).not.toContain('References to this document');
+    expect(moveSection).not.toContain("moved.data[FM.ID] : 'untracked'");
   });
 });

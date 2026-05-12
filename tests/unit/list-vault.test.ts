@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
-import { stat, readdir } from 'node:fs/promises';
+import { stat, readdir, readFile } from 'node:fs/promises';
 
 vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(),
   stat: vi.fn(),
   readdir: vi.fn(),
+  readFile: vi.fn(),
   rmdir: vi.fn(),
 }));
 
@@ -128,6 +129,7 @@ describe('list_vault structured JSON output', () => {
 
     vi.mocked(readdir).mockResolvedValue([]);
     vi.mocked(stat).mockResolvedValue(dirStat());
+    vi.mocked(readFile).mockResolvedValue('file body');
 
     const { supabaseManager } = await import('../../src/storage/supabase.js');
     vi.mocked(supabaseManager.getClient).mockReturnValue({
@@ -138,9 +140,10 @@ describe('list_vault structured JSON output', () => {
     } as unknown as ReturnType<typeof supabaseManager.getClient>);
   });
 
-  it('returns a parseable JSON envelope by default', async () => {
+  it('returns a parseable JSON envelope by default with markdown body chars', async () => {
     vi.mocked(readdir).mockResolvedValue([makeDirent('notes.md', false)]);
     vi.mocked(stat).mockResolvedValueOnce(dirStat()).mockResolvedValue(fileStat(42));
+    vi.mocked(readFile).mockResolvedValue('---\nfq_title: Notes\n---\nBody');
 
     const result = await callListVault({ path: '/' });
     const payload = parsePayload(result);
@@ -158,7 +161,7 @@ describe('list_vault structured JSON output', () => {
         path: 'notes.md',
         type: 'file',
         modified: '2026-01-02T00:00:00.000Z',
-        size: { chars: 42 },
+        size: { chars: 'Body'.length },
       }),
     ]);
   });

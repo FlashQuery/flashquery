@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   resolveTitle,
   buildMetadataEnvelope,
@@ -151,6 +152,21 @@ describe('buildMetadataEnvelope (GDOC-02, GDOC-07)', () => {
     };
     const envelope = buildMetadataEnvelope('Docs/test.md', resolved, {}, 'body content');
     expect(envelope.fq_id).toBe(customId);
+  });
+});
+
+describe('get_document numeric parameter validation contract', () => {
+  it('documents occurrence and max_depth validation as canonical invalid_input handler checks', () => {
+    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
+    const getSection = source.slice(
+      source.indexOf("'get_document'"),
+      source.indexOf('// ─── Tool 3: update_document')
+    );
+
+    expect(getSection).toContain("message: 'occurrence must be a positive integer.'");
+    expect(getSection).toContain("details: { field: 'occurrence', value: occurrence }");
+    expect(getSection).toContain("message: 'max_depth must be an integer between 1 and 6.'");
+    expect(getSection).toContain("details: { field: 'max_depth', value: effectiveMaxDepth, min: 1, max: 6 }");
   });
 });
 

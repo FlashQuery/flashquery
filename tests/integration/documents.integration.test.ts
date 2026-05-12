@@ -326,6 +326,47 @@ describe.skipIf(!HAS_SUPABASE)('get_document canonical expected errors', () => {
       details: { conflict: 'sections_without_body' },
     });
   });
+
+  it('returns invalid_input JSON with isError:false for out-of-range occurrence and max_depth values', async () => {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const invalidOccurrence = await getHandler('get_document')({
+      identifiers: 'missing.md',
+      sections: ['Summary'],
+      occurrence: 0,
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(invalidOccurrence.isError).toBe(false);
+    expect(parseJsonResult(invalidOccurrence)).toMatchObject({
+      error: 'invalid_input',
+      details: { field: 'occurrence', value: 0 },
+    });
+
+    const invalidMaxDepth = await getHandler('get_document')({
+      identifiers: 'missing.md',
+      include: ['headings'],
+      max_depth: 10,
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(invalidMaxDepth.isError).toBe(false);
+    expect(parseJsonResult(invalidMaxDepth)).toMatchObject({
+      error: 'invalid_input',
+      details: { field: 'max_depth', value: 10, min: 1, max: 6 },
+    });
+  });
+
+  it('returns an empty JSON array without error for empty batch identifiers', async () => {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const result = await getHandler('get_document')({
+      identifiers: [],
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    expect(parseJsonResult(result)).toEqual([]);
+  });
 });
 
 describe.skipIf(!HAS_SUPABASE)('archive_document JSON output and archived_at lifecycle', () => {

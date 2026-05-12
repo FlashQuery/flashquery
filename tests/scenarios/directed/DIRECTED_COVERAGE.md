@@ -43,22 +43,22 @@ Core CRUD operations on vault documents via MCP.
 | D-24 | search_documents does not surface stale hits for manually-deleted files before reconcile (or marks them clearly) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-05-07 |
 | D-25 | User-defined custom frontmatter fields survive update_document (updating title, body, or tags leaves unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
 | D-26 | User-defined custom frontmatter fields survive archive_document (archiving only changes status; all other fields preserved) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
-| D-arch-1 | archive_document single returns a JSON document identification block instead of prose. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
-| D-arch-2 | archive_document response includes `archived_at` in ISO-8601 form. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
-| D-arch-3 | archive_document batch returns a JSON array with one envelope per input identifier. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
-| D-arch-4 | archive_document batch response order exactly matches input identifier order. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
-| D-arch-5 | Re-archiving an already archived document returns the existing `archived_at` timestamp. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
+| D-arch-1 | archive_document single returns a JSON document identification block instead of prose. | test_document_archive_and_search | 2026-05-12 |  |
+| D-arch-2 | archive_document response includes `archived_at` in ISO-8601 form. | test_document_archive_and_search | 2026-05-12 |  |
+| D-arch-3 | archive_document batch returns a JSON array with one envelope per input identifier. | test_document_archive_and_search | 2026-05-12 |  |
+| D-arch-4 | archive_document batch response order exactly matches input identifier order. | test_document_archive_and_search | 2026-05-12 |  |
+| D-arch-5 | Re-archiving an already archived document returns the existing `archived_at` timestamp. | test_document_archive_and_search | 2026-05-12 |  |
 | D-arch-6 | archive_document preserves user-defined custom frontmatter fields while adding archive lifecycle fields. | test_frontmatter_preservation; documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
-| D-arch-7 | archive_document batch not_found results return canonical error envelopes at the corresponding element position with outer `isError:false`. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
-| D-copy-1 | copy_document success returns a JSON document identification block for the new copy. | tests/unit/copy-document.test.ts; tests/e2e/protocol.test.ts copy_document JSON round-trip | 2026-05-12 |  |
-| D-copy-2 | copy_document creates a fresh fq_id for the copy and leaves the source document retrievable with its original fq_id. | documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
-| D-copy-3 | copy_document destination conflict returns canonical `conflict` with `details.reason="path_exists"` and `isError:false`. | tests/unit/copy-document.test.ts; documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
+| D-arch-7 | archive_document batch not_found results return canonical error envelopes at the corresponding element position with outer `isError:false`. | test_document_archive_and_search | 2026-05-12 |  |
+| D-copy-1 | copy_document success returns a JSON document identification block for the new copy. | test_document_copy_and_move | 2026-05-12 |  |
+| D-copy-2 | copy_document creates a fresh fq_id for the copy and leaves the source document retrievable with its original fq_id. | test_document_copy_and_move | 2026-05-12 |  |
+| D-copy-3 | copy_document destination conflict returns canonical `conflict` with `details.reason="path_exists"` and `isError:false`. | test_document_copy_and_move | 2026-05-12 |  |
 | D-copy-4 | copy_document remains single-target and rejects array-like source identifiers as `invalid_input`. | tests/unit/copy-document.test.ts | 2026-05-12 |  |
-| D-move-1 | move_document success returns a JSON document identification block for the moved document. | tests/unit/move-document.test.ts; tests/e2e/protocol.test.ts move_document JSON round-trip | 2026-05-12 |  |
-| D-move-2 | move_document preserves fq_id while returning the normalized destination path after an extensionless destination. | documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
-| D-move-3 | move_document destination conflict returns canonical `conflict` with `details.reason="path_exists"` and `isError:false`. | tests/unit/move-document.test.ts; documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
+| D-move-1 | move_document success returns a JSON document identification block for the moved document. | test_document_copy_and_move | 2026-05-12 |  |
+| D-move-2 | move_document preserves fq_id while returning the normalized destination path after an extensionless destination. | test_document_copy_and_move | 2026-05-12 |  |
+| D-move-3 | move_document destination conflict returns canonical `conflict` with `details.reason="path_exists"` and `isError:false`. | test_document_copy_and_move | 2026-05-12 |  |
 | D-move-4 | move_document plugin ownership notice is represented as `warnings:["plugin_ownership_path_expectation"]` rather than appended prose. | tests/unit/move-document.test.ts | 2026-05-12 |  |
-| D-move-5 | move_document reference durability preserves fq_id-based retrieval after the path move. | tests/e2e/protocol.test.ts move_document JSON round-trip; existing IX-19/IX-22 workflows | 2026-05-12 |  |
+| D-move-5 | move_document reference durability preserves fq_id-based retrieval after the path move. | test_document_copy_and_move; existing IX-19/IX-22 workflows | 2026-05-12 |  |
 | D-27 | get_document default response returns JSON envelope with body field (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-28 | get_document include=["frontmatter"] returns frontmatter projection in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-29 | get_document include=["headings"] returns headings array with level, text, chars (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
@@ -84,8 +84,8 @@ Core CRUD operations on vault documents via MCP.
 | D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
 | D-51 | get_document with array identifiers returns array output; each element succeeds independently (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
 | D-52 | get_document batch partial failure — one identifier not found returns error object at position; other succeeds; MCP response is not isError (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
-| D-gdoc-error-1 | get_document missing single identifier returns canonical JSON `not_found` envelope with `isError:false` instead of runtime failure. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
-| D-gdoc-error-2 | get_document invalid section/include combination returns canonical JSON `invalid_input` envelope with `details.conflict` preserved. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
+| D-gdoc-error-1 | get_document missing single identifier returns canonical JSON `not_found` envelope with `isError:false` instead of runtime failure. | test_consolidated_get_document_errors | 2026-05-12 |  |
+| D-gdoc-error-2 | get_document invalid section/include combination returns canonical JSON `invalid_input` envelope with `details.conflict` preserved. | test_consolidated_get_document_errors | 2026-05-12 |  |
 | D-53 | get_document with follow_ref returns source envelope + followed_ref nested object with resolved target content (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
 | D-54 | get_document follow_ref + include: ["headings"] returns headings in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
 | D-55 | get_document follow_ref + include: ["frontmatter","headings"] returns both in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |

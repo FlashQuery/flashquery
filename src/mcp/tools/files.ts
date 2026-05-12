@@ -14,8 +14,9 @@
  */
 
 import { z } from 'zod';
-import { mkdir, stat, readdir, rmdir } from 'node:fs/promises';
+import { mkdir, stat, readdir, rmdir, readFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
+import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
@@ -678,7 +679,8 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
 
         const displayPath = normalizedInput; // '' for vault root
         // ── Step 13: Structured JSON envelope ─────────────────────────────────
-        const entries = displayedEntries.map((entry) => {
+        const markdownExtensions = config.instance.vault.markdownExtensions ?? ['.md'];
+        const entries = await Promise.all(displayedEntries.map(async (entry) => {
           if (entry.kind === 'dir') {
             const childCount = entry.childCount ?? 0;
             const output: Record<string, unknown> = {
@@ -696,12 +698,21 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           }
 
           const row = dbRecordMap.get(entry.relativePath);
+          let chars = entry.size;
+          if (markdownExtensions.some(ext => entry.relativePath.toLowerCase().endsWith(ext.toLowerCase()))) {
+            try {
+              const raw = await readFile(entry.absPath, 'utf8');
+              chars = matter(raw).content.length;
+            } catch (e) {
+              logger.warn(`list_vault: fell back to filesystem size for "${entry.relativePath}" — read failed: ${(e as Error).message}`);
+            }
+          }
           const output: Record<string, unknown> = {
             name: entry.name,
             path: entry.relativePath,
             type: 'file',
             modified: row?.updated_at ?? new Date(entry.mtimeMs).toISOString(),
-            size: { chars: entry.size },
+            size: { chars },
           };
           if (includeMetadata) {
             output.created = row?.created_at ?? new Date(entry.birthtimeMs).toISOString();
@@ -713,7 +724,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             output.fq_id = row.id;
           }
           return output;
-        });
+        }));
 
         const payload = {
           path: displayPath || '/',

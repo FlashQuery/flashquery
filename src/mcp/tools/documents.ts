@@ -575,7 +575,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         occurrence: z.number().optional().default(1).describe(
           'Which occurrence of a heading when name appears multiple times (1-indexed, default: 1). Valid only when sections has exactly one element.'
         ),
-        max_depth: z.number().min(1).max(6).optional().default(6).describe(
+        max_depth: z.number().optional().default(6).describe(
           'Maximum heading depth to include when include contains "headings" (1-6, default: 6 — all levels).'
         ),
         follow_ref: z.string().min(1).optional().describe(
@@ -600,6 +600,22 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
       const effectiveMaxDepth = max_depth ?? 6;
       // WR-02: explicit fallback in case MCP SDK strips the Zod .default(true)
       const effectiveIncludeNested = include_nested ?? true;
+
+      if (!Number.isInteger(occurrence) || occurrence < 1) {
+        return jsonExpectedError({
+          error: 'invalid_input',
+          message: 'occurrence must be a positive integer.',
+          details: { field: 'occurrence', value: occurrence },
+        });
+      }
+
+      if (!Number.isInteger(effectiveMaxDepth) || effectiveMaxDepth < 1 || effectiveMaxDepth > 6) {
+        return jsonExpectedError({
+          error: 'invalid_input',
+          message: 'max_depth must be an integer between 1 and 6.',
+          details: { field: 'max_depth', value: effectiveMaxDepth, min: 1, max: 6 },
+        });
+      }
 
       const paramError = validateParameterCombinations({
         include: [...effectiveInclude],
@@ -918,7 +934,6 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const isBatch = Array.isArray(identifiers);
         const ids = isBatch ? identifiers : [identifiers];
         const results: Array<Record<string, unknown>> = [];
-        let hasRuntimeFailure = false;
 
         for (const id of ids) {
           try {
@@ -1053,7 +1068,6 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             if (!isBatch) {
               throw itemErr;
             }
-            hasRuntimeFailure = true;
             results.push({
               error: 'runtime_error',
               message: msg,
@@ -1062,8 +1076,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           }
         }
 
-        const result = jsonToolResult(isBatch ? results : results[0]);
-        return hasRuntimeFailure ? { ...result, isError: true } : result;
+        return jsonToolResult(isBatch ? results : results[0]);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`archive_document failed - ${msg}`);
@@ -1405,10 +1418,12 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           { ttlSeconds: config.locking.ttlSeconds }
         );
         if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.' }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'conflict',
+            message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+            identifier,
+            details: { reason: 'lock_contention' },
+          });
         }
       }
 
@@ -1433,11 +1448,12 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         // Validate tags (from source)
         const validation = validateAllTags(copyTags);
         if (!validation.valid) {
-          const messages = [...validation.errors];
-          return {
-            content: [{ type: 'text' as const, text: `Tag validation failed - ${messages.join('; ')}` }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: `Tag validation failed - ${[...validation.errors].join('; ')}`,
+            identifier,
+            details: { field: 'tags', errors: [...validation.errors] },
+          });
         }
 
         // Generate new fqc_id for the copy
@@ -1552,7 +1568,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`copy_document failed - ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError({ message: `Error copying document: ${msg}`, identifier });
       } finally {
         if (config.locking.enabled) {
           await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
@@ -1742,10 +1758,12 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           { ttlSeconds: config.locking.ttlSeconds }
         );
         if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.' }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'conflict',
+            message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+            identifier,
+            details: { reason: 'lock_contention' },
+          });
         }
       }
 
@@ -1900,7 +1918,16 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const moved = await vaultManager.readMarkdown(destPath);
         const movedTitle = typeof moved.data[FM.TITLE] === 'string' ? moved.data[FM.TITLE] : responseTitle;
         const modified = typeof moved.data[FM.UPDATED] === 'string' ? moved.data[FM.UPDATED] : new Date().toISOString();
-        const responseFqcId = sourceFqcId ?? (typeof moved.data[FM.ID] === 'string' ? moved.data[FM.ID] : 'untracked');
+        const movedFqcId = typeof moved.data[FM.ID] === 'string' ? moved.data[FM.ID] : null;
+        if (!sourceFqcId && !movedFqcId) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'move_document requires a tracked document with an fq_id.',
+            identifier,
+            details: { reason: 'untracked_document' },
+          });
+        }
+        const responseFqcId = sourceFqcId ?? movedFqcId;
         const payload = documentIdentification({
           identifier: destPath,
           title: movedTitle,
@@ -1930,7 +1957,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`move_document failed - ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError({ message: `Error moving document: ${msg}`, identifier });
       } finally {
         if (config.locking.enabled) {
           await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');

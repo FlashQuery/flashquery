@@ -29,7 +29,7 @@ Exit codes:
 """
 from __future__ import annotations
 
-COVERAGE = ["D-35", "D-31e", "D-31f", "D-46", "D-46a", "O-09", "O-10"]
+COVERAGE = ["D-35", "D-31e", "D-31f", "D-46", "D-46a", "D-gdoc-error-1", "D-gdoc-error-2", "O-09", "O-10"]
 
 import argparse
 import json
@@ -181,12 +181,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         d35_passed = False
         d35_detail = ""
         # This call should fail (isError: true)
-        if not d35_result.ok:
+        if d35_result.ok:
             try:
                 env = json.loads(d35_result.text)
                 msg = env.get("message", "")
                 checks = {
-                    "error == document_not_found": env.get("error") == "document_not_found",
+                    "error == not_found": env.get("error") == "not_found",
                     "identifier present": "identifier" in env,
                     # Phase 1 Gap 7: Error 1 envelope `message` field present
                     "message field present": "message" in env,
@@ -204,7 +204,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             except Exception as e:
                 d35_detail = f"JSON parse error: {e}. raw={d35_result.text[:200]}"
         else:
-            d35_detail = f"Expected isError but got ok=True. text={d35_result.text[:200]}"
+            d35_detail = f"Expected expected-error JSON with ok=True but got ok=False. text={d35_result.text[:200]}"
 
         run.step(
             label="D-35: document_not_found JSON error envelope",
@@ -231,7 +231,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d31e_passed = False
         d31e_detail = ""
-        if not d31e_result.ok:
+        if d31e_result.ok:
             try:
                 env = json.loads(d31e_result.text)
                 missing = env.get("missing_sections", [])
@@ -268,7 +268,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             except Exception as e:
                 d31e_detail = f"JSON parse error: {e}. raw={d31e_result.text[:200]}"
         else:
-            d31e_detail = f"Expected isError but got ok=True. text={d31e_result.text[:200]}"
+            d31e_detail = f"Expected expected-error JSON with ok=True but got ok=False. text={d31e_result.text[:200]}"
 
         run.step(
             label="D-31e: multi-section fail-fast mixed failures (no_match + insufficient_occurrences)",
@@ -292,7 +292,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         o09_passed = False
         o09_detail = ""
-        if not o09_result.ok:
+        if o09_result.ok:
             try:
                 env = json.loads(o09_result.text)
                 available = env.get("available_headings", [])
@@ -348,7 +348,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             except Exception as e:
                 o09_detail = f"JSON parse error: {e}. raw={o09_result.text[:200]}"
         else:
-            o09_detail = f"Expected isError but got ok=True. text={o09_result.text[:200]}"
+            o09_detail = f"Expected expected-error JSON with ok=True but got ok=False. text={o09_result.text[:200]}"
 
         run.step(
             label="D-31f / O-09: section_not_found includes available_headings array",
@@ -373,12 +373,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d46_passed = False
         d46_detail = ""
-        if not d46_result.ok:
+        if d46_result.ok:
             try:
                 env = json.loads(d46_result.text)
                 details = env.get("details", {})
                 checks = {
-                    "error == invalid_parameter_combination": env.get("error") == "invalid_parameter_combination",
+                    "error == invalid_input": env.get("error") == "invalid_input",
                     "details.conflict == occurrence_with_multi_section": details.get("conflict") == "occurrence_with_multi_section",
                     "no identifier field (pre-I/O error)": "identifier" not in env,
                     "details.sections_count == 2 (TC1-W13)":
@@ -393,7 +393,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             except Exception as e:
                 d46_detail = f"JSON parse error: {e}. raw={d46_result.text[:200]}"
         else:
-            d46_detail = f"Expected isError but got ok=True. text={d46_result.text[:200]}"
+            d46_detail = f"Expected expected-error JSON with ok=True but got ok=False. text={d46_result.text[:200]}"
 
         run.step(
             label="D-46: invalid_parameter_combination (occurrence with multi-section)",
@@ -422,13 +422,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d46a_passed = False
         d46a_detail = ""
-        if not d46a_result.ok:
+        if d46a_result.ok:
             try:
                 env = json.loads(d46a_result.text)
                 details = env.get("details", {})
                 checks = {
-                    "error == invalid_parameter_combination":
-                        env.get("error") == "invalid_parameter_combination",
+                    "error == invalid_input":
+                        env.get("error") == "invalid_input",
                     "details.conflict == sections_without_body":
                         details.get("conflict") == "sections_without_body",
                     "no identifier field (pre-I/O error)":
@@ -441,7 +441,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             except Exception as e:
                 d46a_detail = f"JSON parse error: {e}. raw={d46a_result.text[:200]}"
         else:
-            d46a_detail = f"Expected isError but got ok=True. text={d46a_result.text[:200]}"
+            d46a_detail = f"Expected expected-error JSON with ok=True but got ok=False. text={d46a_result.text[:200]}"
 
         run.step(
             label="D-46a: invalid_parameter_combination (sections without body in include) (Phase 1 Gap 1)",
@@ -467,7 +467,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         o10_passed = False
         o10_detail = ""
-        if not o10_result.ok:
+        if o10_result.ok:
             try:
                 env = json.loads(o10_result.text)
                 matched = env.get("matched_headings", [])
@@ -489,7 +489,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             except Exception as e:
                 o10_detail = f"JSON parse error: {e}. raw={o10_result.text[:200]}"
         else:
-            o10_detail = f"Expected isError but got ok=True. text={o10_result.text[:200]}"
+            o10_detail = f"Expected expected-error JSON with ok=True but got ok=False. text={o10_result.text[:200]}"
 
         run.step(
             label="O-10: occurrence_out_of_range (occurrence=5, only 2 Action Items exist)",

@@ -70,6 +70,43 @@ describe('copy_document JSON output contract', () => {
     });
   });
 
+  it('represents lock contention and tag validation as expected JSON errors', () => {
+    const lock = jsonExpectedError({
+      error: 'conflict',
+      message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+      identifier: 'Source.md',
+      details: { reason: 'lock_contention' },
+    });
+    const tags = jsonExpectedError({
+      error: 'invalid_input',
+      message: 'Tag validation failed - invalid tag',
+      identifier: 'Source.md',
+      details: { field: 'tags', errors: ['invalid tag'] },
+    });
+
+    expect(lock.isError).toBe(false);
+    expect(JSON.parse(lock.content[0]!.text)).toMatchObject({
+      error: 'conflict',
+      details: { reason: 'lock_contention' },
+    });
+    expect(tags.isError).toBe(false);
+    expect(JSON.parse(tags.content[0]!.text)).toMatchObject({
+      error: 'invalid_input',
+      details: { field: 'tags' },
+    });
+  });
+
+  it('uses JSON runtime envelopes for unexpected copy_document failures', () => {
+    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
+    const copySection = source.slice(source.indexOf("'copy_document'"), source.indexOf('// ─── Tool 6: reconcile_documents'));
+
+    expect(copySection).toContain("details: { reason: 'lock_contention' }");
+    expect(copySection).toContain("details: { field: 'tags', errors: [...validation.errors] }");
+    expect(copySection).toContain('return jsonRuntimeError({ message: `Error copying document: ${msg}`, identifier });');
+    expect(copySection).not.toContain('Tag validation failed - ${messages.join');
+    expect(copySection).not.toContain('text: `Error: ${msg}`');
+  });
+
   it('uses documentIdentification in copy_document and does not emit legacy key-value Title output', () => {
     const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
     const copySection = source.slice(source.indexOf("'copy_document'"), source.indexOf('// ─── Tool 6: reconcile_documents'));

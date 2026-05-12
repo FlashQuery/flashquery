@@ -43,7 +43,7 @@ describe('archive_document JSON result helpers', () => {
     expect(result.status).toBe('archived');
   });
 
-  it('fails runtime archive errors instead of returning expected conflict envelopes', () => {
+  it('keeps batch archive runtime failures inside positional JSON results', () => {
     const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
     const archiveSection = source.slice(
       source.indexOf("'archive_document'"),
@@ -52,7 +52,8 @@ describe('archive_document JSON result helpers', () => {
 
     expect(archiveSection).toContain('Supabase archive update failed');
     expect(archiveSection).toContain("error: 'runtime_error'");
-    expect(archiveSection).toContain('isError: true');
+    expect(archiveSection).toContain('return jsonToolResult(isBatch ? results : results[0])');
+    expect(archiveSection).not.toContain('hasRuntimeFailure ? { ...result, isError: true }');
     expect(archiveSection).not.toContain("error: 'conflict',\n              message: msg");
   });
 });

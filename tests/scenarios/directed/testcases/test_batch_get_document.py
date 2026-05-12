@@ -226,7 +226,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "list has 2 elements": len(results) == 2,
                     "element 0 succeeds (no error key)": "error" not in results[0],
                     "element 1 has error key": "error" in results[1],
-                    "element 1 error is document_not_found": results[1].get("error") == "document_not_found",
+                    "element 1 error is not_found": results[1].get("error") == "not_found",
                     "element 1 has identifier field": "identifier" in results[1],
                     "results[0].identifier == ident_a (TC2-W1 positional)":
                         len(results) > 0 and results[0].get("identifier") == ident_a,

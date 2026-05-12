@@ -138,6 +138,9 @@ describe.skipIf(!HAS_SUPABASE)('list_vault structured JSON integration', () => {
         size: { chars: expect.any(Number) },
       }),
     ]));
+    const fileEntry = payload.entries.find((entry) => entry.path === 'ListVaultJson/note.md');
+    expect((fileEntry?.size as { chars: number }).chars).toBeGreaterThanOrEqual('List vault integration body.'.length);
+    expect((fileEntry?.size as { chars: number }).chars).toBeLessThan(100);
   });
 
   it('keeps directories while filtering files by extension', async () => {

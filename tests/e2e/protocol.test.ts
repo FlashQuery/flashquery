@@ -79,6 +79,11 @@ function getText(result: { content: Array<{ type: string; text: string }>; isErr
   return first.text;
 }
 
+function extractField(text: string, field: string): string {
+  const match = text.match(new RegExp(`^${field}:\\s*(.+)$`, 'm'));
+  return match?.[1]?.trim() ?? '';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests — run sequentially (shared subprocess state)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -313,6 +318,54 @@ describe.sequential('MCP protocol E2E', () => {
         fq_id: createdDocFqId,
       }),
     ]));
+  }, 30000);
+
+  it('archive_document returns JSON identification and batch partial errors over the MCP protocol', async () => {
+    const createResult = await client.callTool({
+      name: 'create_document',
+      arguments: {
+        title: 'E2E Archive Document',
+        content: 'E2E archive body.',
+        path: 'e2e-json/archive-document.md',
+        tags: ['e2e-json'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(createResult.isError).toBeFalsy();
+    const archivePath = extractField(getText(createResult), 'Path');
+    const archiveFqId = extractField(getText(createResult), 'FQC ID');
+
+    const singleArchive = await client.callTool({
+      name: 'archive_document',
+      arguments: { identifiers: archiveFqId || archivePath },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(singleArchive.isError).toBeFalsy();
+    const archivePayload = JSON.parse(getText(singleArchive));
+    expect(archivePayload).toMatchObject({
+      identifier: archiveFqId || archivePath,
+      path: archivePath,
+      fq_id: archiveFqId,
+      status: 'archived',
+      archived_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
+
+    const batchArchive = await client.callTool({
+      name: 'archive_document',
+      arguments: { identifiers: [archiveFqId || archivePath, 'e2e-json/missing-archive.md'] },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(batchArchive.isError).toBeFalsy();
+    const batchPayload = JSON.parse(getText(batchArchive));
+    expect(batchPayload).toHaveLength(2);
+    expect(batchPayload[0]).toMatchObject({
+      fq_id: archiveFqId,
+      status: 'archived',
+      archived_at: archivePayload.archived_at,
+    });
+    expect(batchPayload[1]).toMatchObject({
+      error: 'not_found',
+      identifier: 'e2e-json/missing-archive.md',
+    });
   }, 30000);
 
   // ── T-04: Error handling — missing required param ─────────────────────────
