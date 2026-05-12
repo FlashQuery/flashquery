@@ -354,6 +354,18 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             });
           }
           if (existsSync(absolutePath)) {
+            try {
+              const statResult = await stat(absolutePath);
+              if (statResult.isDirectory()) {
+                return jsonExpectedError({
+                  error: 'invalid_input',
+                  message: `Path "${relativePath}" is a directory, not a file. Provide a complete file path with .md extension.`,
+                  details: { field: 'path', reason: 'path_is_directory' },
+                });
+              }
+            } catch {
+              // Fall through to the existing path conflict if stat cannot inspect it.
+            }
             return jsonExpectedError({
               error: 'conflict',
               message: `Document already exists at "${relativePath}"`,
@@ -375,6 +387,19 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           const deduplicated = deduplicateTags(validation.normalized);
           const effectiveTitle = title as string;
           const body = content ?? '';
+          const warnings: string[] = [];
+          const folderClaimsMap = getFolderClaimsMap(config);
+          for (const [folder, claim] of folderClaimsMap.entries()) {
+            const normalizedTarget = relativePath.toLowerCase();
+            if (normalizedTarget === folder || normalizedTarget.startsWith(folder + '/')) {
+              const claimEntry = pluginManager.getEntry(claim.pluginId, 'default');
+              const docType = claimEntry?.schema.documents?.types.find((type) => type.id === claim.typeId);
+              if (docType?.access === 'read-only') {
+                warnings.push('plugin_readonly_folder');
+                break;
+              }
+            }
+          }
           const fm = serializeOrderedFrontmatter({
             ...mergeWriteDocumentFrontmatter(frontmatter, effectiveTitle),
             [FM.ID]: fqcId,
@@ -403,7 +428,24 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           };
           const { error: insertError } = await supabase.from('fqc_documents').insert(insertPayload);
           if (insertError) {
-            logger.warn(`write_document(create): fqc_documents insert failed for ${relativePath}: ${insertError.message}`);
+            if (insertError.code === '23505' || insertError.message.includes('duplicate key')) {
+              logger.warn(
+                `write_document(create): duplicate path conflict for ${relativePath} — replacing stale DB row`
+              );
+              await supabase
+                .from('fqc_documents')
+                .delete()
+                .eq('instance_id', config.instance.id)
+                .eq('path', relativePath);
+              const { error: reinsertError } = await supabase.from('fqc_documents').insert(insertPayload);
+              if (reinsertError) {
+                logger.warn(
+                  `write_document(create): re-insert failed after stale-row cleanup for ${relativePath}: ${reinsertError.message}`
+                );
+              }
+            } else {
+              logger.warn(`write_document(create): fqc_documents insert failed for ${relativePath}: ${insertError.message}`);
+            }
           }
 
           void embeddingProvider
@@ -421,7 +463,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               )
             );
 
-          return jsonToolResult(buildDocumentWriteResult({
+          return jsonToolResult(withWarnings(buildDocumentWriteResult({
             mode: 'create',
             identifier: relativePath,
             title: effectiveTitle,
@@ -429,7 +471,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             fq_id: fqcId,
             modified: now,
             chars: body.length,
-          }));
+          }), warnings));
         }
 
         const resolved = await resolveDocumentIdentifier(config, supabase, identifier as string, logger);

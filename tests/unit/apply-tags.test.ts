@@ -16,4 +16,19 @@ describe('apply_tags Phase 124 contract', () => {
     expect(source).toContain('memoryIdentification({');
     expect(source).toContain('return jsonToolResult(results)');
   });
+
+  it('uses canonical envelopes for empty targets and disabled memory targets', () => {
+    expect(source).toContain("error: 'invalid_input'");
+    expect(source).toContain("details: { field: 'targets' }");
+    expect(source).toContain("error: 'unsupported'");
+    expect(source).toContain("details: { disabled_category: 'memory' }");
+    expect(source).toContain('jsonRuntimeError({ message: `Error applying tags: ${msg}` })');
+  });
+
+  it('fetches complete memory identification fields instead of placeholder metadata', () => {
+    expect(source).toContain(".select('content,tags,plugin_scope,created_at,updated_at')");
+    expect(source).toContain("content_preview: typeof memData?.content === 'string' ? memData.content.slice(0, 120) : ''");
+    expect(source).toContain("created_at: memData?.created_at ?? ''");
+    expect(source).not.toContain("identifier: memoryId,\n            entity_type: 'memory'");
+  });
 });

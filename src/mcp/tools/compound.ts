@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
+import { getResolvedHostToolExposure } from '../../config/loader.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { embeddingProvider, NullEmbeddingProvider } from '../../embedding/provider.js';
 import { logger } from '../../logging/logger.js';
@@ -21,11 +22,18 @@ import {
   joinBatchEntries,
   formatEmptyResults,
   jsonExpectedError,
+  jsonRuntimeError,
   jsonToolResult,
   documentIdentification,
   memoryIdentification,
 } from '../utils/response-formats.js';
-import { insertAtPosition, findHeadingOccurrence, getSectionBoundaries } from '../utils/markdown-sections.js';
+import {
+  insertAtPosition,
+  findMatchingHeadings,
+  getSectionBoundaries,
+  resolveHeadingTarget,
+} from '../utils/markdown-sections.js';
+import { getToolMetadata } from '../tool-metadata.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 import { serializeOrderedFrontmatter } from '../utils/frontmatter-sanitizer.js';
 
@@ -38,6 +46,38 @@ function applyTagChanges(existing: string[], addTags: string[], removeTags: stri
   for (const tag of addTags) tagSet.add(tag);
   for (const tag of removeTags) tagSet.delete(tag);
   return Array.from(tagSet);
+}
+
+function memoryCategoryEnabled(config: FlashQueryConfig): boolean {
+  const selectors = config.hostMcpTools?.tools;
+  const excludedSelectors = new Set(config.hostMcpTools?.excludedTools ?? []);
+  if (selectors === undefined) {
+    return true;
+  }
+  if (selectors.some((selector) => selector === 'tier:read-only' || selector === 'tier:read-write' || selector === 'category:memory')) {
+    return true;
+  }
+  if (selectors.some((selector) => getToolMetadata(selector)?.categories.includes('memory') === true)) {
+    return true;
+  }
+
+  const enabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
+  const memoryOnlyTools = ['save_memory', 'search_memory', 'update_memory', 'list_memories', 'get_memory', 'archive_memory'];
+  return memoryOnlyTools.some((toolName) => enabledToolNames.has(toolName) && !excludedSelectors.has(toolName));
+}
+
+function headingErrorMatches(matches: Array<{ text: string; level: number; line: number; occurrence: number }>): Array<{
+  heading: string;
+  level: number;
+  line: number;
+  occurrence: number;
+}> {
+  return matches.map((match) => ({
+    heading: match.text,
+    level: match.level,
+    line: match.line,
+    occurrence: match.occurrence,
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -469,7 +509,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'apply_tags',
     {
       description:
-        'Add or remove tags on one or more vault documents or a memory in a single call. Supports batch operations — pass multiple identifiers to tag several documents at once. Add is idempotent; removing a tag that doesn\'t exist is a silent no-op. Use this when the user wants to tag, untag, categorize, or label documents or memories.',
+        'Add or remove tags on ordered document and memory targets in a single call. Pass targets: [{ entity_type, identifier }] to tag explicit documents or memories. Add is idempotent; removing a tag that does not exist is a silent no-op.',
       inputSchema: {
         targets: z
           .array(z.object({
@@ -522,13 +562,15 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               : []);
 
         if (normalizedTargets.length === 0) {
-          return {
-            content: [{ type: 'text' as const, text: 'Error: targets is required' }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'targets is required',
+            details: { field: 'targets' },
+          });
         }
 
         const supabase = supabaseManager.getClient();
+        const canUseMemoryTargets = memoryCategoryEnabled(config);
         const results: Array<Record<string, unknown>> = [];
 
         for (const target of normalizedTargets) {
@@ -638,11 +680,20 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
 
           const memoryId = target.identifier;
+          if (!canUseMemoryTargets) {
+            results.push({
+              error: 'unsupported',
+              message: 'Memory category is disabled by config',
+              identifier: memoryId,
+              details: { disabled_category: 'memory' },
+            });
+            continue;
+          }
 
           // Fetch current tags from fqc_memory
           const { data: memRow, error: fetchError } = await supabase
             .from('fqc_memory')
-            .select('tags')
+            .select('content,tags,plugin_scope,created_at,updated_at')
             .eq('id', memoryId)
             .eq('instance_id', config.instance.id)
             .single();
@@ -656,7 +707,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             continue;
           }
 
-          const memData = memRow as { tags?: string[] } | null;
+          const memData = memRow as {
+            content?: string | null;
+            tags?: string[];
+            plugin_scope?: string | null;
+            created_at?: string | null;
+            updated_at?: string | null;
+          } | null;
           const existing: string[] = Array.isArray(memData?.tags) ? memData.tags : [];
           const newTags = applyTagChanges(existing, addTags, removeTags);
 
@@ -697,13 +754,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           results.push({
             ...memoryIdentification({
               memory_id: memoryId,
-              content_preview: '',
+              content_preview: typeof memData?.content === 'string' ? memData.content.slice(0, 120) : '',
               tags: dedupMemTags,
-              plugin_scope: 'global',
-              created_at: '',
+              plugin_scope: memData?.plugin_scope ?? 'global',
+              created_at: memData?.created_at ?? '',
               updated_at: new Date().toISOString(),
             }),
-            identifier: memoryId,
             entity_type: 'memory',
           });
         }
@@ -712,7 +768,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`apply_tags failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError({ message: `Error applying tags: ${msg}` });
       }
     }
   );
@@ -1112,7 +1168,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'insert_in_doc',
     {
       description:
-        'Insert markdown content at a specific position in a document: after a heading, at the end of a section, before a heading, at the top, or at the bottom. Use this for adding entries to a specific section (e.g. logging a new CRM interaction under "## Interactions"), prepending content to a document, or inserting between sections. For appending to the very end of a file, this replaces append_to_doc with more precise placement control.',
+        'Insert markdown content at top, bottom, before a heading, after a heading, or at the end of a section. Anchor matching supports heading_match, heading_level, occurrence, and include_nested for markdown-aware placement.',
       inputSchema: {
         identifier: z
           .string()
@@ -1130,14 +1186,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         occurrence: z
           .number()
           .optional()
-          .default(1)
-          .describe('Which occurrence of heading if multiple match same name (1-indexed, default: 1)'),
+          .describe('Which occurrence of heading if multiple match same name (1-indexed). Omit only when the heading query resolves to one match.'),
         include_nested: z
           .boolean()
           .optional()
-          .default(true)
           .describe('For end_of_section only: true includes child sections, false inserts before the first child heading.'),
-        heading_match: z.enum(['contains', 'exact']).optional().default('contains'),
+        heading_match: z.enum(['contains', 'exact']).optional(),
         heading_level: z.number().optional().describe('Optional markdown heading level filter (1-6).'),
       },
     },
@@ -1164,10 +1218,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             details: { field: 'position' },
           });
         }
-        if ((position === 'top' || position === 'bottom') && (heading || heading_level !== undefined || include_nested === false)) {
+        if (
+          (position === 'top' || position === 'bottom') &&
+          (heading || heading_level !== undefined || include_nested !== undefined || heading_match !== undefined || occurrence !== undefined)
+        ) {
           return jsonExpectedError({
             error: 'invalid_input',
-            message: `${position} does not accept heading, heading_level, or include_nested`,
+            message: `${position} does not accept heading, occurrence, heading_match, heading_level, or include_nested`,
             details: { field: 'position' },
           });
         }
@@ -1187,8 +1244,34 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Insert content at specified position
         let modifiedBody: string;
+        if (heading && position !== 'top' && position !== 'bottom') {
+          const matches = findMatchingHeadings(body, heading, {
+            headingMatch: heading_match ?? 'contains',
+            headingLevel: heading_level,
+          });
+          const resolution = resolveHeadingTarget(matches, occurrence);
+          if (resolution.status === 'ambiguous') {
+            return jsonExpectedError({
+              error: 'ambiguous_identifier',
+              message: `Heading query "${heading}" matched multiple headings; provide occurrence to choose one.`,
+              identifier,
+              details: { heading, matches: resolution.matches },
+            });
+          }
+          if (resolution.status === 'not_found') {
+            return jsonExpectedError({
+              error: 'not_found',
+              message: `Heading "${heading}" not found`,
+              identifier,
+              details: { heading, matches: headingErrorMatches(matches) },
+            });
+          }
+        }
         try {
-          modifiedBody = insertAtPosition(body, position, insertContent, heading, occurrence, include_nested ?? true);
+          modifiedBody = insertAtPosition(body, position, insertContent, heading, occurrence ?? 1, include_nested ?? true, {
+            headingMatch: heading_match ?? 'contains',
+            headingLevel: heading_level,
+          });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           return jsonExpectedError({
@@ -1240,19 +1323,23 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             modified: typeof frontmatter[FM.UPDATED] === 'string' ? frontmatter[FM.UPDATED] as string : new Date().toISOString(),
             chars: modifiedBody.length,
           }),
-          inserted_at: {
-            position,
-            ...(heading ? { heading } : {}),
-            heading_match: heading_match ?? 'contains',
-            ...(heading_level !== undefined ? { heading_level } : {}),
-            occurrence: occurrence ?? 1,
-            include_nested: include_nested ?? true,
-          },
+          ...(position === 'top' || position === 'bottom'
+            ? {}
+            : {
+                inserted_at: {
+                  position,
+                  ...(heading ? { heading } : {}),
+                  heading_match: heading_match ?? 'contains',
+                  ...(heading_level !== undefined ? { heading_level } : {}),
+                  occurrence: occurrence ?? 1,
+                  include_nested: include_nested ?? true,
+                },
+              }),
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`insert_in_doc failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError({ message: `Error inserting in document: ${msg}`, identifier });
       }
     }
   );
@@ -1263,20 +1350,18 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'replace_doc_section',
     {
       description:
-        'Replace the content of a specific heading section in a document, leaving all other sections untouched. Identify the section by heading name and optionally by occurrence number if the heading appears more than once. Use include_subheadings to control whether child sections are included in the replacement. Use this when the user wants to rewrite, update, or overwrite a specific part of a document without touching the rest.' +
-        'The heading line is preserved; only the section body is replaced. ' +
-        'Use include_subheadings to control whether nested content is included.',
+        'Replace or delete a specific markdown heading section in a document. Identify the section by heading plus optional heading_match, heading_level, occurrence, and include_nested. Non-empty content preserves the heading line and replaces the section body; empty content deletes the heading and section.',
       inputSchema: {
         identifier: z.string().describe('Document path, fqc_id, or filename'),
-        heading: z.string().describe('Heading text to match (case-sensitive)'),
+        heading: z.string().describe('Heading text to match, case-insensitive by default'),
         content: z.string().describe('New markdown content for section body (does not include heading line)'),
         include_nested: z.boolean().optional().default(true).describe('When true, replace full section including nested headings; when false, preserve child headings (default: true)'),
-        heading_match: z.enum(['contains', 'exact']).optional().default('contains'),
+        heading_match: z.enum(['contains', 'exact']).optional(),
         heading_level: z.number().optional().describe('Optional markdown heading level filter (1-6).'),
-        occurrence: z.number().optional().describe('Which occurrence if heading appears multiple times (1-indexed, default: 1)'),
+        occurrence: z.number().optional().describe('Which occurrence if heading appears multiple times (1-indexed). Omit only when the heading query resolves to one match.'),
       },
     },
-    async ({ identifier, heading, content, include_nested = true, heading_match, heading_level, occurrence = 1 }) => {
+    async ({ identifier, heading, content, include_nested = true, heading_match, heading_level, occurrence }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -1298,10 +1383,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           { ttlSeconds: config.locking.ttlSeconds }
         );
         if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.' }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'conflict',
+            message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+            identifier,
+            details: { reason: 'lock_contention' },
+          });
         }
       }
 
@@ -1321,55 +1408,54 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Step 4: Validate heading exists
         if (headings.length === 0) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Error: Document has no headings. Use update_document to replace entire content, or add a heading first.`,
-              },
-            ],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'not_found',
+            message: 'Document has no headings',
+            identifier,
+            details: { heading },
+          });
         }
 
         // Step 5: Find target heading by name and occurrence
         // Uses markdown-sections.ts utilities (consistent with SPEC-01 get_document sections, SPEC-03 insert_in_doc)
-        const targetHeading = findHeadingOccurrence(headings, heading, occurrence);
+        const matchOptions = {
+          headingMatch: heading_match ?? 'contains',
+          headingLevel: heading_level,
+        };
+        const matches = findMatchingHeadings(headings, heading, matchOptions);
+        const resolvedHeading = resolveHeadingTarget(matches, occurrence);
 
-        if (!targetHeading) {
-          const matches = headings.filter((h) => h.text === heading);
-          if (matches.length > 0) {
-            const matchList = matches.map((m, idx) => `  - Occurrence ${idx + 1} at line ${m.line}`).join('\n');
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Error: Heading "${heading}" appears ${matches.length} time(s). Specify occurrence parameter (1-${matches.length}):\n${matchList}`,
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          const availableHeadings = headings.map((h) => `  - "${h.text}" at line ${h.line}`).join('\n');
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Error: Heading "${heading}" not found. Available headings:\n${availableHeadings}`,
-              },
-            ],
-            isError: true,
-          };
+        if (resolvedHeading.status === 'ambiguous') {
+          return jsonExpectedError({
+            error: 'ambiguous_identifier',
+            message: `Heading query "${heading}" matched multiple headings; provide occurrence to choose one.`,
+            identifier,
+            details: { heading, matches: resolvedHeading.matches },
+          });
         }
 
+        if (resolvedHeading.status === 'not_found') {
+          return jsonExpectedError({
+            error: 'not_found',
+            message: `Heading "${heading}" not found`,
+            identifier,
+            details: {
+              heading,
+              matches: headingErrorMatches(matches),
+              available_headings: headings.map((h) => ({ heading: h.text, level: h.level, line: h.line })),
+            },
+          });
+        }
+        const targetHeading = resolvedHeading.heading;
+        const targetOccurrence = occurrence ?? 1;
+
         // Step 6: Calculate section boundaries using shared utility
-        const boundaries = getSectionBoundaries(bodyContent, heading, include_nested, occurrence);
+        const boundaries = getSectionBoundaries(bodyContent, heading, include_nested, targetOccurrence, matchOptions);
         const startLine = boundaries.startLine;
         const endLine = boundaries.endLine;
 
         // Step 7: Extract old section content (for undo)
-        const oldSectionLines = lines.slice(startLine - 1, endLine); // startLine is 1-indexed; convert for slice
+        const oldSectionLines = lines.slice(startLine, endLine); // Exclude heading line; startLine is 1-indexed.
         const oldContent = oldSectionLines.join('\n');
 
         const headingRemoved = content === '';
@@ -1449,7 +1535,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`replace_doc_section failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError({ message: `Error replacing document section: ${msg}`, identifier });
       } finally {
         if (config.locking.enabled) {
           await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');

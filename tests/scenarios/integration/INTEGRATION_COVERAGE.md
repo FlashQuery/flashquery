@@ -31,12 +31,12 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-move-1 | create -> move -> get by fq_id proves move_document returns JSON identification with stable identity and updated path. | documents.integration.test.ts copy_document and move_document JSON output; move_document_to_new_directory | 2026-05-12 |  |
 | INT-move-2 | move -> search/reference durability keeps fq_id-based reference resolution reaching the moved document while path-sensitive references can be updated separately. | tests/e2e/protocol.test.ts move_document JSON round-trip; existing direct_ref_durability_under_move | 2026-05-12 |  |
 | INT-move-3 | move_document destination conflict returns canonical JSON `conflict` with `details.reason="path_exists"` and no runtime error. | documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
-| INT-wdoc-1 | `write_document(create)` creates documents that are immediately retrievable and searchable through composed workflows. | append_then_search; append_and_search; update_document_then_search; replace_section | 2026-05-12 | 2026-05-12 |
-| INT-wdoc-2 | `write_document(update)` replaces body/title and keeps the updated state visible to search and `get_document`. | update_document_then_search; replace_section; llm_ref_reflects_current_write_state | 2026-05-12 | 2026-05-12 |
+| INT-wdoc-1 | `write_document(create)` creates documents that are immediately retrievable and searchable through composed workflows. | append_then_search; append_and_search; update_document_then_search; replace_section; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
+| INT-wdoc-2 | `write_document(update)` replaces body/title and keeps the updated state visible to search and `get_document`. | update_document_then_search; replace_section; llm_ref_reflects_current_write_state; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
 | INT-wdoc-3 | `write_document(update)` frontmatter mutation feeds pointer/template discovery freshness without stale metadata. | pointer_mutation_propagates; llm_template_metadata_freshness | 2026-05-12 | 2026-05-12 |
-| INT-insert-1 | `insert_in_doc(bottom)` composes with search and document read-back after append. | append_then_search; append_and_search | 2026-05-12 | 2026-05-12 |
-| INT-replace-1 | `replace_doc_section` composes with section-scoped LLM reference resolution after mutation. | llm_ref_section_after_replace | 2026-05-12 | 2026-05-12 |
-| INT-tags-1 | `apply_tags` composes across document targets with ordered result envelopes. | apply_tags_composition; tests/integration/apply-tags.test.ts | 2026-05-12 | 2026-05-12 |
+| INT-insert-1 | `insert_in_doc(bottom)` composes with search and document read-back after append. | append_then_search; append_and_search; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
+| INT-replace-1 | `replace_doc_section` composes with section-scoped LLM reference resolution after mutation. | llm_ref_section_after_replace; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
+| INT-tags-1 | `apply_tags` composes across explicit document/memory targets with ordered result envelopes and disabled-memory per-target errors. | apply_tags_composition; tests/integration/apply-tags.test.ts; tests/integration/write-document.integration.test.ts | 2026-05-12 | 2026-05-12 |
 
 ---
 

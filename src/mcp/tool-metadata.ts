@@ -130,6 +130,24 @@ const D = {
     'Do not use when you only need to read or search documents; use get_document, list_vault, or search instead.',
     'write_document({ "mode": "create", "path": "Notes/Idea.md", "title": "Idea" })'
   ),
+  insertInDoc: description(
+    'Insert markdown into a document at top, bottom, before a heading, after a heading, or at the end of a markdown section.',
+    'Use when you need markdown-aware placement that can match headings by contains/exact text, optional heading_level, occurrence, and include_nested section behavior.',
+    'Do not use when you need to replace an existing section body; use replace_doc_section instead.',
+    'insert_in_doc({ "identifier": "Notes/Idea.md", "position": "end_of_section", "heading": "Tasks", "content": "- Follow up", "include_nested": false })'
+  ),
+  replaceDocSection: description(
+    'Replace or delete one matched markdown heading section and return structured mutation metadata.',
+    'Use when you need to rewrite a section selected by heading, heading_match, heading_level, occurrence, and include_nested; pass content:"" to delete the heading and section.',
+    'Do not use when you need to append or insert content around a section without replacing it; use insert_in_doc instead.',
+    'replace_doc_section({ "identifier": "Notes/Idea.md", "heading": "Risks", "heading_match": "exact", "content": "No open risks." })'
+  ),
+  applyTags: description(
+    'Apply or remove tags on ordered document and memory targets and return per-target JSON identification results.',
+    'Use when you need explicit cross-domain tagging with targets:[{entity_type,identifier}], idempotent add_tags, remove_tags, and per-target expected errors.',
+    'Do not use when you need to replace an entire document tag list; use write_document(mode:"update") for document replacement semantics.',
+    'apply_tags({ "targets": [{ "entity_type": "document", "identifier": "Notes/Idea.md" }], "add_tags": ["planning"] })'
+  ),
   writeMemory: description(
     'Create or update persistent memory through one explicit mode-based memory writer.',
     'Use when you need to save a new memory or create a new latest version of an existing memory.',
@@ -174,9 +192,9 @@ export const TOOL_METADATA = [
   current('copy_document', ['doc-write'], 'read-write', D.copyDocument),
   current('move_document', ['doc-write'], 'read-write', D.moveDocument),
   current('archive_document', ['doc-write'], 'read-write', D.archiveDocument),
-  current('insert_in_doc', ['doc-write'], 'read-write', legacyDescription('insert_in_doc', 'insert_in_doc', 'Insert content at a specific markdown-aware position.')),
-  current('replace_doc_section', ['doc-write'], 'read-write', legacyDescription('replace_doc_section', 'replace_doc_section', 'Replace a named markdown section in a document.')),
-  current('apply_tags', ['doc-write', 'memory'], 'read-write', legacyDescription('apply_tags', 'apply_tags', 'Apply or remove tags on documents and memories.')),
+  current('insert_in_doc', ['doc-write'], 'read-write', D.insertInDoc),
+  current('replace_doc_section', ['doc-write'], 'read-write', D.replaceDocSection),
+  current('apply_tags', ['doc-write', 'memory'], 'read-write', D.applyTags),
   current('get_briefing', ['doc-read', 'memory', 'plugin'], 'read-only', legacyDescription('get_briefing', 'call_macro', 'Build a briefing from tagged documents, memories, and records.')),
   current('insert_doc_link', ['doc-write'], 'read-write', legacyDescription('insert_doc_link', 'call_macro', 'Insert a relationship link between documents.')),
   current('write_document', ['doc-write'], 'read-write', D.writeDocument),

@@ -20,4 +20,17 @@ describe('replace_doc_section Phase 124 contract', () => {
     expect(source).toContain('heading_removed: headingRemoved');
     expect(source).toContain('extracted_section');
   });
+
+  it('returns canonical expected-error envelopes for section selection failures', () => {
+    const replaceBlock = source.slice(
+      source.indexOf("'replace_doc_section'"),
+      source.indexOf('// ─── Tool', source.indexOf("'replace_doc_section'") + 1)
+    );
+
+    expect(replaceBlock).toContain("error: 'conflict'");
+    expect(replaceBlock).toContain("reason: 'lock_contention'");
+    expect(replaceBlock).toContain("error: 'ambiguous_identifier'");
+    expect(replaceBlock).toContain("error: 'not_found'");
+    expect(replaceBlock).toContain('return jsonRuntimeError({ message: `Error replacing document section: ${msg}`, identifier });');
+  });
 });

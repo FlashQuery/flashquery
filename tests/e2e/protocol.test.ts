@@ -261,6 +261,96 @@ describe.sequential('MCP protocol E2E', () => {
     });
   }, 30000);
 
+  it('write_document create/update round-trips through get_document', async () => {
+    const createResult = await client.callTool({
+      name: 'write_document',
+      arguments: {
+        mode: 'create',
+        path: 'e2e-json/write-document.md',
+        title: 'E2E Write Document',
+        content: 'Initial write_document body.',
+        tags: ['e2e-write'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(createResult.isError).toBeFalsy();
+    const created = JSON.parse(getText(createResult));
+    expect(created).toMatchObject({
+      path: 'e2e-json/write-document.md',
+      mode: 'create',
+      size: { chars: expect.any(Number) },
+    });
+
+    const updateResult = await client.callTool({
+      name: 'write_document',
+      arguments: {
+        mode: 'update',
+        identifier: created.fq_id,
+        content: 'Updated write_document body.',
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(updateResult.isError).toBeFalsy();
+    const updated = JSON.parse(getText(updateResult));
+    expect(updated).toMatchObject({ path: created.path, fq_id: created.fq_id, mode: 'update' });
+
+    const getResult = await client.callTool({
+      name: 'get_document',
+      arguments: { identifiers: created.path },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const doc = JSON.parse(getText(getResult));
+    expect(doc.body).toContain('Updated write_document body.');
+  }, 30000);
+
+  it('insert_in_doc and replace_doc_section mutate sections with JSON envelopes', async () => {
+    await client.callTool({
+      name: 'write_document',
+      arguments: {
+        mode: 'create',
+        path: 'e2e-json/section-edit.md',
+        title: 'E2E Section Edit',
+        content: ['# E2E Section Edit', '## Tasks', 'First task.', '## Done', 'Old done.'].join('\n'),
+      },
+    });
+
+    const insertResult = await client.callTool({
+      name: 'insert_in_doc',
+      arguments: {
+        identifier: 'e2e-json/section-edit.md',
+        position: 'end_of_section',
+        heading: 'Tasks',
+        heading_match: 'exact',
+        content: 'Inserted task.',
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(insertResult.isError).toBeFalsy();
+    const inserted = JSON.parse(getText(insertResult));
+    expect(inserted.inserted_at).toMatchObject({ heading: 'Tasks', heading_match: 'exact' });
+
+    const replaceResult = await client.callTool({
+      name: 'replace_doc_section',
+      arguments: {
+        identifier: 'e2e-json/section-edit.md',
+        heading: 'Done',
+        heading_match: 'exact',
+        content: 'Replacement done.',
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(replaceResult.isError).toBeFalsy();
+    const replaced = JSON.parse(getText(replaceResult));
+    expect(replaced.extracted_section).toMatchObject({ heading: 'Done', heading_removed: false });
+
+    const getResult = await client.callTool({
+      name: 'get_document',
+      arguments: { identifiers: 'e2e-json/section-edit.md' },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const doc = JSON.parse(getText(getResult));
+    expect(doc.body).toContain('Inserted task.');
+    expect(doc.body).toContain('Replacement done.');
+  }, 30000);
+
   it('move_document returns JSON identification with stable fq_id and normalized destination path', async () => {
     const moveResult = await client.callTool({
       name: 'move_document',

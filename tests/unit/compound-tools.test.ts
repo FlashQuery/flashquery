@@ -1083,14 +1083,17 @@ describe('apply_tags', () => {
     expect(tags).not.toContain('remove-me');
   });
 
-  it('Test 7 (apply_tags): error when neither doc_path nor memory_id provided', async () => {
+  it('Test 7 (apply_tags): expected invalid_input when no target is provided', async () => {
     const handler = mockServer.getHandler('apply_tags');
     const result = await handler({
       add_tags: ['new'],
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Error');
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      error: 'invalid_input',
+      details: { field: 'targets' },
+    });
   });
 
   // ── Task 2 new tests: tag validation in apply_tags ────────────────────────────
