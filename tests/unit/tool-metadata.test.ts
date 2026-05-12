@@ -156,6 +156,50 @@ describe('tool metadata registry', () => {
     expect(systemTools).not.toContain('manage_directory');
   });
 
+  it('exposes Phase 127 final tools as current metadata with correct policy', () => {
+    expect(requireToolMetadata('remove_document')).toMatchObject({
+      status: 'final',
+      categories: ['doc-write'],
+      tier: 'read-write',
+      hostEligible: true,
+      delegatedEligible: true,
+    });
+    expect(requireToolMetadata('manage_directory')).toMatchObject({
+      status: 'final',
+      categories: ['doc-write'],
+      tier: 'read-write',
+      hostEligible: true,
+      delegatedEligible: true,
+    });
+    expect(requireToolMetadata('maintain_vault')).toMatchObject({
+      status: 'final',
+      categories: ['system'],
+      tier: 'admin',
+      hostEligible: true,
+      delegatedEligible: false,
+      delegatedHardExcludedReason: expect.stringContaining('maintenance'),
+    });
+  });
+
+  it('keeps Phase 127 merged legacy tools as removed suggestion metadata only', () => {
+    expect(requireToolMetadata('create_directory')).toMatchObject({
+      status: 'removed',
+      replacement: 'manage_directory',
+    });
+    expect(requireToolMetadata('remove_directory')).toMatchObject({
+      status: 'removed',
+      replacement: 'manage_directory',
+    });
+    expect(requireToolMetadata('force_file_scan')).toMatchObject({
+      status: 'removed',
+      replacement: 'maintain_vault',
+    });
+    expect(requireToolMetadata('reconcile_documents')).toMatchObject({
+      status: 'removed',
+      replacement: 'maintain_vault',
+    });
+  });
+
   it('lists delegated hard exclusions with per-tool reasons', () => {
     const exclusions = getDelegatedHardExcludedTools();
 
@@ -163,6 +207,7 @@ describe('tool metadata registry', () => {
       expect.objectContaining({ tool: 'call_model', reason: expect.stringContaining('recursively call models') }),
       expect.objectContaining({ tool: 'register_plugin', reason: expect.stringContaining('plugin administration') }),
       expect.objectContaining({ tool: 'unregister_plugin', reason: expect.stringContaining('plugin administration') }),
+      expect.objectContaining({ tool: 'maintain_vault', reason: expect.stringContaining('maintenance') }),
       expect.objectContaining({ tool: 'force_file_scan', reason: expect.stringContaining('maintenance') }),
       expect.objectContaining({ tool: 'reconcile_documents', reason: expect.stringContaining('maintenance') }),
     ]));

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   CANONICAL_ERROR_CODES,
   batchResult,
+  directoryResult,
   documentIdentification,
+  documentRemovalResult,
   formatBatchSeparator,
   formatEmptyResults,
   formatKeyValueEntry,
@@ -12,6 +14,7 @@ import {
   jsonRuntimeError,
   jsonToolResult,
   llmCallIdentification,
+  maintenanceActionResult,
   memoryIdentification,
   pluginIdentification,
   recordIdentification,
@@ -207,6 +210,85 @@ describe('identification builders', () => {
       name: 'summarize',
       resolved_model_name: 'gpt-5-mini',
       provider_name: 'openai',
+    });
+  });
+
+  it('builds JSON-compatible directory results for manage_directory', () => {
+    expect(
+      directoryResult({
+        path: 'Projects/Acme',
+        action: 'create',
+        status: 'created',
+        timestamp: '2026-05-12T00:00:00.000Z',
+      })
+    ).toEqual({
+      path: 'Projects/Acme',
+      action: 'create',
+      status: 'created',
+      timestamp: '2026-05-12T00:00:00.000Z',
+    });
+  });
+
+  it('builds JSON-compatible maintenance action results without prose formatting', () => {
+    expect(
+      maintenanceActionResult({
+        action: 'sync',
+        started_at: '2026-05-12T00:00:00.000Z',
+        finished_at: '2026-05-12T00:00:01.000Z',
+        dry_run: false,
+        counts: {
+          scanned: 3,
+          added: 1,
+          updated: 1,
+          repaired: 0,
+          archived: 1,
+        },
+      })
+    ).toEqual({
+      action: 'sync',
+      started_at: '2026-05-12T00:00:00.000Z',
+      finished_at: '2026-05-12T00:00:01.000Z',
+      dry_run: false,
+      counts: {
+        scanned: 3,
+        added: 1,
+        updated: 1,
+        repaired: 0,
+        archived: 1,
+      },
+    });
+  });
+
+  it('builds document removal results on top of archived document identification', () => {
+    expect(
+      documentRemovalResult({
+        identifier: 'old.md',
+        title: 'Old',
+        path: 'Notes/old.md',
+        fq_id: 'doc-1',
+        modified: '2026-05-12T00:00:00.000Z',
+        chars: 25,
+        archived_at: '2026-05-12T00:00:00.000Z',
+        removal: {
+          mode: 'trash',
+          moved_to: '.flashquery/removed/old.md',
+          original_path: 'Notes/old.md',
+        },
+      })
+    ).toEqual({
+      identifier: 'old.md',
+      title: 'Old',
+      path: 'Notes/old.md',
+      fq_id: 'doc-1',
+      modified: '2026-05-12T00:00:00.000Z',
+      size: { chars: 25 },
+      status: 'archived',
+      archived_at: '2026-05-12T00:00:00.000Z',
+      removal: {
+        mode: 'trash',
+        moved_to: '.flashquery/removed/old.md',
+        original_path: 'Notes/old.md',
+      },
     });
   });
 });
