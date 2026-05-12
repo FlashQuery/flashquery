@@ -32,6 +32,7 @@ import {
   jsonRuntimeError,
   jsonToolResult,
   documentArchiveResult,
+  documentIdentification,
   type ErrorEnvelope,
 } from '../utils/response-formats.js';
 import {
@@ -1370,6 +1371,14 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         };
       }
 
+      if (Array.isArray(identifier)) {
+        return jsonExpectedError({
+          error: 'invalid_input',
+          message: 'copy_document accepts one source identifier; array input is not supported.',
+          details: { reason: 'single_target_only' },
+        });
+      }
+
       if (config.locking.enabled) {
         const locked = await acquireLock(
           supabaseManager.getClient(),
@@ -1428,14 +1437,26 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           const resolvedVault = resolve(config.instance.vault.path);
           const rel = relative(resolvedVault, resolvedAbs);
           if (rel.startsWith('..') || rel === '..') {
-            return {
-              content: [{ type: 'text' as const, text: `Error: path escapes vault root.` }],
-              isError: true,
-            };
+            return jsonExpectedError({
+              error: 'invalid_input',
+              message: 'Destination path escapes vault root.',
+              identifier: copyRelativePath,
+              details: { reason: 'path_traversal' },
+            });
           }
         } else {
           // Default: sanitized filename placed at vault root
           copyRelativePath = `${sanitizeFilename(copyTitle)}.md`;
+        }
+
+        const absPath = join(config.instance.vault.path, copyRelativePath);
+        if (existsSync(absPath)) {
+          return jsonExpectedError({
+            error: 'conflict',
+            message: `A file already exists at '${copyRelativePath}'. Choose a different destination or remove the existing file first.`,
+            identifier: copyRelativePath,
+            details: { reason: 'path_exists' },
+          });
         }
 
         // Build frontmatter for the copy — spread all source fields, override identity/timestamps
@@ -1452,10 +1473,8 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         };
 
         // Write copy to vault
-        const absPath = join(config.instance.vault.path, copyRelativePath);
-        const gitAction = existsSync(absPath) ? 'update' : 'create';
         const sanitizedFm = serializeOrderedFrontmatter(copyFm);
-        await vaultManager.writeMarkdown(copyRelativePath, sanitizedFm, parsed.content, { gitAction, gitTitle: copyTitle });
+        await vaultManager.writeMarkdown(copyRelativePath, sanitizedFm, parsed.content, { gitAction: 'create', gitTitle: copyTitle });
         logger.info(`copy_document: wrote copy to ${copyRelativePath} (new fqc_id=${newFqcId})`);
 
         // Sync: read raw file to compute content_hash, then insert fqc_documents row
@@ -1503,24 +1522,34 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             );
         }
 
-        // Format response using Phase 62 utilities (SPEC-13: metadata-only, same as create_document)
-        const responseLines = [
-          formatKeyValueEntry('Title', copyTitle),
-          formatKeyValueEntry('FQC ID', newFqcId),
-          formatKeyValueEntry('Path', copyRelativePath),
-          formatKeyValueEntry('Tags', deduplicated.length > 0 ? deduplicated : 'none'),
-          formatKeyValueEntry('Status', 'active'),
-        ];
+        const written = await vaultManager.readMarkdown(copyRelativePath);
+        const modified = typeof written.data[FM.UPDATED] === 'string' ? written.data[FM.UPDATED] : now;
 
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: responseLines.join('\n'),
-            },
-          ],
-        };
+        return jsonToolResult(documentIdentification({
+          identifier: copyRelativePath,
+          title: copyTitle,
+          path: copyRelativePath,
+          fq_id: newFqcId,
+          modified,
+          chars: written.content.length,
+        }));
       } catch (err) {
+        if (err instanceof DocumentNotFoundError) {
+          return jsonExpectedError({
+            error: 'not_found',
+            message: `No document found for identifier: ${identifier}`,
+            identifier,
+          });
+        }
+
+        if (err instanceof AmbiguousDocumentIdentifierError) {
+          return jsonExpectedError({
+            error: 'ambiguous_identifier',
+            message: err.message,
+            identifier,
+          });
+        }
+
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`copy_document failed - ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };

@@ -32,6 +32,7 @@ describe('copy_document JSON output contract', () => {
       modified: '2026-05-12T00:00:00.000Z',
       size: { chars: body.length },
     });
+    expect((payload.size as { chars: number }).chars).toBe(body.length);
     expect(payload.fq_id).not.toBe(sourceFqId);
   });
 

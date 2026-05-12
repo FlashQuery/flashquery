@@ -99,6 +99,12 @@ const D = {
     'Do not use when you need to move a document to trash or hard-delete it; use remove_document when that consolidated removal tool is available.',
     'archive_document({ "identifiers": ["Notes/old.md", "missing.md"] })'
   ),
+  copyDocument: description(
+    'Copy one vault document to a new path and return a JSON document identification block for the new copy.',
+    'Use when you need a single-target duplicate with a fresh fq_id while preserving source title, tags, and custom frontmatter; destination conflicts return canonical JSON errors.',
+    'Do not use when you need batch copy behavior; copy_document intentionally accepts one source identifier and one destination per call.',
+    'copy_document({ "identifier": "Templates/Contact.md", "destination": "People/Ada.md" })'
+  ),
   listVault: description(
     'List vault files and folders with optional metadata.',
     'Use when you need to browse vault structure or inspect matching files without reading full bodies.',
@@ -158,7 +164,7 @@ export const TOOL_METADATA = [
   current('update_document', ['doc-write'], 'read-write', legacyDescription('update_document', 'write_document', 'Overwrite or update an existing document.')),
   current('append_to_doc', ['doc-write'], 'read-write', legacyDescription('append_to_doc', 'insert_in_doc', 'Append content to the end of a document.')),
   current('update_doc_header', ['doc-write'], 'read-write', legacyDescription('update_doc_header', 'write_document', 'Update document frontmatter fields.')),
-  current('copy_document', ['doc-write'], 'read-write', legacyDescription('copy_document', 'copy_document', 'Copy a vault document to a new path.')),
+  current('copy_document', ['doc-write'], 'read-write', D.copyDocument),
   current('move_document', ['doc-write'], 'read-write', legacyDescription('move_document', 'move_document', 'Move or rename a vault document.')),
   current('archive_document', ['doc-write'], 'read-write', D.archiveDocument),
   current('insert_in_doc', ['doc-write'], 'read-write', legacyDescription('insert_in_doc', 'insert_in_doc', 'Insert content at a specific markdown-aware position.')),
