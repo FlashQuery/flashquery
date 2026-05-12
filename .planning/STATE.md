@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: MCP Tools Consolidation
-status: executing
-stopped_at: Completed 123-03-PLAN.md
-last_updated: "2026-05-12T00:55:13.755Z"
+status: verifying
+stopped_at: Completed 123-04-PLAN.md
+last_updated: "2026-05-12T01:15:57.520Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 11
-  completed_plans: 10
-  percent: 91
+  completed_plans: 11
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-11)
 
 Phase: 123 (document-read-standard-output-migration) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-12
 
 ## Performance Metrics
@@ -84,6 +84,7 @@ Last activity: 2026-05-12
 | Phase 123 P01 | 6min | 3 tasks | 8 files |
 | Phase 123 P02 | 17min | 3 tasks | 13 files |
 | Phase 123 P03 | 14min | 3 tasks | 10 files |
+| Phase 123 P04 | 17min | 3 tasks | 13 files |
 
 ## Decisions
 
@@ -136,6 +137,9 @@ Last activity: 2026-05-12
 - [Phase 123]: 123-02: Used managed YAML scenario runs when no external FlashQuery server was listening on localhost:3100.
 - [Phase 123]: 123-03 kept copy_document and move_document single-target while migrating their output contracts.
 - [Phase 123]: 123-03 represented plugin ownership notices as warnings:["plugin_ownership_path_expectation"] instead of appended prose.
+- [Phase 123]: 123-04 kept list_vault path/show/recursive/extensions/date/limit behavior intact while replacing only the output contract.
+- [Phase 123]: 123-04 returned expected list_vault path/date/include failures as canonical JSON with isError:false.
+- [Phase 123]: 123-04 added E2E fixture row cleanup because stale Supabase rows can poison path-based list_vault tracking enrichment.
 
 ## Accumulated Context
 
@@ -246,8 +250,8 @@ Last activity: 2026-05-12
 
 ## Session Continuity
 
-Last session: 2026-05-12T00:55:13.714Z
-Stopped at: Completed 123-03-PLAN.md
+Last session: 2026-05-12T01:15:57.496Z
+Stopped at: Completed 123-04-PLAN.md
 Resume: Plan Phase 121
 
 ## Deferred Items

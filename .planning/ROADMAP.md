@@ -44,7 +44,7 @@
 |---|-------|------|--------------|------------------|
 | 121 | Foundation: Metadata, Response Helpers, Test Harness | 3/3 | Complete    | 2026-05-11 |
 | 122 | Host Tool Exposure Config | 4/4 | Complete    | 2026-05-11 |
-| 123 | Document Read + Standard Output Migration | 3/4 | In Progress|  |
+| 123 | Document Read + Standard Output Migration | 4/4 | Complete   | 2026-05-12 |
 | 124 | Document Write Primitives | Implement `write_document`, section/edit expansions, and `apply_tags` structured cross-domain output. | DOC-03, DOC-04, DOC-06..08 | 6 |
 | 125 | Unified Search + Memory Consolidation | Replace search/memory legacy surfaces with `search`, `write_memory`, `get_memory`, and `archive_memory`. | SRCH-01..06, MEM-01..04 | 6 |
 | 126 | Plugin + Record Consolidation | Standardize plugin tools and merge record create/update into `write_record`. | REC-01..07 | 5 |
@@ -119,7 +119,7 @@ Plans:
 - [x] 123-01-PLAN.md — Create traceability foundation and canonicalize `get_document` expected errors.
 - [x] 123-02-PLAN.md — Migrate `archive_document` JSON output and persisted `archived_at` semantics.
 - [x] 123-03-PLAN.md — Migrate `copy_document` and `move_document` JSON identification outputs.
-- [ ] 123-04-PLAN.md — Migrate `list_vault` structured JSON output and close scenario/E2E coverage.
+- [x] 123-04-PLAN.md — Migrate `list_vault` structured JSON output and close scenario/E2E coverage.
 
 **UI hint:** no
 
