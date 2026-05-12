@@ -355,6 +355,50 @@ describe('GitManager', () => {
     });
   });
 
+  describe('commitVaultRemoval', () => {
+    it('stages deletions and moves with git.add("-A") when autoCommit is true', async () => {
+      const manager = makeManager({ autoCommit: true });
+      await manager.initialize(testConfig({ autoCommit: true }));
+
+      vi.clearAllMocks();
+      mocks.mockExistsSync.mockReturnValue(true);
+
+      await manager.commitVaultRemoval('remove', 'Hard delete', ['docs/hard-delete.md']);
+
+      expect(mocks.mockGitAdd).toHaveBeenCalledWith('-A');
+      expect(mocks.mockGitCommit).toHaveBeenCalledWith("vault: remove document 'Hard delete'");
+    });
+
+    it('skips removal commit when autoCommit is false', async () => {
+      const manager = makeManager({ autoCommit: false });
+      await manager.initialize(testConfig({ autoCommit: false }));
+
+      vi.clearAllMocks();
+      mocks.mockExistsSync.mockReturnValue(true);
+
+      await manager.commitVaultRemoval('trash', 'Manual git user', [
+        'docs/source.md',
+        '.flashquery/removed/source.md',
+      ]);
+
+      expect(mocks.mockGitAdd).not.toHaveBeenCalled();
+      expect(mocks.mockGitCommit).not.toHaveBeenCalled();
+    });
+
+    it('autoPush follows removal autoCommit policy', async () => {
+      const manager = makeManager({ autoCommit: true, autoPush: true });
+      await manager.initialize(testConfig({ autoCommit: true, autoPush: true }));
+
+      vi.clearAllMocks();
+      mocks.mockExistsSync.mockReturnValue(true);
+
+      await manager.commitVaultRemoval('trash', 'External trash', ['docs/source.md']);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(mocks.mockGitPush).toHaveBeenCalledWith('origin', 'main');
+    });
+  });
+
   // ─────────────────────────────────────────────────────────────────────────
   describe('dumpDatabase', () => {
     it('queries fqc_* and fqcp_* tables and writes .fqc/backup.json', async () => {
