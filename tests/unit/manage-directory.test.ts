@@ -78,17 +78,20 @@ type RegisteredTool = {
   handler: (args: Record<string, unknown>) => Promise<ToolResult>;
 };
 
-function makeConfig() {
+function makeConfig(overrides: Partial<import('../../src/config/loader.js').FlashQueryConfig> = {}) {
   return {
     instance: {
       id: 'test-instance',
       vault: { path: '/vault' },
     },
     locking: { enabled: true, ttlSeconds: 30 },
+    ...overrides,
   } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
 }
 
-async function registerTools(): Promise<RegisteredTool[]> {
+async function registerTools(
+  config: import('../../src/config/loader.js').FlashQueryConfig = makeConfig()
+): Promise<RegisteredTool[]> {
   const { registerFileTools } = await import('../../src/mcp/tools/files.js');
   const tools: RegisteredTool[] = [];
   const mockServer = {
@@ -103,12 +106,15 @@ async function registerTools(): Promise<RegisteredTool[]> {
     ),
   } as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer;
 
-  registerFileTools(mockServer, makeConfig());
+  registerFileTools(mockServer, config);
   return tools;
 }
 
-async function callManageDirectory(args: Record<string, unknown>): Promise<ToolResult> {
-  const tools = await registerTools();
+async function callManageDirectory(
+  args: Record<string, unknown>,
+  config: import('../../src/config/loader.js').FlashQueryConfig = makeConfig()
+): Promise<ToolResult> {
+  const tools = await registerTools(config);
   const tool = tools.find((entry) => entry.name === 'manage_directory');
   if (!tool) {
     throw new Error('manage_directory handler not registered');
@@ -226,5 +232,25 @@ describe('manage_directory', () => {
       details: { reason: 'lock_contention' },
     });
     expect(vi.mocked(mkdir)).not.toHaveBeenCalled();
+  });
+
+  it('does not acquire directory locks when locking is disabled', async () => {
+    const { acquireLock, releaseLock } = await import('../../src/services/write-lock.js');
+    (acquireLock as MockedFunction<typeof acquireLock>).mockResolvedValueOnce(false);
+
+    const result = await callManageDirectory(
+      { action: 'create', paths: ['Unlocked'] },
+      makeConfig({ locking: { enabled: false, ttlSeconds: 30 } })
+    );
+    const payload = parseJson(result) as { results: Array<Record<string, unknown>> };
+
+    expect(result.isError).toBe(false);
+    expect(payload.results[0]).toMatchObject({
+      path: 'Unlocked',
+      status: 'created',
+    });
+    expect(acquireLock).not.toHaveBeenCalled();
+    expect(releaseLock).not.toHaveBeenCalled();
+    expect(vi.mocked(mkdir)).toHaveBeenCalledWith('/vault/Unlocked', { recursive: true });
   });
 });

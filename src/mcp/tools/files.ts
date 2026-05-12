@@ -110,21 +110,23 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           continue;
         }
 
-        const lockResource = `directory:${normalizedPath}`;
-        const locked = await acquireLock(
-          client,
-          config.instance.id,
-          lockResource,
-          { ttlSeconds: config.locking.ttlSeconds }
-        );
-        if (!locked) {
-          results.push({
-            error: 'conflict',
-            message: 'Directory is currently locked by another operation.',
-            identifier: normalizedPath,
-            details: { reason: 'lock_contention' },
-          });
-          continue;
+        const lockResource = config.locking.enabled ? `directory:${normalizedPath}` : null;
+        if (lockResource) {
+          const locked = await acquireLock(
+            client,
+            config.instance.id,
+            lockResource,
+            { ttlSeconds: config.locking.ttlSeconds }
+          );
+          if (!locked) {
+            results.push({
+              error: 'conflict',
+              message: 'Directory is currently locked by another operation.',
+              identifier: normalizedPath,
+              details: { reason: 'lock_contention' },
+            });
+            continue;
+          }
         }
 
         try {
@@ -291,7 +293,9 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             identifier: normalizedPath,
           });
         } finally {
-          await releaseLock(client, config.instance.id, lockResource);
+          if (lockResource) {
+            await releaseLock(client, config.instance.id, lockResource);
+          }
         }
       }
 

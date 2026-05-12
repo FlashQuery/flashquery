@@ -1568,54 +1568,90 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             const fqcId = resolved.fqcId ?? preScan.capturedFrontmatter.fqcId;
             archivedFm[FM.ID] = fqcId;
 
-            await vaultManager.writeMarkdown(relativePath, archivedFm, parsed.content);
+            let archivedFileWritten = false;
+            let archivedRowWritten = false;
 
-            const updatedAt = new Date().toISOString();
-            const { data: updatedRow, error: updateError } = await supabase
-              .from('fqc_documents')
-              .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
-              .eq('id', fqcId)
-              .eq('instance_id', config.instance.id)
-              .select('id')
-              .maybeSingle();
-            if (updateError) {
-              throw new Error(`Supabase removal archive update failed for ${relativePath}: ${updateError.message}`);
-            }
-            if (!updatedRow) {
-              throw new Error(`Supabase removal archive update affected no document row for ${relativePath}`);
-            }
+            try {
+              await vaultManager.writeMarkdown(relativePath, archivedFm, parsed.content);
+              archivedFileWritten = true;
 
-            const archivedStats = await stat(join(vaultRoot, relativePath));
-            const baseResult = {
-              identifier: id,
-              title,
-              path: relativePath,
-              fq_id: fqcId,
-              modified: archivedStats.mtime.toISOString(),
-              chars: parsed.content.length,
-              archived_at: archivedAt,
-              removed: true as const,
-            };
+              const updatedAt = new Date().toISOString();
+              const { data: updatedRow, error: updateError } = await supabase
+                .from('fqc_documents')
+                .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
+                .eq('id', fqcId)
+                .eq('instance_id', config.instance.id)
+                .select('id')
+                .maybeSingle();
+              if (updateError) {
+                throw new Error(`Supabase removal archive update failed for ${relativePath}: ${updateError.message}`);
+              }
+              if (!updatedRow) {
+                throw new Error(`Supabase removal archive update affected no document row for ${relativePath}`);
+              }
+              archivedRowWritten = true;
 
-            if (config.trashFolder.enabled) {
-              const activeTrashRoot = trashRoot as { absPath: string };
-              const trashDestination = buildTrashDestination(
-                vaultRoot,
-                relativePath,
-                activeTrashRoot.absPath,
-                config.trashFolder.collisionStrategy
-              );
-              await vaultManager.moveMarkdownToTrash(relativePath, trashDestination.absPath, {
-                gitTitle: title,
-              });
-              results.push(documentRemovalResult({
-                ...baseResult,
-                moved_to: trashDestination.responsePath,
-                original_path: relativePath,
-              }));
-            } else {
-              await vaultManager.removeMarkdown(relativePath, { gitTitle: title });
-              results.push(documentRemovalResult(baseResult));
+              const archivedStats = await stat(join(vaultRoot, relativePath));
+              const baseResult = {
+                identifier: id,
+                title,
+                path: relativePath,
+                fq_id: fqcId,
+                modified: archivedStats.mtime.toISOString(),
+                chars: parsed.content.length,
+                archived_at: archivedAt,
+                removed: true as const,
+              };
+
+              if (config.trashFolder.enabled) {
+                const activeTrashRoot = trashRoot as { absPath: string };
+                const trashDestination = buildTrashDestination(
+                  vaultRoot,
+                  relativePath,
+                  activeTrashRoot.absPath,
+                  config.trashFolder.collisionStrategy
+                );
+                await vaultManager.moveMarkdownToTrash(relativePath, trashDestination.absPath, {
+                  gitTitle: title,
+                });
+                results.push(documentRemovalResult({
+                  ...baseResult,
+                  moved_to: trashDestination.responsePath,
+                  original_path: relativePath,
+                }));
+              } else {
+                await vaultManager.removeMarkdown(relativePath, { gitTitle: title });
+                results.push(documentRemovalResult(baseResult));
+              }
+            } catch (removalErr) {
+              if (archivedFileWritten && existsSync(join(vaultRoot, relativePath))) {
+                await vaultManager.writeMarkdown(relativePath, parsed.data, parsed.content);
+              }
+              if (archivedRowWritten) {
+                const originalStatus =
+                  typeof parsed.data[FM.STATUS] === 'string' && parsed.data[FM.STATUS].length > 0
+                    ? parsed.data[FM.STATUS]
+                    : 'active';
+                const originalArchivedAt =
+                  typeof parsed.data[FM.ARCHIVED_AT] === 'string' && parsed.data[FM.ARCHIVED_AT].length > 0
+                    ? parsed.data[FM.ARCHIVED_AT]
+                    : null;
+                const { error: restoreError } = await supabase
+                  .from('fqc_documents')
+                  .update({
+                    status: originalStatus,
+                    archived_at: originalArchivedAt,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', fqcId)
+                  .eq('instance_id', config.instance.id);
+                if (restoreError) {
+                  logger.error(
+                    `remove_document rollback failed for ${relativePath}: ${restoreError.message}`
+                  );
+                }
+              }
+              throw removalErr;
             }
           } catch (itemErr) {
             if (isDocumentNotFoundError(itemErr)) {

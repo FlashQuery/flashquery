@@ -53,4 +53,15 @@ describe('remove_document JSON contract', () => {
     expect(source).not.toContain('removed_at');
     expect(source).not.toContain('removed_to');
   });
+
+  it('rolls back archive mutations when final filesystem removal fails', () => {
+    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
+
+    expect(source).toContain('archivedFileWritten');
+    expect(source).toContain('archivedRowWritten');
+    expect(source).toContain('existsSync(join(vaultRoot, relativePath))');
+    expect(source).toContain('await vaultManager.writeMarkdown(relativePath, parsed.data, parsed.content)');
+    expect(source).toContain("status: originalStatus");
+    expect(source).toContain("archived_at: originalArchivedAt");
+  });
 });
