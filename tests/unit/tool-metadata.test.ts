@@ -85,6 +85,15 @@ describe('tool metadata registry', () => {
     expect(description).toMatch(/single-target|batch/);
   });
 
+  it('documents move_document JSON identification output and plugin ownership warning code', () => {
+    const description = requireToolMetadata('move_document').description;
+
+    expect(description).toContain('JSON');
+    expect(description).toContain('identification');
+    expect(description).toContain('plugin_ownership_path_expectation');
+    expect(description).toMatch(/warnings/);
+  });
+
   it('expands delegated tiers from metadata', () => {
     expect(getToolNamesByTier('tier:read-only')).toEqual([
       'search_documents',
