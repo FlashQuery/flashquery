@@ -5,7 +5,7 @@ status: completed
 completed_at: "2026-05-12T12:51:28Z"
 commits:
   - 3762bad docs(125-05): add search memory scenario ledgers
-  - cac97ee test(125-05): add unified search memory scenarios
+  - ccd39db test(125-05): add unified search memory scenarios
 ---
 
 # Plan 05 Summary: Scenario Coverage Port

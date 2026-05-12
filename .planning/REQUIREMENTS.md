@@ -48,16 +48,16 @@
 
 ### Unified Search And Memory
 
-- [ ] **SRCH-01**: `search` replaces `search_all`, `search_documents`, `search_memory`, and `list_memories` with one result envelope over documents and memories.
-- [ ] **SRCH-02**: `search` supports explicit `mode: "filesystem" | "semantic" | "mixed"` with `"mixed"` as the default and stable validation for empty-query/list-mode cases.
-- [ ] **SRCH-03**: `search` supports document and memory list-mode when query is empty and filters or `list_all` make list intent explicit.
-- [ ] **SRCH-04**: `search` applies global limit after cross-domain merge/dedupe/sort and reports match sources deterministically.
-- [ ] **SRCH-05**: `search` excludes archived documents and memories by default and includes them only when requested.
-- [ ] **SRCH-06**: `search` degrades correctly when `doc-read` or `memory` categories are disabled, including warnings for explicitly requested disabled domains and hard `unsupported` when nothing requested is available.
-- [ ] **MEM-01**: `write_memory(mode:"create")` replaces `save_memory` while creating latest memory rows with default scope, tags, generated IDs, and optional content include behavior.
-- [ ] **MEM-02**: `write_memory(mode:"update")` replaces `update_memory` by creating a new latest version row, linking the previous version, and rejecting updates to non-latest memories.
-- [ ] **MEM-03**: `get_memory` accepts `memory_ids` as a single-or-array parameter and returns ordered memory envelopes with optional content payload.
-- [ ] **MEM-04**: `archive_memory` accepts single-or-array `memory_ids`, archives latest chains consistently, and returns ordered memory identification results.
+- [x] **SRCH-01**: `search` replaces `search_all`, `search_documents`, `search_memory`, and `list_memories` with one result envelope over documents and memories.
+- [x] **SRCH-02**: `search` supports explicit `mode: "filesystem" | "semantic" | "mixed"` with `"mixed"` as the default and stable validation for empty-query/list-mode cases.
+- [x] **SRCH-03**: `search` supports document and memory list-mode when query is empty and filters or `list_all` make list intent explicit.
+- [x] **SRCH-04**: `search` applies global limit after cross-domain merge/dedupe/sort and reports match sources deterministically.
+- [x] **SRCH-05**: `search` excludes archived documents and memories by default and includes them only when requested.
+- [x] **SRCH-06**: `search` degrades correctly when `doc-read` or `memory` categories are disabled, including warnings for explicitly requested disabled domains and hard `unsupported` when nothing requested is available.
+- [x] **MEM-01**: `write_memory(mode:"create")` replaces `save_memory` while creating latest memory rows with default scope, tags, generated IDs, and optional content include behavior.
+- [x] **MEM-02**: `write_memory(mode:"update")` replaces `update_memory` by creating a new latest version row, linking the previous version, and rejecting updates to non-latest memories.
+- [x] **MEM-03**: `get_memory` accepts `memory_ids` as a single-or-array parameter and returns ordered memory envelopes with optional content payload.
+- [x] **MEM-04**: `archive_memory` accepts single-or-array `memory_ids`, archives latest chains consistently, and returns ordered memory identification results.
 - [ ] **MEM-05**: Legacy memory tools `save_memory`, `update_memory`, `search_memory`, and `list_memories` are removed from host and delegated surfaces with migrated coverage.
 
 ### Plugin And Record Tools
@@ -141,16 +141,16 @@
 | DOC-08 | Phase 124 | Complete |
 | DOC-09 | Phase 127 | Pending |
 | DOC-10 | Phase 128 | Pending |
-| SRCH-01 | Phase 125 | Pending |
-| SRCH-02 | Phase 125 | Pending |
-| SRCH-03 | Phase 125 | Pending |
-| SRCH-04 | Phase 125 | Pending |
-| SRCH-05 | Phase 125 | Pending |
-| SRCH-06 | Phase 125 | Pending |
-| MEM-01 | Phase 125 | Pending |
-| MEM-02 | Phase 125 | Pending |
-| MEM-03 | Phase 125 | Pending |
-| MEM-04 | Phase 125 | Pending |
+| SRCH-01 | Phase 125 | Complete |
+| SRCH-02 | Phase 125 | Complete |
+| SRCH-03 | Phase 125 | Complete |
+| SRCH-04 | Phase 125 | Complete |
+| SRCH-05 | Phase 125 | Complete |
+| SRCH-06 | Phase 125 | Complete |
+| MEM-01 | Phase 125 | Complete |
+| MEM-02 | Phase 125 | Complete |
+| MEM-03 | Phase 125 | Complete |
+| MEM-04 | Phase 125 | Complete |
 | MEM-05 | Phase 128 | Pending |
 | REC-01 | Phase 126 | Pending |
 | REC-02 | Phase 126 | Pending |
