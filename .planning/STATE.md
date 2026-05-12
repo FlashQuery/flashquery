@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: MCP Tools Consolidation
-status: ready
-stopped_at: Completed 126-05-PLAN.md
-last_updated: "2026-05-12T17:57:49.000Z"
-last_activity: 2026-05-12 -- Phase 126 completed
+status: executing
+stopped_at: Completed 125-06-PLAN.md
+last_updated: "2026-05-12T19:43:06.084Z"
+last_activity: 2026-05-12
 progress:
   total_phases: 8
   completed_phases: 6
-  total_plans: 29
-  completed_plans: 29
-  percent: 100
+  total_plans: 35
+  completed_plans: 30
+  percent: 86
 ---
 
 # FlashQuery Core — State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-11)
 
 ## Current Position
 
-Phase: 127 (Removal, Directory, And Vault Maintenance) — READY
-Plan: TBD
-Status: Phase 126 complete; ready to plan Phase 127
-Last activity: 2026-05-12 -- Phase 126 completed
+Phase: 127 (Removal, Directory, And Vault Maintenance) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-05-12
 
 ## Performance Metrics
 
@@ -91,6 +91,7 @@ Last activity: 2026-05-12 -- Phase 126 completed
 | Phase 125 P04 | 8 min | 3 tasks | 3 files |
 | Phase 125 P05 | 20 min | 3 tasks | 6 files |
 | Phase 125 P06 | 60 min | 1 task | 10 files |
+| Phase 127 P01 | 9min | 3 tasks | 9 files |
 
 ## Decisions
 
@@ -146,6 +147,8 @@ Last activity: 2026-05-12 -- Phase 126 completed
 - [Phase 123]: 123-04 kept list_vault path/show/recursive/extensions/date/limit behavior intact while replacing only the output contract.
 - [Phase 123]: 123-04 returned expected list_vault path/date/include failures as canonical JSON with isError:false.
 - [Phase 123]: 123-04 added E2E fixture row cleanup because stale Supabase rows can poison path-based list_vault tracking enrichment.
+- [Phase 127]: 127-01 kept trash_folder.path unresolved in loadConfig so remove_document can resolve relative paths from the vault root at use time.
+- [Phase 127]: 127-01 promoted remove_document and manage_directory into read-write delegated tier metadata while keeping maintain_vault system/admin and delegated-hard-excluded.
 
 ## Accumulated Context
 
@@ -256,7 +259,7 @@ Last activity: 2026-05-12 -- Phase 126 completed
 
 ## Session Continuity
 
-Last session: 2026-05-12T15:04:28Z
+Last session: 2026-05-12T19:42:07.684Z
 Stopped at: Completed 125-06-PLAN.md
 Resume: Phase 126
 

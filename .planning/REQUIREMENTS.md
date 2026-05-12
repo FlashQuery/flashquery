@@ -43,7 +43,7 @@
 - [x] **DOC-06**: `insert_in_doc` supports `include_nested` for `end_of_section`, preserves markdown-aware insertion semantics, and returns document identification plus insertion metadata.
 - [x] **DOC-07**: `replace_doc_section` uses explicit `include_nested` semantics, supports empty-string section deletion including the heading line, and returns document identification plus replacement metadata.
 - [x] **DOC-08**: `apply_tags` accepts explicit cross-domain `targets`, returns ordered document/memory identification results, and reports disabled-category failures per target.
-- [ ] **DOC-09**: `remove_document` archives lifecycle state before moving to the configured trash folder or hard-deleting the file, preserves input order for batch results, and honors existing git auto-commit/auto-push policy.
+- [x] **DOC-09**: `remove_document` archives lifecycle state before moving to the configured trash folder or hard-deleting the file, preserves input order for batch results, and honors existing git auto-commit/auto-push policy.
 - [ ] **DOC-10**: `append_to_doc`, `create_document`, `update_document`, `update_doc_header`, and `search_documents` are removed from the final host and delegated tool surfaces with migrated tests and no compatibility aliases.
 
 ### Unified Search And Memory
@@ -72,9 +72,9 @@
 
 ### Directory, Maintenance, LLM, And Cleanup
 
-- [ ] **SYS-01**: `manage_directory(action:"create")` replaces `create_directory` with ordered per-path results, idempotent create status, path validation, and directory-scoped locking.
-- [ ] **SYS-02**: `manage_directory(action:"remove")` replaces `remove_directory` with ordered per-path results, empty-directory-only removal, conflict errors for non-empty paths, and directory-scoped locking.
-- [ ] **SYS-03**: `maintain_vault(action:"sync" | "repair" | "status" | ["repair","sync"])` replaces `force_file_scan` and `reconcile_documents` with structured per-action results, job status, dry-run repair, background sync, and maintenance conflict handling.
+- [x] **SYS-01**: `manage_directory(action:"create")` replaces `create_directory` with ordered per-path results, idempotent create status, path validation, and directory-scoped locking.
+- [x] **SYS-02**: `manage_directory(action:"remove")` replaces `remove_directory` with ordered per-path results, empty-directory-only removal, conflict errors for non-empty paths, and directory-scoped locking.
+- [x] **SYS-03**: `maintain_vault(action:"sync" | "repair" | "status" | ["repair","sync"])` replaces `force_file_scan` and `reconcile_documents` with structured per-action results, job status, dry-run repair, background sync, and maintenance conflict handling.
 - [ ] **SYS-04**: `call_model` and `get_llm_usage` remain compliant reference tools and continue working with document reference resolution even when document MCP categories are hidden.
 - [ ] **SYS-05**: Dead project tools `list_projects` and `get_project_info` stay absent from registration and stale source/tests are deleted.
 - [ ] **SYS-06**: Transitional `get_briefing` and `insert_doc_link` remain only as macro-dependent legacy tools with structured output and explicit removal gates.
@@ -139,7 +139,7 @@
 | DOC-06 | Phase 124 | Complete |
 | DOC-07 | Phase 124 | Complete |
 | DOC-08 | Phase 124 | Complete |
-| DOC-09 | Phase 127 | Pending |
+| DOC-09 | Phase 127 | Complete |
 | DOC-10 | Phase 128 | Pending |
 | SRCH-01 | Phase 125 | Complete |
 | SRCH-02 | Phase 125 | Complete |
@@ -159,9 +159,9 @@
 | REC-05 | Phase 126 | Pending |
 | REC-06 | Phase 126 | Pending |
 | REC-07 | Phase 126 | Pending |
-| SYS-01 | Phase 127 | Pending |
-| SYS-02 | Phase 127 | Pending |
-| SYS-03 | Phase 127 | Pending |
+| SYS-01 | Phase 127 | Complete |
+| SYS-02 | Phase 127 | Complete |
+| SYS-03 | Phase 127 | Complete |
 | SYS-04 | Phase 128 | Pending |
 | SYS-05 | Phase 128 | Pending |
 | SYS-06 | Phase 128 | Pending |
