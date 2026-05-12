@@ -43,6 +43,13 @@ Core CRUD operations on vault documents via MCP.
 | D-24 | search_documents does not surface stale hits for manually-deleted files before reconcile (or marks them clearly) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-05-07 |
 | D-25 | User-defined custom frontmatter fields survive update_document (updating title, body, or tags leaves unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
 | D-26 | User-defined custom frontmatter fields survive archive_document (archiving only changes status; all other fields preserved) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| D-arch-1 | archive_document single returns a JSON document identification block instead of prose. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
+| D-arch-2 | archive_document response includes `archived_at` in ISO-8601 form. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
+| D-arch-3 | archive_document batch returns a JSON array with one envelope per input identifier. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
+| D-arch-4 | archive_document batch response order exactly matches input identifier order. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
+| D-arch-5 | Re-archiving an already archived document returns the existing `archived_at` timestamp. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
+| D-arch-6 | archive_document preserves user-defined custom frontmatter fields while adding archive lifecycle fields. | test_frontmatter_preservation; documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
+| D-arch-7 | archive_document batch not_found results return canonical error envelopes at the corresponding element position with outer `isError:false`. | documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
 | D-27 | get_document default response returns JSON envelope with body field (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-28 | get_document include=["frontmatter"] returns frontmatter projection in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-29 | get_document include=["headings"] returns headings array with level, text, chars (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |

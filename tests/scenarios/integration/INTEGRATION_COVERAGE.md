@@ -24,6 +24,8 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-foundation-frontmatter-1 | Foundation frontmatter constant guardrails are represented in integration coverage traceability for later migration phases. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
 | INT-gdoc-error-1 | get_document JSON error-shape coverage proves missing identifiers use canonical `not_found` envelopes without runtime `isError:true`. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
 | INT-gdoc-error-2 | get_document JSON error-shape coverage proves invalid include/section requests use canonical `invalid_input` envelopes with conflict details preserved. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
+| INT-arch-1 | archive_document then search excludes the archived document from default document results while the archive response exposes JSON `status` and `archived_at`. | archive_status_field         | 2026-05-11   | 2026-05-11   |
+| INT-arch-2 | archive_document batch returns ordered JSON archive envelopes and get_document confirms archived status afterward. | archive_status_field         | 2026-05-11   | 2026-05-11   |
 
 ---
 
@@ -57,7 +59,7 @@ content unaffected.
 | IA-04  | Archive memory → absent from search_memories (VALIDATED)                          | archive_memory               | 2026-05-07   | 2026-05-07   |
 | IA-05  | Archive memory → document with same topic still searchable (VALIDATED)            | archive_memory               | 2026-05-07   | 2026-05-07   |
 | IA-06  | Archive one of several tagged documents → others remain discoverable (VALIDATED)  | archive_partial_set          | 2026-05-07   | 2026-05-07   |
-| IA-07  | Archive document → get_document reflects status='archived' (VALIDATED)            | archive_status_field         | 2026-05-07   | 2026-05-07   |
+| IA-07  | Archive document → get_document reflects status='archived' (VALIDATED)            | archive_status_field         | 2026-05-11   | 2026-05-11   |
 | IA-08  | Create and archive document in nested vault path → remains correctly archived and retrievable (VALIDATED) | archive_nested_path          | 2026-05-07   | 2026-05-07   |
 
 ---

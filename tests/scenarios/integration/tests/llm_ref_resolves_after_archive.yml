@@ -17,10 +17,15 @@ steps:
     content: "The archived secret is HIDDEN-TREASURE."
     tags: [ix14-tag]
 
-  - label: "Archive the document"
-    action: archive_document
-    args:
-      identifiers: "${archived_ref_doc.fq_id}"
+  - label: "Archive the document and assert JSON archive lifecycle output"
+    assert:
+      op: archive_document
+      args:
+        identifiers: "${archived_ref_doc.fq_id}"
+      expect_json_equals:
+        path: "status"
+        value: "archived"
+      expect_json_path: "archived_at"
 
   - label: "call_model {{ref:doc.md}} on archived document still resolves and LLM sees the body"
     assert:
