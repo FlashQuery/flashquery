@@ -170,7 +170,7 @@ describe.skipIf(SKIP_DB)('Plugin System Integration', () => {
     await initSupabase(config);
     if (EMBEDDING_API_KEY) initEmbedding(config);
     await initPlugins(config);
-  });
+  }, 60_000);
 
   afterAll(async () => {
     // Drop all dynamically created plugin tables

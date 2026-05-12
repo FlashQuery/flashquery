@@ -378,6 +378,46 @@ CREATE TABLE IF NOT EXISTS fqc_pending_plugin_review (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- Phase 125: Existing databases may have been created before the pending-review
+-- FK used ON DELETE CASCADE. Repair the constraint idempotently so hard-deleting
+-- a document cannot leave orphaned pending-review rows.
+DO $$
+DECLARE
+  existing_constraint TEXT;
+BEGIN
+  SELECT c.conname INTO existing_constraint
+  FROM pg_constraint c
+  JOIN pg_class t ON t.oid = c.conrelid
+  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(c.conkey)
+  WHERE t.relname = 'fqc_pending_plugin_review'
+    AND c.contype = 'f'
+    AND a.attname = 'fqc_id'
+  LIMIT 1;
+
+  IF existing_constraint IS NOT NULL THEN
+    IF NOT EXISTS (
+      SELECT 1
+      FROM pg_constraint c
+      WHERE c.conname = existing_constraint
+        AND c.confdeltype = 'c'
+    ) THEN
+      EXECUTE format('ALTER TABLE fqc_pending_plugin_review DROP CONSTRAINT %I', existing_constraint);
+      existing_constraint := NULL;
+    END IF;
+  END IF;
+
+  IF existing_constraint IS NULL THEN
+    DELETE FROM fqc_pending_plugin_review p
+    WHERE NOT EXISTS (
+      SELECT 1 FROM fqc_documents d WHERE d.id = p.fqc_id
+    );
+
+    ALTER TABLE fqc_pending_plugin_review
+      ADD CONSTRAINT fqc_pending_plugin_review_fqc_id_fkey
+      FOREIGN KEY (fqc_id) REFERENCES fqc_documents(id) ON DELETE CASCADE;
+  END IF;
+END $$;
+
 CREATE INDEX IF NOT EXISTS idx_pending_review_plugin
   ON fqc_pending_plugin_review(plugin_id, instance_id);
 

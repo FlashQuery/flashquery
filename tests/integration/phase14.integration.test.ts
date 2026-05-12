@@ -228,8 +228,12 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
 
     it('reports failure when document path does not exist', async () => {
       const result = await getDocHandler('archive_document')({ identifiers: '_global/nonexistent.md' }) as { content: Array<{ text: string }>; isError?: boolean };
-      // Per-item errors are captured in results text, not as isError
-      expect(result.content[0].text).toContain('failed');
+      // Expected failures are structured JSON envelopes and do not set runtime isError.
+      expect(result.isError).toBeFalsy();
+      expect(JSON.parse(result.content[0].text)).toMatchObject({
+        error: 'not_found',
+        identifier: '_global/nonexistent.md',
+      });
     });
   });
 

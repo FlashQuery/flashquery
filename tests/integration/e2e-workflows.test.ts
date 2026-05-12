@@ -132,6 +132,10 @@ function isError(result: unknown): boolean {
   return (result as { isError?: boolean }).isError === true;
 }
 
+function getJson<T = Record<string, unknown>>(result: unknown): T {
+  return JSON.parse(getText(result)) as T;
+}
+
 // ── seedDocument helper ────────────────────────────────────────────────────────
 
 // Shared instance ID for Scenarios A-C. Using a single constant avoids overwriting
@@ -431,7 +435,11 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       const result = await scBHandlers('move_document')({
         identifier: srcConflictDocId, destination: 'Work/Archive/Existing.md',
       });
-      expect(isError(result)).toBe(true);
+      expect(isError(result)).toBe(false);
+      expect(getJson<{ error: string; details?: { reason?: string } }>(result)).toMatchObject({
+        error: 'conflict',
+        details: { reason: 'path_exists' },
+      });
       expect(existsSync(join(scBVaultPath, 'Work/Projects/ConflictSrc.md'))).toBe(true);
       expect(existsSync(join(scBVaultPath, 'Work/Archive/Existing.md'))).toBe(true);
     });
@@ -497,10 +505,15 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       expect(text).toContain('project1.md');
       expect(text).toContain('project2.md');
       expect(text).toContain('project3.md');
-      expect(text).toContain('Title:');
-      expect(text).toContain('Path:');
-      expect(text).toContain('fqc_id:');
-      expect(text).toContain('Status:');
+      const payload = getJson<{ entries: Array<{ name: string; path: string; type: string; size: { chars: number } }> }>(result);
+      expect(payload.entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ name: 'project1.md', path: 'Work/Projects-C/project1.md', type: 'file' }),
+          expect.objectContaining({ name: 'project2.md', path: 'Work/Projects-C/project2.md', type: 'file' }),
+          expect.objectContaining({ name: 'project3.md', path: 'Work/Projects-C/project3.md', type: 'file' }),
+        ])
+      );
+      expect(payload.entries.every((entry) => typeof entry.size.chars === 'number')).toBe(true);
       const check = validateToolResponse(result);
       expect(check.valid).toBe(true);
     });
@@ -541,13 +554,10 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
         identifier: project1Id, destination: 'Work/Projects-C/project1-copy.md',
       });
       expect(isError(copyResult)).toBe(false);
-      const text = getText(copyResult);
-      expect(text).toContain('FQC ID:');
-      expect(text).toContain('Title:');
-
-      const fqcMatch = text.match(/FQC ID: ([a-f0-9-]{36})/);
-      expect(fqcMatch).toBeTruthy();
-      const newFqcId = fqcMatch![1];
+      const payload = getJson<{ fq_id: string; title: string }>(copyResult);
+      expect(payload.fq_id).toBeTruthy();
+      expect(payload.title).toBeTruthy();
+      const newFqcId = payload.fq_id;
       expect(newFqcId).not.toBe(project1Id);
 
       expect(existsSync(join(scCVaultPath, 'Work/Projects-C/project1-copy.md'))).toBe(true);
@@ -568,9 +578,8 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
         identifier: project2Id, destination: 'Work/Projects-C/project2-copy.md',
       });
       expect(isError(copyResult)).toBe(false);
-      const copyFqcMatch = getText(copyResult).match(/FQC ID: ([a-f0-9-]{36})/);
-      expect(copyFqcMatch).toBeTruthy();
-      const copyFqcId = copyFqcMatch![1];
+      const copyFqcId = getJson<{ fq_id: string }>(copyResult).fq_id;
+      expect(copyFqcId).toBeTruthy();
 
       const moveResult = await scCHandlers('move_document')({
         identifier: copyFqcId, destination: 'Work/Archive-C/project2-copy.md',
@@ -806,9 +815,11 @@ describe.skipIf(SKIP)('Scenario E: 1000+ Document Discovery with Plugin Ownershi
 
     // If files were found, verify response format (SPEC-04: correct metadata structure)
     if (!text.includes('No entries found')) {
-      // Response should contain structured metadata for each file
-      // Check for expected key-value format from response-formats.ts
-      expect(text).toMatch(/Title:|Path:|fqc_id:/i);
+      const payload = getJson<{ entries: Array<{ path: string; type: string; size: { chars: number } }> }>(result);
+      expect(payload.entries.length).toBeGreaterThan(0);
+      expect(payload.entries[0]).toMatchObject({ type: 'file' });
+      expect(payload.entries[0].path).toContain('CRM/Contacts/');
+      expect(typeof payload.entries[0].size.chars).toBe('number');
     }
   }, 30_000);
 
@@ -826,12 +837,13 @@ describe.skipIf(SKIP)('Scenario E: 1000+ Document Discovery with Plugin Ownershi
       return;
     }
 
-    // SPEC-04: Verify required metadata fields are present in response
-    // list_vault detailed format: Path, Type, Size, Updated, Created are always present.
-    // Title and fqc_id are only present for DB-tracked files; untracked files show Tracked: false.
-    expect(text).toContain('Path:');
-    expect(text).toContain('Type:');
-    expect(text).toContain('Size:');
+    // SPEC-04: Verify required metadata fields are present in JSON response.
+    const payload = getJson<{ entries: Array<{ path: string; type: string; modified: string; size: { chars: number } }> }>(result);
+    expect(payload.entries.length).toBeGreaterThan(0);
+    expect(payload.entries[0].path).toContain('CRM/Contacts/');
+    expect(payload.entries[0].type).toBe('file');
+    expect(payload.entries[0].modified).toBeTruthy();
+    expect(typeof payload.entries[0].size.chars).toBe('number');
 
     // Verify response is not corrupted (should be parseable text)
     expect(text.length).toBeGreaterThan(0);

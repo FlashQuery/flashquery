@@ -25,15 +25,14 @@ import {
 
 const MCP_PORT = 4300;
 const AUTH_SECRET = 'uat-67-test-secret';
-const INSTANCE_ID = 'uat-67-test';
 
-function writeTestConfig(vaultPath: string): string {
+function writeTestConfig(vaultPath: string, instanceId: string): string {
   const configPath = join(tmpdir(), `fqc-uat-67-${Date.now()}.yml`);
   writeFileSync(
     configPath,
     `instance:
   name: "UAT-67 Test"
-  id: "${INSTANCE_ID}"
+  id: "${instanceId}"
   vault:
     path: "${vaultPath}"
     markdown_extensions: [".md"]
@@ -132,12 +131,14 @@ describe.skipIf(!HAS_SUPABASE)('Phase 67 UAT: File Ops P2 (copy_document, remove
   let serverProcess: ChildProcess | null = null;
   let vaultPath: string;
   let configPath: string;
+  let instanceId: string;
 
   const SOURCE_REL = 'Documents/source.md';
   const COPY_REL = 'Documents/copy.md';
 
   beforeAll(async () => {
     vaultPath = join(tmpdir(), `fqc-uat-67-vault-${Date.now()}`);
+    instanceId = `uat-67-test-${Date.now()}`;
     await mkdir(join(vaultPath, 'Documents'), { recursive: true });
 
     // Write source document with correct FM field names
@@ -151,7 +152,7 @@ describe.skipIf(!HAS_SUPABASE)('Phase 67 UAT: File Ops P2 (copy_document, remove
     );
     await writeFile(join(vaultPath, SOURCE_REL), sourceFrontmatter, 'utf-8');
 
-    configPath = writeTestConfig(vaultPath);
+    configPath = writeTestConfig(vaultPath, instanceId);
     const distIndex = new URL('../../dist/index.js', import.meta.url).pathname;
 
     serverProcess = spawn('node', [distIndex, 'start', '--config', configPath], {

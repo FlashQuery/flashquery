@@ -183,7 +183,7 @@ describe.skipIf(SKIP_DB)('CRM E2E Integration', () => {
     registerDocumentTools(server, config);
     registerCompoundTools(server, config);
     getHandler = gh;
-  });
+  }, 60_000);
 
   afterAll(async () => {
     // Drop all CRM plugin tables created during test

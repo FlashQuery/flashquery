@@ -731,12 +731,19 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
       const getResult = await handlers('get_memory')({ memory_ids: memoryId });
       expect(isError(getResult)).toBe(false);
       const text = getText(getResult);
+      const payload = JSON.parse(text) as {
+        memory_id: string;
+        content_preview: string;
+        tags: string[];
+        created_at: string;
+        updated_at: string;
+      };
 
-      expect(text).toContain('Integration test memory for get_memory round-trip.');
-      expect(text).toContain(memoryId);
-      expect(text).toContain('#get-memory-test');
-      expect(text).toContain('Created:');
-      expect(text).toContain('Updated:');
+      expect(payload.memory_id).toBe(memoryId);
+      expect(payload.content_preview).toContain('Integration test memory for get_memory round-trip.');
+      expect(payload.tags).toContain('#get-memory-test');
+      expect(payload.created_at).toBeTruthy();
+      expect(payload.updated_at).toBeTruthy();
     });
   });
 
