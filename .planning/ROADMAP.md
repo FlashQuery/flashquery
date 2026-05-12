@@ -45,7 +45,7 @@
 | 121 | Foundation: Metadata, Response Helpers, Test Harness | 3/3 | Complete    | 2026-05-11 |
 | 122 | Host Tool Exposure Config | 4/4 | Complete    | 2026-05-11 |
 | 123 | Document Read + Standard Output Migration | 4/4 | Complete    | 2026-05-12 |
-| 124 | Document Write Primitives | Implement `write_document`, section/edit expansions, and `apply_tags` structured cross-domain output. | DOC-03, DOC-04, DOC-06..08 | 6 |
+| 124 | Document Write Primitives | 7/7 | Complete    | 2026-05-12 |
 | 125 | Unified Search + Memory Consolidation | Replace search/memory legacy surfaces with `search`, `write_memory`, `get_memory`, and `archive_memory`. | SRCH-01..06, MEM-01..04 | 6 |
 | 126 | Plugin + Record Consolidation | Standardize plugin tools and merge record create/update into `write_record`. | REC-01..07 | 5 |
 | 127 | Removal, Directory, And Vault Maintenance | Add `remove_document`, `manage_directory`, and `maintain_vault` with safe filesystem/git semantics. | DOC-09, SYS-01..03 | 6 |
@@ -139,7 +139,7 @@ Plans:
 5. Legacy create/update/header/append behavior is ported into new tests before those legacy tools are removed later.
 6. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
 
-**Plans:** 7 plans
+**Plans:** 7/7 plans complete
 
 Plans:
 **Wave 1**

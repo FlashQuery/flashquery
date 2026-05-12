@@ -37,12 +37,12 @@
 
 - [x] **DOC-01**: `get_document` keeps the shipped include/sections/follow_ref surface while migrating single-result errors to canonical envelopes and expected-error `isError: false` semantics.
 - [x] **DOC-02**: `archive_document` returns document identification blocks with persisted `archived_at`, preserves idempotent re-archive behavior, and returns ordered per-element results for batches.
-- [ ] **DOC-03**: `write_document(mode:"create")` replaces `create_document` by creating markdown files from `path`, `title`, optional content, frontmatter, and tags while rejecting conflicts and reserved FQ-managed frontmatter.
-- [ ] **DOC-04**: `write_document(mode:"update")` replaces `update_document` and `update_doc_header` by updating body, title, frontmatter, or tags on one resolved document while preserving omitted fields.
+- [x] **DOC-03**: `write_document(mode:"create")` replaces `create_document` by creating markdown files from `path`, `title`, optional content, frontmatter, and tags while rejecting conflicts and reserved FQ-managed frontmatter.
+- [x] **DOC-04**: `write_document(mode:"update")` replaces `update_document` and `update_doc_header` by updating body, title, frontmatter, or tags on one resolved document while preserving omitted fields.
 - [x] **DOC-05**: `copy_document`, `move_document`, and `list_vault` retain their existing behavior while returning structured JSON envelopes instead of prose/table text.
-- [ ] **DOC-06**: `insert_in_doc` supports `include_nested` for `end_of_section`, preserves markdown-aware insertion semantics, and returns document identification plus insertion metadata.
-- [ ] **DOC-07**: `replace_doc_section` uses explicit `include_nested` semantics, supports empty-string section deletion including the heading line, and returns document identification plus replacement metadata.
-- [ ] **DOC-08**: `apply_tags` accepts explicit cross-domain `targets`, returns ordered document/memory identification results, and reports disabled-category failures per target.
+- [x] **DOC-06**: `insert_in_doc` supports `include_nested` for `end_of_section`, preserves markdown-aware insertion semantics, and returns document identification plus insertion metadata.
+- [x] **DOC-07**: `replace_doc_section` uses explicit `include_nested` semantics, supports empty-string section deletion including the heading line, and returns document identification plus replacement metadata.
+- [x] **DOC-08**: `apply_tags` accepts explicit cross-domain `targets`, returns ordered document/memory identification results, and reports disabled-category failures per target.
 - [ ] **DOC-09**: `remove_document` archives lifecycle state before moving to the configured trash folder or hard-deleting the file, preserves input order for batch results, and honors existing git auto-commit/auto-push policy.
 - [ ] **DOC-10**: `append_to_doc`, `create_document`, `update_document`, `update_doc_header`, and `search_documents` are removed from the final host and delegated tool surfaces with migrated tests and no compatibility aliases.
 

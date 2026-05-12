@@ -344,18 +344,16 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const vaultRoot = config.instance.vault.path;
 
         if (mode === 'create') {
-          const relativePath = path as string;
-          const absolutePath = join(vaultRoot, relativePath);
-          const resolvedAbs = resolve(absolutePath);
-          const resolvedVault = resolve(vaultRoot);
-          const relToVault = relative(resolvedVault, resolvedAbs);
-          if (relToVault.startsWith('..') || relToVault === '..') {
+          const validation = await validateVaultPath(vaultRoot, path as string);
+          if (!validation.valid) {
             return jsonExpectedError({
               error: 'invalid_input',
-              message: 'path escapes vault root',
+              message: validation.error ?? 'Invalid path.',
               details: { field: 'path' },
             });
           }
+          const relativePath = validation.relativePath;
+          const absolutePath = validation.absPath;
           if (existsSync(absolutePath)) {
             try {
               const statResult = await stat(absolutePath);
@@ -376,18 +374,18 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             });
           }
 
-          const validation = validateAllTags(tags ?? []);
-          if (!validation.valid) {
+          const tagValidation = validateAllTags(tags ?? []);
+          if (!tagValidation.valid) {
             return jsonExpectedError({
               error: 'invalid_input',
-              message: `Tag validation failed: ${validation.errors.join('; ')}`,
+              message: `Tag validation failed: ${tagValidation.errors.join('; ')}`,
               details: { field: 'tags' },
             });
           }
 
           const fqcId = uuidv4();
           const now = new Date().toISOString();
-          const deduplicated = deduplicateTags(validation.normalized);
+          const deduplicated = deduplicateTags(tagValidation.normalized);
           const effectiveTitle = title as string;
           const body = content ?? '';
           const warnings: string[] = [];
@@ -508,8 +506,8 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           }
         }
         const serialized = matter.stringify(effectiveBody, fm);
-        const newContentHash = computeHash(serialized);
-        const preScan = await targetedScan(config, supabase, resolved, newContentHash, logger);
+        const preWriteHash = computeHash(serialized);
+        const preScan = await targetedScan(config, supabase, resolved, preWriteHash, logger);
         const fqcId = preScan.capturedFrontmatter.fqcId;
         fm[FM.ID] = fqcId;
         const sanitizedFm = serializeOrderedFrontmatter(fm);
@@ -517,13 +515,15 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           gitAction: 'update',
           gitTitle: effectiveTitle,
         });
+        const postWriteRaw = await readFile(resolved.absPath, 'utf-8');
+        const postWriteHash = computeHash(postWriteRaw);
 
         const { error: updateError } = await supabase
           .from('fqc_documents')
           .update({
             title: effectiveTitle,
             tags: effectiveTags,
-            content_hash: newContentHash,
+            content_hash: postWriteHash,
             path: resolved.relativePath,
             updated_at: new Date().toISOString(),
           })

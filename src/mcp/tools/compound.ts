@@ -1215,6 +1215,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         };
       }
 
+      let lockAcquired = false;
       try {
         // Validate position
         const validPositions = ['top', 'bottom', 'after_heading', 'before_heading', 'end_of_section'];
@@ -1234,6 +1235,23 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             message: `${position} does not accept heading, occurrence, heading_match, heading_level, or include_nested`,
             details: { field: 'position' },
           });
+        }
+
+        if (config.locking.enabled) {
+          lockAcquired = await acquireLock(
+            supabaseManager.getClient(),
+            config.instance.id,
+            'documents',
+            { ttlSeconds: config.locking.ttlSeconds }
+          );
+          if (!lockAcquired) {
+            return jsonExpectedError({
+              error: 'conflict',
+              message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+              identifier,
+              details: { reason: 'lock_contention' },
+            });
+          }
         }
 
         // Resolve document identifier
@@ -1295,13 +1313,29 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           gitAction: 'update',
           gitTitle: `Insert in document at ${position}`,
         });
+        const postWriteRaw = await readFile(resolved.absPath, 'utf-8');
+        const postWriteHash = computeHash(postWriteRaw);
+        const fqcId = typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : resolved.fqcId;
+        if (fqcId) {
+          const { error: hashUpdateError } = await supabaseManager
+            .getClient()
+            .from('fqc_documents')
+            .update({
+              content_hash: postWriteHash,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', fqcId)
+            .eq('instance_id', config.instance.id);
+          if (hashUpdateError) {
+            throw new Error(`Supabase insert update failed for ${relativePath}: ${hashUpdateError.message}`);
+          }
+        }
 
         // Trigger fire-and-forget embedding
         const docTitle = typeof frontmatter[FM.TITLE] === 'string' ? frontmatter[FM.TITLE] as string : relativePath;
         void (async () => {
           try {
             const vector = await embeddingProvider.embed(`${docTitle}\n\n${modifiedBody}`);
-            const fqcId = typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : undefined;
             if (fqcId) {
               await supabaseManager
                 .getClient()
@@ -1347,6 +1381,10 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`insert_in_doc failed: ${msg}`);
         return jsonRuntimeError({ message: `Error inserting in document: ${msg}`, identifier });
+      } finally {
+        if (lockAcquired) {
+          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
+        }
       }
     }
   );
@@ -1491,14 +1529,22 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Step 11: Update database
         if (resolved.fqcId) {
-          await supabase
+          const { data: updatedRow, error: sectionUpdateError } = await supabase
             .from('fqc_documents')
             .update({
               content_hash: newHash,
               updated_at: new Date().toISOString(),
             })
             .eq('id', resolved.fqcId)
-            .eq('instance_id', config.instance.id);
+            .eq('instance_id', config.instance.id)
+            .select('id')
+            .maybeSingle();
+          if (sectionUpdateError) {
+            throw new Error(`Supabase section update failed for ${resolved.relativePath}: ${sectionUpdateError.message}`);
+          }
+          if (!updatedRow) {
+            throw new Error(`Supabase section update affected no document row for ${resolved.relativePath}`);
+          }
 
           // Step 12: Fire-and-forget re-embedding
           const docTitle = typeof document.data[FM.TITLE] === 'string' ? document.data[FM.TITLE] as string : resolved.relativePath;

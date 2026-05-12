@@ -20,6 +20,8 @@ FlashQuery Core is an open source, local-first data management layer for individ
 
 **Phase 123 complete (2026-05-12):** Document read/list/archive/copy/move tools now return structured JSON identification/envelope outputs and canonical expected errors while preserving shipped behavior. `get_document`, `archive_document`, `copy_document`, `move_document`, and `list_vault` have same-phase unit, integration, E2E, directed, and integration scenario coverage.
 
+**Phase 124 complete (2026-05-12):** Document write primitives are consolidated around `write_document`, markdown-aware section edits, and structured `apply_tags` cross-domain output. Post-review fixes closed path confinement, write-lock, content-hash, and Supabase update consistency gaps; verification passed 31/31 must-haves.
+
 ## Current Milestone: v3.3 MCP Tools Consolidation
 
 **Goal:** Consolidate, update, and standardize the FlashQuery MCP tool surface so every final tool has a consistent JSON contract, centralized metadata/exposure rules, canonical errors, and same-phase coverage across unit, integration, E2E, directed scenario, and integration scenario tests.
@@ -315,4 +317,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-11 — completed Phase 121 foundation for v3.3 MCP Tools Consolidation*
+*Last updated: 2026-05-12 — completed Phase 124 document write primitives for v3.3 MCP Tools Consolidation*

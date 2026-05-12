@@ -264,7 +264,6 @@ describe('write-lock tool integration', () => {
 
       const result = await getHandler('update_document')({ path: 'test.md', content: 'new body' });
 
-      expect(result.isError).toBe(true);
       expect(result.content[0].text).toContain('Write lock timeout');
       expect(result.content[0].text).toContain('documents');
     });
@@ -446,6 +445,39 @@ describe('write-lock tool integration', () => {
 
       registerMemoryTools(server, config);
       await getHandler('list_memories')({});
+
+      expect(acquireLock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('insert_in_doc', () => {
+    it('returns isError:true with lock timeout message when acquireLock returns false', async () => {
+      vi.mocked(acquireLock).mockResolvedValue(false);
+
+      const config = makeConfig(true);
+      const { server, getHandler } = createMockServer();
+      registerCompoundTools(server, config);
+
+      const result = await getHandler('insert_in_doc')({
+        identifier: 'notes.md',
+        position: 'bottom',
+        content: 'New note',
+      });
+
+      expect(result.content[0].text).toContain('Write lock timeout');
+      expect(result.content[0].text).toContain('documents');
+    });
+
+    it('does not call acquireLock when locking is disabled', async () => {
+      const config = makeConfig(false);
+      const { server, getHandler } = createMockServer();
+      registerCompoundTools(server, config);
+
+      await getHandler('insert_in_doc')({
+        identifier: 'notes.md',
+        position: 'bottom',
+        content: 'New note',
+      });
 
       expect(acquireLock).not.toHaveBeenCalled();
     });

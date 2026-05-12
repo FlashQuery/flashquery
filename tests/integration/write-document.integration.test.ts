@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { initLogger } from '../../src/logging/logger.js';
@@ -49,6 +50,10 @@ function createMockServer() {
 
 function textOf(result: unknown): string {
   return (result as { content: Array<{ text: string }> }).content[0].text;
+}
+
+function computeHash(content: string): string {
+  return createHash('sha256').update(content).digest('hex');
 }
 
 describe.skipIf(SKIP)('Phase 124 document write primitives (integration)', () => {
@@ -103,6 +108,36 @@ describe.skipIf(SKIP)('Phase 124 document write primitives (integration)', () =>
     expect(raw).toContain('Write Updated');
     expect(raw).toContain('Updated body.');
     expect(raw).toContain('reviewer: ai-dev-agent');
+
+    const { data: row, error } = await supabaseManager
+      .getClient()
+      .from('fqc_documents')
+      .select('content_hash')
+      .eq('id', created.fq_id)
+      .single();
+    expect(error).toBeNull();
+    expect((row as { content_hash: string }).content_hash).toBe(computeHash(raw));
+  });
+
+  it('write_document create rejects symlinked vault path segments', async () => {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const outsideDir = await mkdtemp(join(tmpdir(), 'fqc-phase-124-outside-'));
+    await symlink(outsideDir, join(vaultPath, 'phase-124-symlink'), 'dir');
+
+    const result = await getHandler('write_document')({
+      mode: 'create',
+      path: 'phase-124-symlink/escaped.md',
+      title: 'Escaped',
+      content: 'Should not write outside the vault.',
+    }) as { isError?: boolean };
+
+    expect(result.isError).toBeFalsy();
+    const payload = JSON.parse(textOf(result)) as { error: string; details?: { field?: string } };
+    expect(payload).toMatchObject({ error: 'invalid_input', details: { field: 'path' } });
+    await expect(readFile(join(outsideDir, 'escaped.md'), 'utf-8')).rejects.toThrow();
+    await rm(outsideDir, { recursive: true, force: true });
   });
 
   it('insert_in_doc and replace_doc_section honor exact/ambiguous matching envelopes', async () => {
@@ -134,6 +169,15 @@ describe.skipIf(SKIP)('Phase 124 document write primitives (integration)', () =>
       content: 'Inserted task.',
     }) as { isError?: boolean };
     expect(inserted.isError).toBeFalsy();
+    const insertRaw = await readFile(join(vaultPath, 'phase-124/section-edit.md'), 'utf-8');
+    const { data: afterInsert } = await supabaseManager
+      .getClient()
+      .from('fqc_documents')
+      .select('content_hash')
+      .eq('path', 'phase-124/section-edit.md')
+      .eq('instance_id', TEST_INSTANCE_ID)
+      .single();
+    expect((afterInsert as { content_hash: string }).content_hash).toBe(computeHash(insertRaw));
 
     const replaced = await getHandler('replace_doc_section')({
       identifier: 'phase-124/section-edit.md',
@@ -144,6 +188,15 @@ describe.skipIf(SKIP)('Phase 124 document write primitives (integration)', () =>
     expect(replaced.isError).toBeFalsy();
     const payload = JSON.parse(textOf(replaced)) as { extracted_section: { heading: string } };
     expect(payload.extracted_section.heading).toBe('Tasks Later');
+    const replaceRaw = await readFile(join(vaultPath, 'phase-124/section-edit.md'), 'utf-8');
+    const { data: afterReplace } = await supabaseManager
+      .getClient()
+      .from('fqc_documents')
+      .select('content_hash')
+      .eq('path', 'phase-124/section-edit.md')
+      .eq('instance_id', TEST_INSTANCE_ID)
+      .single();
+    expect((afterReplace as { content_hash: string }).content_hash).toBe(computeHash(replaceRaw));
   });
 
   it('apply_tags returns per-target unsupported when memory category is disabled', async () => {
