@@ -65,6 +65,14 @@ Core CRUD operations on vault documents via MCP.
 | D-move-3 | move_document destination conflict returns canonical `conflict` with `details.reason="path_exists"` and `isError:false`. | test_document_copy_and_move | 2026-05-12 |  |
 | D-move-4 | move_document plugin ownership notice is represented as `warnings:["plugin_ownership_path_expectation"]` rather than appended prose. | tests/unit/move-document.test.ts | 2026-05-12 |  |
 | D-move-5 | move_document reference durability preserves fq_id-based retrieval after the path move. | test_document_copy_and_move; existing IX-19/IX-22 workflows | 2026-05-12 |  |
+| D-rdoc-1 | `remove_document` hard-deletes when trash is disabled and returns `status:"archived"`. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-rdoc-2 | `remove_document` trash-folder moves use basename-only destinations. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
+| D-rdoc-3 | `remove_document` external trash moves leave the source absent and external file present. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
+| D-rdoc-4 | `remove_document` collision strategy preserves all removed files. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
+| D-rdoc-5 | `remove_document` archives lifecycle state before filesystem removal and never emits a `removed` lifecycle status. | test_removal_directory_maintenance; tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
+| D-rdoc-6 | `remove_document` batch partial failure preserves input order. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-rdoc-7 | `remove_document` bulk removal emits a warning for more than five identifiers. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-rdoc-8 | `remove_document` trash-folder moves write manual recovery metadata. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
 | D-27 | get_document default response returns JSON envelope with body field (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-28 | get_document include=["frontmatter"] returns frontmatter projection in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-29 | get_document include=["headings"] returns headings array with level, text, chars (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
@@ -348,6 +356,12 @@ Vault scanning, file listing, and directory management.
 | F-50 | Dot-prefixed directory (`.staging/temp`) created successfully (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-05-07 |
 | F-51 | Dot-prefixed directory is invisible to `list_vault` (scanner ignore patterns) (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-05-07 |
 | F-52 | Shutdown check — call during shutdown returns `isError: true` with shutdown message (DEFERRED — cannot inject in-process shutdown state from subprocess; unit-tested in files-tools.test.ts) | test_create_directory_special | 2026-04-29 | 2026-04-29 |
+| D-mdir-1 | `manage_directory(action:"create")` creates directories through the final surface. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mdir-2 | `manage_directory(action:"create")` returns `status:"unchanged"` for idempotent re-create. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mdir-3 | `manage_directory(action:"remove")` removes empty directories through the final surface. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mdir-4 | `manage_directory(action:"remove")` rejects non-empty directories with `details.reason:"directory_not_empty"`. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mdir-5 | `manage_directory` batch order and per-element errors are stable. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mdir-6 | `manage_directory` rejects traversal paths as ordered per-element errors. | test_removal_directory_maintenance | 2026-05-12 |  |
 
 ### 9.4 Vault Listing (`list_vault`)
 
@@ -410,6 +424,14 @@ Vault scanning, file listing, and directory management.
 | D-list-vault-5 | Invalid include values return canonical `{ error:"invalid_input" }` JSON with `isError:false` | tests/unit/list-vault.test.ts | 2026-05-12 | 2026-05-12 |
 | D-list-vault-6 | Dot-prefixed entries remain hidden from default structured listings | tests/integration/list-vault.integration.test.ts | 2026-05-12 | 2026-05-12 |
 | D-list-vault-7 | Extension filtering preserves directories and filters files in the structured `entries` array | tests/integration/list-vault.integration.test.ts, list_vault_extension_filter_with_directories | 2026-05-12 | 2026-05-12 |
+| D-mvault-1 | `maintain_vault(action:"sync")` indexes external filesystem changes. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mvault-2 | `maintain_vault(action:"repair")` reports structured repair action results. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mvault-3 | `maintain_vault(["sync","repair"])` returns repair before sync. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mvault-4 | `maintain_vault` accepts `dry_run` only for repair. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mvault-5 | `maintain_vault` rejects background execution outside sync. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mvault-6 | `maintain_vault(action:"status")` returns `not_found` for an unknown job id. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mvault-7 | `maintain_vault` concurrent maintenance conflicts are covered at unit/integration level. | tests/unit/maintain-vault.test.ts; tests/integration/maintain-vault.integration.test.ts | 2026-05-12 |  |
+| D-mvault-8 | `maintain_vault(action:"status")` output excludes scanner internals. | tests/unit/maintain-vault.test.ts; tests/integration/maintain-vault.integration.test.ts | 2026-05-12 |  |
 
 ## 10. Briefing and Aggregation
 
