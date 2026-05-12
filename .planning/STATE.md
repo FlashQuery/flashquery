@@ -4,14 +4,14 @@ milestone: v3.3
 milestone_name: MCP Tools Consolidation
 status: executing
 stopped_at: Completed 127-04-PLAN.md
-last_updated: "2026-05-12T20:25:58.005Z"
+last_updated: "2026-05-12T20:59:42.903Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 8
   completed_phases: 6
   total_plans: 35
-  completed_plans: 33
-  percent: 94
+  completed_plans: 34
+  percent: 97
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-11)
 ## Current Position
 
 Phase: 127 (Removal, Directory, And Vault Maintenance) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-05-12
 
@@ -95,6 +95,7 @@ Last activity: 2026-05-12
 | Phase 127 P02 | 10min | 3 tasks | 6 files |
 | Phase 127 P03 | 9m26s | 3 tasks | 8 files |
 | Phase 127 P04 | 11min | 3 tasks | 9 files |
+| Phase 127 P05 | 30min | 3 tasks | 9 files |
 
 ## Decisions
 
@@ -159,6 +160,7 @@ Last activity: 2026-05-12
 - [Phase 127]: 127-04 remove_document archives lifecycle state before filesystem removal and keeps persistent state as archived, not removed. — Matches DOC-09 requirement: no removed status or removed_at/removed_to DB fields.
 - [Phase 127]: 127-04 removal git policy uses git add -A through GitManager for hard deletes and trash moves. — Ensures delete and in-repo trash destination changes are staged consistently under existing autoCommit/autoPush policy.
 - [Phase 127]: 127-04 unsafe relative trash_folder traversal is rejected before source lifecycle mutation. — Prevents bad trash configuration from archiving, moving, or deleting the source document.
+- [Phase 127]: 127-05 hides local legacy directory/maintenance names from host exposure while broader legacy cleanup remains Phase 128.
 
 ## Accumulated Context
 
@@ -269,7 +271,7 @@ Last activity: 2026-05-12
 
 ## Session Continuity
 
-Last session: 2026-05-12T20:25:57.983Z
+Last session: 2026-05-12T20:59:11.056Z
 Stopped at: Completed 127-04-PLAN.md
 Resume: Phase 126
 
