@@ -63,6 +63,7 @@ Step types
              memory.write       → save_memory MCP tool
              archive_document   → archive_document MCP tool
              update_document    → update_document MCP tool
+             maintain_vault     → maintain_vault MCP tool
              scan_vault         → force_file_scan MCP tool (background=False)
              <any MCP tool>     → called directly; use args: {...}
 
@@ -390,6 +391,7 @@ _EXTRACT_PATTERNS: dict[str, str] = {
 # Fields to extract for variable binding, keyed by action name
 _ACTION_EXTRACT_FIELDS: dict[str, tuple[str, ...]] = {
     "vault.write":  ("fq_id", "path", "title", "status"),
+    "write_document": ("fq_id", "path", "title", "status"),
     "memory.write": ("memory_id", "content"),
     "write_memory": ("memory_id", "content"),
     "write_record": ("id",),
@@ -595,6 +597,7 @@ _ACTION_TOOL_MAP: dict[str, str] = {
     "update_document":  "write_document",
     "append_to_doc":    "insert_in_doc",
     "update_doc_header": "write_document",
+    "maintain_vault":   "maintain_vault",
     "scan_vault":       "force_file_scan",
 }
 

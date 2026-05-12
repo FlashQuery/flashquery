@@ -859,6 +859,24 @@ class TestContext:
         """Call force_file_scan (sync) — a common step after creating files."""
         return self.client.call_tool("force_file_scan", background=False)
 
+    def maintain_vault(
+        self,
+        action: str | list[str] = "sync",
+        *,
+        dry_run: bool | None = None,
+        background: bool | None = None,
+        job_id: str | None = None,
+    ) -> ToolResult:
+        """Call maintain_vault for final Phase 127 maintenance workflows."""
+        args: dict[str, Any] = {"action": action}
+        if dry_run is not None:
+            args["dry_run"] = dry_run
+        if background is not None:
+            args["background"] = background
+        if job_id is not None:
+            args["job_id"] = job_id
+        return self.client.call_tool("maintain_vault", **args)
+
 
 # ---------------------------------------------------------------------------
 # TestRun — step recorder with structured output

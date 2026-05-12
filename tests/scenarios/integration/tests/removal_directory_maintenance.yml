@@ -1,0 +1,172 @@
+name: removal_directory_maintenance
+description: >
+  Phase 127 final removal, directory, and vault maintenance workflow using
+  remove_document, manage_directory, and maintain_vault. Verifies intentional
+  removals stay absent after repair/sync maintenance.
+coverage:
+  - INT-rdoc-1
+  - INT-rdoc-4
+  - INT-rdoc-5
+  - INT-mdir-1
+  - INT-mdir-2
+  - INT-mdir-3
+  - INT-mdir-4
+  - INT-mdir-5
+  - INT-mvault-1
+  - INT-mvault-2
+  - INT-mvault-3
+  - INT-mvault-4
+  - INT-mvault-5
+  - INT-mvault-6
+
+steps:
+  - label: "Create ordered directories through manage_directory"
+    action: manage_directory
+    args:
+      action: create
+      paths:
+        - "_integration/p127-final/empty"
+        - "_integration/p127-final/non-empty"
+
+  - label: "Directory create returns ordered JSON results"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/p127-final"
+        show: directories
+      expect_contains: "_integration/p127-final/empty"
+
+  - label: "Directory create exposes created status for first path"
+    assert:
+      op: manage_directory
+      args:
+        action: create
+        paths:
+          - "_integration/p127-final/empty"
+      expect_json_equals:
+        path: results[0].status
+        value: unchanged
+
+  - label: "Write a document that makes one directory non-empty"
+    action: vault.write
+    name: kept_doc
+    path: "p127-final/non-empty/kept.md"
+    title: "Phase 127 Kept Directory Document"
+    content: "This file keeps the directory non-empty for conflict coverage."
+    tags: [phase127-integration]
+
+  - label: "Non-empty directory removal reports conflict"
+    assert:
+      op: manage_directory
+      args:
+        action: remove
+        paths:
+          - "_integration/p127-final/non-empty"
+      expect_json_equals:
+        path: results[0].details.reason
+        value: directory_not_empty
+
+  - label: "Empty directory removal succeeds"
+    assert:
+      op: manage_directory
+      args:
+        action: remove
+        paths:
+          - "_integration/p127-final/empty"
+      expect_json_equals:
+        path: results[0].status
+        value: removed
+
+  - label: "Removed directory is gone from list_vault"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/p127-final"
+        show: directories
+      expect_not_contains: "empty/"
+
+  - label: "Write a document for intentional removal"
+    action: write_document
+    name: remove_doc
+    args:
+      mode: create
+      path: "_integration/p127-final/remove-target.md"
+      title: "Phase 127 Intentional Removal"
+      content: "This document should stay absent after vault maintenance."
+      tags: [phase127-integration]
+
+  - label: "remove_document archives and removes the file"
+    assert:
+      op: remove_document
+      args:
+        identifiers: "${remove_doc.fq_id}"
+      expect_json_equals:
+        path: status
+        value: archived
+
+  - label: "remove_document reports the file was removed"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${remove_doc.fq_id}"
+      expect_json_equals:
+        path: error
+        value: not_found
+
+  - label: "maintain_vault repair dry_run returns structured counts"
+    action: maintain_vault
+    args:
+      action: repair
+      dry_run: true
+
+  - label: "maintain_vault sync returns structured counts"
+    action: maintain_vault
+    args:
+      action: sync
+
+  - label: "maintain_vault combined actions run repair before sync"
+    assert:
+      op: maintain_vault
+      args:
+        action: [sync, repair]
+      expect_json_equals:
+        path: actions[0].action
+        value: repair
+
+  - label: "Combined maintain_vault sync is second action"
+    assert:
+      op: maintain_vault
+      args:
+        action: [sync, repair]
+      expect_json_equals:
+        path: actions[1].action
+        value: sync
+
+  - label: "Intentional removal is not reclassified as missing or stale active search result"
+    assert:
+      op: search
+      args:
+        query: "Phase 127 Intentional Removal"
+        entity_types: [documents]
+        mode: filesystem
+      expect_not_contains: "p127-final/remove-target.md"
+
+  - label: "maintain_vault rejects background repair"
+    assert:
+      op: maintain_vault
+      args:
+        action: repair
+        background: true
+      expect_json_equals:
+        path: error
+        value: invalid_input
+
+  - label: "maintain_vault status returns not_found for unknown job"
+    assert:
+      op: maintain_vault
+      args:
+        action: status
+        job_id: missing
+      expect_json_equals:
+        path: error
+        value: not_found

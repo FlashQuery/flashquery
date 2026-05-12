@@ -167,6 +167,7 @@ Action steps perform operations against the live FlashQuery server. The `action:
 | `memory.write` | `save_memory` | — |
 | `archive_document` | `archive_document` | — |
 | `update_document` | `update_document` | — |
+| `maintain_vault` | `maintain_vault` | Final Phase 127 maintenance surface for sync, repair, and status |
 | `scan_vault` | `force_file_scan` | `background` is always forced to `false` |
 | any other string | called as-is | Direct MCP tool name |
 
@@ -191,7 +192,16 @@ Action steps perform operations against the live FlashQuery server. The `action:
   tags: [wts-tag]
 ```
 
-**`scan_vault`.** No arguments needed — the runner forces `background: false` automatically:
+**`maintain_vault`.** Use this for final Phase 127 vault maintenance scenarios:
+
+```yaml
+- label: "Synchronize external vault changes"
+  action: maintain_vault
+  args:
+    action: sync
+```
+
+**`scan_vault`.** Legacy shortcut for older scenarios. No arguments needed — the runner forces `background: false` automatically:
 
 ```yaml
 - label: "Scan the vault"

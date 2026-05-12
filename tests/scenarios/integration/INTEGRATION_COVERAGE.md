@@ -45,6 +45,20 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-wmem-2 | `write_memory(mode:"update")` creates a latest version that is retrievable and discoverable through composed workflows. | unified_search_memory_lifecycle | 2026-05-12   | 2026-05-12   |
 | INT-wmem-3 | `get_memory` reads final `write_memory` output by `memory_ids` with JSON projection semantics. | unified_search_memory_lifecycle | 2026-05-12   | 2026-05-12   |
 | INT-wmem-4 | `archive_memory(memory_ids)` composes with `search` archived visibility controls. | unified_search_memory_lifecycle | 2026-05-12   | 2026-05-12   |
+| INT-rdoc-1 | `remove_document` composes with `write_document` by archiving lifecycle state before the vault file is removed. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-rdoc-4 | `remove_document` followed by `maintain_vault(action:"repair")` and `maintain_vault(action:"sync")` keeps the intentional removal out of active search and does not reclassify it as missing or stale active content. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-rdoc-5 | Removed archived documents remain absent from default final `search` document results. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mdir-1 | `manage_directory(action:"create")` composes with `list_vault` through ordered JSON directory creation. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mdir-2 | Repeated `manage_directory(action:"create")` on an existing directory returns unchanged without duplicate listing state. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mdir-3 | `manage_directory(action:"remove")` removes empty directories and the result is reflected by `list_vault`. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mdir-4 | `manage_directory(action:"remove")` reports a JSON conflict for non-empty directories created through normal document workflows. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mdir-5 | Ordered `manage_directory` results remain usable by declarative YAML assertions. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mvault-1 | `maintain_vault(action:"sync")` is available as the final YAML maintenance action and returns structured counts. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mvault-2 | `maintain_vault(action:"repair", dry_run:true)` returns structured repair counts without mutating state. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mvault-3 | Combined `maintain_vault(action:["sync","repair"])` normalizes execution order to repair before sync. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mvault-4 | YAML integration helpers document and dispatch final `maintain_vault` instead of relying on legacy scan shortcuts for new Phase 127 coverage. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mvault-5 | `maintain_vault(action:"repair", background:true)` returns canonical `invalid_input`. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-mvault-6 | `maintain_vault(action:"status")` returns canonical `not_found` for an unknown job id. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
 
 ---
 
