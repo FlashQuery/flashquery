@@ -347,6 +347,12 @@ describe.skipIf(!HAS_SUPABASE)('archive_document JSON output and archived_at lif
     return JSON.parse(result.content[0]!.text) as T;
   }
 
+  function expectSameInstant(actual: unknown, expected: unknown): void {
+    expect(typeof actual).toBe('string');
+    expect(typeof expected).toBe('string');
+    expect(new Date(actual as string).toISOString()).toBe(new Date(expected as string).toISOString());
+  }
+
   async function createDocument(title: string, content: string): Promise<{ fqcId: string; path: string }> {
     const { server, getHandler } = createMockServer();
     registerDocumentTools(server, config);
@@ -421,7 +427,8 @@ describe.skipIf(!HAS_SUPABASE)('archive_document JSON output and archived_at lif
       .select('status, archived_at')
       .eq('id', created.fqcId)
       .single();
-    expect(dbRow).toMatchObject({ status: 'archived', archived_at: payload.archived_at });
+    expect(dbRow?.status).toBe('archived');
+    expectSameInstant(dbRow?.archived_at, payload.archived_at);
 
     const parsed = await vaultManager.readMarkdown(created.path);
     expect(parsed.data[FM.STATUS]).toBe('archived');
@@ -472,7 +479,7 @@ describe.skipIf(!HAS_SUPABASE)('archive_document JSON output and archived_at lif
       .select('archived_at')
       .eq('id', created.fqcId)
       .single();
-    expect(dbRow?.archived_at).toBe(firstPayload.archived_at);
+    expectSameInstant(dbRow?.archived_at, firstPayload.archived_at);
 
     const parsed = await vaultManager.readMarkdown(created.path);
     expect(parsed.data[FM.ARCHIVED_AT]).toBe(firstPayload.archived_at);

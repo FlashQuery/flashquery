@@ -13,7 +13,12 @@ import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { validateAllTags, deduplicateTags } from '../../utils/tag-validator.js';
-import { resolveDocumentIdentifier, targetedScan } from '../utils/resolve-document.js';
+import {
+  AmbiguousDocumentIdentifierError,
+  DocumentNotFoundError,
+  resolveDocumentIdentifier,
+  targetedScan,
+} from '../utils/resolve-document.js';
 import { serializeOrderedFrontmatter } from '../utils/frontmatter-sanitizer.js';
 import { scanMutex } from '../../services/scanner.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
@@ -26,6 +31,7 @@ import {
   jsonExpectedError,
   jsonRuntimeError,
   jsonToolResult,
+  documentArchiveResult,
   type ErrorEnvelope,
 } from '../utils/response-formats.js';
 import {
@@ -415,7 +421,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         if (!validation.valid) {
           const messages = [...validation.errors];
           return {
-            content: [{ type: 'text' as const, text: `Tag validation failed: ${messages.join('; ')}` }],
+            content: [{ type: 'text' as const, text: `Tag validation failed - ${messages.join('; ')}` }],
             isError: true,
           };
         }
@@ -525,7 +531,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`create_document failed: ${msg}`);
+        logger.error(`create_document failed - ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       } finally {
         if (config.locking.enabled) {
@@ -654,7 +660,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           return jsonExpectedError(err.envelope as ErrorEnvelope);
         }
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`get_document failed: ${msg}`);
+        logger.error(`get_document failed - ${msg}`);
         const isNotFound =
           msg.toLowerCase().includes('not found') ||
           msg.toLowerCase().includes('missing') ||
@@ -865,7 +871,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`update_document failed: ${msg}`);
+        logger.error(`update_document failed - ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       } finally {
         if (config.locking.enabled) {
@@ -906,11 +912,21 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
       try {
         const supabase = supabaseManager.getClient();
-        const ids = Array.isArray(identifiers) ? identifiers : [identifiers];
-        const results: string[] = [];
+        const isBatch = Array.isArray(identifiers);
+        const ids = isBatch ? identifiers : [identifiers];
+        const results: Array<Record<string, unknown>> = [];
 
         for (const id of ids) {
           try {
+            if (typeof id !== 'string' || id.trim() === '') {
+              results.push({
+                error: 'invalid_input',
+                message: 'Document identifier must be a non-empty string.',
+                identifier: String(id),
+              });
+              continue;
+            }
+
             // Resolve identifier to a canonical path
             const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
             const relativePath = resolved.relativePath;
@@ -926,9 +942,19 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               );
             }
 
+            const existingArchivedAt =
+              typeof parsed.data[FM.ARCHIVED_AT] === 'string' && parsed.data[FM.ARCHIVED_AT].length > 0
+                ? parsed.data[FM.ARCHIVED_AT]
+                : null;
+            const archivedAt = existingArchivedAt ?? new Date().toISOString();
+
             // Step 2: Call targetedScan to update frontmatter with archived status
             // Compute hash of the file with archived status
-            const archivedFm: Record<string, unknown> = { ...parsed.data, [FM.STATUS]: 'archived' };
+            const archivedFm: Record<string, unknown> = {
+              ...parsed.data,
+              [FM.STATUS]: 'archived',
+              [FM.ARCHIVED_AT]: archivedAt,
+            };
             const serialized = matter.stringify(parsed.content, archivedFm);
             const newContentHash = computeHash(serialized);
 
@@ -954,10 +980,11 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
             // Step 3: Update Supabase fqc_documents
             const fqcId = preScan.capturedFrontmatter.fqcId;
+            const updatedAt = new Date().toISOString();
             if (fqcId) {
               const { error } = await supabase
                 .from('fqc_documents')
-                .update({ status: 'archived', updated_at: new Date().toISOString() })
+                .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
                 .eq('id', fqcId)
                 .eq('instance_id', config.instance.id);
               if (error) {
@@ -967,7 +994,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               // Fallback: update by path if no fqcId available
               const { error } = await supabase
                 .from('fqc_documents')
-                .update({ status: 'archived', updated_at: new Date().toISOString() })
+                .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
                 .eq('path', relativePath)
                 .eq('instance_id', config.instance.id);
               if (error) {
@@ -975,26 +1002,53 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               }
             }
 
+            const archivedStats = await stat(join(config.instance.vault.path, relativePath));
+            const title = typeof archivedFm[FM.TITLE] === 'string' ? archivedFm[FM.TITLE] : relativePath;
+
             logger.info(`archive_document: archived ${relativePath}`);
-            results.push(`"${relativePath}" archived`);
+            results.push(documentArchiveResult({
+              identifier: id,
+              title,
+              path: relativePath,
+              fq_id: fqcId,
+              modified: archivedStats.mtime.toISOString(),
+              chars: parsed.content.length,
+              archived_at: archivedAt,
+            }));
           } catch (itemErr) {
+            if (itemErr instanceof DocumentNotFoundError) {
+              results.push({
+                error: 'not_found',
+                message: `No document matches identifier '${id}'`,
+                identifier: id,
+              });
+              continue;
+            }
+
+            if (itemErr instanceof AmbiguousDocumentIdentifierError) {
+              results.push({
+                error: 'ambiguous_identifier',
+                message: itemErr.message,
+                identifier: id,
+                details: { matches: itemErr.matches },
+              });
+              continue;
+            }
+
             const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
-            results.push(`"${id}" failed: ${msg}`);
+            results.push({
+              error: 'conflict',
+              message: msg,
+              identifier: id,
+            });
           }
         }
 
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: results.join('\n'),
-            },
-          ],
-        };
+        return jsonToolResult(isBatch ? results : results[0]);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`archive_document failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        logger.error(`archive_document failed - ${msg}`);
+        return jsonRuntimeError(msg);
       }
     }
   );
@@ -1209,7 +1263,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             }
           } catch (err) {
             logger.warn(
-              `search_documents: filesystem path-sync failed: ${err instanceof Error ? err.message : String(err)}`
+              `search_documents: filesystem path-sync failed - ${err instanceof Error ? err.message : String(err)}`
             );
           }
         })();
@@ -1277,7 +1331,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`search_documents failed: ${msg}`);
+        logger.error(`search_documents failed - ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       }
     }
@@ -1354,7 +1408,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         if (!validation.valid) {
           const messages = [...validation.errors];
           return {
-            content: [{ type: 'text' as const, text: `Tag validation failed: ${messages.join('; ')}` }],
+            content: [{ type: 'text' as const, text: `Tag validation failed - ${messages.join('; ')}` }],
             isError: true,
           };
         }
@@ -1468,7 +1522,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`copy_document failed: ${msg}`);
+        logger.error(`copy_document failed - ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       } finally {
         if (config.locking.enabled) {
@@ -1614,7 +1668,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`reconcile_documents failed: ${msg}`);
+        logger.error(`reconcile_documents failed - ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       } finally {
         release();
@@ -1814,7 +1868,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         return { content: [{ type: 'text' as const, text: responseLines.join('\n') }] };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`move_document failed: ${msg}`);
+        logger.error(`move_document failed - ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
       } finally {
         if (config.locking.enabled) {
