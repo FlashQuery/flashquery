@@ -1,5 +1,5 @@
 /**
- * Tests for scanner service (src/services/scanner.ts) and force_file_scan MCP tool.
+ * Tests for scanner service (src/services/scanner.ts) and maintain_vault MCP tool.
  *
  * Coverage:
  * - titleFromFilename transformation
@@ -8,7 +8,7 @@
  * - Deletion tracking with status='missing' (SCAN-04)
  * - Extension filtering (SCAN-06)
  * - Hash mismatch detection (DISC-01)
- * - force_file_scan MCP tool sync/async modes
+ * - maintain_vault MCP tool sync/background modes
  * - Startup banner verification (SCAN-08)
  */
 
@@ -46,6 +46,7 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('node:crypto', () => ({
+  randomUUID: vi.fn(() => '00000000-0000-4000-8000-000000000001'),
   createHash: vi.fn(() => ({
     update: vi.fn().mockReturnThis(),
     digest: vi.fn(() => 'mock-sha256-hash-abc123'),
@@ -702,28 +703,28 @@ describe('runScanOnce — regression', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tests: force_file_scan MCP tool
+// Tests: maintain_vault MCP tool
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('force_file_scan MCP tool', () => {
+describe('maintain_vault MCP tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('registers force_file_scan tool', () => {
+  it('registers maintain_vault tool', () => {
     const config = makeConfig();
     const { server } = createMockServer();
 
     registerScanTools(server, config);
 
     expect(server.registerTool).toHaveBeenCalledWith(
-      'force_file_scan',
+      'maintain_vault',
       expect.any(Object),
       expect.any(Function)
     );
   });
 
-  it('sync mode returns result counts as JSON', async () => {
+  it('sync action returns result counts as JSON', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
 
@@ -731,33 +732,35 @@ describe('force_file_scan MCP tool', () => {
     vi.mocked(fsPromises.readdir).mockResolvedValue([] as any);
 
     registerScanTools(server, config);
-    const handler = getHandler('force_file_scan');
+    const handler = getHandler('maintain_vault');
 
-    const result = await handler({ background: false }) as any;
+    const result = await handler({ action: 'sync', background: false }) as any;
 
     expect(result.content).toBeDefined();
     expect(result.content[0].type).toBe('text');
     const json = JSON.parse(result.content[0].text);
-    expect(json.status).toBe('complete');
-    expect(json.new_files).toBeDefined();
-    expect(json.updated_files).toBeDefined();
-    expect(json.moved_files).toBeDefined();
-    expect(json.deleted_files).toBeDefined();
+    expect(json.actions[0].action).toBe('sync');
+    expect(json.actions[0].counts.added).toBeDefined();
+    expect(json.actions[0].counts.updated).toBeDefined();
+    expect(json.actions[0].counts.archived).toBeDefined();
+    expect(JSON.stringify(json)).not.toContain('embedding_status');
+    expect(JSON.stringify(json)).not.toContain('embeds_awaited');
   });
 
-  it('background mode returns immediately with status=started', async () => {
+  it('background sync returns immediately with accepted job metadata', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
 
     registerScanTools(server, config);
-    const handler = getHandler('force_file_scan');
+    const handler = getHandler('maintain_vault');
 
-    const result = await handler({ background: true }) as any;
+    const result = await handler({ action: 'sync', background: true }) as any;
 
     expect(result.content).toBeDefined();
     const json = JSON.parse(result.content[0].text);
-    expect(json.status).toBe('started');
-    expect(json.message).toContain('background');
+    expect(json.accepted).toBe(true);
+    expect(json.job_id).toEqual(expect.any(String));
+    expect(json.started_at).toEqual(expect.any(String));
   });
 
   it('returns isError on scan failure', async () => {
@@ -770,10 +773,10 @@ describe('force_file_scan MCP tool', () => {
     // by checking that isError field exists in error responses
 
     registerScanTools(server, config);
-    const handler = getHandler('force_file_scan');
+    const handler = getHandler('maintain_vault');
 
     // Even on normal operation, we can verify the structure supports isError: true
-    const result = await handler({ background: false }) as any;
+    const result = await handler({ action: 'sync', background: false }) as any;
 
     // Verify the tool returns proper structure
     expect(result.content).toBeDefined();
