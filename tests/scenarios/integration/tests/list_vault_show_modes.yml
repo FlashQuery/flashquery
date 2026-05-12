@@ -1,8 +1,9 @@
 name: list_vault_show_modes
 description: >
   Verifies that list_vault show modes work correctly: show="files" excludes directories
-  and show="all" includes both files and directories in the same path. A directory and
-  a document are created in the same parent, then both show modes are asserted. Covers IF-11.
+  and show="all" includes both files and directories in the same structured JSON entries
+  envelope. A directory and a document are created in the same parent, then both show
+  modes are asserted. Covers IF-11.
 coverage: [IF-11]
 
 steps:
@@ -25,8 +26,19 @@ steps:
       args:
         path: "_integration/if11"
         show: "files"
-      expect_contains: "note.md"
-      expect_not_contains: "subdir/"
+      expect_json_equals:
+        path: "entries[0].path"
+        value: "_integration/if11/note.md"
+
+  - label: "list_vault(show: files) reports one JSON entry (IF-11)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if11"
+        show: "files"
+      expect_json_array_length:
+        path: "entries"
+        equals: 1
 
   - label: "list_vault(show: all) includes file (IF-11)"
     assert:
@@ -34,7 +46,9 @@ steps:
       args:
         path: "_integration/if11"
         show: "all"
-      expect_contains: "note.md"
+      expect_json_equals:
+        path: "entries[1].path"
+        value: "_integration/if11/note.md"
 
   - label: "list_vault(show: all) includes directory (IF-11)"
     assert:
@@ -42,4 +56,6 @@ steps:
       args:
         path: "_integration/if11"
         show: "all"
-      expect_contains: "subdir/"
+      expect_json_equals:
+        path: "entries[0].path"
+        value: "_integration/if11/subdir"

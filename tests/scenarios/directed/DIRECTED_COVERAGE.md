@@ -362,6 +362,18 @@ Vault scanning, file listing, and directory management.
 | F-96 | `list_vault` skips inaccessible subdirectory (permission denied) without `isError` — returns results for accessible entries | test_list_vault_fs_resilience | 2026-04-29 | 2026-05-07 |
 | F-97 | `list_vault` skips unreadable file (stat error) without `isError` — returns results for readable files | test_list_vault_fs_resilience | 2026-04-29 | 2026-05-07 |
 
+### 9.5 Vault Listing Structured Output Migration (`list_vault`)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| D-list-vault-1 | `list_vault` returns parseable JSON `{ path, total, displayed, truncated, entries }` instead of table/prose output | tests/unit/list-vault.test.ts, tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-2 | `list_vault` default entries include `name`, `path`, `type`, `modified`, and structured `size` fields | tests/unit/list-vault.test.ts, tests/integration/list-vault.integration.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-3 | `include:["metadata"]` adds directory `children` and `created` fields without changing default filtering behavior | tests/unit/list-vault.test.ts, list_vault_format_modes | 2026-05-12 | 2026-05-12 |
+| D-list-vault-4 | `include:["tracking"]` adds tracked file `title`, `tags`, `status`, and `fq_id` while omitting those fields for untracked files | tests/unit/list-vault.test.ts, tests/integration/list-vault.integration.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-5 | Invalid include values return canonical `{ error:"invalid_input" }` JSON with `isError:false` | tests/unit/list-vault.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-6 | Dot-prefixed entries remain hidden from default structured listings | tests/integration/list-vault.integration.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-7 | Extension filtering preserves directories and filters files in the structured `entries` array | tests/integration/list-vault.integration.test.ts, list_vault_extension_filter_with_directories | 2026-05-12 | 2026-05-12 |
+
 ## 10. Briefing and Aggregation
 
 Cross-entity summary tools.

@@ -154,12 +154,12 @@ FlashQuery tools (create_document, move_document, register_plugin, search_docume
 | IF-08  | dot-prefixed directory created → list_vault shows it is invisible to default listing (VALIDATED)                 | dot_directory_invisible      | 2026-05-07   | 2026-05-07   |
 | IF-09  | create_directory with name requiring sanitization → list_vault shows sanitized name → create_document in it succeeds (VALIDATED) | sanitized_directory_usable   | 2026-05-07   | 2026-05-07   |
 | IF-10  | create_directory → move_document into new directory → list_vault confirms moved document (VALIDATED)             | move_document_to_new_directory | 2026-05-11   | 2026-05-11   |
-| IF-11  | list_vault(show: "files") excludes directories; list_vault(show: "all") includes both (VALIDATED)                | list_vault_show_modes        | 2026-05-07   | 2026-05-07   |
-| IF-12  | list_vault(show: "all", extensions: [".md"]) — directories unfiltered, only .md files shown (VALIDATED)         | list_vault_extension_filter_with_directories | 2026-05-07   | 2026-05-07   |
+| IF-11  | list_vault(show: "files") excludes directories; list_vault(show: "all") includes both as structured JSON entries (VALIDATED) | list_vault_show_modes        | 2026-05-11   | 2026-05-11   |
+| IF-12  | list_vault(show: "all", extensions: [".md"]) — directories unfiltered, only .md files shown as structured JSON entries (VALIDATED) | list_vault_extension_filter_with_directories | 2026-05-11   | 2026-05-11   |
 | IF-13  | register_plugin → create_directory scaffold → list_vault confirms dirs → create_document → search_records confirms auto-tracking (VALIDATED) | plugin_init_scaffold         | 2026-05-07   | 2026-05-07   |
 | IF-14  | register_plugin → create_directory scaffold → vault.write in watched folder → reconciliation → search_records (VALIDATED) | plugin_init_with_reconciliation | 2026-05-07   | 2026-05-07   |
-| IF-15  | create_directory → list_vault(format: "table") vs list_vault(format: "detailed") produce correct formats (VALIDATED) | list_vault_format_modes      | 2026-05-07   | 2026-05-07   |
-| IF-16  | create_directory → create_document → list_vault(format: "table") shows file size for the document (VALIDATED)   | list_vault_table_file_size   | 2026-05-07   | 2026-05-07   |
+| IF-15  | create_directory → list_vault default/include modes produce structured JSON entries with metadata fields (VALIDATED) | list_vault_format_modes      | 2026-05-11   | 2026-05-11   |
+| IF-16  | create_directory → create_document → list_vault(show: "files") exposes file size as `entries[].size.chars` (VALIDATED) | list_vault_table_file_size   | 2026-05-11   | 2026-05-11   |
 
 ---
 

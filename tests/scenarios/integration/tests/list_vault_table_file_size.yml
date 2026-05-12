@@ -1,8 +1,8 @@
 name: list_vault_table_file_size
 description: >
   create_directory creates a directory, then vault.write creates a document inside it.
-  list_vault(format: "table", show: "files") returns a markdown table that includes
-  file size column data for the created document. Covers IF-16.
+  list_vault(show: "files") returns structured JSON entries with size.chars for the
+  created document. Covers IF-16.
 coverage: [IF-16]
 
 steps:
@@ -19,29 +19,28 @@ steps:
     content: "Document for verifying file size column in list_vault table format."
     tags: [if16-tag]
 
-  - label: "list_vault(format: table, show: files) shows file size column header (IF-16)"
+  - label: "list_vault(show: files) returns entries array (IF-16)"
     assert:
       op: list_vault
       args:
         path: "_integration/if16/docs"
-        format: "table"
         show: "files"
-      expect_contains: "| Name |"
+      expect_json_path: "entries"
 
-  - label: "list_vault(format: table, show: files) shows note.md file entry (IF-16)"
+  - label: "list_vault(show: files) shows note.md file entry (IF-16)"
     assert:
       op: list_vault
       args:
         path: "_integration/if16/docs"
-        format: "table"
         show: "files"
-      expect_contains: "note.md"
+      expect_json_equals:
+        path: "entries[0].path"
+        value: "_integration/if16/docs/note.md"
 
-  - label: "list_vault(format: table, show: files) shows a file size value (IF-16)"
+  - label: "list_vault(show: files) shows size.chars for the file (IF-16)"
     assert:
       op: list_vault
       args:
         path: "_integration/if16/docs"
-        format: "table"
         show: "files"
-      expect_contains: " B"
+      expect_json_path: "entries[0].size.chars"
