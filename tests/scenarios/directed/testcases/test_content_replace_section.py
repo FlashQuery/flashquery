@@ -6,14 +6,14 @@ Scenario:
     1. Create doc-A with two top-level sections, the first having two nested
        subsections, plus a duplicate "## Section One" heading at the bottom
        (create_document).
-    2. C-06: replace_doc_section on "Section Two" (default include_subheadings)
+    2. C-06: replace_doc_section on "Section Two" (default include_nested)
        and verify the heading line is preserved, body replaced, and other
        sections untouched.
     3. Create doc-B with the same structure. C-07: replace_doc_section on
-       "Section One" with include_subheadings=True. Verify Subsection A and B
+       "Section One" with include_nested=True. Verify Subsection A and B
        are gone and the heading remains with the new body.
     4. Create doc-C with the same structure. C-08: replace_doc_section on
-       "Section One" with include_subheadings=False. Verify the nested
+       "Section One" with include_nested=False. Verify the nested
        "### Subsection A" and "### Subsection B" headings are still present
        after the replacement.
     5. C-09: Use doc-A (which still has the duplicate "## Section One"
@@ -43,9 +43,10 @@ Exit codes:
 from __future__ import annotations
 
 
-COVERAGE = ["C-06", "C-07", "C-08", "C-09"]
+COVERAGE = ["C-06", "C-07", "C-08", "C-09", "C-15"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -69,7 +70,16 @@ TEST_NAME = "test_content_replace_section"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
+    """Extract fields from either JSON tool results or legacy key-value text."""
+    json_keys = {"FQC ID": "fq_id", "Path": "path", "Title": "title"}
+    try:
+        payload = json.loads(text)
+        value = payload.get(json_keys.get(field, field))
+        if value is not None:
+            return str(value)
+    except json.JSONDecodeError:
+        pass
+
     m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
@@ -132,7 +142,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1: Create doc-A (used for C-06 and C-09) ──────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_a = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_a,
             content=body,
             path=path_a,
@@ -208,7 +219,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 3: Create doc-B for C-07 ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_b = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_b,
             content=body,
             path=path_b,
@@ -232,7 +244,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not create_b.ok:
             return run
 
-        # ── Step 4: C-07 replace include_subheadings=True ──────────
+        # ── Step 4: C-07 replace include_nested=True ──────────
         nuked_marker = f"NUKED-ONE-{run.run_id}"
         log_mark = ctx.server.log_position if ctx.server else 0
         rep_b = ctx.client.call_tool(
@@ -240,14 +252,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             identifier=b_fqc_id or b_path,
             heading="Section One",
             content=nuked_marker,
-            include_subheadings=True,
+            include_nested=True,
             occurrence=1,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         rep_b.expect_contains("Section One")
         run.step(
-            label="C-07 replace_doc_section('Section One', include_subheadings=True)",
+            label="C-07 replace_doc_section('Section One', include_nested=True)",
             passed=(rep_b.ok and rep_b.status == "pass"),
             detail=expectation_detail(rep_b) or rep_b.error or "",
             timing_ms=rep_b.timing_ms,
@@ -279,17 +291,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
             if not all_ok:
                 failed = [k for k, v in checks.items() if not v]
                 detail = f"Failed: {', '.join(failed)}. body={body_b!r}"
-            run.step("C-07 verify include_subheadings=True replacement on disk",
+            run.step("C-07 verify include_nested=True replacement on disk",
                      passed=all_ok, detail=detail, timing_ms=elapsed)
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
-            run.step("C-07 verify include_subheadings=True replacement on disk",
+            run.step("C-07 verify include_nested=True replacement on disk",
                      passed=False, detail=f"Exception: {e}", timing_ms=elapsed)
 
         # ── Step 5: Create doc-C for C-08 ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_c = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_c,
             content=body,
             path=path_c,
@@ -313,7 +326,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not create_c.ok:
             return run
 
-        # ── Step 6: C-08 replace include_subheadings=False ─────────
+        # ── Step 6: C-08 replace include_nested=False ─────────
         new_one_marker = f"NEW-ONE-BODY-{run.run_id}"
         log_mark = ctx.server.log_position if ctx.server else 0
         rep_c = ctx.client.call_tool(
@@ -321,14 +334,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             identifier=c_fqc_id or c_path,
             heading="Section One",
             content=new_one_marker,
-            include_subheadings=False,
+            include_nested=False,
             occurrence=1,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         rep_c.expect_contains("Section One")
         run.step(
-            label="C-08 replace_doc_section('Section One', include_subheadings=False)",
+            label="C-08 replace_doc_section('Section One', include_nested=False)",
             passed=(rep_c.ok and rep_c.status == "pass"),
             detail=expectation_detail(rep_c) or rep_c.error or "",
             timing_ms=rep_c.timing_ms,
@@ -357,14 +370,61 @@ def run_test(args: argparse.Namespace) -> TestRun:
             if not all_ok:
                 failed = [k for k, v in checks.items() if not v]
                 detail = f"Failed: {', '.join(failed)}. body={body_c!r}"
-            run.step("C-08 verify include_subheadings=False replacement on disk",
+            run.step("C-08 verify include_nested=False replacement on disk",
                      passed=all_ok, detail=detail, timing_ms=elapsed)
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
-            run.step("C-08 verify include_subheadings=False replacement on disk",
+            run.step("C-08 verify include_nested=False replacement on disk",
                      passed=False, detail=f"Exception: {e}", timing_ms=elapsed)
 
-        # ── Step 7: C-09 insert_in_doc occurrence=2 on doc-A ───────
+        # ── Step 7: C-15 delete section by replacing with empty content ──
+        log_mark = ctx.server.log_position if ctx.server else 0
+        del_c = ctx.client.call_tool(
+            "replace_doc_section",
+            identifier=c_fqc_id or c_path,
+            heading="Section Two",
+            content="",
+            include_nested=True,
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        response_without_spaces = del_c.text.replace(" ", "")
+        run.step(
+            label="C-15 replace_doc_section deletes heading with empty content",
+            passed=(
+                del_c.ok
+                and del_c.status == "pass"
+                and '"heading_removed":true' in response_without_spaces
+            ),
+            detail=expectation_detail(del_c) or del_c.error or "",
+            timing_ms=del_c.timing_ms,
+            tool_result=del_c,
+            server_logs=step_logs,
+        )
+
+        t0 = time.monotonic()
+        try:
+            doc_c2 = ctx.vault.read_file(c_path)
+            elapsed = int((time.monotonic() - t0) * 1000)
+            body_c2 = doc_c2.body
+            checks = {
+                "Section Two heading removed": "## Section Two" not in body_c2,
+                "Section Two body removed": "original two-body" not in body_c2,
+                "Section One still present": "## Section One" in body_c2,
+            }
+            all_ok = all(checks.values())
+            detail = ""
+            if not all_ok:
+                failed = [k for k, v in checks.items() if not v]
+                detail = f"Failed: {', '.join(failed)}. body={body_c2!r}"
+            run.step("C-15 verify empty replacement removes heading on disk",
+                     passed=all_ok, detail=detail, timing_ms=elapsed)
+        except Exception as e:
+            elapsed = int((time.monotonic() - t0) * 1000)
+            run.step("C-15 verify empty replacement removes heading on disk",
+                     passed=False, detail=f"Exception: {e}", timing_ms=elapsed)
+
+        # ── Step 8: C-09 insert_in_doc occurrence=2 on doc-A ───────
         # Doc-A still has both "## Section One" headings (only Section Two
         # was modified), so it's the right doc for the duplicate-heading
         # occurrence test.

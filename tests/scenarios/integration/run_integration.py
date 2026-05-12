@@ -373,8 +373,8 @@ def _substitute(value: Any, variables: dict[str, dict]) -> Any:
 # Response field extraction
 # ---------------------------------------------------------------------------
 
-# FQC responses use "Field: value" lines — these patterns extract named fields.
-# Extended here as new action types are added.
+# FQC responses may be JSON or older "Field: value" lines. These patterns
+# handle legacy responses after the JSON path has had a chance.
 _EXTRACT_PATTERNS: dict[str, str] = {
     "fq_id":     r"^FQC ID:\s*(.+)$",
     "path":      r"^Path:\s*(.+)$",
@@ -395,9 +395,21 @@ _ACTION_EXTRACT_FIELDS: dict[str, tuple[str, ...]] = {
 
 
 def _extract(text: str, *fields: str) -> dict[str, str]:
-    """Extract named fields from an FQC key-value response string."""
+    """Extract named fields from JSON or legacy key-value response text."""
     result: dict[str, str] = {}
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            for field in fields:
+                value = payload.get(field)
+                if value is not None:
+                    result[field] = str(value)
+    except json.JSONDecodeError:
+        pass
+
     for field in fields:
+        if field in result:
+            continue
         pattern = _EXTRACT_PATTERNS.get(field)
         if pattern:
             m = re.search(pattern, text, re.MULTILINE)
@@ -575,10 +587,12 @@ def _evaluate_assertions(
 # Maps YAML action names to MCP tool names.
 # Any MCP tool name can also be used directly as an action value.
 _ACTION_TOOL_MAP: dict[str, str] = {
-    "vault.write":      "create_document",
+    "vault.write":      "write_document",
     "memory.write":     "save_memory",
     "archive_document": "archive_document",
-    "update_document":  "update_document",
+    "update_document":  "write_document",
+    "append_to_doc":    "insert_in_doc",
+    "update_doc_header": "write_document",
     "scan_vault":       "force_file_scan",
 }
 
@@ -618,6 +632,17 @@ def _execute_action(
         p = str(raw_args["path"])
         if not p.startswith("_integration/"):
             raw_args["path"] = f"_integration/{p}"
+
+    if op == "vault.write":
+        raw_args.setdefault("mode", "create")
+    elif op == "update_document":
+        raw_args.setdefault("mode", "update")
+    elif op == "update_doc_header":
+        raw_args.setdefault("mode", "update")
+        if "updates" in raw_args and "frontmatter" not in raw_args:
+            raw_args["frontmatter"] = raw_args.pop("updates")
+    elif op == "append_to_doc":
+        raw_args.setdefault("position", "bottom")
 
     # Force synchronous scan when using scan_vault
     if op == "scan_vault":

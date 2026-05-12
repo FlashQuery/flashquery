@@ -43,6 +43,12 @@ Core CRUD operations on vault documents via MCP.
 | D-24 | search_documents does not surface stale hits for manually-deleted files before reconcile (or marks them clearly) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-05-07 |
 | D-25 | User-defined custom frontmatter fields survive update_document (updating title, body, or tags leaves unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
 | D-26 | User-defined custom frontmatter fields survive archive_document (archiving only changes status; all other fields preserved) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| D-wdoc-1 | `write_document(mode:"create")` creates a document and returns JSON document identification (`fq_id`, `path`, `title`). | test_content_append_and_insert; test_content_replace_section; test_content_frontmatter_ops; test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
+| D-wdoc-2 | `write_document(mode:"update")` updates body, title, and custom frontmatter while preserving omitted fields. | test_content_frontmatter_ops; test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
+| D-wdoc-3 | `write_document(mode:"create")` rejects/respects final reserved-field and title/frontmatter ownership boundaries through JSON response contracts. | tests/unit/write-document.test.ts; test_content_frontmatter_ops | 2026-05-12 | 2026-05-12 |
+| D-wdoc-4 | `write_document(mode:"create")` responses are parseable by directed scenarios without legacy prose parsing. | test_content_append_and_insert; test_content_replace_section; test_content_frontmatter_ops; test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
+| D-wdoc-5 | `write_document(mode:"update")` can remove custom frontmatter fields by setting them to `null`. | test_content_frontmatter_ops | 2026-05-12 | 2026-05-12 |
+| D-wdoc-6 | `write_document(mode:"update")` updates FQ title through the top-level `title` parameter rather than reserved `fq_title` frontmatter. | test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
 | D-arch-1 | archive_document single returns a JSON document identification block instead of prose. | test_document_archive_and_search | 2026-05-12 |  |
 | D-arch-2 | archive_document response includes `archived_at` in ISO-8601 form. | test_document_archive_and_search | 2026-05-12 |  |
 | D-arch-3 | archive_document batch returns a JSON array with one envelope per input identifier. | test_document_archive_and_search | 2026-05-12 |  |
@@ -120,8 +126,8 @@ Surgical editing tools for modifying document content at specific locations.
 | C-04 | Insert content before a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
 | C-05 | Insert content at end of a section (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
 | C-06 | Replace section content (preserves heading line) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
-| C-07 | Replace section with include_subheadings=true (replaces nested) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
-| C-08 | Replace section with include_subheadings=false (preserves nested) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
+| C-07 | Replace section with include_nested=true (replaces nested) (VALIDATED) | test_content_replace_section | 2026-05-12 | 2026-05-12 |
+| C-08 | Replace section with include_nested=false (preserves nested) (VALIDATED) | test_content_replace_section | 2026-05-12 | 2026-05-12 |
 | C-09 | Insert at heading with occurrence > 1 (duplicate headings) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
 | C-10 | Update frontmatter header only (body untouched) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
 | C-11 | Update frontmatter with null value removes field (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
@@ -134,6 +140,14 @@ Surgical editing tools for modifying document content at specific locations.
 | C-18 | User-defined custom frontmatter fields survive content-editing operations (append_to_doc, insert_in_doc, replace_doc_section leave unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
 | C-19 | update_doc_header can explicitly modify user-defined frontmatter fields when named in the update map (MCP-directed override is permitted) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
 | C-20 | update_doc_header targeting only FQC-managed fields (e.g. title) does not modify user-defined custom frontmatter fields (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| D-insert-1 | `insert_in_doc(position:"bottom")` appends content at the end of a document body. | test_content_append_and_insert; test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
+| D-insert-2 | `insert_in_doc` supports top, before_heading, after_heading, and end_of_section positions with occurrence targeting. | test_content_append_and_insert; test_content_replace_section | 2026-05-12 | 2026-05-12 |
+| D-insert-3 | `insert_in_doc` uses `include_nested` semantics for section-boundary insertion. | test_content_append_and_insert; tests/unit/insert-in-doc.test.ts | 2026-05-12 | 2026-05-12 |
+| D-replace-1 | `replace_doc_section` preserves the matched heading when replacement content is non-empty. | test_content_replace_section; test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
+| D-replace-2 | `replace_doc_section` uses `include_nested` to include or preserve nested headings. | test_content_replace_section; tests/unit/replace-doc-section.test.ts | 2026-05-12 | 2026-05-12 |
+| D-replace-3 | `replace_doc_section` with `content:""` deletes the matched heading and returns `heading_removed:true`. | test_content_replace_section | 2026-05-12 | 2026-05-12 |
+| D-tags-1 | `apply_tags` accepts `targets: [{entity_type, identifier}]` and returns ordered per-target JSON results. | tests/unit/apply-tags.test.ts; tests/integration/apply-tags.test.ts | 2026-05-12 | 2026-05-12 |
+| D-tags-2 | `apply_tags` does not leak disabled memory-domain targets when memory tools are unavailable. | tests/unit/apply-tags.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
 
 ## 3. Document Outline and Structure
 

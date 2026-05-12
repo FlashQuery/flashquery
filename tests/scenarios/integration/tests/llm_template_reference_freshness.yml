@@ -1,7 +1,7 @@
 name: llm_template_reference_freshness
 description: >
   ATL-INT-01: template freshness after template body update. Two call_model
-  invocations bracket an update_document write to the template itself, proving
+  invocations bracket a write_document write to the template itself, proving
   the resolver does not reuse stale template content.
 coverage: [IL-37]
 deps: [llm]
@@ -30,8 +30,9 @@ steps:
       expect_contains: "ATL-INT-01-ALPHA"
 
   - label: "ATL-INT-01 update: replace template body with BETA marker"
-    action: update_document
+    action: write_document
     args:
+      mode: update
       identifier: "${freshness_template.fq_id}"
       content: "Freshness template body marker: ATL-INT-01-BETA"
 

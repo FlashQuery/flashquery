@@ -4,14 +4,14 @@ Test: user-defined custom frontmatter fields survive document operations.
 
 Scenario:
     1. Create Doc A via MCP with custom frontmatter fields (project, priority)
-    2. Update Doc A title via update_document — verify custom fields survive (D-25)
+    2. Update Doc A title via write_document — verify custom fields survive (D-25)
     3. Archive Doc A via archive_document — verify custom fields survive with status=archived (D-26)
     4. Create Doc B via MCP with custom frontmatter fields (workflow, reviewer)
-    5. Append content to Doc B via append_to_doc — verify custom fields survive (C-18)
+    5. Append content to Doc B via insert_in_doc(position="bottom") — verify custom fields survive (C-18)
     6. Insert content into Doc B via insert_in_doc — verify custom fields survive (C-18)
     7. Replace a section in Doc B via replace_doc_section — verify custom fields survive (C-18)
-    8. Update Doc B custom field via update_doc_header — verify field was changed (C-19)
-    9. Update Doc B title via update_doc_header — verify custom fields untouched (C-20)
+    8. Update Doc B custom field via write_document — verify field was changed (C-19)
+    9. Update Doc B title via write_document — verify custom fields untouched (C-20)
     10. Write external file to vault with custom frontmatter but no fqc_id
     11. Scan vault via force_file_scan — verify fqc_id assigned, custom fields preserved (F-18)
     Cleanup is automatic (filesystem + database) even if the test fails.
@@ -39,6 +39,7 @@ from __future__ import annotations
 COVERAGE = ["D-25", "D-26", "C-18", "C-19", "C-20", "F-18"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -63,7 +64,16 @@ TEST_NAME = "test_frontmatter_preservation"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FlashQuery key-value response text."""
+    """Extract fields from either JSON tool results or legacy key-value text."""
+    json_keys = {"FQC ID": "fq_id", "Path": "path", "Title": "title"}
+    try:
+        payload = json.loads(text)
+        value = payload.get(json_keys.get(field, field))
+        if value is not None:
+            return str(value)
+    except json.JSONDecodeError:
+        pass
+
     m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
@@ -75,7 +85,7 @@ def _extract_field(text: str, field: str) -> str:
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
 
-    # Doc A — for D-25 (update_document) and D-26 (archive_document)
+    # Doc A — for D-25 (write_document) and D-26 (archive_document)
     title_a = f"FlashQuery FM Preservation A {run.run_id}"
     path_a = f"_test/{TEST_NAME}_{run.run_id}_a.md"
     body_a = f"## Content A\n\nDocument A created by {TEST_NAME} (run {run.run_id})."
@@ -107,7 +117,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1: Create Doc A with custom frontmatter ──────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_a = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_a,
             content=body_a,
             path=path_a,
@@ -143,12 +154,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         identifier_a = fqc_id_a or path_a
 
-        # ── Step 2: update_document (title only) — custom fields survive [D-25] ──
+        # ── Step 2: write_document (title only) — custom fields survive [D-25] ──
         updated_title_a = f"FlashQuery FM Updated A {run.run_id}"
 
         log_mark = ctx.server.log_position if ctx.server else 0
         update_a = ctx.client.call_tool(
-            "update_document",
+            "write_document",
+            mode="update",
             identifier=identifier_a,
             title=updated_title_a,
         )
@@ -174,7 +186,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     f"title={doc_a.title!r}"
                 )
             run.step(
-                label="update_document (title only) — custom fields survive on disk [D-25]",
+                label="write_document (title only) — custom fields survive on disk [D-25]",
                 passed=all_ok,
                 detail=detail,
                 timing_ms=elapsed,
@@ -184,7 +196,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="update_document (title only) — custom fields survive on disk [D-25]",
+                label="write_document (title only) — custom fields survive on disk [D-25]",
                 passed=False,
                 detail=f"Exception reading disk: {e}",
                 timing_ms=elapsed,
@@ -243,7 +255,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: Create Doc B with custom frontmatter ──────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_b = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_b,
             content=body_b,
             path=path_b,
@@ -278,10 +291,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         identifier_b = fqc_id_b or path_b
 
-        # ── Step 5: append_to_doc — custom fields survive [C-18] ─────────
+        # ── Step 5: insert_in_doc(position="bottom") — custom fields survive [C-18] ─────────
         log_mark = ctx.server.log_position if ctx.server else 0
         append_result = ctx.client.call_tool(
-            "append_to_doc",
+            "insert_in_doc",
+            position="bottom",
             identifier=identifier_b,
             content="\n## Appended Section\n\nAppended by test.",
         )
@@ -305,7 +319,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     f"reviewer={doc_b.frontmatter.get('reviewer')!r}"
                 )
             run.step(
-                label="append_to_doc — custom fields survive on disk [C-18]",
+                label="insert_in_doc position=bottom — custom fields survive on disk [C-18]",
                 passed=all_ok,
                 detail=detail,
                 timing_ms=elapsed,
@@ -315,7 +329,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="append_to_doc — custom fields survive on disk [C-18]",
+                label="insert_in_doc position=bottom — custom fields survive on disk [C-18]",
                 passed=False,
                 detail=f"Exception reading disk: {e}",
                 timing_ms=elapsed,
@@ -422,12 +436,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not replace_result.ok:
             return run
 
-        # ── Step 8: update_doc_header targeting custom field — value changed [C-19] ──
+        # ── Step 8: write_document targeting custom field — value changed [C-19] ──
         log_mark = ctx.server.log_position if ctx.server else 0
         header_c19 = ctx.client.call_tool(
-            "update_doc_header",
+            "write_document",
+            mode="update",
             identifier=identifier_b,
-            updates={"workflow": "review"},
+            frontmatter={"workflow": "review"},
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -449,7 +464,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     f"reviewer={doc_b4.frontmatter.get('reviewer')!r}"
                 )
             run.step(
-                label="update_doc_header targeting custom field 'workflow' — value changed [C-19]",
+                label="write_document targeting custom field 'workflow' — value changed [C-19]",
                 passed=all_ok,
                 detail=detail,
                 timing_ms=elapsed,
@@ -459,7 +474,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="update_doc_header targeting custom field 'workflow' — value changed [C-19]",
+                label="write_document targeting custom field 'workflow' — value changed [C-19]",
                 passed=False,
                 detail=f"Exception reading disk: {e}",
                 timing_ms=elapsed,
@@ -469,14 +484,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not header_c19.ok:
             return run
 
-        # ── Step 9: update_doc_header targeting title only — custom fields untouched [C-20] ──
+        # ── Step 9: write_document targeting title only — custom fields untouched [C-20] ──
         updated_title_b = f"FlashQuery FM Updated B {run.run_id}"
 
         log_mark = ctx.server.log_position if ctx.server else 0
         header_c20 = ctx.client.call_tool(
-            "update_doc_header",
+            "write_document",
+            mode="update",
             identifier=identifier_b,
-            updates={FM.TITLE: updated_title_b},
+            title=updated_title_b,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -500,7 +516,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     f"reviewer={doc_b5.frontmatter.get('reviewer')!r}"
                 )
             run.step(
-                label="update_doc_header targeting title only — custom fields untouched [C-20]",
+                label="write_document targeting title only — custom fields untouched [C-20]",
                 passed=all_ok,
                 detail=detail,
                 timing_ms=elapsed,
@@ -510,7 +526,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
             run.step(
-                label="update_doc_header targeting title only — custom fields untouched [C-20]",
+                label="write_document targeting title only — custom fields untouched [C-20]",
                 passed=False,
                 detail=f"Exception reading disk: {e}",
                 timing_ms=elapsed,

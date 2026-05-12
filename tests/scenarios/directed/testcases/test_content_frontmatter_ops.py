@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Test: update_doc_header and insert_doc_link frontmatter operations.
+Test: write_document and insert_doc_link frontmatter operations.
 
 Scenario:
     1. Create a primary document via MCP (create_document) with custom frontmatter
        and a known body.
-    2. update_doc_header to add/change fields — verify on disk that fields were
+    2. write_document to add/change fields — verify on disk that fields were
        merged, pre-existing custom field preserved, and body untouched (C-10).
-    3. update_doc_header with a null value to remove a field — verify on disk
+    3. write_document with a null value to remove a field — verify on disk
        that the field is gone (C-11).
     4. Create two target documents so insert_doc_link has valid resolution targets.
     5. insert_doc_link with default property → verify `links` array contains the
@@ -41,6 +41,7 @@ from __future__ import annotations
 COVERAGE = ["C-10", "C-11", "C-12", "C-13", "C-14"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -64,13 +65,22 @@ TEST_NAME = "test_content_frontmatter_ops"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
+    """Extract fields from either JSON tool results or legacy key-value text."""
+    json_keys = {"FQC ID": "fq_id", "Path": "path", "Title": "title"}
+    try:
+        payload = json.loads(text)
+        value = payload.get(json_keys.get(field, field))
+        if value is not None:
+            return str(value)
+    except json.JSONDecodeError:
+        pass
+
     m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
 def _track_created(ctx, create_result) -> tuple[str, str]:
-    """Parse FQC ID + Path from a create_document response and register cleanup."""
+    """Parse FQC ID + Path from a write_document response and register cleanup."""
     fqc_id = _extract_field(create_result.text, "FQC ID")
     path = _extract_field(create_result.text, "Path")
     if path:
@@ -119,7 +129,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1: Create primary document with custom frontmatter ──
         log_mark = ctx.server.log_position if ctx.server else 0
         create_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=primary_title,
             content=primary_body,
             path=primary_path,
@@ -145,17 +156,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
         primary_identifier = primary_fqc_id or primary_path
         read_path = primary_actual_path or primary_path
 
-        # ── Step 2: update_doc_header merges fields, body untouched (C-10) ──
+        # ── Step 2: write_document merges fields, body untouched (C-10) ──
         log_mark = ctx.server.log_position if ctx.server else 0
         upd1_result = ctx.client.call_tool(
-            "update_doc_header",
+            "write_document",
+            mode="update",
             identifier=primary_identifier,
-            updates={"project": "new", "client": "acme"},
+            frontmatter={"project": "new", "client": "acme"},
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
-            label="update_doc_header (merge project + client)",
+            label="write_document (merge project + client)",
             passed=(upd1_result.ok and upd1_result.status == "pass"),
             detail=expectation_detail(upd1_result) or upd1_result.error or "",
             timing_ms=upd1_result.timing_ms,
@@ -193,17 +205,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run.step("C-10: header merge preserves body + untouched fields",
                      passed=False, detail=f"Exception: {e}", timing_ms=elapsed)
 
-        # ── Step 3: update_doc_header with null removes field (C-11) ──
+        # ── Step 3: write_document with null removes field (C-11) ──
         log_mark = ctx.server.log_position if ctx.server else 0
         upd2_result = ctx.client.call_tool(
-            "update_doc_header",
+            "write_document",
+            mode="update",
             identifier=primary_identifier,
-            updates={"priority": None},
+            frontmatter={"priority": None},
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
-            label="update_doc_header (priority = null)",
+            label="write_document (priority = null)",
             passed=(upd2_result.ok and upd2_result.status == "pass"),
             detail=expectation_detail(upd2_result) or upd2_result.error or "",
             timing_ms=upd2_result.timing_ms,
@@ -239,7 +252,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: Create two target documents for link resolution ──
         log_mark = ctx.server.log_position if ctx.server else 0
         target_a_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=target_a_title,
             content=f"Target A body ({run.run_id}).",
             path=target_a_path,
@@ -261,7 +275,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         log_mark = ctx.server.log_position if ctx.server else 0
         target_b_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=target_b_title,
             content=f"Target B body ({run.run_id}).",
             path=target_b_path,
@@ -441,7 +456,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Test: update_doc_header and insert_doc_link frontmatter operations.",
+        description="Test: write_document and insert_doc_link frontmatter operations.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

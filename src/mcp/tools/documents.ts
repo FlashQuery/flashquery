@@ -457,6 +457,11 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           [FM.CREATED]: existingData[FM.CREATED] as string | undefined,
           [FM.STATUS]: (existingData[FM.STATUS] as string | undefined) ?? 'active',
         };
+        for (const [key, value] of Object.entries(frontmatter ?? {})) {
+          if (value === null) {
+            delete fm[key];
+          }
+        }
         const serialized = matter.stringify(effectiveBody, fm);
         const newContentHash = computeHash(serialized);
         const preScan = await targetedScan(config, supabase, resolved, newContentHash, logger);

@@ -2,7 +2,7 @@ name: replace_section
 description: >
   A document can be updated to replace its content section entirely. After replacement,
   the new content is discoverable via search while the old content is absent from results.
-  Verifies that content mutation via update_document is reflected in search results,
+  Verifies that content mutation via write_document is reflected in search results,
   including the absence of replaced text.
 coverage: [IC-03]
 
@@ -23,8 +23,9 @@ steps:
       expect_path: "drafts/proposal.md"
 
   - label: "Replace the document content with new text"
-    action: update_document
+    action: write_document
     args:
+      mode: update
       identifier: "${draft_doc.fq_id}"
       content: "This proposal outlines the new approach using cloud-native architecture with microservices."
 

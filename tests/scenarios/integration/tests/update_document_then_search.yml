@@ -1,8 +1,8 @@
-name: update_document_then_search
+name: write_document_then_search
 description: >
-  A document created via vault.write and then modified via update_document is
+  A document created via vault.write and then modified via write_document is
   discoverable through search using its new title and body content. Verifies
-  that update_document propagates changes to the search index so that the
+  that write_document propagates changes to the search index so that the
   updated state is what search returns.
 coverage: [IX-03, IC-02]
 
@@ -23,8 +23,9 @@ steps:
       expect_path: "reports/expedition-notes.md"
 
   - label: "Update the document with a new title and revised content"
-    action: update_document
+    action: write_document
     args:
+      mode: update
       identifier: "${report_doc.fq_id}"
       title: "Expedition Notes Final"
       content: "Final field observations compiled from the northern and southern survey teams after full review."

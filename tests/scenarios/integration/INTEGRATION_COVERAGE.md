@@ -31,6 +31,12 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-move-1 | create -> move -> get by fq_id proves move_document returns JSON identification with stable identity and updated path. | documents.integration.test.ts copy_document and move_document JSON output; move_document_to_new_directory | 2026-05-12 |  |
 | INT-move-2 | move -> search/reference durability keeps fq_id-based reference resolution reaching the moved document while path-sensitive references can be updated separately. | tests/e2e/protocol.test.ts move_document JSON round-trip; existing direct_ref_durability_under_move | 2026-05-12 |  |
 | INT-move-3 | move_document destination conflict returns canonical JSON `conflict` with `details.reason="path_exists"` and no runtime error. | documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
+| INT-wdoc-1 | `write_document(create)` creates documents that are immediately retrievable and searchable through composed workflows. | append_then_search; append_and_search; update_document_then_search; replace_section | 2026-05-12 | 2026-05-12 |
+| INT-wdoc-2 | `write_document(update)` replaces body/title and keeps the updated state visible to search and `get_document`. | update_document_then_search; replace_section; llm_ref_reflects_current_write_state | 2026-05-12 | 2026-05-12 |
+| INT-wdoc-3 | `write_document(update)` frontmatter mutation feeds pointer/template discovery freshness without stale metadata. | pointer_mutation_propagates; llm_template_metadata_freshness | 2026-05-12 | 2026-05-12 |
+| INT-insert-1 | `insert_in_doc(bottom)` composes with search and document read-back after append. | append_then_search; append_and_search | 2026-05-12 | 2026-05-12 |
+| INT-replace-1 | `replace_doc_section` composes with section-scoped LLM reference resolution after mutation. | llm_ref_section_after_replace | 2026-05-12 | 2026-05-12 |
+| INT-tags-1 | `apply_tags` composes across document targets with ordered result envelopes. | apply_tags_composition; tests/integration/apply-tags.test.ts | 2026-05-12 | 2026-05-12 |
 
 ---
 
@@ -77,17 +83,17 @@ Verifies behaviors that span more than one FlashQuery domain (documents, memorie
 |--------|-----------------------------------------------------------------------------|----------------------|--------------|--------------|
 | IX-01  | Document and memory share a tag → search_all with that tag returns both (VALIDATED)      | cross_domain_search_embeddings | 2026-05-07   | 2026-05-07   |
 | IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-05-07   | 2026-05-07   |
-| IX-03  | Create via vault.write, update via update_document → search returns new content (VALIDATED) | update_document_then_search  | 2026-05-07   | 2026-05-07   |
+| IX-03  | Create via vault.write, update via update_document → search returns new content (VALIDATED) | write_document_then_search   | 2026-05-12   | 2026-05-12   |
 | IX-04  | Create document, get_document by fqc_id → returns correct content (VALIDATED)           | document_retrieval_by_id     | 2026-05-07   | 2026-05-07   |
 | IX-05  | Create document with tags, apply_tags to add more → all tags searchable (VALIDATED)     | apply_tags_composition       | 2026-05-07   | 2026-05-07   |
 | IX-06  | Get document by vault-relative path → returns same content as fqc_id retrieval (VALIDATED) | get_document_by_path         | 2026-05-07   | 2026-05-07   |
 | IX-07  | Get document returns all metadata fields (title, tags, status, fqc_id, path) (VALIDATED) | get_document_metadata        | 2026-05-07   | 2026-05-07   |
 | IX-08  | Create multiple documents, update each, retrieve all → each returns updated state (VALIDATED) | concurrent_updates           | 2026-05-07   | 2026-05-07   |
 | IX-09  | Evaluation workflow end-to-end: search_documents → get_document batch with include=["frontmatter","headings"] → call_model with {{ref:<chosen>#<chosen-section>}} resolves the targeted section | eval_workflow_search_get_call | 2026-05-07   | 2026-05-07   |
-| IX-10  | Reference reflects current write state: vault.write doc → call_model {{ref:doc.md}} returns body A → update_document body → call_model {{ref:doc.md}} returns body B | llm_ref_reflects_current_write_state | 2026-05-07   | 2026-05-07   |
-| IX-11  | Section coherence: vault.write multi-section doc → call_model {{ref:doc.md#Section}} returns original section → replace_doc_section → call_model {{ref:doc.md#Section}} returns new section | llm_ref_section_after_replace | 2026-05-07   | 2026-05-07   |
+| IX-10  | Reference reflects current write state: vault.write doc → call_model {{ref:doc.md}} returns body A → update_document body → call_model {{ref:doc.md}} returns body B | llm_ref_reflects_current_write_state | 2026-05-12   | 2026-05-12   |
+| IX-11  | Section coherence: vault.write multi-section doc → call_model {{ref:doc.md#Section}} returns original section → replace_doc_section → call_model {{ref:doc.md#Section}} returns new section | llm_ref_section_after_replace | 2026-05-12   | 2026-05-12   |
 | IX-12  | Pointer dereference cross-interface consistency: get_document(follow_ref:"projections.summary") and call_model {{ref:source->projections.summary}} return identical target body and matching resolved_to | pointer_deref_cross_interface_consistency | 2026-05-07   | 2026-05-07   |
-| IX-13  | Pointer mutation propagates: source has projections.summary→A; call_model {{ref:source->projections.summary}} injects A; update_doc_header re-points to B; next call_model injection is B (covers top-level + nested pointer keys) | pointer_mutation_propagates  | 2026-05-07   | 2026-05-07   |
+| IX-13  | Pointer mutation propagates: source has projections.summary→A; call_model {{ref:source->projections.summary}} injects A; update_doc_header re-points to B; next call_model injection is B (covers top-level + nested pointer keys) | pointer_mutation_propagates  | 2026-05-12   | 2026-05-12   |
 | IX-14  | Archive does not block reference resolution: vault.write doc → archive_document → call_model {{ref:doc.md}} resolves successfully and reports correct chars in injected_references[] | llm_ref_resolves_after_archive | 2026-05-11   | 2026-05-11   |
 | IX-15  | Projections matrix — fq_id-source dereference: {{ref:<source-uuid>->projections.summary}} resolves through fq_id-source path, then nested-key pointer traversal, returning target body | projections_id_source_dereference | 2026-05-07   | 2026-05-07   |
 | IX-16  | Projections matrix — fq_id-typed target value: source has projections.key_entities=<target-uuid>; call_model {{ref:source->projections.key_entities}} resolves via fq_id branch and injects target body | projections_fq_id_typed_target | 2026-05-07   | 2026-05-07   |
@@ -107,10 +113,10 @@ discoverable through search after the mutation.
 
 | ID     | Behavior                                                                         | Covered By | Date Updated | Last Passing |
 |--------|----------------------------------------------------------------------------------|------------|--------------|--------------|
-| IC-01  | Append content to document → appended content appears in search_documents (VALIDATED)         | append_then_search           | 2026-05-07   | 2026-05-07   |
-| IC-02  | Update document body → updated content appears in search_documents (VALIDATED)                | update_document_then_search  | 2026-05-07   | 2026-05-07   |
-| IC-03  | Replace section in document → replaced content appears, original absent (VALIDATED)           | replace_section              | 2026-05-07   | 2026-05-07   |
-| IC-04  | Append to document → search reflects appended text immediately after append (VALIDATED)       | append_and_search            | 2026-05-07   | 2026-05-07   |
+| IC-01  | Append content to document → appended content appears in search_documents (VALIDATED)         | append_then_search           | 2026-05-12   | 2026-05-12   |
+| IC-02  | Update document body → updated content appears in search_documents (VALIDATED)                | write_document_then_search   | 2026-05-12   | 2026-05-12   |
+| IC-03  | Replace section in document → replaced content appears, original absent (VALIDATED)           | replace_section              | 2026-05-12   | 2026-05-12   |
+| IC-04  | Append to document → search reflects appended text immediately after append (VALIDATED)       | append_and_search            | 2026-05-12   | 2026-05-12   |
 
 ---
 
@@ -207,12 +213,12 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 | IL-34  | ATL-I-06: Runtime template binding behavior is covered at the TypeScript integration layer because no public runtime binding YAML tool name exists yet; precedence, removal, and shared capability admission are validated without inventing a scenario-only public API | llm-config-sync.test.ts | 2026-05-06   | 2026-05-06   |
 | IL-35  | ATL-INT-04: Runtime-vs-YAML template binding precedence survives restart and YAML reappears after runtime binding removal; recorded against `llm-config-sync.test.ts` until a public runtime binding scenario surface exists | llm-config-sync.test.ts | 2026-05-06   | 2026-05-06   |
 | IL-36  | VAL-115: Phase 115 full gate includes build, focused unit tests, Supabase-backed schema/config-sync integration, managed directed scenario `test_call_model_agent_loop_capabilities`, and managed YAML scenario `llm_discovery_list` | llm-config.test.ts; llm-config-sync.test.ts; llm-tool.test.ts; schema-verify.test.ts; supabase-schema-verify.test.ts; test_call_model_agent_loop_capabilities; llm_discovery_list | 2026-05-06   | 2026-05-06   |
-| IL-37  | ATL-INT-01: Template-body freshness brackets an `update_document` write with two `call_model` calls; the first sees ALPHA and the second sees BETA without stale ALPHA | llm_template_reference_freshness | 2026-05-07   | 2026-05-07   |
-| IL-38  | ATL-INT-02: Document-parameter freshness brackets a target-document write with two `call_model` calls; the first renders ALPHA and the second renders BETA | llm_template_document_param_freshness | 2026-05-07   | 2026-05-07   |
+| IL-37  | ATL-INT-01: Template-body freshness brackets an `update_document` write with two `call_model` calls; the first sees ALPHA and the second sees BETA without stale ALPHA | llm_template_reference_freshness | 2026-05-12   | 2026-05-12   |
+| IL-38  | ATL-INT-02: Document-parameter freshness brackets a target-document write with two `call_model` calls; the first renders ALPHA and the second renders BETA | llm_template_document_param_freshness | 2026-05-12   | 2026-05-12   |
 | IL-39  | ATL-INT-03: Discovery-to-invocation closure covers public `list_purposes` usage guidance, discovered `template_path`/parameter metadata, direct `{{ref:...}}` template invocation, and purpose invocation | llm_discovery_then_call      | 2026-05-07   | 2026-05-07   |
 | IL-40  | ATL-INT-05: Mixed path, section, pointer, alias, and `_items` template/reference modes compose in one `call_model` flow; parsed directed coverage asserts metadata ordering, parent list entry, same-document sections, and default `_separator` shape | llm_mixed_reference_modes    | 2026-05-07   | 2026-05-07   |
 | IL-41  | Help resolver participates in no-usage-row contract: baseline get_llm_usage → call_model resolver=help returns help body → get_llm_usage total_calls delta is 0 (help is a no-LLM-dispatch resolver and writes no `fqc_llm_usage` row) | llm_help_no_usage_row        | 2026-05-07   | 2026-05-07   |
-| IL-42  | Template metadata freshness reaches discovery surface: vault.write template (`fq_template: true`, `fq_expose_as_tool: true`, `fq_desc: A`) → list_purposes shows description A in template_tools → update_document rewrites frontmatter with `fq_desc: B` → next list_purposes shows description B (template registry reads frontmatter fresh from disk per call) | llm_template_metadata_freshness | 2026-05-07   | 2026-05-07   |
+| IL-42  | Template metadata freshness reaches discovery surface: vault.write template (`fq_template: true`, `fq_expose_as_tool: true`, `fq_desc: A`) → list_purposes shows description A in template_tools → update_document rewrites frontmatter with `fq_desc: B` → next list_purposes shows description B (template registry reads frontmatter fresh from disk per call) | llm_template_metadata_freshness | 2026-05-12   | 2026-05-12   |
 
 ---
 

@@ -143,25 +143,25 @@ Plans:
 
 Plans:
 **Wave 1**
-- [ ] 124-01-PLAN.md — Create traceability and implement `write_document` create/update primitives.
+- [x] 124-01-PLAN.md — Create traceability and implement `write_document` create/update primitives.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 124-02-PLAN.md — Migrate `insert_in_doc` nested-section semantics and JSON metadata.
+- [x] 124-02-PLAN.md — Migrate `insert_in_doc` nested-section semantics and JSON metadata.
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 124-03-PLAN.md — Migrate `replace_doc_section` nested replacement/deletion semantics.
+- [x] 124-03-PLAN.md — Migrate `replace_doc_section` nested replacement/deletion semantics.
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 124-04-PLAN.md — Migrate `apply_tags` explicit targets and ordered results.
+- [x] 124-04-PLAN.md — Migrate `apply_tags` explicit targets and ordered results.
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 124-05-PLAN.md — Update scenario coverage ledgers and traceability before scenario edits.
+- [x] 124-05-PLAN.md — Update scenario coverage ledgers and traceability before scenario edits.
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 124-06-PLAN.md — Port directed Python scenarios to final Phase 124 primitives.
+- [x] 124-06-PLAN.md — Port directed Python scenarios to final Phase 124 primitives.
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 124-07-PLAN.md — Port YAML integration scenarios and close Phase 124 validation evidence.
+- [x] 124-07-PLAN.md — Port YAML integration scenarios and close Phase 124 validation evidence.
 
 **UI hint:** no
 

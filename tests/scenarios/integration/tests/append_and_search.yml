@@ -1,6 +1,6 @@
 name: append_and_search
 description: >
-  When content is appended to a document via append_to_doc, the document
+  When content is appended to a document via insert_in_doc, the document
   remains immediately discoverable in search_documents without requiring a
   separate scan or index step. Verifies that append mutations do not break
   the document's search visibility, and that the appended content is
@@ -25,9 +25,10 @@ steps:
       expect_contains: "Activity Log"
 
   - label: "Append new entry to the document"
-    action: append_to_doc
+    action: insert_in_doc
     args:
       identifier: "${log_doc.fq_id}"
+      position: bottom
       content: "\nNew event: User logged in from 192.168.1.100"
 
   - label: "Document is findable by title immediately after append — no scan step needed"

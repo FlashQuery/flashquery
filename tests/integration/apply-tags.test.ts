@@ -160,7 +160,9 @@ describe.skipIf(SKIP)('apply_tags tag validation (integration)', () => {
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain('Updated tags:');
+    const envelope = JSON.parse(result.content[0].text) as Array<{ tags: string[]; entity_type: string }>;
+    expect(envelope[0]).toMatchObject({ entity_type: 'document' });
+    expect(envelope[0]?.tags).toEqual(expect.arrayContaining(['dup', '#status/published']));
   });
 
   it('apply_tags with multiple status tags succeeds — D-06 removed status mutual exclusivity', async () => {
@@ -191,7 +193,9 @@ describe.skipIf(SKIP)('apply_tags tag validation (integration)', () => {
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain('Updated tags:');
+    const envelope = JSON.parse(result.content[0].text) as Array<{ tags: string[]; entity_type: string }>;
+    expect(envelope[0]).toMatchObject({ entity_type: 'document' });
+    expect(envelope[0]?.tags).toContain('#status/archived');
   });
 
   it('apply_tags on memory accepts multiple status tags — D-06 removed status mutual exclusivity', async () => {

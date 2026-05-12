@@ -133,12 +133,12 @@
 | CFG-06 | Phase 122 | Complete |
 | DOC-01 | Phase 123 | Complete |
 | DOC-02 | Phase 123 | Complete |
-| DOC-03 | Phase 124 | Pending |
-| DOC-04 | Phase 124 | Pending |
+| DOC-03 | Phase 124 | Complete |
+| DOC-04 | Phase 124 | Complete |
 | DOC-05 | Phase 123 | Complete |
-| DOC-06 | Phase 124 | Pending |
-| DOC-07 | Phase 124 | Pending |
-| DOC-08 | Phase 124 | Pending |
+| DOC-06 | Phase 124 | Complete |
+| DOC-07 | Phase 124 | Complete |
+| DOC-08 | Phase 124 | Complete |
 | DOC-09 | Phase 127 | Pending |
 | DOC-10 | Phase 128 | Pending |
 | SRCH-01 | Phase 125 | Pending |
