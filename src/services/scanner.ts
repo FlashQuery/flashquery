@@ -1181,9 +1181,21 @@ export async function repairFrontmatter(
             const parsed = matter(raw);
             fileContent = parsed.content;
             existingFrontmatter = parsed.data;
-          } catch {
-            // If file is unreadable, write empty body with frontmatter
-            fileContent = '';
+          } catch (readErr) {
+            if ((readErr as NodeJS.ErrnoException).code === 'ENOENT') {
+              await supabase
+                .from('fqc_documents')
+                .update({
+                  status: 'missing',
+                  needs_frontmatter_repair: false,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', fqcId)
+                .eq('instance_id', instanceId);
+              logger.warn(`[TSA-02] frontmatter repair skipped missing file: "${filePath}" (fqc_id=${fqcId})`);
+              continue;
+            }
+            throw readErr;
           }
 
           // Merge FQC identity fields into existing frontmatter — user-defined fields survive

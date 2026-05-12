@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import matter from 'gray-matter';
-import { titleFromFilename, runScanOnce, scanMutex } from '../../src/services/scanner.js';
+import { titleFromFilename, runScanOnce, scanMutex, repairFrontmatter } from '../../src/services/scanner.js';
 import { registerScanTools } from '../../src/mcp/tools/scan.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
@@ -1215,6 +1215,73 @@ describe('runScanOnce — IDC-01: restore missing→active in hash-found path', 
     // The scanner correctly implements the feature, but the test mocking strategy needs refinement
     // TODO: Refactor to properly mock the DB state initialization that scanner uses
     expect(true).toBe(true);
+  });
+});
+
+describe('repairFrontmatter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('marks a repair row missing instead of recreating a deleted vault file', async () => {
+    const updatePayloads: Array<Record<string, unknown>> = [];
+    const finalEq = vi.fn().mockResolvedValue({ data: null, error: null });
+    const update = vi.fn((payload: Record<string, unknown>) => {
+      updatePayloads.push(payload);
+      return {
+        eq: vi.fn().mockReturnValue({
+          eq: finalEq,
+        }),
+      };
+    });
+    const repairQuery = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'missing-repair-id',
+          path: 'Gone/Missing.md',
+          content_hash: 'old-hash',
+          created_at: '2026-05-12T00:00:00.000Z',
+          status: 'active',
+        },
+      ],
+      error: null,
+    });
+    const select = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: repairQuery,
+      }),
+    });
+    const mockSupabase = {
+      from: vi.fn(() => ({ select, update })),
+    };
+    vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabase as any);
+    vi.mocked(fsPromises.readFile).mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+
+    try {
+      const result = await repairFrontmatter(makeConfig());
+
+      expect(result).toMatchObject({ scanned: 1, repaired: 0, updated: 0 });
+      expect(vaultManager.writeMarkdown).not.toHaveBeenCalled();
+      expect(updatePayloads[0]).toMatchObject({
+        status: 'missing',
+        needs_frontmatter_repair: false,
+      });
+      expect(finalEq).toHaveBeenCalledWith('instance_id', 'test-instance-id');
+    } finally {
+      vi.mocked(supabaseManager.getClient).mockImplementation(() => ({
+        from: vi.fn(() => ({
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          neq: vi.fn().mockResolvedValue({ data: [], error: null }),
+          in: vi.fn().mockResolvedValue({ data: [], error: null }),
+          update: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+          insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+          upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
+        })),
+      }) as any);
+    }
   });
 });
 

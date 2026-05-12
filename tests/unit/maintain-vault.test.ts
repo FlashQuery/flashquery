@@ -190,6 +190,39 @@ describe('maintainVault service contract', () => {
     });
   });
 
+  it('returns conflict instead of accepting background work while maintenance is running', async () => {
+    let releaseScan: () => void = () => {};
+    scannerMocks.runScanOnce.mockReturnValue(
+      new Promise((resolve) => {
+        releaseScan = () =>
+          resolve({
+            hashMismatches: 0,
+            statusMismatches: 0,
+            newFiles: 0,
+            movedFiles: 0,
+            deletedFiles: 0,
+            embeddingStatus: 'complete',
+            embedsAwaited: 0,
+          });
+      })
+    );
+
+    const first = maintainVault(makeConfig(), { action: 'sync' });
+    const second = await maintainVault(makeConfig(), { action: 'sync', background: true });
+    releaseScan();
+    await first;
+
+    expect(second).toEqual({
+      ok: false,
+      error: {
+        error: 'conflict',
+        message: 'A vault maintenance operation is already running',
+        identifier: 'maintain_vault',
+        details: { reason: 'maintenance_in_progress' },
+      },
+    });
+  });
+
   it('rejects new maintenance starts during shutdown and marks in-flight abort state', async () => {
     setShuttingDown(true);
 

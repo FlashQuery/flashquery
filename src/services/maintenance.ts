@@ -74,6 +74,10 @@ export async function maintainVault(
     return shutdownRejection();
   }
 
+  if (maintenanceInProgress) {
+    return maintenanceConflict();
+  }
+
   if (input.background) {
     const job = createJob(normalized.payload, false);
     void runBackgroundJob(config, job.job_id);
@@ -81,10 +85,6 @@ export async function maintainVault(
       ok: true,
       payload: { accepted: true, job_id: job.job_id, started_at: job.started_at },
     };
-  }
-
-  if (maintenanceInProgress) {
-    return maintenanceConflict();
   }
 
   maintenanceInProgress = true;
