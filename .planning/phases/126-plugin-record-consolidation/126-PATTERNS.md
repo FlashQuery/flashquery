@@ -13,6 +13,20 @@ Downstream implementation, review, and verification agents MUST read these two p
 
 Treat `.planning/ROADMAP.md` as the phase boundary and the two product docs above as the detailed contract inside that boundary.
 
+## Phase 125 Gap-Fix Compatibility Note
+
+Reviewed after the Phase 125 post-implementation gap fixes. The current dirty codebase includes Phase 125 fixes in:
+
+- `src/mcp/tools/compound.ts` — `get_briefing` now points callers to final `search` rather than legacy `search_all`.
+- `src/mcp/tools/memory.ts` — `write_memory(mode:"update")` maps transactional non-latest races to canonical `conflict` and missing-row races to canonical `not_found`; legacy descriptions now point to final `search`; `archive_memory` handles empty batches and fetches the memory chain once per request.
+- `tests/unit/write-memory.test.ts` — adds regression coverage for those transactional `write_memory` expected-error envelopes.
+
+Impact on Phase 126 plans: no plan changes are required because Phase 126 modifies plugin/record/pending-review files, not search/memory handlers. Downstream implementers should still use these Phase 125 fixes as stronger analogs for expected-error mapping and final-tool description wording:
+
+- Record write race/validation failures should return `jsonExpectedError` with `isError:false`, mirroring the fixed `write_memory` behavior.
+- Plugin/record descriptions should point to final tools (`search`, `write_record`, `clear_pending_reviews(action)`) and should not mention removed legacy names as preferred paths.
+- Batch-capable handlers should explicitly handle empty arrays where the product contract permits them; for Phase 126, keep `archive_record.targets` array-only per the locked contract.
+
 ## File Classification
 
 | New/Modified File | Role | Data Flow | Closest Analog | Match Quality |
