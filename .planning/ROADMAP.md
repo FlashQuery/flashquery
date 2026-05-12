@@ -48,7 +48,7 @@
 | 124 | Document Write Primitives | 7/7 | Complete    | 2026-05-12 |
 | 125 | Unified Search + Memory Consolidation | 6/6 | Completed |  |
 | 126 | Plugin + Record Consolidation | 5/5 | Complete   | 2026-05-12 |
-| 127 | Removal, Directory, And Vault Maintenance | 3/6 | In Progress|  |
+| 127 | Removal, Directory, And Vault Maintenance | 4/6 | In Progress|  |
 | 128 | Legacy Surface Removal + Final Audit | Remove merged/dead tools, preserve transitional macro gates, and close coverage/preflight. | DOC-10, MEM-05, SYS-04..06, TEST-07, TEST-08 | 6 |
 
 ## Phase Details
@@ -236,13 +236,13 @@ Plans:
 5. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
 6. Scenario tests prove real user workflows across write/search/remove/maintenance, not just handler-level calls.
 
-**Plans:** 3/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 - [x] 127-01-PLAN.md — Create traceability, trash config, frontmatter constants, response helpers, and final tool metadata.
 - [x] 127-02-PLAN.md — Implement `manage_directory(action:"create" | "remove")` with ordered JSON, locks, and integration coverage.
 - [x] 127-03-PLAN.md — Implement `maintain_vault(action)` with sync, repair, status, background, and conflict behavior.
-- [ ] 127-04-PLAN.md — Implement `remove_document` archive-before-trash/delete semantics with git-aware filesystem coverage.
+- [x] 127-04-PLAN.md — Implement `remove_document` archive-before-trash/delete semantics with git-aware filesystem coverage.
 - [ ] 127-05-PLAN.md — Add MCP protocol, directed scenario, and YAML integration coverage for Phase 127 workflows.
 - [ ] 127-06-PLAN.md — Run final validation, local absence/prose/frontmatter audits, and close traceability.
 
