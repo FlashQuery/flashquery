@@ -17,6 +17,12 @@ import {
   recordIdentification,
   withWarnings,
 } from '../../src/mcp/utils/response-formats.js';
+import {
+  buildContentPreview,
+  buildMemoryResult,
+  buildOrderedMemoryResults,
+  memoryNotFoundError,
+} from '../../src/mcp/utils/memory-output.js';
 
 function parseToolText(result: { content: Array<{ type: 'text'; text: string }> }): unknown {
   expect(result.content[0]?.type).toBe('text');
@@ -186,6 +192,63 @@ describe('identification builders', () => {
       name: 'summarize',
       resolved_model_name: 'gpt-5-mini',
       provider_name: 'openai',
+    });
+  });
+});
+
+describe('memory output helpers', () => {
+  const memoryRow = {
+    id: 'mem-1',
+    content: 'User prefers concise JSON output for MCP tools.',
+    tags: ['#preference', '#json'],
+    plugin_scope: 'global',
+    created_at: '2026-05-11T00:00:00.000Z',
+    updated_at: '2026-05-11T01:00:00.000Z',
+    version: 2,
+    previous_version_id: 'mem-0',
+    is_latest: true,
+    archived_at: null,
+  };
+
+  it('builds content previews from normalized memory content', () => {
+    expect(buildContentPreview('  Alpha\n\nBeta   Gamma  ', 12)).toBe('Alpha Bet...');
+  });
+
+  it('builds memory identification plus requested include payloads', () => {
+    expect(buildMemoryResult(memoryRow, ['content', 'tags_full'])).toEqual({
+      memory_id: 'mem-1',
+      content_preview: 'User prefers concise JSON output for MCP tools.',
+      tags: ['#preference', '#json'],
+      plugin_scope: 'global',
+      created_at: '2026-05-11T00:00:00.000Z',
+      updated_at: '2026-05-11T01:00:00.000Z',
+      version: 2,
+      previous_version_id: 'mem-0',
+      is_latest: true,
+      archived_at: null,
+      content: 'User prefers concise JSON output for MCP tools.',
+      tags_full: ['#preference', '#json'],
+    });
+  });
+
+  it('preserves requested batch order and inserts canonical expected errors', () => {
+    expect(buildOrderedMemoryResults(['missing', 'mem-1'], [memoryRow])).toEqual([
+      {
+        error: 'not_found',
+        message: 'Memory not found: missing',
+        identifier: 'missing',
+      },
+      expect.objectContaining({ memory_id: 'mem-1' }),
+    ]);
+  });
+
+  it('returns canonical expected error envelopes for missing memories', () => {
+    const result = memoryNotFoundError('mem-x');
+    expect(result.isError).toBe(false);
+    expect(parseToolText(result)).toEqual({
+      error: 'not_found',
+      message: 'Memory not found: mem-x',
+      identifier: 'mem-x',
     });
   });
 });
