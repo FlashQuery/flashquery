@@ -200,7 +200,14 @@ Plans:
 4. `clear_pending_reviews` uses explicit list/clear actions and structured item envelopes.
 5. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
 
-**Plans:** TBD by `$gsd-plan-phase 126`
+**Plans:** 5 plans
+
+Plans:
+- [ ] 126-01-PLAN.md — Create traceability, record validation, and record output helper contracts.
+- [ ] 126-02-PLAN.md — Migrate plugin register/unregister/info tools to structured envelopes.
+- [ ] 126-03-PLAN.md — Implement `write_record(mode:"create" | "update")` with integration and E2E coverage.
+- [ ] 126-04-PLAN.md — Migrate `get_record`, `archive_record`, and `search_records` structured envelopes.
+- [ ] 126-05-PLAN.md — Migrate `clear_pending_reviews` actions and close scenario/validation coverage.
 
 **UI hint:** no
 
