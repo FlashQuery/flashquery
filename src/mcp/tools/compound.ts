@@ -803,7 +803,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'get_briefing',
     {
       description:
-        'Get a summary of documents and memories matching specified tags. Returns document metadata (title, path, tags, fqc_id) and memory content, grouped by type. Use this when the user wants an overview of everything related to a topic — e.g. "brief me on the CRM" or "what do we have tagged \'project-alpha\'". Optionally pass a plugin_id to include plugin record counts. For full-text search, use search_all instead.' +
+        'Get a summary of documents and memories matching specified tags. Returns document metadata (title, path, tags, fqc_id) and memory content, grouped by type. Use this when the user wants an overview of everything related to a topic — e.g. "brief me on the CRM" or "what do we have tagged \'project-alpha\'". Optionally pass a plugin_id to include plugin record counts. For full-text search, use search instead.' +
         'Returns document metadata and memory content scoped by tag filters. ' +
         'Optionally includes plugin records when plugin_id is provided.',
       inputSchema: {

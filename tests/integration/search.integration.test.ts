@@ -206,10 +206,36 @@ describe.skipIf(SKIP)('unified search integration', () => {
     expect(payload.results.map((item) => item.memory_id)).not.toContain(nonLatestMemoryId);
   });
 
-  it('returns unsupported for an explicit disabled memory domain', async () => {
+  it('keeps document search available and applies canonical disabled-memory degradation', async () => {
     const disabledConfig = makeConfig(vaultPath, ['category:doc-read']);
     const disabledServer = createMockServer();
     registerCompoundTools(disabledServer.server, disabledConfig);
+
+    const documentsOnly = await disabledServer.getHandler('search')({
+      query: 'alpha',
+      mode: 'filesystem',
+      entity_types: ['documents'],
+      tags: ['phase125'],
+    }) as { isError?: boolean };
+    expect(documentsOnly.isError).toBeFalsy();
+    expect(JSON.parse(textOf(documentsOnly))).toMatchObject({
+      entity_types: ['documents'],
+      results: [expect.objectContaining({ entity_type: 'document', title: 'Alpha Project' })],
+    });
+
+    const narrowed = await disabledServer.getHandler('search')({
+      query: 'alpha',
+      mode: 'filesystem',
+      entity_types: ['documents', 'memories'],
+      tags: ['phase125'],
+    }) as { isError?: boolean };
+    expect(narrowed.isError).toBeFalsy();
+    expect(JSON.parse(textOf(narrowed))).toMatchObject({
+      entity_types: ['documents'],
+      warnings: ['memory_category_disabled'],
+      results: [expect.objectContaining({ entity_type: 'document', title: 'Alpha Project' })],
+    });
+
     const result = await disabledServer.getHandler('search')({
       query: 'alpha',
       entity_types: ['memories'],

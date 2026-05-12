@@ -201,7 +201,7 @@ Unified search across documents and memories.
 | D-search-5 | `search` applies one global limit to mixed document and memory result sets. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
 | D-search-6 | `search` result items carry entity type, identifier, and match-source metadata usable by MCP clients. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
 | D-search-7 | `search` excludes archived memories by default and surfaces them only when `include_archived:true`. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-search-8 | `search` reports disabled/unsupported memory category requests through JSON envelope semantics instead of legacy prose. | tests/unit/search.test.ts; tests/integration/search.integration.test.ts | 2026-05-12 |  |
+| D-search-8 | `search` reports disabled/unsupported memory category requests through JSON envelope semantics; accepted substitute coverage because this is host-config behavior, not a managed directed scenario. | tests/unit/search.test.ts; tests/integration/search.integration.test.ts | 2026-05-12 | 2026-05-12 |
 
 ## 6. Memory Lifecycle
 

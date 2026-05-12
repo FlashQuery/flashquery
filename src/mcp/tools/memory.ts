@@ -285,8 +285,25 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
           p_content: nextContent,
           p_tags: nextTags,
           p_plugin_scope: existingRow.plugin_scope ?? 'global',
-        }) as { data: MemoryRow | MemoryRow[] | null; error: { message: string } | null };
-        if (insertError) throw new Error(insertError.message);
+        }) as { data: MemoryRow | MemoryRow[] | null; error: { message: string; code?: string } | null };
+        if (insertError) {
+          if (insertError.code === '23505' || insertError.message.includes('Cannot update a non-latest memory version')) {
+            return jsonExpectedError({
+              error: 'conflict',
+              message: 'Cannot update a non-latest memory version',
+              identifier: String(params.memory_id),
+              details: { reason: 'non_latest_memory_version' },
+            });
+          }
+          if (insertError.code === 'P0002') {
+            return jsonExpectedError({
+              error: 'not_found',
+              message: `Memory not found: ${String(params.memory_id)}`,
+              identifier: String(params.memory_id),
+            });
+          }
+          throw new Error(insertError.message);
+        }
         const inserted = Array.isArray(insertedData) ? insertedData[0] : insertedData;
         if (!inserted) throw new Error('fqc_memory_create_version returned no row');
 
@@ -500,7 +517,7 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
           return {
             content: [{
               type: 'text' as const,
-              text: 'Semantic search unavailable (no API key configured). Use tag-based search with list_memories instead.',
+              text: 'Semantic search unavailable (no API key configured). Use search with entity_types:["memories"], an empty query, and tags for tag-based memory listing.',
             }],
             isError: true,
           };
@@ -608,12 +625,12 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
     'update_memory',
     {
       description:
-        'Update an existing memory\'s content by ID. Creates a new version — the previous version is preserved for history. Use search_memory or list_memories to find the memory_id first. Use this when the user says "update the memory about X" or when a previously saved fact has changed.',
+        'Update an existing memory\'s content by ID. Creates a new version — the previous version is preserved for history. Use search to find the memory_id first. Use this when the user says "update the memory about X" or when a previously saved fact has changed.',
       inputSchema: {
         memory_id: z
           .string()
           .uuid()
-          .describe('UUID of the memory to update. Retrieve via search_memory or list_memories.'),
+          .describe('UUID of the memory to update. Retrieve via search.'),
         content: z.string().describe('New content to replace the existing memory text'),
         tags: z
           .array(z.string())
@@ -820,7 +837,7 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
     'get_memory',
     {
       description:
-        'Retrieve one or more memories by their memory_id. Returns full content and all metadata. Pass a single ID for one memory, or an array of IDs for batch retrieval. Use this after finding memory IDs through search_memory or list_memories when you need the complete, untruncated content.' +
+        'Retrieve one or more memories by their memory_id. Returns full content and all metadata. Pass a single ID for one memory, or an array of IDs for batch retrieval. Use this after finding memory IDs through search when you need the complete, untruncated content.' +
         'or an array of memory_id strings for batch format.',
       inputSchema: {
         memory_ids: z
@@ -887,7 +904,7 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
     'archive_memory',
     {
       description:
-        'Archive a memory by marking it inactive. Archived memories no longer appear in search_memory or list_memories results. Use this when a memory is outdated, wrong, or the user asks to forget something.',
+        'Archive a memory by marking it inactive. Archived memories no longer appear in search results by default. Use this when a memory is outdated, wrong, or the user asks to forget something.',
       inputSchema: {
         memory_ids: z.union([z.string(), z.array(z.string())]).optional().describe('Single memory ID or array of memory IDs to archive'),
         memory_id: z.string().uuid().optional().describe('Legacy singular memory ID accepted during migration'),
@@ -915,23 +932,27 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
         }
         const isBatch = Array.isArray(idsInput);
         const ids = isBatch ? idsInput : [idsInput];
+        if (ids.length === 0) {
+          logger.info('archive_memory: archived 0 memory request(s)');
+          return jsonToolResult([]);
+        }
         const archivedAtByRoot = new Map<string, string>();
         const results: Array<ReturnType<typeof buildMemoryResult> | { error: string; message: string; identifier: string }> = [];
+        const { data: chainRows, error: fetchError } = await supabase
+          .from('fqc_memory')
+          .select('id, content, tags, plugin_scope, status, created_at, updated_at, version, previous_version_id, is_latest, archived_at')
+          .eq('instance_id', config.instance.id);
+        if (fetchError) throw new Error(fetchError.message);
+
+        const allRows = (chainRows ?? []) as Array<MemoryRow & { status?: string }>;
+        const byId = new Map(allRows.map((row) => [row.id, row]));
 
         for (const id of ids) {
-          const { data: chainRows, error: fetchError } = await supabase
-            .from('fqc_memory')
-            .select('id, content, tags, plugin_scope, status, created_at, updated_at, version, previous_version_id, is_latest, archived_at')
-            .eq('instance_id', config.instance.id);
-          if (fetchError) throw new Error(fetchError.message);
-
-          const allRows = (chainRows ?? []) as Array<MemoryRow & { status?: string }>;
-          const requested = allRows.find((row) => row.id === id);
+          const requested = byId.get(id);
           if (!requested) {
-            results.push({ error: 'not_found', message: `Memory not found: ${id}`, identifier: id });
+            results.push({ error: 'not_found', message: `No memory matches identifier '${id}'`, identifier: id });
             continue;
           }
-          const byId = new Map(allRows.map((row) => [row.id, row]));
           let root = requested;
           while (root.previous_version_id && byId.has(root.previous_version_id)) {
             root = byId.get(root.previous_version_id)!;

@@ -209,4 +209,71 @@ describe('write_memory', () => {
     });
     expect(parseResult(result)).toMatchObject({ memory_id: 'mem-2', previous_version_id: 'mem-1', is_latest: true });
   });
+
+  it('maps transactional RPC non-latest races to the canonical conflict envelope', async () => {
+    const { server, getHandler } = createMockServer();
+    registerMemoryTools(server, makeConfig());
+
+    const fetchChain = makeThenableChain({
+      data: {
+        id: 'mem-1',
+        content: 'old',
+        tags: [],
+        plugin_scope: 'global',
+        version: 1,
+        previous_version_id: null,
+        is_latest: true,
+        archived_at: null,
+      },
+      error: null,
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: '23505', message: 'Cannot update a non-latest memory version' },
+    });
+    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ from: vi.fn().mockReturnValue(fetchChain), rpc });
+
+    const result = await getHandler('write_memory')({ mode: 'update', memory_id: 'mem-1', content: 'new' }) as { isError?: boolean };
+
+    expect(result.isError).toBe(false);
+    expect(parseResult(result)).toMatchObject({
+      error: 'conflict',
+      message: 'Cannot update a non-latest memory version',
+      identifier: 'mem-1',
+      details: { reason: 'non_latest_memory_version' },
+    });
+  });
+
+  it('maps transactional RPC missing-row races to the canonical not_found envelope', async () => {
+    const { server, getHandler } = createMockServer();
+    registerMemoryTools(server, makeConfig());
+
+    const fetchChain = makeThenableChain({
+      data: {
+        id: 'mem-1',
+        content: 'old',
+        tags: [],
+        plugin_scope: 'global',
+        version: 1,
+        previous_version_id: null,
+        is_latest: true,
+        archived_at: null,
+      },
+      error: null,
+    });
+    const rpc = vi.fn().mockResolvedValue({
+      data: null,
+      error: { code: 'P0002', message: 'Memory not found: mem-1' },
+    });
+    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ from: vi.fn().mockReturnValue(fetchChain), rpc });
+
+    const result = await getHandler('write_memory')({ mode: 'update', memory_id: 'mem-1', content: 'new' }) as { isError?: boolean };
+
+    expect(result.isError).toBe(false);
+    expect(parseResult(result)).toMatchObject({
+      error: 'not_found',
+      message: 'Memory not found: mem-1',
+      identifier: 'mem-1',
+    });
+  });
 });

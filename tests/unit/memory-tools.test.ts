@@ -883,7 +883,7 @@ describe('update_memory', () => {
     expect(result.content[0].text).toContain(existingId);
   });
 
-  it('returns isError when memory not found', async () => {
+  it('returns canonical not_found entries for missing archive ids and fetches rows once per batch', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
@@ -1380,15 +1380,29 @@ describe('archive_memory', () => {
       from: vi.fn().mockReturnValue(selectChain),
     });
 
-    const result = await getHandler('archive_memory')({ memory_id: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff' }) as {
+    const result = await getHandler('archive_memory')({
+      memory_ids: [
+        'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
+        'bbbbcccc-dddd-eeee-ffff-000000000000',
+      ],
+    }) as {
       isError?: boolean;
       content: Array<{ text: string }>;
     };
     expect(result.isError).toBeUndefined();
-    expect(JSON.parse(result.content[0].text)).toMatchObject({
-      error: 'not_found',
-      identifier: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
-    });
+    expect(selectChain.select).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(result.content[0].text)).toEqual([
+      {
+        error: 'not_found',
+        message: "No memory matches identifier 'aaaabbbb-cccc-dddd-eeee-ffffffffffff'",
+        identifier: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
+      },
+      {
+        error: 'not_found',
+        message: "No memory matches identifier 'bbbbcccc-dddd-eeee-ffff-000000000000'",
+        identifier: 'bbbbcccc-dddd-eeee-ffff-000000000000',
+      },
+    ]);
   });
 
   it('archives every version in a 3-version chain when called with the oldest id and returns latest id', async () => {
@@ -1478,6 +1492,7 @@ describe('archive_memory', () => {
       '22222222-2222-2222-2222-222222222222',
       '33333333-3333-3333-3333-333333333333',
     ]);
+    expect(selectChain.select).toHaveBeenCalledTimes(1);
     const payload = JSON.parse(result.content[0].text);
     expect(payload).toMatchObject({
       memory_id: '33333333-3333-3333-3333-333333333333',
