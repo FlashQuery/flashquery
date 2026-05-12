@@ -587,7 +587,11 @@ Other content`,
       from: vi.fn().mockReturnValue({
         update: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ error: null }),
+            eq: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'test-fqc-id' }, error: null }),
+              }),
+            }),
           }),
         }),
       }),
@@ -635,7 +639,11 @@ Other content`,
       from: vi.fn().mockReturnValue({
         update: vi.fn().mockReturnValue({
           eq: vi.fn().mockReturnValue({
-            eq: vi.fn().mockResolvedValue({ error: null }),
+            eq: vi.fn().mockReturnValue({
+              select: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'test-fqc-id' }, error: null }),
+              }),
+            }),
           }),
         }),
       }),
