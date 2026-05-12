@@ -184,6 +184,17 @@ describe('Phase 23 DDL updates', () => {
     expect(ddl).toContain("plugin_scope TEXT DEFAULT 'global'");
   });
 
+  it('adds Phase 125 memory lifecycle columns and backfills latest version chains', () => {
+    const ddl = buildSchemaDDL(1536);
+    expect(ddl).toContain('is_latest BOOLEAN DEFAULT true');
+    expect(ddl).toContain('archived_at TIMESTAMPTZ');
+    expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS is_latest BOOLEAN DEFAULT true');
+    expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ');
+    expect(ddl).toContain('UPDATE fqc_memory SET is_latest = true WHERE is_latest IS NULL');
+    expect(ddl).toContain('previous_version_id = parent.id');
+    expect(ddl).toContain('idx_fqc_memory_latest_status');
+  });
+
   it('idx_fqc_memory_project index is removed (PROJ-04)', () => {
     const ddl = buildSchemaDDL(1536);
     expect(ddl).not.toContain('idx_fqc_memory_project');

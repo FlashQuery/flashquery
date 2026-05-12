@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import {
   compareSchemaVersions,
   analyzeSchemaChanges,
+  MEMORY_ARCHIVED_AT_MIGRATION_SQL,
+  MEMORY_IS_LATEST_MIGRATION_SQL,
   type ParsedPluginSchema,
 } from '../../src/utils/schema-migration.js';
 
@@ -77,6 +79,17 @@ describe('compareSchemaVersions', () => {
     expect(compareSchemaVersions('10.10.10', '10.10.10')).toBe(0);
     expect(compareSchemaVersions('10.10.10', '10.10.11')).toBe(-1);
     expect(compareSchemaVersions('100.0.0', '99.9.9')).toBe(1);
+  });
+});
+
+describe('Phase 125 memory schema constants', () => {
+  it('exports stable memory lifecycle migration SQL snippets', () => {
+    expect(MEMORY_IS_LATEST_MIGRATION_SQL).toBe(
+      'ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS is_latest BOOLEAN DEFAULT true'
+    );
+    expect(MEMORY_ARCHIVED_AT_MIGRATION_SQL).toBe(
+      'ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ'
+    );
   });
 });
 

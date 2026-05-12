@@ -278,9 +278,23 @@ CREATE TABLE IF NOT EXISTS fqc_memory (
   status TEXT DEFAULT 'active',
   version INTEGER DEFAULT 1,
   previous_version_id UUID,
+  is_latest BOOLEAN DEFAULT true,
+  archived_at TIMESTAMPTZ,
   embedding vector(${dimensions}),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Phase 125: memory lifecycle visibility columns for final search/memory tools.
+ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS is_latest BOOLEAN DEFAULT true;
+ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+UPDATE fqc_memory SET is_latest = true WHERE is_latest IS NULL;
+UPDATE fqc_memory parent
+SET is_latest = false
+WHERE EXISTS (
+  SELECT 1
+  FROM fqc_memory child
+  WHERE child.previous_version_id = parent.id
 );
 
 -- Phase 23: Hard-delete unused columns from existing databases (v1.7 pre-release)
@@ -565,6 +579,7 @@ CREATE INDEX IF NOT EXISTS idx_fqc_purpose_templates_lookup
 CREATE INDEX IF NOT EXISTS idx_fqc_memory_embedding ON fqc_memory USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_fqc_memory_tags ON fqc_memory USING gin (tags);
 CREATE INDEX IF NOT EXISTS idx_fqc_memory_status ON fqc_memory (status);
+CREATE INDEX IF NOT EXISTS idx_fqc_memory_latest_status ON fqc_memory (instance_id, status, is_latest);
 CREATE INDEX IF NOT EXISTS idx_fqc_vault_instance ON fqc_vault (instance_id);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_embedding ON fqc_documents USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_instance ON fqc_documents (instance_id);

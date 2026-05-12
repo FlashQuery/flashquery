@@ -10,6 +10,12 @@ import type { ParsedPluginSchema, PluginTableSpec, PluginColumnSpec } from '../p
 export const DOCUMENT_ARCHIVED_AT_MIGRATION_SQL =
   'ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ';
 
+export const MEMORY_IS_LATEST_MIGRATION_SQL =
+  'ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS is_latest BOOLEAN DEFAULT true';
+
+export const MEMORY_ARCHIVED_AT_MIGRATION_SQL =
+  'ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ';
+
 /**
  * Represents a single schema change (addition, removal, or modification).
  * Used in migration analysis to categorize changes as safe or unsafe.
