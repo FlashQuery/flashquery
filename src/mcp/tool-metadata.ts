@@ -295,6 +295,7 @@ export function getToolNamesByTier(tier: ToolTierSelector): string[] {
   return CURRENT_DELEGATED_TIER_ORDER
     .map((name) => getToolMetadata(name))
     .filter((entry): entry is ToolMetadata => entry !== undefined)
+    .filter((entry) => entry.status !== 'removed')
     .filter((entry) => entry.delegatedEligible)
     .filter((entry) => entry.tier === 'read-only' || targetTier === 'read-write' && entry.tier === 'read-write')
     .map((entry) => entry.name);
@@ -372,7 +373,11 @@ function filterAvailable(names: string[], options: ExpandToolSelectorsOptions): 
 }
 
 function isAvailable(entry: ToolMetadata, options: ExpandToolSelectorsOptions): boolean {
-  if (options.includeUnavailable !== true && entry.status === 'dead') return false;
+  if (
+    options.includeUnavailable !== true &&
+    entry.status !== 'final' &&
+    entry.status !== 'transitional'
+  ) return false;
   if (options.hostEligible !== undefined && entry.hostEligible !== options.hostEligible) return false;
   if (options.delegatedEligible !== undefined && entry.delegatedEligible !== options.delegatedEligible) return false;
   return true;
@@ -391,7 +396,10 @@ function current(
     categories,
     tier,
     hostEligible: true,
-    delegatedEligible: hardExcludedReason === undefined && CURRENT_DELEGATED_TIER_TOOLS.has(name),
+    delegatedEligible:
+      hardExcludedReason === undefined &&
+      CURRENT_DELEGATED_TIER_TOOLS.has(name) &&
+      currentToolStatus(name) !== 'removed',
     ...(hardExcludedReason === undefined ? {} : { delegatedHardExcludedReason: hardExcludedReason }),
     ...(legacyReplacement(name) === undefined ? {} : { replacement: legacyReplacement(name) }),
     description: toolDescription,

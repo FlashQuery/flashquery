@@ -5,7 +5,8 @@
  * Handler is exercised via the registerFileTools factory — same pattern as
  * files-tools.test.ts (callCreateDirectory / callListVault).
  *
- * remove_directory is the THIRD tool registered by registerFileTools (handlers[2]).
+ * remove_directory is captured by registered tool name so final tool insertions
+ * do not break this legacy handler coverage.
  */
 
 import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
@@ -139,11 +140,8 @@ function makeConfig(vaultPath = '/vault', lockingEnabled = false) {
 }
 
 /**
- * Invoke remove_directory by capturing handlers[2] registered via registerFileTools.
- * Registration order in registerFileTools:
- *   handlers[0] — create_directory
- *   handlers[1] — list_vault
- *   handlers[2] — remove_directory
+ * Invoke remove_directory by capturing the named handler registered via
+ * registerFileTools.
  */
 async function callRemoveDirectory(
   dirPath: string,
@@ -152,25 +150,24 @@ async function callRemoveDirectory(
 ): Promise<ToolResult> {
   const { registerFileTools } = await import('../../src/mcp/tools/files.js');
 
-  const handlers: Array<(args: Record<string, unknown>) => Promise<ToolResult>> = [];
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<ToolResult>>();
   const mockServer = {
     registerTool: vi.fn(
       (
-        _name: string,
+        name: string,
         _config: unknown,
         handler: (args: Record<string, unknown>) => Promise<ToolResult>
       ) => {
-        handlers.push(handler);
+        handlers.set(name, handler);
       }
     ),
   } as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer;
 
   registerFileTools(mockServer, makeConfig(vaultPath, lockingEnabled));
 
-  // remove_directory is registered third (handlers[2])
-  const removeDirHandler = handlers[2];
+  const removeDirHandler = handlers.get('remove_directory');
   if (!removeDirHandler) {
-    throw new Error('remove_directory handler not registered (expected handlers[2])');
+    throw new Error('remove_directory handler not registered');
   }
 
   return removeDirHandler({ path: dirPath });

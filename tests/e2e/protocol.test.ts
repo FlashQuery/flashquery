@@ -95,11 +95,6 @@ function getText(result: { content: Array<{ type: string; text: string }>; isErr
   return first.text;
 }
 
-function extractField(text: string, field: string): string {
-  const match = text.match(new RegExp(`^${field}:\\s*(.+)$`, 'm'));
-  return match?.[1]?.trim() ?? '';
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests — run sequentially (shared subprocess state)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,17 +107,15 @@ describe.sequential('MCP protocol E2E', () => {
     const { tools } = await client.listTools();
 
     const expectedTools = [
-      'save_memory',
-      'search_memory',
-      'list_memories',
       'get_memory',
       'write_memory',
       'archive_memory',
-      'create_document',
       'get_document',
-      'search_documents',
-      'search_all',
       'search',
+      'write_document',
+      'copy_document',
+      'move_document',
+      'archive_document',
       'write_record',
       'remove_document',
       'manage_directory',
@@ -143,6 +136,12 @@ describe.sequential('MCP protocol E2E', () => {
     expect(toolNames).not.toContain('remove_directory');
     expect(toolNames).not.toContain('force_file_scan');
     expect(toolNames).not.toContain('reconcile_documents');
+    expect(toolNames).not.toContain('save_memory');
+    expect(toolNames).not.toContain('search_memory');
+    expect(toolNames).not.toContain('list_memories');
+    expect(toolNames).not.toContain('create_document');
+    expect(toolNames).not.toContain('search_documents');
+    expect(toolNames).not.toContain('search_all');
   }, 30000);
 
   it('listTools reflects host_mcp_tools filtered registration', async () => {
@@ -160,12 +159,13 @@ describe.sequential('MCP protocol E2E', () => {
       expect(toolNames).toEqual(expect.arrayContaining([
         'get_document',
         'list_vault',
-        'search_documents',
-        'search_all',
         'search',
         'call_model',
+        'get_llm_usage',
       ]));
       expect(toolNames).not.toContain('save_memory');
+      expect(toolNames).not.toContain('search_documents');
+      expect(toolNames).not.toContain('search_all');
       expect(toolNames).not.toContain('create_document');
       expect(toolNames).not.toContain('archive_document');
       expect(toolNames).not.toContain('force_file_scan');
@@ -177,13 +177,14 @@ describe.sequential('MCP protocol E2E', () => {
     }
   }, 30000);
 
-  // ── T-02: save_memory + search_memory round-trip ──────────────────────────
+  // ── T-02: write_memory + search round-trip ────────────────────────────────
 
-  it('save_memory stores a memory and search_memory retrieves it', async () => {
+  it('write_memory stores a memory and search retrieves it', async () => {
     // Save
     const saveResult = await client.callTool({
-      name: 'save_memory',
+      name: 'write_memory',
       arguments: {
+        mode: 'create',
         content: 'The capital of France is Paris',
         tags: ['geography', 'e2e-france'],
       },
@@ -191,19 +192,22 @@ describe.sequential('MCP protocol E2E', () => {
 
     expect(saveResult.isError).toBeFalsy();
     const saveText = getText(saveResult);
-    expect(saveText).toMatch(/Memory saved/i);
+    const saved = JSON.parse(saveText);
+    expect(saved).toMatchObject({ memory_id: expect.any(String), is_latest: true });
 
-    // Use list_memories with tag filter (more reliable than semantic search without embedding)
+    // Use search with tag filter (more reliable than semantic search without embedding)
     const listResult = await client.callTool({
-      name: 'list_memories',
+      name: 'search',
       arguments: {
+        query: '',
+        entity_types: ['memories'],
         tags: ['e2e-france'],
       },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(listResult.isError).toBeFalsy();
-    const listText = getText(listResult);
-    expect(listText).toContain('Paris');
+    const listPayload = JSON.parse(getText(listResult));
+    expect(JSON.stringify(listPayload.results)).toContain('Paris');
   }, 30000);
 
   it('write_memory, search, get_memory, and archive_memory round-trip with JSON envelopes', async () => {
@@ -453,16 +457,18 @@ describe.sequential('MCP protocol E2E', () => {
     });
   }, 30000);
 
-  // ── T-03: create_document + get_document round-trip ───────────────────────
+  // ── T-03: write_document + get_document round-trip ────────────────────────
 
   let createdDocPath: string;
   let createdDocFqId: string;
 
-  it('create_document writes a file and get_document reads it back', async () => {
+  it('write_document writes a file and get_document reads it back', async () => {
     // Create
     const createResult = await client.callTool({
-      name: 'create_document',
+      name: 'write_document',
       arguments: {
+        mode: 'create',
+        path: 'e2e-json/e2e-test-document.md',
         title: 'E2E Test Document',
         content: 'This is an E2E test.',
         tags: ['e2e-test'],
@@ -470,19 +476,13 @@ describe.sequential('MCP protocol E2E', () => {
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(createResult.isError).toBeFalsy();
-    const createText = getText(createResult);
-    // v2.5 response format uses key-value pairs
-    expect(createText).toMatch(/Title:|Path:|FQC ID:/);
-
-    // Extract vault-relative path from "Path: <path>" line (v2.5 format)
-    const match = createText.match(/^Path:\s*(.+)$/m);
-    if (!match || !match[1]) {
-      throw new Error(
-        `Expected "Path: <path>" in response, got: ${createText}`
-      );
-    }
-    createdDocPath = match[1].trim();
-    expect(createdDocPath).toMatch(/\.md$/);
+    const created = JSON.parse(getText(createResult));
+    expect(created).toMatchObject({
+      path: 'e2e-json/e2e-test-document.md',
+      fq_id: expect.any(String),
+      mode: 'create',
+    });
+    createdDocPath = created.path;
 
     // Get the document back
     const getResult = await client.callTool({
@@ -688,17 +688,19 @@ describe.sequential('MCP protocol E2E', () => {
 
   it('archive_document returns JSON identification and batch partial errors over the MCP protocol', async () => {
     const createResult = await client.callTool({
-      name: 'create_document',
+      name: 'write_document',
       arguments: {
+        mode: 'create',
+        path: 'e2e-json/archive-document.md',
         title: 'E2E Archive Document',
         content: 'E2E archive body.',
-        path: 'e2e-json/archive-document.md',
         tags: ['e2e-json'],
       },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
     expect(createResult.isError).toBeFalsy();
-    const archivePath = extractField(getText(createResult), 'Path');
-    const archiveFqId = extractField(getText(createResult), 'FQC ID');
+    const archiveCreated = JSON.parse(getText(createResult));
+    const archivePath = archiveCreated.path;
+    const archiveFqId = archiveCreated.fq_id;
 
     const singleArchive = await client.callTool({
       name: 'archive_document',
@@ -984,24 +986,27 @@ describe.sequential('MCP protocol E2E', () => {
   it('multi-memory search returns TypeScript memories before French cuisine', async () => {
     // Save 3 memories covering distinct topics
     await client.callTool({
-      name: 'save_memory',
+      name: 'write_memory',
       arguments: {
+        mode: 'create',
         content: 'TypeScript generics enable type-safe reusable functions and classes',
         tags: ['typescript', 'e2e-ts-multi'],
       },
     });
 
     await client.callTool({
-      name: 'save_memory',
+      name: 'write_memory',
       arguments: {
+        mode: 'create',
         content: 'French cuisine is famous for croissants, baguettes, and coq au vin',
         tags: ['food', 'france', 'e2e-ts-multi'],
       },
     });
 
     await client.callTool({
-      name: 'save_memory',
+      name: 'write_memory',
       arguments: {
+        mode: 'create',
         content: 'TypeScript async/await patterns simplify Promise-based code in Node.js',
         tags: ['typescript', 'nodejs', 'e2e-ts-multi'],
       },
@@ -1009,15 +1014,17 @@ describe.sequential('MCP protocol E2E', () => {
 
     // Use tag-based search to find TypeScript memories with the multi tag
     const result = await client.callTool({
-      name: 'list_memories',
+      name: 'search',
       arguments: {
+        query: '',
+        entity_types: ['memories'],
         tags: ['typescript', 'e2e-ts-multi'],
         tag_match: 'all',
       },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBeFalsy();
-    const text = getText(result);
+    const text = JSON.stringify(JSON.parse(getText(result)).results);
 
     // Both TypeScript memories should appear when filtering by typescript tag
     expect(text).toContain('TypeScript');
@@ -1025,27 +1032,29 @@ describe.sequential('MCP protocol E2E', () => {
     expect(text).not.toContain('croissants');
   }, 30000);
 
-  // ── T-09: list_memories basic round-trip ─────────────────────────────────
+  // ── T-09: memory search basic round-trip ─────────────────────────────────
 
-  it('list_memories returns memories saved in earlier tests', async () => {
+  it('search returns memories saved in earlier tests', async () => {
     const result = await client.callTool({
-      name: 'list_memories',
-      arguments: {},
+      name: 'search',
+      arguments: { query: '', entity_types: ['memories'], tags: ['e2e-france'] },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBeFalsy();
-    const text = getText(result);
+    const text = JSON.stringify(JSON.parse(getText(result)).results);
     // T-02 saved a memory about France/Paris — it must appear in the listing
     expect(text).toContain('Paris');
   }, 30000);
 
-  // ── T-10: search_documents by project filter ──────────────────────────────
+  // ── T-10: document search by tag filter ───────────────────────────────────
 
-  it('search_documents returns only documents from the specified project', async () => {
+  it('search returns only documents from the specified tag', async () => {
     // Create a document with a unique tag to distinguish it
     const createResult = await client.callTool({
-      name: 'create_document',
+      name: 'write_document',
       arguments: {
+        mode: 'create',
+        path: 'e2e-json/alt-project-document.md',
         title: 'Alt Project Document',
         content: 'This document belongs to the alternate project.',
         tags: ['alt-project-test'],
@@ -1056,25 +1065,27 @@ describe.sequential('MCP protocol E2E', () => {
 
     // Search for documents with e2e-test tag using filesystem mode (no embedding needed)
     const searchResult = await client.callTool({
-      name: 'search_documents',
-      arguments: { tags: ['e2e-test'], mode: 'filesystem' },
+      name: 'search',
+      arguments: { query: '', tags: ['e2e-test'], mode: 'filesystem', entity_types: ['documents'] },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(searchResult.isError).toBeFalsy();
-    const text = getText(searchResult);
+    const text = JSON.stringify(JSON.parse(getText(searchResult)).results);
     // T-03 created "E2E Test Document" with e2e-test tag — should appear
     expect(text).toContain('E2E Test Document');
     // Alt Project Document has alt-project-test tag, not e2e-test — should not appear
     expect(text).not.toContain('Alt Project Document');
   }, 30000);
 
-  // ── T-11: search_documents by tag filter ──────────────────────────────────
+  // ── T-11: search by tag filter ────────────────────────────────────────────
 
-  it('search_documents returns only documents matching the specified tag', async () => {
+  it('search returns only documents matching the specified tag', async () => {
     // Create a document with a unique tag
     await client.callTool({
-      name: 'create_document',
+      name: 'write_document',
       arguments: {
+        mode: 'create',
+        path: 'e2e-json/tagged-filter-document.md',
         title: 'Tagged Filter Document',
         content: 'This document has a unique tag for filter testing.',
         tags: ['e2e-tag-filter'],
@@ -1083,24 +1094,25 @@ describe.sequential('MCP protocol E2E', () => {
 
     // Search by the unique tag using filesystem mode
     const result = await client.callTool({
-      name: 'search_documents',
-      arguments: { tags: ['e2e-tag-filter'], mode: 'filesystem' },
+      name: 'search',
+      arguments: { query: '', tags: ['e2e-tag-filter'], mode: 'filesystem', entity_types: ['documents'] },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBeFalsy();
-    const text = getText(result);
+    const text = JSON.stringify(JSON.parse(getText(result)).results);
     expect(text).toContain('Tagged Filter Document');
     // Documents without e2e-tag-filter tag should not appear
     expect(text).not.toContain('Alt Project Document');
   }, 30000);
 
-  // ── T-12: search_memory with project filter ───────────────────────────────
+  // ── T-12: memory search with tag filter ───────────────────────────────────
 
-  it('search_memory scopes results to the specified project', async () => {
+  it('search scopes memory results to the specified tag', async () => {
     // Save a geography memory with unique tags
     await client.callTool({
-      name: 'save_memory',
+      name: 'write_memory',
       arguments: {
+        mode: 'create',
         content: 'The Eiffel Tower is a landmark in Paris, France',
         tags: ['landmark-unique-eiffel'],
       },
@@ -1108,70 +1120,72 @@ describe.sequential('MCP protocol E2E', () => {
 
     // List memories with typescript tag (no semantic search needed)
     const result = await client.callTool({
-      name: 'list_memories',
+      name: 'search',
       arguments: {
+        query: '',
+        entity_types: ['memories'],
         tags: ['typescript'],
       },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBeFalsy();
-    const text = getText(result);
+    const text = JSON.stringify(JSON.parse(getText(result)).results);
     // Should find TypeScript memories with the typescript tag
     expect(text).toContain('TypeScript');
     // Should not find Eiffel Tower (different tag)
     expect(text).not.toContain('Eiffel Tower');
   }, 30000);
 
-  // ── T-14: list_memories with project filter ───────────────────────────────
+  // ── T-14: search memories with tag filter ─────────────────────────────────
 
-  it('list_memories scopes results to the specified project', async () => {
+  it('search scopes results to the specified memory tag', async () => {
     const result = await client.callTool({
-      name: 'list_memories',
-      arguments: { tags: ['geography'] },
+      name: 'search',
+      arguments: { query: '', entity_types: ['memories'], tags: ['geography'] },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBeFalsy();
-    const text = getText(result);
+    const text = JSON.stringify(JSON.parse(getText(result)).results);
     // Should list memories with geography tag (from T-02: Paris memory)
     expect(text).toContain('Paris');
   }, 30000);
 
-  // ── T-15: search_memory with no matching results ──────────────────────────
+  // ── T-15: memory search with no matching results ──────────────────────────
 
-  it('search_memory returns a graceful response when no results match', async () => {
+  it('search returns a graceful response when no memory results match', async () => {
     // Search for a non-existent tag
     const result = await client.callTool({
-      name: 'list_memories',
+      name: 'search',
       arguments: {
+        query: '',
+        entity_types: ['memories'],
         tags: ['nonexistent-tag-xyz'],
       },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     // Should not be an error — empty results are not failures
     expect(result.isError).toBeFalsy();
-    const text = getText(result);
-    expect(typeof text).toBe('string');
-    expect(text.length).toBeGreaterThan(0);
-    // Should indicate no results found gracefully
-    const lc = text.toLowerCase();
-    expect(lc.includes('no') || lc.includes('empty') || lc.includes('found')).toBe(true);
+    const payload = JSON.parse(getText(result));
+    expect(payload.results).toEqual([]);
   }, 30000);
 
-  // ── T-16: save_memory without project uses config default ─────────────────
+  // ── T-16: write_memory without include returns JSON identity ──────────────
 
-  it('save_memory uses config defaults.project when project param is omitted', async () => {
+  it('write_memory creates a memory with global defaults', async () => {
     const result = await client.callTool({
-      name: 'save_memory',
+      name: 'write_memory',
       arguments: {
-        content: 'Testing default project fallback behavior in save_memory',
+        mode: 'create',
+        content: 'Testing default scope behavior in write_memory',
       },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBeFalsy();
-    const text = getText(result);
-    // In v2.5, memories use global scope by default (no project concept)
-    expect(text).toMatch(/Memory saved/i);
-    expect(text).toMatch(/Scope: Global/i);
+    const payload = JSON.parse(getText(result));
+    expect(payload).toMatchObject({
+      memory_id: expect.any(String),
+      is_latest: true,
+    });
   }, 30000);
 
 });

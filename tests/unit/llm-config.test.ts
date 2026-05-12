@@ -250,7 +250,7 @@ llm:
     }
   });
 
-  it('accepts removed-status purpose tools while they are still registered on the host surface', () => {
+  it('rejects removed-status purpose tools after their final replacements are registered', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 templates:
@@ -278,14 +278,13 @@ llm:
 `;
     writeFileSync(tmpFile, yaml);
     try {
-      const config = loadConfig(tmpFile);
-      expect(config.llm?.purposes[0].tools).toEqual(['search_documents']);
+      expect(() => loadConfig(tmpFile)).toThrow(/unknown native tool 'search_documents'/);
     } finally {
       unlinkSync(tmpFile);
     }
   });
 
-  it('keeps removed-status purpose tool names valid until their replacement tools are registered', () => {
+  it('rejects removed-status purpose tool names while keeping migration metadata available', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-legacy-tools-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 templates:
@@ -312,9 +311,9 @@ llm:
 `;
     writeFileSync(tmpFile, yaml);
     try {
-      const config = loadConfig(tmpFile);
-      expect(config.llm?.purposes[0].tools).toEqual(['search_documents', 'save_memory', 'force_file_scan']);
-      expect(config.llm?.purposes[0].excludedTools).toEqual(['create_document']);
+      expect(() => loadConfig(tmpFile)).toThrow(/unknown native tool 'search_documents'/);
+      expect(() => loadConfig(tmpFile)).toThrow(/unknown native tool 'save_memory'/);
+      expect(() => loadConfig(tmpFile)).toThrow(/unknown native tool 'create_document'/);
     } finally {
       unlinkSync(tmpFile);
     }

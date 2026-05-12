@@ -149,5 +149,5 @@ function expandHostSelector(selector: string): string[] {
 
 function isCurrentHostSelectable(metadata: ToolMetadata): boolean {
   if (PHASE_127_LOCALLY_REPLACED_TOOLS.has(metadata.name)) return false;
-  return metadata.hostEligible && metadata.status !== 'dead';
+  return metadata.hostEligible && (metadata.status === 'final' || metadata.status === 'transitional');
 }

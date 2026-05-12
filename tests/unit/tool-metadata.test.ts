@@ -106,41 +106,34 @@ describe('tool metadata registry', () => {
 
   it('expands delegated tiers from metadata', () => {
     expect(getToolNamesByTier('tier:read-only')).toEqual([
-      'search_documents',
       'get_document',
-      'search_memory',
       'get_memory',
-      'list_memories',
       'search_records',
       'get_record',
-      'search_all',
       'get_briefing',
     ]);
     expect(getToolNamesByTier('tier:read-write')).toEqual(expect.arrayContaining([
-      'create_document',
-      'update_document',
-      'append_to_doc',
       'move_document',
-      'save_memory',
-      'update_memory',
-      'create_record',
-      'update_record',
+      'write_document',
+      'write_record',
       'apply_tags',
       'archive_document',
+      'remove_document',
       'archive_memory',
       'archive_record',
-      'create_directory',
-      'remove_directory',
+      'manage_directory',
       'insert_doc_link',
     ]));
+    expect(getToolNamesByTier('tier:read-write')).not.toContain('create_document');
   });
 
   it('applies additive doc-write category expansion', () => {
     const expanded = expandToolSelectors(['category:doc-write'], { hostEligible: true });
 
     expect(expanded).toContain('get_document');
-    expect(expanded).toContain('create_document');
+    expect(expanded).toContain('write_document');
     expect(expanded).toContain('archive_document');
+    expect(expanded).not.toContain('create_document');
   });
 
   it('keeps directory tools out of the system category', () => {
@@ -150,7 +143,9 @@ describe('tool metadata registry', () => {
 
     const systemTools = expandToolSelectors(['category:system'], { hostEligible: true });
 
-    expect(systemTools).toEqual(expect.arrayContaining(['force_file_scan', 'reconcile_documents']));
+    expect(systemTools).toEqual(['maintain_vault']);
+    expect(systemTools).not.toContain('force_file_scan');
+    expect(systemTools).not.toContain('reconcile_documents');
     expect(systemTools).not.toContain('create_directory');
     expect(systemTools).not.toContain('remove_directory');
     expect(systemTools).not.toContain('manage_directory');

@@ -170,9 +170,10 @@ trash_folder:
 
     expect(getResolvedHostToolExposure(config).hostEnabledToolNames).toEqual(expect.arrayContaining([
       'get_document',
-      'save_memory',
+      'write_memory',
       'call_model',
     ]));
+    expect(getResolvedHostToolExposure(config).hostEnabledToolNames).not.toContain('save_memory');
     expect(getDeprecationWarnings(config)).toEqual(expect.any(Array));
     expect(getStartupWarnings(config)).toEqual(expect.any(Array));
     expect(getDeprecationWarnings(config).some((warning) => warning.startsWith('host_mcp_tools:'))).toBe(false);

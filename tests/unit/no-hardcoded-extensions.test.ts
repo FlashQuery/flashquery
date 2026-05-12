@@ -40,6 +40,7 @@ const MANAGED_FRONTMATTER_LITERAL_ALLOWLIST = new Set([
   'tests/integration/compound-tools.integration.test.ts',
   'tests/integration/e2e-workflows.test.ts',
   'tests/integration/frontmatter-ordering.integration.test.ts',
+  'tests/integration/maintain-vault.integration.test.ts',
   'tests/integration/plugin-reconciliation.integration.test.ts',
   'tests/integration/reference-resolver.integration.test.ts',
   'tests/integration/scan-command.integration.test.ts',

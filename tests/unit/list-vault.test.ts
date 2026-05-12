@@ -73,17 +73,17 @@ function makeConfig(vaultPath = '/vault') {
 
 async function callListVault(params: Record<string, unknown>): Promise<ToolResult> {
   const { registerFileTools } = await import('../../src/mcp/tools/files.js');
-  const handlers: Array<(args: Record<string, unknown>) => Promise<ToolResult>> = [];
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<ToolResult>>();
   const mockServer = {
     registerTool: vi.fn(
-      (_name: string, _config: unknown, handler: (args: Record<string, unknown>) => Promise<ToolResult>) => {
-        handlers.push(handler);
+      (name: string, _config: unknown, handler: (args: Record<string, unknown>) => Promise<ToolResult>) => {
+        handlers.set(name, handler);
       }
     ),
   } as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer;
 
   registerFileTools(mockServer, makeConfig());
-  const listVaultHandler = handlers[1];
+  const listVaultHandler = handlers.get('list_vault');
   if (!listVaultHandler) throw new Error('list_vault handler not registered');
   return listVaultHandler(params);
 }

@@ -24,34 +24,23 @@ import { registerLlmUsageTools } from '../../src/mcp/tools/llm-usage.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const READ_ONLY_TOOLS = [
-  'search_documents',
   'get_document',
-  'search_memory',
   'get_memory',
-  'list_memories',
   'search_records',
   'get_record',
-  'search_all',
   'get_briefing',
 ];
 
 const READ_WRITE_EXTRA_TOOLS = [
   'write_document',
-  'create_document',
-  'update_document',
-  'append_to_doc',
   'move_document',
-  'save_memory',
-  'update_memory',
-  'create_record',
   'write_record',
-  'update_record',
   'apply_tags',
   'archive_document',
+  'remove_document',
   'archive_memory',
   'archive_record',
-  'create_directory',
-  'remove_directory',
+  'manage_directory',
   'insert_doc_link',
 ];
 
@@ -258,7 +247,7 @@ describe('assembleNativeToolRegistry', () => {
     const hostFilteredCatalog = CATALOG.filter((tool) => ['get_document', 'list_vault', 'search_documents'].includes(tool.name));
     const result = assembleNativeToolRegistry(makeConfig(['tier:read-only']), 'research', hostFilteredCatalog);
 
-    expect(result.nativeToolNames).toEqual(['search_documents', 'get_document']);
+    expect(result.nativeToolNames).toEqual(['get_document']);
     expect(result.nativeToolNames).not.toContain('search_memory');
     expect(result.nativeToolNames).not.toContain('get_memory');
     expect(result.nativeToolNames).not.toContain('list_memories');
@@ -320,15 +309,12 @@ describe('assembleNativeToolRegistry', () => {
     );
 
     expect(result.nativeToolNames).toEqual([
-      'search_documents',
       'get_document',
-      'search_memory',
-      'list_memories',
       'search_records',
       'get_record',
       'get_briefing',
     ]);
-    expect(result.diagnostics.excluded).toEqual(['get_memory', 'search_all', 'custom_native_tool']);
+    expect(result.diagnostics.excluded).toEqual(['get_memory', 'custom_native_tool']);
   });
 
   it('removes hard-excluded native tools and reports exact diagnostics', () => {
@@ -369,7 +355,7 @@ describe('assembleNativeToolRegistry', () => {
 
   it('returns an exact empty result when all requested tools are excluded', () => {
     const result = assembleNativeToolRegistry(
-      makeConfig(['search_documents', 'get_document'], ['search_documents', 'get_document']),
+      makeConfig(['get_document'], ['get_document']),
       'research',
       CATALOG
     );
@@ -379,8 +365,8 @@ describe('assembleNativeToolRegistry', () => {
       providerTools: undefined,
       diagnostics: {
         expandedTiers: [],
-        explicitTools: ['search_documents', 'get_document'],
-        excluded: ['search_documents', 'get_document'],
+        explicitTools: ['get_document'],
+        excluded: ['get_document'],
         hardExcluded: [],
         unknown: [],
       },

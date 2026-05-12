@@ -12,16 +12,15 @@ describe('host MCP tool exposure', () => {
 
     expect(resolved.hostEnabledToolNames).toEqual(
       listToolMetadata({ hostEligible: true })
-        .filter((entry) => entry.status !== 'dead')
+        .filter((entry) => entry.status === 'final' || entry.status === 'transitional')
         .map((entry) => entry.name)
     );
     expect(resolved.hostEnabledToolNames).toEqual(expect.arrayContaining([
       'get_document',
-      'save_memory',
       'search',
       'call_model',
-      'create_document',
       'write_document',
+      'manage_directory',
     ]));
   });
 
@@ -38,14 +37,16 @@ describe('host MCP tool exposure', () => {
     expect(docWrite).toEqual(expect.arrayContaining([
       'get_document',
       'list_vault',
-      'create_document',
       'write_document',
       'archive_document',
+      'remove_document',
+      'manage_directory',
       'insert_in_doc',
       'replace_doc_section',
     ]));
     expect(docRead).toEqual(expect.arrayContaining(['get_document', 'list_vault']));
     expect(docRead).not.toContain('create_document');
+    expect(docRead).not.toContain('manage_directory');
   });
 
   it('applies excluded_tools as the final deny layer', () => {
@@ -55,7 +56,8 @@ describe('host MCP tool exposure', () => {
     });
 
     expect(resolved.hostEnabledToolNames).not.toContain('get_document');
-    expect(resolved.hostEnabledToolNames).toContain('create_document');
+    expect(resolved.hostEnabledToolNames).toContain('write_document');
+    expect(resolved.hostEnabledToolNames).toContain('manage_directory');
   });
 
   it('expands host tiers from host-eligible metadata instead of delegated tier policy', () => {
@@ -67,7 +69,8 @@ describe('host MCP tool exposure', () => {
     expect(readOnly).toContain('get_llm_usage');
     expect(readOnly).not.toContain('create_document');
     expect(readWrite).toContain('list_vault');
-    expect(readWrite).toContain('create_document');
+    expect(readWrite).toContain('write_document');
+    expect(readWrite).toContain('manage_directory');
   });
 
 
@@ -76,7 +79,8 @@ describe('host MCP tool exposure', () => {
     expect(validateToolSelectors(['not_a_tool'])).toEqual(["unknown tool selector 'not_a_tool'"]);
     expect(validateToolSelectors(['write_document'])).toEqual([]);
     expect(validateToolSelectors(['list_projects'])).toEqual(["tool 'list_projects' is not available for host MCP exposure"]);
-    expect(validateToolSelectors(['create_document'])).toEqual([]);
+    expect(validateToolSelectors(['create_document'])).toEqual(["tool 'create_document' is not available for host MCP exposure"]);
+    expect(validateToolSelectors(['manage_directory'])).toEqual([]);
   });
 
   it('emits stable warning prefixes for suspicious category combinations', () => {
