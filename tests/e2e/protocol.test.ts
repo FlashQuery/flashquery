@@ -386,14 +386,19 @@ describe.sequential('MCP protocol E2E', () => {
       },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
     expect(archiveResult.isError).toBeFalsy();
-    expect(JSON.parse(getText(archiveResult))).toEqual([
+    // The fixture `contacts` table has no `archived_at` column, so the success element
+    // carries the warning and omits `archived_at`/`status` (Phase 126 Gap 6).
+    const archivePayload = JSON.parse(getText(archiveResult)) as Array<Record<string, unknown>>;
+    expect(archivePayload).toEqual([
       expect.objectContaining({
         id: created.id,
         plugin_id: WRITE_RECORD_PLUGIN_ID,
         table: 'contacts',
-        status: 'archived',
+        warnings: ['archived_at_unavailable'],
       }),
     ]);
+    expect(archivePayload[0]).not.toHaveProperty('status');
+    expect(archivePayload[0]).not.toHaveProperty('archived_at');
 
     const postArchiveSearch = await client.callTool({
       name: 'search_records',

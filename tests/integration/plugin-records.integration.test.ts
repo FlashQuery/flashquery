@@ -207,7 +207,16 @@ describe.skipIf(SKIP_DB)('Plugin System Integration', () => {
 
     if (result.isError) console.error('register_plugin error:', result.content[0].text);
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain('fqcp_crm_test_default_contacts');
+    // register_plugin returns a structured JSON identification envelope; it must not
+    // leak physical fqcp_* table names (Phase 126 Gap 3).
+    const registerPayload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(registerPayload).toMatchObject({
+      plugin_id: 'crm_test',
+      status: 'registered',
+      table_count: 1,
+      was_new: true,
+    });
+    expect(result.content[0].text).not.toContain('fqcp_');
 
     // Verify table was created in Postgres
     const tableResult = await pgClient.query(`
