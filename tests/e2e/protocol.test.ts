@@ -17,8 +17,10 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rm } from 'node:fs/promises';
+import pg from 'pg';
 import { startMcpServerFixture, stopMcpServerFixture } from '../helpers/mcp-server-fixture.js';
 import { cleanupTestRows, setupTestSupabase } from '../helpers/supabase.js';
+import { TEST_DATABASE_URL } from '../helpers/test-env.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -27,6 +29,8 @@ const HOST_FILTERED_FIXTURE_PATH = resolve(__dirname, '../fixtures/flashquery.e2
 const ENTRY_POINT = resolve(__dirname, '../../src/index.ts');
 const VAULT_E2E = resolve(__dirname, '../fixtures/vault-e2e');
 const E2E_INSTANCE_ID = 'e2e-shutdown-test';
+const WRITE_RECORD_PLUGIN_ID = 'e2e_write_record';
+const WRITE_RECORD_TABLE = `fqcp_${WRITE_RECORD_PLUGIN_ID}_default_contacts`;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared client — single FQC subprocess for all tests
@@ -37,6 +41,12 @@ let transport: StdioClientTransport;
 
 beforeAll(async () => {
   try {
+    if (TEST_DATABASE_URL) {
+      const pgClient = new pg.Client({ connectionString: TEST_DATABASE_URL });
+      await pgClient.connect();
+      await pgClient.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(WRITE_RECORD_TABLE)}`).catch(() => {});
+      await pgClient.end();
+    }
     await rm(VAULT_E2E, { recursive: true, force: true });
     await cleanupTestRows(await setupTestSupabase(), E2E_INSTANCE_ID);
     const fixture = await startMcpServerFixture();
@@ -56,6 +66,12 @@ afterAll(async () => {
   try {
     await rm(VAULT_E2E, { recursive: true, force: true });
     await cleanupTestRows(await setupTestSupabase(), E2E_INSTANCE_ID);
+    if (TEST_DATABASE_URL) {
+      const pgClient = new pg.Client({ connectionString: TEST_DATABASE_URL });
+      await pgClient.connect();
+      await pgClient.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(WRITE_RECORD_TABLE)}`).catch(() => {});
+      await pgClient.end();
+    }
   } catch (err) {
     console.warn(`Failed to clean up E2E test state for ${VAULT_E2E}:`, err);
     // Don't throw — cleanup failure shouldn't fail the test suite
@@ -107,6 +123,7 @@ describe.sequential('MCP protocol E2E', () => {
       'search_documents',
       'search_all',
       'search',
+      'write_record',
     ];
 
     // At least the core tools must be present (compound/plugin tools may also be registered)
@@ -252,6 +269,87 @@ describe.sequential('MCP protocol E2E', () => {
     expect(JSON.parse(getText(archiveResult))).toMatchObject({
       memory_id: updated.memory_id,
       archived_at: expect.any(String),
+    });
+  }, 30000);
+
+  it('write_record create/update round-trips with JSON envelopes', async () => {
+    const schema = [
+      'plugin:',
+      `  id: ${WRITE_RECORD_PLUGIN_ID}`,
+      '  name: E2E Write Record',
+      '  version: 1',
+      'tables:',
+      '  - name: contacts',
+      '    columns:',
+      '      - name: name',
+      '        type: text',
+      '        required: true',
+      '      - name: email',
+      '        type: text',
+    ].join('\n');
+
+    const registerResult = await client.callTool({
+      name: 'register_plugin',
+      arguments: { schema_yaml: schema },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(registerResult.isError).toBeFalsy();
+
+    const createResult = await client.callTool({
+      name: 'write_record',
+      arguments: {
+        mode: 'create',
+        plugin_id: WRITE_RECORD_PLUGIN_ID,
+        table: 'contacts',
+        data: { name: 'Protocol Ada', email: 'ada@example.test' },
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(createResult.isError).toBeFalsy();
+    const created = JSON.parse(getText(createResult));
+    expect(created).toMatchObject({
+      id: expect.any(String),
+      plugin_id: WRITE_RECORD_PLUGIN_ID,
+      table: 'contacts',
+      created_at: expect.any(String),
+      updated_at: expect.any(String),
+    });
+    expect(created.data).toBeUndefined();
+
+    const updateResult = await client.callTool({
+      name: 'write_record',
+      arguments: {
+        mode: 'update',
+        plugin_id: WRITE_RECORD_PLUGIN_ID,
+        table: 'contacts',
+        id: created.id,
+        data: { email: 'ada-protocol@example.test' },
+        include: ['data'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(updateResult.isError).toBeFalsy();
+    const updated = JSON.parse(getText(updateResult));
+    expect(updated).toMatchObject({
+      id: created.id,
+      plugin_id: WRITE_RECORD_PLUGIN_ID,
+      table: 'contacts',
+      data: {
+        name: 'Protocol Ada',
+        email: 'ada-protocol@example.test',
+      },
+    });
+
+    const invalidResult = await client.callTool({
+      name: 'write_record',
+      arguments: {
+        mode: 'create',
+        plugin_id: WRITE_RECORD_PLUGIN_ID,
+        table: 'contacts',
+        data: { email: 'missing-name@example.test' },
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(invalidResult.isError).toBe(false);
+    expect(JSON.parse(getText(invalidResult))).toMatchObject({
+      error: 'invalid_input',
+      details: { missing_fields: ['name'] },
     });
   }, 30000);
 

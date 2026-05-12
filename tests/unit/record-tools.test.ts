@@ -241,24 +241,123 @@ const TABLE_SPEC_NO_EMBED = {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tests: registerRecordTools registers 5 tools total
+// Tests: registerRecordTools registers 6 tools total
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('registerRecordTools', () => {
-  it('registers exactly 5 tools', () => {
+  it('registers exactly 6 tools including write_record', () => {
     const config = makeConfig();
     const { server } = createMockServer();
     registerRecordTools(server, config);
 
     const registerTool = vi.mocked(server.registerTool);
-    expect(registerTool).toHaveBeenCalledTimes(5);
+    expect(registerTool).toHaveBeenCalledTimes(6);
 
     const names = registerTool.mock.calls.map(call => call[0]);
+    expect(names).toContain('write_record');
     expect(names).toContain('create_record');
     expect(names).toContain('get_record');
     expect(names).toContain('update_record');
     expect(names).toContain('archive_record');
     expect(names).toContain('search_records');
+  });
+});
+
+describe('write_record', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPgClient.connect.mockResolvedValue(undefined);
+    mockPgClient.query.mockResolvedValue({ rows: [] });
+    mockPgClient.end.mockResolvedValue(undefined);
+  });
+
+  it('creates a record with identification-only JSON output by default', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+    makeSupabaseMock({
+      insertData: {
+        id: 'rec-1',
+        title: 'Task',
+        status: 'open',
+        created_at: '2026-05-12T00:00:00.000Z',
+        updated_at: '2026-05-12T00:00:00.000Z',
+      },
+    });
+
+    const result = await getHandler('write_record')({
+      mode: 'create',
+      plugin_id: 'crm',
+      table: 'tasks',
+      data: { title: 'Task' },
+    }) as { content: Array<{ text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0]?.text ?? '{}')).toEqual({
+      id: 'rec-1',
+      plugin_id: 'crm',
+      table: 'tasks',
+      created_at: '2026-05-12T00:00:00.000Z',
+      updated_at: '2026-05-12T00:00:00.000Z',
+    });
+  });
+
+  it('updates a record and includes data when requested', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+    makeSupabaseMock({
+      selectData: {
+        id: 'rec-1',
+        title: 'Renamed task',
+        created_at: '2026-05-12T00:00:00.000Z',
+        updated_at: '2026-05-12T01:00:00.000Z',
+      },
+    });
+
+    const result = await getHandler('write_record')({
+      mode: 'update',
+      plugin_id: 'crm',
+      table: 'tasks',
+      id: 'rec-1',
+      data: { title: 'Renamed task' },
+      include: ['data'],
+    }) as { content: Array<{ text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0]?.text ?? '{}')).toMatchObject({
+      id: 'rec-1',
+      plugin_id: 'crm',
+      table: 'tasks',
+      data: {
+        title: 'Renamed task',
+      },
+    });
+  });
+
+  it('returns expected invalid_input JSON before mutation', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+    const { mockInsert, mockUpdate } = makeSupabaseMock();
+
+    const result = await getHandler('write_record')({
+      mode: 'create',
+      plugin_id: 'crm',
+      table: 'tasks',
+      data: { id: 'rec-1', title: 'Task' },
+    }) as { content: Array<{ text: string }>; isError?: boolean };
+
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0]?.text ?? '{}')).toMatchObject({
+      error: 'invalid_input',
+      details: { field: 'id' },
+    });
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockUpdate).not.toHaveBeenCalled();
   });
 });
 

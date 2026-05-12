@@ -47,6 +47,7 @@ const CURRENT_DELEGATED_TIER_ORDER = [
   'save_memory',
   'update_memory',
   'create_record',
+  'write_record',
   'update_record',
   'apply_tags',
   'archive_document',
@@ -240,6 +241,7 @@ export const TOOL_METADATA = [
   current('unregister_plugin', ['plugin'], 'admin', D.unregisterPlugin, PLUGIN_ADMIN_REASON),
   current('get_plugin_info', ['plugin'], 'read-only', D.getPluginInfo, PLUGIN_ADMIN_REASON),
   current('create_record', ['plugin'], 'read-write', legacyDescription('create_record', 'write_record', 'Create a plugin-owned structured record.')),
+  current('write_record', ['plugin'], 'read-write', D.writeRecord),
   current('get_record', ['plugin'], 'read-only', legacyDescription('get_record', 'get_record', 'Retrieve one plugin-owned structured record.')),
   current('update_record', ['plugin'], 'read-write', legacyDescription('update_record', 'write_record', 'Update plugin-owned structured record fields.')),
   current('archive_record', ['plugin'], 'read-write', legacyDescription('archive_record', 'archive_record', 'Archive a plugin-owned structured record.')),
@@ -254,7 +256,6 @@ export const TOOL_METADATA = [
   current('create_directory', ['doc-write'], 'read-write', legacyDescription('create_directory', 'manage_directory', 'Create vault directories.')),
   current('remove_directory', ['doc-write'], 'read-write', legacyDescription('remove_directory', 'manage_directory', 'Remove empty vault directories.')),
 
-  future('write_record', ['plugin'], 'read-write', D.writeRecord),
   future('remove_document', ['doc-write'], 'read-write', D.removeDocument),
   future('manage_directory', ['doc-write'], 'read-write', D.manageDirectory),
   future('maintain_vault', ['system'], 'admin', D.maintainVault, SYSTEM_ADMIN_REASON),

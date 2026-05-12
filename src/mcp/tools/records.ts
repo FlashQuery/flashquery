@@ -15,6 +15,19 @@ import {
   executeReconciliationActions,
 } from '../../services/plugin-reconciliation.js';
 import type { ReconciliationActionSummary } from '../../services/plugin-reconciliation.js';
+import {
+  jsonExpectedError,
+  jsonRuntimeError,
+  jsonToolResult,
+} from '../utils/response-formats.js';
+import { validateWriteRecordInput } from '../utils/record-validation.js';
+import {
+  addPendingReviewPayload,
+  addReconciliationPayload,
+  buildRecordResult,
+  parseRecordInclude,
+  type RecordInclude,
+} from '../utils/record-output.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared helpers
@@ -104,11 +117,183 @@ async function queryPendingReview(
   return data ?? [];
 }
 
+function buildReconciliationPayload(summary: ReconciliationActionSummary): Record<string, unknown> | undefined {
+  const payload = {
+    auto_tracked: summary.autoTracked,
+    archived: summary.archived,
+    resurrected: summary.resurrected,
+    paths_updated: summary.pathsUpdated,
+    fields_synced: summary.fieldsSynced,
+    pending_reviews_created: summary.pendingReviewsCreated,
+    pending_reviews_cleared: summary.pendingReviewsCleared,
+  };
+  return Object.values(payload).some((value) => value > 0) ? payload : undefined;
+}
+
+function buildPendingReviewPayload(
+  pendingItems: Array<{ fqc_id: string; table_name: string; review_type: string; context: unknown }>
+): Record<string, unknown> | undefined {
+  if (pendingItems.length === 0) return undefined;
+  return {
+    count: pendingItems.length,
+    items: pendingItems.map((item) => ({
+      fqc_id: item.fqc_id,
+      table: item.table_name,
+      type: item.review_type,
+      context: item.context,
+    })),
+  };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // registerRecordTools — registers all 5 record CRUD MCP tools
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function registerRecordTools(server: McpServer, config: FlashQueryConfig): void {
+  // ─── Tool 0: write_record (REC-04, REC-05) ───────────────────────────────
+
+  server.registerTool(
+    'write_record',
+    {
+      description: 'Create or update one structured plugin record. Use this when a plugin table owns the data and you need schema-validated record writes rather than markdown document edits.',
+      inputSchema: {
+        mode: z.enum(['create', 'update']).describe('Write mode. Use "create" for a new record or "update" for an existing record.'),
+        plugin_id: z.string().describe('Plugin identifier'),
+        plugin_instance: z.string().optional().describe('Plugin instance identifier. Omit for single-instance plugins.'),
+        table: z.string().describe('Table name as defined in plugin schema'),
+        id: z.string().optional().describe('Record UUID. Required when mode is "update"; not allowed when mode is "create".'),
+        data: z.record(z.string(), z.unknown()).describe('Schema-validated record fields to create or update'),
+        include: z.array(z.enum(['data', 'schema_metadata'])).optional().describe('Optional payload sections. Defaults to identification-only for writes.'),
+      },
+    },
+    async ({ mode, plugin_id, plugin_instance, table, id, data, include }) => {
+      if (getIsShuttingDown()) {
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
+      }
+
+      if (config.locking.enabled) {
+        const locked = await acquireLock(
+          supabaseManager.getClient(),
+          config.instance.id,
+          'records',
+          { ttlSeconds: config.locking.ttlSeconds }
+        );
+        if (!locked) {
+          return jsonRuntimeError('Write lock timeout: another instance is writing to records. Retry in a few seconds.');
+        }
+      }
+
+      try {
+        const instanceName = plugin_instance ?? 'default';
+        let resolved: ReturnType<typeof resolveAndValidateTable>;
+        try {
+          resolved = resolveAndValidateTable(plugin_id, instanceName, table);
+        } catch (err) {
+          return jsonExpectedError({
+            error: 'not_found',
+            message: err instanceof Error ? err.message : String(err),
+            identifier: `${plugin_id}:${instanceName}:${table}`,
+          });
+        }
+
+        const validationError = validateWriteRecordInput(
+          { mode, plugin_id, table, id, data },
+          resolved.tableSpec
+        );
+        if (validationError) {
+          return jsonExpectedError(validationError);
+        }
+
+        let reconciliation: Record<string, unknown> | undefined;
+        try {
+          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
+          reconciliation = buildReconciliationPayload(actionSummary);
+        } catch (err) {
+          logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
+        }
+
+        const supabase = supabaseManager.getClient();
+        const effectiveInclude = parseRecordInclude(include as RecordInclude[] | undefined, 'write');
+        const recordData = data as Record<string, unknown>;
+        const now = new Date().toISOString();
+
+        let row: Record<string, unknown> | null;
+        if (mode === 'create') {
+          const insertResult = (await supabase
+            .from(resolved.fullTableName)
+            .insert({ ...recordData, instance_id: config.instance.id })
+            .select('*')
+            .single()) as { data: Record<string, unknown> | null; error: { message: string } | null };
+          if (insertResult.error || !insertResult.data) {
+            return jsonRuntimeError(insertResult.error?.message ?? 'Insert returned no data');
+          }
+          row = insertResult.data;
+
+          if (resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
+            fireAndForgetEmbed(
+              resolved.fullTableName,
+              row.id as string,
+              recordData,
+              resolved.tableSpec.embed_fields,
+              config.supabase.databaseUrl
+            );
+          }
+        } else {
+          const updateResult = (await supabase
+            .from(resolved.fullTableName)
+            .update({ ...recordData, updated_at: now })
+            .eq('id', id as string)
+            .eq('instance_id', config.instance.id)
+            .select('*')
+            .single()) as { data: Record<string, unknown> | null; error: { message: string } | null };
+          if (updateResult.error || !updateResult.data) {
+            return jsonExpectedError({
+              error: 'not_found',
+              message: `Record '${id}' not found in ${resolved.fullTableName}`,
+              identifier: id as string,
+            });
+          }
+          row = updateResult.data;
+
+          if (resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
+            fireAndForgetEmbed(
+              resolved.fullTableName,
+              id as string,
+              row,
+              resolved.tableSpec.embed_fields,
+              config.supabase.databaseUrl
+            );
+          }
+        }
+
+        const pendingItems = await queryPendingReview(plugin_id, instanceName, config.instance.id);
+        const payload = addPendingReviewPayload(
+          addReconciliationPayload(
+            buildRecordResult(
+              row as { id: string; created_at: string; updated_at: string; [key: string]: unknown },
+              { plugin_id, table, tableSpec: resolved.tableSpec },
+              effectiveInclude
+            ),
+            reconciliation
+          ),
+          buildPendingReviewPayload(pendingItems)
+        );
+
+        logger.info(`write_record: ${mode} ${payload.id} in ${resolved.fullTableName}`);
+        return jsonToolResult(payload);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error(`write_record failed: ${msg}`);
+        return jsonRuntimeError(msg);
+      } finally {
+        if (config.locking.enabled) {
+          await releaseLock(supabaseManager.getClient(), config.instance.id, 'records');
+        }
+      }
+    }
+  );
+
   // ─── Tool 1: create_record (REC-01) ──────────────────────────────────────
 
   server.registerTool(
