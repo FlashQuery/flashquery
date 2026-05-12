@@ -51,6 +51,36 @@ export interface DocumentArchiveResultInput extends DocumentIdentificationInput 
   archived_at: string | null;
 }
 
+export interface DocumentRemovalResultInput extends DocumentArchiveResultInput {
+  removal: {
+    mode: 'deleted' | 'trash';
+    moved_to?: string;
+    original_path?: string;
+  };
+}
+
+export interface DirectoryResult {
+  path: string;
+  action: 'create' | 'remove';
+  status: 'created' | 'removed' | 'unchanged';
+  timestamp: string;
+}
+
+export interface MaintenanceActionResult {
+  action: 'sync' | 'repair';
+  started_at: string;
+  finished_at: string;
+  dry_run: boolean;
+  counts: {
+    scanned: number;
+    added: number;
+    updated: number;
+    repaired: number;
+    archived: number;
+  };
+  warnings?: WarningCode[];
+}
+
 export interface MemoryIdentificationInput {
   memory_id: string;
   content_preview: string;
@@ -152,6 +182,41 @@ export function documentArchiveResult(input: DocumentArchiveResultInput): Return
     ...documentIdentification(input),
     status: 'archived',
     archived_at: input.archived_at,
+  };
+}
+
+export function documentRemovalResult(input: DocumentRemovalResultInput): ReturnType<typeof documentArchiveResult> & {
+  removal: DocumentRemovalResultInput['removal'];
+} {
+  return {
+    ...documentArchiveResult(input),
+    removal: input.removal,
+  };
+}
+
+export function directoryResult(input: DirectoryResult): DirectoryResult {
+  return {
+    path: input.path,
+    action: input.action,
+    status: input.status,
+    timestamp: input.timestamp,
+  };
+}
+
+export function maintenanceActionResult(input: MaintenanceActionResult): MaintenanceActionResult {
+  return {
+    action: input.action,
+    started_at: input.started_at,
+    finished_at: input.finished_at,
+    dry_run: input.dry_run,
+    counts: {
+      scanned: input.counts.scanned,
+      added: input.counts.added,
+      updated: input.counts.updated,
+      repaired: input.counts.repaired,
+      archived: input.counts.archived,
+    },
+    ...(input.warnings === undefined ? {} : { warnings: input.warnings }),
   };
 }
 
