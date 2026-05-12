@@ -292,6 +292,31 @@ describe('Schema Verification (Integration)', () => {
     ]);
   });
 
+  it('DOC-02 exposes nullable fqc_documents.archived_at after DDL', async () => {
+    if (!testSupabaseAvailable) {
+      console.log('⏭️  Skipping: Supabase not available');
+      return;
+    }
+
+    const result = await client!.query(
+      `
+      SELECT column_name, is_nullable, data_type
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'fqc_documents'
+        AND column_name = 'archived_at'
+      `
+    );
+
+    expect(result.rows[0]).toEqual(
+      expect.objectContaining({
+        column_name: 'archived_at',
+        is_nullable: 'YES',
+        data_type: 'timestamp with time zone',
+      })
+    );
+  });
+
   it('ATL-I-01 enforces unique fqc_purpose_templates identity by instance, purpose, and template_path', async () => {
     if (!testSupabaseAvailable) {
       console.log('⏭️  Skipping: Supabase not available');

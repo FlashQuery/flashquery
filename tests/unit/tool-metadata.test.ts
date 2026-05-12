@@ -66,6 +66,16 @@ describe('tool metadata registry', () => {
     expect(description).toContain('headings');
   });
 
+  it('documents archive_document JSON identification blocks, archived_at, and idempotency', () => {
+    const description = requireToolMetadata('archive_document').description;
+
+    expect(description).toContain('JSON');
+    expect(description).toContain('identification');
+    expect(description).toContain('batch');
+    expect(description).toContain('archived_at');
+    expect(description).toMatch(/idempotent|re-archive/);
+  });
+
   it('expands delegated tiers from metadata', () => {
     expect(getToolNamesByTier('tier:read-only')).toEqual([
       'search_documents',
