@@ -36,6 +36,7 @@ vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(),
   writeFile: vi.fn(),
   stat: vi.fn(),
+  lstat: vi.fn(),
 }));
 
 vi.mock('node:fs', () => ({
@@ -197,13 +198,15 @@ function createMoveDocumentSupabaseMock(ownershipPluginId: string | null = null)
   const selectEq1 = vi.fn().mockReturnValue({ eq: selectEq2 });
   const select = vi.fn().mockReturnValue({ eq: selectEq1 });
 
-  const updateEq2 = vi.fn().mockResolvedValue({ error: null });
+  const updateMaybeSingle = vi.fn().mockResolvedValue({ data: { id: 'test-fqc-id' }, error: null });
+  const updateSelect = vi.fn().mockReturnValue({ maybeSingle: updateMaybeSingle });
+  const updateEq2 = vi.fn().mockReturnValue({ select: updateSelect });
   const updateEq1 = vi.fn().mockReturnValue({ eq: updateEq2 });
   const update = vi.fn().mockReturnValue({ eq: updateEq1 });
 
   const mockSupabase = {
     from: vi.fn().mockReturnValue({ select, update }),
-    _spies: { select, update, selectEq1, selectEq2, maybeSingle, updateEq1, updateEq2 },
+    _spies: { select, update, selectEq1, selectEq2, maybeSingle, updateEq1, updateEq2, updateSelect, updateMaybeSingle },
   };
   return mockSupabase;
 }
@@ -211,6 +214,11 @@ function createMoveDocumentSupabaseMock(ownershipPluginId: string | null = null)
 describe('move_document (SPEC-05)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(fsPromises.lstat).mockRejectedValue(Object.assign(new Error('not found'), { code: 'ENOENT' }));
+    vi.mocked(vaultManager.readMarkdown).mockResolvedValue({
+      data: { fq_title: 'Original Title', fq_id: 'test-fqc-id' },
+      content: 'Content here',
+    });
   });
 
   it('moves a file and updates database', async () => {
@@ -251,8 +259,12 @@ Content here`
 
     const result = await moveTool?.({ identifier: 'test.md', destination: 'newdir/renamed.md' });
 
-    expect(result).toHaveProperty('content');
-    expect(result?.content[0].text).toContain('Document moved successfully');
+    expect(result?.isError).toBeFalsy();
+    expect(JSON.parse(result?.content[0].text as string)).toMatchObject({
+      identifier: 'newdir/renamed.md',
+      path: 'newdir/renamed.md',
+      fq_id: 'test-fqc-id',
+    });
     expect(mockRename).toHaveBeenCalledWith('/tmp/test-vault/test.md', '/tmp/test-vault/newdir/renamed.md');
   });
 
@@ -274,8 +286,12 @@ Content here`
     const moveTool = tools.get('move_document');
     const result = await moveTool?.({ identifier: 'test.md', destination: 'existing.md' });
 
-    expect(result?.isError).toBe(true);
-    expect(result?.content[0].text).toContain('A file already exists');
+    expect(result?.isError).toBe(false);
+    expect(JSON.parse(result?.content[0].text as string)).toMatchObject({
+      error: 'conflict',
+      message: expect.stringContaining('A file already exists'),
+      details: { reason: 'path_exists' },
+    });
   });
 
   it('rejects path traversal attempts', async () => {
@@ -294,8 +310,12 @@ Content here`
     const moveTool = tools.get('move_document');
     const result = await moveTool?.({ identifier: 'test.md', destination: '../../etc/passwd' });
 
-    expect(result?.isError).toBe(true);
-    expect(result?.content[0].text).toContain('escapes vault root');
+    expect(result?.isError).toBe(false);
+    expect(JSON.parse(result?.content[0].text as string)).toMatchObject({
+      error: 'invalid_input',
+      message: expect.stringContaining('escapes vault root'),
+      details: { reason: 'path_traversal' },
+    });
   });
 
   it('auto-appends extension if omitted', async () => {
@@ -363,25 +383,7 @@ fqc_id: test-fqc-id
 Content`
     );
 
-    // Plugin ownership query: select('ownership_plugin_id').eq('id', ...).eq('instance_id', ...).maybeSingle()
-    const mockMaybeSingle = vi.fn().mockResolvedValue({
-      data: { ownership_plugin_id: 'crm-plugin' },
-    });
-    const mockSelectEq2 = vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle });
-    const mockSelectEq1 = vi.fn().mockReturnValue({ eq: mockSelectEq2 });
-    const mockSelect = vi.fn().mockReturnValue({ eq: mockSelectEq1 });
-
-    const mockUpdateEq2 = vi.fn().mockResolvedValue({ error: null });
-    const mockUpdateEq1 = vi.fn().mockReturnValue({ eq: mockUpdateEq2 });
-    const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq1 });
-
-    const mockSupabase = {
-      from: vi.fn().mockReturnValue({
-        select: mockSelect,
-        update: mockUpdate,
-      }),
-    };
-
+    const mockSupabase = createMoveDocumentSupabaseMock('crm-plugin');
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseManager.getClient>);
 
     registerDocumentTools(server, config);
@@ -390,10 +392,9 @@ Content`
     const result = await moveTool?.({ identifier: 'test.md', destination: 'newdir/renamed.md' });
 
     expect(result?.isError).not.toBe(true);
-    expect(result?.content[0].text).toContain('Warning');
-    expect(result?.content[0].text).toContain('owned by plugin');
-    expect(result?.content[0].text).toContain('crm-plugin');
-    expect(result?.content[0].text).toContain('may expect the original path');
+    expect(JSON.parse(result?.content[0].text as string)).toMatchObject({
+      warnings: ['plugin_ownership_path_expectation'],
+    });
   });
 
   it('should not display warning when document has no plugin ownership', async () => {
@@ -421,25 +422,7 @@ fqc_id: test-fqc-id
 Content`
     );
 
-    // ownership_plugin_id is null — no plugin owns this document
-    const mockMaybeSingle = vi.fn().mockResolvedValue({
-      data: { ownership_plugin_id: null },
-    });
-    const mockSelectEq2 = vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle });
-    const mockSelectEq1 = vi.fn().mockReturnValue({ eq: mockSelectEq2 });
-    const mockSelect = vi.fn().mockReturnValue({ eq: mockSelectEq1 });
-
-    const mockUpdateEq2 = vi.fn().mockResolvedValue({ error: null });
-    const mockUpdateEq1 = vi.fn().mockReturnValue({ eq: mockUpdateEq2 });
-    const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq1 });
-
-    const mockSupabase = {
-      from: vi.fn().mockReturnValue({
-        select: mockSelect,
-        update: mockUpdate,
-      }),
-    };
-
+    const mockSupabase = createMoveDocumentSupabaseMock(null);
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseManager.getClient>);
 
     registerDocumentTools(server, config);
@@ -448,10 +431,10 @@ Content`
     const result = await moveTool?.({ identifier: 'test.md', destination: 'newdir/renamed.md' });
 
     expect(result?.isError).not.toBe(true);
-    expect(result?.content[0].text).not.toContain('owned by plugin');
+    expect(JSON.parse(result?.content[0].text as string)).not.toHaveProperty('warnings');
   });
 
-  it('should skip plugin ownership check when document has no fqc_id', async () => {
+  it('should skip plugin ownership check and reject move when document has no fqc_id', async () => {
     const { server, tools } = createMockServer();
     const config = createMockConfig();
 
@@ -480,6 +463,10 @@ title: Untracked Doc
 ---
 Content without fqc_id`
     );
+    vi.mocked(vaultManager.readMarkdown).mockResolvedValueOnce({
+      data: { fq_title: 'Untracked Doc' },
+      content: 'Content without fqc_id',
+    });
 
     const mockSelectSpy = vi.fn();
     const mockUpdateEq2 = vi.fn().mockResolvedValue({ error: null });
@@ -500,10 +487,11 @@ Content without fqc_id`
     const moveTool = tools.get('move_document');
     const result = await moveTool?.({ identifier: 'untracked.md', destination: 'newdir/untracked.md' });
 
-    // Move should succeed
-    expect(result?.isError).not.toBe(true);
-    // No plugin ownership warning
-    expect(result?.content[0].text).not.toContain('owned by plugin');
+    expect(result?.isError).toBe(false);
+    expect(JSON.parse(result?.content[0].text as string)).toMatchObject({
+      error: 'invalid_input',
+      details: { reason: 'untracked_document' },
+    });
     // The ownership_plugin_id select query should NOT have been called
     // (the fqc_id guard prevents the query; select is only used for DB update path which has no fqcId)
     expect(mockSelectSpy).not.toHaveBeenCalled();
@@ -539,25 +527,7 @@ fqc_id: tracked-fqc-id
 Plugin-managed content`
     );
 
-    // Plugin owns this document
-    const mockMaybeSingle = vi.fn().mockResolvedValue({
-      data: { ownership_plugin_id: 'plugin-x' },
-    });
-    const mockSelectEq2 = vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle });
-    const mockSelectEq1 = vi.fn().mockReturnValue({ eq: mockSelectEq2 });
-    const mockSelect = vi.fn().mockReturnValue({ eq: mockSelectEq1 });
-
-    const mockUpdateEq2 = vi.fn().mockResolvedValue({ error: null });
-    const mockUpdateEq1 = vi.fn().mockReturnValue({ eq: mockUpdateEq2 });
-    const mockUpdate = vi.fn().mockReturnValue({ eq: mockUpdateEq1 });
-
-    const mockSupabase = {
-      from: vi.fn().mockReturnValue({
-        select: mockSelect,
-        update: mockUpdate,
-      }),
-    };
-
+    const mockSupabase = createMoveDocumentSupabaseMock('plugin-x');
     vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabase as unknown as ReturnType<typeof supabaseManager.getClient>);
 
     registerDocumentTools(server, config);
@@ -570,12 +540,12 @@ Plugin-managed content`
     // File was physically renamed
     expect(mockRename).toHaveBeenCalled();
     // DB was updated
-    expect(mockUpdate).toHaveBeenCalled();
+    expect(mockSupabase._spies.update).toHaveBeenCalled();
     // Warning is present in response
-    expect(result?.content[0].text).toContain('Warning');
-    expect(result?.content[0].text).toContain('plugin-x');
-    // Success message is also present
-    expect(result?.content[0].text).toContain('Document moved successfully');
+    expect(JSON.parse(result?.content[0].text as string)).toMatchObject({
+      warnings: ['plugin_ownership_path_expectation'],
+      path: 'archive/plugin-doc.md',
+    });
   });
 });
 

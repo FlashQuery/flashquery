@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
 import { stat, readdir, readFile } from 'node:fs/promises';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 
 vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(),
@@ -223,12 +224,12 @@ describe('list_vault structured JSON output', () => {
       title: 'Tracked Note',
       tags: ['project'],
       status: 'active',
-      fq_id: 'doc-1',
+      [FM.ID]: 'doc-1',
     });
     expect(untracked).not.toHaveProperty('title');
     expect(untracked).not.toHaveProperty('tags');
     expect(untracked).not.toHaveProperty('status');
-    expect(untracked).not.toHaveProperty('fq_id');
+    expect(untracked).not.toHaveProperty(FM.ID);
   });
 
   it('returns a runtime error when requested tracking metadata cannot be loaded', async () => {

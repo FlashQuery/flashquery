@@ -21,6 +21,7 @@
 import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
 import { mkdir, stat, readdir } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 
@@ -760,7 +761,7 @@ describe('list_vault handler', () => {
 
     expect(result.isError).toBeFalsy();
     expect(payload.entries[0]).not.toHaveProperty('title');
-    expect(payload.entries[0]).not.toHaveProperty('fq_id');
+    expect(payload.entries[0]).not.toHaveProperty(FM.ID);
   });
 
   // ── U-58: all files tracked → no untracked note ───────────────────────────────

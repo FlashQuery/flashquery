@@ -2225,10 +2225,13 @@ describe('archive_document', () => {
     registerDocumentTools(server, config);
 
     vi.mocked(vaultManager.readMarkdown).mockRejectedValueOnce(new Error('file not found'));
-    const result = await getHandler('archive_document')({ identifiers: 'Notes/missing.md' }) as { isError?: boolean; content: Array<{ text: string }> };
+    const result = await getHandler('archive_document')({ identifiers: ['Notes/missing.md'] }) as { isError?: boolean; content: Array<{ text: string }> };
     // Per-item errors are captured in results, not as isError
-    expect(result.content[0].text).toContain('failed');
-    expect(result.content[0].text).toContain('file not found');
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(result.content[0].text)).toEqual([expect.objectContaining({
+      error: 'runtime_error',
+      message: expect.stringContaining('file not found'),
+    })]);
   });
 });
 

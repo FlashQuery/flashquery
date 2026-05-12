@@ -37,6 +37,8 @@ import {
   jsonToolResult,
 } from '../utils/response-formats.js';
 
+const DEFAULT_MARKDOWN_EXTENSIONS: string[] = ['.md'];
+
 /**
  * Register filesystem primitive tools on the MCP server.
  * Registers create_directory, list_vault, and remove_directory (migrated from documents.ts in Phase 94).
@@ -679,7 +681,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
 
         const displayPath = normalizedInput; // '' for vault root
         // ── Step 13: Structured JSON envelope ─────────────────────────────────
-        const markdownExtensions = config.instance.vault.markdownExtensions ?? ['.md'];
+        const markdownExtensions = config.instance.vault.markdownExtensions ?? DEFAULT_MARKDOWN_EXTENSIONS;
         const entries = await Promise.all(displayedEntries.map(async (entry) => {
           if (entry.kind === 'dir') {
             const childCount = entry.childCount ?? 0;
