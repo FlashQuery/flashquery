@@ -47,6 +47,10 @@ export interface DocumentIdentificationInput {
   chars: number;
 }
 
+export interface DocumentArchiveResultInput extends DocumentIdentificationInput {
+  archived_at: string | null;
+}
+
 export interface MemoryIdentificationInput {
   memory_id: string;
   content_preview: string;
@@ -137,6 +141,17 @@ export function documentIdentification(input: DocumentIdentificationInput): {
     fq_id: input.fq_id,
     modified: input.modified,
     size: { chars: input.chars },
+  };
+}
+
+export function documentArchiveResult(input: DocumentArchiveResultInput): ReturnType<typeof documentIdentification> & {
+  status: 'archived';
+  archived_at: string | null;
+} {
+  return {
+    ...documentIdentification(input),
+    status: 'archived',
+    archived_at: input.archived_at,
   };
 }
 

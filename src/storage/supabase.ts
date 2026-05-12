@@ -327,6 +327,7 @@ CREATE TABLE IF NOT EXISTS fqc_documents (
   tags TEXT[] DEFAULT '{}',
   content_hash TEXT,
   status TEXT DEFAULT 'active',
+  archived_at TIMESTAMPTZ,
   embedding vector(${dimensions}),
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
@@ -337,6 +338,9 @@ CREATE TABLE IF NOT EXISTS fqc_documents (
 
 -- Phase 39: needs_frontmatter_repair flag for TSA-01 (read-only background scan)
 ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS needs_frontmatter_repair BOOLEAN DEFAULT FALSE;
+
+-- Phase 123: archive_document lifecycle timestamp (DOC-02)
+ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
 -- Phase 88: Remove push-notification infrastructure (LEGACY-07)
 DROP TABLE IF EXISTS fqc_change_queue;

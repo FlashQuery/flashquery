@@ -7,6 +7,9 @@
 
 import type { ParsedPluginSchema, PluginTableSpec, PluginColumnSpec } from '../plugins/manager.js';
 
+export const DOCUMENT_ARCHIVED_AT_MIGRATION_SQL =
+  'ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ';
+
 /**
  * Represents a single schema change (addition, removal, or modification).
  * Used in migration analysis to categorize changes as safe or unsafe.

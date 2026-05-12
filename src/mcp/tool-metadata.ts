@@ -93,6 +93,12 @@ const D = {
     'Do not use when you need to create or modify documents; use write_document or the current write/edit tool instead.',
     'get_document({ "identifier": "Projects/Plan.md", "include": ["body", "frontmatter", "headings"] })'
   ),
+  archiveDocument: description(
+    'Archive one or more documents and return JSON document identification blocks with status:"archived" and archived_at.',
+    'Use when you need a reversible archive transition for one document or an ordered batch; array input returns one JSON result per identifier, expected per-item failures stay in place, and re-archive is idempotent.',
+    'Do not use when you need to move a document to trash or hard-delete it; use remove_document when that consolidated removal tool is available.',
+    'archive_document({ "identifiers": ["Notes/old.md", "missing.md"] })'
+  ),
   listVault: description(
     'List vault files and folders with optional metadata.',
     'Use when you need to browse vault structure or inspect matching files without reading full bodies.',
@@ -154,7 +160,7 @@ export const TOOL_METADATA = [
   current('update_doc_header', ['doc-write'], 'read-write', legacyDescription('update_doc_header', 'write_document', 'Update document frontmatter fields.')),
   current('copy_document', ['doc-write'], 'read-write', legacyDescription('copy_document', 'copy_document', 'Copy a vault document to a new path.')),
   current('move_document', ['doc-write'], 'read-write', legacyDescription('move_document', 'move_document', 'Move or rename a vault document.')),
-  current('archive_document', ['doc-write'], 'read-write', legacyDescription('archive_document', 'archive_document', 'Archive one or more documents.')),
+  current('archive_document', ['doc-write'], 'read-write', D.archiveDocument),
   current('insert_in_doc', ['doc-write'], 'read-write', legacyDescription('insert_in_doc', 'insert_in_doc', 'Insert content at a specific markdown-aware position.')),
   current('replace_doc_section', ['doc-write'], 'read-write', legacyDescription('replace_doc_section', 'replace_doc_section', 'Replace a named markdown section in a document.')),
   current('apply_tags', ['doc-write', 'memory'], 'read-write', legacyDescription('apply_tags', 'apply_tags', 'Apply or remove tags on documents and memories.')),
