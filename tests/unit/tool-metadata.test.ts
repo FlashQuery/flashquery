@@ -55,6 +55,17 @@ describe('tool metadata registry', () => {
     }
   });
 
+  it('documents get_document canonical expected-error envelopes and include vocabulary', () => {
+    const description = requireToolMetadata('get_document').description;
+
+    expect(description).toMatch(/canonical expected-error|expected-error/);
+    expect(description).toContain('isError:false');
+    expect(description).toContain('include');
+    expect(description).toContain('body');
+    expect(description).toContain('frontmatter');
+    expect(description).toContain('headings');
+  });
+
   it('expands delegated tiers from metadata', () => {
     expect(getToolNamesByTier('tier:read-only')).toEqual([
       'search_documents',

@@ -329,7 +329,7 @@ describe('validateParameterCombinations (Error 9)', () => {
       sections: ['X'],
     });
     expect(result).not.toBeNull();
-    expect(result).toHaveProperty('error', 'invalid_parameter_combination');
+    expect(result).toHaveProperty('error', 'invalid_input');
     expect((result as Record<string, unknown>)['details']).toMatchObject({
       conflict: 'sections_without_body',
     });
@@ -342,7 +342,7 @@ describe('validateParameterCombinations (Error 9)', () => {
       occurrence: 2,
     });
     expect(result).not.toBeNull();
-    expect(result).toHaveProperty('error', 'invalid_parameter_combination');
+    expect(result).toHaveProperty('error', 'invalid_input');
     const details = (result as Record<string, unknown>)['details'] as Record<string, unknown>;
     expect(details['conflict']).toBe('occurrence_with_multi_section');
     expect(details['sections_count']).toBe(2);
