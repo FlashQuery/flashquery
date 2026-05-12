@@ -76,6 +76,15 @@ describe('tool metadata registry', () => {
     expect(description).toMatch(/idempotent|re-archive/);
   });
 
+  it('documents copy_document JSON identification output and no batch support', () => {
+    const description = requireToolMetadata('copy_document').description;
+
+    expect(description).toContain('JSON');
+    expect(description).toContain('identification');
+    expect(description).toMatch(/new copy/);
+    expect(description).toMatch(/single-target|batch/);
+  });
+
   it('expands delegated tiers from metadata', () => {
     expect(getToolNamesByTier('tier:read-only')).toEqual([
       'search_documents',
