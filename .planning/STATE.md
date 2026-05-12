@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: MCP Tools Consolidation
 status: executing
-stopped_at: Completed 123-02-PLAN.md
-last_updated: "2026-05-12T00:37:39.796Z"
+stopped_at: Completed 123-03-PLAN.md
+last_updated: "2026-05-12T00:55:13.755Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 11
-  completed_plans: 9
-  percent: 82
+  completed_plans: 10
+  percent: 91
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-11)
 ## Current Position
 
 Phase: 123 (document-read-standard-output-migration) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-12
 
@@ -83,6 +83,7 @@ Last activity: 2026-05-12
 | Phase 121 P02 | 6min | 3 tasks | 5 files |
 | Phase 123 P01 | 6min | 3 tasks | 8 files |
 | Phase 123 P02 | 17min | 3 tasks | 13 files |
+| Phase 123 P03 | 14min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -133,6 +134,8 @@ Last activity: 2026-05-12
 - [Phase 123]: 123-01 recorded get_document canonical error-shape evidence in existing directed and integration coverage ledgers.
 - [Phase 123]: 123-02: Stored archive_document archived_at as TIMESTAMPTZ while preserving frontmatter fq_archived_at as exact ISO string.
 - [Phase 123]: 123-02: Used managed YAML scenario runs when no external FlashQuery server was listening on localhost:3100.
+- [Phase 123]: 123-03 kept copy_document and move_document single-target while migrating their output contracts.
+- [Phase 123]: 123-03 represented plugin ownership notices as warnings:["plugin_ownership_path_expectation"] instead of appended prose.
 
 ## Accumulated Context
 
@@ -243,8 +246,8 @@ Last activity: 2026-05-12
 
 ## Session Continuity
 
-Last session: 2026-05-12T00:37:39.772Z
-Stopped at: Completed 123-02-PLAN.md
+Last session: 2026-05-12T00:55:13.714Z
+Stopped at: Completed 123-03-PLAN.md
 Resume: Plan Phase 121
 
 ## Deferred Items
