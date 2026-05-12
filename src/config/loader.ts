@@ -86,6 +86,15 @@ const LockingSchema = z
   .strip()
   .prefault({});
 
+const TrashFolderSchema = z
+  .object({
+    enabled: z.boolean().default(false),
+    path: z.string().default('.flashquery/removed'),
+    collision_strategy: z.enum(['suffix', 'timestamp']).default('suffix'),
+  })
+  .strip()
+  .prefault({});
+
 // LLM provider/model/purpose schemas (v3.0 — three-layer)
 const ProviderSchema = z
   .object({
@@ -237,6 +246,7 @@ const ConfigSchema = z
     embedding: EmbeddingSchema.optional(),
     logging: LoggingSchema,
     locking: LockingSchema,
+    trash_folder: TrashFolderSchema,
   })
   .strict();
 
@@ -258,6 +268,7 @@ export interface FlashQueryConfig {
   git: { autoCommit: boolean; autoPush: boolean; remote: string; branch: string };
   mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
   locking: { enabled: boolean; ttlSeconds: number };
+  trashFolder: { enabled: boolean; path: string; collisionStrategy: 'suffix' | 'timestamp' };
   hostMcpTools?: { tools?: string[]; excludedTools?: string[] };
   templates?: { defaultAccess: 'permissive' | 'restrictive' };
   llm?: {
