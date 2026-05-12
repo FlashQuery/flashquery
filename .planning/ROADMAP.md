@@ -46,7 +46,7 @@
 | 122 | Host Tool Exposure Config | 4/4 | Complete    | 2026-05-11 |
 | 123 | Document Read + Standard Output Migration | 4/4 | Complete    | 2026-05-12 |
 | 124 | Document Write Primitives | 7/7 | Complete    | 2026-05-12 |
-| 125 | Unified Search + Memory Consolidation | 2/6 | In Progress|  |
+| 125 | Unified Search + Memory Consolidation | 3/6 | In Progress|  |
 | 126 | Plugin + Record Consolidation | Standardize plugin tools and merge record create/update into `write_record`. | REC-01..07 | 5 |
 | 127 | Removal, Directory, And Vault Maintenance | Add `remove_document`, `manage_directory`, and `maintain_vault` with safe filesystem/git semantics. | DOC-09, SYS-01..03 | 6 |
 | 128 | Legacy Surface Removal + Final Audit | Remove merged/dead tools, preserve transitional macro gates, and close coverage/preflight. | DOC-10, MEM-05, SYS-04..06, TEST-07, TEST-08 | 6 |
@@ -181,7 +181,7 @@ Plans:
 5. Legacy memory/search coverage is ported to the consolidated tools before removal.
 6. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
 
-**Plans:** 2/6 plans executed
+**Plans:** 3/6 plans executed
 
 **UI hint:** no
 
