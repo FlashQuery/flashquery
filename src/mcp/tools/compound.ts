@@ -36,6 +36,11 @@ import {
 import { getToolMetadata } from '../tool-metadata.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 import { serializeOrderedFrontmatter } from '../utils/frontmatter-sanitizer.js';
+import {
+  mergeSearchResults,
+  resolveSearchIntent,
+  type SearchResultItem,
+} from '../utils/search-results.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: apply tag set operations (idempotent add, graceful remove)
@@ -64,6 +69,18 @@ function memoryCategoryEnabled(config: FlashQueryConfig): boolean {
   const enabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
   const memoryOnlyTools = ['save_memory', 'search_memory', 'update_memory', 'list_memories', 'get_memory', 'archive_memory'];
   return memoryOnlyTools.some((toolName) => enabledToolNames.has(toolName) && !excludedSelectors.has(toolName));
+}
+
+function documentCategoryEnabled(config: FlashQueryConfig): boolean {
+  const selectors = config.hostMcpTools?.tools;
+  if (selectors === undefined) return true;
+  if (selectors.some((selector) => selector === 'tier:read-only' || selector === 'tier:read-write' || selector === 'category:doc-read' || selector === 'category:doc-write')) {
+    return true;
+  }
+  if (selectors.some((selector) => getToolMetadata(selector)?.categories.some((category) => category === 'doc-read' || category === 'doc-write') === true)) {
+    return true;
+  }
+  return getResolvedHostToolExposure(config).hostEnabledToolNames.includes('get_document');
 }
 
 function headingErrorMatches(matches: Array<{ text: string; level: number; line: number; occurrence: number }>): Array<{
@@ -941,6 +958,203 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_briefing failed: ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+      }
+    }
+  );
+
+  server.registerTool(
+    'search',
+    {
+      description:
+        'Unified JSON search across documents and memories with filesystem, semantic, mixed, and list modes.',
+      inputSchema: {
+        query: z.string().optional().describe('Search query. Empty query requires filters or list_all:true.'),
+        mode: z.enum(['filesystem', 'semantic', 'mixed']).optional().describe('Search mode. Default: mixed.'),
+        tags: z.array(z.string()).optional().describe('Filter by tags.'),
+        tag_match: z.enum(['any', 'all']).optional().describe('Tag matching mode. Default: any.'),
+        limit: z.number().optional().describe('Global result limit after merge/dedupe/sort. Default: 10.'),
+        entity_types: z.array(z.enum(['documents', 'memories'])).optional().describe('Search domains. Default: enabled searchable domains.'),
+        list_all: z.boolean().optional().describe('Allow empty unfiltered list-mode search.'),
+        path_filter: z.string().optional().describe('Document path substring filter for filesystem/list searches.'),
+        include_archived: z.boolean().optional().describe('Include archived documents and memories. Default: false.'),
+      },
+    },
+    async ({ query, mode, tags, tag_match, limit, entity_types, list_all, path_filter, include_archived }) => {
+      if (getIsShuttingDown()) {
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
+      }
+
+      const enabled = {
+        documents: documentCategoryEnabled(config),
+        memories: memoryCategoryEnabled(config),
+      };
+      const intentResult = resolveSearchIntent(
+        { query, mode, tags, path_filter, list_all, limit, entity_types },
+        enabled
+      );
+      if (intentResult.error) {
+        return jsonExpectedError(intentResult.error);
+      }
+      const intent = intentResult.intent!;
+      const warnings = [...intentResult.warnings];
+      const matchMode = tag_match ?? 'any';
+      const allResults: SearchResultItem[] = [];
+
+      try {
+        if (intent.entity_types.includes('documents')) {
+          const vaultRoot = config.instance.vault.path;
+          const canSemantic = !(embeddingProvider instanceof NullEmbeddingProvider);
+          if ((intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
+            try {
+              const docs = await searchDocumentsSemantic(config, intent.query, {
+                tags,
+                tagMatch: matchMode,
+                limit: intent.limit,
+              });
+              allResults.push(...docs.map((doc) => ({
+                entity_type: 'documents' as const,
+                identifier: doc.path,
+                title: doc.title,
+                path: doc.path,
+                fq_id: doc.id,
+                tags: doc.tags,
+                score: doc.similarity,
+                match_source: ['semantic' as const],
+              })));
+            } catch (err) {
+              warnings.push('embedding_unavailable');
+              if (intent.requested_mode === 'semantic') {
+                return jsonExpectedError({
+                  error: 'unsupported',
+                  message: 'Semantic document search is unavailable',
+                  identifier: 'documents',
+                  details: { reason: err instanceof Error ? err.message : String(err) },
+                });
+              }
+            }
+          } else if (intent.requested_mode === 'semantic' && !canSemantic) {
+            return jsonExpectedError({
+              error: 'unsupported',
+              message: 'Semantic document search is unavailable',
+              identifier: 'documents',
+              details: { reason: 'embedding_unavailable' },
+            });
+          }
+
+          if (intent.requested_mode === 'filesystem' || intent.requested_mode === 'mixed' || intent.list_mode) {
+            const files = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
+            const metaResults = await Promise.all(files.map((file) => parseDocMeta(vaultRoot, file)));
+            let docs = metaResults
+              .filter((meta): meta is DocMeta => meta !== null)
+              .filter((meta) => include_archived === true || meta.status !== 'archived');
+            if (path_filter) {
+              docs = docs.filter((meta) => meta.relativePath.toLowerCase().includes(String(path_filter).toLowerCase()));
+            }
+            if (tags && tags.length > 0) {
+              docs = matchMode === 'all'
+                ? docs.filter((meta) => tags.every((tag) => meta.tags.includes(tag)))
+                : docs.filter((meta) => meta.tags.some((tag) => tags.includes(tag)));
+            }
+            if (intent.query) {
+              const lowerQuery = intent.query.toLowerCase();
+              docs = docs.filter((meta) => meta.title.toLowerCase().includes(lowerQuery) || meta.relativePath.toLowerCase().includes(lowerQuery));
+            }
+            allResults.push(...docs.map((doc) => ({
+              entity_type: 'documents' as const,
+              identifier: doc.relativePath,
+              title: doc.title,
+              path: doc.relativePath,
+              fq_id: doc.fqcId ?? doc.relativePath,
+              tags: doc.tags,
+              score: intent.list_mode ? 0 : 0.5,
+              match_source: [intent.list_mode ? 'list' as const : 'filesystem' as const],
+            })));
+          }
+        }
+
+        if (intent.entity_types.includes('memories')) {
+          const canSemantic = !(embeddingProvider instanceof NullEmbeddingProvider);
+          if ((intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
+            try {
+              const memories = await searchMemoriesSemantic(config, intent.query, {
+                tags,
+                tagMatch: matchMode,
+                limit: intent.limit,
+              });
+              allResults.push(...memories.map((memory) => ({
+                entity_type: 'memories' as const,
+                identifier: memory.id,
+                memory_id: memory.id,
+                content_preview: memory.content.length > 120 ? `${memory.content.slice(0, 117)}...` : memory.content,
+                tags: memory.tags,
+                score: memory.similarity,
+                match_source: ['semantic' as const],
+              })));
+            } catch (err) {
+              warnings.push('embedding_unavailable');
+              if (intent.requested_mode === 'semantic') {
+                return jsonExpectedError({
+                  error: 'unsupported',
+                  message: 'Semantic memory search is unavailable',
+                  identifier: 'memories',
+                  details: { reason: err instanceof Error ? err.message : String(err) },
+                });
+              }
+            }
+          } else if (intent.requested_mode === 'semantic' && !canSemantic) {
+            return jsonExpectedError({
+              error: 'unsupported',
+              message: 'Semantic memory search is unavailable',
+              identifier: 'memories',
+              details: { reason: 'embedding_unavailable' },
+            });
+          }
+
+          if (intent.requested_mode === 'filesystem' || intent.requested_mode === 'mixed' || intent.list_mode) {
+            let dbQuery = supabaseManager.getClient()
+              .from('fqc_memory')
+              .select('id, content, tags, plugin_scope, created_at, updated_at, is_latest, archived_at')
+              .eq('instance_id', config.instance.id);
+            if (include_archived !== true) {
+              dbQuery = dbQuery.eq('status', 'active').eq('is_latest', true);
+            }
+            if (tags && tags.length > 0) {
+              dbQuery = matchMode === 'all' ? dbQuery.contains('tags', tags) : dbQuery.overlaps('tags', tags);
+            }
+            const { data, error } = await dbQuery;
+            if (error) throw new Error(error.message);
+            let memories = (data ?? []) as Array<{ id: string; content: string; tags: string[]; is_latest: boolean; archived_at: string | null }>;
+            if (intent.query) {
+              const lowerQuery = intent.query.toLowerCase();
+              memories = memories.filter((memory) => memory.content.toLowerCase().includes(lowerQuery));
+            }
+            allResults.push(...memories.map((memory) => ({
+              entity_type: 'memories' as const,
+              identifier: memory.id,
+              memory_id: memory.id,
+              content_preview: memory.content.length > 120 ? `${memory.content.slice(0, 117)}...` : memory.content,
+              tags: memory.tags,
+              score: intent.list_mode ? 0 : 0.5,
+              match_source: [intent.list_mode ? 'list' as const : 'filesystem' as const],
+              is_latest: memory.is_latest,
+              archived_at: memory.archived_at,
+            })));
+          }
+        }
+
+        const results = mergeSearchResults(allResults, intent.limit);
+        return jsonToolResult({
+          query: intent.query,
+          entity_types: intent.entity_types,
+          mode: intent.mode,
+          total: results.length,
+          ...(warnings.length > 0 ? { warnings: [...new Set(warnings)] } : {}),
+          results,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error(`search failed: ${msg}`);
+        return jsonRuntimeError(msg);
       }
     }
   );

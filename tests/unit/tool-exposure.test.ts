@@ -18,6 +18,7 @@ describe('host MCP tool exposure', () => {
     expect(resolved.hostEnabledToolNames).toEqual(expect.arrayContaining([
       'get_document',
       'save_memory',
+      'search',
       'call_model',
       'create_document',
       'write_document',
@@ -62,6 +63,7 @@ describe('host MCP tool exposure', () => {
     const readWrite = resolveHostToolExposure({ tools: ['tier:read-write'] }).hostEnabledToolNames;
 
     expect(readOnly).toContain('list_vault');
+    expect(readOnly).toContain('search');
     expect(readOnly).toContain('get_llm_usage');
     expect(readOnly).not.toContain('create_document');
     expect(readWrite).toContain('list_vault');

@@ -198,6 +198,7 @@ export const TOOL_METADATA = [
   current('get_briefing', ['doc-read', 'memory', 'plugin'], 'read-only', legacyDescription('get_briefing', 'call_macro', 'Build a briefing from tagged documents, memories, and records.')),
   current('insert_doc_link', ['doc-write'], 'read-write', legacyDescription('insert_doc_link', 'call_macro', 'Insert a relationship link between documents.')),
   current('write_document', ['doc-write'], 'read-write', D.writeDocument),
+  current('search', ['doc-read', 'memory'], 'read-only', D.search),
 
   current('save_memory', ['memory'], 'read-write', legacyDescription('save_memory', 'write_memory', 'Store a persistent memory fact.')),
   current('search_memory', ['memory'], 'read-only', legacyDescription('search_memory', 'search', 'Search memories by semantic similarity and tags.')),
@@ -235,7 +236,6 @@ export const TOOL_METADATA = [
   current('create_directory', ['doc-write'], 'read-write', legacyDescription('create_directory', 'manage_directory', 'Create vault directories.')),
   current('remove_directory', ['doc-write'], 'read-write', legacyDescription('remove_directory', 'manage_directory', 'Remove empty vault directories.')),
 
-  future('search', ['doc-read', 'memory'], 'read-only', D.search),
   future('write_record', ['plugin'], 'read-write', D.writeRecord),
   future('remove_document', ['doc-write'], 'read-write', D.removeDocument),
   future('manage_directory', ['doc-write'], 'read-write', D.manageDirectory),
