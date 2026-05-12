@@ -46,6 +46,9 @@ vi.mock('../../src/mcp/utils/path-validation.js', async () => {
   return {
     ...actual,
     validateVaultPath: vi.fn(async (_vaultRoot: string, userPath: string) => {
+      if (userPath.includes('\0')) {
+        throw new Error('Path contains invalid null byte.');
+      }
       if (userPath.startsWith('..')) {
         return {
           valid: false,
@@ -232,6 +235,26 @@ describe('manage_directory', () => {
       details: { reason: 'lock_contention' },
     });
     expect(vi.mocked(mkdir)).not.toHaveBeenCalled();
+  });
+
+  it('keeps malformed path validation failures inside per-path results', async () => {
+    const result = await callManageDirectory({
+      action: 'create',
+      paths: ['Bad\0Path', 'Good'],
+    });
+    const payload = parseJson(result) as { results: Array<Record<string, unknown>> };
+
+    expect(result.isError).toBe(false);
+    expect(payload.results).toHaveLength(2);
+    expect(payload.results[0]).toMatchObject({
+      error: 'invalid_input',
+      identifier: 'Bad\0Path',
+      details: { field: 'paths' },
+    });
+    expect(payload.results[1]).toMatchObject({
+      path: 'Good',
+      status: 'created',
+    });
   });
 
   it('does not acquire directory locks when locking is disabled', async () => {

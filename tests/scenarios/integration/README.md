@@ -168,7 +168,7 @@ Action steps perform operations against the live FlashQuery server. The `action:
 | `archive_document` | `archive_document` | — |
 | `update_document` | `update_document` | — |
 | `maintain_vault` | `maintain_vault` | Final Phase 127 maintenance surface for sync, repair, and status |
-| `scan_vault` | `force_file_scan` | `background` is always forced to `false` |
+| `scan_vault` | `maintain_vault` | Legacy shortcut that runs `action: sync` with `background: false` |
 | any other string | called as-is | Direct MCP tool name |
 
 **Path auto-prefixing.** `vault.write` paths are automatically prefixed with `_integration/` if they don't already start with it. This scopes all integration test files under a dedicated subdirectory and keeps them out of real vault content. The prefixed path (not the original) is what ends up in the response and in any bound variables.
@@ -201,7 +201,7 @@ Action steps perform operations against the live FlashQuery server. The `action:
     action: sync
 ```
 
-**`scan_vault`.** Legacy shortcut for older scenarios. No arguments needed — the runner forces `background: false` automatically:
+**`scan_vault`.** Legacy shortcut for older scenarios. No arguments needed — the runner calls `maintain_vault` with `action: sync` and `background: false`:
 
 ```yaml
 - label: "Scan the vault"
@@ -513,7 +513,7 @@ steps:
 | `memory.write` | `save_memory` | `memory_id`, `content` |
 | `archive_document` | `archive_document` | — |
 | `update_document` | `update_document` | — |
-| `scan_vault` | `force_file_scan` | — |
+| `scan_vault` | `maintain_vault` | — |
 | *(any MCP tool name)* | called directly | — |
 
 ### Assertion keys

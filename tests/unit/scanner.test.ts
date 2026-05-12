@@ -1283,6 +1283,42 @@ describe('repairFrontmatter', () => {
       }) as any);
     }
   });
+
+  it('throws when the repair row query fails', async () => {
+    const repairQuery = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'database unavailable' },
+    });
+    const select = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: repairQuery,
+      }),
+    });
+    const mockSupabase = {
+      from: vi.fn(() => ({ select })),
+    };
+    vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabase as any);
+
+    try {
+      await expect(repairFrontmatter(makeConfig())).rejects.toThrow(
+        'frontmatter repair query failed: database unavailable'
+      );
+    } finally {
+      vi.mocked(supabaseManager.getClient).mockImplementation(() => ({
+        from: vi.fn(() => ({
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          neq: vi.fn().mockResolvedValue({ data: [], error: null }),
+          in: vi.fn().mockResolvedValue({ data: [], error: null }),
+          update: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+          insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+          upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
+        })),
+      }) as any);
+    }
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -1150,11 +1150,15 @@ export async function repairFrontmatter(
   };
 
   try {
-    const { data: repairFiles } = await supabase
+    const { data: repairFiles, error: repairQueryError } = await supabase
       .from('fqc_documents')
       .select('id, path, content_hash, created_at, status')
       .eq('instance_id', instanceId)
       .eq('needs_frontmatter_repair', true);
+
+    if (repairQueryError) {
+      throw new Error(`frontmatter repair query failed: ${repairQueryError.message}`);
+    }
 
     if (repairFiles && repairFiles.length > 0) {
       counts.scanned = repairFiles.length;
@@ -1252,6 +1256,7 @@ export async function repairFrontmatter(
     logger.warn(
       `[TSA-02] frontmatter repair phase failed: ${err instanceof Error ? err.message : String(err)}`
     );
+    throw err;
   }
   return counts;
 }

@@ -99,7 +99,18 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           continue;
         }
 
-        const validation = await validateVaultPath(vaultRoot, normalizedPath);
+        let validation: Awaited<ReturnType<typeof validateVaultPath>>;
+        try {
+          validation = await validateVaultPath(vaultRoot, normalizedPath);
+        } catch (validationErr) {
+          results.push({
+            error: 'invalid_input',
+            message: validationErr instanceof Error ? validationErr.message : 'Invalid path.',
+            identifier: inputPath,
+            details: { field: 'paths' },
+          });
+          continue;
+        }
         if (!validation.valid) {
           results.push({
             error: 'invalid_input',

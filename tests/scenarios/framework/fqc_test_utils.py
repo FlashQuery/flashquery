@@ -856,8 +856,8 @@ class TestContext:
         return relative_path
 
     def scan_vault(self) -> ToolResult:
-        """Call force_file_scan (sync) — a common step after creating files."""
-        return self.client.call_tool("force_file_scan", background=False)
+        """Run a synchronous vault maintenance sync after creating files."""
+        return self.client.call_tool("maintain_vault", action="sync", background=False)
 
     def maintain_vault(
         self,

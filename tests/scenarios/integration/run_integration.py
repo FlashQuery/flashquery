@@ -64,7 +64,7 @@ Step types
              archive_document   → archive_document MCP tool
              update_document    → update_document MCP tool
              maintain_vault     → maintain_vault MCP tool
-             scan_vault         → force_file_scan MCP tool (background=False)
+             scan_vault         → maintain_vault MCP tool (action=sync, background=False)
              <any MCP tool>     → called directly; use args: {...}
 
   sleep:   Pause for N seconds (float). Use to let async server-side operations
@@ -598,7 +598,7 @@ _ACTION_TOOL_MAP: dict[str, str] = {
     "append_to_doc":    "insert_in_doc",
     "update_doc_header": "write_document",
     "maintain_vault":   "maintain_vault",
-    "scan_vault":       "force_file_scan",
+    "scan_vault":       "maintain_vault",
 }
 
 # Keys that are step-level metadata, not tool arguments
@@ -649,8 +649,9 @@ def _execute_action(
     elif op == "append_to_doc":
         raw_args.setdefault("position", "bottom")
 
-    # Force synchronous scan when using scan_vault
+    # Keep legacy scan_vault YAML steps on the final synchronous maintenance surface.
     if op == "scan_vault":
+        raw_args["action"] = "sync"
         raw_args["background"] = False
 
     # Substitute ${name.field} references
