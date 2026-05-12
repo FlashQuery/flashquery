@@ -56,6 +56,7 @@ describe.skipIf(SKIP)('unified search integration', () => {
   let config: FlashQueryConfig;
   let mockServer: ReturnType<typeof createMockServer>;
   const memoryIds: string[] = [];
+  let nonLatestMemoryId = '';
 
   beforeAll(async () => {
     vaultPath = await mkdtemp(join(tmpdir(), 'fqc-search-'));
@@ -85,9 +86,11 @@ describe.skipIf(SKIP)('unified search integration', () => {
     for (const memory of [
       { content: 'Alpha memory visible in unified search', status: 'active', is_latest: true, archived_at: null },
       { content: 'Archived alpha memory hidden by default', status: 'archived', is_latest: true, archived_at: new Date().toISOString() },
+      { content: 'Superseded alpha memory hidden from latest-only search', status: 'active', is_latest: false, archived_at: null },
     ]) {
       const id = randomUUID();
       memoryIds.push(id);
+      if (!memory.is_latest) nonLatestMemoryId = id;
       await supabaseManager.getClient().from('fqc_memory').insert({
         id,
         instance_id: INSTANCE_ID,
@@ -120,10 +123,19 @@ describe.skipIf(SKIP)('unified search integration', () => {
       tags: ['phase125'],
     }) as { isError?: boolean };
     expect(result.isError).toBeFalsy();
-    const payload = JSON.parse(textOf(result)) as { mode: string; entity_types: string[]; results: Array<{ title?: string }> };
+    const payload = JSON.parse(textOf(result)) as { mode: string; entity_types: string[]; results: Array<Record<string, unknown>> };
     expect(payload.mode).toBe('filesystem');
     expect(payload.entity_types).toEqual(['documents']);
-    expect(payload.results).toEqual([expect.objectContaining({ title: 'Alpha Project' })]);
+    expect(payload.results).toEqual([
+      expect.objectContaining({
+        entity_type: 'document',
+        title: 'Alpha Project',
+        modified: expect.any(String),
+        size: { chars: expect.any(Number) },
+        match_source: ['filesystem'],
+      }),
+    ]);
+    expect(payload.results[0]).not.toHaveProperty('score');
   });
 
   it('supports memory list-mode without semantic provider calls', async () => {
@@ -133,11 +145,20 @@ describe.skipIf(SKIP)('unified search integration', () => {
       entity_types: ['memories'],
     }) as { isError?: boolean };
     expect(result.isError).toBeFalsy();
-    const payload = JSON.parse(textOf(result)) as { mode: string; results: Array<{ memory_id?: string; content_preview?: string }> };
+    const payload = JSON.parse(textOf(result)) as { mode: string; results: Array<Record<string, unknown>> };
     expect(payload.mode).toBe('list');
     expect(payload.results).toEqual([
-      expect.objectContaining({ memory_id: memoryIds[0], content_preview: expect.stringContaining('Alpha memory') }),
+      expect.objectContaining({
+        entity_type: 'memory',
+        memory_id: memoryIds[0],
+        content_preview: expect.stringContaining('Alpha memory'),
+        plugin_scope: 'global',
+        created_at: expect.any(String),
+        updated_at: expect.any(String),
+      }),
     ]);
+    expect(payload.results[0]).not.toHaveProperty('score');
+    expect(payload.results[0]).not.toHaveProperty('match_source');
   });
 
   it('applies one global limit after mixed document and memory merge', async () => {
@@ -171,6 +192,18 @@ describe.skipIf(SKIP)('unified search integration', () => {
     const archivedPayload = JSON.parse(textOf(archivedResult)) as { results: Array<{ title?: string; content_preview?: string }> };
     expect(JSON.stringify(archivedPayload.results)).toContain('Archived Alpha');
     expect(JSON.stringify(archivedPayload.results)).toContain('Archived alpha memory');
+  });
+
+  it('keeps memory search latest-only even when include_archived is true', async () => {
+    const result = await mockServer.getHandler('search')({
+      query: 'superseded alpha',
+      mode: 'filesystem',
+      entity_types: ['memories'],
+      include_archived: true,
+      list_all: true,
+    });
+    const payload = JSON.parse(textOf(result)) as { results: Array<{ memory_id?: string }> };
+    expect(payload.results.map((item) => item.memory_id)).not.toContain(nonLatestMemoryId);
   });
 
   it('returns unsupported for an explicit disabled memory domain', async () => {

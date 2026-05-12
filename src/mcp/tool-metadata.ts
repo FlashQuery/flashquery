@@ -4,7 +4,7 @@ export type ToolStatus = 'final' | 'transitional' | 'removed' | 'dead';
 
 export type ToolTierSelector = 'tier:read-only' | 'tier:read-write';
 export type ToolCategorySelector = `category:${ToolCategory}`;
-export type ToolSelector = ToolTierSelector | ToolCategorySelector | string;
+export type ToolSelector = string;
 
 export interface ToolMetadata {
   name: string;
@@ -119,10 +119,10 @@ const D = {
     'list_vault({ "path": "Projects", "recursive": true, "include": ["metadata", "tracking"] })'
   ),
   search: description(
-    'Search documents and memories through the consolidated search surface.',
-    'Use when you need filesystem, semantic, mixed, or list-mode search across enabled data domains.',
-    'Do not use when you need a single known entity by ID or path; use get_document or get_memory instead.',
-    'search({ "query": "launch notes", "entity_types": ["documents"], "mode": "mixed" })'
+    'Search documents and memories through one unified result list.',
+    'Use when you need to find notes or memories by title/path/tags, semantic meaning, or mixed search. Use entity_types to narrow to documents, memories, or both; use mode:"filesystem", mode:"semantic", mode:"mixed", or an empty query with tags/path_filter for list-mode.',
+    'Do not use this for literal body grep, regex, or line-range search; those belong in macro/string operations. Do not use domain-specific legacy search surfaces; use this tool with entity_types instead. For a single known entity, use get_document or get_memory.',
+    'search({ "query": "planning", "entity_types": ["documents", "memories"], "mode": "mixed", "limit": 10 })'
   ),
   writeDocument: description(
     'Create or update a document through one explicit mode-based document writer.',
@@ -183,8 +183,8 @@ const D = {
 export const TOOL_METADATA = [
   current('get_document', ['doc-read'], 'read-only', D.getDocument),
   current('list_vault', ['doc-read'], 'read-only', D.listVault),
-  current('search_documents', ['doc-read'], 'read-only', legacyDescription('search_documents', 'search', 'Search vault documents by path, title, tags, or content.')),
-  current('search_all', ['doc-read', 'memory'], 'read-only', legacyDescription('search_all', 'search', 'Search documents and memories through the current unified search helper.')),
+  current('search_documents', ['doc-read'], 'read-only', legacyDescription('search_documents', 'search', 'Legacy document search surface; use search with entity_types:["documents"] instead.')),
+  current('search_all', ['doc-read', 'memory'], 'read-only', legacyDescription('search_all', 'search', 'Legacy cross-domain search surface; use search with entity_types instead.')),
   current('create_document', ['doc-write'], 'read-write', legacyDescription('create_document', 'write_document', 'Create a new markdown document in the vault.')),
   current('update_document', ['doc-write'], 'read-write', legacyDescription('update_document', 'write_document', 'Overwrite or update an existing document.')),
   current('append_to_doc', ['doc-write'], 'read-write', legacyDescription('append_to_doc', 'insert_in_doc', 'Append content to the end of a document.')),
@@ -201,9 +201,9 @@ export const TOOL_METADATA = [
   current('search', ['doc-read', 'memory'], 'read-only', D.search),
 
   current('save_memory', ['memory'], 'read-write', legacyDescription('save_memory', 'write_memory', 'Store a persistent memory fact.')),
-  current('search_memory', ['memory'], 'read-only', legacyDescription('search_memory', 'search', 'Search memories by semantic similarity and tags.')),
+  current('search_memory', ['memory'], 'read-only', legacyDescription('search_memory', 'search', 'Legacy memory search surface; use search with entity_types:["memories"] instead.')),
   current('update_memory', ['memory'], 'read-write', legacyDescription('update_memory', 'write_memory', 'Update an existing memory by creating a new version.')),
-  current('list_memories', ['memory'], 'read-only', legacyDescription('list_memories', 'search', 'List memories filtered by tags or project scope.')),
+  current('list_memories', ['memory'], 'read-only', legacyDescription('list_memories', 'search', 'Legacy memory list surface; use search with entity_types:["memories"], an empty query, and tags instead.')),
   current('get_memory', ['memory'], 'read-only', description(
     'Retrieve one or more memories by ID and return JSON memory identification with include-gated payloads.',
     'Use when you already have memory_ids and need preview metadata, full content, tags_full, or direct access to a previous version.',

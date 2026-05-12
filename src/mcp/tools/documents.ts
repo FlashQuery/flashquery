@@ -63,13 +63,14 @@ export interface DocMeta {
   status: string;
   fqcId: string;
   modified: string;
+  size: { chars: number };
 }
 
-function isDocumentNotFoundError(err: unknown): boolean {
+function isDocumentNotFoundError(err: unknown): err is Error {
   return err instanceof Error && err.name === 'DocumentNotFoundError';
 }
 
-function isAmbiguousDocumentIdentifierError(err: unknown): boolean {
+function isAmbiguousDocumentIdentifierError(err: unknown): err is Error & { matches?: unknown } {
   return err instanceof Error && err.name === 'AmbiguousDocumentIdentifierError';
 }
 
@@ -165,8 +166,9 @@ export async function listMarkdownFiles(
 
 export async function parseDocMeta(vaultRoot: string, relativePath: string): Promise<DocMeta | null> {
   try {
-    const raw = await readFile(join(vaultRoot, relativePath), 'utf-8');
-    const { data } = matter(raw);
+    const fullPath = join(vaultRoot, relativePath);
+    const raw = await readFile(fullPath, 'utf-8');
+    const { data, content } = matter(raw);
     return {
       relativePath,
       title: String(data[FM.TITLE] ?? relativePath),
@@ -174,7 +176,8 @@ export async function parseDocMeta(vaultRoot: string, relativePath: string): Pro
       project: String(data.project ?? ''),
       status: String(data[FM.STATUS] ?? 'active'),
       fqcId: String(data[FM.ID] ?? ''),
-      modified: String(data[FM.UPDATED] ?? data[FM.CREATED] ?? ''),
+      modified: String(data[FM.UPDATED] ?? data[FM.CREATED] ?? new Date(0).toISOString()),
+      size: { chars: content.length },
     };
   } catch {
     logger.warn(`search_documents: skipping malformed file ${relativePath}`);
@@ -243,23 +246,25 @@ export async function reconcileMissingRow(
 export async function searchDocumentsSemantic(
   config: FlashQueryConfig,
   query: string,
-  opts: {
-    tags?: string[];
-    tagMatch?: 'any' | 'all';
-    limit?: number;
-  }
-): Promise<Array<{ id: string; path: string; title: string; tags: string[]; similarity: number; created_at: string }>> {
-  const { tags, tagMatch = 'any', limit = 20 } = opts;
+	  opts: {
+	    tags?: string[];
+	    tagMatch?: 'any' | 'all';
+	    limit?: number;
+	    includeArchived?: boolean;
+	  }
+	): Promise<Array<{ id: string; path: string; title: string; tags: string[]; similarity: number; created_at: string }>> {
+	  const { tags, tagMatch = 'any', limit = 20, includeArchived = false } = opts;
   const queryEmbedding = await embeddingProvider.embed(query);
   const supabase = supabaseManager.getClient();
   const rpcResult = (await supabase.rpc('match_documents', {
     query_embedding: JSON.stringify(queryEmbedding),
     match_threshold: 0.4,
     match_count: limit,
-    filter_instance_id: config.instance.id,
-    filter_tags: tags ?? null,
-    filter_tag_match: tagMatch,
-  })) as { data: unknown; error: { message: string } | null };
+	    filter_instance_id: config.instance.id,
+	    filter_tags: tags ?? null,
+	    filter_tag_match: tagMatch,
+	    include_archived: includeArchived,
+	  })) as { data: unknown; error: { message: string } | null };
   const { data, error } = rpcResult;
   if (error) throw new Error(error.message);
   const rawResults = (data ?? []) as Array<{

@@ -18,8 +18,22 @@ describe('search helper validation', () => {
   });
 
   it('rejects empty query without filters unless list_all is true', () => {
-    expect(validateSearchInput({ query: '' })).toMatchObject({ error: 'invalid_input' });
+    expect(validateSearchInput({ query: '' })).toEqual({
+      error: 'invalid_input',
+      message: 'Empty query requires filters or list_all: true',
+      identifier: '',
+      details: { requires: ['tags', 'path_filter', 'list_all'] },
+    });
     expect(validateSearchInput({ query: '', list_all: true, entity_types: ['documents'] })).toBeNull();
+  });
+
+  it('rejects deferred literal body-search parameters with macro guidance', () => {
+    expect(validateSearchInput({ query: 'needle', body_contains: 'literal' })).toEqual({
+      error: 'invalid_input',
+      message: expect.stringContaining('macro/string operations'),
+      identifier: 'body_contains',
+      details: { unsupported_parameters: ['body_contains'] },
+    });
   });
 
   it('enters list mode for empty filtered searches and requires explicit entity_types', () => {
@@ -69,10 +83,10 @@ describe('search helper validation', () => {
 describe('search result merge and ranking', () => {
   it('dedupes mixed-mode document and memory results by fq_id/memory_id and aggregates match_source', () => {
     const results: SearchResultItem[] = [
-      { entity_type: 'documents', identifier: 'doc path', path: 'A.md', fq_id: 'doc-1', score: 0.4, match_source: ['filesystem'] },
-      { entity_type: 'documents', identifier: 'doc path', path: 'A.md', fq_id: 'doc-1', score: 0.9, match_source: ['semantic'] },
-      { entity_type: 'memories', identifier: 'mem-1', memory_id: 'mem-1', score: 0.7, match_source: ['semantic'] },
-      { entity_type: 'memories', identifier: 'mem-1', memory_id: 'mem-1', score: 0.2, match_source: ['list'] },
+      { entity_type: 'document', identifier: 'doc path', path: 'A.md', fq_id: 'doc-1', score: 0.4, match_source: ['filesystem'] },
+      { entity_type: 'document', identifier: 'doc path', path: 'A.md', fq_id: 'doc-1', score: 0.9, match_source: ['semantic'] },
+      { entity_type: 'memory', identifier: 'mem-1', memory_id: 'mem-1', score: 0.7, match_source: ['semantic'] },
+      { entity_type: 'memory', identifier: 'mem-1', memory_id: 'mem-1', match_source: ['list'] },
     ];
 
     expect(mergeSearchResults(results, 10)).toEqual([
@@ -83,9 +97,9 @@ describe('search result merge and ranking', () => {
 
   it('applies one global limit after merge, dedupe, and deterministic sorting', () => {
     const results: SearchResultItem[] = [
-      { entity_type: 'memories', identifier: 'mem-b', memory_id: 'mem-b', score: 0.8, match_source: ['semantic'] },
-      { entity_type: 'documents', identifier: 'b', path: 'B.md', fq_id: 'doc-b', score: 0.8, match_source: ['semantic'] },
-      { entity_type: 'documents', identifier: 'a', path: 'A.md', fq_id: 'doc-a', score: 0.8, match_source: ['filesystem'] },
+      { entity_type: 'memory', identifier: 'mem-b', memory_id: 'mem-b', score: 0.8, match_source: ['semantic'] },
+      { entity_type: 'document', identifier: 'b', path: 'B.md', fq_id: 'doc-b', score: 0.8, match_source: ['semantic'] },
+      { entity_type: 'document', identifier: 'a', path: 'A.md', fq_id: 'doc-a', score: 0.8, match_source: ['filesystem'] },
     ];
 
     expect(mergeSearchResults(results, 2).map((result) => result.identifier)).toEqual(['a', 'b']);

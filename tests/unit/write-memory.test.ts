@@ -86,9 +86,13 @@ describe('write_memory', () => {
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, makeConfig());
 
-    const generated = await getHandler('write_memory')({ mode: 'create', content: 'x', id: 'caller-id' }) as { isError?: boolean };
+    const generated = await getHandler('write_memory')({ mode: 'create', content: 'x', memory_id: 'caller-id' }) as { isError?: boolean };
     expect(generated.isError).toBe(false);
-    expect(parseResult(generated)).toMatchObject({ error: 'invalid_input' });
+    expect(parseResult(generated)).toEqual({
+      error: 'invalid_input',
+      message: 'memory_id is not allowed when mode is create',
+      identifier: 'caller-id',
+    });
 
     let capturedInsert: Record<string, unknown> = {};
     const insertChain = makeThenableChain({
@@ -115,7 +119,13 @@ describe('write_memory', () => {
     const result = await getHandler('write_memory')({ mode: 'create', content: 'User prefers JSON', tags: ['preference'], include: ['content'] });
     const payload = parseResult(result);
 
-    expect(capturedInsert).toMatchObject({ plugin_scope: 'global', is_latest: true, previous_version_id: null });
+    expect(capturedInsert).toMatchObject({
+      plugin_scope: 'global',
+      is_latest: true,
+      previous_version_id: null,
+      chain_root_id: expect.any(String),
+    });
+    expect(capturedInsert.chain_root_id).toBe(capturedInsert.id);
     expect(payload).toMatchObject({ memory_id: 'mem-1', content: 'User prefers JSON', is_latest: true });
   });
 
@@ -144,10 +154,15 @@ describe('write_memory', () => {
 
     const conflict = await handler({ mode: 'update', memory_id: 'mem-1', content: 'new' }) as { isError?: boolean };
     expect(conflict.isError).toBe(false);
-    expect(parseResult(conflict)).toMatchObject({ error: 'conflict', details: { reason: 'not_latest' } });
+    expect(parseResult(conflict)).toMatchObject({
+      error: 'conflict',
+      message: 'Cannot update a non-latest memory version',
+      identifier: 'mem-1',
+      details: { reason: 'non_latest_memory_version' },
+    });
   });
 
-  it('update inserts a new latest version with previous_version_id and flips the previous row', async () => {
+  it('update creates a new latest version through the transactional database RPC', async () => {
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, makeConfig());
 
@@ -164,8 +179,7 @@ describe('write_memory', () => {
       },
       error: null,
     });
-    let capturedInsert: Record<string, unknown> = {};
-    const insertChain = makeThenableChain({
+    const rpc = vi.fn().mockResolvedValue({
       data: {
         id: 'mem-2',
         content: 'new',
@@ -180,21 +194,19 @@ describe('write_memory', () => {
       },
       error: null,
     });
-    (insertChain.insert as ReturnType<typeof vi.fn>).mockImplementation((row: Record<string, unknown>) => {
-      capturedInsert = row;
-      return insertChain;
-    });
-    const updateChain = makeThenableChain({ error: null });
     const from = vi.fn()
-      .mockReturnValueOnce(fetchChain)
-      .mockReturnValueOnce(insertChain)
-      .mockReturnValueOnce(updateChain);
-    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ from });
+      .mockReturnValueOnce(fetchChain);
+    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ from, rpc });
 
     const result = await getHandler('write_memory')({ mode: 'update', memory_id: 'mem-1', content: 'new', tags: ['new'] });
 
-    expect(capturedInsert).toMatchObject({ previous_version_id: 'mem-1', version: 2, is_latest: true, tags: ['new'] });
-    expect(updateChain.update).toHaveBeenCalledWith(expect.objectContaining({ is_latest: false }));
+    expect(rpc).toHaveBeenCalledWith('fqc_memory_create_version', {
+      p_instance_id: 'test-instance-id',
+      p_previous_id: 'mem-1',
+      p_content: 'new',
+      p_tags: ['new'],
+      p_plugin_scope: 'global',
+    });
     expect(parseResult(result)).toMatchObject({ memory_id: 'mem-2', previous_version_id: 'mem-1', is_latest: true });
   });
 });

@@ -277,8 +277,9 @@ CREATE TABLE IF NOT EXISTS fqc_memory (
   plugin_scope TEXT DEFAULT 'global',
   status TEXT DEFAULT 'active',
   version INTEGER DEFAULT 1,
-  previous_version_id UUID,
-  is_latest BOOLEAN DEFAULT true,
+	  previous_version_id UUID,
+	  chain_root_id UUID,
+	  is_latest BOOLEAN DEFAULT true,
   archived_at TIMESTAMPTZ,
   embedding vector(${dimensions}),
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -286,16 +287,32 @@ CREATE TABLE IF NOT EXISTS fqc_memory (
 );
 
 -- Phase 125: memory lifecycle visibility columns for final search/memory tools.
-ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS is_latest BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
-UPDATE fqc_memory SET is_latest = true WHERE is_latest IS NULL;
-UPDATE fqc_memory parent
-SET is_latest = false
+	ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS is_latest BOOLEAN DEFAULT true;
+	ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
+	ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS chain_root_id UUID;
+	UPDATE fqc_memory SET is_latest = true WHERE is_latest IS NULL;
+	UPDATE fqc_memory parent
+	SET is_latest = false
 WHERE EXISTS (
   SELECT 1
   FROM fqc_memory child
-  WHERE child.previous_version_id = parent.id
-);
+	  WHERE child.previous_version_id = parent.id
+	);
+	WITH RECURSIVE memory_chains AS (
+	  SELECT id, id AS root_id
+	  FROM fqc_memory
+	  WHERE previous_version_id IS NULL
+	  UNION ALL
+	  SELECT child.id, parent.root_id
+	  FROM fqc_memory child
+	  JOIN memory_chains parent ON child.previous_version_id = parent.id
+	)
+	UPDATE fqc_memory memory
+	SET chain_root_id = memory_chains.root_id
+	FROM memory_chains
+	WHERE memory.id = memory_chains.id
+	  AND memory.chain_root_id IS NULL;
+	UPDATE fqc_memory SET chain_root_id = id WHERE chain_root_id IS NULL;
 
 -- Phase 23: Hard-delete unused columns from existing databases (v1.7 pre-release)
 ALTER TABLE IF EXISTS fqc_memory DROP COLUMN IF EXISTS user_id;
@@ -619,7 +636,9 @@ CREATE INDEX IF NOT EXISTS idx_fqc_purpose_templates_lookup
 CREATE INDEX IF NOT EXISTS idx_fqc_memory_embedding ON fqc_memory USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_fqc_memory_tags ON fqc_memory USING gin (tags);
 CREATE INDEX IF NOT EXISTS idx_fqc_memory_status ON fqc_memory (status);
-CREATE INDEX IF NOT EXISTS idx_fqc_memory_latest_status ON fqc_memory (instance_id, status, is_latest);
+	CREATE INDEX IF NOT EXISTS idx_fqc_memory_latest_status ON fqc_memory (instance_id, status, is_latest);
+	CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_memory_one_latest_per_chain
+	  ON fqc_memory (instance_id, chain_root_id) WHERE (is_latest = true);
 CREATE INDEX IF NOT EXISTS idx_fqc_vault_instance ON fqc_vault (instance_id);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_embedding ON fqc_documents USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS idx_fqc_documents_instance ON fqc_documents (instance_id);
@@ -647,28 +666,32 @@ CREATE INDEX IF NOT EXISTS idx_fqc_documents_ownership ON fqc_documents(ownershi
 
 -- Step 4: Create match_memories RPC function
 
--- Drop old function signature if it exists (Phase 33 added tag_match support)
--- Old 6-param signature: embedding, threshold, count, project(removed), tags, instance_id
--- New 6-param signature: embedding, threshold, count, tags, tag_match(new), instance_id
--- PostgreSQL 42P13 blocks CREATE OR REPLACE when RETURNS TABLE differs, so we drop first.
-DROP FUNCTION IF EXISTS match_memories(vector, double precision, integer, text, text[], text) CASCADE;
+	-- Drop old function signature if it exists (Phase 33 added tag_match support)
+	-- Old 6-param signature: embedding, threshold, count, project(removed), tags, instance_id
+	-- New 6-param signature: embedding, threshold, count, tags, tag_match(new), instance_id
+	-- PostgreSQL 42P13 blocks CREATE OR REPLACE when RETURNS TABLE differs, so we drop first.
+	DROP FUNCTION IF EXISTS match_memories(vector, double precision, integer, text, text[], text) CASCADE;
+	DROP FUNCTION IF EXISTS match_memories(vector, double precision, integer, text[], text, text) CASCADE;
 
-CREATE OR REPLACE FUNCTION match_memories(
+	CREATE OR REPLACE FUNCTION match_memories(
   query_embedding vector(${dimensions}),
   match_threshold float DEFAULT 0.7,
   match_count int DEFAULT 10,
-  filter_tags text[] DEFAULT NULL,
-  filter_tag_match text DEFAULT 'any',
-  filter_instance_id text DEFAULT NULL
-)
+	  filter_tags text[] DEFAULT NULL,
+	  filter_tag_match text DEFAULT 'any',
+	  filter_instance_id text DEFAULT NULL,
+	  include_archived boolean DEFAULT false
+	)
 RETURNS TABLE (
   id uuid,
   content text,
-  tags text[],
-  plugin_scope text,
-  similarity float,
-  created_at timestamptz
-)
+	  tags text[],
+	  plugin_scope text,
+	  similarity float,
+	  created_at timestamptz,
+	  updated_at timestamptz,
+	  is_latest boolean
+	)
 LANGUAGE plpgsql
 AS $$
 BEGIN
@@ -677,12 +700,15 @@ BEGIN
     m.id,
     m.content,
     m.tags,
-    m.plugin_scope,
-    1 - (m.embedding <=> query_embedding) AS similarity,
-    m.created_at
-  FROM fqc_memory m
-  WHERE m.status = 'active'
-    AND 1 - (m.embedding <=> query_embedding) > match_threshold
+	    m.plugin_scope,
+	    1 - (m.embedding <=> query_embedding) AS similarity,
+	    m.created_at,
+	    m.updated_at,
+	    m.is_latest
+	  FROM fqc_memory m
+	  WHERE (include_archived OR m.status = 'active')
+	    AND m.is_latest = true
+	    AND 1 - (m.embedding <=> query_embedding) > match_threshold
     AND (filter_tags IS NULL OR
       CASE WHEN filter_tag_match = 'all'
         THEN m.tags @> filter_tags
@@ -692,24 +718,123 @@ BEGIN
     AND (filter_instance_id IS NULL OR m.instance_id = filter_instance_id)
   ORDER BY m.embedding <=> query_embedding
   LIMIT match_count;
-END;
-$$;
+	END;
+	$$;
+
+	CREATE OR REPLACE FUNCTION fqc_memory_create_version(
+	  p_instance_id text,
+	  p_previous_id uuid,
+	  p_content text,
+	  p_tags text[],
+	  p_plugin_scope text DEFAULT 'global'
+	)
+	RETURNS TABLE (
+	  id uuid,
+	  content text,
+	  tags text[],
+	  plugin_scope text,
+	  created_at timestamptz,
+	  updated_at timestamptz,
+	  version integer,
+	  previous_version_id uuid,
+	  is_latest boolean,
+	  archived_at timestamptz,
+	  chain_root_id uuid
+	)
+	LANGUAGE plpgsql
+	AS $$
+	DECLARE
+	  previous_row fqc_memory%ROWTYPE;
+	  inserted_id uuid := gen_random_uuid();
+	  root_id uuid;
+	BEGIN
+	  SELECT * INTO previous_row
+	  FROM fqc_memory
+	  WHERE fqc_memory.id = p_previous_id
+	    AND fqc_memory.instance_id = p_instance_id
+	  FOR UPDATE;
+
+	  IF NOT FOUND THEN
+	    RAISE EXCEPTION 'Memory not found: %', p_previous_id USING ERRCODE = 'P0002';
+	  END IF;
+
+	  IF previous_row.is_latest IS NOT TRUE THEN
+	    RAISE EXCEPTION 'Cannot update a non-latest memory version' USING ERRCODE = '23505';
+	  END IF;
+
+	  root_id := COALESCE(previous_row.chain_root_id, previous_row.id);
+
+	  UPDATE fqc_memory
+	  SET is_latest = false,
+	      updated_at = now(),
+	      chain_root_id = root_id
+	  WHERE fqc_memory.id = previous_row.id
+	    AND fqc_memory.instance_id = p_instance_id;
+
+	  INSERT INTO fqc_memory (
+	    id,
+	    instance_id,
+	    content,
+	    tags,
+	    plugin_scope,
+	    status,
+	    version,
+	    previous_version_id,
+	    chain_root_id,
+	    is_latest,
+	    archived_at,
+	    embedding
+	  )
+	  VALUES (
+	    inserted_id,
+	    p_instance_id,
+	    p_content,
+	    COALESCE(p_tags, '{}'),
+	    COALESCE(p_plugin_scope, previous_row.plugin_scope, 'global'),
+	    'active',
+	    COALESCE(previous_row.version, 1) + 1,
+	    previous_row.id,
+	    root_id,
+	    true,
+	    NULL,
+	    NULL
+	  );
+
+	  RETURN QUERY
+	  SELECT
+	    m.id,
+	    m.content,
+	    m.tags,
+	    m.plugin_scope,
+	    m.created_at,
+	    m.updated_at,
+	    m.version,
+	    m.previous_version_id,
+	    m.is_latest,
+	    m.archived_at,
+	    m.chain_root_id
+	  FROM fqc_memory m
+	  WHERE m.id = inserted_id;
+	END;
+	$$;
 
 -- Step 5: Create match_documents RPC function
 
 -- Drop old function signatures with incompatible parameters (Phase 33 added filter_tags, filter_tag_match)
--- Old signature: (vector, float, int, text) — 4 params, no tag filtering
--- New signature: (vector, float, int, text, text[], text) — adds filter_tags and filter_tag_match
-DROP FUNCTION IF EXISTS match_documents(vector, double precision, integer, text) CASCADE;
+	-- Old signature: (vector, float, int, text) — 4 params, no tag filtering
+	-- New signature: (vector, float, int, text, text[], text) — adds filter_tags and filter_tag_match
+	DROP FUNCTION IF EXISTS match_documents(vector, double precision, integer, text) CASCADE;
+	DROP FUNCTION IF EXISTS match_documents(vector, double precision, integer, text, text[], text) CASCADE;
 
 CREATE OR REPLACE FUNCTION match_documents(
   query_embedding vector(${dimensions}),
   match_threshold float DEFAULT 0.7,
   match_count int DEFAULT 10,
-  filter_instance_id text DEFAULT NULL,
-  filter_tags text[] DEFAULT NULL,
-  filter_tag_match text DEFAULT 'any'
-)
+	  filter_instance_id text DEFAULT NULL,
+	  filter_tags text[] DEFAULT NULL,
+	  filter_tag_match text DEFAULT 'any',
+	  include_archived boolean DEFAULT false
+	)
 RETURNS TABLE (
   id uuid,
   path text,
@@ -730,7 +855,7 @@ BEGIN
     1 - (d.embedding <=> query_embedding) AS similarity,
     d.created_at
   FROM fqc_documents d
-  WHERE d.status = 'active'
+	  WHERE (include_archived OR d.status = 'active')
     AND d.embedding IS NOT NULL
     AND 1 - (d.embedding <=> query_embedding) > match_threshold
     AND (filter_instance_id IS NULL OR d.instance_id = filter_instance_id)

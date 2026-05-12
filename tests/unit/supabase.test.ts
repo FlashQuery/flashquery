@@ -190,9 +190,13 @@ describe('Phase 23 DDL updates', () => {
     expect(ddl).toContain('archived_at TIMESTAMPTZ');
     expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS is_latest BOOLEAN DEFAULT true');
     expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ');
+    expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_memory ADD COLUMN IF NOT EXISTS chain_root_id UUID');
     expect(ddl).toContain('UPDATE fqc_memory SET is_latest = true WHERE is_latest IS NULL');
     expect(ddl).toContain('previous_version_id = parent.id');
     expect(ddl).toContain('idx_fqc_memory_latest_status');
+    expect(ddl).toContain('idx_fqc_memory_one_latest_per_chain');
+    expect(ddl).toContain('CREATE OR REPLACE FUNCTION fqc_memory_create_version');
+    expect(ddl).toContain('FOR UPDATE');
   });
 
   it('idx_fqc_memory_project index is removed (PROJ-04)', () => {

@@ -235,7 +235,7 @@ describe('memory output helpers', () => {
     expect(buildOrderedMemoryResults(['missing', 'mem-1'], [memoryRow])).toEqual([
       {
         error: 'not_found',
-        message: 'Memory not found: missing',
+        message: "No memory matches identifier 'missing'",
         identifier: 'missing',
       },
       expect.objectContaining({ memory_id: 'mem-1' }),
@@ -247,7 +247,7 @@ describe('memory output helpers', () => {
     expect(result.isError).toBe(false);
     expect(parseToolText(result)).toEqual({
       error: 'not_found',
-      message: 'Memory not found: mem-x',
+      message: "No memory matches identifier 'mem-x'",
       identifier: 'mem-x',
     });
   });

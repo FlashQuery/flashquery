@@ -237,7 +237,7 @@ describe('get_memory', () => {
     expect(JSON.parse(result.content[0].text)).toEqual([
       {
         error: 'not_found',
-        message: `Memory not found: ${MISSING_ID}`,
+        message: `No memory matches identifier '${MISSING_ID}'`,
         identifier: MISSING_ID,
       },
     ]);
@@ -257,6 +257,7 @@ describe('get_memory', () => {
     expect(result.isError).toBe(false);
     expect(JSON.parse(result.content[0].text)).toMatchObject({
       error: 'not_found',
+      message: `No memory matches identifier '${MISSING_ID}'`,
       identifier: MISSING_ID,
     });
   });

@@ -20,6 +20,7 @@ export interface MemoryRow {
   previous_version_id?: string | null;
   is_latest?: boolean | null;
   archived_at?: string | null;
+  chain_root_id?: string | null;
 }
 
 export type MemoryResult = MemoryIdentificationInput & {
@@ -81,7 +82,7 @@ export function buildOrderedMemoryResults(
       if (!row) {
         return {
           error: 'not_found',
-          message: `Memory not found: ${id}`,
+          message: `No memory matches identifier '${id}'`,
           identifier: id,
         } satisfies ErrorEnvelope;
       }
@@ -93,7 +94,7 @@ export function buildOrderedMemoryResults(
 export function memoryNotFoundError(memoryId: string): ToolResult {
   return jsonExpectedError({
     error: 'not_found',
-    message: `Memory not found: ${memoryId}`,
+    message: `No memory matches identifier '${memoryId}'`,
     identifier: memoryId,
   });
 }

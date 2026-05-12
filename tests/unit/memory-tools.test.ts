@@ -1285,6 +1285,8 @@ describe('archive_memory', () => {
     expect(JSON.parse(result.content[0].text)).toMatchObject({
       memory_id: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
       archived_at: expect.any(String),
+      status: 'archived',
+      archived_version_count: 1,
     });
     expect(updateChain.update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1386,6 +1388,102 @@ describe('archive_memory', () => {
     expect(JSON.parse(result.content[0].text)).toMatchObject({
       error: 'not_found',
       identifier: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
+    });
+  });
+
+  it('archives every version in a 3-version chain when called with the oldest id and returns latest id', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerMemoryTools(server, config);
+
+    const rows = [
+      {
+        id: '11111111-1111-1111-1111-111111111111',
+        content: 'oldest',
+        tags: ['#status/active'],
+        status: 'active',
+        plugin_scope: 'global',
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+        version: 1,
+        previous_version_id: null,
+        is_latest: false,
+        archived_at: null,
+      },
+      {
+        id: '22222222-2222-2222-2222-222222222222',
+        content: 'middle',
+        tags: ['#status/active'],
+        status: 'active',
+        plugin_scope: 'global',
+        created_at: '2026-01-02T00:00:00Z',
+        updated_at: '2026-01-02T00:00:00Z',
+        version: 2,
+        previous_version_id: '11111111-1111-1111-1111-111111111111',
+        is_latest: false,
+        archived_at: null,
+      },
+      {
+        id: '33333333-3333-3333-3333-333333333333',
+        content: 'latest',
+        tags: ['#status/active'],
+        status: 'active',
+        plugin_scope: 'global',
+        created_at: '2026-01-03T00:00:00Z',
+        updated_at: '2026-01-03T00:00:00Z',
+        version: 3,
+        previous_version_id: '22222222-2222-2222-2222-222222222222',
+        is_latest: true,
+        archived_at: null,
+      },
+    ];
+
+    const updates: Array<{ id: string; payload: Record<string, unknown> }> = [];
+    const selectChain = {
+      select: vi.fn(),
+      eq: vi.fn(),
+      then: (resolve: (value: unknown) => void) => resolve({ data: rows, error: null }),
+    };
+    selectChain.select.mockReturnValue(selectChain);
+    selectChain.eq.mockReturnValue(selectChain);
+
+    const client = {
+      from: vi.fn().mockImplementation(() => {
+        if (client.from.mock.calls.length === 1) return selectChain;
+        let payload: Record<string, unknown> = {};
+        const updateChain = {
+          update: vi.fn().mockImplementation((next: Record<string, unknown>) => {
+            payload = next;
+            return updateChain;
+          }),
+          eq: vi.fn().mockImplementation((field: string, value: string) => {
+            if (field === 'id') updates.push({ id: value, payload });
+            return updateChain;
+          }),
+          then: (resolve: (value: unknown) => void) => resolve({ error: null }),
+        };
+        return updateChain;
+      }),
+    };
+    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue(client);
+
+    const result = await getHandler('archive_memory')({ memory_ids: '11111111-1111-1111-1111-111111111111' }) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.isError).toBeUndefined();
+    expect(updates.map((update) => update.id)).toEqual([
+      '11111111-1111-1111-1111-111111111111',
+      '22222222-2222-2222-2222-222222222222',
+      '33333333-3333-3333-3333-333333333333',
+    ]);
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload).toMatchObject({
+      memory_id: '33333333-3333-3333-3333-333333333333',
+      status: 'archived',
+      archived_version_count: 3,
+      archived_at: expect.any(String),
     });
   });
 });

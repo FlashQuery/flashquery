@@ -966,7 +966,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'search',
     {
       description:
-        'Unified JSON search across documents and memories with filesystem, semantic, mixed, and list modes.',
+        'Search documents and memories through one unified result list. Use this when you need to find notes or memories by title/path/tags, semantic meaning, or a mixed search that combines both.\n\nUse entity_types to narrow to documents, memories, or both. Use mode: "filesystem" for title/path/tag matching, mode: "semantic" for embedding search, and mode: "mixed" when you want both; mixed is the default. Use an empty query with tags or path_filter for list-mode, or list_all: true when you intentionally want an unfiltered listing.\n\nDo not use this for literal body grep, regex, or line-range search; those belong in macro/string operations. Do not use domain-specific legacy search surfaces; use this tool with entity_types instead.\n\nExample: search({ "query": "planning", "entity_types": ["documents", "memories"], "mode": "mixed", "limit": 10 })',
       inputSchema: {
         query: z.string().optional().describe('Search query. Empty query requires filters or list_all:true.'),
         mode: z.enum(['filesystem', 'semantic', 'mixed']).optional().describe('Search mode. Default: mixed.'),
@@ -977,9 +977,16 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         list_all: z.boolean().optional().describe('Allow empty unfiltered list-mode search.'),
         path_filter: z.string().optional().describe('Document path substring filter for filesystem/list searches.'),
         include_archived: z.boolean().optional().describe('Include archived documents and memories. Default: false.'),
+        body_contains: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        body_regex: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        regex: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        line_range: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        lines: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        byte_range: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
       },
     },
-    async ({ query, mode, tags, tag_match, limit, entity_types, list_all, path_filter, include_archived }) => {
+    async (params) => {
+      const { tags, tag_match, path_filter, include_archived } = params;
       if (getIsShuttingDown()) {
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
@@ -989,7 +996,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         memories: memoryCategoryEnabled(config),
       };
       const intentResult = resolveSearchIntent(
-        { query, mode, tags, path_filter, list_all, limit, entity_types },
+        params,
         enabled
       );
       if (intentResult.error) {
@@ -1006,21 +1013,28 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           const canSemantic = !(embeddingProvider instanceof NullEmbeddingProvider);
           if ((intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
             try {
-              const docs = await searchDocumentsSemantic(config, intent.query, {
-                tags,
-                tagMatch: matchMode,
-                limit: intent.limit,
-              });
-              allResults.push(...docs.map((doc) => ({
-                entity_type: 'documents' as const,
-                identifier: doc.path,
-                title: doc.title,
-                path: doc.path,
-                fq_id: doc.id,
-                tags: doc.tags,
-                score: doc.similarity,
-                match_source: ['semantic' as const],
-              })));
+	              const docs = await searchDocumentsSemantic(config, intent.query, {
+	                tags,
+	                tagMatch: matchMode,
+	                limit: intent.limit,
+	                includeArchived: include_archived === true,
+	              });
+	              const semanticResults = await Promise.all(docs.map(async (doc) => {
+	                const meta = await parseDocMeta(config.instance.vault.path, doc.path);
+	                return {
+	                  entity_type: 'document' as const,
+	                  identifier: doc.path,
+	                  title: doc.title,
+	                  path: doc.path,
+	                  fq_id: doc.id,
+	                  tags: doc.tags,
+	                  modified: meta?.modified ?? doc.created_at,
+	                  size: meta?.size ?? { chars: 0 },
+	                  score: doc.similarity,
+	                  match_source: ['semantic' as const],
+	                };
+	              }));
+	              allResults.push(...semanticResults);
             } catch (err) {
               warnings.push('embedding_unavailable');
               if (intent.requested_mode === 'semantic') {
@@ -1060,13 +1074,14 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
               docs = docs.filter((meta) => meta.title.toLowerCase().includes(lowerQuery) || meta.relativePath.toLowerCase().includes(lowerQuery));
             }
             allResults.push(...docs.map((doc) => ({
-              entity_type: 'documents' as const,
+              entity_type: 'document' as const,
               identifier: doc.relativePath,
               title: doc.title,
               path: doc.relativePath,
               fq_id: doc.fqcId ?? doc.relativePath,
               tags: doc.tags,
-              score: intent.list_mode ? 0 : 0.5,
+              modified: doc.modified,
+              size: doc.size,
               match_source: [intent.list_mode ? 'list' as const : 'filesystem' as const],
             })));
           }
@@ -1076,17 +1091,21 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           const canSemantic = !(embeddingProvider instanceof NullEmbeddingProvider);
           if ((intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
             try {
-              const memories = await searchMemoriesSemantic(config, intent.query, {
-                tags,
-                tagMatch: matchMode,
-                limit: intent.limit,
-              });
+	              const memories = await searchMemoriesSemantic(config, intent.query, {
+	                tags,
+	                tagMatch: matchMode,
+	                limit: intent.limit,
+	                includeArchived: include_archived === true,
+	              });
               allResults.push(...memories.map((memory) => ({
-                entity_type: 'memories' as const,
+                entity_type: 'memory' as const,
                 identifier: memory.id,
                 memory_id: memory.id,
                 content_preview: memory.content.length > 120 ? `${memory.content.slice(0, 117)}...` : memory.content,
                 tags: memory.tags,
+                plugin_scope: memory.plugin_scope ?? 'global',
+                created_at: memory.created_at,
+                updated_at: memory.updated_at,
                 score: memory.similarity,
                 match_source: ['semantic' as const],
               })));
@@ -1114,28 +1133,31 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             let dbQuery = supabaseManager.getClient()
               .from('fqc_memory')
               .select('id, content, tags, plugin_scope, created_at, updated_at, is_latest, archived_at')
-              .eq('instance_id', config.instance.id);
+              .eq('instance_id', config.instance.id)
+              .eq('is_latest', true);
             if (include_archived !== true) {
-              dbQuery = dbQuery.eq('status', 'active').eq('is_latest', true);
+              dbQuery = dbQuery.eq('status', 'active');
             }
             if (tags && tags.length > 0) {
               dbQuery = matchMode === 'all' ? dbQuery.contains('tags', tags) : dbQuery.overlaps('tags', tags);
             }
             const { data, error } = await dbQuery;
             if (error) throw new Error(error.message);
-            let memories = (data ?? []) as Array<{ id: string; content: string; tags: string[]; is_latest: boolean; archived_at: string | null }>;
+            let memories = (data ?? []) as Array<{ id: string; content: string; tags: string[]; plugin_scope: string | null; created_at: string; updated_at: string; is_latest: boolean; archived_at: string | null }>;
             if (intent.query) {
               const lowerQuery = intent.query.toLowerCase();
               memories = memories.filter((memory) => memory.content.toLowerCase().includes(lowerQuery));
             }
             allResults.push(...memories.map((memory) => ({
-              entity_type: 'memories' as const,
+              entity_type: 'memory' as const,
               identifier: memory.id,
               memory_id: memory.id,
               content_preview: memory.content.length > 120 ? `${memory.content.slice(0, 117)}...` : memory.content,
               tags: memory.tags,
-              score: intent.list_mode ? 0 : 0.5,
-              match_source: [intent.list_mode ? 'list' as const : 'filesystem' as const],
+              plugin_scope: memory.plugin_scope ?? 'global',
+              created_at: memory.created_at,
+              updated_at: memory.updated_at,
+              ...(intent.list_mode ? {} : { match_source: ['filesystem' as const] }),
               is_latest: memory.is_latest,
               archived_at: memory.archived_at,
             })));
@@ -1164,9 +1186,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
   server.registerTool(
     'search_all',
     {
-      description:
-        'Search across both documents and memories in a single semantic query. Returns unified, ranked results from both types with match scores. Use this when the user\'s search could match either documents or memories — e.g. "what do I know about Acme" or "find anything related to the Q2 launch". For searching only documents, use search_documents. For searching only memories, use search_memory.' +
-        'Returns unified results from both entity types. Falls back to filesystem search for documents when semantic search is unavailable.',
+	      description:
+	        'Legacy cross-domain search surface. Use search with entity_types:["documents","memories"] instead; use entity_types:["documents"] or entity_types:["memories"] on search to narrow the domain.',
       inputSchema: {
         query: z.string().describe('The search query'),
         tags: z.array(z.string()).optional().describe('Filter results to items with these tags.'),

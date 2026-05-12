@@ -12,7 +12,10 @@ export interface SearchInput {
   path_filter?: string;
   list_all?: boolean;
   limit?: number;
+  [key: string]: unknown;
 }
+
+const deferredLiteralSearchParams = ['body_contains', 'body_regex', 'regex', 'line_range', 'lines', 'byte_range'];
 
 export interface ResolvedSearchIntent {
   query: string;
@@ -24,16 +27,21 @@ export interface ResolvedSearchIntent {
 }
 
 export interface SearchResultItem {
-  entity_type: SearchEntityType;
+  entity_type: 'document' | 'memory';
   identifier: string;
   title?: string;
   path?: string;
   fq_id?: string;
+  modified?: string;
+  size?: { chars: number };
   memory_id?: string;
   content_preview?: string;
+  plugin_scope?: string;
+  created_at?: string;
+  updated_at?: string;
   tags?: string[];
   score?: number;
-  match_source: SearchMatchSource[];
+  match_source?: SearchMatchSource[];
   archived_at?: string | null;
   is_latest?: boolean | null;
 }
@@ -45,6 +53,16 @@ export function resolveSearchMode(mode: string | undefined): SearchMode {
 }
 
 export function validateSearchInput(input: SearchInput): ErrorEnvelope | null {
+  const unsupportedParams = deferredLiteralSearchParams.filter((param) => input[param] !== undefined);
+  if (unsupportedParams.length > 0) {
+    return {
+      error: 'invalid_input',
+      message: 'Literal body grep, regex, line-range, and byte-range search belong in macro/string operations; search supports title/path/tag/filesystem and semantic matching only.',
+      identifier: unsupportedParams[0],
+      details: { unsupported_parameters: unsupportedParams },
+    };
+  }
+
   let resolvedMode: SearchMode;
   try {
     resolvedMode = resolveSearchMode(input.mode);
@@ -68,8 +86,9 @@ export function validateSearchInput(input: SearchInput): ErrorEnvelope | null {
   if (query.length === 0 && !hasFilters && input.list_all !== true) {
     return {
       error: 'invalid_input',
-      message: 'empty search requires filters or list_all:true',
-      details: { requires: ['query', 'tags', 'path_filter', 'list_all'] },
+      message: 'Empty query requires filters or list_all: true',
+      identifier: '',
+      details: { requires: ['tags', 'path_filter', 'list_all'] },
     };
   }
   if (query.length === 0 && hasFilters && input.entity_types === undefined) {
@@ -159,13 +178,13 @@ export function resolveSearchIntent(
 }
 
 function resultKey(result: SearchResultItem): string {
-  return result.entity_type === 'documents'
+  return result.entity_type === 'document'
     ? `documents:${result.fq_id ?? result.identifier}`
     : `memories:${result.memory_id ?? result.identifier}`;
 }
 
 function sortKey(result: SearchResultItem): string {
-  return result.entity_type === 'documents'
+  return result.entity_type === 'document'
     ? (result.path ?? result.identifier)
     : (result.memory_id ?? result.identifier);
 }
@@ -176,15 +195,20 @@ export function mergeSearchResults(results: SearchResultItem[], limit: number): 
     const key = resultKey(result);
     const existing = byKey.get(key);
     if (!existing) {
-      byKey.set(key, { ...result, match_source: [...new Set(result.match_source)] });
+      byKey.set(key, {
+        ...result,
+        ...(result.match_source ? { match_source: [...new Set(result.match_source)] } : {}),
+      });
       continue;
     }
     const existingScore = existing.score ?? 0;
     const resultScore = result.score ?? 0;
+    const next = resultScore > existingScore ? result : existing;
+    const matchSource = [...new Set([...(existing.match_source ?? []), ...(result.match_source ?? [])])];
     byKey.set(key, {
-      ...(resultScore > existingScore ? result : existing),
-      match_source: [...new Set([...existing.match_source, ...result.match_source])],
-      score: Math.max(existingScore, resultScore),
+      ...next,
+      ...(matchSource.length > 0 ? { match_source: matchSource } : {}),
+      ...(existing.score !== undefined || result.score !== undefined ? { score: Math.max(existingScore, resultScore) } : {}),
     });
   }
 

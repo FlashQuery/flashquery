@@ -27,7 +27,7 @@ export type CanonicalErrorCode = (typeof CANONICAL_ERROR_CODES)[number];
 export type WarningCode = string;
 
 export interface ErrorEnvelope {
-  error: CanonicalErrorCode | string;
+  error: string;
   message: string;
   identifier?: string;
   details?: Record<string, unknown>;
