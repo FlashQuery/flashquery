@@ -255,6 +255,14 @@ Registration, record CRUD, and teardown of plugin schemas.
 | P-15 | Plugin instance isolation (same plugin, different instances) (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-05-07 |
 | P-16 | Plugin with both document-backed tables (`track_as`) and non-document-backed tables registers without DDL errors (no duplicate or conflicting implicit columns) (VALIDATED) | test_plugin_mixed_tables | 2026-04-22 | 2026-05-07 |
 | P-17 | Plugin schema that explicitly declares `fqc_id` on a document-backed table (per §8.4.7 — the CRM plugin pattern) registers without a DDL error — the DDL builder de-duplicates the plugin-defined and implicit `fqc_id` columns rather than producing a duplicate column definition (PIR-03 regression guard; test schema MUST include `fqc_id` explicitly in the document-backed table columns — P-16 deliberately omits it, masking this defect) (VALIDATED) | test_plugin_explicit_fqc_id | 2026-04-22 | 2026-05-07 |
+| P-18 | `register_plugin` returns structured registered envelope with `was_new` for new/existing registration (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
+| P-19 | `unregister_plugin` conflicts on live records and `force:true` unregisters with orphan warning (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
+| P-20 | `get_plugin_info` include variants gate schema, tables, and status detail (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
+| P-21 | `write_record` create/update validates required, generated, unknown fields and include-gated data (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
+| P-22 | `get_record` supports default data, `include: []`, schema metadata, and expected not_found envelope (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
+| P-23 | `archive_record` ordered batch returns per-target results and `archived_at_unavailable` warnings (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
+| P-24 | `search_records` returns structured envelopes with include-gated data, archived filtering, scores, and taggable warnings (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
+| P-25 | `clear_pending_reviews` action list/clear/no-match uses pending-review row IDs (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
 
 ## 8. Tag Operations
 

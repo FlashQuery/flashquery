@@ -156,6 +156,7 @@ function buildSearchEnvelope(input: {
   tableSpec: PluginTableSpec;
   semantic?: boolean;
   warnings?: string[];
+  reconciliation?: Record<string, unknown>;
 }): Record<string, unknown> {
   const results = input.rows.map((row) => {
     const result = buildRecordResult(
@@ -175,6 +176,7 @@ function buildSearchEnvelope(input: {
     ...(input.tag === undefined ? {} : { tag: input.tag }),
     total: results.length,
     results,
+    ...(input.reconciliation === undefined ? {} : { reconciliation: input.reconciliation }),
     ...(input.warnings && input.warnings.length > 0 ? { warnings: input.warnings } : {}),
   };
 }
@@ -876,9 +878,11 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           });
         }
 
+        let reconciliation: Record<string, unknown> | undefined;
         try {
           const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
-          await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
+          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
+          reconciliation = buildReconciliationPayload(actionSummary);
         } catch (err) {
           logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -917,7 +921,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           logger.info(
             `search_records: filters-only found ${rows.length} record(s) in ${fullTableName}`
           );
-          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec }));
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, reconciliation }));
         }
 
         // ── Semantic path (query + embed_fields) ──────────────────────────
@@ -959,7 +963,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             logger.info(
               `search_records: semantic found ${rows.length} record(s) in ${fullTableName}`
             );
-            return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, semantic: true }));
+            return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, semantic: true, reconciliation }));
           } finally {
             await pgClient.end();
           }
@@ -986,7 +990,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             return jsonRuntimeError(error.message);
           }
           const rows = data ?? [];
-          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec }));
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, reconciliation }));
         }
 
         const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
@@ -1020,7 +1024,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           const result = await pgClient.query(sql, params);
           const rows = result.rows ?? [];
           logger.info(`search_records: ILIKE found ${rows.length} record(s) in ${fullTableName}`);
-          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec }));
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, reconciliation }));
         } finally {
           await pgClient.end();
         }

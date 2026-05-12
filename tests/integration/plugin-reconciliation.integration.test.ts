@@ -507,11 +507,9 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
       // If create_document didn't write fqc_id to frontmatter, get it from DB
     }
 
-    // Query mode: fqc_ids: [] — should return pending items without deleting
     const queryResult = await getHandler('clear_pending_reviews')({
+      action: 'list',
       plugin_id: 'rec_int_test',
-      plugin_instance: 'default',
-      fqc_ids: [],
     }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(queryResult.isError).toBeUndefined();
@@ -519,7 +517,7 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
     // Check if there are any pending reviews
     const { data: pendingRows } = await supabaseManager.getClient()
       .from('fqc_pending_plugin_review')
-      .select('fqc_id')
+      .select('id')
       .eq('plugin_id', 'rec_int_test')
       .eq('instance_id', INSTANCE_ID);
 
@@ -532,27 +530,23 @@ describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
         .eq('instance_id', INSTANCE_ID);
       expect((afterQueryCount.count ?? 0)).toBeGreaterThan(0);
 
-      // Clear mode: delete ALL pending rows for this plugin (not just one)
-      // so we can assert empty state afterwards
-      const allFqcIds = pendingRows.map((r: { fqc_id: string }) => r.fqc_id);
+      const allIds = pendingRows.map((r: { id: string }) => r.id);
       const clearResult = await getHandler('clear_pending_reviews')({
+        action: 'clear',
         plugin_id: 'rec_int_test',
-        plugin_instance: 'default',
-        fqc_ids: allFqcIds,
+        ids: allIds,
       }) as { content: Array<{ text: string }>; isError?: boolean };
 
       expect(clearResult.isError).toBeUndefined();
-      expect(clearResult.content[0].text).toContain('No pending reviews');
+      expect(JSON.parse(clearResult.content[0].text)).toMatchObject({ cleared: allIds.length });
 
-      // Query mode again — should be empty
       const queryResult2 = await getHandler('clear_pending_reviews')({
+        action: 'list',
         plugin_id: 'rec_int_test',
-        plugin_instance: 'default',
-        fqc_ids: [],
       }) as { content: Array<{ text: string }>; isError?: boolean };
 
       expect(queryResult2.isError).toBeUndefined();
-      expect(queryResult2.content[0].text).toContain('No pending reviews');
+      expect(JSON.parse(queryResult2.content[0].text)).toEqual({ pending: 0, items: [] });
     }
   });
 

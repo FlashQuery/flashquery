@@ -148,6 +148,9 @@ multi-step workflows involving plugin tables, record tools, scan, and frontmatte
 | IR-11  | Document moved between plugin-owned folders reports moved in source table, not added in destination (VALIDATED)  | ir11_plugin_cross_folder_move | 2026-05-07   | 2026-05-07   |
 | IR-12  | Pending review items appear in record tool response even when reconciliation staleness check skips diff (VALIDATED) | ir12_plugin_pending_review_staleness | 2026-05-07   | 2026-05-07   |
 | IR-13  | Frontmatter-based type discovery: document outside all watched folders picked up via fqc_type (VALIDATED)        | ir13_plugin_frontmatter_discovery | 2026-05-07   | 2026-05-07   |
+| IR-14  | `register_plugin -> write_record(create) -> search_records` final plugin-record workflow (VALIDATED)             | plugin_record_consolidation  | 2026-05-12   | 2026-05-12   |
+| IR-15  | `write_record(update) -> plugin reconciliation -> clear_pending_reviews(action:"list")` final workflow (VALIDATED) | plugin_record_consolidation  | 2026-05-12   | 2026-05-12   |
+| IR-16  | `write_record -> archive_record -> search_records` archived visibility workflow (VALIDATED)                      | plugin_record_consolidation  | 2026-05-12   | 2026-05-12   |
 
 ---
 

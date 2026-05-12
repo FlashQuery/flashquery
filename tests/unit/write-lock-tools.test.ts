@@ -367,9 +367,7 @@ describe('write-lock tool integration', () => {
       registerRecordTools(server, config);
 
       const result = await getHandler('archive_record')({
-        plugin_id: 'crm',
-        table: 'contacts',
-        id: 'some-uuid',
+        targets: [{ plugin_id: 'crm', table: 'contacts', id: 'some-uuid' }],
       });
 
       expect(result.isError).toBe(true);

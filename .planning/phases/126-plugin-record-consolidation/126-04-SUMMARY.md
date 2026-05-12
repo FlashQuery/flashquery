@@ -31,7 +31,7 @@ Migrated `get_record`, `archive_record`, and `search_records` to structured JSON
 
 | Task | Commit | Description |
 |------|--------|-------------|
-| 1-2 | pending | Record read/archive/search JSON contracts and coverage |
+| 1-2 | d7e0907 | Record read/archive/search JSON contracts and coverage |
 
 ## Verification
 

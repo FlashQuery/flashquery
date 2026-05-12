@@ -44,6 +44,7 @@ const READ_WRITE_EXTRA_TOOLS = [
   'save_memory',
   'update_memory',
   'create_record',
+  'write_record',
   'update_record',
   'apply_tags',
   'archive_document',

@@ -114,6 +114,7 @@ vi.mock('../../src/plugins/manager.js', () => ({
   },
   parsePluginSchema: vi.fn(),
   buildPluginTableDDL: vi.fn(),
+  buildGlobalTypeRegistry: vi.fn(),
   resolveTableName: vi.fn(),
   validateInstanceName: vi.fn(),
 }));
@@ -674,7 +675,7 @@ describe('unregister_plugin (SPEC-16)', () => {
     vi.clearAllMocks();
   });
 
-  it('performs dry-run inventory by default', async () => {
+  it('unregisters when no live records are present', async () => {
     const { server, tools } = createMockServer();
     const config = createMockConfig();
 
@@ -709,9 +710,17 @@ describe('unregister_plugin (SPEC-16)', () => {
       filter: vi.fn().mockReturnValue(filterChain),
     };
 
+    const updateEq2 = vi.fn().mockResolvedValue({ error: null });
+    const updateEq1 = vi.fn().mockReturnValue({ eq: updateEq2 });
+    const deleteEq3 = vi.fn().mockResolvedValue({ error: null });
+    const deleteEq2 = vi.fn().mockReturnValue({ eq: deleteEq3 });
+    const deleteEq1 = vi.fn().mockReturnValue({ eq: deleteEq2 });
+
     const mockSupabase = {
       from: vi.fn().mockReturnValue({
         select: vi.fn().mockReturnValue(selectChain),
+        update: vi.fn().mockReturnValue({ eq: updateEq1 }),
+        delete: vi.fn().mockReturnValue({ eq: deleteEq1 }),
       }),
       rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
     };
@@ -729,7 +738,12 @@ describe('unregister_plugin (SPEC-16)', () => {
     });
 
     expect(result?.isError).not.toBe(true);
-    expect(result?.content[0].text).toContain('DRY RUN');
+    expect(JSON.parse(result?.content[0].text as string)).toMatchObject({
+      plugin_id: 'test',
+      status: 'unregistered',
+      documents_ownership_cleared: 0,
+      plugin_scoped_memories_deleted: 0,
+    });
   });
 
   it('errors if plugin not registered', async () => {
@@ -773,7 +787,11 @@ describe('unregister_plugin (SPEC-16)', () => {
       plugin_instance: 'default',
     });
 
-    expect(result?.isError).toBe(true);
-    expect(result?.content[0].text).toContain('not registered');
+    expect(result?.isError).toBe(false);
+    expect(JSON.parse(result?.content[0].text as string)).toMatchObject({
+      error: 'not_found',
+      identifier: 'nonexistent',
+      details: { plugin_instance: 'default' },
+    });
   });
 });

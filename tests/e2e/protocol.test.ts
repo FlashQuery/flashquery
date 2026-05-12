@@ -406,6 +406,24 @@ describe.sequential('MCP protocol E2E', () => {
     expect(postArchiveSearch.isError).toBeFalsy();
     expect(JSON.parse(getText(postArchiveSearch))).toMatchObject({ total: 0, results: [] });
 
+    const pendingList = await client.callTool({
+      name: 'clear_pending_reviews',
+      arguments: { action: 'list', plugin_id: WRITE_RECORD_PLUGIN_ID },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(pendingList.isError).toBeFalsy();
+    expect(JSON.parse(getText(pendingList))).toMatchObject({ pending: expect.any(Number), items: expect.any(Array) });
+
+    const pendingNoMatch = await client.callTool({
+      name: 'clear_pending_reviews',
+      arguments: { action: 'clear', plugin_id: WRITE_RECORD_PLUGIN_ID, ids: ['00000000-0000-0000-0000-000000000000'] },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(pendingNoMatch.isError).toBeFalsy();
+    expect(JSON.parse(getText(pendingNoMatch))).toMatchObject({
+      cleared: 0,
+      items: [],
+      warnings: ['no_matching_items'],
+    });
+
     const invalidResult = await client.callTool({
       name: 'write_record',
       arguments: {

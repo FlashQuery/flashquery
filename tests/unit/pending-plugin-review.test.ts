@@ -74,26 +74,52 @@ describe('clear_pending_reviews', () => {
     vi.clearAllMocks();
   });
 
-  it('returns template_available pending review when template declared', async () => {
+  it('requires action', async () => {
+    const chain = makeSupabaseChain([]);
+    const { callTool } = setupTool(chain);
+
+    const result = await callTool({ plugin_id: 'crm' }) as {
+      content: Array<{ type: string; text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      error: 'invalid_input',
+      details: { field: 'action' },
+    });
+  });
+
+  it('lists template_available pending review rows by row id', async () => {
     // Test 1: INSERT pending review when `template` is declared — query mode returns
     // the row with review_type: 'template_available'
     const chain = makeSupabaseChain([
       {
+        id: 'review-1',
         fqc_id: 'uuid-1',
+        plugin_id: 'crm',
         table_name: 'fqcp_test_contacts',
         review_type: 'template_available',
-        context: {},
+        context: { path: 'Contacts/Ada.md' },
       },
     ]);
     const { callTool } = setupTool(chain);
 
     const result = await callTool({
       plugin_id: 'crm',
-      plugin_instance: 'default',
-      fqc_ids: [],
+      action: 'list',
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
-    expect(result.content[0].text).toContain('template_available');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      pending: 1,
+      items: [{
+        id: 'review-1',
+        type: 'template_available',
+        plugin_id: 'crm',
+        table: 'fqcp_test_contacts',
+        path: 'Contacts/Ada.md',
+      }],
+    });
     expect(result.isError).toBeFalsy();
   });
 
@@ -104,25 +130,22 @@ describe('clear_pending_reviews', () => {
 
     const result = await callTool({
       plugin_id: 'crm',
-      plugin_instance: 'default',
-      fqc_ids: [],
+      action: 'list',
     }) as { content: Array<{ type: string; text: string }> };
 
-    expect(result.content[0].text).toContain('No pending reviews');
+    expect(JSON.parse(result.content[0].text)).toEqual({ pending: 0, items: [] });
   });
 
-  it('query mode returns all items without calling delete', async () => {
-    // Test 3: Query mode (fqc_ids: []) returns all pending items without calling delete
+  it('list action returns all items without calling delete', async () => {
     const chain = makeSupabaseChain([
-      { fqc_id: 'uuid-a', table_name: 'fqcp_crm_contacts', review_type: 'template_available', context: {} },
-      { fqc_id: 'uuid-b', table_name: 'fqcp_crm_companies', review_type: 'resurrected', context: {} },
+      { id: 'review-a', plugin_id: 'crm', fqc_id: 'uuid-a', table_name: 'fqcp_crm_contacts', review_type: 'template_available', context: {} },
+      { id: 'review-b', plugin_id: 'crm', fqc_id: 'uuid-b', table_name: 'fqcp_crm_companies', review_type: 'resurrected', context: {} },
     ]);
     const { callTool } = setupTool(chain);
 
     await callTool({
       plugin_id: 'crm',
-      plugin_instance: 'default',
-      fqc_ids: [],
+      action: 'list',
     });
 
     // delete must NOT have been called in query mode
@@ -131,49 +154,69 @@ describe('clear_pending_reviews', () => {
     expect(chain.select).toHaveBeenCalled();
   });
 
-  it('clear mode calls DELETE then returns remaining items', async () => {
-    // Test 4: Clear mode (fqc_ids non-empty) calls DELETE with specified IDs, then returns remaining
-    // Use a chain that records both delete and select calls
+  it('clear action with nonmatching ids returns warning without delete', async () => {
     const chain = makeSupabaseChain([]); // remaining after delete = empty
     const { callTool } = setupTool(chain);
 
     const result = await callTool({
       plugin_id: 'crm',
-      plugin_instance: 'default',
-      fqc_ids: ['aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000002'],
+      action: 'clear',
+      ids: ['review-1', 'review-2'],
     }) as { content: Array<{ type: string; text: string }> };
 
-    // delete() must have been called
-    expect(chain.delete).toHaveBeenCalled();
-    // in() must have been called with 'fqc_id' and the two UUIDs
-    expect(chain.in).toHaveBeenCalledWith('fqc_id', ['aaaaaaaa-0000-0000-0000-000000000001', 'aaaaaaaa-0000-0000-0000-000000000002']);
-    // select() must have been called to return remaining items
+    expect(chain.delete).not.toHaveBeenCalled();
+    expect(chain.in).toHaveBeenCalledWith('id', ['review-1', 'review-2']);
     expect(chain.select).toHaveBeenCalled();
-    // Empty remainder = 'No pending reviews'
-    expect(result.content[0].text).toContain('No pending reviews');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      cleared: 0,
+      items: [],
+      warnings: ['no_matching_items'],
+    });
   });
 
-  it('idempotent — non-existent IDs do not cause error', async () => {
-    // Test 5: Calling with non-existent IDs does not cause an error
-    // Postgres IN() silently ignores missing rows — mock reflects { error: null }
+  it('clear action calls DELETE by matching pending-review row ids', async () => {
+    const chain = makeSupabaseChain([
+      { id: 'review-1', plugin_id: 'crm', table_name: 'fqcp_crm_contacts', review_type: 'template_available', context: {} },
+    ]);
+    const { callTool } = setupTool(chain);
+
+    const result = await callTool({
+      plugin_id: 'crm',
+      action: 'clear',
+      ids: ['review-1'],
+    }) as { content: Array<{ type: string; text: string }> };
+
+    expect(chain.delete).toHaveBeenCalled();
+    expect(chain.in).toHaveBeenCalledWith('id', ['review-1']);
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      cleared: 1,
+      items: [expect.objectContaining({ id: 'review-1' })],
+    });
+  });
+
+  it('non-existent ids warn with no_matching_items', async () => {
     const chain = makeSupabaseChain([]); // delete resolves with no error, select returns []
     const { callTool } = setupTool(chain);
 
     const result = await callTool({
       plugin_id: 'crm',
-      plugin_instance: 'default',
-      fqc_ids: ['aaaaaaaa-0000-0000-0000-000000000000'],
+      action: 'clear',
+      ids: ['missing-review'],
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('No pending reviews');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      cleared: 0,
+      warnings: ['no_matching_items'],
+    });
   });
 
-  it('response shape always contains fqc_id, table_name, review_type, context', async () => {
-    // Test 6: Response shape always matches { fqc_id, table_name, review_type, context } array
+  it('response shape contains id, type, plugin_id, table, path', async () => {
     const chain = makeSupabaseChain([
       {
+        id: 'review-x',
         fqc_id: 'uuid-x',
+        plugin_id: 'crm',
         table_name: 'fqcp_crm_contacts',
         review_type: 'resurrected',
         context: { moved_from: '/old' },
@@ -183,16 +226,19 @@ describe('clear_pending_reviews', () => {
 
     const result = await callTool({
       plugin_id: 'crm',
-      plugin_instance: 'default',
-      fqc_ids: [],
+      action: 'list',
     }) as { content: Array<{ type: string; text: string }> };
 
-    const text = result.content[0].text;
-    // All four field names must appear in the response
-    expect(text).toContain('fqc_id');
-    expect(text).toContain('table_name');
-    expect(text).toContain('review_type');
-    expect(text).toContain('context');
+    expect(JSON.parse(result.content[0].text)).toEqual({
+      pending: 1,
+      items: [{
+        id: 'review-x',
+        type: 'resurrected',
+        plugin_id: 'crm',
+        table: 'fqcp_crm_contacts',
+        path: null,
+      }],
+    });
   });
 
   it('CASCADE: fqc_documents delete removes pending review rows automatically', async () => {
@@ -204,12 +250,10 @@ describe('clear_pending_reviews', () => {
 
     const result = await callTool({
       plugin_id: 'crm',
-      plugin_instance: 'default',
-      fqc_ids: [],
+      action: 'list',
     }) as { content: Array<{ type: string; text: string }> };
 
-    // Tool correctly reports empty state — no stale rows remain after CASCADE
-    expect(result.content[0].text).toContain('No pending reviews');
+    expect(JSON.parse(result.content[0].text)).toEqual({ pending: 0, items: [] });
   });
 
   it('unregister_plugin cleanup deletes all pending reviews for plugin', async () => {
