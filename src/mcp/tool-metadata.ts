@@ -203,8 +203,19 @@ export const TOOL_METADATA = [
   current('search_memory', ['memory'], 'read-only', legacyDescription('search_memory', 'search', 'Search memories by semantic similarity and tags.')),
   current('update_memory', ['memory'], 'read-write', legacyDescription('update_memory', 'write_memory', 'Update an existing memory by creating a new version.')),
   current('list_memories', ['memory'], 'read-only', legacyDescription('list_memories', 'search', 'List memories filtered by tags or project scope.')),
-  current('get_memory', ['memory'], 'read-only', legacyDescription('get_memory', 'get_memory', 'Retrieve one or more memories by ID.')),
-  current('archive_memory', ['memory'], 'read-write', legacyDescription('archive_memory', 'archive_memory', 'Archive one or more memories.')),
+  current('get_memory', ['memory'], 'read-only', description(
+    'Retrieve one or more memories by ID and return JSON memory identification with include-gated payloads.',
+    'Use when you already have memory_ids and need preview metadata, full content, tags_full, or direct access to a previous version.',
+    'Do not use when you need to discover memories by query or tag; use search instead.',
+    'get_memory({ "memory_ids": ["uuid"], "include": ["content"] })'
+  )),
+  current('archive_memory', ['memory'], 'read-write', description(
+    'Archive one or more memory version chains with idempotent archived_at timestamps and JSON results.',
+    'Use when a memory is outdated, wrong, or should be hidden from default search/list visibility.',
+    'Do not use when you need to create a corrected latest version; use write_memory(mode:"update") instead.',
+    'archive_memory({ "memory_ids": ["uuid"] })'
+  )),
+  current('write_memory', ['memory'], 'read-write', D.writeMemory),
 
   current('register_plugin', ['plugin'], 'admin', legacyDescription('register_plugin', 'register_plugin', 'Register or update a plugin schema.'), PLUGIN_ADMIN_REASON),
   current('unregister_plugin', ['plugin'], 'admin', legacyDescription('unregister_plugin', 'unregister_plugin', 'Unregister a plugin and remove its owned tables.'), PLUGIN_ADMIN_REASON),
@@ -225,7 +236,6 @@ export const TOOL_METADATA = [
   current('remove_directory', ['doc-write'], 'read-write', legacyDescription('remove_directory', 'manage_directory', 'Remove empty vault directories.')),
 
   future('search', ['doc-read', 'memory'], 'read-only', D.search),
-  future('write_memory', ['memory'], 'read-write', D.writeMemory),
   future('write_record', ['plugin'], 'read-write', D.writeRecord),
   future('remove_document', ['doc-write'], 'read-write', D.removeDocument),
   future('manage_directory', ['doc-write'], 'read-write', D.manageDirectory),
