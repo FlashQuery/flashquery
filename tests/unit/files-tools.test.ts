@@ -194,7 +194,7 @@ function makeDirent(name: string, isDir: boolean) {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('create_directory handler', () => {
+describe.skip('create_directory legacy handler (merged into manage_directory)', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     // Reset getIsShuttingDown to false for every test (F-52 sets it to true)

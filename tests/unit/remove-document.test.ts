@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { documentRemovalResult } from '../../src/mcp/utils/response-formats.js';
 
 describe('remove_document JSON contract', () => {
-  it('returns archived document identification with top-level removal feedback', () => {
+  it('returns archived document identification with documented removal feedback only', () => {
     expect(
       documentRemovalResult({
         identifier: 'Notes/Old.md',
@@ -13,9 +13,7 @@ describe('remove_document JSON contract', () => {
         modified: '2026-05-12T00:00:00.000Z',
         chars: 24,
         archived_at: '2026-05-12T00:01:00.000Z',
-        removed: true,
         moved_to: '.flashquery/removed/Old.md',
-        original_path: 'Notes/Old.md',
       })
     ).toEqual({
       identifier: 'Notes/Old.md',
@@ -26,9 +24,25 @@ describe('remove_document JSON contract', () => {
       size: { chars: 24 },
       status: 'archived',
       archived_at: '2026-05-12T00:01:00.000Z',
-      removed: true,
       moved_to: '.flashquery/removed/Old.md',
-      original_path: 'Notes/Old.md',
+    });
+  });
+
+  it('returns moved_to null for hard-delete removal feedback', () => {
+    expect(
+      documentRemovalResult({
+        identifier: 'Notes/Old.md',
+        title: 'Old',
+        path: 'Notes/Old.md',
+        fq_id: '11111111-1111-4111-8111-111111111111',
+        modified: '2026-05-12T00:00:00.000Z',
+        chars: 24,
+        archived_at: '2026-05-12T00:01:00.000Z',
+        moved_to: null,
+      })
+    ).toMatchObject({
+      status: 'archived',
+      moved_to: null,
     });
   });
 

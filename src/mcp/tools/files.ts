@@ -105,18 +105,19 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         } catch (validationErr) {
           results.push({
             error: 'invalid_input',
-            message: validationErr instanceof Error ? validationErr.message : 'Invalid path.',
+            message: 'Invalid directory path',
             identifier: inputPath,
-            details: { field: 'paths' },
+            details: { reason: 'invalid_directory_path' },
           });
           continue;
         }
         if (!validation.valid) {
+          const isTraversal = (validation.error ?? '').toLowerCase().includes('traversal');
           results.push({
             error: 'invalid_input',
-            message: validation.error ?? 'Invalid path.',
+            message: isTraversal ? 'Path must stay inside the vault' : 'Invalid directory path',
             identifier: inputPath,
-            details: { field: 'paths' },
+            details: { reason: isTraversal ? 'path_traversal' : 'invalid_directory_path' },
           });
           continue;
         }
@@ -268,7 +269,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           if (entries.length > 0) {
             results.push({
               error: 'conflict',
-              message: 'Directory is not empty.',
+              message: 'Directory is not empty',
               identifier: normalizedPath,
               details: { reason: 'directory_not_empty', count: entries.length },
             });
@@ -314,8 +315,8 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
     }
   );
 
-  // ─── Tool: create_directory ──────────────────────────────────────────────────
-  server.registerTool(
+  // Legacy create_directory was merged into manage_directory(action:"create").
+  if (false) server.registerTool(
     'create_directory',
     {
       description:
@@ -1016,8 +1017,8 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
     }
   );
 
-  // ─── Tool: remove_directory ──────────────────────────────────────────────────
-  server.registerTool(
+  // Legacy remove_directory was merged into manage_directory(action:"remove").
+  if (false) server.registerTool(
     'remove_directory',
     {
       description:

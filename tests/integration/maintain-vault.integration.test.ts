@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -127,28 +127,95 @@ describe.skipIf(!HAS_SUPABASE)('maintain_vault integration', () => {
     expect(data?.path).toBe('external-sync.md');
   });
 
-  it('maintain_vault repair dry_run reports action result without mutating frontmatter', async () => {
-    await writeFile(join(vaultPath, 'needs-repair.md'), '# Needs Repair\n\nNo FQ frontmatter.');
+  it('maintain_vault repair dry_run previews tracked document reconciliation without mutating rows', async () => {
+    await writeFile(
+      join(vaultPath, 'moved-new.md'),
+      [
+        '---',
+        'fq_id: 11111111-1111-4111-8111-111111111111',
+        'fq_title: Moved Document',
+        '---',
+        '',
+        'Moved outside FlashQuery.',
+      ].join('\n')
+    );
     await supabaseManager.getClient().from('fqc_documents').insert({
       id: '11111111-1111-4111-8111-111111111111',
       instance_id: TEST_INSTANCE_ID,
-      path: 'needs-repair.md',
-      title: 'Needs Repair',
+      path: 'moved-old.md',
+      title: 'Moved Document',
       status: 'active',
-      content_hash: 'pre-repair-hash',
+      content_hash: 'pre-reconcile-hash',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
-      needs_frontmatter_repair: true,
     });
 
     const result = await maintainVault({ action: 'repair', dry_run: true });
     const payload = parseResult(result);
-    const fileAfterDryRun = await readFile(join(vaultPath, 'needs-repair.md'), 'utf8');
 
     expect(payload.actions).toMatchObject([
-      { action: 'repair', dry_run: true, counts: { scanned: 1, repaired: 1 } },
+      { action: 'repair', dry_run: true, counts: { scanned: 1, updated: 1, repaired: 1, archived: 0 } },
     ]);
-    expect(fileAfterDryRun).not.toContain('fq_id');
+    const { data } = await supabaseManager
+      .getClient()
+      .from('fqc_documents')
+      .select('path,status')
+      .eq('id', '11111111-1111-4111-8111-111111111111')
+      .single();
+    expect(data).toMatchObject({ path: 'moved-old.md', status: 'active' });
+  });
+
+  it('maintain_vault repair updates moved tracked rows and archives permanently missing rows', async () => {
+    await writeFile(
+      join(vaultPath, 'moved-new.md'),
+      [
+        '---',
+        'fq_id: 11111111-1111-4111-8111-111111111111',
+        'fq_title: Moved Document',
+        '---',
+        '',
+        'Moved outside FlashQuery.',
+      ].join('\n')
+    );
+    await supabaseManager.getClient().from('fqc_documents').insert([
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        instance_id: TEST_INSTANCE_ID,
+        path: 'moved-old.md',
+        title: 'Moved Document',
+        status: 'active',
+        content_hash: 'pre-reconcile-hash',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        instance_id: TEST_INSTANCE_ID,
+        path: 'deleted.md',
+        title: 'Deleted Document',
+        status: 'active',
+        content_hash: 'deleted-hash',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+    ]);
+
+    const result = await maintainVault({ action: 'repair' });
+    const payload = parseResult(result);
+
+    expect(payload.actions).toMatchObject([
+      { action: 'repair', dry_run: false, counts: { scanned: 2, updated: 1, repaired: 1, archived: 1 } },
+    ]);
+    const { data } = await supabaseManager
+      .getClient()
+      .from('fqc_documents')
+      .select('id,path,status')
+      .eq('instance_id', TEST_INSTANCE_ID)
+      .in('id', ['11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222']);
+    expect(data).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: '11111111-1111-4111-8111-111111111111', path: 'moved-new.md', status: 'active' }),
+      expect.objectContaining({ id: '22222222-2222-4222-8222-222222222222', path: 'deleted.md', status: 'archived' }),
+    ]));
   });
 
   it('maintain_vault combined repair sync orders repair before sync', async () => {

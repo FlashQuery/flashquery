@@ -269,9 +269,7 @@ describe('identification builders', () => {
         modified: '2026-05-12T00:00:00.000Z',
         chars: 25,
         archived_at: '2026-05-12T00:00:00.000Z',
-        removed: true,
         moved_to: '.flashquery/removed/old.md',
-        original_path: 'Notes/old.md',
       })
     ).toEqual({
       identifier: 'old.md',
@@ -282,9 +280,7 @@ describe('identification builders', () => {
       size: { chars: 25 },
       status: 'archived',
       archived_at: '2026-05-12T00:00:00.000Z',
-      removed: true,
       moved_to: '.flashquery/removed/old.md',
-      original_path: 'Notes/old.md',
     });
   });
 });

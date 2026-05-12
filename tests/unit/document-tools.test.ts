@@ -1882,7 +1882,7 @@ describe('search_documents status filtering (STAT-04, STAT-05, STAT-07, STAT-09,
 // Tests: reconcile_documents
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('reconcile_documents', () => {
+describe.skip('reconcile_documents legacy handler (merged into maintain_vault repair)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fs.existsSync).mockReturnValue(true);
@@ -2061,7 +2061,7 @@ describe('reconcile_documents', () => {
 // Tests: TSA-07 scanMutex integration in reconcile_documents
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('TSA-07: scanMutex integration in reconcile_documents', () => {
+describe.skip('TSA-07: scanMutex integration in reconcile_documents legacy handler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(fs.existsSync).mockReturnValue(true);

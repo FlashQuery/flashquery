@@ -12,11 +12,13 @@ import { setShuttingDown } from '../../src/server/shutdown-state.js';
 const scannerMocks = vi.hoisted(() => ({
   runScanOnce: vi.fn(),
   repairFrontmatter: vi.fn(),
+  reconcileTrackedDocuments: vi.fn(),
 }));
 
 vi.mock('../../src/services/scanner.js', () => ({
   runScanOnce: scannerMocks.runScanOnce,
   repairFrontmatter: scannerMocks.repairFrontmatter,
+  reconcileTrackedDocuments: scannerMocks.reconcileTrackedDocuments,
 }));
 
 vi.mock('../../src/services/plugin-reconciliation.js', () => ({
@@ -91,6 +93,11 @@ describe('maintainVault service contract', () => {
       repaired: 6,
       archived: 1,
     });
+    scannerMocks.reconcileTrackedDocuments.mockResolvedValue({
+      scanned: 7,
+      updated: 6,
+      archived: 1,
+    });
   });
 
   it('runs combined sync and repair actions as repair before sync', async () => {
@@ -105,7 +112,8 @@ describe('maintainVault service contract', () => {
         ],
       },
     });
-    expect(scannerMocks.repairFrontmatter).toHaveBeenCalledBefore(scannerMocks.runScanOnce);
+    expect(scannerMocks.reconcileTrackedDocuments).toHaveBeenCalledBefore(scannerMocks.runScanOnce);
+    expect(scannerMocks.repairFrontmatter).not.toHaveBeenCalled();
   });
 
   it('allows dry_run only for repair', async () => {
@@ -113,7 +121,7 @@ describe('maintainVault service contract', () => {
     const sync = await maintainVault(makeConfig(), { action: 'sync', dry_run: true });
 
     expect(repair.ok).toBe(true);
-    expect(scannerMocks.repairFrontmatter).toHaveBeenCalledWith(makeConfig(), { dryRun: true });
+    expect(scannerMocks.reconcileTrackedDocuments).toHaveBeenCalledWith(makeConfig(), { dryRun: true });
     expect(sync).toEqual({
       ok: false,
       error: {
@@ -153,6 +161,30 @@ describe('maintainVault service contract', () => {
         error: 'not_found',
         message: "No maintenance job found for job_id 'missing-job-id'",
         identifier: 'missing-job-id',
+      },
+    });
+  });
+
+  it('rejects dry_run and background for status requests', async () => {
+    const dryRun = await maintainVault(makeConfig(), { action: 'status', job_id: 'missing', dry_run: true });
+    const background = await maintainVault(makeConfig(), { action: 'status', job_id: 'missing', background: true });
+
+    expect(dryRun).toEqual({
+      ok: false,
+      error: {
+        error: 'invalid_input',
+        message: 'dry_run is not supported for action: status',
+        identifier: 'status',
+        details: { parameter: 'dry_run' },
+      },
+    });
+    expect(background).toEqual({
+      ok: false,
+      error: {
+        error: 'invalid_input',
+        message: 'background is not supported for action: status',
+        identifier: 'status',
+        details: { parameter: 'background' },
       },
     });
   });
@@ -288,6 +320,11 @@ describe('maintain_vault MCP handler', () => {
       added: 0,
       updated: 1,
       repaired: 1,
+      archived: 0,
+    });
+    scannerMocks.reconcileTrackedDocuments.mockResolvedValue({
+      scanned: 4,
+      updated: 1,
       archived: 0,
     });
   });

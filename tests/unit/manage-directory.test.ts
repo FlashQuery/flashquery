@@ -221,6 +221,19 @@ describe('manage_directory', () => {
     expect(vi.mocked(rmdir)).not.toHaveBeenCalled();
   });
 
+  it('returns path_traversal reason for unsafe vault paths', async () => {
+    const result = await callManageDirectory({ action: 'create', paths: ['../outside'] });
+    const payload = parseJson(result) as { results: Array<Record<string, unknown>> };
+
+    expect(result.isError).toBe(false);
+    expect(payload.results[0]).toMatchObject({
+      error: 'invalid_input',
+      message: 'Path must stay inside the vault',
+      identifier: '../outside',
+      details: { reason: 'path_traversal' },
+    });
+  });
+
   it('returns lock_contention conflict when the directory lock cannot be acquired', async () => {
     const { acquireLock } = await import('../../src/services/write-lock.js');
     (acquireLock as MockedFunction<typeof acquireLock>).mockResolvedValueOnce(false);
@@ -249,7 +262,7 @@ describe('manage_directory', () => {
     expect(payload.results[0]).toMatchObject({
       error: 'invalid_input',
       identifier: 'Bad\0Path',
-      details: { field: 'paths' },
+      details: { reason: 'invalid_directory_path' },
     });
     expect(payload.results[1]).toMatchObject({
       path: 'Good',

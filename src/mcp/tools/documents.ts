@@ -18,7 +18,6 @@ import {
   targetedScan,
 } from '../utils/resolve-document.js';
 import { serializeOrderedFrontmatter } from '../utils/frontmatter-sanitizer.js';
-import { scanMutex } from '../../services/scanner.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
   formatKeyValueEntry,
@@ -1606,7 +1605,6 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
                 modified: archivedStats.mtime.toISOString(),
                 chars: parsed.content.length,
                 archived_at: archivedAt,
-                removed: true as const,
               };
 
               if (config.trashFolder.enabled) {
@@ -1623,11 +1621,10 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
                 results.push(documentRemovalResult({
                   ...baseResult,
                   moved_to: trashDestination.responsePath,
-                  original_path: relativePath,
                 }));
               } else {
                 await vaultManager.removeMarkdown(relativePath, { gitTitle: title });
-                results.push(documentRemovalResult(baseResult));
+                results.push(documentRemovalResult({ ...baseResult, moved_to: null }));
               }
             } catch (removalErr) {
               if (archivedFileWritten && existsSync(join(vaultRoot, relativePath))) {
@@ -1693,6 +1690,9 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
         if (isBatch) {
           return jsonToolResult(withWarnings({ results }, warnings));
+        }
+        if (results[0] && typeof results[0].error === 'string') {
+          return jsonExpectedError(results[0] as ErrorEnvelope);
         }
         return jsonToolResult(results[0]);
       } catch (err) {
@@ -2195,150 +2195,6 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         if (config.locking.enabled) {
           await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
         }
-      }
-    }
-  );
-
-  // ─── Tool 6: reconcile_documents (DOC-08) ──────────────────────────────────
-
-  server.registerTool(
-    'reconcile_documents',
-    {
-      description:
-        'Scan the database for documents whose vault file is missing. Detects files that were moved (by matching fqc_id in frontmatter at the new location) and updates their path. Files that are permanently gone are marked archived. Use this after bulk file moves, vault reorganization, or when documents show stale path warnings.',
-      inputSchema: {
-        dry_run: z
-          .boolean()
-          .optional()
-          .describe(
-            'If true, report what would change without making any DB updates. Default: false'
-          ),
-      },
-    },
-    async ({ dry_run }) => {
-      // D-02b: Check shutdown flag immediately
-      if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      // TSA-07: Acquire scanMutex to prevent races with background scan during vault walk
-      const release = await scanMutex.acquire();
-      try {
-        const isDryRun = dry_run ?? false;
-        const supabase = supabaseManager.getClient();
-        const vaultRoot = config.instance.vault.path;
-
-        // Fetch all non-archived rows for this instance
-        const { data: rows, error: fetchError } = await supabase
-          .from('fqc_documents')
-          .select('id, path, title, status')
-          .eq('instance_id', config.instance.id)
-          .neq('status', 'archived');
-
-        if (fetchError) throw new Error(fetchError.message);
-        if (!rows || rows.length === 0) {
-          return {
-            content: [{ type: 'text' as const, text: 'No active documents in DB to reconcile.' }],
-          };
-        }
-
-        // Identify rows whose vault file is missing
-        const missingRows = (
-          rows as Array<{ id: string; path: string; title: string; status: string }>
-        ).filter((r) => !existsSync(join(vaultRoot, r.path)));
-
-        if (missingRows.length === 0) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `reconcile_documents: all ${rows.length} DB rows have valid vault files. Nothing to do.`,
-              },
-            ],
-          };
-        }
-
-        logger.info(
-          `reconcile_documents: found ${missingRows.length} missing vault file(s) out of ${rows.length} DB rows`
-        );
-
-        // Build a vault-wide fqc_id index once (expensive but necessary for bulk reconcile)
-        const allFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
-        const fqcIdIndex = new Map<string, string>(); // fqc_id → relativePath
-        for (const file of allFiles) {
-          try {
-            const raw = await readFile(join(vaultRoot, file), 'utf-8');
-            const { data: fm } = matter(raw);
-            if (typeof fm[FM.ID] === 'string' && fm[FM.ID]) {
-              fqcIdIndex.set(fm[FM.ID] as string, file);
-            }
-          } catch {
-            // skip unreadable files
-          }
-        }
-
-        const moved: Array<{ fqcId: string; oldPath: string; newPath: string; title: string }> = [];
-        const archived: Array<{ fqcId: string; path: string; title: string }> = [];
-
-        for (const row of missingRows) {
-          const newPath = fqcIdIndex.get(row.id) ?? null;
-          if (newPath) {
-            moved.push({ fqcId: row.id, oldPath: row.path, newPath, title: row.title });
-            if (!isDryRun) {
-              await supabase
-                .from('fqc_documents')
-                .update({ path: newPath, updated_at: new Date().toISOString() })
-                .eq('id', row.id);
-              logger.info(
-                `reconcile_documents: updated path for fqc_id=${row.id} from "${row.path}" to "${newPath}"`
-              );
-            }
-          } else {
-            archived.push({ fqcId: row.id, path: row.path, title: row.title });
-            if (!isDryRun) {
-              await supabase
-                .from('fqc_documents')
-                .update({ status: 'archived', updated_at: new Date().toISOString() })
-                .eq('id', row.id);
-              logger.info(
-                `reconcile_documents: archived fqc_id=${row.id} (file not found: "${row.path}")`
-              );
-            }
-          }
-        }
-
-        const prefix = isDryRun ? '[DRY RUN] ' : '';
-        const lines: string[] = [
-          `${prefix}reconcile_documents: scanned ${rows.length} DB rows, found ${missingRows.length} missing file(s).`,
-        ];
-        if (moved.length > 0) {
-          lines.push(`\n${prefix}Moved (path updated):`);
-          for (const m of moved) {
-            lines.push(`  - "${m.title}" (fqc_id=${m.fqcId})\n    ${m.oldPath} → ${m.newPath}`);
-          }
-        }
-        if (archived.length > 0) {
-          lines.push(`\n${prefix}Archived (file permanently missing):`);
-          for (const a of archived) {
-            lines.push(`  - "${a.title}" (fqc_id=${a.fqcId})\n    ${a.path}`);
-          }
-        }
-
-        return { content: [{ type: 'text' as const, text: lines.join('\n') }] };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`reconcile_documents failed - ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
-      } finally {
-        release();
       }
     }
   );

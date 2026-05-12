@@ -573,7 +573,7 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
     for (const tool of [...tools, ...excludedTools]) {
       const suggestion = getLegacyToolSuggestion(tool);
       const metadata = getToolMetadata(tool);
-      if (suggestion && metadata?.hostEligible === false) {
+      if (suggestion && metadata?.status === 'removed') {
         errors.push({
           layer: 'purpose',
           name: pu.name,

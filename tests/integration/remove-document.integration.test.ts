@@ -141,8 +141,8 @@ describe.skipIf(!HAS_SUPABASE)('remove_document integration', () => {
       identifier: created.fq_id,
       path: 'remove/hard-delete.md',
       status: 'archived',
-      removed: true,
       archived_at: expect.any(String),
+      moved_to: null,
     });
     expect(existsSync(join(vaultPath, 'remove/hard-delete.md'))).toBe(false);
 
@@ -169,7 +169,6 @@ describe.skipIf(!HAS_SUPABASE)('remove_document integration', () => {
       path: 'remove/trash-me.md',
       status: 'archived',
       moved_to: '.flashquery/removed/trash-me.md',
-      original_path: 'remove/trash-me.md',
       archived_at: expect.any(String),
     });
     expect(existsSync(join(vaultPath, 'remove/trash-me.md'))).toBe(false);

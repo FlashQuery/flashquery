@@ -5,7 +5,12 @@ import type { ErrorEnvelope, MaintenanceActionResult } from '../mcp/utils/respon
 import { maintenanceActionResult } from '../mcp/utils/response-formats.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
 import { invalidateReconciliationCache } from './plugin-reconciliation.js';
-import { repairFrontmatter, runScanOnce, type FrontmatterRepairResult, type ScanResult } from './scanner.js';
+import {
+  reconcileTrackedDocuments,
+  runScanOnce,
+  type DocumentReconciliationResult,
+  type ScanResult,
+} from './scanner.js';
 
 export type MaintenanceAction = 'sync' | 'repair' | 'status';
 export type MaintenanceRequestedAction = MaintenanceAction | Array<'sync' | 'repair'>;
@@ -57,6 +62,16 @@ export async function maintainVault(
   input: MaintainVaultInput
 ): Promise<MaintenanceResult<MaintenanceSyncPayload | MaintenanceAcceptedPayload | MaintenanceStatusPayload>> {
   if (input.action === 'status') {
+    if (input.dry_run === true) {
+      return invalidInput('dry_run is not supported for action: status', 'status', {
+        parameter: 'dry_run',
+      });
+    }
+    if (input.background === true) {
+      return invalidInput('background is not supported for action: status', 'status', {
+        parameter: 'background',
+      });
+    }
     return getMaintenanceJobStatus(input.job_id ?? '');
   }
 
@@ -193,7 +208,7 @@ async function executeActions(
 
     const startedAt = new Date().toISOString();
     if (action === 'repair') {
-      const result = await repairFrontmatter(config, { dryRun });
+      const result = await reconcileTrackedDocuments(config, { dryRun });
       const finishedAt = new Date().toISOString();
       results.push(maintenanceActionResult({
         action: 'repair',
@@ -278,12 +293,12 @@ function scanCounts(result: ScanResult): MaintenanceActionResult['counts'] {
   };
 }
 
-function repairCounts(result: FrontmatterRepairResult): MaintenanceActionResult['counts'] {
+function repairCounts(result: DocumentReconciliationResult): MaintenanceActionResult['counts'] {
   return {
     scanned: result.scanned,
-    added: result.added,
+    added: 0,
     updated: result.updated,
-    repaired: result.repaired,
+    repaired: result.updated,
     archived: result.archived,
   };
 }

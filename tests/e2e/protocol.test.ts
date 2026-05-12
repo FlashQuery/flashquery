@@ -884,7 +884,7 @@ describe.sequential('MCP protocol E2E', () => {
       fq_id: singleCreated.fq_id,
       status: 'archived',
       archived_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-      removed: true,
+      moved_to: null,
     });
 
     const batchCreate = await client.callTool({

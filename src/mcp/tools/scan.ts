@@ -1,11 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
-import {
-  getMaintenanceJobStatus,
-  maintainVault,
-  type MaintainVaultInput,
-} from '../../services/maintenance.js';
+import { maintainVault, type MaintainVaultInput } from '../../services/maintenance.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult } from '../utils/response-formats.js';
 
 const MaintenanceActionSchema = z.enum(['sync', 'repair', 'status']);
@@ -37,10 +33,7 @@ export function registerScanTools(server: McpServer, config: FlashQueryConfig): 
         ...(job_id === undefined ? {} : { job_id }),
       };
 
-      const result =
-        action === 'status'
-          ? getMaintenanceJobStatus(job_id ?? '')
-          : await maintainVault(config, input);
+      const result = await maintainVault(config, input);
 
       if (result.ok) {
         return jsonToolResult(result.payload);

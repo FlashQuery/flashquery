@@ -278,7 +278,7 @@ llm:
 `;
     writeFileSync(tmpFile, yaml);
     try {
-      expect(() => loadConfig(tmpFile)).toThrow(/unknown native tool 'search_documents'/);
+      expect(() => loadConfig(tmpFile)).toThrow(/Tool 'search_documents' has been replaced by 'search'/);
     } finally {
       unlinkSync(tmpFile);
     }
@@ -311,9 +311,10 @@ llm:
 `;
     writeFileSync(tmpFile, yaml);
     try {
-      expect(() => loadConfig(tmpFile)).toThrow(/unknown native tool 'search_documents'/);
-      expect(() => loadConfig(tmpFile)).toThrow(/unknown native tool 'save_memory'/);
-      expect(() => loadConfig(tmpFile)).toThrow(/unknown native tool 'create_document'/);
+      expect(() => loadConfig(tmpFile)).toThrow(/Tool 'search_documents' has been replaced by 'search'/);
+      expect(() => loadConfig(tmpFile)).toThrow(/Tool 'save_memory' has been replaced by 'write_memory'/);
+      expect(() => loadConfig(tmpFile)).toThrow(/Tool 'create_document' has been replaced by 'write_document'/);
+      expect(() => loadConfig(tmpFile)).toThrow(/Tool 'force_file_scan' has been replaced by 'maintain_vault'/);
     } finally {
       unlinkSync(tmpFile);
     }

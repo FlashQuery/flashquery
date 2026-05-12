@@ -1,4 +1,4 @@
-import { basename, dirname, extname } from 'node:path';
+import { basename, dirname, extname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { existsSync, lstatSync } from 'node:fs';
 import { v4 as uuidv4 } from 'uuid';
@@ -47,6 +47,12 @@ export interface FrontmatterRepairResult {
   archived: number;
 }
 
+export interface DocumentReconciliationResult {
+  scanned: number;
+  updated: number;
+  archived: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // titleFromFilename — derives title from filename (D-03: not from H1 heading)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -58,6 +64,89 @@ export function titleFromFilename(relativePath: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export async function reconcileTrackedDocuments(
+  config: FlashQueryConfig,
+  options: FrontmatterRepairOptions = {}
+): Promise<DocumentReconciliationResult> {
+  const { supabaseManager } = await import('../storage/supabase.js');
+  const supabase = supabaseManager.getClient();
+  const vaultRoot = config.instance.vault.path;
+  const instanceId = config.instance.id;
+  const release = await scanMutex.acquire();
+
+  try {
+    const { data: rows, error: fetchError } = await supabase
+      .from('fqc_documents')
+      .select('id, path, title, status')
+      .eq('instance_id', instanceId)
+      .neq('status', 'archived');
+
+    if (fetchError) {
+      throw new Error(`document reconciliation query failed: ${fetchError.message}`);
+    }
+
+    const activeRows = (rows ?? []) as Array<{ id: string; path: string; title: string | null; status: string | null }>;
+    const missingRows = activeRows.filter((row) => !existsSync(join(vaultRoot, row.path)));
+    const counts: DocumentReconciliationResult = {
+      scanned: activeRows.length,
+      updated: 0,
+      archived: 0,
+    };
+
+    if (missingRows.length === 0) {
+      return counts;
+    }
+
+    const allFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
+    const fqcIdIndex = new Map<string, string>();
+    for (const file of allFiles) {
+      try {
+        const raw = await readFile(join(vaultRoot, file), 'utf-8');
+        const { data: fm } = matter(raw);
+        if (typeof fm[FM.ID] === 'string' && fm[FM.ID].length > 0) {
+          fqcIdIndex.set(fm[FM.ID], file);
+        }
+      } catch {
+        // Skip unreadable files during reconciliation; the missing-row archive path remains authoritative.
+      }
+    }
+
+    for (const row of missingRows) {
+      const newPath = fqcIdIndex.get(row.id);
+      if (newPath) {
+        counts.updated++;
+        if (!options.dryRun) {
+          const { error: updateError } = await supabase
+            .from('fqc_documents')
+            .update({ path: newPath, updated_at: new Date().toISOString() })
+            .eq('id', row.id)
+            .eq('instance_id', instanceId);
+          if (updateError) {
+            throw new Error(`document reconciliation path update failed for ${row.id}: ${updateError.message}`);
+          }
+        }
+        continue;
+      }
+
+      counts.archived++;
+      if (!options.dryRun) {
+        const { error: archiveError } = await supabase
+          .from('fqc_documents')
+          .update({ status: 'archived', updated_at: new Date().toISOString() })
+          .eq('id', row.id)
+          .eq('instance_id', instanceId);
+        if (archiveError) {
+          throw new Error(`document reconciliation archive failed for ${row.id}: ${archiveError.message}`);
+        }
+      }
+    }
+
+    return counts;
+  } finally {
+    release();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

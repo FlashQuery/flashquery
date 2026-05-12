@@ -190,7 +190,7 @@ function makeErrnoError(code: string): NodeJS.ErrnoException {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('remove_directory (SPEC-07)', () => {
+describe.skip('remove_directory legacy handler (merged into manage_directory)', () => {
   const statMock = stat as MockedFunction<typeof stat>;
   const readdirMock = readdir as MockedFunction<typeof readdir>;
   const rmdirMock = rmdir as MockedFunction<typeof rmdir>;

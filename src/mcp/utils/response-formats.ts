@@ -52,9 +52,7 @@ export interface DocumentArchiveResultInput extends DocumentIdentificationInput 
 }
 
 export interface DocumentRemovalResultInput extends DocumentArchiveResultInput {
-  removed: true;
-  moved_to?: string;
-  original_path?: string;
+  moved_to: string | null;
 }
 
 export interface DirectoryResult {
@@ -184,15 +182,11 @@ export function documentArchiveResult(input: DocumentArchiveResultInput): Return
 }
 
 export function documentRemovalResult(input: DocumentRemovalResultInput): ReturnType<typeof documentArchiveResult> & {
-  removed: true;
-  moved_to?: string;
-  original_path?: string;
+  moved_to: string | null;
 } {
   return {
     ...documentArchiveResult(input),
-    removed: input.removed,
-    ...(input.moved_to === undefined ? {} : { moved_to: input.moved_to }),
-    ...(input.original_path === undefined ? {} : { original_path: input.original_path }),
+    moved_to: input.moved_to,
   };
 }
 
