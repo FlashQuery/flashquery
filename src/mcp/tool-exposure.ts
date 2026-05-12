@@ -52,6 +52,11 @@ export function validateToolSelectors(selectors: readonly string[] = []): string
 export function resolveHostToolExposure(config?: HostMcpToolsConfig): ResolvedHostToolExposure {
   const selectors = config?.tools;
   const excludedSelectors = config?.excludedTools ?? [];
+
+  if (config !== undefined && selectors !== undefined && selectors.length === 0) {
+    throw new Error("tools is empty; omit host_mcp_tools.tools to keep the default host surface or list at least one selector");
+  }
+
   const errors = [
     ...validateToolSelectors(selectors ?? []),
     ...validateToolSelectors(excludedSelectors),
@@ -61,7 +66,7 @@ export function resolveHostToolExposure(config?: HostMcpToolsConfig): ResolvedHo
     throw new Error(errors.join('; '));
   }
 
-  const enabled = selectors === undefined || selectors.length === 0
+  const enabled = selectors === undefined
     ? listToolMetadata({ hostEligible: true })
         .filter(isCurrentHostSelectable)
         .map((entry) => entry.name)

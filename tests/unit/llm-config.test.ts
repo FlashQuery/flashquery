@@ -250,7 +250,42 @@ llm:
     }
   });
 
-  it('hard-fails removed legacy purpose tool names with replacement suggestions and no aliases', () => {
+  it('accepts removed-status purpose tools while they are still registered on the host surface', () => {
+    const tmpFile = join(tmpdir(), `fqc-llm-test-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
+    const yaml = BASE_CONFIG_YAML + `
+templates:
+  default_access: restrictive
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: gpt-4o
+      provider_name: openai
+      model: gpt-4o
+      type: language
+      cost_per_million:
+        input: 2.5
+        output: 10.0
+  purposes:
+    - name: agentic
+      description: Current delegated search purpose
+      models:
+        - gpt-4o
+      tools:
+        - search_documents
+`;
+    writeFileSync(tmpFile, yaml);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.purposes[0].tools).toEqual(['search_documents']);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('keeps removed-status purpose tool names valid until their replacement tools are registered', () => {
     const tmpFile = join(tmpdir(), `fqc-llm-legacy-tools-${Date.now()}-${Math.random().toString(36).slice(2)}.yml`);
     const yaml = BASE_CONFIG_YAML + `
 templates:
@@ -277,11 +312,9 @@ llm:
 `;
     writeFileSync(tmpFile, yaml);
     try {
-      expect(() => loadConfig(tmpFile)).toThrow("Tool 'search_documents' has been replaced by 'search'");
-      expect(() => loadConfig(tmpFile)).toThrow("Tool 'create_document' has been replaced by 'write_document'");
-      expect(() => loadConfig(tmpFile)).toThrow("Tool 'save_memory' has been replaced by 'write_memory'");
-      expect(() => loadConfig(tmpFile)).toThrow("Tool 'force_file_scan' has been replaced by 'maintain_vault'");
-      expect(() => loadConfig(tmpFile)).toThrow('FlashQuery does not alias legacy tool names');
+      const config = loadConfig(tmpFile);
+      expect(config.llm?.purposes[0].tools).toEqual(['search_documents', 'save_memory', 'force_file_scan']);
+      expect(config.llm?.purposes[0].excludedTools).toEqual(['create_document']);
     } finally {
       unlinkSync(tmpFile);
     }

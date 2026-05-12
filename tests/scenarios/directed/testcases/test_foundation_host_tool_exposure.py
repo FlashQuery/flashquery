@@ -3,8 +3,7 @@
 Test: host MCP tool exposure configuration.
 
 Coverage points: D-foundation-tools-2, D-foundation-tools-3,
-D-foundation-tools-4, D-foundation-tools-5, D-foundation-tools-6,
-D-foundation-tools-7
+D-foundation-tools-4, D-foundation-tools-5, D-foundation-tools-7
 """
 from __future__ import annotations
 
@@ -13,7 +12,6 @@ COVERAGE = [
     "D-foundation-tools-3",
     "D-foundation-tools-4",
     "D-foundation-tools-5",
-    "D-foundation-tools-6",
     "D-foundation-tools-7",
 ]
 
@@ -53,7 +51,7 @@ def _record_tool_expectation(run: TestRun, label: str, names: list[str], present
     run.step(label=label, passed=passed, detail=detail.strip(), timing_ms=0)
 
 
-def _legacy_startup_fails(args: argparse.Namespace, port_range: tuple[int, int] | None) -> tuple[bool, str]:
+def _removed_status_purpose_name_starts(args: argparse.Namespace, port_range: tuple[int, int] | None) -> tuple[bool, str]:
     server = FQCServer(
         fqc_dir=args.fqc_dir,
         port_range=port_range,
@@ -79,11 +77,10 @@ def _legacy_startup_fails(args: argparse.Namespace, port_range: tuple[int, int] 
     )
     try:
         server.start()
-        return False, "Server started despite legacy purpose tool name"
+        return True, ""
     except Exception as exc:
         text = f"{exc}\n" + "\n".join(server.captured_logs)
-        expected = "Tool 'search_documents' has been replaced by 'search'" in text and "does not alias legacy tool names" in text
-        return expected, "" if expected else text[-1000:]
+        return False, text[-1000:]
     finally:
         server.stop()
 
@@ -125,7 +122,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         filtered_names = _list_tool_names(filtered_ctx)
         _record_tool_expectation(
             run,
-            "D-foundation-tools-3/4/6: category/name selectors filter host and delegated catalog",
+            "D-foundation-tools-3/4: category/name selectors filter host catalog",
             filtered_names,
             ["get_document", "list_vault", "search_documents", "search_all", "call_model"],
             ["save_memory", "create_document", "force_file_scan", "get_briefing"],
@@ -147,9 +144,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
             ["save_memory"],
         )
 
-    passed, detail = _legacy_startup_fails(args, port_range)
+    passed, detail = _removed_status_purpose_name_starts(args, port_range)
     run.step(
-        label="D-foundation-tools-7: legacy purpose names hard-fail with suggestions",
+        label="D-foundation-tools-7: removed-status purpose names remain valid while registered",
         passed=passed,
         detail=detail,
         timing_ms=0,

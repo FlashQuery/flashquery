@@ -53,6 +53,7 @@ const CURRENT_DELEGATED_TIER_ORDER = [
   'archive_record',
   'create_directory',
   'remove_directory',
+  'insert_doc_link',
 ] as const;
 
 const CURRENT_DELEGATED_TIER_TOOLS = new Set<string>(CURRENT_DELEGATED_TIER_ORDER);

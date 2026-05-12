@@ -5,7 +5,7 @@ import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 import { validateAllPurposeMode2Admissions } from '../llm/capabilities.js';
 import { HARD_EXCLUDED_NATIVE_TOOLS, TOOL_TIERS } from '../llm/tool-registry.js';
-import { getLegacyToolSuggestion } from '../mcp/tool-metadata.js';
+import { getLegacyToolSuggestion, getToolMetadata } from '../mcp/tool-metadata.js';
 import {
   resolveHostToolExposure,
   type ResolvedHostToolExposure,
@@ -485,11 +485,9 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
   const errors: LlmValidationError[] = [];
   const namePattern = /^[a-z0-9][a-z0-9_-]*$/;
   const toolTierNames = new Set<string>(Object.keys(TOOL_TIERS));
-  const transitionalPurposeToolNames = new Set<string>(['get_briefing', 'insert_doc_link']);
   const nativeToolNames = new Set<string>([
     ...Object.values(TOOL_TIERS).flat(),
     ...HARD_EXCLUDED_NATIVE_TOOLS,
-    ...transitionalPurposeToolNames,
   ]);
 
   // CONF-01: name format validation
@@ -563,7 +561,8 @@ function validateLlmConfig(llm: RawLlm): LlmValidationError[] {
 
     for (const tool of [...tools, ...excludedTools]) {
       const suggestion = getLegacyToolSuggestion(tool);
-      if (suggestion) {
+      const metadata = getToolMetadata(tool);
+      if (suggestion && metadata?.hostEligible === false) {
         errors.push({
           layer: 'purpose',
           name: pu.name,
@@ -865,8 +864,8 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   // 10. Emit warnings (deferred until after validation — caller logs them)
   (config as unknown as Record<string, unknown>)['_deprecationWarnings'] = [
     ...(extensionWarning ? [extensionWarning] : []),
-    ...resolvedHostToolExposure.warnings,
   ];
+  (config as unknown as Record<string, unknown>)['_startupWarnings'] = resolvedHostToolExposure.warnings;
   (config as unknown as Record<string, unknown>)['_resolvedHostToolExposure'] = resolvedHostToolExposure;
 
   // Attach raw LLM api_key refs (used by syncLlmConfigToDb in src/llm/config-sync.ts).
@@ -883,11 +882,15 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// getDeprecationWarnings — retrieve warnings attached to config
+// getDeprecationWarnings — retrieve deprecation warnings attached to config
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getDeprecationWarnings(config: FlashQueryConfig): string[] {
   return ((config as unknown as Record<string, unknown>)['_deprecationWarnings'] as string[]) ?? [];
+}
+
+export function getStartupWarnings(config: FlashQueryConfig): string[] {
+  return ((config as unknown as Record<string, unknown>)['_startupWarnings'] as string[]) ?? [];
 }
 
 export function getResolvedHostToolExposure(config: FlashQueryConfig): ResolvedHostToolExposure {

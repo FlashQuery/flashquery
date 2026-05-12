@@ -44,8 +44,8 @@ steps:
       expect_tools_contains:
         - call_model
 
-  - label: "Legacy purpose tool names fail startup with replacement guidance"
-    startup_error:
+  - label: "Removed-status purpose tool names remain valid while registered"
+    startup_success:
       extra_config:
         llm:
           providers:
@@ -65,6 +65,3 @@ steps:
               description: Legacy tool config
               models: [gpt-4o]
               tools: [search_documents]
-      expect_contains:
-        - "Tool 'search_documents' has been replaced by 'search'"
-        - "does not alias legacy tool names"

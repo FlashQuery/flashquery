@@ -82,6 +82,7 @@ describe('tool metadata registry', () => {
       'archive_record',
       'create_directory',
       'remove_directory',
+      'insert_doc_link',
     ]));
   });
 

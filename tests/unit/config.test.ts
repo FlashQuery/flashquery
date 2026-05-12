@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { writeFileSync, unlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
-import { loadConfig, getDeprecationWarnings, getResolvedHostToolExposure } from '../../src/config/loader.js';
+import { loadConfig, getDeprecationWarnings, getResolvedHostToolExposure, getStartupWarnings } from '../../src/config/loader.js';
 
 const FIXTURE_PATH = new URL('../fixtures/flashquery.test.yml', import.meta.url).pathname;
 
@@ -107,6 +107,34 @@ host_mcp_tools:
       'call_model',
     ]));
     expect(getDeprecationWarnings(config)).toEqual(expect.any(Array));
+    expect(getStartupWarnings(config)).toEqual(expect.any(Array));
+    expect(getDeprecationWarnings(config).some((warning) => warning.startsWith('host_mcp_tools:'))).toBe(false);
+  });
+
+  it('rejects explicit empty host_mcp_tools.tools with an actionable config error', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-host-tools-empty-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "host-tools-empty"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+host_mcp_tools:
+  tools: []
+`);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(
+        'Config error: [host_mcp_tools] tools is empty; omit host_mcp_tools.tools to keep the default host surface or list at least one selector'
+      );
+    } finally {
+      unlinkSync(tmpFile);
+    }
   });
 
   it('rejects invalid host_mcp_tools selectors with a host-scoped config error', () => {

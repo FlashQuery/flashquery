@@ -50,6 +50,7 @@ const READ_WRITE_EXTRA_TOOLS = [
   'archive_record',
   'create_directory',
   'remove_directory',
+  'insert_doc_link',
 ];
 
 const HARD_EXCLUDED_TOOLS = [

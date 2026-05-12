@@ -1500,13 +1500,13 @@ Phase 121 foundation behaviors for MCP tool consolidation metadata, response hel
 | D-foundation-tools-3 | Host selector expansion accepts category, tier, and explicit tool names. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
 | D-foundation-tools-4 | `excluded_tools` is applied as the final host tool deny layer. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
 | D-foundation-tools-5 | `category:doc-write` implies read tools while `category:doc-read` remains read-only. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
-| D-foundation-tools-6 | Delegated native tool assembly cannot regain host-disabled tools. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
-| D-foundation-tools-7 | Legacy purpose tool names hard-fail startup with replacement suggestions and no aliasing. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
+| D-foundation-tools-6 | Delegated native tool assembly cannot regain host-disabled tools. | Unit: llm-tool-registry.test.ts (`does not regain memory tools from tier selectors when the host catalog is doc-read only`); directed host boundary in test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
+| D-foundation-tools-7 | Removed-status purpose tool names remain valid while their legacy tools are still registered; hard-fail suggestions are deferred until actual removal. | test_foundation_host_tool_exposure; llm-config.test.ts | 2026-05-11 | 2026-05-11 |
 | D-foundation-frontmatter-1 | Foundation frontmatter constant guardrails prevent new unmanaged raw `fq_*` field literals outside explicit legacy/fixture allowlists. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
 | D-foundation-description-1 | MCP `tools/list` exposes registered tool descriptions that include the XC-8 four-block template. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
 
 ### test_foundation_host_tool_exposure
-Covers: D-foundation-tools-2, D-foundation-tools-3, D-foundation-tools-4, D-foundation-tools-5, D-foundation-tools-6, D-foundation-tools-7
+Covers: D-foundation-tools-2, D-foundation-tools-3, D-foundation-tools-4, D-foundation-tools-5, D-foundation-tools-7
 
 ### test_foundation_json_response
 Covers: D-foundation-json-1, D-foundation-json-2, D-foundation-tools-1, D-foundation-frontmatter-1, D-foundation-description-1

@@ -23,6 +23,12 @@ describe('host MCP tool exposure', () => {
     ]));
   });
 
+  it('rejects explicitly empty tools instead of silently enabling all tools', () => {
+    expect(() => resolveHostToolExposure({ tools: [] })).toThrow(
+      'tools is empty; omit host_mcp_tools.tools to keep the default host surface or list at least one selector'
+    );
+  });
+
   it('doc-write includes doc-read while doc-read remains read-only', () => {
     const docWrite = resolveHostToolExposure({ tools: ['category:doc-write'] }).hostEnabledToolNames;
     const docRead = resolveHostToolExposure({ tools: ['category:doc-read'] }).hostEnabledToolNames;

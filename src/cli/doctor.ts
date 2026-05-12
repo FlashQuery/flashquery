@@ -1,6 +1,6 @@
 import { accessSync, constants } from 'node:fs';
 import { simpleGit } from 'simple-git';
-import { loadConfig, resolveConfigPath, getDeprecationWarnings } from '../config/loader.js';
+import { loadConfig, resolveConfigPath, getDeprecationWarnings, getStartupWarnings } from '../config/loader.js';
 import { initLogger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 
@@ -186,6 +186,9 @@ export async function runDoctorCommand(explicitConfigPath?: string): Promise<voi
     // Show any deprecation warnings from config loading
     const deprecationWarnings = getDeprecationWarnings(config);
     for (const warning of deprecationWarnings) {
+      process.stderr.write(`  [WARN] ${warning}\n`);
+    }
+    for (const warning of getStartupWarnings(config)) {
       process.stderr.write(`  [WARN] ${warning}\n`);
     }
   } catch (err) {
