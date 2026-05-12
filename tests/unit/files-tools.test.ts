@@ -113,24 +113,23 @@ async function callCreateDirectory({
 }): Promise<ToolResult> {
   const { registerFileTools } = await import('../../src/mcp/tools/files.js');
 
-  const handlers: Array<(args: Record<string, unknown>) => Promise<ToolResult>> = [];
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<ToolResult>>();
 
   const mockServer = {
     registerTool: vi.fn(
       (
-        _name: string,
+        name: string,
         _config: unknown,
         handler: (args: Record<string, unknown>) => Promise<ToolResult>
       ) => {
-        handlers.push(handler);
+        handlers.set(name, handler);
       }
     ),
   } as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer;
 
   registerFileTools(mockServer, makeConfig());
 
-  // create_directory is registered first (handlers[0])
-  const createDirHandler = handlers[0];
+  const createDirHandler = handlers.get('create_directory');
   if (!createDirHandler) {
     throw new Error('registerFileTools did not call server.registerTool');
   }
@@ -157,18 +156,17 @@ async function callListVault(params: {
   limit?: number;
 }): Promise<ToolResult> {
   const { registerFileTools } = await import('../../src/mcp/tools/files.js');
-  const handlers: Array<(args: Record<string, unknown>) => Promise<ToolResult>> = [];
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<ToolResult>>();
   const mockServer = {
     registerTool: vi.fn(
-      (_name: string, _config: unknown, handler: (args: Record<string, unknown>) => Promise<ToolResult>) => {
-        handlers.push(handler);
+      (name: string, _config: unknown, handler: (args: Record<string, unknown>) => Promise<ToolResult>) => {
+        handlers.set(name, handler);
       }
     ),
   } as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer;
   registerFileTools(mockServer, makeConfig());
-  // create_directory is registered first (handlers[0]); list_vault is second (handlers[1])
-  const listVaultHandler = handlers[1];
-  if (!listVaultHandler) throw new Error('list_vault handler not registered (expected handlers[1])');
+  const listVaultHandler = handlers.get('list_vault');
+  if (!listVaultHandler) throw new Error('list_vault handler not registered');
   return listVaultHandler(params as Record<string, unknown>);
 }
 

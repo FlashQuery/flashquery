@@ -32,6 +32,7 @@ import { supabaseManager } from '../../storage/supabase.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { parseDateFilter } from '../utils/date-filter.js';
 import {
+  directoryResult,
   jsonExpectedError,
   jsonRuntimeError,
   jsonToolResult,
@@ -44,6 +45,260 @@ const DEFAULT_MARKDOWN_EXTENSIONS: string[] = ['.md'];
  * Registers create_directory, list_vault, and remove_directory (migrated from documents.ts in Phase 94).
  */
 export function registerFileTools(server: McpServer, config: FlashQueryConfig): void {
+  // ─── Tool: manage_directory ─────────────────────────────────────────────────
+  server.registerTool(
+    'manage_directory',
+    {
+      description:
+        'Create or remove vault directories with ordered JSON results. Use when preparing document folders or cleaning up empty staging directories. Do not use for files; use write_document/remove_document. Example: manage_directory({ "action": "create", "paths": ["Notes/Ideas", "Projects/Alpha"] })',
+      inputSchema: {
+        action: z
+          .enum(['create', 'remove'])
+          .describe('Directory operation to perform. "create" creates directories recursively; "remove" removes only empty directories.'),
+        paths: z
+          .array(z.string())
+          .describe('Vault-relative directory paths to process in order. Duplicate paths execute sequentially.'),
+      },
+    },
+    async ({ action, paths }) => {
+      if (getIsShuttingDown()) {
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed.');
+      }
+
+      if (action !== 'create' && action !== 'remove') {
+        return jsonExpectedError({
+          error: 'invalid_input',
+          message: 'Invalid action. Expected one of: create, remove.',
+          details: { field: 'action', allowed: ['create', 'remove'] },
+        });
+      }
+
+      if (!Array.isArray(paths) || !paths.every((path) => typeof path === 'string')) {
+        return jsonExpectedError({
+          error: 'invalid_input',
+          message: 'Invalid paths. Expected an array of strings.',
+          details: { field: 'paths' },
+        });
+      }
+
+      const vaultRoot = config.instance.vault.path;
+      const client = supabaseManager.getClient();
+      const results: Array<Record<string, unknown>> = [];
+
+      for (const inputPath of paths) {
+        const normalizedPath = normalizePath(inputPath);
+        if (normalizedPath === '') {
+          results.push({
+            error: 'invalid_input',
+            message: action === 'remove'
+              ? 'Cannot remove the vault root directory.'
+              : 'Path cannot target the vault root directory.',
+            identifier: inputPath,
+            details: { field: 'paths', reason: 'vault_root' },
+          });
+          continue;
+        }
+
+        const validation = await validateVaultPath(vaultRoot, normalizedPath);
+        if (!validation.valid) {
+          results.push({
+            error: 'invalid_input',
+            message: validation.error ?? 'Invalid path.',
+            identifier: inputPath,
+            details: { field: 'paths' },
+          });
+          continue;
+        }
+
+        const lockResource = `directory:${normalizedPath}`;
+        const locked = await acquireLock(
+          client,
+          config.instance.id,
+          lockResource,
+          { ttlSeconds: config.locking.ttlSeconds }
+        );
+        if (!locked) {
+          results.push({
+            error: 'conflict',
+            message: 'Directory is currently locked by another operation.',
+            identifier: normalizedPath,
+            details: { reason: 'lock_contention' },
+          });
+          continue;
+        }
+
+        try {
+          const absPath = validation.absPath;
+          const timestamp = new Date().toISOString();
+
+          if (action === 'create') {
+            try {
+              const existingStat = await stat(absPath);
+              if (!existingStat.isDirectory()) {
+                results.push({
+                  error: 'conflict',
+                  message: 'Path exists as a file, not a directory.',
+                  identifier: normalizedPath,
+                  details: { reason: 'not_directory' },
+                });
+                continue;
+              }
+
+              results.push(directoryResult({
+                path: normalizedPath,
+                action,
+                status: 'unchanged',
+                timestamp,
+              }));
+              continue;
+            } catch (statErr) {
+              const code = (statErr as NodeJS.ErrnoException).code;
+              if (code !== 'ENOENT' && code !== 'ENOTDIR') {
+                if (code === 'EACCES') {
+                  results.push({
+                    error: 'permission_denied',
+                    message: 'Permission denied while checking directory.',
+                    identifier: normalizedPath,
+                    details: { operation: 'stat' },
+                  });
+                  continue;
+                }
+                throw statErr;
+              }
+            }
+
+            try {
+              await mkdir(absPath, { recursive: true });
+              results.push(directoryResult({
+                path: normalizedPath,
+                action,
+                status: 'created',
+                timestamp,
+              }));
+            } catch (mkdirErr) {
+              const code = (mkdirErr as NodeJS.ErrnoException).code;
+              if (code === 'EEXIST' || code === 'ENOTDIR') {
+                results.push({
+                  error: 'conflict',
+                  message: 'Path conflicts with an existing file.',
+                  identifier: normalizedPath,
+                  details: { reason: 'not_directory' },
+                });
+                continue;
+              }
+              if (code === 'EACCES') {
+                results.push({
+                  error: 'permission_denied',
+                  message: 'Permission denied while creating directory.',
+                  identifier: normalizedPath,
+                  details: { operation: 'mkdir' },
+                });
+                continue;
+              }
+              throw mkdirErr;
+            }
+            continue;
+          }
+
+          let dirStat: Awaited<ReturnType<typeof stat>>;
+          try {
+            dirStat = await stat(absPath);
+          } catch (statErr) {
+            const code = (statErr as NodeJS.ErrnoException).code;
+            if (code === 'ENOENT') {
+              results.push({
+                error: 'not_found',
+                message: 'Directory does not exist.',
+                identifier: normalizedPath,
+                details: { kind: 'directory' },
+              });
+              continue;
+            }
+            if (code === 'EACCES') {
+              results.push({
+                error: 'permission_denied',
+                message: 'Permission denied while checking directory.',
+                identifier: normalizedPath,
+                details: { operation: 'stat' },
+              });
+              continue;
+            }
+            throw statErr;
+          }
+
+          if (!dirStat.isDirectory()) {
+            results.push({
+              error: 'conflict',
+              message: 'Path is a file, not a directory.',
+              identifier: normalizedPath,
+              details: { reason: 'not_directory' },
+            });
+            continue;
+          }
+
+          let entries: string[];
+          try {
+            entries = await readdir(absPath);
+          } catch (readdirErr) {
+            if ((readdirErr as NodeJS.ErrnoException).code === 'EACCES') {
+              results.push({
+                error: 'permission_denied',
+                message: 'Permission denied while reading directory.',
+                identifier: normalizedPath,
+                details: { operation: 'readdir' },
+              });
+              continue;
+            }
+            throw readdirErr;
+          }
+
+          if (entries.length > 0) {
+            results.push({
+              error: 'conflict',
+              message: 'Directory is not empty.',
+              identifier: normalizedPath,
+              details: { reason: 'directory_not_empty', count: entries.length },
+            });
+            continue;
+          }
+
+          try {
+            await rmdir(absPath);
+            results.push(directoryResult({
+              path: normalizedPath,
+              action,
+              status: 'removed',
+              timestamp,
+            }));
+          } catch (rmdirErr) {
+            if ((rmdirErr as NodeJS.ErrnoException).code === 'EACCES') {
+              results.push({
+                error: 'permission_denied',
+                message: 'Permission denied while removing directory.',
+                identifier: normalizedPath,
+                details: { operation: 'rmdir' },
+              });
+              continue;
+            }
+            throw rmdirErr;
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logger.error(`manage_directory ${action} failed for ${normalizedPath}: ${msg}`);
+          results.push({
+            error: 'runtime_error',
+            message: msg,
+            identifier: normalizedPath,
+          });
+        } finally {
+          await releaseLock(client, config.instance.id, lockResource);
+        }
+      }
+
+      return { ...jsonToolResult({ results }), isError: false };
+    }
+  );
+
   // ─── Tool: create_directory ──────────────────────────────────────────────────
   server.registerTool(
     'create_directory',
