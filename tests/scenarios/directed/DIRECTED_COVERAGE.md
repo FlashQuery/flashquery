@@ -194,13 +194,13 @@ Unified search across documents and memories.
 | SA-03 | search_all with entity_types filter restricts results (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
 | SA-04 | search_all with tag filtering (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
 | SA-05 | search_all falls back to filesystem when embeddings disabled (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
-| D-search-1 | `search` returns a JSON envelope for document filesystem results with `query`, `entity_types`, `mode`, `total`, and typed result items. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-search-2 | `search` returns memory results through the final unified surface without using `search_memory` or `search_all`. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-search-3 | `search(mode:"filesystem")` honors explicit mode selection for document search. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-search-4 | `search` enters list mode for empty filtered memory searches when `entity_types:["memories"]` is explicit. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-search-5 | `search` applies one global limit to mixed document and memory result sets. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-search-6 | `search` result items carry entity type, identifier, and match-source metadata usable by MCP clients. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-search-7 | `search` excludes archived memories by default and surfaces them only when `include_archived:true`. | test_unified_search_memory_final | 2026-05-12 |  |
+| D-search-1 | `search` returns a JSON envelope for document filesystem results with `query`, `entity_types`, `mode`, `total`, and typed result items. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-search-2 | `search` returns memory results through the final unified surface without using `search_memory` or `search_all`. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-search-3 | `search(mode:"filesystem")` honors explicit mode selection for document search. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-search-4 | `search` enters list mode for empty filtered memory searches when `entity_types:["memories"]` is explicit. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-search-5 | `search` applies one global limit to mixed document and memory result sets. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-search-6 | `search` result items carry entity type, identifier, and match-source metadata usable by MCP clients. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-search-7 | `search` excludes archived memories by default and surfaces them only when `include_archived:true`. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
 | D-search-8 | `search` reports disabled/unsupported memory category requests through JSON envelope semantics instead of legacy prose. | tests/unit/search.test.ts; tests/integration/search.integration.test.ts | 2026-05-12 |  |
 
 ## 6. Memory Lifecycle
@@ -224,13 +224,13 @@ Core CRUD operations on memories.
 | M-13 | Archived memory excluded from search_memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-14 | Archive memory manages status tags automatically (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-15 | Save memory with plugin_scope (fuzzy matched) (VALIDATED) | test_memory_plugin_scope | 2026-04-14 | 2026-05-07 |
-| D-wmem-1 | `write_memory(mode:"create")` creates a memory and returns parseable JSON identification with `memory_id`, `content_preview`, tags, and lifecycle fields. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-wmem-2 | `write_memory(mode:"create")` supports include projections for full content and full tags. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-wmem-3 | `write_memory(mode:"update")` creates a new latest version linked to the previous memory. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-wmem-4 | `write_memory(mode:"update")` preserves existing tags when tags are omitted. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-wmem-5 | `get_memory` returns ordered JSON arrays for batch input with per-element content projection. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-wmem-6 | `archive_memory` accepts `memory_ids` batch input and returns ordered JSON archive envelopes. | test_unified_search_memory_final | 2026-05-12 |  |
-| D-wmem-7 | `archive_memory` preserves expected-error semantics for missing batch elements without turning the outer MCP response into a runtime error. | test_unified_search_memory_final | 2026-05-12 |  |
+| D-wmem-1 | `write_memory(mode:"create")` creates a memory and returns parseable JSON identification with `memory_id`, `content_preview`, tags, and lifecycle fields. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-wmem-2 | `write_memory(mode:"create")` supports include projections for full content and full tags. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-wmem-3 | `write_memory(mode:"update")` creates a new latest version linked to the previous memory. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-wmem-4 | `write_memory(mode:"update")` preserves existing tags when tags are omitted. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-wmem-5 | `get_memory` returns ordered JSON arrays for batch input with per-element content projection. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-wmem-6 | `archive_memory` accepts `memory_ids` batch input and returns ordered JSON archive envelopes. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-wmem-7 | `archive_memory` preserves expected-error semantics for missing batch elements without turning the outer MCP response into a runtime error. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
 
 ## 7. Plugin Lifecycle
 

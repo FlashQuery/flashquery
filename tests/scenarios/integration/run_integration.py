@@ -391,6 +391,7 @@ _EXTRACT_PATTERNS: dict[str, str] = {
 _ACTION_EXTRACT_FIELDS: dict[str, tuple[str, ...]] = {
     "vault.write":  ("fq_id", "path", "title", "status"),
     "memory.write": ("memory_id", "content"),
+    "write_memory": ("memory_id", "content"),
 }
 
 
@@ -681,7 +682,7 @@ def _execute_action(
         if resp_fields.get("fq_id"):
             ctx.cleanup.track_mcp_document(resp_fields["fq_id"])
 
-    elif op == "memory.write":
+    elif op == "memory.write" or op == "write_memory":
         resp_fields = _extract(result.text, "memory_id")
         if resp_fields.get("memory_id"):
             ctx.cleanup.track_mcp_memory(resp_fields["memory_id"])

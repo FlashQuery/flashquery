@@ -1,0 +1,32 @@
+name: unified_search_documents
+description: >
+  Final unified search composes with write_document and returns document results
+  through the `search` tool with explicit entity_types filtering.
+coverage: [INT-search-1]
+
+steps:
+  - label: "Write a document for final unified search"
+    action: vault.write
+    name: unified_doc
+    path: "phase125/unified-search-document.md"
+    title: "Phase 125 Unified Search Document"
+    content: "This document is indexed for the final unified search document scenario."
+    tags: [phase125, unified-search-doc]
+
+  - label: "Index the document fixture"
+    action: scan_vault
+
+  - label: "Final search returns a JSON document result filtered by entity_types"
+    assert:
+      op: search
+      args:
+        query: "Phase 125 Unified Search Document"
+        mode: filesystem
+        entity_types: [documents]
+        tags: [unified-search-doc]
+      expect_json_equals:
+        path: "entity_types"
+        value: [documents]
+      expect_json_contains:
+        path: "results[0].path"
+        value: "_integration/phase125/unified-search-document.md"
