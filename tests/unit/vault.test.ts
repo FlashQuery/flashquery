@@ -52,6 +52,8 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
 let testDir: string;
 
 beforeEach(() => {
+  gitMocks.commitVaultChanges.mockResolvedValue(undefined);
+  gitMocks.commitVaultRemoval.mockResolvedValue(undefined);
   testDir = join(
     tmpdir(),
     `fqc-vault-test-${Date.now()}-${Math.random().toString(36).slice(2)}`

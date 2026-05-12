@@ -193,6 +193,53 @@ export class GitManagerImpl {
     }
   }
 
+  // ───────────────────────────────────────────────────────────────────────────
+  // commitVaultRemoval — stage delete/move effects with git add -A
+  // ───────────────────────────────────────────────────────────────────────────
+
+  async commitVaultRemoval(
+    action: 'remove' | 'trash',
+    title: string,
+    relativePaths: string[]
+  ): Promise<void> {
+    if (!this.gitAvailable || !existsSync(join(this.vaultPath, '.git'))) {
+      logger.warn(`Git: skipping removal commit for '${title}' — git not available or vault not a repo`);
+      return;
+    }
+
+    if (!this.config.autoCommit) return;
+
+    const startTime = performance.now();
+    const release = await this.mutex.acquire();
+    try {
+      const message = `vault: remove document '${title}'`;
+      await this.git.add('-A');
+      await this.git.commit(message);
+      const duration = Math.round(performance.now() - startTime);
+      logger.debug(
+        `Git: committed "${message}" (${duration}ms) — ${action} staged paths: ${relativePaths.join(', ')}`
+      );
+
+      if (this.config.autoPush) {
+        logger.debug('Git: push started — background sync to remote');
+        void this.git
+          .push(this.config.remote, this.config.branch)
+          .then(() => {
+            logger.debug(`Git: push completed to ${this.config.remote}/${this.config.branch} — background sync to remote`);
+          })
+          .catch((err) =>
+            logger.warn(`Git: push failed — ${err instanceof Error ? err.message : String(err)}. Manual push may be needed`)
+          );
+      }
+    } catch (err) {
+      logger.warn(
+        `Git: removal commit failed for '${title}' — ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      release();
+    }
+  }
+
   /**
    * Graceful shutdown: acquire and release async-mutex with timeout
    *
