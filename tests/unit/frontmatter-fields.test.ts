@@ -18,13 +18,16 @@ describe('FM constants', () => {
     expect(FM.TYPE).toBe('fq_type');
     expect(FM.INSTANCE).toBe('fq_instance');
     expect(FM.ARCHIVED_AT).toBe('fq_archived_at');
+    expect(FM.ORIGINAL_PATH).toBe('fq_original_path');
     expect(FM.ID).toBe('fq_id');
   });
 
   it('FrontmatterFieldName includes consolidation-managed constants', () => {
     const archivedAtField: FrontmatterFieldName = FM.ARCHIVED_AT;
+    const originalPathField: FrontmatterFieldName = FM.ORIGINAL_PATH;
 
     expect(archivedAtField).toBe('fq_archived_at');
+    expect(originalPathField).toBe('fq_original_path');
   });
 
   it('key ordering matches preferred write order', () => {
@@ -39,6 +42,7 @@ describe('FM constants', () => {
       'TYPE',
       'INSTANCE',
       'ARCHIVED_AT',
+      'ORIGINAL_PATH',
       'ID',
     ]);
   });

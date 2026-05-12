@@ -98,6 +98,73 @@ host_mcp_tools:
     }
   });
 
+  it('defaults trash_folder to disabled suffix trash under .flashquery/removed', () => {
+    const config = loadConfig(FIXTURE_PATH);
+
+    expect(config.trashFolder).toEqual({
+      enabled: false,
+      path: '.flashquery/removed',
+      collisionStrategy: 'suffix',
+    });
+  });
+
+  it('loads trash_folder with camelCase collisionStrategy without resolving relative paths', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-trash-folder-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "trash-folder-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+trash_folder:
+  enabled: true
+  path: ".custom-trash"
+  collision_strategy: "timestamp"
+`);
+    try {
+      const config = loadConfig(tmpFile);
+
+      expect(config.trashFolder).toEqual({
+        enabled: true,
+        path: '.custom-trash',
+        collisionStrategy: 'timestamp',
+      });
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('rejects unsupported trash_folder collision_strategy values', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-trash-folder-invalid-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "trash-folder-invalid"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+trash_folder:
+  collision_strategy: "overwrite"
+`);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/trash_folder\.collision_strategy/);
+      expect(() => loadConfig(tmpFile)).toThrow(/suffix|timestamp/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('defaults omitted host_mcp_tools to all host-eligible tools and stores warnings without stdout writes', () => {
     const config = loadConfig(FIXTURE_PATH);
 
