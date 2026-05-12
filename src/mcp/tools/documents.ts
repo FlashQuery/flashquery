@@ -26,6 +26,7 @@ import {
   jsonExpectedError,
   jsonRuntimeError,
   jsonToolResult,
+  type ErrorEnvelope,
 } from '../utils/response-formats.js';
 import {
   validateParameterCombinations,
@@ -623,8 +624,8 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               return await resolveAndBuildDocument(id, elementOptions, deps);
             } catch (err) {
               if (err instanceof DocumentRequestError) {
-                // section_not_found / follow_ref_*_error etc. — embed envelope at this position
-                return err.envelope;
+                // section_not_found / follow_ref_*_error etc. — embed the helper-normalized envelope at this position
+                return JSON.parse(jsonExpectedError(err.envelope as ErrorEnvelope).content[0]?.text ?? '{}') as ErrorEnvelope;
               }
               const msg = err instanceof Error ? err.message : String(err);
               const isNotFound =
@@ -650,7 +651,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         return jsonToolResult(result);
       } catch (err) {
         if (err instanceof DocumentRequestError) {
-          return { content: [{ type: 'text' as const, text: JSON.stringify(err.envelope) }], isError: false };
+          return jsonExpectedError(err.envelope as ErrorEnvelope);
         }
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_document failed: ${msg}`);

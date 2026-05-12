@@ -88,10 +88,10 @@ function description(summary: string, useWhen: string, doNotUseWhen: string, exa
 
 const D = {
   getDocument: description(
-    'Read one or more vault documents and return structured document data.',
-    'Use when you need document body, frontmatter, headings, sections, or reference-following behavior.',
+    'Read one or more vault documents and return structured document data with canonical expected-error envelopes using isError:false.',
+    'Use when you need document body, frontmatter, headings, sections, reference-following behavior, or recoverable not_found/invalid_input results.',
     'Do not use when you need to create or modify documents; use write_document or the current write/edit tool instead.',
-    'get_document({ "identifier": "Projects/Plan.md", "include": ["body", "frontmatter"] })'
+    'get_document({ "identifier": "Projects/Plan.md", "include": ["body", "frontmatter", "headings"] })'
   ),
   listVault: description(
     'List vault files and folders with optional metadata.',
