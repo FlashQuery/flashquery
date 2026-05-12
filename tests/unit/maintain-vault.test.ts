@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { registerScanTools } from '../../src/mcp/tools/scan.js';
 import {
   getMaintenanceJobStatus,
   maintainVault,
@@ -46,6 +48,26 @@ function makeConfig(): FlashQueryConfig {
     },
     logging: { level: 'info', output: 'stdout' },
   } as unknown as FlashQueryConfig;
+}
+
+function createMockServer(): {
+  server: McpServer;
+  handlers: Record<string, (params: Record<string, unknown>) => Promise<unknown>>;
+} {
+  const handlers: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {};
+  const server = {
+    registerTool: vi.fn(
+      (name: string, _config: unknown, handler: (params: Record<string, unknown>) => Promise<unknown>) => {
+        handlers[name] = handler;
+      }
+    ),
+  } as unknown as McpServer;
+  return { server, handlers };
+}
+
+function parseToolResult(result: unknown): Record<string, unknown> {
+  const toolResult = result as { content: Array<{ text: string }> };
+  return JSON.parse(toolResult.content[0].text) as Record<string, unknown>;
 }
 
 describe('maintainVault service contract', () => {
@@ -211,5 +233,100 @@ describe('maintainVault service contract', () => {
     expect(serialized).not.toContain('embeds_awaited');
     expect(serialized).not.toContain('availability');
     expect(serialized).not.toContain('per_document');
+  });
+});
+
+describe('maintain_vault MCP handler', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    setShuttingDown(false);
+    resetMaintenanceStateForTests();
+    scannerMocks.runScanOnce.mockResolvedValue({
+      hashMismatches: 1,
+      statusMismatches: 0,
+      newFiles: 2,
+      movedFiles: 0,
+      deletedFiles: 0,
+      embeddingStatus: 'complete',
+      embedsAwaited: 3,
+    });
+    scannerMocks.repairFrontmatter.mockResolvedValue({
+      scanned: 4,
+      added: 0,
+      updated: 1,
+      repaired: 1,
+      archived: 0,
+    });
+  });
+
+  it('registers maintain_vault instead of active force_file_scan', () => {
+    const { server, handlers } = createMockServer();
+
+    registerScanTools(server, makeConfig());
+
+    expect(server.registerTool).toHaveBeenCalledWith(
+      'maintain_vault',
+      expect.any(Object),
+      expect.any(Function)
+    );
+    expect(handlers.maintain_vault).toBeTypeOf('function');
+    expect(handlers.force_file_scan).toBeUndefined();
+  });
+
+  it('returns sync actions with started_at counts and no scanner-internal embedding_status fields', async () => {
+    const { handlers } = createMockServer();
+    registerScanTools({ registerTool: vi.fn((name, _config, handler) => (handlers[name] = handler)) } as unknown as McpServer, makeConfig());
+
+    const result = await handlers.maintain_vault({ action: 'sync' });
+    const payload = parseToolResult(result);
+
+    expect(payload.actions).toMatchObject([
+      {
+        action: 'sync',
+        started_at: expect.any(String),
+        finished_at: expect.any(String),
+        dry_run: false,
+        counts: { scanned: 3, added: 2, updated: 1, repaired: 0, archived: 0 },
+      },
+    ]);
+    expect(JSON.stringify(payload)).not.toContain('embedding_status');
+    expect(JSON.stringify(payload)).not.toContain('embeds_awaited');
+  });
+
+  it('returns accepted job_id metadata for background sync', async () => {
+    const { server, handlers } = createMockServer();
+    registerScanTools(server, makeConfig());
+
+    const result = await handlers.maintain_vault({ action: 'sync', background: true });
+    const payload = parseToolResult(result);
+
+    expect(payload).toMatchObject({
+      accepted: true,
+      job_id: expect.any(String),
+      started_at: expect.any(String),
+    });
+  });
+
+  it('maps invalid combinations, conflicts, and unknown jobs to JSON expected errors', async () => {
+    const { server, handlers } = createMockServer();
+    registerScanTools(server, makeConfig());
+
+    const invalid = await handlers.maintain_vault({ action: 'repair', background: true }) as {
+      isError?: boolean;
+    };
+    const unknown = await handlers.maintain_vault({ action: 'status', job_id: 'missing' }) as {
+      isError?: boolean;
+    };
+
+    expect(invalid.isError).toBe(false);
+    expect(parseToolResult(invalid)).toMatchObject({
+      error: 'invalid_input',
+      details: { parameter: 'background' },
+    });
+    expect(unknown.isError).toBe(false);
+    expect(parseToolResult(unknown)).toMatchObject({
+      error: 'not_found',
+      identifier: 'missing',
+    });
   });
 });
