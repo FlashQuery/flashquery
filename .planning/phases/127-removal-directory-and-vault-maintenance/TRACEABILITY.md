@@ -1,0 +1,27 @@
+# Phase 127 Traceability
+
+Roadmap source: `.planning/ROADMAP.md` defines the Phase 127 boundary. Product contract sources:
+`/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Roadmap/Features/MCP Tool Consolidation/MCP Tool Consolidation Requirements.md` and
+`/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Roadmap/Features/MCP Tool Consolidation/MCP Tool Consolidation Test Plan.md` define the detailed behavior and test contract.
+
+| Requirement | Product section | Unit | Integration | E2E | Directed coverage row | Directed testcase | Integration scenario row | Integration scenario file | Final verification evidence | Status |
+|-------------|-----------------|------|-------------|-----|-----------------------|-------------------|--------------------------|---------------------------|-----------------------------|--------|
+| DOC-09 | Requirements section 4.41 `remove_document`; Test Plan section 4.5 | `tests/unit/remove-document.test.ts` | `tests/integration/remove-document.integration.test.ts` | `tests/e2e/protocol.test.ts` remove_document MCP round-trip | `tests/scenarios/directed/DIRECTED_COVERAGE.md` (`D-rdoc-*`) | `tests/scenarios/directed/testcases/test_removal_directory_maintenance.py` (`D-rdoc-1` through `D-rdoc-8`) | `tests/scenarios/integration/INTEGRATION_COVERAGE.md` (`INT-rdoc-*`) | `tests/scenarios/integration/tests/removal_directory_maintenance.yml` (`INT-rdoc-1` through `INT-rdoc-4`) | `npm test -- tests/unit/remove-document.test.ts`; `npm run test:integration -- tests/integration/remove-document.integration.test.ts`; E2E protocol remove_document case; directed and integration scenario runs; `npm run build` | planned |
+| SYS-01 | Requirements section 4.39 `manage_directory(action:"create")`; Test Plan section 4.6 | `tests/unit/manage-directory.test.ts` | `tests/integration/manage-directory.integration.test.ts` | `tests/e2e/protocol.test.ts` manage_directory create MCP round-trip | `tests/scenarios/directed/DIRECTED_COVERAGE.md` (`D-mdir-*`) | `tests/scenarios/directed/testcases/test_removal_directory_maintenance.py` (`D-mdir-1`, `D-mdir-2`, `D-mdir-5`, `D-mdir-6`) | `tests/scenarios/integration/INTEGRATION_COVERAGE.md` (`INT-mdir-*`) | `tests/scenarios/integration/tests/removal_directory_maintenance.yml` (`INT-mdir-1`) | `npm test -- tests/unit/manage-directory.test.ts`; `npm run test:integration -- tests/integration/manage-directory.integration.test.ts`; E2E protocol manage_directory create case; directed and integration scenario runs; `npm run build` | planned |
+| SYS-02 | Requirements section 4.39 `manage_directory(action:"remove")`; Test Plan section 4.6 | `tests/unit/manage-directory.test.ts` | `tests/integration/manage-directory.integration.test.ts` | `tests/e2e/protocol.test.ts` manage_directory remove MCP round-trip | `tests/scenarios/directed/DIRECTED_COVERAGE.md` (`D-mdir-*`) | `tests/scenarios/directed/testcases/test_removal_directory_maintenance.py` (`D-mdir-3`, `D-mdir-4`, `D-mdir-5`, `D-mdir-6`) | `tests/scenarios/integration/INTEGRATION_COVERAGE.md` (`INT-mdir-*`) | `tests/scenarios/integration/tests/removal_directory_maintenance.yml` (`INT-mdir-2`, `INT-mdir-3`) | `npm test -- tests/unit/manage-directory.test.ts`; `npm run test:integration -- tests/integration/manage-directory.integration.test.ts`; E2E protocol manage_directory remove case; directed and integration scenario runs; `npm run build` | planned |
+| SYS-03 | Requirements section 4.40 `maintain_vault`; Test Plan section 4.7 | `tests/unit/maintain-vault.test.ts` | `tests/integration/maintain-vault.integration.test.ts` | `tests/e2e/protocol.test.ts` maintain_vault MCP round-trip | `tests/scenarios/directed/DIRECTED_COVERAGE.md` (`D-mvault-*`) | `tests/scenarios/directed/testcases/test_removal_directory_maintenance.py` (`D-mvault-1` through `D-mvault-8`) | `tests/scenarios/integration/INTEGRATION_COVERAGE.md` (`INT-mvault-*`) | `tests/scenarios/integration/tests/removal_directory_maintenance.yml` (`INT-mvault-1` through `INT-mvault-3`) | `npm test -- tests/unit/maintain-vault.test.ts`; `npm run test:integration -- tests/integration/maintain-vault.integration.test.ts`; E2E protocol maintain_vault cases; directed and integration scenario runs; `npm run build` | planned |
+
+## Evidence Closure Notes
+
+- Plan 127-01 creates this ledger before implementation and establishes shared config, frontmatter, response, and metadata contracts.
+- Plans 127-02 through 127-05 fill the unit, integration, E2E, directed, and integration scenario evidence named above.
+- Plan 127-06 closes final validation by recording focused suite results, legacy-surface absence checks, prose-response audits, frontmatter constant audits, and build evidence.
+
+## Scenario Row Families
+
+- `D-rdoc-*` covers directed remove_document cases.
+- `D-mdir-*` covers directed manage_directory cases.
+- `D-mvault-*` covers directed maintain_vault cases.
+- `INT-rdoc-*` covers integration remove_document workflows.
+- `INT-mdir-*` covers integration manage_directory workflows.
+- `INT-mvault-*` covers integration maintain_vault workflows.
