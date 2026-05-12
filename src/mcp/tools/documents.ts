@@ -14,8 +14,6 @@ import type { FlashQueryConfig } from '../../config/loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { validateAllTags, deduplicateTags } from '../../utils/tag-validator.js';
 import {
-  AmbiguousDocumentIdentifierError,
-  DocumentNotFoundError,
   resolveDocumentIdentifier,
   targetedScan,
 } from '../utils/resolve-document.js';
@@ -41,6 +39,13 @@ import {
   resolveAndBuildDocument,
   DocumentRequestError,
 } from '../utils/document-output.js';
+import {
+  buildDocumentWriteResult,
+  mergeWriteDocumentFrontmatter,
+  resolveTitleFrontmatterConflict,
+  validateReservedFrontmatter,
+  validateWriteDocumentInput,
+} from '../utils/document-write.js';
 import { validateVaultPath } from '../utils/path-validation.js';
 import { pluginManager, getFolderClaimsMap } from '../../plugins/manager.js';
 import { FM } from '../../constants/frontmatter-fields.js';
@@ -57,6 +62,14 @@ export interface DocMeta {
   status: string;
   fqcId: string;
   modified: string;
+}
+
+function isDocumentNotFoundError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'DocumentNotFoundError';
+}
+
+function isAmbiguousDocumentIdentifierError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AmbiguousDocumentIdentifierError';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -274,6 +287,251 @@ export async function searchDocumentsSemantic(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function registerDocumentTools(server: McpServer, config: FlashQueryConfig): void {
+  server.registerTool(
+    'write_document',
+    {
+      description:
+        'Create a new markdown document or update one existing document. Use this when you need to write a whole document body, create a note at a vault path, change title/frontmatter, or replace a document\'s tag list.\n\n' +
+        'Use mode: "create" with path and title to create a new document. Use mode: "update" with identifier to update an existing document by fq_id, path, or filename. In update mode, provide at least one of content, title, frontmatter, or tags. Tags replace the full tag list; they are not additive.\n\n' +
+        'Do not use this for heading-anchored insertions or section replacement; use insert_in_doc or replace_doc_section. Do not use this for additive/removal tag edits; use apply_tags. Do not pass FQ-managed frontmatter fields such as fq_id directly.\n\n' +
+        'Example: write_document({ "mode": "update", "identifier": "Notes/project.md", "title": "Project Plan", "frontmatter": { "status": "review" }, "tags": ["planning"] })',
+      inputSchema: {
+        mode: z.enum(['create', 'update']).optional().describe('Required explicit mode: "create" or "update".'),
+        identifier: z.string().optional().describe('Existing document identifier for update mode.'),
+        path: z.string().optional().describe('Vault-relative path for create mode.'),
+        title: z.string().optional().describe(`Document title; maps to ${FM.TITLE}.`),
+        content: z.string().optional().describe('Document body. Omitted create content becomes an empty body.'),
+        frontmatter: z.record(z.string(), z.unknown()).optional().describe('Custom frontmatter fields. FQ-managed fields are rejected.'),
+        tags: z.array(z.string()).optional().describe('Replacement tag list.'),
+      },
+    },
+    async ({ mode, identifier, path, title, content, frontmatter, tags }) => {
+      if (getIsShuttingDown()) {
+        return {
+          content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed' }],
+          isError: true,
+        };
+      }
+
+      const inputError = validateWriteDocumentInput({ mode, identifier, path, title, content, frontmatter, tags });
+      if (inputError) return jsonExpectedError(inputError);
+      const reservedError = validateReservedFrontmatter(frontmatter);
+      if (reservedError) return jsonExpectedError(reservedError);
+      const titleError = resolveTitleFrontmatterConflict(title, frontmatter);
+      if (titleError) return jsonExpectedError(titleError);
+
+      if (config.locking.enabled) {
+        const locked = await acquireLock(
+          supabaseManager.getClient(),
+          config.instance.id,
+          'documents',
+          { ttlSeconds: config.locking.ttlSeconds }
+        );
+        if (!locked) {
+          return jsonExpectedError({
+            error: 'conflict',
+            message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+            details: { reason: 'lock_contention' },
+          });
+        }
+      }
+
+      try {
+        const supabase = supabaseManager.getClient();
+        const vaultRoot = config.instance.vault.path;
+
+        if (mode === 'create') {
+          const relativePath = path as string;
+          const absolutePath = join(vaultRoot, relativePath);
+          const resolvedAbs = resolve(absolutePath);
+          const resolvedVault = resolve(vaultRoot);
+          const relToVault = relative(resolvedVault, resolvedAbs);
+          if (relToVault.startsWith('..') || relToVault === '..') {
+            return jsonExpectedError({
+              error: 'invalid_input',
+              message: 'path escapes vault root',
+              details: { field: 'path' },
+            });
+          }
+          if (existsSync(absolutePath)) {
+            return jsonExpectedError({
+              error: 'conflict',
+              message: `Document already exists at "${relativePath}"`,
+              details: { reason: 'path_exists' },
+            });
+          }
+
+          const validation = validateAllTags(tags ?? []);
+          if (!validation.valid) {
+            return jsonExpectedError({
+              error: 'invalid_input',
+              message: `Tag validation failed: ${validation.errors.join('; ')}`,
+              details: { field: 'tags' },
+            });
+          }
+
+          const fqcId = uuidv4();
+          const now = new Date().toISOString();
+          const deduplicated = deduplicateTags(validation.normalized);
+          const effectiveTitle = title as string;
+          const body = content ?? '';
+          const fm = serializeOrderedFrontmatter({
+            ...mergeWriteDocumentFrontmatter(frontmatter, effectiveTitle),
+            [FM.ID]: fqcId,
+            [FM.INSTANCE]: config.instance.id,
+            [FM.STATUS]: 'active',
+            [FM.TAGS]: deduplicated,
+            [FM.CREATED]: now,
+          });
+
+          await vaultManager.writeMarkdown(relativePath, fm, body, {
+            gitAction: 'create',
+            gitTitle: effectiveTitle,
+          });
+
+          const rawContent = await readFile(join(vaultRoot, relativePath), 'utf-8');
+          const contentHash = computeHash(rawContent);
+          const insertPayload = {
+            id: fqcId,
+            instance_id: config.instance.id,
+            path: relativePath,
+            title: effectiveTitle,
+            tags: deduplicated,
+            content_hash: contentHash,
+            status: 'active',
+            embedding: null,
+          };
+          const { error: insertError } = await supabase.from('fqc_documents').insert(insertPayload);
+          if (insertError) {
+            logger.warn(`write_document(create): fqc_documents insert failed for ${relativePath}: ${insertError.message}`);
+          }
+
+          void embeddingProvider
+            .embed(`${effectiveTitle}\n\n${body}`)
+            .then((vector) =>
+              supabaseManager
+                .getClient()
+                .from('fqc_documents')
+                .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
+                .eq('id', fqcId)
+            )
+            .catch((err) =>
+              logger.warn(
+                `write_document(create): background embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
+              )
+            );
+
+          return jsonToolResult(buildDocumentWriteResult({
+            mode: 'create',
+            identifier: relativePath,
+            title: effectiveTitle,
+            path: relativePath,
+            fq_id: fqcId,
+            modified: now,
+            chars: body.length,
+          }));
+        }
+
+        const resolved = await resolveDocumentIdentifier(config, supabase, identifier as string, logger);
+        const rawContent = await readFile(resolved.absPath, 'utf-8');
+        const parsed = matter(rawContent);
+        const existingData = parsed.data;
+        const existingBody = parsed.content;
+        const effectiveTitle =
+          title ?? (typeof existingData[FM.TITLE] === 'string' ? existingData[FM.TITLE] as string : resolved.relativePath);
+        const validation = validateAllTags(tags ?? (Array.isArray(existingData[FM.TAGS]) ? existingData[FM.TAGS] as string[] : []));
+        if (!validation.valid) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: `Tag validation failed: ${validation.errors.join('; ')}`,
+            details: { field: 'tags' },
+          });
+        }
+        const effectiveTags = deduplicateTags(validation.normalized);
+        const effectiveBody = content ?? existingBody;
+        const fm: Record<string, unknown> = {
+          ...existingData,
+          ...mergeWriteDocumentFrontmatter(frontmatter, effectiveTitle),
+          [FM.TAGS]: effectiveTags,
+          [FM.INSTANCE]: (existingData[FM.INSTANCE] as string | undefined) ?? config.instance.id,
+          [FM.CREATED]: existingData[FM.CREATED] as string | undefined,
+          [FM.STATUS]: (existingData[FM.STATUS] as string | undefined) ?? 'active',
+        };
+        const serialized = matter.stringify(effectiveBody, fm);
+        const newContentHash = computeHash(serialized);
+        const preScan = await targetedScan(config, supabase, resolved, newContentHash, logger);
+        const fqcId = preScan.capturedFrontmatter.fqcId;
+        fm[FM.ID] = fqcId;
+        const sanitizedFm = serializeOrderedFrontmatter(fm);
+        await vaultManager.writeMarkdown(resolved.relativePath, sanitizedFm, effectiveBody, {
+          gitAction: 'update',
+          gitTitle: effectiveTitle,
+        });
+
+        const { error: updateError } = await supabase
+          .from('fqc_documents')
+          .update({
+            title: effectiveTitle,
+            tags: effectiveTags,
+            content_hash: newContentHash,
+            path: resolved.relativePath,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', fqcId);
+        if (updateError) {
+          logger.warn(`write_document(update): fqc_documents update failed for ${resolved.relativePath}: ${updateError.message}`);
+        }
+
+        void embeddingProvider
+          .embed(`${effectiveTitle}\n\n${effectiveBody}`)
+          .then((vector) =>
+            supabaseManager
+              .getClient()
+              .from('fqc_documents')
+              .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
+              .eq('id', fqcId)
+          )
+          .catch((err) =>
+            logger.warn(
+              `write_document(update): background re-embed failed for ${resolved.relativePath}: ${err instanceof Error ? err.message : String(err)}`
+            )
+          );
+
+        return jsonToolResult(buildDocumentWriteResult({
+          mode: 'update',
+          identifier: identifier as string,
+          title: effectiveTitle,
+          path: resolved.relativePath,
+          fq_id: fqcId,
+          modified: new Date().toISOString(),
+          chars: effectiveBody.length,
+        }));
+      } catch (err) {
+        if (isDocumentNotFoundError(err)) {
+          return jsonExpectedError({
+            error: 'not_found',
+            message: `No document found for identifier: ${identifier}`,
+            identifier,
+          });
+        }
+        if (isAmbiguousDocumentIdentifierError(err)) {
+          return jsonExpectedError({
+            error: 'ambiguous_identifier',
+            message: err.message,
+            identifier,
+          });
+        }
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error(`write_document failed - ${msg}`);
+        return jsonRuntimeError({ message: `Error writing document: ${msg}`, identifier });
+      } finally {
+        if (config.locking.enabled) {
+          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
+        }
+      }
+    }
+  );
+
   // ─── Tool 1: create_document (DOC-01, DOC-02) ──────────────────────────────
 
   server.registerTool(
@@ -1045,7 +1303,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               archived_at: archivedAt,
             }));
           } catch (itemErr) {
-            if (itemErr instanceof DocumentNotFoundError) {
+            if (isDocumentNotFoundError(itemErr)) {
               results.push({
                 error: 'not_found',
                 message: `No document matches identifier '${id}'`,
@@ -1054,7 +1312,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               continue;
             }
 
-            if (itemErr instanceof AmbiguousDocumentIdentifierError) {
+            if (isAmbiguousDocumentIdentifierError(itemErr)) {
               results.push({
                 error: 'ambiguous_identifier',
                 message: itemErr.message,
@@ -1550,7 +1808,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           chars: written.content.length,
         }));
       } catch (err) {
-        if (err instanceof DocumentNotFoundError) {
+        if (isDocumentNotFoundError(err)) {
           return jsonExpectedError({
             error: 'not_found',
             message: `No document found for identifier: ${identifier}`,
@@ -1558,7 +1816,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           });
         }
 
-        if (err instanceof AmbiguousDocumentIdentifierError) {
+        if (isAmbiguousDocumentIdentifierError(err)) {
           return jsonExpectedError({
             error: 'ambiguous_identifier',
             message: err.message,
@@ -1939,7 +2197,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
         return jsonToolResult(withWarnings(payload, warnings));
       } catch (err) {
-        if (err instanceof DocumentNotFoundError) {
+        if (isDocumentNotFoundError(err)) {
           return jsonExpectedError({
             error: 'not_found',
             message: `No document found for identifier: ${identifier}`,
@@ -1947,7 +2205,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           });
         }
 
-        if (err instanceof AmbiguousDocumentIdentifierError) {
+        if (isAmbiguousDocumentIdentifierError(err)) {
           return jsonExpectedError({
             error: 'ambiguous_identifier',
             message: err.message,

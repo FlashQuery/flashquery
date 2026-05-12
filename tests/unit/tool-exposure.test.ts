@@ -20,6 +20,7 @@ describe('host MCP tool exposure', () => {
       'save_memory',
       'call_model',
       'create_document',
+      'write_document',
     ]));
   });
 
@@ -37,6 +38,7 @@ describe('host MCP tool exposure', () => {
       'get_document',
       'list_vault',
       'create_document',
+      'write_document',
       'archive_document',
       'insert_in_doc',
       'replace_doc_section',
@@ -70,7 +72,7 @@ describe('host MCP tool exposure', () => {
   it('rejects unknown selectors, host-ineligible tools, and dead tools', () => {
     expect(validateToolSelectors(['category:not-real'])).toEqual(["unknown tool selector 'category:not-real'"]);
     expect(validateToolSelectors(['not_a_tool'])).toEqual(["unknown tool selector 'not_a_tool'"]);
-    expect(validateToolSelectors(['write_document'])).toEqual(["tool 'write_document' is not available for host MCP exposure"]);
+    expect(validateToolSelectors(['write_document'])).toEqual([]);
     expect(validateToolSelectors(['list_projects'])).toEqual(["tool 'list_projects' is not available for host MCP exposure"]);
     expect(validateToolSelectors(['create_document'])).toEqual([]);
   });

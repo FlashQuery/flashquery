@@ -20,6 +20,10 @@ import {
   formatKeyValueEntry,
   joinBatchEntries,
   formatEmptyResults,
+  jsonExpectedError,
+  jsonToolResult,
+  documentIdentification,
+  memoryIdentification,
 } from '../utils/response-formats.js';
 import { insertAtPosition, findHeadingOccurrence, getSectionBoundaries } from '../utils/markdown-sections.js';
 import { FM } from '../../constants/frontmatter-fields.js';
@@ -467,6 +471,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
       description:
         'Add or remove tags on one or more vault documents or a memory in a single call. Supports batch operations — pass multiple identifiers to tag several documents at once. Add is idempotent; removing a tag that doesn\'t exist is a silent no-op. Use this when the user wants to tag, untag, categorize, or label documents or memories.',
       inputSchema: {
+        targets: z
+          .array(z.object({
+            entity_type: z.enum(['document', 'memory']),
+            identifier: z.string(),
+          }))
+          .optional()
+          .describe('Ordered targets to tag. Each target declares document or memory explicitly.'),
         identifiers: z
           .union([z.string(), z.array(z.string())])
           .optional()
@@ -484,7 +495,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           .describe('Tags to remove (silent no-op if not present)'),
       },
     },
-    async ({ identifiers, memory_id, add_tags, remove_tags }) => {
+    async ({ targets, identifiers, memory_id, add_tags, remove_tags }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -503,27 +514,26 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const addTags: string[] = normalizeTags(Array.isArray(add_tags) ? add_tags : []);
         const removeTags: string[] = normalizeTags(Array.isArray(remove_tags) ? remove_tags : []);
 
-        // Validate: at least one target must be provided
-        if (!identifiers && !memory_id) {
+        const normalizedTargets = targets ??
+          (identifiers
+            ? (Array.isArray(identifiers) ? identifiers : [identifiers]).map((id) => ({ entity_type: 'document' as const, identifier: id }))
+            : memory_id
+              ? [{ entity_type: 'memory' as const, identifier: memory_id }]
+              : []);
+
+        if (normalizedTargets.length === 0) {
           return {
-            content: [
-              {
-                type: 'text' as const,
-                text: 'Error: At least one of identifiers or memory_id must be provided.',
-              },
-            ],
+            content: [{ type: 'text' as const, text: 'Error: targets is required' }],
             isError: true,
           };
         }
 
         const supabase = supabaseManager.getClient();
+        const results: Array<Record<string, unknown>> = [];
 
-        if (identifiers) {
-          // ── Document tag update (batch-capable) ─────────────────────────
-          const ids = Array.isArray(identifiers) ? identifiers : [identifiers];
-          const results: string[] = [];
-
-          for (const id of ids) {
+        for (const target of normalizedTargets) {
+          if (target.entity_type === 'document') {
+            const id = target.identifier;
             try {
               // Resolve identifier
               const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
@@ -549,7 +559,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                     ? [`Document has conflicting statuses: ${docTagValidation.conflicts.join(', ')}. Choose one to keep.`]
                     : []),
                 ];
-                results.push(`"${relativePath}" failed: Tag validation failed: ${messages.join('; ')}`);
+                results.push({
+                  error: 'invalid_input',
+                  message: `Tag validation failed: ${messages.join('; ')}`,
+                  identifier: id,
+                  details: { field: 'tags' },
+                });
                 continue;
               }
 
@@ -599,24 +614,30 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 }
               }
 
-              results.push(`"${relativePath}": ${docTagValidation.normalized.join(', ') || '(none)'}`);
+              results.push({
+                ...documentIdentification({
+                  identifier: id,
+                  title: typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] as string : relativePath,
+                  path: relativePath,
+                  fq_id: fqcId,
+                  modified: typeof parsed.data[FM.UPDATED] === 'string' ? parsed.data[FM.UPDATED] as string : new Date().toISOString(),
+                  chars: parsed.content.length,
+                }),
+                tags: dedupTagsForSync,
+                entity_type: 'document',
+              });
             } catch (itemErr) {
               const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
-              results.push(`"${id}" failed: ${msg}`);
+              results.push({
+                error: msg.toLowerCase().includes('not found') ? 'not_found' : 'runtime_error',
+                message: msg,
+                identifier: id,
+              });
             }
+            continue;
           }
 
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Updated tags:\n${results.join('\n')}`,
-              },
-            ],
-          };
-        } else {
-          // ── Memory tag update ────────────────────────────────────────────
-          const memoryId = memory_id as string;
+          const memoryId = target.identifier;
 
           // Fetch current tags from fqc_memory
           const { data: memRow, error: fetchError } = await supabase
@@ -627,15 +648,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             .single();
 
           if (fetchError) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Error: Failed to fetch memory "${memoryId}": ${fetchError.message}`,
-                },
-              ],
-              isError: true,
-            };
+            results.push({
+              error: 'not_found',
+              message: `Failed to fetch memory "${memoryId}": ${fetchError.message}`,
+              identifier: memoryId,
+            });
+            continue;
           }
 
           const memData = memRow as { tags?: string[] } | null;
@@ -651,10 +669,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 ? [`Memory has conflicting statuses: ${memTagValidation.conflicts.join(', ')}. Choose one to keep.`]
                 : []),
             ];
-            return {
-              content: [{ type: 'text' as const, text: `Tag validation failed: ${messages.join('; ')}` }],
-              isError: true,
-            };
+            results.push({
+              error: 'invalid_input',
+              message: `Tag validation failed: ${messages.join('; ')}`,
+              identifier: memoryId,
+              details: { field: 'tags' },
+            });
+            continue;
           }
 
           // Update fqc_memory.tags with deduplicated tags (memories have no vault file — D-13, D-05a)
@@ -673,15 +694,21 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
           logger.info(`apply_tags: updated tags on memory ${memoryId} (${memTagValidation.normalized.length} tags)`);
 
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Updated tags on memory "${memoryId}": ${memTagValidation.normalized.join(', ') || '(none)'}`,
-              },
-            ],
-          };
+          results.push({
+            ...memoryIdentification({
+              memory_id: memoryId,
+              content_preview: '',
+              tags: dedupMemTags,
+              plugin_scope: 'global',
+              created_at: '',
+              updated_at: new Date().toISOString(),
+            }),
+            identifier: memoryId,
+            entity_type: 'memory',
+          });
         }
+
+        return jsonToolResult(results);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`apply_tags failed: ${msg}`);
@@ -1105,9 +1132,16 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           .optional()
           .default(1)
           .describe('Which occurrence of heading if multiple match same name (1-indexed, default: 1)'),
+        include_nested: z
+          .boolean()
+          .optional()
+          .default(true)
+          .describe('For end_of_section only: true includes child sections, false inserts before the first child heading.'),
+        heading_match: z.enum(['contains', 'exact']).optional().default('contains'),
+        heading_level: z.number().optional().describe('Optional markdown heading level filter (1-6).'),
       },
     },
-    async ({ identifier, heading, position, content: insertContent, occurrence }) => {
+    async ({ identifier, heading, position, content: insertContent, occurrence, include_nested, heading_match, heading_level }) => {
       if (getIsShuttingDown()) {
         return {
           content: [
@@ -1124,15 +1158,18 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         // Validate position
         const validPositions = ['top', 'bottom', 'after_heading', 'before_heading', 'end_of_section'];
         if (!validPositions.includes(position)) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Invalid position "${position}"; must be one of: ${validPositions.join(', ')}`,
-              },
-            ],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: `Invalid position "${position}"; must be one of: ${validPositions.join(', ')}`,
+            details: { field: 'position' },
+          });
+        }
+        if ((position === 'top' || position === 'bottom') && (heading || heading_level !== undefined || include_nested === false)) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: `${position} does not accept heading, heading_level, or include_nested`,
+            details: { field: 'position' },
+          });
         }
 
         // Resolve document identifier
@@ -1151,13 +1188,15 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         // Insert content at specified position
         let modifiedBody: string;
         try {
-          modifiedBody = insertAtPosition(body, position, insertContent, heading, occurrence);
+          modifiedBody = insertAtPosition(body, position, insertContent, heading, occurrence, include_nested ?? true);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          return {
-            content: [{ type: 'text' as const, text: `Insertion failed: ${msg}` }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: msg.toLowerCase().includes('not found') ? 'not_found' : 'invalid_input',
+            message: `Insertion failed: ${msg}`,
+            identifier,
+            details: { heading },
+          });
         }
 
         // Write back to file (atomic via vaultManager)
@@ -1190,20 +1229,26 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
         })();
 
-        // Return confirmation
-        const preview = insertContent.split('\n').slice(0, 3).join('\n');
-        const lines = [
-          formatKeyValueEntry('Inserted at', `${position} heading "${heading || 'N/A'}"`),
-          formatKeyValueEntry('Location', `Line ${heading ? 'near heading' : 'at document'}`),
-          formatKeyValueEntry('Content preview', preview),
-          formatKeyValueEntry('Embedding', 'queued'),
-        ];
-
         logger.info(`insert_in_doc: path="${relativePath}" position="${position}" heading="${heading || 'N/A'}"`);
 
-        return {
-          content: [{ type: 'text' as const, text: lines.join('\n') }],
-        };
+        return jsonToolResult({
+          ...documentIdentification({
+            identifier,
+            title: docTitle,
+            path: relativePath,
+            fq_id: typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : resolved.fqcId,
+            modified: typeof frontmatter[FM.UPDATED] === 'string' ? frontmatter[FM.UPDATED] as string : new Date().toISOString(),
+            chars: modifiedBody.length,
+          }),
+          inserted_at: {
+            position,
+            ...(heading ? { heading } : {}),
+            heading_match: heading_match ?? 'contains',
+            ...(heading_level !== undefined ? { heading_level } : {}),
+            occurrence: occurrence ?? 1,
+            include_nested: include_nested ?? true,
+          },
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`insert_in_doc failed: ${msg}`);
@@ -1225,11 +1270,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         identifier: z.string().describe('Document path, fqc_id, or filename'),
         heading: z.string().describe('Heading text to match (case-sensitive)'),
         content: z.string().describe('New markdown content for section body (does not include heading line)'),
-        include_subheadings: z.boolean().optional().describe('When true, replace full section including nested headings; when false, preserve child headings (default: true)'),
+        include_nested: z.boolean().optional().default(true).describe('When true, replace full section including nested headings; when false, preserve child headings (default: true)'),
+        heading_match: z.enum(['contains', 'exact']).optional().default('contains'),
+        heading_level: z.number().optional().describe('Optional markdown heading level filter (1-6).'),
         occurrence: z.number().optional().describe('Which occurrence if heading appears multiple times (1-indexed, default: 1)'),
       },
     },
-    async ({ identifier, heading, content, include_subheadings = true, occurrence = 1 }) => {
+    async ({ identifier, heading, content, include_nested = true, heading_match, heading_level, occurrence = 1 }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -1317,7 +1364,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         }
 
         // Step 6: Calculate section boundaries using shared utility
-        const boundaries = getSectionBoundaries(bodyContent, heading, include_subheadings, occurrence);
+        const boundaries = getSectionBoundaries(bodyContent, heading, include_nested, occurrence);
         const startLine = boundaries.startLine;
         const endLine = boundaries.endLine;
 
@@ -1325,13 +1372,18 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const oldSectionLines = lines.slice(startLine - 1, endLine); // startLine is 1-indexed; convert for slice
         const oldContent = oldSectionLines.join('\n');
 
-        // Step 8: Build new content
-        const newLines = [
-          ...lines.slice(0, startLine - 1),        // Everything before heading
-          ...lines.slice(startLine - 1, startLine), // The heading line itself
-          ...content.split('\n'),                    // New section body
-          ...lines.slice(endLine),                   // Everything after old section
-        ];
+        const headingRemoved = content === '';
+        const newLines = headingRemoved
+          ? [
+              ...lines.slice(0, startLine - 1),
+              ...lines.slice(endLine),
+            ]
+          : [
+              ...lines.slice(0, startLine - 1),
+              ...lines.slice(startLine - 1, startLine),
+              ...content.split('\n'),
+              ...lines.slice(endLine),
+            ];
 
         const newContent = newLines.join('\n');
 
@@ -1373,21 +1425,27 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             );
         }
 
-        // Step 13: Build response
-        const responseLines: string[] = [
-          `Section "${heading}" replaced successfully.`,
-          '',
-          formatKeyValueEntry('Line range', `${startLine}-${endLine}`),
-          formatKeyValueEntry('New hash', newHash),
-        ];
-
-        if (resolved.fqcId) {
-          responseLines.push(formatKeyValueEntry('Document ID', resolved.fqcId));
-        }
-
-        responseLines.push('', 'Old section content (for undo if needed):', oldContent);
-
-        return { content: [{ type: 'text' as const, text: responseLines.join('\n') }] };
+        const docTitle = typeof document.data[FM.TITLE] === 'string' ? document.data[FM.TITLE] as string : resolved.relativePath;
+        return jsonToolResult({
+          ...documentIdentification({
+            identifier,
+            title: docTitle,
+            path: resolved.relativePath,
+            fq_id: resolved.fqcId ?? '',
+            modified: typeof document.data[FM.UPDATED] === 'string' ? document.data[FM.UPDATED] as string : new Date().toISOString(),
+            chars: newContent.length,
+          }),
+          extracted_section: {
+            heading: targetHeading.text,
+            level: targetHeading.level,
+            old_content_length: oldContent.length,
+            new_content_length: content.length,
+            include_nested,
+            heading_removed: headingRemoved,
+          },
+          heading_match: heading_match ?? 'contains',
+          ...(heading_level !== undefined ? { heading_level } : {}),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`replace_doc_section failed: ${msg}`);
@@ -1400,4 +1458,3 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     }
   );
 }
-

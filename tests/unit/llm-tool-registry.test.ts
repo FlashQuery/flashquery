@@ -36,6 +36,7 @@ const READ_ONLY_TOOLS = [
 ];
 
 const READ_WRITE_EXTRA_TOOLS = [
+  'write_document',
   'create_document',
   'update_document',
   'append_to_doc',

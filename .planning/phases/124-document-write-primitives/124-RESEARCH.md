@@ -389,17 +389,15 @@ return jsonToolResult({
 |---|-------|---------|---------------|
 | A1 | Codebase-specific findings remain valid until touched by later phases. [ASSUMED] | Metadata | Planner may rely on stale code locations if another phase edits the same files before Phase 124 execution. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should legacy Phase 124 tools remain registered after this phase?**
    - What we know: Phase 124 success criterion says legacy behavior is ported before legacy tools are removed later, and Phase 128 owns final absence audit. [VERIFIED: .planning/ROADMAP.md; 124-CONTEXT.md]
-   - What's unclear: Whether Phase 124 should register `write_document` alongside legacy `create_document`/`update_document` or swap implementation behind old names immediately. [VERIFIED: phase boundary ambiguity from product docs + ROADMAP]
-   - Recommendation: Plan Phase 124 to add final tools and final tests while leaving final removal/absence assertions to Phase 128 unless the product docs explicitly state a tool is removed in this phase. [VERIFIED: 124-CONTEXT.md]
+   - Resolution: Phase 124 should add final tools and final tests while leaving final legacy removal and absence assertions to Phase 128. This follows the roadmap success criterion that legacy behavior is ported before those tools are removed later. [VERIFIED: .planning/ROADMAP.md; 124-CONTEXT.md]
 
 2. **How should host category-disabled `apply_tags` be tested without final Phase 125 memory surfaces?**
    - What we know: `apply_tags` belongs to `doc-write` and can target memories; when memory is disabled, memory target positions return `unsupported`. [VERIFIED: product requirements §4.16 and §3.10.2 excerpt]
-   - What's unclear: The exact fixture config for memory-disabled but doc-write-enabled `apply_tags` E2E/scenario coverage is not yet present in Phase 124 docs. [VERIFIED: repo fixture search]
-   - Recommendation: Use Phase 122 host-filtered config patterns and direct handler/unit tests first; add one managed scenario only if the runner can start with the needed host selector config. [VERIFIED: Phase 122 summaries; tests/scenarios docs]
+   - Resolution: Use Phase 122 host-filtered config patterns and direct handler/unit tests as the required coverage for disabled-memory behavior. Add managed scenario coverage only if the existing runner can start with a doc-write-enabled, memory-disabled host selector config without introducing new harness infrastructure. [VERIFIED: Phase 122 summaries; tests/scenarios docs]
 
 ## Environment Availability
 

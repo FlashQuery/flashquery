@@ -309,7 +309,8 @@ export function insertAtPosition(
   position: 'top' | 'bottom' | 'after_heading' | 'before_heading' | 'end_of_section',
   insertContent: string,
   anchorHeading?: string,
-  occurrence: number = 1
+  occurrence: number = 1,
+  includeNested: boolean = true
 ): string {
   // Validate position
   const validPositions = ['top', 'bottom', 'after_heading', 'before_heading', 'end_of_section'];
@@ -380,8 +381,10 @@ export function insertAtPosition(
   }
 
   if (position === 'end_of_section') {
-    // Find next heading at same-or-higher level
-    const nextHeadingIndex = getNextHeadingIndex(headings, headingIndex, targetHeading.level);
+    // includeNested=true inserts after child sections; false inserts before the first child heading.
+    const nextHeadingIndex = includeNested
+      ? getNextHeadingIndex(headings, headingIndex, targetHeading.level)
+      : headings.findIndex((h, index) => index > headingIndex && h.level !== 0);
     let insertLineNum: number;
 
     if (nextHeadingIndex !== -1) {
