@@ -202,3 +202,85 @@ DTS dist/index.d.ts 3.45 KB
 ```
 
 **Requirement evidence:** Phase 127 code compiles after final focused verification.
+
+## Task 2 Local Audits
+
+**Task 2 completed:** 2026-05-12T21:09:00Z
+
+### legacy-name audit
+
+**Command:**
+
+```bash
+rg -n "create_directory|remove_directory|force_file_scan|reconcile_documents" src tests | rg -v "tool-metadata|legacy|suggest|Phase 128|127-VALIDATION|DIRECTED_COVERAGE|INTEGRATION_COVERAGE"
+```
+
+**Result:** PASS with classified remaining matches.
+
+**Output/classification summary:**
+
+| Match family | Classification | Reason |
+|--------------|----------------|--------|
+| `tests/e2e/protocol.test.ts` `not.toContain(...)` checks for `create_directory`, `remove_directory`, `force_file_scan`, `reconcile_documents` | ported Phase 127 absence assertions | These prove local host MCP exposure hides the replaced names. |
+| `src/mcp/tool-exposure.ts` replaced-name deny list for `create_directory`, `remove_directory`, `force_file_scan`, `reconcile_documents` | ported Phase 127 exposure guard | This is the implementation that supports the E2E absence assertions. |
+| `tests/unit/maintain-vault.test.ts` checks that `force_file_scan` is not registered by `registerScanTools` | ported Phase 127 unit assertion | Confirms the active scan registration path exposes `maintain_vault`. |
+| `src/services/scanner.ts` comments using `force_file_scan` to describe old scan-drain semantics | allowed transitional context | Scanner internals predate Phase 127; wording remains historical implementation context, not an active public surface. |
+| `src/mcp/utils/path-validation.ts` comments naming `create_directory`/`remove_directory` | allowed transitional context | Utility comment describes historical call sites and does not expose tools. |
+| `src/mcp/tools/files.ts` active `create_directory`/`remove_directory` handler source and comments | Phase 128 global cleanup context | Phase 127 hides these locally from host exposure; broad source deletion is Phase 128 scope. |
+| `src/mcp/tools/documents.ts` active `reconcile_documents` handler source and comments | Phase 128 global cleanup context | Phase 127 added `maintain_vault` and local scan registration; broader document-tool legacy cleanup is Phase 128 scope. |
+| Older unit/scenario files such as `tests/unit/document-tools.test.ts`, `tests/unit/files-tools.test.ts`, `tests/unit/staleness-invalidation.test.ts`, and pre-127 directed scenarios | Phase 128 global cleanup context or historical coverage | These are pre-existing global legacy-test surfaces and are not migrated by this final Phase 127 validation plan. |
+| `tests/unit/llm-config.test.ts`, `tests/unit/llm-tool-registry.test.ts`, `tests/unit/tool-exposure.test.ts` | allowed migration/selector context | These validate legacy-name preservation or exclusion behavior in configuration/tool selection layers. |
+
+**Blockers:** None for Phase 127. Remaining broad source/test cleanup is explicitly scoped to Phase 128.
+
+### prose-response audit
+
+**Command:**
+
+```bash
+rg -n "Directory created:|Directory removed:|Scan complete|Reconciliation complete" tests/unit tests/integration tests/e2e tests/scenarios | rg -v "historical|legacy|Phase 128"
+```
+
+**Result:** PASS.
+
+**Observed output:**
+
+```text
+No matches. Pipeline exit code 1 from rg means no migrated Phase 127 test asserts the old prose/key-value responses.
+```
+
+**Classification:** No blockers. Migrated Phase 127 tests parse JSON and no longer assert the old directory/scan/reconciliation prose strings.
+
+### frontmatter audit
+
+**Command:**
+
+```bash
+rg -n "fq_original_path|fq_archived_at|fq_status" src tests | rg -v "frontmatter-fields|FM\.|expected fixture|fixture"
+```
+
+**Result:** PASS with classified remaining matches.
+
+**Output/classification summary:**
+
+| Match family | Classification | Reason |
+|--------------|----------------|--------|
+| `src/mcp/tools/documents.ts` schema descriptions mentioning reserved `fq_*` fields | allowed user-facing description text | These are validation/help strings, not frontmatter access. |
+| `src/storage/vault.ts`, `src/mcp/utils/frontmatter-sanitizer.ts`, `src/mcp/utils/document-output.ts`, `src/mcp/tools/compound.ts` comments | allowed historical/internal explanatory context | Comments do not read/write managed frontmatter fields. |
+| Unit/integration/scenario fixtures and expected literal frontmatter payloads | allowed test fixture/expected output context | Tests intentionally assert serialized YAML field names or generate raw markdown fixtures. |
+| `tests/scenarios/framework/frontmatter_fields.py` | allowed cross-language constant registry | Python scenarios use their own field-name helper to build fixture markdown. |
+| `src/mcp/tools/documents.ts` raw `fq_original_path` search | no matches | Production `remove_document` access uses `FM.ORIGINAL_PATH`. |
+
+**Direct production check:**
+
+```bash
+grep -n "fq_original_path" src/mcp/tools/documents.ts
+```
+
+**Observed output:**
+
+```text
+No matches.
+```
+
+**Blockers:** None. Phase 127 production code uses `FM.*` constants for managed frontmatter access; raw `fq_*` occurrences are descriptions, comments, fixtures, or expected serialized field names.
