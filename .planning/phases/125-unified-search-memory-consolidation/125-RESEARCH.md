@@ -48,8 +48,12 @@ Phase 124 should be treated as complete for planning purposes. Some early `124-0
 - `apply_tags` supports final ordered `targets: [{ entity_type, identifier }]` and JSON results, while legacy `identifiers` / `memory_id` compatibility remains temporarily for migration.
 - `apply_tags` now rejects a call that supplies targets but neither `add_tags` nor `remove_tags`, returning expected `invalid_input` with `details.requires: ["add_tags","remove_tags"]`.
 - `write_document` now rejects conflicting `tags` and `frontmatter.fq_tags` at the handler boundary through `resolveTagsFrontmatterConflict`; tests should use either top-level `tags` or matching `frontmatter.fq_tags`, not divergent values.
+- `write_document` create now rejects symlinked vault path segments with an expected `invalid_input` envelope, and integration evidence verifies it does not write outside the vault.
+- `insert_in_doc` and `replace_doc_section` are locked document writes when locking is enabled. Both synchronously refresh `fqc_documents.content_hash` / `updated_at` from the raw post-write file before background embedding.
+- `replace_doc_section` now fails loudly if the expected `fqc_documents` row is not updated. Unit mocks for this path need to support `.update(...).eq(...).eq(...).select('id').maybeSingle()`.
+- `tests/integration/write-document.integration.test.ts` now asserts raw-file `content_hash` parity after `write_document`, `insert_in_doc`, and `replace_doc_section`.
 
-Phase 125 plans should therefore reuse Phase 124 final primitives and tests as stable analogs, not assume integration/E2E coverage is missing.
+Phase 125 plans should therefore reuse Phase 124 final primitives and tests as stable analogs, not assume integration/E2E coverage is missing. Search integration setup should not manually patch `fqc_documents` rows or depend on a targeted scan after Phase 124 writes; the current contract is that document write primitives leave the DB row fresh enough for search filtering and identification. Semantic embedding refresh remains background work, so tests that need deterministic immediate visibility should use filesystem/list-mode paths or explicit embedding stubs.
 
 ### Search
 
@@ -230,6 +234,7 @@ Existing test files to port:
 - scenario ledgers in `tests/scenarios/directed/DIRECTED_COVERAGE.md` and `tests/scenarios/integration/INTEGRATION_COVERAGE.md`
 
 Phase 125 scenario/test setup that uses Phase 124 tools must obey the gap-fixed contracts: `write_document` fixture creation should avoid divergent `tags` and `frontmatter.fq_tags`, and `apply_tags` calls must include at least one operation list (`add_tags` or `remove_tags`).
+If setup mutates documents with `insert_in_doc` or `replace_doc_section`, assert against current file/row state rather than compensating with manual `fqc_documents` updates; Phase 124 now owns synchronous hash freshness for those tools.
 
 ## Validation Architecture
 

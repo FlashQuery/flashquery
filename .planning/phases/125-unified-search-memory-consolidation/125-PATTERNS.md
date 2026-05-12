@@ -25,7 +25,8 @@ Executors must read these before implementation:
 | `tests/unit/search.test.ts` | Search unit coverage | `tests/unit/search-all.test.ts`, `tests/unit/search-documents.test.ts`, `tests/unit/search-memory-list.test.ts` | Port old tests and add pure merge/list-mode tests. |
 | `tests/integration/write-memory.integration.test.ts` | Memory persistence integration | `tests/integration/save-memory-tags.test.ts` | New or renamed integration suite. |
 | `tests/integration/search.integration.test.ts` | Search integration | `tests/integration/search-all.integration.test.ts` | New final unified search integration suite. |
-| `tests/integration/write-document.integration.test.ts` | Existing Phase 124 integration analog | Itself | Use as the current JSON envelope and document-write/search workflow analog. |
+| `tests/integration/write-document.integration.test.ts` | Existing Phase 124 integration analog | Itself | Use as the current JSON envelope, symlink rejection, and document-write DB freshness analog. |
+| `tests/unit/advanced-document-tools.test.ts` | Existing section-write mock analog | `replace_doc_section` tests | Mock `fqc_documents` update chains with `.select('id').maybeSingle()` when exercising section writes. |
 | `tests/unit/compound-tools.test.ts` | Existing apply_tags validation analog | `apply_tags rejects targets when neither add_tags nor remove_tags is provided` | Use when Phase 125 scenarios need tag setup through `apply_tags`. |
 | `tests/unit/write-document.test.ts` | Existing write_document validation analog | `resolveTagsFrontmatterConflict` tests | Use when Phase 125 document fixtures include both `tags` and frontmatter. |
 | `tests/e2e/protocol.test.ts` | MCP round trips | Existing protocol memory/search tests | Update/add final tool round trips. |
@@ -141,6 +142,15 @@ Use E2E protocol parsing pattern from:
 
 Final Phase 125 E2E additions should parse JSON envelopes with `JSON.parse(getText(result))`, following Phase 107/124 JSON assertions.
 
+### Phase 124 Document Freshness Contract
+
+Phase 124 section writes are now part of the stable baseline:
+
+- `write_document`, `insert_in_doc`, and `replace_doc_section` refresh `fqc_documents.content_hash` from raw post-write file bytes.
+- `insert_in_doc` and `replace_doc_section` acquire/release the document write lock when locking is enabled.
+- `replace_doc_section` treats "no DB row updated" as a runtime failure, so tests should seed/resolve a real tracked document row before calling it.
+- Immediate deterministic search assertions should use filesystem/list-mode paths or controlled embedding stubs; background re-embedding is still asynchronous.
+
 ## Pitfalls
 
 - Do not build new output shapes by string concatenation; use JSON helpers.
@@ -151,5 +161,7 @@ Final Phase 125 E2E additions should parse JSON envelopes with `JSON.parse(getTe
 - Do not treat early Phase 124 partial summaries as current truth; use Phase 124 `TRACEABILITY.md`, `124-VALIDATION.md`, and live tests for the gap-fixed baseline.
 - Do not create document fixtures with divergent top-level `tags` and `frontmatter.fq_tags`; Phase 124 now rejects that conflict.
 - Do not call `apply_tags` only with `targets`; Phase 124 now requires at least one of `add_tags` or `remove_tags`.
+- Do not manually patch `fqc_documents.content_hash` in Phase 125 search tests to compensate for Phase 124 document writes; that freshness is now a Phase 124 contract.
+- Do not assume immediate semantic visibility after document section writes unless embedding is stubbed or awaited through an existing deterministic test hook.
 - Do not remove every legacy search/memory tool in Phase 125 unless the plan includes coverage port evidence and explicitly notes Phase 128 final audit remains.
 - Do not add literal body grep/regex search to `search`; product docs defer it.
