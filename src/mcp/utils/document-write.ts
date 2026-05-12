@@ -91,6 +91,9 @@ export function validateWriteDocumentInput(input: WriteDocumentInput): ErrorEnve
     }
   }
 
+  const tagConflict = resolveTagsFrontmatterConflict(input.tags, input.frontmatter);
+  if (tagConflict) return tagConflict;
+
   return null;
 }
 
@@ -124,6 +127,30 @@ export function resolveTitleFrontmatterConflict(
       details: { field: FM.TITLE },
     };
   }
+  return null;
+}
+
+export function resolveTagsFrontmatterConflict(
+  tags: string[] | undefined,
+  frontmatter: Record<string, unknown> | undefined
+): ErrorEnvelope | null {
+  if (tags === undefined || frontmatter === undefined || frontmatter[FM.TAGS] === undefined) {
+    return null;
+  }
+
+  const frontmatterTags = frontmatter[FM.TAGS];
+  if (
+    !Array.isArray(frontmatterTags) ||
+    frontmatterTags.length !== tags.length ||
+    frontmatterTags.some((tag, index) => tag !== tags[index])
+  ) {
+    return {
+      error: 'invalid_input',
+      message: `tags conflicts with frontmatter.${FM.TAGS}`,
+      details: { field: FM.TAGS },
+    };
+  }
+
   return null;
 }
 

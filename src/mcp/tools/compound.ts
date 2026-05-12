@@ -568,6 +568,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             details: { field: 'targets' },
           });
         }
+        if (addTags.length === 0 && removeTags.length === 0) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'At least one of add_tags or remove_tags is required',
+            details: { requires: ['add_tags', 'remove_tags'] },
+          });
+        }
 
         const supabase = supabaseManager.getClient();
         const canUseMemoryTargets = memoryCategoryEnabled(config);

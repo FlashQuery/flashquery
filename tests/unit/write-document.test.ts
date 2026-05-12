@@ -34,6 +34,26 @@ describe('write_document helper contract', () => {
     });
   });
 
+  it('rejects differing tags and frontmatter fq_tags values', () => {
+    expect(validateWriteDocumentInput({
+      mode: 'create',
+      path: 'a.md',
+      title: 'T',
+      tags: ['planning'],
+      frontmatter: { [FM.TAGS]: ['research'] },
+    })).toMatchObject({
+      error: 'invalid_input',
+      details: { field: FM.TAGS },
+    });
+
+    expect(validateWriteDocumentInput({
+      mode: 'update',
+      identifier: 'a.md',
+      tags: ['planning'],
+      frontmatter: { [FM.TAGS]: ['planning'] },
+    })).toBeNull();
+  });
+
   it('rejects reserved managed frontmatter fields', () => {
     expect(validateReservedFrontmatter({ [FM.ARCHIVED_AT]: '2026-05-12' })).toMatchObject({
       error: 'invalid_input',

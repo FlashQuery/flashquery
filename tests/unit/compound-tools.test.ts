@@ -1096,6 +1096,20 @@ describe('apply_tags', () => {
     });
   });
 
+  it('apply_tags rejects targets when neither add_tags nor remove_tags is provided', async () => {
+    const handler = mockServer.getHandler('apply_tags');
+    const result = await handler({
+      targets: [{ entity_type: 'document', identifier: '_global/tagged-doc.md' }],
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      error: 'invalid_input',
+      message: 'At least one of add_tags or remove_tags is required',
+      details: { requires: ['add_tags', 'remove_tags'] },
+    });
+  });
+
   // ── Task 2 new tests: tag validation in apply_tags ────────────────────────────
 
   it('Task2: apply_tags allows adding #status/published to doc with #status/draft — no conflict rejection (D-06)', async () => {
