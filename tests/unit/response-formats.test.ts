@@ -163,6 +163,21 @@ describe('identification builders', () => {
     });
   });
 
+  it('preserves record plugin/table scope and timestamps', () => {
+    const result = recordIdentification({
+      id: 'rec-1',
+      plugin_id: 'crm',
+      table: 'contacts',
+      created_at: '2026-05-12T00:00:00.000Z',
+      updated_at: '2026-05-12T01:00:00.000Z',
+    });
+
+    expect(result.plugin_id).toBe('crm');
+    expect(result.table).toBe('contacts');
+    expect(result.created_at).toBe('2026-05-12T00:00:00.000Z');
+    expect(result.updated_at).toBe('2026-05-12T01:00:00.000Z');
+  });
+
   it('builds required plugin identification fields', () => {
     expect(
       pluginIdentification({
