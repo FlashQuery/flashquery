@@ -16,7 +16,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rm } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import pg from 'pg';
 import { startMcpServerFixture, stopMcpServerFixture } from '../helpers/mcp-server-fixture.js';
 import { cleanupTestRows, setupTestSupabase } from '../helpers/supabase.js';
@@ -124,6 +124,9 @@ describe.sequential('MCP protocol E2E', () => {
       'search_all',
       'search',
       'write_record',
+      'remove_document',
+      'manage_directory',
+      'maintain_vault',
     ];
 
     // At least the core tools must be present (compound/plugin tools may also be registered)
@@ -135,6 +138,11 @@ describe.sequential('MCP protocol E2E', () => {
     }
     // Phase 107: get_doc_outline was removed — must not appear in the tool list
     expect(toolNames).not.toContain('get_doc_outline');
+    // Phase 127 local merged surfaces must use the final tool names.
+    expect(toolNames).not.toContain('create_directory');
+    expect(toolNames).not.toContain('remove_directory');
+    expect(toolNames).not.toContain('force_file_scan');
+    expect(toolNames).not.toContain('reconcile_documents');
   }, 30000);
 
   it('listTools reflects host_mcp_tools filtered registration', async () => {
@@ -724,6 +732,217 @@ describe.sequential('MCP protocol E2E', () => {
       error: 'not_found',
       identifier: 'e2e-json/missing-archive.md',
     });
+  }, 30000);
+
+  it('manage_directory create/remove returns ordered JSON results and non-empty conflicts', async () => {
+    const createResult = await client.callTool({
+      name: 'manage_directory',
+      arguments: {
+        action: 'create',
+        paths: ['e2e-phase127/empty-dir', 'e2e-phase127/non-empty-dir'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(createResult.isError).toBe(false);
+    const createPayload = JSON.parse(getText(createResult));
+    expect(createPayload.results).toEqual([
+      expect.objectContaining({
+        path: 'e2e-phase127/empty-dir',
+        action: 'create',
+        status: 'created',
+      }),
+      expect.objectContaining({
+        path: 'e2e-phase127/non-empty-dir',
+        action: 'create',
+        status: 'created',
+      }),
+    ]);
+
+    await client.callTool({
+      name: 'write_document',
+      arguments: {
+        mode: 'create',
+        path: 'e2e-phase127/non-empty-dir/kept.md',
+        title: 'E2E Phase 127 Kept',
+        content: 'This document keeps the directory non-empty.',
+      },
+    });
+
+    const nonEmptyRemove = await client.callTool({
+      name: 'manage_directory',
+      arguments: { action: 'remove', paths: ['e2e-phase127/non-empty-dir'] },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(nonEmptyRemove.isError).toBe(false);
+    const nonEmptyPayload = JSON.parse(getText(nonEmptyRemove));
+    expect(nonEmptyPayload.results).toEqual([
+      expect.objectContaining({
+        error: 'conflict',
+        identifier: 'e2e-phase127/non-empty-dir',
+        details: expect.objectContaining({ reason: 'directory_not_empty' }),
+      }),
+    ]);
+
+    const removeResult = await client.callTool({
+      name: 'manage_directory',
+      arguments: { action: 'remove', paths: ['e2e-phase127/empty-dir'] },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(removeResult.isError).toBe(false);
+    const removePayload = JSON.parse(getText(removeResult));
+    expect(removePayload.results).toEqual([
+      expect.objectContaining({
+        path: 'e2e-phase127/empty-dir',
+        action: 'remove',
+        status: 'removed',
+      }),
+    ]);
+  }, 30000);
+
+  it('maintain_vault returns JSON sync counts and expected option errors', async () => {
+    await writeFile(
+      resolve(VAULT_E2E, 'e2e-phase127/external-sync.md'),
+      [
+        '---',
+        'title: E2E Phase 127 External Sync',
+        'tags:',
+        '  - e2e-phase127',
+        '---',
+        '',
+        'External file written outside MCP.',
+      ].join('\n'),
+      'utf-8'
+    );
+
+    const syncResult = await client.callTool({
+      name: 'maintain_vault',
+      arguments: { action: 'sync' },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(syncResult.isError).toBe(false);
+    const syncPayload = JSON.parse(getText(syncResult));
+    expect(syncPayload.actions).toEqual([
+      expect.objectContaining({
+        action: 'sync',
+        counts: expect.objectContaining({
+          scanned: expect.any(Number),
+          added: expect.any(Number),
+          updated: expect.any(Number),
+          repaired: expect.any(Number),
+          archived: expect.any(Number),
+        }),
+      }),
+    ]);
+
+    const invalidRepairBackground = await client.callTool({
+      name: 'maintain_vault',
+      arguments: { action: 'repair', background: true },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(invalidRepairBackground.isError).toBe(false);
+    expect(JSON.parse(getText(invalidRepairBackground))).toMatchObject({
+      error: 'invalid_input',
+      details: expect.objectContaining({ field: 'background' }),
+    });
+
+    const missingStatus = await client.callTool({
+      name: 'maintain_vault',
+      arguments: { action: 'status', job_id: 'missing' },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(missingStatus.isError).toBe(false);
+    expect(JSON.parse(getText(missingStatus))).toMatchObject({
+      error: 'not_found',
+      details: expect.objectContaining({ job_id: 'missing' }),
+    });
+  }, 30000);
+
+  it('remove_document returns JSON archived removal results, mixed batch errors, and bulk warnings', async () => {
+    const singleCreate = await client.callTool({
+      name: 'write_document',
+      arguments: {
+        mode: 'create',
+        path: 'e2e-phase127/remove-single.md',
+        title: 'E2E Phase 127 Remove Single',
+        content: 'Remove this document through remove_document.',
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(singleCreate.isError).toBeFalsy();
+    const singleCreated = JSON.parse(getText(singleCreate));
+
+    const singleRemove = await client.callTool({
+      name: 'remove_document',
+      arguments: { identifiers: singleCreated.fq_id },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(singleRemove.isError).toBeFalsy();
+    const singlePayload = JSON.parse(getText(singleRemove));
+    expect(singlePayload).toMatchObject({
+      identifier: singleCreated.fq_id,
+      path: 'e2e-phase127/remove-single.md',
+      fq_id: singleCreated.fq_id,
+      status: 'archived',
+      archived_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      removed: true,
+    });
+
+    const batchCreate = await client.callTool({
+      name: 'write_document',
+      arguments: {
+        mode: 'create',
+        path: 'e2e-phase127/remove-batch-success.md',
+        title: 'E2E Phase 127 Remove Batch Success',
+        content: 'Remove this document in a mixed batch.',
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const batchCreated = JSON.parse(getText(batchCreate));
+
+    const mixedBatch = await client.callTool({
+      name: 'remove_document',
+      arguments: {
+        identifiers: [batchCreated.path, 'e2e-phase127/missing-remove.md'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(mixedBatch.isError).toBeFalsy();
+    const mixedPayload = JSON.parse(getText(mixedBatch));
+    expect(mixedPayload.results).toEqual([
+      expect.objectContaining({
+        identifier: batchCreated.path,
+        path: batchCreated.path,
+        status: 'archived',
+        archived_at: expect.any(String),
+      }),
+      expect.objectContaining({
+        error: 'not_found',
+        identifier: 'e2e-phase127/missing-remove.md',
+      }),
+    ]);
+
+    const bulkPaths = await Promise.all(
+      Array.from({ length: 6 }, async (_, index) => {
+        const created = await client.callTool({
+          name: 'write_document',
+          arguments: {
+            mode: 'create',
+            path: `e2e-phase127/bulk-${index}.md`,
+            title: `E2E Phase 127 Bulk ${index}`,
+            content: 'Bulk removal warning coverage.',
+          },
+        }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+        return JSON.parse(getText(created)).path as string;
+      })
+    );
+
+    const bulkRemove = await client.callTool({
+      name: 'remove_document',
+      arguments: { identifiers: bulkPaths },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(bulkRemove.isError).toBeFalsy();
+    const bulkPayload = JSON.parse(getText(bulkRemove));
+    expect(bulkPayload.results).toHaveLength(6);
+    expect(bulkPayload.warnings).toEqual(['bulk_removal: 6 items']);
   }, 30000);
 
   // ── T-04: Error handling — missing required param ─────────────────────────
