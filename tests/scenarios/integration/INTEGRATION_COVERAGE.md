@@ -37,6 +37,14 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-insert-1 | `insert_in_doc(bottom)` composes with search and document read-back after append. | append_then_search; append_and_search; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
 | INT-replace-1 | `replace_doc_section` composes with section-scoped LLM reference resolution after mutation. | llm_ref_section_after_replace; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
 | INT-tags-1 | `apply_tags` composes across explicit document/memory targets with ordered result envelopes and disabled-memory per-target errors. | apply_tags_composition; tests/integration/apply-tags.test.ts; tests/integration/write-document.integration.test.ts | 2026-05-12 | 2026-05-12 |
+| INT-search-1 | `search` composes with `write_document` and returns final JSON document results filtered by explicit `entity_types`. | unified_search_documents | 2026-05-12 |  |
+| INT-search-2 | `search` composes with `write_memory` and mixed document/memory result limits through the final unified search surface. | unified_search_memory_lifecycle | 2026-05-12 |  |
+| INT-search-3 | `search` excludes archived memory results by default and returns them when `include_archived:true`. | unified_search_memory_lifecycle | 2026-05-12 |  |
+| INT-search-4 | `search` integration coverage records disabled category semantics through TypeScript integration because YAML scenarios run with read/write memory enabled. | search.integration.test.ts | 2026-05-12 |  |
+| INT-wmem-1 | `write_memory(mode:"create")` creates memories whose JSON identifiers feed later composed MCP calls. | unified_search_memory_lifecycle | 2026-05-12 |  |
+| INT-wmem-2 | `write_memory(mode:"update")` creates a latest version that is retrievable and discoverable through composed workflows. | unified_search_memory_lifecycle | 2026-05-12 |  |
+| INT-wmem-3 | `get_memory` reads final `write_memory` output by `memory_ids` with JSON projection semantics. | unified_search_memory_lifecycle | 2026-05-12 |  |
+| INT-wmem-4 | `archive_memory(memory_ids)` composes with `search` archived visibility controls. | unified_search_memory_lifecycle | 2026-05-12 |  |
 
 ---
 
