@@ -170,6 +170,7 @@ describe.sequential('MCP protocol E2E', () => {
   // ── T-03: create_document + get_document round-trip ───────────────────────
 
   let createdDocPath: string;
+  let createdDocFqId: string;
 
   it('create_document writes a file and get_document reads it back', async () => {
     // Create
@@ -213,8 +214,70 @@ describe.sequential('MCP protocol E2E', () => {
       title: 'E2E Test Document',
       size: { chars: expect.any(Number) },
     });
+    createdDocFqId = getEnv.fq_id;
+    expect(createdDocFqId).toEqual(expect.any(String));
     expect(getEnv.body).toContain('E2E test');
     // Note: get_document returns JSON envelope — tags are in frontmatter field
+  }, 30000);
+
+  it('copy_document returns JSON identification and the copy is independently retrievable', async () => {
+    const copyResult = await client.callTool({
+      name: 'copy_document',
+      arguments: {
+        identifier: createdDocPath,
+        destination: 'e2e-json/copy-document-copy.md',
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(copyResult.isError).toBeFalsy();
+    const copyPayload = JSON.parse(getText(copyResult));
+    expect(copyPayload).toMatchObject({
+      identifier: 'e2e-json/copy-document-copy.md',
+      path: 'e2e-json/copy-document-copy.md',
+      title: 'E2E Test Document',
+      size: { chars: expect.any(Number) },
+    });
+    expect(copyPayload.fq_id).toEqual(expect.any(String));
+    expect(copyPayload.fq_id).not.toBe(createdDocFqId);
+
+    const getCopyResult = await client.callTool({
+      name: 'get_document',
+      arguments: { identifiers: copyPayload.fq_id },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const getCopyPayload = JSON.parse(getText(getCopyResult));
+    expect(getCopyPayload).toMatchObject({
+      path: copyPayload.path,
+      fq_id: copyPayload.fq_id,
+    });
+  }, 30000);
+
+  it('move_document returns JSON identification with stable fq_id and normalized destination path', async () => {
+    const moveResult = await client.callTool({
+      name: 'move_document',
+      arguments: {
+        identifier: createdDocFqId,
+        destination: 'e2e-json/moved-document',
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(moveResult.isError).toBeFalsy();
+    const movePayload = JSON.parse(getText(moveResult));
+    expect(movePayload).toMatchObject({
+      identifier: 'e2e-json/moved-document.md',
+      path: 'e2e-json/moved-document.md',
+      fq_id: createdDocFqId,
+      size: { chars: expect.any(Number) },
+    });
+
+    const getMovedResult = await client.callTool({
+      name: 'get_document',
+      arguments: { identifiers: createdDocFqId },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const getMovedPayload = JSON.parse(getText(getMovedResult));
+    expect(getMovedPayload).toMatchObject({
+      path: 'e2e-json/moved-document.md',
+      fq_id: createdDocFqId,
+    });
   }, 30000);
 
   // ── T-04: Error handling — missing required param ─────────────────────────

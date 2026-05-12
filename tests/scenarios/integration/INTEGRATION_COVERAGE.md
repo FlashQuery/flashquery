@@ -26,6 +26,11 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-gdoc-error-2 | get_document JSON error-shape coverage proves invalid include/section requests use canonical `invalid_input` envelopes with conflict details preserved. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
 | INT-arch-1 | archive_document then search excludes the archived document from default document results while the archive response exposes JSON `status` and `archived_at`. | archive_status_field         | 2026-05-11   | 2026-05-11   |
 | INT-arch-2 | archive_document batch returns ordered JSON archive envelopes and get_document confirms archived status afterward. | archive_status_field         | 2026-05-11   | 2026-05-11   |
+| INT-copy-1 | create -> copy -> get both documents proves copy_document returns JSON identification and the new copy has a distinct fq_id from the source. | documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
+| INT-copy-2 | copy_document destination conflict returns canonical JSON `conflict` with `details.reason="path_exists"` and no runtime error. | documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
+| INT-move-1 | create -> move -> get by fq_id proves move_document returns JSON identification with stable identity and updated path. | documents.integration.test.ts copy_document and move_document JSON output; move_document_to_new_directory | 2026-05-12 |  |
+| INT-move-2 | move -> search/reference durability keeps fq_id-based reference resolution reaching the moved document while path-sensitive references can be updated separately. | tests/e2e/protocol.test.ts move_document JSON round-trip; existing direct_ref_durability_under_move | 2026-05-12 |  |
+| INT-move-3 | move_document destination conflict returns canonical JSON `conflict` with `details.reason="path_exists"` and no runtime error. | documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
 
 ---
 
@@ -148,7 +153,7 @@ FlashQuery tools (create_document, move_document, register_plugin, search_docume
 | IF-07  | create_directory called twice with same path → list_vault shows no duplicate entries (idempotency) (VALIDATED)   | create_directory_idempotent  | 2026-05-07   | 2026-05-07   |
 | IF-08  | dot-prefixed directory created → list_vault shows it is invisible to default listing (VALIDATED)                 | dot_directory_invisible      | 2026-05-07   | 2026-05-07   |
 | IF-09  | create_directory with name requiring sanitization → list_vault shows sanitized name → create_document in it succeeds (VALIDATED) | sanitized_directory_usable   | 2026-05-07   | 2026-05-07   |
-| IF-10  | create_directory → move_document into new directory → list_vault confirms moved document (VALIDATED)             | move_document_to_new_directory | 2026-05-07   | 2026-05-07   |
+| IF-10  | create_directory → move_document into new directory → list_vault confirms moved document (VALIDATED)             | move_document_to_new_directory | 2026-05-11   | 2026-05-11   |
 | IF-11  | list_vault(show: "files") excludes directories; list_vault(show: "all") includes both (VALIDATED)                | list_vault_show_modes        | 2026-05-07   | 2026-05-07   |
 | IF-12  | list_vault(show: "all", extensions: [".md"]) — directories unfiltered, only .md files shown (VALIDATED)         | list_vault_extension_filter_with_directories | 2026-05-07   | 2026-05-07   |
 | IF-13  | register_plugin → create_directory scaffold → list_vault confirms dirs → create_document → search_records confirms auto-tracking (VALIDATED) | plugin_init_scaffold         | 2026-05-07   | 2026-05-07   |

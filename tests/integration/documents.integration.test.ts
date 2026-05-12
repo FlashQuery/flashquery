@@ -485,3 +485,171 @@ describe.skipIf(!HAS_SUPABASE)('archive_document JSON output and archived_at lif
     expect(parsed.data[FM.ARCHIVED_AT]).toBe(firstPayload.archived_at);
   });
 });
+
+describe.skipIf(!HAS_SUPABASE)('copy_document and move_document JSON output', () => {
+  let vaultPath: string;
+  let config: FlashQueryConfig;
+
+  function makeNoEmbedConfig(vp: string): FlashQueryConfig {
+    return {
+      instance: { name: 'copy-move-json-test', id: 'copy-move-json-test-id', vault: { path: vp, markdownExtensions: ['.md'] } },
+      supabase: { url: TEST_SUPABASE_URL, serviceRoleKey: TEST_SUPABASE_KEY, databaseUrl: TEST_DATABASE_URL, skipDdl: false },
+      embedding: { provider: 'none' as never, model: '', apiKey: '', dimensions: 1536 },
+      logging: { level: 'error', output: 'stdout' },
+      locking: { enabled: false, ttlSeconds: 30 },
+    } as unknown as FlashQueryConfig;
+  }
+
+  function parseJsonResult<T>(result: { content: Array<{ text: string }>; isError?: boolean }): T {
+    expect(result.content[0]?.text).toBeTruthy();
+    return JSON.parse(result.content[0]!.text) as T;
+  }
+
+  async function createDocument(title: string, content: string): Promise<{ fqcId: string; path: string }> {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const result = await getHandler('create_document')({
+      title,
+      content,
+      project: 'CopyMoveJson',
+    }) as { content: Array<{ text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    const fqcId = result.content[0]!.text.match(/FQC ID: ([a-f0-9-]+)/)?.[1];
+    expect(fqcId).toBeTruthy();
+
+    const { data, error } = await supabaseManager.getClient()
+      .from('fqc_documents')
+      .select('path')
+      .eq('id', fqcId!)
+      .single();
+    expect(error).toBeNull();
+    expect(data?.path).toBeTruthy();
+
+    return { fqcId: fqcId!, path: data!.path as string };
+  }
+
+  beforeAll(async () => {
+    vaultPath = await mkdtemp(join(tmpdir(), 'fqc-copy-move-json-'));
+    config = makeNoEmbedConfig(vaultPath);
+    initLogger(config);
+    await initSupabase(config);
+    initEmbedding(config);
+    await initVault(config);
+  }, 60_000);
+
+  afterAll(async () => {
+    if (!supabaseManager) {
+      if (vaultPath) {
+        await rm(vaultPath, { recursive: true, force: true });
+      }
+      return;
+    }
+    await supabaseManager.getClient()
+      .from('fqc_documents')
+      .delete()
+      .eq('instance_id', 'copy-move-json-test-id');
+    await rm(vaultPath, { recursive: true, force: true });
+  });
+
+  it('copy_document returns JSON identification for a distinct copy retrievable by fq_id', async () => {
+    const source = await createDocument('Copy JSON Source', 'Copy body content.');
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const copyResult = await getHandler('copy_document')({
+      identifier: source.fqcId,
+      destination: 'CopyMoveJson/copied.md',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(copyResult.isError).toBeUndefined();
+    const copyPayload = parseJsonResult<Record<string, unknown>>(copyResult);
+    expect(copyPayload).toMatchObject({
+      identifier: 'CopyMoveJson/copied.md',
+      path: 'CopyMoveJson/copied.md',
+      title: 'Copy JSON Source',
+      size: { chars: expect.any(Number) },
+    });
+    expect((copyPayload.size as { chars: number }).chars).toBeGreaterThanOrEqual('Copy body content.'.length);
+    expect(copyPayload.fq_id).not.toBe(source.fqcId);
+
+    const sourceGet = await getHandler('get_document')({
+      identifiers: source.fqcId,
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const copyGet = await getHandler('get_document')({
+      identifiers: copyPayload.fq_id,
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(parseJsonResult<Record<string, unknown>>(sourceGet)).toMatchObject({
+      path: source.path,
+      fq_id: source.fqcId,
+    });
+    expect(parseJsonResult<Record<string, unknown>>(copyGet)).toMatchObject({
+      path: 'CopyMoveJson/copied.md',
+      fq_id: copyPayload.fq_id,
+    });
+  });
+
+  it('move_document returns JSON identification with stable fq_id and normalized path', async () => {
+    const source = await createDocument('Move JSON Source', 'Move body content.');
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const moveResult = await getHandler('move_document')({
+      identifier: source.fqcId,
+      destination: 'CopyMoveJson/Moved/moved-json-source',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(moveResult.isError).toBeUndefined();
+    const movePayload = parseJsonResult<Record<string, unknown>>(moveResult);
+    expect(movePayload).toMatchObject({
+      identifier: 'CopyMoveJson/Moved/moved-json-source.md',
+      path: 'CopyMoveJson/Moved/moved-json-source.md',
+      fq_id: source.fqcId,
+      size: { chars: expect.any(Number) },
+    });
+    expect((movePayload.size as { chars: number }).chars).toBeGreaterThanOrEqual('Move body content.'.length);
+
+    const getMoved = await getHandler('get_document')({
+      identifiers: source.fqcId,
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(parseJsonResult<Record<string, unknown>>(getMoved)).toMatchObject({
+      path: 'CopyMoveJson/Moved/moved-json-source.md',
+      fq_id: source.fqcId,
+    });
+  });
+
+  it('copy_document and move_document conflicts return canonical JSON envelopes', async () => {
+    const source = await createDocument('Conflict JSON Source', 'Conflict body.');
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const firstCopy = await getHandler('copy_document')({
+      identifier: source.fqcId,
+      destination: 'CopyMoveJson/existing-conflict.md',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(firstCopy.isError).toBeUndefined();
+
+    const copyConflict = await getHandler('copy_document')({
+      identifier: source.fqcId,
+      destination: 'CopyMoveJson/existing-conflict.md',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(copyConflict.isError).toBe(false);
+    expect(parseJsonResult<Record<string, unknown>>(copyConflict)).toMatchObject({
+      error: 'conflict',
+      details: { reason: 'path_exists' },
+    });
+
+    const moveConflict = await getHandler('move_document')({
+      identifier: source.fqcId,
+      destination: 'CopyMoveJson/existing-conflict.md',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(moveConflict.isError).toBe(false);
+    expect(parseJsonResult<Record<string, unknown>>(moveConflict)).toMatchObject({
+      error: 'conflict',
+      details: { reason: 'path_exists' },
+    });
+  });
+});

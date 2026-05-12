@@ -20,10 +20,17 @@ steps:
       paths: "_integration/if10/new-dir"
 
   - label: "Move the document into the new directory (IF-10)"
-    action: move_document
-    args:
-      identifier: "${orig_doc.fq_id}"
-      destination: "_integration/if10/new-dir/original.md"
+    assert:
+      op: move_document
+      args:
+        identifier: "${orig_doc.fq_id}"
+        destination: "_integration/if10/new-dir/original.md"
+      expect_json_equals:
+        path: fq_id
+        value: "${orig_doc.fq_id}"
+      expect_json_path:
+        - path
+        - size.chars
 
   - label: "list_vault on new directory confirms moved document appears (IF-10)"
     assert:
