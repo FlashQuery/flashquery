@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -228,6 +228,43 @@ describe.skipIf(!HAS_SUPABASE)('remove_document integration', () => {
     expect(removed.moved_to).toBe('.flashquery/removed/collide-1.md');
     expect(await readFile(join(vaultPath, '.flashquery/removed/collide.md'), 'utf8')).toBe('existing trash');
     expect(existsSync(join(vaultPath, '.flashquery/removed/collide-1.md'))).toBe(true);
+  });
+
+  it('trash collision strategy timestamp avoids same-millisecond overwrites', async () => {
+    await useConfig(makeConfig(vaultPath, {
+      enabled: true,
+      path: '.flashquery/removed',
+      collisionStrategy: 'timestamp',
+    }));
+    await mkdir(join(vaultPath, '.flashquery/removed'), { recursive: true });
+    await writeFile(join(vaultPath, '.flashquery/removed/note.md'), 'existing basename trash');
+    const frozen = new Date('2026-05-12T12:34:56.789Z');
+    const timestamp = frozen.toISOString().replace(/[:.]/g, '-');
+    await writeFile(join(vaultPath, `.flashquery/removed/note-${timestamp}.md`), 'existing timestamp trash');
+    await writeDoc('remove/a/note.md', 'Timestamp Collision A', 'first same-basename body');
+    await writeDoc('remove/b/note.md', 'Timestamp Collision B', 'second same-basename body');
+
+    vi.useFakeTimers();
+    vi.setSystemTime(frozen);
+    try {
+      const removed = parseResult<{ results: Array<Record<string, unknown>> }>(
+        await handlers.remove_document({
+          identifiers: ['remove/a/note.md', 'remove/b/note.md'],
+        })
+      );
+
+      expect(removed.results.map((item) => item.moved_to)).toEqual([
+        `.flashquery/removed/note-${timestamp}-1.md`,
+        `.flashquery/removed/note-${timestamp}-2.md`,
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(await readFile(join(vaultPath, '.flashquery/removed/note.md'), 'utf8')).toBe('existing basename trash');
+    expect(await readFile(join(vaultPath, `.flashquery/removed/note-${timestamp}.md`), 'utf8')).toBe('existing timestamp trash');
+    expect(await readFile(join(vaultPath, `.flashquery/removed/note-${timestamp}-1.md`), 'utf8')).toContain('first same-basename body');
+    expect(await readFile(join(vaultPath, `.flashquery/removed/note-${timestamp}-2.md`), 'utf8')).toContain('second same-basename body');
   });
 
   it('invalid trash path returns invalid_input path_traversal and leaves the source file present', async () => {

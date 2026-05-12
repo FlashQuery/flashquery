@@ -132,7 +132,13 @@ function buildTrashDestination(
 
   if (existsSync(candidate)) {
     if (collisionStrategy === 'timestamp') {
-      candidate = join(trashRootAbsPath, `${stem}-${compactTimestamp()}${ext}`);
+      const timestamp = compactTimestamp();
+      let index = 0;
+      do {
+        const suffix = index === 0 ? timestamp : `${timestamp}-${index}`;
+        candidate = join(trashRootAbsPath, `${stem}-${suffix}${ext}`);
+        index += 1;
+      } while (existsSync(candidate));
     } else {
       let index = 1;
       do {
