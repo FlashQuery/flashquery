@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: MCP Tools Consolidation
-status: executing
-stopped_at: Completed 127-04-PLAN.md
-last_updated: "2026-05-12T20:59:42.903Z"
+status: verifying
+stopped_at: Completed 127-06-PLAN.md
+last_updated: "2026-05-12T21:14:50.799Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 8
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 35
-  completed_plans: 34
-  percent: 97
+  completed_plans: 35
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-11)
 
 Phase: 127 (Removal, Directory, And Vault Maintenance) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-12
 
 ## Performance Metrics
@@ -96,6 +96,7 @@ Last activity: 2026-05-12
 | Phase 127 P03 | 9m26s | 3 tasks | 8 files |
 | Phase 127 P04 | 11min | 3 tasks | 9 files |
 | Phase 127 P05 | 30min | 3 tasks | 9 files |
+| Phase 127 P06 | 12m20s | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -161,6 +162,8 @@ Last activity: 2026-05-12
 - [Phase 127]: 127-04 removal git policy uses git add -A through GitManager for hard deletes and trash moves. — Ensures delete and in-repo trash destination changes are staged consistently under existing autoCommit/autoPush policy.
 - [Phase 127]: 127-04 unsafe relative trash_folder traversal is rejected before source lifecycle mutation. — Prevents bad trash configuration from archiving, moving, or deleting the source document.
 - [Phase 127]: 127-05 hides local legacy directory/maintenance names from host exposure while broader legacy cleanup remains Phase 128.
+- [Phase 127]: 127-06 classified remaining broad legacy source/test references as Phase 128 global cleanup instead of deleting them in Phase 127.
+- [Phase 127]: 127-06 treated Phase 127 local absence as host exposure/protocol absence plus final-tool scenario coverage, not global source deletion.
 
 ## Accumulated Context
 
@@ -271,9 +274,9 @@ Last activity: 2026-05-12
 
 ## Session Continuity
 
-Last session: 2026-05-12T20:59:11.056Z
-Stopped at: Completed 127-04-PLAN.md
-Resume: Phase 126
+Last session: 2026-05-12T21:14:50.750Z
+Stopped at: Completed 127-06-PLAN.md
+Resume: None
 
 ## Deferred Items
 
