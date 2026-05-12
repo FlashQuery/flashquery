@@ -327,3 +327,154 @@ describe.skipIf(!HAS_SUPABASE)('get_document canonical expected errors', () => {
     });
   });
 });
+
+describe.skipIf(!HAS_SUPABASE)('archive_document JSON output and archived_at lifecycle', () => {
+  let vaultPath: string;
+  let config: FlashQueryConfig;
+
+  function makeNoEmbedConfig(vp: string): FlashQueryConfig {
+    return {
+      instance: { name: 'archive-json-test', id: 'archive-json-test-id', vault: { path: vp, markdownExtensions: ['.md'] } },
+      supabase: { url: TEST_SUPABASE_URL, serviceRoleKey: TEST_SUPABASE_KEY, databaseUrl: TEST_DATABASE_URL, skipDdl: false },
+      embedding: { provider: 'none' as never, model: '', apiKey: '', dimensions: 1536 },
+      logging: { level: 'error', output: 'stdout' },
+      locking: { enabled: false, ttlSeconds: 30 },
+    } as unknown as FlashQueryConfig;
+  }
+
+  function parseJsonResult<T>(result: { content: Array<{ text: string }>; isError?: boolean }): T {
+    expect(result.content[0]?.text).toBeTruthy();
+    return JSON.parse(result.content[0]!.text) as T;
+  }
+
+  async function createDocument(title: string, content: string): Promise<{ fqcId: string; path: string }> {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const result = await getHandler('create_document')({
+      title,
+      content,
+      project: 'ArchiveJson',
+    }) as { content: Array<{ text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    const fqcId = result.content[0]!.text.match(/FQC ID: ([a-f0-9-]+)/)?.[1];
+    expect(fqcId).toBeTruthy();
+
+    const { data, error } = await supabaseManager.getClient()
+      .from('fqc_documents')
+      .select('path')
+      .eq('id', fqcId!)
+      .single();
+    expect(error).toBeNull();
+    expect(data?.path).toBeTruthy();
+
+    return { fqcId: fqcId!, path: data!.path as string };
+  }
+
+  beforeAll(async () => {
+    vaultPath = await mkdtemp(join(tmpdir(), 'fqc-archive-json-'));
+    config = makeNoEmbedConfig(vaultPath);
+    initLogger(config);
+    await initSupabase(config);
+    initEmbedding(config);
+    await initVault(config);
+  }, 60_000);
+
+  afterAll(async () => {
+    if (!supabaseManager) {
+      if (vaultPath) {
+        await rm(vaultPath, { recursive: true, force: true });
+      }
+      return;
+    }
+    await supabaseManager.getClient()
+      .from('fqc_documents')
+      .delete()
+      .eq('instance_id', 'archive-json-test-id');
+    await rm(vaultPath, { recursive: true, force: true });
+  });
+
+  it('returns a flat JSON identification block for single archive and persists archived_at', async () => {
+    const created = await createDocument('Archive JSON Single', 'Single archive body.');
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const result = await getHandler('archive_document')({
+      identifiers: created.fqcId,
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    const payload = parseJsonResult<Record<string, unknown>>(result);
+
+    expect(Array.isArray(payload)).toBe(false);
+    expect(payload).toMatchObject({
+      identifier: created.fqcId,
+      path: created.path,
+      fq_id: created.fqcId,
+      status: 'archived',
+    });
+    expect(payload.archived_at).toEqual(expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/));
+
+    const { data: dbRow } = await supabaseManager.getClient()
+      .from('fqc_documents')
+      .select('status, archived_at')
+      .eq('id', created.fqcId)
+      .single();
+    expect(dbRow).toMatchObject({ status: 'archived', archived_at: payload.archived_at });
+
+    const parsed = await vaultManager.readMarkdown(created.path);
+    expect(parsed.data[FM.STATUS]).toBe('archived');
+    expect(parsed.data[FM.ARCHIVED_AT]).toBe(payload.archived_at);
+  });
+
+  it('returns ordered batch JSON with per-element not_found envelopes and isError false', async () => {
+    const first = await createDocument('Archive JSON Batch A', 'Batch A body.');
+    const third = await createDocument('Archive JSON Batch C', 'Batch C body.');
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const result = await getHandler('archive_document')({
+      identifiers: [first.fqcId, 'missing-archive-json.md', third.fqcId],
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeUndefined();
+    const payload = parseJsonResult<Array<Record<string, unknown>>>(result);
+
+    expect(payload).toHaveLength(3);
+    expect(payload[0]).toMatchObject({ identifier: first.fqcId, fq_id: first.fqcId, status: 'archived' });
+    expect(payload[1]).toMatchObject({
+      error: 'not_found',
+      identifier: 'missing-archive-json.md',
+    });
+    expect(payload[2]).toMatchObject({ identifier: third.fqcId, fq_id: third.fqcId, status: 'archived' });
+  });
+
+  it('preserves the first archived_at value when re-archiving a document', async () => {
+    const created = await createDocument('Archive JSON Idempotent', 'Idempotent body.');
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const firstResult = await getHandler('archive_document')({
+      identifiers: created.fqcId,
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const firstPayload = parseJsonResult<Record<string, unknown>>(firstResult);
+
+    const secondResult = await getHandler('archive_document')({
+      identifiers: created.fqcId,
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const secondPayload = parseJsonResult<Record<string, unknown>>(secondResult);
+
+    expect(secondPayload.archived_at).toBe(firstPayload.archived_at);
+
+    const { data: dbRow } = await supabaseManager.getClient()
+      .from('fqc_documents')
+      .select('archived_at')
+      .eq('id', created.fqcId)
+      .single();
+    expect(dbRow?.archived_at).toBe(firstPayload.archived_at);
+
+    const parsed = await vaultManager.readMarkdown(created.path);
+    expect(parsed.data[FM.ARCHIVED_AT]).toBe(firstPayload.archived_at);
+  });
+});
