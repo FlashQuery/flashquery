@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat, rename, mkdir, writeFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, relative, extname, normalize, sep, dirname, basename, resolve } from 'node:path';
+import { join, relative, extname, normalize, dirname, basename, resolve } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -41,6 +41,7 @@ import {
   resolveAndBuildDocument,
   DocumentRequestError,
 } from '../utils/document-output.js';
+import { validateVaultPath } from '../utils/path-validation.js';
 import { pluginManager, getFolderClaimsMap } from '../../plugins/manager.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 
@@ -917,6 +918,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const isBatch = Array.isArray(identifiers);
         const ids = isBatch ? identifiers : [identifiers];
         const results: Array<Record<string, unknown>> = [];
+        let hasRuntimeFailure = false;
 
         for (const id of ids) {
           try {
@@ -981,26 +983,36 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             );
 
             // Step 3: Update Supabase fqc_documents
-            const fqcId = preScan.capturedFrontmatter.fqcId;
+            const fqcId = resolved.fqcId ?? preScan.capturedFrontmatter.fqcId;
             const updatedAt = new Date().toISOString();
             if (fqcId) {
-              const { error } = await supabase
+              const { data, error } = await supabase
                 .from('fqc_documents')
                 .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
                 .eq('id', fqcId)
-                .eq('instance_id', config.instance.id);
+                .eq('instance_id', config.instance.id)
+                .select('id')
+                .maybeSingle();
               if (error) {
-                logger.warn(`archive_document: Supabase update failed for ${relativePath}: ${error.message}`);
+                throw new Error(`Supabase archive update failed for ${relativePath}: ${error.message}`);
+              }
+              if (!data) {
+                throw new Error(`Supabase archive update affected no document row for ${relativePath}`);
               }
             } else {
               // Fallback: update by path if no fqcId available
-              const { error } = await supabase
+              const { data, error } = await supabase
                 .from('fqc_documents')
                 .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
                 .eq('path', relativePath)
-                .eq('instance_id', config.instance.id);
+                .eq('instance_id', config.instance.id)
+                .select('id')
+                .maybeSingle();
               if (error) {
-                logger.warn(`archive_document: Supabase update failed for ${relativePath}: ${error.message}`);
+                throw new Error(`Supabase archive update failed for ${relativePath}: ${error.message}`);
+              }
+              if (!data) {
+                throw new Error(`Supabase archive update affected no document row for ${relativePath}`);
               }
             }
 
@@ -1038,15 +1050,20 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             }
 
             const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
+            if (!isBatch) {
+              throw itemErr;
+            }
+            hasRuntimeFailure = true;
             results.push({
-              error: 'conflict',
+              error: 'runtime_error',
               message: msg,
               identifier: id,
             });
           }
         }
 
-        return jsonToolResult(isBatch ? results : results[0]);
+        const result = jsonToolResult(isBatch ? results : results[0]);
+        return hasRuntimeFailure ? { ...result, isError: true } : result;
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`archive_document failed - ${msg}`);
@@ -1427,28 +1444,18 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const newFqcId = uuidv4();
         const now = new Date().toISOString();
 
-        // Build copy path
-        let copyRelativePath: string;
-        if (destination) {
-          copyRelativePath = destination;
-
-          // Guard: reject path traversal attempts (proven pattern from resolveDocumentIdentifier)
-          const absolutePath = join(config.instance.vault.path, copyRelativePath);
-          const resolvedAbs = resolve(absolutePath);
-          const resolvedVault = resolve(config.instance.vault.path);
-          const rel = relative(resolvedVault, resolvedAbs);
-          if (rel.startsWith('..') || rel === '..') {
-            return jsonExpectedError({
-              error: 'invalid_input',
-              message: 'Destination path escapes vault root.',
-              identifier: copyRelativePath,
-              details: { reason: 'path_traversal' },
-            });
-          }
-        } else {
-          // Default: sanitized filename placed at vault root
-          copyRelativePath = `${sanitizeFilename(copyTitle)}.md`;
+        // Build copy path, then validate with the shared symlink-aware vault guard.
+        const requestedCopyPath = destination ?? `${sanitizeFilename(copyTitle)}.md`;
+        const copyValidation = await validateVaultPath(config.instance.vault.path, requestedCopyPath);
+        if (!copyValidation.valid) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: `Invalid destination path: ${copyValidation.error}`,
+            identifier: requestedCopyPath,
+            details: { reason: 'path_traversal' },
+          });
         }
+        const copyRelativePath = copyValidation.relativePath;
 
         const absPath = join(config.instance.vault.path, copyRelativePath);
         if (existsSync(absPath)) {
@@ -1480,29 +1487,21 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
         // Sync: read raw file to compute content_hash, then insert fqc_documents row
         let contentHash: string | null = null;
-        try {
-          const rawCopyContent = await readFile(join(config.instance.vault.path, copyRelativePath), 'utf-8');
-          contentHash = computeHash(rawCopyContent);
-          const supabase = supabaseManager.getClient();
-          const { error: insertError } = await supabase.from('fqc_documents').insert({
-            id: newFqcId,
-            instance_id: config.instance.id,
-            path: copyRelativePath,
-            title: copyTitle,
-            tags: deduplicated,
-            content_hash: contentHash,
-            status: 'active',
-            embedding: null,
-          });
-          if (insertError) {
-            logger.warn(
-              `copy_document: fqc_documents insert failed for ${copyRelativePath}: ${insertError.message}`
-            );
-          }
-        } catch (dbErr) {
-          logger.warn(
-            `copy_document: fqc_documents insert error for ${copyRelativePath}: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`
-          );
+        const rawCopyContent = await readFile(join(config.instance.vault.path, copyRelativePath), 'utf-8');
+        contentHash = computeHash(rawCopyContent);
+        const supabase = supabaseManager.getClient();
+        const { error: insertError } = await supabase.from('fqc_documents').insert({
+          id: newFqcId,
+          instance_id: config.instance.id,
+          path: copyRelativePath,
+          title: copyTitle,
+          tags: deduplicated,
+          content_hash: contentHash,
+          status: 'active',
+          embedding: null,
+        });
+        if (insertError) {
+          throw new Error(`Supabase copy insert failed for ${copyRelativePath}: ${insertError.message}`);
         }
 
         // Fire-and-forget: embed after MCP response is returned
@@ -1792,17 +1791,25 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           destPath += sourceExt;
         }
 
-        // Path traversal protection
-        const destAbsPath = join(vaultRoot, destPath);
-        const normalizedDest = normalize(destAbsPath);
-        if (!normalizedDest.startsWith(vaultRoot + sep) && normalizedDest !== vaultRoot) {
-          return jsonExpectedError({
-            error: 'invalid_input',
-            message: 'Destination path escapes vault root.',
-            identifier: destPath,
-            details: { reason: 'path_traversal' },
-          });
+        // Path traversal and symlink protection for the destination parent.
+        const destDirRel = dirname(destPath);
+        const destBase = basename(destPath);
+        let destAbsPath: string;
+        if (destDirRel === '.' || destDirRel === '') {
+          destAbsPath = join(resolve(vaultRoot), destBase);
+        } else {
+          const parentValidation = await validateVaultPath(vaultRoot, destDirRel);
+          if (!parentValidation.valid) {
+            return jsonExpectedError({
+              error: 'invalid_input',
+              message: 'Destination path escapes vault root.',
+              identifier: destPath,
+              details: { reason: 'path_traversal' },
+            });
+          }
+          destAbsPath = join(parentValidation.absPath, destBase);
         }
+        const normalizedDest = normalize(destAbsPath);
 
         // Step 4: Check if destination already exists
         if (existsSync(destAbsPath)) {
@@ -1875,11 +1882,19 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             responseTitle = currentTitle;
           }
 
-          await supabase
+          const { data: updatedRow, error: updateError } = await supabase
             .from('fqc_documents')
             .update(updateData)
             .eq('id', sourceFqcId)
-            .eq('instance_id', config.instance.id);
+            .eq('instance_id', config.instance.id)
+            .select('id')
+            .maybeSingle();
+          if (updateError) {
+            throw new Error(`Supabase path update failed for ${destPath}: ${updateError.message}`);
+          }
+          if (!updatedRow) {
+            throw new Error(`Supabase path update affected no document row for ${destPath}`);
+          }
         }
 
         const moved = await vaultManager.readMarkdown(destPath);

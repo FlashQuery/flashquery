@@ -75,6 +75,8 @@ describe('copy_document JSON output contract', () => {
     const copySection = source.slice(source.indexOf("'copy_document'"), source.indexOf('// ─── Tool 6: reconcile_documents'));
 
     expect(copySection).toContain('documentIdentification');
+    expect(copySection).toContain('validateVaultPath(config.instance.vault.path, requestedCopyPath)');
+    expect(copySection).toContain('Supabase copy insert failed');
     expect(copySection).not.toContain("formatKeyValueEntry('Title', copyTitle)");
     expect(copySection).toContain('path_exists');
   });

@@ -228,6 +228,34 @@ describe('list_vault structured JSON output', () => {
     expect(untracked).not.toHaveProperty('fq_id');
   });
 
+  it('returns a runtime error when requested tracking metadata cannot be loaded', async () => {
+    vi.mocked(readdir).mockResolvedValue([makeDirent('tracked.md', false)]);
+    vi.mocked(stat)
+      .mockResolvedValueOnce(dirStat())
+      .mockResolvedValueOnce(fileStat(200, '2026-01-03T00:00:00.000Z'));
+
+    const { supabaseManager } = await import('../../src/storage/supabase.js');
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockResolvedValue({
+        data: null,
+        error: { message: 'network unavailable' },
+      }),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+
+    const result = await callListVault({ path: '/', show: 'files', include: ['tracking'] });
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+
+    expect(result.isError).toBe(true);
+    expect(payload).toMatchObject({
+      error: 'tracking_unavailable',
+      message: expect.stringContaining('tracking metadata'),
+      details: { include: 'tracking' },
+    });
+  });
+
   it('returns a canonical JSON invalid_input envelope for invalid include values', async () => {
     const result = await callListVault({ path: '/', include: ['tracking', 'sync_state'] });
     const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;

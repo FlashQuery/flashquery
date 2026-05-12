@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { documentArchiveResult } from '../../src/mcp/utils/response-formats.js';
 
@@ -40,5 +41,18 @@ describe('archive_document JSON result helpers', () => {
 
     expect(result.archived_at).toBe(existingArchivedAt);
     expect(result.status).toBe('archived');
+  });
+
+  it('fails runtime archive errors instead of returning expected conflict envelopes', () => {
+    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
+    const archiveSection = source.slice(
+      source.indexOf("'archive_document'"),
+      source.indexOf("'search_documents'")
+    );
+
+    expect(archiveSection).toContain('Supabase archive update failed');
+    expect(archiveSection).toContain("error: 'runtime_error'");
+    expect(archiveSection).toContain('isError: true');
+    expect(archiveSection).not.toContain("error: 'conflict',\n              message: msg");
   });
 });

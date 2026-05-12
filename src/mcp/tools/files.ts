@@ -592,16 +592,27 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         const dbRecordMap = new Map<string, DbRow>();
 
         const fileEntries = dateFiltered.filter(e => e.kind === 'file');
-        if (fileEntries.length > 0) {
+        if ((includeTracking || afterTs !== undefined || beforeTs !== undefined) && fileEntries.length > 0) {
           const supabase = supabaseManager.getClient();
           const filePaths = fileEntries.map(e => e.relativePath);
           for (let i = 0; i < filePaths.length; i += 100) {
             const batch = filePaths.slice(i, i + 100);
-            const { data: rows } = await supabase
+            const { data: rows, error } = await supabase
               .from('fqc_documents')
               .select('id, path, title, status, tags, updated_at, created_at')
               .eq('instance_id', config.instance.id)
               .in('path', batch);
+            if (error) {
+              if (!includeTracking) {
+                logger.warn(`list_vault: tracking timestamp enrichment failed: ${error.message}`);
+                continue;
+              }
+              return jsonRuntimeError({
+                error: 'tracking_unavailable',
+                message: `Unable to load tracking metadata for list_vault: ${error.message}`,
+                details: { include: 'tracking' },
+              });
+            }
             for (const row of rows ?? []) {
               dbRecordMap.set(row.path as string, row);
             }

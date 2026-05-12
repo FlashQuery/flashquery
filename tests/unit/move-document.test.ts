@@ -82,6 +82,9 @@ describe('move_document JSON output contract', () => {
     const moveSection = source.slice(source.indexOf("'move_document'"));
 
     expect(moveSection).toContain('documentIdentification');
+    expect(moveSection).toContain('validateVaultPath(vaultRoot, destDirRel)');
+    expect(moveSection).toContain('Supabase path update failed');
+    expect(moveSection).toContain('Supabase path update affected no document row');
     expect(moveSection).toContain('plugin_ownership_path_expectation');
     expect(moveSection).toContain('path_exists');
     expect(moveSection).not.toContain('Document moved successfully');
