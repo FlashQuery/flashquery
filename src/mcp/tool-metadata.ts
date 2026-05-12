@@ -112,10 +112,10 @@ const D = {
     'move_document({ "identifier": "Notes/Draft.md", "destination": "Archive/Draft.md" })'
   ),
   listVault: description(
-    'List vault files and folders with optional metadata.',
-    'Use when you need to browse vault structure or inspect matching files without reading full bodies.',
+    'List vault files and folders as structured JSON with { path, total, displayed, truncated, entries } and optional include-gated metadata/tracking payloads.',
+    'Use when you need to browse vault structure, inspect matching files without reading full bodies, or request include:["metadata","tracking"] for directory counts and tracked document fields.',
     'Do not use when you need semantic or content search; use search instead.',
-    'list_vault({ "path": "Projects", "recursive": true })'
+    'list_vault({ "path": "Projects", "recursive": true, "include": ["metadata", "tracking"] })'
   ),
   search: description(
     'Search documents and memories through the consolidated search surface.',

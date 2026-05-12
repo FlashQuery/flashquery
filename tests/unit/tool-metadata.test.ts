@@ -94,6 +94,16 @@ describe('tool metadata registry', () => {
     expect(description).toMatch(/warnings/);
   });
 
+  it('documents list_vault structured entries and include-gated metadata/tracking output', () => {
+    const description = requireToolMetadata('list_vault').description;
+
+    expect(description).toContain('structured JSON');
+    expect(description).toContain('entries');
+    expect(description).toContain('metadata');
+    expect(description).toContain('tracking');
+    expect(description).toContain('include');
+  });
+
   it('expands delegated tiers from metadata', () => {
     expect(getToolNamesByTier('tier:read-only')).toEqual([
       'search_documents',

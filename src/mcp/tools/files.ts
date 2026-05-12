@@ -29,13 +29,11 @@ import {
 } from '../utils/path-validation.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
-import { formatFileSize } from '../utils/format-file-size.js';
 import { parseDateFilter } from '../utils/date-filter.js';
 import {
-  formatTableHeader,
-  formatTableRow,
-  formatKeyValueEntry,
-  joinBatchEntries,
+  jsonExpectedError,
+  jsonRuntimeError,
+  jsonToolResult,
 } from '../utils/response-formats.js';
 
 /**
@@ -347,14 +345,14 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
     'list_vault',
     {
       description:
-        'Browse vault contents at any path. Returns files, directories, or both (show parameter). Supports two output formats (table/detailed), recursive listing, extension and date filtering, DB-enriched metadata for tracked files, and real file sizes. Replaces list_files.',
+        'Browse vault contents at any path. Returns a structured JSON envelope with entries, counts, and optional include-gated metadata/tracking fields. Replaces list_files.',
       inputSchema: {
         path: z.string().optional().default('/')
           .describe('Vault-relative directory path to list. Default "/" lists the vault root.'),
         show: z.enum(['files', 'directories', 'all']).optional().default('all')
           .describe('Which entry types to include: "files", "directories", or "all" (default).'),
-        format: z.enum(['table', 'detailed']).optional().default('table')
-          .describe('Response format: "table" (compact markdown) or "detailed" (key-value blocks).'),
+        include: z.array(z.enum(['metadata', 'tracking'])).optional().default([])
+          .describe('Optional payload sections to include. "metadata" adds directory created/children fields. "tracking" adds tracked file title, tags, status, and fq_id.'),
         recursive: z.boolean().optional().default(false)
           .describe('Walk subdirectories recursively. Default false.'),
         extensions: z.array(z.string()).optional()
@@ -369,7 +367,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           .describe('Maximum number of results to return. Default 200.'),
       },
     },
-    async ({ path, show, format, recursive, extensions, after, before, date_field, limit }) => {
+    async ({ path, show, include, recursive, extensions, after, before, date_field, limit }) => {
       // ── Step 0: Shutdown check ──────────────────────────────────────────────
       if (getIsShuttingDown()) {
         return {
@@ -380,6 +378,19 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
 
       try {
         const vaultRoot = config.instance.vault.path;
+        const includeValues = Array.isArray(include) ? include : [];
+        const invalidInclude = includeValues.find(
+          (value): value is string => value !== 'metadata' && value !== 'tracking'
+        );
+        if (invalidInclude !== undefined) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: `Invalid include value "${invalidInclude}". Expected one of: metadata, tracking.`,
+            details: { field: 'include', allowed: ['metadata', 'tracking'] },
+          });
+        }
+        const includeMetadata = includeValues.includes('metadata');
+        const includeTracking = includeValues.includes('tracking');
 
         // ── Step 1: Path validation — vault root bypass (Pitfall 1) ────────────
         // normalizePath('/') → '' (empty); validateVaultPath rejects empty paths (correct for
@@ -392,10 +403,12 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         } else {
           const validation = await validateVaultPath(vaultRoot, normalizedInput);
           if (!validation.valid) {
-            return {
-              content: [{ type: 'text' as const, text: `Invalid path: ${validation.error}` }],
-              isError: true,
-            };
+            return jsonExpectedError({
+              error: 'invalid_input',
+              message: `Invalid path: ${validation.error}`,
+              identifier: normalizedInput,
+              details: { field: 'path' },
+            });
           }
           absTargetPath = validation.absPath;
         }
@@ -407,20 +420,22 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         if (after) {
           const ts = parseDateFilter(after);
           if (ts === null) {
-            return {
-              content: [{ type: 'text' as const, text: `Invalid date format: "${after}". Use ISO format (YYYY-MM-DD) or relative format (7d, 24h, 1w).` }],
-              isError: true,
-            };
+            return jsonExpectedError({
+              error: 'invalid_input',
+              message: `Invalid date format: "${after}". Use ISO format (YYYY-MM-DD) or relative format (7d, 24h, 1w).`,
+              details: { field: 'after' },
+            });
           }
           afterTs = ts;
         }
         if (before) {
           const ts = parseDateFilter(before);
           if (ts === null) {
-            return {
-              content: [{ type: 'text' as const, text: `Invalid date format: "${before}". Use ISO format (YYYY-MM-DD) or relative format (7d, 24h, 1w).` }],
-              isError: true,
-            };
+            return jsonExpectedError({
+              error: 'invalid_input',
+              message: `Invalid date format: "${before}". Use ISO format (YYYY-MM-DD) or relative format (7d, 24h, 1w).`,
+              details: { field: 'before' },
+            });
           }
           beforeTs = ts;
         }
@@ -431,18 +446,22 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           targetStat = await stat(absTargetPath);
         } catch (e) {
           if ((e as NodeJS.ErrnoException).code === 'ENOENT') {
-            return {
-              content: [{ type: 'text' as const, text: `Path not found: "${normalizedInput || '/'}". Use list_vault with an existing directory path.` }],
-              isError: true,
-            };
+            return jsonExpectedError({
+              error: 'not_found',
+              message: `Path not found: "${normalizedInput || '/'}". Use list_vault with an existing directory path.`,
+              identifier: normalizedInput || '/',
+              details: { kind: 'directory' },
+            });
           }
           throw e;
         }
         if (!targetStat.isDirectory()) {
-          return {
-            content: [{ type: 'text' as const, text: `"${normalizedInput}" is a file, not a directory. list_vault requires a directory path.` }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: `"${normalizedInput}" is a file, not a directory. list_vault requires a directory path.`,
+            identifier: normalizedInput,
+            details: { field: 'path', reason: 'not_directory' },
+          });
         }
 
         // ── Step 4: D-09 — extensions with show="directories" is a debug log ──
@@ -646,120 +665,59 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         const displayedEntries = truncated ? sortedEntries.slice(0, actualLimit) : sortedEntries;
         const displayed = displayedEntries.length;
 
-        // ── Step 13: Handle empty results ────────────────────────────────────────
         const displayPath = normalizedInput; // '' for vault root
-        if (displayed === 0) {
-          const emptyMsg =
-            show === 'files' ? `No files found in "${displayPath || '/'}".\n` :
-            show === 'directories' ? `No directories found in "${displayPath || '/'}".\n` :
-            `No entries found in "${displayPath || '/'}".\n`;
-          const summaryLine = `Showing 0 of 0 entries in ${displayPath || '/'}.`;
-          return {
-            content: [{ type: 'text' as const, text: `${emptyMsg}${summaryLine}` }],
-            isError: false,
+        // ── Step 13: Structured JSON envelope ─────────────────────────────────
+        const entries = displayedEntries.map((entry) => {
+          if (entry.kind === 'dir') {
+            const childCount = entry.childCount ?? 0;
+            const output: Record<string, unknown> = {
+              name: entry.name,
+              path: entry.relativePath,
+              type: 'directory',
+              modified: new Date(entry.mtimeMs).toISOString(),
+              size: { entries: childCount },
+            };
+            if (includeMetadata) {
+              output.created = new Date(entry.birthtimeMs).toISOString();
+              output.children = childCount;
+            }
+            return output;
+          }
+
+          const row = dbRecordMap.get(entry.relativePath);
+          const output: Record<string, unknown> = {
+            name: entry.name,
+            path: entry.relativePath,
+            type: 'file',
+            modified: row?.updated_at ?? new Date(entry.mtimeMs).toISOString(),
+            size: { chars: entry.size },
           };
-        }
-
-        // ── Step 14: Serialize (format: "table" or "detailed") ──────────────────
-        let bodyText: string;
-
-        if (format === 'detailed') {
-          const entryStrings: string[] = [];
-          for (const entry of displayedEntries) {
-            if (entry.kind === 'dir') {
-              const childCount = entry.childCount ?? 0;
-              const mtimeStr = new Date(entry.mtimeMs).toISOString();
-              const btimeStr = new Date(entry.birthtimeMs).toISOString();
-              const dirStr = [
-                formatKeyValueEntry('Path', `${entry.relativePath}/`),
-                formatKeyValueEntry('Type', 'directory'),
-                formatKeyValueEntry('Size', `${childCount} items`),
-                formatKeyValueEntry('Children', String(childCount)),
-                formatKeyValueEntry('Updated', mtimeStr),
-                formatKeyValueEntry('Created', btimeStr),
-              ].join('\n');
-              entryStrings.push(dirStr);
-            } else {
-              const row = dbRecordMap.get(entry.relativePath);
-              if (row) {
-                // Tracked file: Title → Path → Type → Size → Status → Tags → Updated → Created → fqc_id
-                const trackedStr = [
-                  formatKeyValueEntry('Title', row.title ?? ''),
-                  formatKeyValueEntry('Path', entry.relativePath),
-                  formatKeyValueEntry('Type', 'file'),
-                  formatKeyValueEntry('Size', formatFileSize(entry.size)),
-                  formatKeyValueEntry('Status', row.status ?? ''),
-                  formatKeyValueEntry('Tags', row.tags?.join(', ') ?? ''),
-                  formatKeyValueEntry('Updated', row.updated_at ?? ''),
-                  formatKeyValueEntry('Created', row.created_at ?? ''),
-                  formatKeyValueEntry('fqc_id', row.id),
-                ].join('\n');
-                entryStrings.push(trackedStr);
-              } else {
-                // Untracked file: Path → Type → Size → Tracked → Updated → Created
-                const untrackedStr = [
-                  formatKeyValueEntry('Path', entry.relativePath),
-                  formatKeyValueEntry('Type', 'file'),
-                  formatKeyValueEntry('Size', formatFileSize(entry.size)),
-                  formatKeyValueEntry('Tracked', 'false'),
-                  formatKeyValueEntry('Updated', new Date(entry.mtimeMs).toISOString()),
-                  formatKeyValueEntry('Created', new Date(entry.birthtimeMs).toISOString()),
-                ].join('\n');
-                entryStrings.push(untrackedStr);
-              }
-            }
+          if (includeMetadata) {
+            output.created = row?.created_at ?? new Date(entry.birthtimeMs).toISOString();
           }
-          bodyText = joinBatchEntries(entryStrings);
-        } else {
-          // format === 'table' (default)
-          const rows: string[] = [formatTableHeader()];
-          for (const entry of displayedEntries) {
-            if (entry.kind === 'dir') {
-              const childCount = entry.childCount ?? 0;
-              const nameCol = recursive ? `${entry.relativePath}/` : `${entry.name}/`;
-              const createdCol = new Date(entry.birthtimeMs).toISOString().slice(0, 10);
-              const updatedCol = new Date(entry.mtimeMs).toISOString().slice(0, 10);
-              rows.push(formatTableRow(nameCol, 'directory', `${childCount} items`, createdCol, updatedCol));
-            } else {
-              const row = dbRecordMap.get(entry.relativePath);
-              const nameCol = recursive ? entry.relativePath : entry.name;
-              if (row) {
-                const createdCol = row.created_at ? row.created_at.slice(0, 10) : new Date(entry.birthtimeMs).toISOString().slice(0, 10);
-                const updatedCol = row.updated_at ? row.updated_at.slice(0, 10) : new Date(entry.mtimeMs).toISOString().slice(0, 10);
-                rows.push(formatTableRow(nameCol, 'file', formatFileSize(entry.size), createdCol, updatedCol));
-              } else {
-                const createdCol = new Date(entry.birthtimeMs).toISOString().slice(0, 10);
-                const updatedCol = new Date(entry.mtimeMs).toISOString().slice(0, 10);
-                rows.push(formatTableRow(nameCol, 'file', formatFileSize(entry.size), createdCol, updatedCol));
-              }
-            }
+          if (includeTracking && row) {
+            output.title = row.title ?? '';
+            output.tags = row.tags ?? [];
+            output.status = row.status ?? '';
+            output.fq_id = row.id;
           }
-          bodyText = rows.join('\n');
-        }
+          return output;
+        });
 
-        // ── Step 15: Trailing notes (LIST-11) ──────────────────────────────────
-        const summaryLine = truncated
-          ? `Showing ${actualLimit} of ${total} entries (truncated). Use a narrower path, date filter, or higher limit to see more.`
-          : `Showing ${displayed} of ${total} entries in ${displayPath}/.`;
-
-        const untrackedCount = displayedEntries.filter(
-          e => e.kind === 'file' && !dbRecordMap.has(e.relativePath)
-        ).length;
-        const untrackedNote = untrackedCount > 0
-          ? `\n${untrackedCount} untracked file(s) included — dates are filesystem-reported and may be less reliable than DB timestamps for tracked files.`
-          : '';
-
-        const fullText = `${bodyText}\n${summaryLine}${untrackedNote}`;
+        const payload = {
+          path: displayPath || '/',
+          total,
+          displayed,
+          truncated,
+          entries,
+        };
 
         logger.info(`list_vault: listed ${displayed} entries in "${displayPath || '/'}"`);
-        return {
-          content: [{ type: 'text' as const, text: fullText }],
-          isError: false,
-        };
+        return { ...jsonToolResult(payload), isError: false };
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`list_vault failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       }
     }
   );

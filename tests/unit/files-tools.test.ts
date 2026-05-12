@@ -147,7 +147,7 @@ async function callCreateDirectory({
 async function callListVault(params: {
   path?: string;
   show?: 'files' | 'directories' | 'all';
-  format?: 'table' | 'detailed';
+  include?: Array<'metadata' | 'tracking'>;
   recursive?: boolean;
   extensions?: string[];
   after?: string;
@@ -169,6 +169,16 @@ async function callListVault(params: {
   const listVaultHandler = handlers[1];
   if (!listVaultHandler) throw new Error('list_vault handler not registered (expected handlers[1])');
   return listVaultHandler(params as Record<string, unknown>);
+}
+
+function parseListVault(result: ToolResult) {
+  return JSON.parse(result.content[0].text) as {
+    path: string;
+    total: number;
+    displayed: number;
+    truncated: boolean;
+    entries: Array<Record<string, unknown>>;
+  };
 }
 
 /**
@@ -439,13 +449,14 @@ describe('list_vault handler', () => {
 
   // ── U-35: non-existent path ───────────────────────────────────────────────────
 
-  it('U-35: returns isError:true when target path does not exist (ENOENT)', async () => {
+  it('U-35: returns expected not_found JSON when target path does not exist (ENOENT)', async () => {
     vi.mocked(stat).mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
     const result = await callListVault({ path: 'nonexistent/dir' });
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('not found');
+    expect(result.isError).toBe(false);
+    expect(payload).toMatchObject({ error: 'not_found', identifier: 'nonexistent/dir' });
   });
 
   // ── U-36: invalid after date ──────────────────────────────────────────────────
@@ -453,9 +464,11 @@ describe('list_vault handler', () => {
   it('U-36: returns isError:true with date format error for invalid after date string', async () => {
     const result = await callListVault({ after: 'not-a-date' });
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Invalid date format: "not-a-date"');
-    expect(result.content[0].text).toContain('YYYY-MM-DD');
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(result.isError).toBe(false);
+    expect(payload).toMatchObject({ error: 'invalid_input' });
+    expect(payload.message).toContain('Invalid date format: "not-a-date"');
+    expect(payload.message).toContain('YYYY-MM-DD');
   });
 
   // ── U-37: invalid before date ─────────────────────────────────────────────────
@@ -463,8 +476,10 @@ describe('list_vault handler', () => {
   it('U-37: returns isError:true with date format error for invalid before date string', async () => {
     const result = await callListVault({ before: 'bad' });
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Invalid date format: "bad"');
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(result.isError).toBe(false);
+    expect(payload).toMatchObject({ error: 'invalid_input' });
+    expect(payload.message).toContain('Invalid date format: "bad"');
   });
 
   // ── U-38: show='files' filters out directories ────────────────────────────────
@@ -566,9 +581,9 @@ describe('list_vault handler', () => {
     expect(subdirPos).toBeLessThan(notesPos); // directories before files
   });
 
-  // ── U-41: format='table' includes table header ────────────────────────────────
+  // ── U-41: default output is structured JSON ──────────────────────────────────
 
-  it('U-41: format="table" response text contains table header "| Name | Type | Size | Created | Updated |"', async () => {
+  it('U-41: default response text is parseable JSON with entries', async () => {
     vi.mocked(readdir).mockResolvedValue([makeDirent('notes.md', false)]);
     vi.mocked(stat)
       .mockResolvedValueOnce({
@@ -586,15 +601,16 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', format: 'table' });
+    const result = await callListVault({ path: '/' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('| Name | Type | Size | Created | Updated |');
+    expect(payload.entries[0]).toMatchObject({ name: 'notes.md', type: 'file', size: { chars: 500 } });
   });
 
-  // ── U-42: format='detailed' does NOT include table header ────────────────────
+  // ── U-42: legacy table header is absent ──────────────────────────────────────
 
-  it('U-42: format="detailed" response text does NOT contain table header "| Name |"', async () => {
+  it('U-42: structured JSON response text does NOT contain table header "| Name |"', async () => {
     vi.mocked(readdir).mockResolvedValue([makeDirent('notes.md', false)]);
     vi.mocked(stat)
       .mockResolvedValueOnce({
@@ -612,7 +628,7 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', format: 'detailed' });
+    const result = await callListVault({ path: '/' });
 
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).not.toContain('| Name |');
@@ -627,9 +643,9 @@ describe('list_vault handler', () => {
     expect(result.isError).toBeFalsy();
   });
 
-  // ── U-54: directory entry size column reads 'N items' ────────────────────────
+  // ── U-54: directory entry size reads entries count ───────────────────────────
 
-  it('U-54: directory entry in table format shows "N items" in size column matching readdir child count', async () => {
+  it('U-54: directory entry in JSON has size.entries matching readdir child count', async () => {
     // Target path has one subdirectory
     vi.mocked(readdir)
       .mockResolvedValueOnce([makeDirent('projects', true)]) // target path contents
@@ -654,15 +670,16 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'directories', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'directories' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('3 items');
+    expect(payload.entries[0]).toMatchObject({ size: { entries: 3 } });
   });
 
-  // ── U-55: file entry size column reads formatted file size ────────────────────
+  // ── U-55: file entry size reads chars ────────────────────────────────────────
 
-  it('U-55: file entry in table format shows formatted file size from stat().size', async () => {
+  it('U-55: file entry in JSON uses size.chars from stat().size', async () => {
     vi.mocked(readdir).mockResolvedValue([makeDirent('report.md', false)]);
     vi.mocked(stat)
       .mockResolvedValueOnce({
@@ -680,10 +697,11 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'files', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'files' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('2.3 KB');
+    expect(payload.entries[0]).toMatchObject({ size: { chars: 2340 } });
   });
 
   // ── U-56: children count for directory matches readdir() call on that directory path ─
@@ -709,15 +727,16 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'directories', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'directories' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('2 items');
+    expect(payload.entries[0]).toMatchObject({ size: { entries: 2 } });
   });
 
-  // ── U-57: untracked file in results → trailing note contains 'untracked file(s) included' ──
+  // ── U-57: untracked file in results omits tracking filler ───────────────────
 
-  it('U-57: untracked file in results → trailing note contains "untracked file(s) included"', async () => {
+  it('U-57: untracked file in results omits tracking fields', async () => {
     vi.mocked(readdir).mockResolvedValue([makeDirent('untracked.md', false)]);
     vi.mocked(stat)
       .mockResolvedValueOnce({
@@ -737,9 +756,11 @@ describe('list_vault handler', () => {
 
     // supabaseManager returns empty data — no tracked files
     const result = await callListVault({ path: '/', show: 'files' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('untracked file(s) included');
+    expect(payload.entries[0]).not.toHaveProperty('title');
+    expect(payload.entries[0]).not.toHaveProperty('fq_id');
   });
 
   // ── U-58: all files tracked → no untracked note ───────────────────────────────
@@ -806,7 +827,7 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'directories', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'directories' });
 
     expect(result.isError).toBeFalsy();
     const text = result.content[0].text;
@@ -876,7 +897,7 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'all', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'all' });
 
     expect(result.isError).toBeFalsy();
     const text = result.content[0].text;
