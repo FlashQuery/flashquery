@@ -28,6 +28,7 @@ import {
   buildRecordResult,
   parseRecordInclude,
   type PendingReviewPublicRow,
+  type RecordRow,
   type RecordResult,
   type RecordInclude,
 } from '../utils/record-output.js';
@@ -167,6 +168,13 @@ function isNotFoundDbError(error: { message?: string; code?: string } | null | u
   return message.includes('no rows') || message.includes('0 rows') || message.includes('not found');
 }
 
+function asRecordRows(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((row): row is Record<string, unknown> =>
+    row !== null && typeof row === 'object' && !Array.isArray(row)
+  );
+}
+
 function buildSearchEnvelope(input: {
   plugin_id?: string;
   table?: string;
@@ -181,8 +189,8 @@ function buildSearchEnvelope(input: {
 }): Record<string, unknown> {
   const results = input.rows.map((row) => {
     const result = buildRecordResult(
-      row as { id: string; created_at: string; updated_at: string; [key: string]: unknown },
-      { plugin_id: (row.plugin_id as string | undefined) ?? input.plugin_id ?? '', table: (row.table as string | undefined) ?? input.table ?? '', tableSpec: input.tableSpec },
+      row as RecordRow,
+      { plugin_id: typeof row.plugin_id === 'string' ? row.plugin_id : input.plugin_id ?? '', table: typeof row.table === 'string' ? row.table : input.table ?? '', tableSpec: input.tableSpec },
       input.include
     ) as RecordResult & { score?: number };
     if (input.semantic && typeof row.similarity === 'number') {
@@ -267,8 +275,8 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         }
 
         const supabase = supabaseManager.getClient();
-        const effectiveInclude = parseRecordInclude(include as RecordInclude[] | undefined, 'write');
-        const recordData = data as Record<string, unknown>;
+        const effectiveInclude = parseRecordInclude(include, 'write');
+        const recordData = data;
         const now = new Date().toISOString();
 
         let row: Record<string, unknown> | null;
@@ -296,7 +304,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           const updateResult = (await supabase
             .from(resolved.fullTableName)
             .update({ ...recordData, updated_at: now })
-            .eq('id', id as string)
+            .eq('id', id)
             .eq('instance_id', config.instance.id)
             .select('*')
             .single()) as { data: Record<string, unknown> | null; error: { message: string; code?: string } | null };
@@ -304,14 +312,14 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             if (!isNotFoundDbError(updateResult.error)) {
               return jsonRuntimeError(updateResult.error?.message ?? 'Update returned no data');
             }
-            return jsonExpectedError(recordNotFoundEnvelope(id as string, plugin_id, table));
+            return jsonExpectedError(recordNotFoundEnvelope(id, plugin_id, table));
           }
           row = updateResult.data;
 
           if (resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
             fireAndForgetEmbed(
               resolved.fullTableName,
-              id as string,
+              id,
               row,
               resolved.tableSpec.embed_fields,
               config.supabase.databaseUrl
@@ -323,7 +331,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const payload = addPendingReviewPayload(
           addReconciliationPayload(
             buildRecordResult(
-              row as { id: string; created_at: string; updated_at: string; [key: string]: unknown },
+              row as RecordRow,
               { plugin_id, table, tableSpec: resolved.tableSpec },
               effectiveInclude
             ),
@@ -332,7 +340,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           buildPendingReviewPayload(pendingItems)
         );
 
-        logger.info(`write_record: ${mode} ${payload.id} in ${resolved.fullTableName}`);
+        logger.info(`write_record: ${mode} ${String(payload.id)} in ${resolved.fullTableName}`);
         return jsonToolResult(payload);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -511,7 +519,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             buildRecordResult(
               data as { id: string; created_at: string; updated_at: string; [key: string]: unknown },
               { plugin_id, table, tableSpec },
-              parseRecordInclude(include as RecordInclude[] | undefined, 'get')
+              parseRecordInclude(include, 'get')
             ),
             reconciliation
           ),
@@ -729,7 +737,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
 
             const payload = addReconciliationPayload(
               buildRecordResult(
-                updateResult.data as { id: string; created_at: string; updated_at: string; [key: string]: unknown },
+                updateResult.data as RecordRow,
                 { plugin_id: target.plugin_id, table: target.table, tableSpec },
                 []
               ),
@@ -807,7 +815,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
       try {
         // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
-        const effectiveInclude = parseRecordInclude(include as RecordInclude[] | undefined, 'search');
+        const effectiveInclude = parseRecordInclude(include, 'search');
         const maxResults = limit ?? 10;
 
         if (taggable_tables_only === true) {
@@ -842,7 +850,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
               logger.warn(`search_records taggable query failed for ${fullTableName}: ${error.message}`);
               continue;
             }
-            rows.push(...(data ?? []).map((row) => ({
+            rows.push(...asRecordRows(data).map((row) => ({
               ...row,
               plugin_id: item.entry.plugin_id,
               table: item.tableSpec.name,
@@ -850,11 +858,11 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           }
 
           return jsonToolResult(buildSearchEnvelope({
-            query: query as string | undefined,
-            tag: tag as string | undefined,
+            query,
+            tag,
             rows: rows.slice(0, maxResults),
             include: effectiveInclude,
-            tableSpec: taggable[0]!.tableSpec,
+            tableSpec: taggable[0].tableSpec,
           }));
         }
 
@@ -882,6 +890,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         );
 
         const hasQuery = typeof query === 'string' && query.length > 0;
+        const queryText = typeof query === 'string' ? query : '';
         const hasEmbedFields = tableSpec.embed_fields && tableSpec.embed_fields.length > 0;
 
         // ── Filters-only path (no query) ──────────────────────────────────
@@ -905,17 +914,17 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             return jsonRuntimeError(error.message);
           }
 
-          const rows = data ?? [];
+          const rows = asRecordRows(data);
           logger.info(
             `search_records: filters-only found ${rows.length} record(s) in ${fullTableName}`
           );
-          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, reconciliation }));
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, reconciliation }));
         }
 
         // ── Semantic path (query + embed_fields) ──────────────────────────
         if (hasEmbedFields) {
           // TODO LOG-01: Add timing to record queries (high-value: identifies slow DB operations)
-          const queryEmbedding = await embeddingProvider.embed(query);
+          const queryEmbedding = await embeddingProvider.embed(queryText);
           const escapedTable = pg.escapeIdentifier(fullTableName);
           const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
           try {
@@ -947,11 +956,11 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             `;
 
             const result = await pgClient.query(sql, params);
-            const rows = result.rows ?? [];
+            const rows = asRecordRows(result.rows);
             logger.info(
               `search_records: semantic found ${rows.length} record(s) in ${fullTableName}`
             );
-            return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, semantic: true, reconciliation }));
+            return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, semantic: true, reconciliation }));
           } finally {
             await pgClient.end();
           }
@@ -977,15 +986,15 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           if (error) {
             return jsonRuntimeError(error.message);
           }
-          const rows = data ?? [];
-          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, reconciliation }));
+          const rows = asRecordRows(data);
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, reconciliation }));
         }
 
         const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
         try {
           await pgClient.connect();
 
-          const params: unknown[] = [`%${query}%`, config.instance.id, maxResults];
+          const params: unknown[] = [`%${queryText}%`, config.instance.id, maxResults];
           const ilikeConditions = textColumns
             .map((col) => `${pg.escapeIdentifier(col)} ILIKE $1`)
             .join(' OR ');
@@ -1010,9 +1019,9 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           `;
 
           const result = await pgClient.query(sql, params);
-          const rows = result.rows ?? [];
+          const rows = asRecordRows(result.rows);
           logger.info(`search_records: ILIKE found ${rows.length} record(s) in ${fullTableName}`);
-          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query: query as string | undefined, tag: tag as string | undefined, rows, include: effectiveInclude, tableSpec, reconciliation }));
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, reconciliation }));
         } finally {
           await pgClient.end();
         }

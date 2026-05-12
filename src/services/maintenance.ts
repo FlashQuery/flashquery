@@ -255,7 +255,12 @@ async function runBackgroundJob(config: FlashQueryConfig, jobId: string): Promis
   if (maintenanceInProgress) {
     job.status = 'failed';
     job.finished_at = new Date().toISOString();
-    job.error = maintenanceConflict().error;
+    job.error = {
+      error: 'conflict',
+      message: 'A vault maintenance operation is already running',
+      identifier: 'maintain_vault',
+      details: { reason: 'maintenance_in_progress' },
+    };
     return;
   }
 

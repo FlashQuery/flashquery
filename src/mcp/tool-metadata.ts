@@ -406,25 +406,6 @@ function current(
   };
 }
 
-function future(
-  name: string,
-  categories: ToolCategory[],
-  tier: ToolTier,
-  toolDescription: string,
-  hardExcludedReason?: string
-): ToolMetadata {
-  return {
-    name,
-    status: 'final',
-    categories,
-    tier,
-    hostEligible: false,
-    delegatedEligible: false,
-    ...(hardExcludedReason === undefined ? {} : { delegatedHardExcludedReason: hardExcludedReason }),
-    description: toolDescription,
-  };
-}
-
 function dead(name: string, categories: ToolCategory[], toolDescription: string): ToolMetadata {
   return {
     name,

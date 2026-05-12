@@ -99,7 +99,9 @@ function validateDataFields(
       }, targetIdentifier(input));
     }
     if (!allowedFields.has(field)) {
-      return invalidInput(`Unknown field '${field}' for ${input.plugin_id}.${input.table}`, {
+      const pluginId = typeof input.plugin_id === 'string' ? input.plugin_id : String(input.plugin_id);
+      const tableName = typeof input.table === 'string' ? input.table : String(input.table);
+      return invalidInput(`Unknown field '${field}' for ${pluginId}.${tableName}`, {
         field,
         plugin_id: input.plugin_id,
         table: input.table,
