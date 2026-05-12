@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { documentRemovalResult } from '../../src/mcp/utils/response-formats.js';
-import { FM } from '../../src/constants/frontmatter-fields.js';
 
 describe('remove_document JSON contract', () => {
   it('returns archived document identification with top-level removal feedback', () => {
@@ -42,7 +41,7 @@ describe('remove_document JSON contract', () => {
     expect(source).toContain('moved_to');
     expect(source).toContain('archived_at');
     expect(source).toContain('basename');
-    expect(source).toContain(FM.ORIGINAL_PATH);
+    expect(source).toContain('FM.ORIGINAL_PATH');
   });
 
   it('rejects unsafe trash paths without introducing removed schema fields', () => {

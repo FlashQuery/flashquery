@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { createHash } from 'node:crypto';
 import { readdir, readFile, stat, rename, mkdir, writeFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, relative, extname, normalize, dirname, basename, resolve } from 'node:path';
+import { join, relative, extname, normalize, dirname, basename, resolve, isAbsolute } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -30,6 +30,7 @@ import {
   jsonRuntimeError,
   jsonToolResult,
   documentArchiveResult,
+  documentRemovalResult,
   documentIdentification,
   withWarnings,
   type ErrorEnvelope,
@@ -72,6 +73,80 @@ function isDocumentNotFoundError(err: unknown): err is Error {
 
 function isAmbiguousDocumentIdentifierError(err: unknown): err is Error & { matches?: unknown } {
   return err instanceof Error && err.name === 'AmbiguousDocumentIdentifierError';
+}
+
+interface TrashDestination {
+  absPath: string;
+  responsePath: string;
+}
+
+function isPathInside(parent: string, child: string): boolean {
+  const rel = relative(resolve(parent), resolve(child));
+  return rel === '' || (!rel.startsWith('..') && rel !== '..' && !isAbsolute(rel));
+}
+
+function toVaultRelative(vaultRoot: string, absPath: string): string | null {
+  if (!isPathInside(vaultRoot, absPath)) return null;
+  return relative(resolve(vaultRoot), resolve(absPath)).replace(/\\/g, '/');
+}
+
+function compactTimestamp(date = new Date()): string {
+  return date.toISOString().replace(/[:.]/g, '-');
+}
+
+function resolveTrashRoot(vaultRoot: string, trashPath: string): { absPath: string } | ErrorEnvelope {
+  const trimmed = trashPath.trim();
+  if (trimmed === '') {
+    return {
+      error: 'invalid_input',
+      message: 'trash_folder.path must not be empty.',
+      details: { reason: 'unsafe_trash' },
+    };
+  }
+
+  if (!isAbsolute(trimmed)) {
+    const normalized = normalize(trimmed).replace(/\\/g, '/');
+    if (normalized === '..' || normalized.startsWith('../')) {
+      return {
+        error: 'invalid_input',
+        message: 'trash_folder.path escapes the vault root.',
+        details: { reason: 'path_traversal' },
+      };
+    }
+    return { absPath: resolve(vaultRoot, normalized) };
+  }
+
+  return { absPath: resolve(trimmed) };
+}
+
+function buildTrashDestination(
+  vaultRoot: string,
+  sourceRelativePath: string,
+  trashRootAbsPath: string,
+  collisionStrategy: 'suffix' | 'timestamp'
+): TrashDestination {
+  const sourceBase = basename(sourceRelativePath);
+  const ext = extname(sourceBase);
+  const stem = ext ? sourceBase.slice(0, -ext.length) : sourceBase;
+  let candidate = join(trashRootAbsPath, sourceBase);
+
+  if (existsSync(candidate)) {
+    if (collisionStrategy === 'timestamp') {
+      candidate = join(trashRootAbsPath, `${stem}-${compactTimestamp()}${ext}`);
+    } else {
+      let index = 1;
+      do {
+        candidate = join(trashRootAbsPath, `${stem}-${index}${ext}`);
+        index += 1;
+      } while (existsSync(candidate));
+    }
+  }
+
+  const vaultRelative = toVaultRelative(vaultRoot, candidate);
+  return {
+    absPath: candidate,
+    responsePath: vaultRelative ?? candidate,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1394,6 +1469,198 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`archive_document failed - ${msg}`);
         return jsonRuntimeError(msg);
+      }
+    }
+  );
+
+  // ─── Tool: remove_document (DOC-09) ───────────────────────────────────────
+
+  server.registerTool(
+    'remove_document',
+    {
+      description:
+        'Remove documents from their current vault path, archiving their FlashQuery lifecycle state first. Use this when a document should no longer appear in normal vault workflows and should either be hard-deleted or moved to the configured trash folder.\n\n' +
+        'Pass identifiers as a single document identifier or an array. If trash_folder is enabled, files move to the configured trash folder using basename-only destinations and collision handling. If trash_folder is disabled, files are physically deleted. Batch responses preserve input order and report per-document errors.\n\n' +
+        'Do not use this for reversible archive-only workflows; use archive_document. Do not expect a restore or trash lifecycle API from this tool. Do not use it for directories; use manage_directory for empty directory removal.\n\n' +
+        'Example: remove_document({ "identifiers": ["Notes/old-plan.md", "Scratch/temp.md"] })',
+      inputSchema: {
+        identifiers: z
+          .union([z.string(), z.array(z.string())])
+          .describe('One or more document identifiers: path, fq_id, or filename.'),
+      },
+    },
+    async ({ identifiers }) => {
+      if (getIsShuttingDown()) {
+        return {
+          content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed' }],
+          isError: true,
+        };
+      }
+
+      if (config.locking.enabled) {
+        const locked = await acquireLock(
+          supabaseManager.getClient(),
+          config.instance.id,
+          'documents',
+          { ttlSeconds: config.locking.ttlSeconds }
+        );
+        if (!locked) {
+          return jsonExpectedError({
+            error: 'conflict',
+            message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+            details: { reason: 'lock_contention' },
+          });
+        }
+      }
+
+      try {
+        const supabase = supabaseManager.getClient();
+        const vaultRoot = config.instance.vault.path;
+        const isBatch = Array.isArray(identifiers);
+        const ids = isBatch ? identifiers : [identifiers];
+        const results: Array<Record<string, unknown>> = [];
+        const warnings = ids.length > 5 ? [`bulk_removal: ${ids.length} items`] : [];
+        const trashRoot = config.trashFolder.enabled
+          ? resolveTrashRoot(vaultRoot, config.trashFolder.path)
+          : null;
+
+        for (const id of ids) {
+          try {
+            if (typeof id !== 'string' || id.trim() === '') {
+              results.push({
+                error: 'invalid_input',
+                message: 'Document identifier must be a non-empty string.',
+                identifier: String(id),
+              });
+              continue;
+            }
+
+            if (trashRoot && 'error' in trashRoot) {
+              results.push({
+                ...trashRoot,
+                identifier: id,
+              });
+              continue;
+            }
+
+            const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
+            const relativePath = resolved.relativePath;
+            const parsed = await vaultManager.readMarkdown(relativePath);
+            const existingArchivedAt =
+              typeof parsed.data[FM.ARCHIVED_AT] === 'string' && parsed.data[FM.ARCHIVED_AT].length > 0
+                ? parsed.data[FM.ARCHIVED_AT]
+                : null;
+            const archivedAt = existingArchivedAt ?? new Date().toISOString();
+            const title = typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] : relativePath;
+
+            const archivedFm: Record<string, unknown> = {
+              ...parsed.data,
+              [FM.STATUS]: 'archived',
+              [FM.ARCHIVED_AT]: archivedAt,
+            };
+            if (config.trashFolder.enabled) {
+              archivedFm[FM.ORIGINAL_PATH] = relativePath;
+            }
+
+            const serialized = matter.stringify(parsed.content, archivedFm);
+            const newContentHash = computeHash(serialized);
+            const preScan = await targetedScan(config, supabase, resolved, newContentHash, logger);
+            const fqcId = resolved.fqcId ?? preScan.capturedFrontmatter.fqcId;
+            archivedFm[FM.ID] = fqcId;
+
+            await vaultManager.writeMarkdown(relativePath, archivedFm, parsed.content);
+
+            const updatedAt = new Date().toISOString();
+            const { data: updatedRow, error: updateError } = await supabase
+              .from('fqc_documents')
+              .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
+              .eq('id', fqcId)
+              .eq('instance_id', config.instance.id)
+              .select('id')
+              .maybeSingle();
+            if (updateError) {
+              throw new Error(`Supabase removal archive update failed for ${relativePath}: ${updateError.message}`);
+            }
+            if (!updatedRow) {
+              throw new Error(`Supabase removal archive update affected no document row for ${relativePath}`);
+            }
+
+            const archivedStats = await stat(join(vaultRoot, relativePath));
+            const baseResult = {
+              identifier: id,
+              title,
+              path: relativePath,
+              fq_id: fqcId,
+              modified: archivedStats.mtime.toISOString(),
+              chars: parsed.content.length,
+              archived_at: archivedAt,
+              removed: true as const,
+            };
+
+            if (config.trashFolder.enabled) {
+              const activeTrashRoot = trashRoot as { absPath: string };
+              const trashDestination = buildTrashDestination(
+                vaultRoot,
+                relativePath,
+                activeTrashRoot.absPath,
+                config.trashFolder.collisionStrategy
+              );
+              await vaultManager.moveMarkdownToTrash(relativePath, trashDestination.absPath, {
+                gitTitle: title,
+              });
+              results.push(documentRemovalResult({
+                ...baseResult,
+                moved_to: trashDestination.responsePath,
+                original_path: relativePath,
+              }));
+            } else {
+              await vaultManager.removeMarkdown(relativePath, { gitTitle: title });
+              results.push(documentRemovalResult(baseResult));
+            }
+          } catch (itemErr) {
+            if (isDocumentNotFoundError(itemErr)) {
+              results.push({
+                error: 'not_found',
+                message: `No document matches identifier '${id}'`,
+                identifier: id,
+              });
+              continue;
+            }
+
+            if (isAmbiguousDocumentIdentifierError(itemErr)) {
+              results.push({
+                error: 'ambiguous_identifier',
+                message: itemErr.message,
+                identifier: id,
+                details: { matches: itemErr.matches },
+              });
+              continue;
+            }
+
+            const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
+            if (!isBatch) {
+              throw itemErr;
+            }
+            results.push({
+              error: 'runtime_error',
+              message: msg,
+              identifier: id,
+            });
+          }
+        }
+
+        if (isBatch) {
+          return jsonToolResult(withWarnings({ results }, warnings));
+        }
+        return jsonToolResult(results[0]);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.error(`remove_document failed - ${msg}`);
+        return jsonRuntimeError(msg);
+      } finally {
+        if (config.locking.enabled) {
+          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
+        }
       }
     }
   );
