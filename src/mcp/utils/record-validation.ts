@@ -24,12 +24,28 @@ export interface WriteRecordValidationInput {
   data?: unknown;
 }
 
-function invalidInput(message: string, details?: Record<string, unknown>): ErrorEnvelope {
+function invalidInput(
+  message: string,
+  details?: Record<string, unknown>,
+  identifier?: string
+): ErrorEnvelope {
   return {
     error: 'invalid_input',
     message,
+    ...(identifier === undefined ? {} : { identifier }),
     ...(details === undefined ? {} : { details }),
   };
+}
+
+function recordScopeIdentifier(input: WriteRecordValidationInput): string | undefined {
+  if (typeof input.plugin_id !== 'string' || typeof input.table !== 'string') {
+    return undefined;
+  }
+  return `${input.plugin_id}.${input.table}`;
+}
+
+function targetIdentifier(input: WriteRecordValidationInput): string | undefined {
+  return typeof input.id === 'string' ? input.id : recordScopeIdentifier(input);
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -80,14 +96,14 @@ function validateDataFields(
         field,
         plugin_id: input.plugin_id,
         table: input.table,
-      });
+      }, targetIdentifier(input));
     }
     if (!allowedFields.has(field)) {
-      return invalidInput(`data field "${field}" is not declared in plugin table schema`, {
+      return invalidInput(`Unknown field '${field}' for ${input.plugin_id}.${input.table}`, {
         field,
         plugin_id: input.plugin_id,
         table: input.table,
-      });
+      }, targetIdentifier(input));
     }
   }
   return null;
@@ -112,13 +128,14 @@ export function validateWriteRecordInput(
   }
 
   const mode = input.mode;
+  const scopeIdentifier = recordScopeIdentifier(input);
   const pluginError = requireStringField(input, 'plugin_id', mode);
   if (pluginError) return pluginError;
   const tableError = requireStringField(input, 'table', mode);
   if (tableError) return tableError;
 
   if (mode === 'create' && input.id !== undefined) {
-    return invalidInput('id is not allowed when mode is "create"', { field: 'id' });
+    return invalidInput('id is not allowed when mode is "create"', { field: 'id' }, scopeIdentifier);
   }
 
   if (mode === 'update') {
@@ -139,19 +156,19 @@ export function validateWriteRecordInput(
       .map((column) => column.name)
       .filter((field) => data[field] === undefined);
     if (missingFields.length > 0) {
-      return invalidInput('mode "create" requires all schema-required data fields', {
+      return invalidInput('Record data failed schema validation', {
         field: 'data',
         missing_fields: missingFields,
         plugin_id: input.plugin_id,
         table: input.table,
-      });
+      }, scopeIdentifier);
     }
   }
 
   if (mode === 'update' && Object.keys(data).length === 0) {
     return invalidInput('mode "update" requires at least one mutable data field', {
       reason: 'no_mutable_fields',
-    });
+    }, targetIdentifier(input));
   }
 
   return null;

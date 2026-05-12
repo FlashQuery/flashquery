@@ -237,6 +237,7 @@ describe('register_plugin', () => {
       table_count: 1,
       was_new: true,
     });
+    expect(parseToolText(result)).not.toHaveProperty('tables');
     // pg connection was established via createPgClientIPv4
     expect(mockPgClient.connect).toHaveBeenCalled();
     expect(mockPgClient.query).toHaveBeenCalled();
@@ -303,7 +304,7 @@ describe('register_plugin', () => {
   });
 
 
-  it('returns isError when neither schema_path nor schema_yaml provided', async () => {
+  it('returns expected invalid_input JSON when neither schema_path nor schema_yaml provided', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerPluginTools(server, config);
@@ -311,7 +312,12 @@ describe('register_plugin', () => {
     const handler = getHandler('register_plugin');
     const result = await handler({}) as { isError?: boolean; content: Array<{ text: string }> };
 
-    expect(result.isError).toBe(true);
+    expect(result.isError).toBe(false);
+    expect(parseToolText(result)).toEqual({
+      error: 'invalid_input',
+      message: 'Either schema_path or schema_yaml must be provided',
+      details: { field: 'schema_path|schema_yaml' },
+    });
   });
 
   it('returns isError when schema YAML is invalid', async () => {
@@ -330,7 +336,36 @@ describe('register_plugin', () => {
     };
 
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Invalid column type');
+    expect(parseToolText(result)).toMatchObject({
+      error: 'runtime_error',
+      message: 'Invalid column type',
+    });
+  });
+
+  it('returns runtime JSON when registry lookup fails', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerPluginTools(server, config);
+
+    const mockMaybeSingle = vi.fn().mockResolvedValue({ data: null, error: { message: 'registry unavailable' } });
+    const mockEq3 = vi.fn().mockReturnValue({ maybeSingle: mockMaybeSingle });
+    const mockEq2 = vi.fn().mockReturnValue({ eq: mockEq3 });
+    const mockEq1 = vi.fn().mockReturnValue({ eq: mockEq2 });
+    const mockSelect = vi.fn().mockReturnValue({ eq: mockEq1 });
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({ select: mockSelect }),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+
+    const result = await getHandler('register_plugin')({ schema_yaml: VALID_SCHEMA_YAML }) as {
+      isError?: boolean;
+      content: Array<{ text: string }>;
+    };
+
+    expect(result.isError).toBe(true);
+    expect(parseToolText(result)).toMatchObject({
+      error: 'runtime_error',
+      message: 'Error checking registry: registry unavailable',
+    });
   });
 
 });

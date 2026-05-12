@@ -392,6 +392,7 @@ _ACTION_EXTRACT_FIELDS: dict[str, tuple[str, ...]] = {
     "vault.write":  ("fq_id", "path", "title", "status"),
     "memory.write": ("memory_id", "content"),
     "write_memory": ("memory_id", "content"),
+    "write_record": ("id",),
 }
 
 

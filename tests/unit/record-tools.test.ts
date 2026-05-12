@@ -337,6 +337,30 @@ describe('write_record', () => {
     });
   });
 
+  it('returns canonical not_found JSON for missing update targets', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+    makeSupabaseMock({ updateError: { message: 'No rows found' } });
+
+    const result = await getHandler('write_record')({
+      mode: 'update',
+      plugin_id: 'crm',
+      table: 'tasks',
+      id: 'missing-record',
+      data: { title: 'Nope' },
+    }) as { content: Array<{ text: string }>; isError?: boolean };
+
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0]?.text ?? '{}')).toEqual({
+      error: 'not_found',
+      message: "No record matches id 'missing-record'",
+      identifier: 'missing-record',
+      details: { plugin_id: 'crm', table: 'tasks' },
+    });
+  });
+
   it('returns expected invalid_input JSON before mutation', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
@@ -354,6 +378,7 @@ describe('write_record', () => {
     expect(result.isError).toBe(false);
     expect(JSON.parse(result.content[0]?.text ?? '{}')).toMatchObject({
       error: 'invalid_input',
+      identifier: 'crm.tasks',
       details: { field: 'id' },
     });
     expect(mockInsert).not.toHaveBeenCalled();
@@ -578,9 +603,15 @@ describe('get_record', () => {
       plugin_id: 'crm',
       table: 'tasks',
       id: 'unknown-id',
-    }) as { isError?: boolean };
+    }) as { content: Array<{ text: string }>; isError?: boolean };
 
     expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0]?.text ?? '{}')).toEqual({
+      error: 'not_found',
+      message: "No record matches id 'unknown-id'",
+      identifier: 'unknown-id',
+      details: { plugin_id: 'crm', table: 'tasks' },
+    });
   });
 
   it('filters by instance_id for tenant isolation', async () => {
@@ -788,8 +819,35 @@ describe('archive_record', () => {
 
     expect(result.isError).toBeUndefined();
     expect(JSON.parse(result.content[0]?.text ?? '[]')).toEqual([
-      expect.objectContaining({ error: 'not_found', identifier: 'bad-id' }),
+      {
+        error: 'not_found',
+        message: "No record matches id 'bad-id'",
+        identifier: 'bad-id',
+        details: { plugin_id: 'crm', table: 'tasks' },
+      },
     ]);
+  });
+
+  it('returns a runtime JSON error instead of relabeling DB failures as not_found', async () => {
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerRecordTools(server, config);
+
+    vi.mocked(pluginManager.getTableSpec).mockReturnValue(TABLE_SPEC_NO_EMBED);
+    makeSupabaseMock({ updateError: { message: 'connection refused' } });
+
+    const handler = getHandler('archive_record');
+    const result = await handler({
+      targets: [{ plugin_id: 'crm', table: 'tasks', id: 'rec-err' }],
+    }) as { content: Array<{ text: string }>; isError?: boolean };
+
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.content[0]?.text ?? '{}')).toMatchObject({
+      error: 'runtime_error',
+      message: 'connection refused',
+      identifier: 'rec-err',
+      details: { plugin_id: 'crm', table: 'tasks' },
+    });
   });
 
   it('defaults plugin_instance to "default" when not provided', async () => {
@@ -836,11 +894,12 @@ describe('archive_record', () => {
     expect(JSON.parse(result.content[0]?.text ?? '[]')).toEqual([
       expect.objectContaining({
         id: 'rec-archive',
-        status: 'archived',
-        archived_at: null,
         warnings: ['archived_at_unavailable'],
       }),
     ]);
+    const payload = JSON.parse(result.content[0]?.text ?? '[]') as Array<Record<string, unknown>>;
+    expect(payload[0]).not.toHaveProperty('status');
+    expect(payload[0]).not.toHaveProperty('archived_at');
   });
 });
 

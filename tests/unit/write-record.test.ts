@@ -5,6 +5,8 @@ import {
   validateWriteRecordInput,
 } from '../../src/mcp/utils/record-validation.js';
 import {
+  addPendingReviewPayload,
+  buildPendingReviewPayload,
   buildRecordResult,
   parseRecordInclude,
   stripGeneratedRecordData,
@@ -42,6 +44,8 @@ describe('write_record validation', () => {
 
     expect(validateWriteRecordInput({ mode: 'create', plugin_id: 'crm', table: 'contacts', data: {} }, contactsTable)).toMatchObject({
       error: 'invalid_input',
+      message: 'Record data failed schema validation',
+      identifier: 'crm.contacts',
       details: { missing_fields: ['name'] },
     });
 
@@ -51,6 +55,7 @@ describe('write_record validation', () => {
   it('rejects top-level id and generated data fields on create', () => {
     expect(validateWriteRecordInput({ mode: 'create', plugin_id: 'crm', table: 'contacts', id: 'rec-1', data: { name: 'Ada' } }, contactsTable)).toMatchObject({
       error: 'invalid_input',
+      identifier: 'crm.contacts',
       details: { field: 'id' },
     });
 
@@ -62,6 +67,7 @@ describe('write_record validation', () => {
         )
       ).toMatchObject({
         error: 'invalid_input',
+        identifier: 'crm.contacts',
         details: { field: generatedField, plugin_id: 'crm', table: 'contacts' },
       });
     }
@@ -70,6 +76,8 @@ describe('write_record validation', () => {
   it('rejects unknown data fields with plugin/table details', () => {
     expect(validateWriteRecordInput({ mode: 'create', plugin_id: 'crm', table: 'contacts', data: { name: 'Ada', nickname: 'Ace' } }, contactsTable)).toMatchObject({
       error: 'invalid_input',
+      message: "Unknown field 'nickname' for crm.contacts",
+      identifier: 'crm.contacts',
       details: { field: 'nickname', plugin_id: 'crm', table: 'contacts' },
     });
   });
@@ -82,6 +90,7 @@ describe('write_record validation', () => {
 
     expect(validateWriteRecordInput({ mode: 'update', plugin_id: 'crm', table: 'contacts', id: 'rec-1', data: {} }, contactsTable)).toMatchObject({
       error: 'invalid_input',
+      identifier: 'rec-1',
       details: { reason: 'no_mutable_fields' },
     });
 
@@ -148,6 +157,37 @@ describe('record output helpers', () => {
     expect(stripGeneratedRecordData(row)).toEqual({
       name: 'Ada',
       email: 'a@example.test',
+    });
+  });
+
+  it('builds pending_review side-effect payloads with pending row ids and minimal public fields', () => {
+    const pending = buildPendingReviewPayload([
+      {
+        id: 'review-row-1',
+        plugin_id: 'crm',
+        table_name: 'contacts',
+        review_type: 'field_conflict',
+        context: {
+          path: 'People/Ada.md',
+          // Extra context is intentionally not part of the public payload type.
+        },
+      },
+    ]);
+
+    expect(addPendingReviewPayload({ id: 'rec-1' }, pending)).toEqual({
+      id: 'rec-1',
+      pending_review: {
+        count: 1,
+        items: [
+          {
+            id: 'review-row-1',
+            type: 'field_conflict',
+            plugin_id: 'crm',
+            table: 'contacts',
+            path: 'People/Ada.md',
+          },
+        ],
+      },
     });
   });
 });

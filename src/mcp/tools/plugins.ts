@@ -20,6 +20,7 @@ import { reloadManifests } from '../../services/manifest-loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import {
   jsonExpectedError,
+  jsonRuntimeError,
   jsonToolResult,
   pluginIdentification,
   withWarnings,
@@ -45,15 +46,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
     async ({ schema_path, schema_yaml, plugin_instance }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
       try {
@@ -68,15 +61,11 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         } else if (schema_yaml) {
           rawYaml = schema_yaml;
         } else {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: 'Error: Either schema_path or schema_yaml must be provided.',
-              },
-            ],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'Either schema_path or schema_yaml must be provided',
+            details: { field: 'schema_path|schema_yaml' },
+          });
         }
 
         // Step 3: parse schema
@@ -94,12 +83,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           .maybeSingle();
 
         if (selectError) {
-          return {
-            content: [
-              { type: 'text' as const, text: `Error checking registry: ${selectError.message}` },
-            ],
-            isError: true,
-          };
+          return jsonRuntimeError(`Error checking registry: ${selectError.message}`);
         }
 
         // Step 5: handle version mismatch with auto-migration logic (SPEC-15)
@@ -109,14 +93,18 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
 
           // Identical versions (should not happen, but idempotent check)
           if (versionComparison === 0) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Plugin '${schema.plugin.id}' already registered with schema version ${schema.plugin.version}. No changes applied.`,
-                },
-              ],
-            };
+            return jsonToolResult({
+              ...pluginIdentification({
+                plugin_id: schema.plugin.id,
+                name: schema.plugin.name,
+                status: 'registered',
+                table_count: schema.tables.length,
+              }),
+              registered_at: new Date().toISOString(),
+              was_new: false,
+              plugin_instance: instanceName,
+              schema_version: schema.plugin.version,
+            });
           }
 
           // Version upgrade (new > old) — attempt safe migration
@@ -129,15 +117,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
               .maybeSingle();
 
             if (registryError || !registryData) {
-              return {
-                content: [
-                  {
-                    type: 'text' as const,
-                    text: `Error fetching old schema for migration analysis: ${registryError?.message || 'Schema not found'}`,
-                  },
-                ],
-                isError: true,
-              };
+              return jsonRuntimeError(`Error fetching old schema for migration analysis: ${registryError?.message || 'Schema not found'}`);
             }
 
             // Parse old schema for comparison
@@ -146,15 +126,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
               oldSchema = parsePluginSchema(registryData.schema_yaml as string);
             } catch (err) {
               logger.warn(`register_plugin: failed to parse old schema for migration: ${err instanceof Error ? err.message : String(err)}`);
-              return {
-                content: [
-                  {
-                    type: 'text' as const,
-                    text: `Error analyzing schema migration: could not parse old schema. ${err instanceof Error ? err.message : String(err)}`,
-                  },
-                ],
-                isError: true,
-              };
+              return jsonRuntimeError(`Error analyzing schema migration: could not parse old schema. ${err instanceof Error ? err.message : String(err)}`);
             }
 
             // Analyze schema changes
@@ -166,15 +138,21 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                 .map((c) => `- Table "${c.table}"${c.column ? `, column "${c.column}"` : ''}: ${c.type}`)
                 .join('\n');
 
-              return {
-                content: [
-                {
-                  type: 'text' as const,
-                  text: `Schema migration failed: plugin "${schema.plugin.id}" version ${existing.schema_version} → ${schema.plugin.version} contains breaking changes.\n\nUnsafe changes detected:\n${unsafeList}\n\nTo apply breaking changes, use:\n1. unregister_plugin({ plugin_id: "${schema.plugin.id}", force: true })\n2. Then register_plugin again with the new schema.`,
+              return jsonExpectedError({
+                error: 'conflict',
+                message: `Schema migration failed: plugin "${schema.plugin.id}" contains breaking changes`,
+                identifier: schema.plugin.id,
+                details: {
+                  from_version: existing.schema_version,
+                  to_version: schema.plugin.version,
+                  unsafe_changes: unsafe,
+                  guidance: [
+                    `unregister_plugin({ plugin_id: "${schema.plugin.id}", force: true })`,
+                    'register_plugin again with the new schema',
+                  ],
+                  unsafe_summary: unsafeList,
                 },
-                ],
-                isError: true,
-              };
+              });
             }
 
             // Apply safe changes via DDL
@@ -212,15 +190,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                 await new Promise((resolve) => setTimeout(resolve, 300));
               } catch (err) {
                 logger.error(`Failed to apply safe schema changes: ${err instanceof Error ? err.message : String(err)}`);
-                return {
-                  content: [
-                    {
-                      type: 'text' as const,
-                      text: `Error applying safe schema changes: ${err instanceof Error ? err.message : String(err)}`,
-                    },
-                  ],
-                  isError: true,
-                };
+                return jsonRuntimeError(`Error applying safe schema changes: ${err instanceof Error ? err.message : String(err)}`);
               } finally {
                 await pgClient.end();
               }
@@ -279,7 +249,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             const fullTableName = resolveTableName(schema.plugin.id, instanceName, table.name);
             const ddl = buildPluginTableDDL(fullTableName, table, getEmbeddingDimensions(config));
             await pgClient.query(ddl);
-            createdTables.push(fullTableName);
+            createdTables.push(table.name);
           }
           // Notify PostgREST to reload schema cache so new tables are immediately accessible.
           // Brief wait for PostgREST to process the async reload notification.
@@ -349,12 +319,11 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           was_new: !existing,
           plugin_instance: instanceName,
           schema_version: schema.plugin.version,
-          tables: createdTables,
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`register_plugin failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       }
     }
   );
@@ -374,15 +343,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
     ({ plugin_id, plugin_instance, include }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
       try {
@@ -426,7 +387,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_plugin_info failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       }
     }
   );
@@ -447,15 +408,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
     async ({ plugin_id, plugin_instance, force = false }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
       if (config.locking.enabled) {
@@ -466,10 +419,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           { ttlSeconds: config.locking.ttlSeconds }
         );
         if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is managing plugins. Retry in a few seconds.' }],
-            isError: true,
-          };
+          return jsonRuntimeError('Write lock timeout: another instance is managing plugins. Retry in a few seconds.');
         }
       }
 
@@ -489,10 +439,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           .maybeSingle();
 
         if (selectError) {
-          return {
-            content: [{ type: 'text' as const, text: `Error checking registry: ${selectError.message}` }],
-            isError: true,
-          };
+          return jsonRuntimeError(`Error checking registry: ${selectError.message}`);
         }
 
         if (!registryRow) {
@@ -651,7 +598,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`unregister_plugin failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       } finally {
         if (config.locking.enabled) {
           await releaseLock(supabaseManager.getClient(), config.instance.id, 'plugins');

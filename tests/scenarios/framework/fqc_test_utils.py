@@ -614,7 +614,7 @@ class TestCleanup:
                     "unregister_plugin",
                     plugin_id=plugin_id,
                     plugin_instance=plugin_instance,
-                    confirm_destroy=True,
+                    force=True,
                 )
                 if not result.ok:
                     # "is not registered" means the test already unregistered inline — not an error

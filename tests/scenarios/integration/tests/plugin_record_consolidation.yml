@@ -1,20 +1,123 @@
 name: plugin_record_consolidation
 description: >
-  Phase 126 plugin and record final public contracts are validated by the
-  dedicated unit, integration, E2E, and directed scenario gates. This scenario
-  keeps a lightweight live assertion for the final pending-review action contract.
+  Phase 126 final plugin-record workflow using consolidated JSON tools:
+  register_plugin -> write_record(create) -> search_records -> get_record ->
+  write_record(update) -> clear_pending_reviews(list) -> archive_record ->
+  search_records.
 coverage: [IR-14, IR-15, IR-16]
 
 steps:
-  - label: "Pending review list action returns the final JSON envelope"
+  - label: "Register a plugin for final record workflow"
+    action: register_plugin
+    args:
+      plugin_instance: prc
+      schema_yaml: |
+        plugin:
+          id: p126int
+          name: Phase 126 Integration Plugin
+          version: 1.0.0
+        tables:
+          - name: contacts
+            description: Contacts
+            columns:
+              - name: name
+                type: text
+                required: true
+              - name: email
+                type: text
+
+  - label: "Create a plugin record through write_record"
+    action: write_record
+    name: contact
+    args:
+      mode: create
+      plugin_id: p126int
+      plugin_instance: prc
+      table: contacts
+      data:
+        name: Ada Lovelace
+        email: ada@example.test
+
+  - label: "Search finds the created record"
+    assert:
+      op: search_records
+      args:
+        plugin_id: p126int
+        plugin_instance: prc
+        table: contacts
+        filters:
+          name: Ada Lovelace
+        include: [data]
+      expect_json_equals:
+        path: total
+        value: 1
+      expect_json_contains:
+        path: results[0].data.email
+        value: ada@example.test
+
+  - label: "get_record retrieves the created record by id"
+    assert:
+      op: get_record
+      args:
+        plugin_id: p126int
+        plugin_instance: prc
+        table: contacts
+        id: "${contact.id}"
+      expect_json_equals:
+        path: id
+        value: "${contact.id}"
+
+  - label: "Update the record through write_record"
+    action: write_record
+    args:
+      mode: update
+      plugin_id: p126int
+      plugin_instance: prc
+      table: contacts
+      id: "${contact.id}"
+      data:
+        email: ada-updated@example.test
+
+  - label: "Pending-review list action remains available after write_record update"
     assert:
       op: clear_pending_reviews
       args:
         action: list
-        plugin_id: phase126-empty
+        plugin_id: p126int
+      expect_json_path: items
+
+  - label: "Search sees the updated record"
+    assert:
+      op: search_records
+      args:
+        plugin_id: p126int
+        plugin_instance: prc
+        table: contacts
+        filters:
+          name: Ada Lovelace
+        include: [data]
+      expect_json_contains:
+        path: results[0].data.email
+        value: ada-updated@example.test
+
+  - label: "Archive the record through archive_record"
+    action: archive_record
+    args:
+      targets:
+        - plugin_id: p126int
+          plugin_instance: prc
+          table: contacts
+          id: "${contact.id}"
+
+  - label: "Archived record is no longer visible in search_records"
+    assert:
+      op: search_records
+      args:
+        plugin_id: p126int
+        plugin_instance: prc
+        table: contacts
+        filters:
+          name: Ada Lovelace
       expect_json_equals:
-        path: pending
+        path: total
         value: 0
-      expect_json_array_length:
-        path: items
-        equals: 0

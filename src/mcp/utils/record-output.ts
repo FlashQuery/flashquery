@@ -32,6 +32,14 @@ export type RecordResult = RecordIdentificationInput & {
   pending_review?: Record<string, unknown>;
 };
 
+export interface PendingReviewPublicRow {
+  id: string;
+  plugin_id: string;
+  table_name: string;
+  review_type: string;
+  context?: { path?: string } | null;
+}
+
 export function parseRecordInclude(
   include: RecordInclude[] | undefined,
   scope: RecordResultScope
@@ -75,6 +83,22 @@ export function addPendingReviewPayload<T extends Record<string, unknown>>(
     return payload;
   }
   return { ...payload, pending_review: pendingReview };
+}
+
+export function buildPendingReviewPayload(
+  pendingItems: PendingReviewPublicRow[]
+): Record<string, unknown> | undefined {
+  if (pendingItems.length === 0) return undefined;
+  return {
+    count: pendingItems.length,
+    items: pendingItems.map((item) => ({
+      id: item.id,
+      type: item.review_type,
+      plugin_id: item.plugin_id,
+      table: item.table_name,
+      path: item.context?.path ?? null,
+    })),
+  };
 }
 
 export function buildRecordResult(

@@ -24,8 +24,10 @@ import { validateWriteRecordInput } from '../utils/record-validation.js';
 import {
   addPendingReviewPayload,
   addReconciliationPayload,
+  buildPendingReviewPayload,
   buildRecordResult,
   parseRecordInclude,
+  type PendingReviewPublicRow,
   type RecordResult,
   type RecordInclude,
 } from '../utils/record-output.js';
@@ -108,11 +110,11 @@ async function queryPendingReview(
   pluginId: string,
   _instanceName: string,
   fqcInstanceId: string
-): Promise<Array<{ fqc_id: string; table_name: string; review_type: string; context: unknown }>> {
+): Promise<PendingReviewPublicRow[]> {
   const supabase = supabaseManager.getClient();
   const { data } = await supabase
     .from('fqc_pending_plugin_review')
-    .select('fqc_id, table_name, review_type, context')
+    .select('id, plugin_id, table_name, review_type, context')
     .eq('plugin_id', pluginId)
     .eq('instance_id', fqcInstanceId);
   return data ?? [];
@@ -131,19 +133,38 @@ function buildReconciliationPayload(summary: ReconciliationActionSummary): Recor
   return Object.values(payload).some((value) => value > 0) ? payload : undefined;
 }
 
-function buildPendingReviewPayload(
-  pendingItems: Array<{ fqc_id: string; table_name: string; review_type: string; context: unknown }>
-): Record<string, unknown> | undefined {
-  if (pendingItems.length === 0) return undefined;
+function recordNotFoundEnvelope(
+  id: string,
+  pluginId: string,
+  table: string
+): { error: 'not_found'; message: string; identifier: string; details: { plugin_id: string; table: string } } {
   return {
-    count: pendingItems.length,
-    items: pendingItems.map((item) => ({
-      fqc_id: item.fqc_id,
-      table: item.table_name,
-      type: item.review_type,
-      context: item.context,
-    })),
+    error: 'not_found',
+    message: `No record matches id '${id}'`,
+    identifier: id,
+    details: { plugin_id: pluginId, table },
   };
+}
+
+function tableNotFoundEnvelope(
+  err: unknown,
+  pluginId: string,
+  instanceName: string,
+  table: string
+): { error: 'not_found'; message: string; identifier: string; details: { plugin_instance: string } } {
+  return {
+    error: 'not_found',
+    message: err instanceof Error ? err.message : String(err),
+    identifier: `${pluginId}.${table}`,
+    details: { plugin_instance: instanceName },
+  };
+}
+
+function isNotFoundDbError(error: { message?: string; code?: string } | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === 'PGRST116') return true;
+  const message = error.message?.toLowerCase() ?? '';
+  return message.includes('no rows') || message.includes('0 rows') || message.includes('not found');
 }
 
 function buildSearchEnvelope(input: {
@@ -225,11 +246,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         try {
           resolved = resolveAndValidateTable(plugin_id, instanceName, table);
         } catch (err) {
-          return jsonExpectedError({
-            error: 'not_found',
-            message: err instanceof Error ? err.message : String(err),
-            identifier: `${plugin_id}:${instanceName}:${table}`,
-          });
+          return jsonExpectedError(tableNotFoundEnvelope(err, plugin_id, instanceName, table));
         }
 
         const validationError = validateWriteRecordInput(
@@ -282,13 +299,12 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             .eq('id', id as string)
             .eq('instance_id', config.instance.id)
             .select('*')
-            .single()) as { data: Record<string, unknown> | null; error: { message: string } | null };
+            .single()) as { data: Record<string, unknown> | null; error: { message: string; code?: string } | null };
           if (updateResult.error || !updateResult.data) {
-            return jsonExpectedError({
-              error: 'not_found',
-              message: `Record '${id}' not found in ${resolved.fullTableName}`,
-              identifier: id as string,
-            });
+            if (!isNotFoundDbError(updateResult.error)) {
+              return jsonRuntimeError(updateResult.error?.message ?? 'Update returned no data');
+            }
+            return jsonExpectedError(recordNotFoundEnvelope(id as string, plugin_id, table));
           }
           row = updateResult.data;
 
@@ -346,15 +362,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
     async ({ plugin_id, plugin_instance, table, fields }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
       if (config.locking.enabled) {
@@ -491,14 +499,9 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const { data, error } = getResult;
 
         if (error || !data) {
-          const msg = `Record '${id}' not found in ${fullTableName}`;
+          const msg = `No record matches id '${id}'`;
           logger.warn(`get_record: ${msg}`);
-          return jsonExpectedError({
-            error: 'not_found',
-            message: msg,
-            identifier: id,
-            details: { plugin_id, table },
-          });
+          return jsonExpectedError(recordNotFoundEnvelope(id, plugin_id, table));
         }
 
         logger.info(`get_record: retrieved ${id} from ${fullTableName}`);
@@ -518,7 +521,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_record failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       }
     }
   );
@@ -540,15 +543,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
     async ({ plugin_id, plugin_instance, table, id, fields }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
       if (config.locking.enabled) {
@@ -559,10 +554,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           { ttlSeconds: config.locking.ttlSeconds }
         );
         if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to records. Retry in a few seconds.' }],
-            isError: true,
-          };
+          return jsonRuntimeError('Write lock timeout: another instance is writing to records. Retry in a few seconds.');
         }
       }
       try {
@@ -700,7 +692,14 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
               logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
             }
 
-            const { fullTableName, tableSpec } = resolveAndValidateTable(target.plugin_id, instanceName, target.table);
+            let resolved: ReturnType<typeof resolveAndValidateTable>;
+            try {
+              resolved = resolveAndValidateTable(target.plugin_id, instanceName, target.table);
+            } catch (err) {
+              results.push(tableNotFoundEnvelope(err, target.plugin_id, instanceName, target.table));
+              continue;
+            }
+            const { fullTableName, tableSpec } = resolved;
             const supportsArchivedAt = tableSpec.columns.some((column) => column.name === 'archived_at');
             const archivedAt = new Date().toISOString();
             const updatePayload = {
@@ -714,15 +713,17 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
               .eq('id', target.id)
               .eq('instance_id', config.instance.id)
               .select('*')
-              .single()) as { data: Record<string, unknown> | null; error: { message: string } | null };
+              .single()) as { data: Record<string, unknown> | null; error: { message: string; code?: string } | null };
 
             if (updateResult.error || !updateResult.data) {
-              results.push({
-                error: 'not_found',
-                message: `Record '${target.id}' not found in ${fullTableName}`,
-                identifier: target.id,
-                details: { plugin_id: target.plugin_id, table: target.table },
-              });
+              if (!isNotFoundDbError(updateResult.error)) {
+                return jsonRuntimeError({
+                  message: updateResult.error?.message ?? 'Archive returned no data',
+                  identifier: target.id,
+                  details: { plugin_id: target.plugin_id, table: target.table },
+                });
+              }
+              results.push(recordNotFoundEnvelope(target.id, target.plugin_id, target.table));
               continue;
             }
 
@@ -736,13 +737,11 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             );
             results.push({
               ...payload,
-              status: 'archived',
-              archived_at: supportsArchivedAt ? archivedAt : null,
+              ...(supportsArchivedAt ? { archived_at: archivedAt } : {}),
               ...(supportsArchivedAt ? {} : { warnings: ['archived_at_unavailable'] }),
             });
           } catch (err) {
-            results.push({
-              error: 'not_found',
+            return jsonRuntimeError({
               message: err instanceof Error ? err.message : String(err),
               identifier: target.id,
               details: { plugin_id: target.plugin_id, table: target.table },
@@ -754,7 +753,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`archive_record failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       } finally {
         if (config.locking.enabled) {
           await releaseLock(supabaseManager.getClient(), config.instance.id, 'records');
@@ -791,15 +790,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
     async ({ plugin_id, plugin_instance, table, filters, query, tag, taggable_tables_only, include, limit }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
       if (config.locking.enabled) {
@@ -810,10 +801,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           { ttlSeconds: config.locking.ttlSeconds }
         );
         if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to records. Retry in a few seconds.' }],
-            isError: true,
-          };
+          return jsonRuntimeError('Write lock timeout: another instance is writing to records. Retry in a few seconds.');
         }
       }
       try {
@@ -1031,7 +1019,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`search_records failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       } finally {
         if (config.locking.enabled) {
           await releaseLock(supabaseManager.getClient(), config.instance.id, 'records');
