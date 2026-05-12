@@ -92,7 +92,7 @@ describe.sequential('MCP protocol E2E', () => {
 
   // ── T-01: Tool discovery ───────────────────────────────────────────────────
 
-  it('lists all registered tools including get_memory and search_all', async () => {
+  it('lists all registered tools including final search and memory tools', async () => {
     const { tools } = await client.listTools();
 
     const expectedTools = [
@@ -100,10 +100,13 @@ describe.sequential('MCP protocol E2E', () => {
       'search_memory',
       'list_memories',
       'get_memory',
+      'write_memory',
+      'archive_memory',
       'create_document',
       'get_document',
       'search_documents',
       'search_all',
+      'search',
     ];
 
     // At least the core tools must be present (compound/plugin tools may also be registered)
@@ -134,6 +137,7 @@ describe.sequential('MCP protocol E2E', () => {
         'list_vault',
         'search_documents',
         'search_all',
+        'search',
         'call_model',
       ]));
       expect(toolNames).not.toContain('save_memory');
@@ -175,6 +179,80 @@ describe.sequential('MCP protocol E2E', () => {
     expect(listResult.isError).toBeFalsy();
     const listText = getText(listResult);
     expect(listText).toContain('Paris');
+  }, 30000);
+
+  it('write_memory, search, get_memory, and archive_memory round-trip with JSON envelopes', async () => {
+    const createResult = await client.callTool({
+      name: 'write_memory',
+      arguments: {
+        mode: 'create',
+        content: 'Phase 125 protocol memory about durable JSON search.',
+        tags: ['phase125-e2e'],
+        include: ['content'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(createResult.isError).toBeFalsy();
+    const created = JSON.parse(getText(createResult));
+    expect(created).toMatchObject({
+      memory_id: expect.any(String),
+      content: 'Phase 125 protocol memory about durable JSON search.',
+      is_latest: true,
+    });
+
+    const searchResult = await client.callTool({
+      name: 'search',
+      arguments: {
+        query: '',
+        tags: ['phase125-e2e'],
+        entity_types: ['memories'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(searchResult.isError).toBeFalsy();
+    const searchPayload = JSON.parse(getText(searchResult));
+    expect(searchPayload).toMatchObject({ mode: 'list', entity_types: ['memories'] });
+    expect(searchPayload.results).toEqual([
+      expect.objectContaining({ memory_id: created.memory_id }),
+    ]);
+
+    const updateResult = await client.callTool({
+      name: 'write_memory',
+      arguments: {
+        mode: 'update',
+        memory_id: created.memory_id,
+        content: 'Phase 125 protocol memory updated.',
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(updateResult.isError).toBeFalsy();
+    const updated = JSON.parse(getText(updateResult));
+    expect(updated).toMatchObject({
+      memory_id: expect.any(String),
+      previous_version_id: created.memory_id,
+      is_latest: true,
+    });
+
+    const getResult = await client.callTool({
+      name: 'get_memory',
+      arguments: {
+        memory_ids: updated.memory_id,
+        include: ['content'],
+      },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(getResult.isError).toBeFalsy();
+    expect(JSON.parse(getText(getResult))).toMatchObject({
+      memory_id: updated.memory_id,
+      content: 'Phase 125 protocol memory updated.',
+    });
+
+    const archiveResult = await client.callTool({
+      name: 'archive_memory',
+      arguments: { memory_ids: updated.memory_id },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(archiveResult.isError).toBeFalsy();
+    expect(JSON.parse(getText(archiveResult))).toMatchObject({
+      memory_id: updated.memory_id,
+      archived_at: expect.any(String),
+    });
   }, 30000);
 
   // ── T-03: create_document + get_document round-trip ───────────────────────
