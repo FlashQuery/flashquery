@@ -162,7 +162,7 @@ describe('get_memory', () => {
     vi.clearAllMocks();
   });
 
-  it('single string ID: returns single-memory format with content-first, blank line, then metadata', async () => {
+  it('single string ID: returns JSON memory identification with content only when included', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
@@ -171,25 +171,20 @@ describe('get_memory', () => {
     (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue(chain);
 
     const handler = getHandler('get_memory');
-    const result = (await handler({ memory_ids: MEMORY_1.id })) as ToolResult;
+    const result = (await handler({ memory_ids: MEMORY_1.id, include: ['content'] })) as ToolResult;
 
     expect(result.isError).toBeUndefined();
-    const text = result.content[0].text;
-
-    // Single-mode format: content first (unlabeled), blank line, then metadata
-    const lines = text.split('\n');
-    expect(lines[0]).toBe('User prefers dark mode'); // Content first
-    expect(lines[1]).toBe(''); // Blank line delimiter
-
-    // Metadata in key-value format
-    expect(text).toContain('Memory ID:');
-    expect(text).toContain(`Memory ID: ${MEMORY_1.id}`);
-    expect(text).toContain('Tags:');
-    expect(text).toContain('Created:');
-    expect(text).toContain('Updated:');
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(payload).toMatchObject({
+      memory_id: MEMORY_1.id,
+      content_preview: 'User prefers dark mode',
+      tags: ['#preference'],
+      plugin_scope: 'global',
+      content: 'User prefers dark mode',
+    });
   });
 
-  it('array of 2 IDs: returns batch format with --- separators', async () => {
+  it('array of 2 IDs: returns ordered JSON batch results', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
@@ -201,20 +196,12 @@ describe('get_memory', () => {
     const result = (await handler({ memory_ids: [MEMORY_1.id, MEMORY_2.id] })) as ToolResult;
 
     expect(result.isError).toBeUndefined();
-    const text = result.content[0].text;
-
-    // NEW format: --- separators instead of === delimiters
-    expect(text).toContain('---');
-    // NEW format: key-value pairs instead of inline format
-    expect(text).toContain('Memory ID:');
-    expect(text).toContain(`Memory ID: ${MEMORY_1.id}`);
-    expect(text).toContain(`Memory ID: ${MEMORY_2.id}`);
-    expect(text).toContain('Content:');
-    expect(text).toContain('User prefers dark mode');
-    expect(text).toContain('Project deadline is April 15');
+    const payload = JSON.parse(result.content[0].text) as Array<Record<string, unknown>>;
+    expect(payload.map((entry) => entry.memory_id)).toEqual([MEMORY_1.id, MEMORY_2.id]);
+    expect(payload[0]).not.toHaveProperty('content');
   });
 
-  it('array of 3 IDs with 1 missing: returns batch format with found memories and Not found note', async () => {
+  it('array of 3 IDs with 1 missing: returns ordered JSON successes and not_found envelope', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
@@ -229,16 +216,13 @@ describe('get_memory', () => {
     })) as ToolResult;
 
     expect(result.isError).toBeUndefined();
-    const text = result.content[0].text;
-    // NEW format: --- separators, key-value pairs
-    expect(text).toContain('---');
-    expect(text).toContain(`Memory ID: ${MEMORY_1.id}`);
-    expect(text).toContain(`Memory ID: ${MEMORY_2.id}`);
-    // Not found note at end for missing ID (NEW format: no underscores)
-    expect(text).toContain(`Not found: ${MISSING_ID}`);
+    const payload = JSON.parse(result.content[0].text) as Array<Record<string, unknown>>;
+    expect(payload[0]).toMatchObject({ memory_id: MEMORY_1.id });
+    expect(payload[1]).toMatchObject({ memory_id: MEMORY_2.id });
+    expect(payload[2]).toMatchObject({ error: 'not_found', identifier: MISSING_ID });
   });
 
-  it('array where ALL IDs are missing: returns isError true', async () => {
+  it('array where ALL IDs are missing: returns expected not_found envelope with isError false', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
@@ -249,11 +233,17 @@ describe('get_memory', () => {
     const handler = getHandler('get_memory');
     const result = (await handler({ memory_ids: [MISSING_ID] })) as ToolResult;
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Not found');
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toEqual([
+      {
+        error: 'not_found',
+        message: `Memory not found: ${MISSING_ID}`,
+        identifier: MISSING_ID,
+      },
+    ]);
   });
 
-  it('single string ID not found: returns isError true', async () => {
+  it('single string ID not found: returns expected not_found envelope with isError false', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
@@ -264,8 +254,11 @@ describe('get_memory', () => {
     const handler = getHandler('get_memory');
     const result = (await handler({ memory_ids: MISSING_ID })) as ToolResult;
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Not found');
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      error: 'not_found',
+      identifier: MISSING_ID,
+    });
   });
 
   it('queries include instance_id filter for tenant isolation', async () => {
@@ -299,7 +292,7 @@ describe('get_memory', () => {
     expect(chain.in).not.toHaveBeenCalledWith('memory_id', expect.anything());
   });
 
-  it('single-element array uses batch format (dispatch on Array.isArray, not length)', async () => {
+  it('single-element array uses array JSON format (dispatch on Array.isArray, not length)', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
@@ -312,10 +305,8 @@ describe('get_memory', () => {
     const result = (await handler({ memory_ids: [MEMORY_1.id] })) as ToolResult;
 
     expect(result.isError).toBeUndefined();
-    const text = result.content[0].text;
-    // NEW batch format includes --- separator (no blank line needed for single-entry batch)
-    // Key-value format
-    expect(text).toContain(`Memory ID: ${MEMORY_1.id}`);
-    expect(text).not.toContain('\n\n'); // No blank line in batch mode
+    const payload = JSON.parse(result.content[0].text);
+    expect(Array.isArray(payload)).toBe(true);
+    expect(payload).toEqual([expect.objectContaining({ memory_id: MEMORY_1.id })]);
   });
 });

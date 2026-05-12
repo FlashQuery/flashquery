@@ -1225,11 +1225,11 @@ describe('archive_memory', () => {
     fetchResult: { data: unknown; error: unknown },
     updateResult: { error: unknown }
   ) {
-    // select chain: .from().select().eq().eq().single()
+    // select chain: .from().select().eq()
     const selectChain = {
       select: vi.fn(),
       eq: vi.fn(),
-      single: vi.fn().mockResolvedValue(fetchResult),
+      then: (resolve: (value: unknown) => void) => resolve(fetchResult),
     };
     selectChain.select.mockReturnValue(selectChain);
     selectChain.eq.mockReturnValue(selectChain);
@@ -1256,7 +1256,22 @@ describe('archive_memory', () => {
     registerMemoryTools(server, config);
 
     const { client, updateChain } = makeArchiveMock(
-      { data: { tags: ['some-tag', '#status/active'], status: 'active' }, error: null },
+      {
+        data: [{
+          id: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
+          content: 'memory',
+          tags: ['some-tag', '#status/active'],
+          status: 'active',
+          plugin_scope: 'global',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+          version: 1,
+          previous_version_id: null,
+          is_latest: true,
+          archived_at: null,
+        }],
+        error: null,
+      },
       { error: null }
     );
     (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue(client);
@@ -1267,7 +1282,10 @@ describe('archive_memory', () => {
     };
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain('archived');
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      memory_id: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
+      archived_at: expect.any(String),
+    });
     expect(updateChain.update).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'archived',
@@ -1282,7 +1300,22 @@ describe('archive_memory', () => {
     registerMemoryTools(server, config);
 
     const { client, updateChain } = makeArchiveMock(
-      { data: { tags: ['#status/active', 'other-tag'], status: 'active' }, error: null },
+      {
+        data: [{
+          id: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
+          content: 'memory',
+          tags: ['#status/active', 'other-tag'],
+          status: 'active',
+          plugin_scope: 'global',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+          version: 1,
+          previous_version_id: null,
+          is_latest: true,
+          archived_at: null,
+        }],
+        error: null,
+      },
       { error: null }
     );
     (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue(client);
@@ -1300,7 +1333,22 @@ describe('archive_memory', () => {
     registerMemoryTools(server, config);
 
     const { client, updateChain } = makeArchiveMock(
-      { data: { tags: ['#status/archived'], status: 'archived' }, error: null },
+      {
+        data: [{
+          id: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
+          content: 'memory',
+          tags: ['#status/archived'],
+          status: 'archived',
+          plugin_scope: 'global',
+          created_at: '2026-01-01T00:00:00Z',
+          updated_at: '2026-01-01T00:00:00Z',
+          version: 1,
+          previous_version_id: null,
+          is_latest: true,
+          archived_at: '2026-01-02T00:00:00Z',
+        }],
+        error: null,
+      },
       { error: null }
     );
     (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue(client);
@@ -1317,11 +1365,11 @@ describe('archive_memory', () => {
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, config);
 
-    // fetch returns error
+    // fetch returns no matching rows
     const selectChain = {
       select: vi.fn(),
       eq: vi.fn(),
-      single: vi.fn().mockResolvedValue({ data: null, error: { message: 'record not found' } }),
+      then: (resolve: (value: unknown) => void) => resolve({ data: [], error: null }),
     };
     selectChain.select.mockReturnValue(selectChain);
     selectChain.eq.mockReturnValue(selectChain);
@@ -1334,8 +1382,11 @@ describe('archive_memory', () => {
       isError?: boolean;
       content: Array<{ text: string }>;
     };
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Error:');
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].text)).toMatchObject({
+      error: 'not_found',
+      identifier: 'aaaabbbb-cccc-dddd-eeee-ffffffffffff',
+    });
   });
 });
 
