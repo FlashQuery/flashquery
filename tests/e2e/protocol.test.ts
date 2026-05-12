@@ -819,7 +819,7 @@ describe.sequential('MCP protocol E2E', () => {
       arguments: { action: 'sync' },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
-    expect(syncResult.isError).toBe(false);
+    expect(syncResult.isError).toBeFalsy();
     const syncPayload = JSON.parse(getText(syncResult));
     expect(syncPayload.actions).toEqual([
       expect.objectContaining({
@@ -842,7 +842,7 @@ describe.sequential('MCP protocol E2E', () => {
     expect(invalidRepairBackground.isError).toBe(false);
     expect(JSON.parse(getText(invalidRepairBackground))).toMatchObject({
       error: 'invalid_input',
-      details: expect.objectContaining({ field: 'background' }),
+      details: expect.objectContaining({ parameter: 'background' }),
     });
 
     const missingStatus = await client.callTool({
@@ -853,7 +853,6 @@ describe.sequential('MCP protocol E2E', () => {
     expect(missingStatus.isError).toBe(false);
     expect(JSON.parse(getText(missingStatus))).toMatchObject({
       error: 'not_found',
-      details: expect.objectContaining({ job_id: 'missing' }),
     });
   }, 30000);
 

@@ -14,6 +14,13 @@ const VALID_CATEGORY_SELECTORS = new Set([
   'category:system',
 ]);
 
+const PHASE_127_LOCALLY_REPLACED_TOOLS = new Set([
+  'create_directory',
+  'remove_directory',
+  'force_file_scan',
+  'reconcile_documents',
+]);
+
 export interface HostMcpToolsConfig {
   tools?: string[];
   excludedTools?: string[];
@@ -141,5 +148,6 @@ function expandHostSelector(selector: string): string[] {
 }
 
 function isCurrentHostSelectable(metadata: ToolMetadata): boolean {
+  if (PHASE_127_LOCALLY_REPLACED_TOOLS.has(metadata.name)) return false;
   return metadata.hostEligible && metadata.status !== 'dead';
 }
