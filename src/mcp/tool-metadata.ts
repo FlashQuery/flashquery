@@ -160,6 +160,24 @@ const D = {
     'Do not use when you need plugin metadata or record retrieval; use get_plugin_info or get_record instead.',
     'write_record({ "mode": "create", "plugin_id": "crm", "table": "contacts", "data": {} })'
   ),
+  registerPlugin: description(
+    'Register or update a plugin schema and return structured plugin registration metadata.',
+    'Use when setting up a plugin or applying a safe additive schema update; re-registering the same plugin preserves explicit upsert semantics and returns was_new:false.',
+    'Do not use when you need to inspect an installed plugin; use get_plugin_info instead.',
+    'register_plugin({ "schema_yaml": "plugin:\\n  id: crm\\n  name: CRM" })'
+  ),
+  unregisterPlugin: description(
+    'Unregister plugin registry state with conflict protection for live records.',
+    'Use when removing a plugin registration; pass force:true only when you accept orphaning existing plugin table rows.',
+    'Do not use for record deletion or table cleanup; archive_record handles record lifecycle and forced unregister leaves records orphaned.',
+    'unregister_plugin({ "plugin_id": "crm", "force": true })'
+  ),
+  getPluginInfo: description(
+    'Read plugin identification plus include-gated table, schema, and status details.',
+    'Use when you need plugin table names by default or include:["schema","status_detail"] for deeper diagnostics.',
+    'Do not use when you need to create, update, or unregister a plugin; use register_plugin or unregister_plugin instead.',
+    'get_plugin_info({ "plugin_id": "crm", "include": ["tables", "schema"] })'
+  ),
   maintainVault: description(
     'Run vault maintenance actions such as sync, repair, or status checks.',
     'Use when an operator needs administrative vault maintenance through the dedicated system tool.',
@@ -218,9 +236,9 @@ export const TOOL_METADATA = [
   )),
   current('write_memory', ['memory'], 'read-write', D.writeMemory),
 
-  current('register_plugin', ['plugin'], 'admin', legacyDescription('register_plugin', 'register_plugin', 'Register or update a plugin schema.'), PLUGIN_ADMIN_REASON),
-  current('unregister_plugin', ['plugin'], 'admin', legacyDescription('unregister_plugin', 'unregister_plugin', 'Unregister a plugin and remove its owned tables.'), PLUGIN_ADMIN_REASON),
-  current('get_plugin_info', ['plugin'], 'read-only', legacyDescription('get_plugin_info', 'get_plugin_info', 'Get plugin schema and registration information.'), PLUGIN_ADMIN_REASON),
+  current('register_plugin', ['plugin'], 'admin', D.registerPlugin, PLUGIN_ADMIN_REASON),
+  current('unregister_plugin', ['plugin'], 'admin', D.unregisterPlugin, PLUGIN_ADMIN_REASON),
+  current('get_plugin_info', ['plugin'], 'read-only', D.getPluginInfo, PLUGIN_ADMIN_REASON),
   current('create_record', ['plugin'], 'read-write', legacyDescription('create_record', 'write_record', 'Create a plugin-owned structured record.')),
   current('get_record', ['plugin'], 'read-only', legacyDescription('get_record', 'get_record', 'Retrieve one plugin-owned structured record.')),
   current('update_record', ['plugin'], 'read-write', legacyDescription('update_record', 'write_record', 'Update plugin-owned structured record fields.')),

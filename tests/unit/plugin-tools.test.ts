@@ -37,6 +37,7 @@ vi.mock('../../src/plugins/manager.js', () => ({
   pluginManager: {
     getEntry: vi.fn(),
     loadEntry: vi.fn(),
+    removeEntry: vi.fn(),
     getAllEntries: vi.fn(() => []),
   },
   parsePluginSchema: vi.fn(),
@@ -90,6 +91,10 @@ import * as nodeFs from 'node:fs';
 import pg from 'pg';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
+function parseToolText(result: { content: Array<{ text: string }> }): Record<string, unknown> {
+  return JSON.parse(result.content[0]?.text ?? '{}') as Record<string, unknown>;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,6 +127,7 @@ function makeConfig(): FlashQueryConfig {
     defaults: { project: 'Default' },
     vault: { path: '/tmp/vault' },
     projects: { areas: [] },
+    locking: { enabled: false, ttlSeconds: 30 },
   } as unknown as FlashQueryConfig;
 }
 
@@ -224,6 +230,13 @@ describe('register_plugin', () => {
     };
 
     expect(result.isError).toBeUndefined();
+    expect(parseToolText(result)).toMatchObject({
+      plugin_id: 'crm',
+      name: 'CRM Plugin',
+      status: 'registered',
+      table_count: 1,
+      was_new: true,
+    });
     // pg connection was established via createPgClientIPv4
     expect(mockPgClient.connect).toHaveBeenCalled();
     expect(mockPgClient.query).toHaveBeenCalled();
@@ -350,12 +363,16 @@ describe('get_plugin_info', () => {
     };
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain('crm');
-    expect(result.content[0].text).toContain('fqcp_crm_default_');
-    expect(result.content[0].text).toContain('contacts');
+    expect(parseToolText(result)).toEqual({
+      plugin_id: 'crm',
+      name: 'CRM Plugin',
+      status: 'registered',
+      table_count: 1,
+      tables: ['contacts'],
+    });
   });
 
-  it('returns isError for unknown plugin', async () => {
+  it('returns expected not_found for unknown plugin', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerPluginTools(server, config);
@@ -368,8 +385,11 @@ describe('get_plugin_info', () => {
       isError?: boolean;
     };
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('not found');
+    expect(result.isError).toBe(false);
+    expect(parseToolText(result)).toMatchObject({
+      error: 'not_found',
+      identifier: 'nonexistent',
+    });
   });
 
   it('defaults plugin_instance to "default" when not provided', async () => {
@@ -398,7 +418,7 @@ describe('get_plugin_info', () => {
     expect(pluginManager.getEntry).toHaveBeenCalledWith('crm', 'work');
   });
 
-  it('includes Version and table list in response', async () => {
+  it('gates schema, tables, and status detail through include', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
     registerPluginTools(server, config);
@@ -411,11 +431,112 @@ describe('get_plugin_info', () => {
     });
 
     const handler = getHandler('get_plugin_info');
-    const result = await handler({ plugin_id: 'crm' }) as { content: Array<{ text: string }> };
+    const result = await handler({ plugin_id: 'crm', include: ['schema', 'tables', 'status_detail'] }) as { content: Array<{ text: string }> };
+    const payload = parseToolText(result);
 
-    expect(result.content[0].text).toContain('Version:');
-    expect(result.content[0].text).toContain('1');
-    expect(result.content[0].text).toContain('contacts');
+    expect(payload).toMatchObject({
+      plugin_id: 'crm',
+      tables: ['contacts'],
+      status_detail: {
+        plugin_instance: 'default',
+        table_prefix: 'fqcp_crm_default_',
+        version: '1',
+      },
+    });
+    expect(payload.schema).toEqual(PARSED_SCHEMA_MOCK);
+  });
+});
+
+describe('unregister_plugin', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(parsePluginSchema).mockReturnValue(PARSED_SCHEMA_MOCK as ReturnType<typeof parsePluginSchema>);
+    mockPgClient.connect.mockResolvedValue(undefined);
+    mockPgClient.end.mockResolvedValue(undefined);
+  });
+
+  function mockUnregisterSupabase() {
+    const registryMaybeSingle = vi.fn().mockResolvedValue({
+      data: { id: 'registry-1', schema_yaml: VALID_SCHEMA_YAML },
+      error: null,
+    });
+    const registryEq3 = vi.fn().mockReturnValue({ maybeSingle: registryMaybeSingle });
+    const registryEq2 = vi.fn().mockReturnValue({ eq: registryEq3 });
+    const registryEq1 = vi.fn().mockReturnValue({ eq: registryEq2 });
+    const registrySelect = vi.fn().mockReturnValue({ eq: registryEq1 });
+    const registryDeleteEq3 = vi.fn().mockResolvedValue({ error: null });
+    const registryDeleteEq2 = vi.fn().mockReturnValue({ eq: registryDeleteEq3 });
+    const registryDeleteEq1 = vi.fn().mockReturnValue({ eq: registryDeleteEq2 });
+    const registryDelete = vi.fn().mockReturnValue({ eq: registryDeleteEq1 });
+
+    const countEq2 = vi.fn().mockResolvedValue({ count: 0 });
+    const countEq1 = vi.fn().mockReturnValue({ eq: countEq2 });
+    const countSelect = vi.fn().mockReturnValue({ eq: countEq1 });
+    const updateEq2 = vi.fn().mockResolvedValue({ error: null });
+    const updateEq1 = vi.fn().mockReturnValue({ eq: updateEq2 });
+    const update = vi.fn().mockReturnValue({ eq: updateEq1 });
+    const deleteEq2 = vi.fn().mockResolvedValue({ error: null });
+    const deleteEq1 = vi.fn().mockReturnValue({ eq: deleteEq2 });
+    const deleteFn = vi.fn().mockReturnValue({ eq: deleteEq1 });
+
+    const mockFrom = vi.fn((table: string) => {
+      if (table === 'fqc_plugin_registry') {
+        return { select: registrySelect, delete: registryDelete };
+      }
+      return { select: countSelect, update, delete: deleteFn };
+    });
+
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: mockFrom,
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+  }
+
+  it('conflicts on live records unless force is true', async () => {
+    mockUnregisterSupabase();
+    mockPgClient.query
+      .mockResolvedValueOnce({ rows: [{ count: '1' }] })
+      .mockResolvedValueOnce({ rows: [{ count: '2' }] });
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerPluginTools(server, config);
+
+    const result = await getHandler('unregister_plugin')({ plugin_id: 'crm' }) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.isError).toBe(false);
+    expect(parseToolText(result)).toMatchObject({
+      error: 'conflict',
+      details: { live_record_count: 2 },
+    });
+    expect(pluginManager.removeEntry).not.toHaveBeenCalled();
+  });
+
+  it('force unregisters registry state and warns about orphaned records', async () => {
+    mockUnregisterSupabase();
+    mockPgClient.query
+      .mockResolvedValueOnce({ rows: [{ count: '1' }] })
+      .mockResolvedValueOnce({ rows: [{ count: '3' }] });
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerPluginTools(server, config);
+
+    const result = await getHandler('unregister_plugin')({ plugin_id: 'crm', force: true }) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+
+    expect(result.isError).toBeUndefined();
+    expect(parseToolText(result)).toMatchObject({
+      plugin_id: 'crm',
+      name: 'CRM Plugin',
+      status: 'unregistered',
+      table_count: 1,
+      warnings: ['orphaned_records: 3'],
+    });
+    expect(pluginManager.removeEntry).toHaveBeenCalledWith('crm', 'default');
+    expect(mockPgClient.query).not.toHaveBeenCalledWith(expect.stringContaining('DROP TABLE'));
   });
 });
 

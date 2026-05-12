@@ -1343,6 +1343,13 @@ describe.skipIf(SKIP)('Scenario F: Unregister Plugin → Teardown Verification',
     }
   }
 
+  async function seedLiveContact(name = 'Ada'): Promise<void> {
+    await pgClient.query(
+      `INSERT INTO "${TABLE_CONTACTS}" (instance_id, name, contact_status, status) VALUES ($1, $2, $3, 'active')`,
+      [INSTANCE_ID, name, 'active']
+    );
+  }
+
   async function cleanAll(): Promise<void> {
     await dropPluginTables(pgClient, [TABLE_CONTACTS, TABLE_INTERACTIONS]);
     await supabaseManager.getClient()
@@ -1399,18 +1406,19 @@ describe.skipIf(SKIP)('Scenario F: Unregister Plugin → Teardown Verification',
 
   // ── F1 ─────────────────────────────────────────────────────────────────────
 
-  it('F1: dry-run preview shows tables and ownership count without deleting anything', async () => {
+  it('F1: unregister without force conflicts when live records exist', async () => {
     await cleanAll();
     await setupPlugin(3);
+    await seedLiveContact();
 
     const result = await getHandler('unregister_plugin')({ plugin_id: PLUGIN_ID });
 
     expect(isError(result)).toBe(false);
-    const text = getText(result);
-    expect(text).toMatch(/dry.?run|preview/i);
-    expect(text).toMatch(/table/i);
-    expect(text).toMatch(/ownership|document/i);
-    expect(text).toMatch(/confirm_destroy.*true|call.*unregister/i);
+    const payload = getJson(result);
+    expect(payload).toMatchObject({
+      error: 'conflict',
+      details: { live_record_count: 1 },
+    });
 
     // Plugin still registered
     const { data } = await supabaseManager.getClient()
@@ -1432,16 +1440,24 @@ describe.skipIf(SKIP)('Scenario F: Unregister Plugin → Teardown Verification',
 
   // ── F2 ─────────────────────────────────────────────────────────────────────
 
-  it('F2: confirmed teardown drops plugin tables and removes registry entry', async () => {
+  it('F2: force unregister removes registry entry but leaves plugin tables orphaned', async () => {
+    await cleanAll();
+    await setupPlugin(0);
+    await seedLiveContact();
+
     const result = await getHandler('unregister_plugin')({
       plugin_id: PLUGIN_ID,
-      confirm_destroy: true,
+      force: true,
     });
 
     expect(isError(result)).toBe(false);
-    expect(getText(result)).toMatch(/unregistered|removed|dropped/i);
-    expect(await tableExists(pgClient, TABLE_CONTACTS)).toBe(false);
-    expect(await tableExists(pgClient, TABLE_INTERACTIONS)).toBe(false);
+    expect(getJson(result)).toMatchObject({
+      plugin_id: PLUGIN_ID,
+      status: 'unregistered',
+      warnings: ['orphaned_records: 1'],
+    });
+    expect(await tableExists(pgClient, TABLE_CONTACTS)).toBe(true);
+    expect(await tableExists(pgClient, TABLE_INTERACTIONS)).toBe(true);
 
     const { data } = await supabaseManager.getClient()
       .from('fqc_plugin_registry')
@@ -1467,7 +1483,7 @@ describe.skipIf(SKIP)('Scenario F: Unregister Plugin → Teardown Verification',
 
     await getHandler('unregister_plugin')({
       plugin_id: PLUGIN_ID,
-      confirm_destroy: true,
+      force: true,
     });
 
     const { count: totalCount } = await supabaseManager.getClient()
@@ -1491,10 +1507,11 @@ describe.skipIf(SKIP)('Scenario F: Unregister Plugin → Teardown Verification',
 
     const result = await getHandler('unregister_plugin')({ plugin_id: badId });
 
-    expect(isError(result)).toBe(true);
-    const text = getText(result);
-    expect(text).toMatch(/not found|not registered/i);
-    expect(text).toContain(badId);
+    expect(isError(result)).toBe(false);
+    expect(getJson(result)).toMatchObject({
+      error: 'not_found',
+      identifier: badId,
+    });
   });
 
   // ── F5 ─────────────────────────────────────────────────────────────────────
@@ -1505,21 +1522,24 @@ describe.skipIf(SKIP)('Scenario F: Unregister Plugin → Teardown Verification',
 
     const first = await getHandler('unregister_plugin')({
       plugin_id: PLUGIN_ID,
-      confirm_destroy: true,
+      force: true,
     });
     expect(isError(first)).toBe(false);
 
     const second = await getHandler('unregister_plugin')({
       plugin_id: PLUGIN_ID,
-      confirm_destroy: true,
+      force: true,
     });
-    expect(isError(second)).toBe(true);
-    expect(getText(second)).toMatch(/not found|not registered|already/i);
+    expect(isError(second)).toBe(false);
+    expect(getJson(second)).toMatchObject({
+      error: 'not_found',
+      identifier: PLUGIN_ID,
+    });
   });
 
   // ── F6 ─────────────────────────────────────────────────────────────────────
 
-  it('F6: dry-run with 100 owned documents shows correct ownership count', async () => {
+  it('F6: unregister clears ownership for 100 owned documents', async () => {
     await cleanAll();
     await setupPlugin(0);
 
@@ -1549,24 +1569,19 @@ describe.skipIf(SKIP)('Scenario F: Unregister Plugin → Teardown Verification',
     const result = await getHandler('unregister_plugin')({ plugin_id: PLUGIN_ID });
 
     expect(isError(result)).toBe(false);
-    const text = getText(result);
-    // Dry-run output must include the ownership doc count (100)
-    expect(text).toMatch(/100/);
-    expect(text).toMatch(/ownership|document/i);
+    expect(getJson(result)).toMatchObject({
+      plugin_id: PLUGIN_ID,
+      status: 'unregistered',
+      documents_ownership_cleared: 100,
+    });
 
-    // Plugin still registered after dry-run
+    // Plugin no longer registered after zero-live-record unregister.
     const { data } = await supabaseManager.getClient()
       .from('fqc_plugin_registry')
       .select('id')
       .eq('plugin_id', PLUGIN_ID)
       .eq('instance_id', INSTANCE_ID)
       .maybeSingle();
-    expect(data).toBeDefined();
-
-    // Clean up
-    await getHandler('unregister_plugin')({
-      plugin_id: PLUGIN_ID,
-      confirm_destroy: true,
-    });
+    expect(data).toBeNull();
   });
 });

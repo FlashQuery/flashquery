@@ -18,7 +18,12 @@ import { createPgClientIPv4 } from '../../utils/pg-client.js';
 import { compareSchemaVersions, analyzeSchemaChanges } from '../../utils/schema-migration.js';
 import { reloadManifests } from '../../services/manifest-loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
-// formatKeyValueEntry imported for potential future use — not currently referenced in this file
+import {
+  jsonExpectedError,
+  jsonToolResult,
+  pluginIdentification,
+  withWarnings,
+} from '../utils/response-formats.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // registerPluginTools — registers register_plugin and get_plugin_info
@@ -163,10 +168,10 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
 
               return {
                 content: [
-                  {
-                    type: 'text' as const,
-                    text: `Schema migration failed: plugin "${schema.plugin.id}" version ${existing.schema_version} → ${schema.plugin.version} contains breaking changes.\n\nUnsafe changes detected:\n${unsafeList}\n\nTo apply breaking changes, use:\n1. unregister_plugin({ plugin_id: "${schema.plugin.id}", confirm_destroy: true })\n2. Then register_plugin again with the new schema.`,
-                  },
+                {
+                  type: 'text' as const,
+                  text: `Schema migration failed: plugin "${schema.plugin.id}" version ${existing.schema_version} → ${schema.plugin.version} contains breaking changes.\n\nUnsafe changes detected:\n${unsafeList}\n\nTo apply breaking changes, use:\n1. unregister_plugin({ plugin_id: "${schema.plugin.id}", force: true })\n2. Then register_plugin again with the new schema.`,
+                },
                 ],
                 isError: true,
               };
@@ -251,14 +256,18 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           // Phase 84: Rebuild global type registry after re-registration
           buildGlobalTypeRegistry();
 
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Plugin '${schema.plugin.id}' schema updated from ${existing.schema_version} to ${schema.plugin.version}. Applied ${safeChangeCount} safe change(s).`,
-              },
-            ],
-          };
+          return jsonToolResult({
+            ...pluginIdentification({
+              plugin_id: schema.plugin.id,
+              name: schema.plugin.name,
+              status: 'registered',
+              table_count: schema.tables.length,
+            }),
+            registered_at: new Date().toISOString(),
+            was_new: false,
+            schema_version: schema.plugin.version,
+            safe_change_count: safeChangeCount,
+          });
         }
 
         // Step 6: execute DDL for new plugin or same-version re-registration
@@ -329,19 +338,19 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           `register_plugin: registered '${schema.plugin.id}' instance '${instanceName}' — ${createdTables.length} table(s)`
         );
 
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: [
-                `Plugin '${schema.plugin.id}' (${schema.plugin.name}) registered successfully. Manifest mappings updated.`,
-                `Instance: ${instanceName}`,
-                `Version: ${schema.plugin.version}`,
-                `Tables created: ${createdTables.join(', ')}`,
-              ].join('\n'),
-            },
-          ],
-        };
+        return jsonToolResult({
+          ...pluginIdentification({
+            plugin_id: schema.plugin.id,
+            name: schema.plugin.name,
+            status: 'registered',
+            table_count: schema.tables.length,
+          }),
+          registered_at: new Date().toISOString(),
+          was_new: !existing,
+          plugin_instance: instanceName,
+          schema_version: schema.plugin.version,
+          tables: createdTables,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`register_plugin failed: ${msg}`);
@@ -359,9 +368,10 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
       inputSchema: {
         plugin_id: z.string().describe('Plugin identifier'),
         plugin_instance: z.string().optional().describe('Plugin instance identifier. Omit for single-instance plugins.'),
+        include: z.array(z.enum(['schema', 'tables', 'status_detail'])).optional().describe('Payload sections to include. Defaults to ["tables"].'),
       },
     },
-    ({ plugin_id, plugin_instance }) => {
+    ({ plugin_id, plugin_instance, include }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -380,43 +390,39 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         const entry = pluginManager.getEntry(plugin_id, instanceName);
 
         if (!entry) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Plugin '${plugin_id}' instance '${instanceName}' not found. Register it first with register_plugin.`,
-              },
-            ],
-            isError: true,
+          return jsonExpectedError({
+            error: 'not_found',
+            message: `Plugin '${plugin_id}' instance '${instanceName}' not found. Register it first with register_plugin.`,
+            identifier: plugin_id,
+            details: { plugin_instance: instanceName },
+          });
+        }
+
+        const effectiveInclude = include ?? ['tables'];
+        const payload: Record<string, unknown> = {
+          ...pluginIdentification({
+            plugin_id: entry.schema.plugin.id,
+            name: entry.schema.plugin.name,
+            status: 'registered',
+            table_count: entry.schema.tables.length,
+          }),
+        };
+
+        if (effectiveInclude.includes('tables')) {
+          payload.tables = entry.schema.tables.map((table) => table.name);
+        }
+        if (effectiveInclude.includes('schema')) {
+          payload.schema = entry.schema;
+        }
+        if (effectiveInclude.includes('status_detail')) {
+          payload.status_detail = {
+            plugin_instance: entry.plugin_instance,
+            table_prefix: entry.table_prefix,
+            version: entry.schema.plugin.version,
           };
         }
 
-        const tableLines = entry.schema.tables.map((t) => {
-          const fullTable = `${entry.table_prefix}${t.name}`;
-          const cols = t.columns
-            .map(
-              (c) =>
-                `    - ${c.name} (${c.type})${c.required ? ' NOT NULL' : ''}${c.default !== undefined ? ` DEFAULT ${JSON.stringify(c.default)}` : ''}${c.description ? ` — ${c.description}` : ''}`
-            )
-            .join('\n');
-          const embedInfo =
-            t.embed_fields && t.embed_fields.length > 0
-              ? `\n  embed_fields: ${t.embed_fields.join(', ')}`
-              : '';
-          return `- ${fullTable}${embedInfo}\n  columns:\n${cols}`;
-        });
-
-        const responseText = [
-          `Plugin: ${entry.schema.plugin.name} (${entry.schema.plugin.id})`,
-          `Version: ${entry.schema.plugin.version}`,
-          `Instance: ${entry.plugin_instance}`,
-          `Table prefix: ${entry.table_prefix}`,
-          ``,
-          `Tables:`,
-          tableLines.join('\n'),
-        ].join('\n');
-
-        return { content: [{ type: 'text' as const, text: responseText }] };
+        return jsonToolResult(payload);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_plugin_info failed: ${msg}`);
@@ -431,17 +437,14 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
     'unregister_plugin',
     {
       description:
-        'Unregister a plugin and tear down its database resources. Call without confirm_destroy to preview what will be removed (dry run showing table record counts, document ownership, and memory counts). Call with confirm_destroy: true to execute the teardown: drops plugin tables, clears document ownership claims, deletes plugin-scoped memories, and removes the registry entry. Vault files are never deleted. Use this when removing a plugin, resetting plugin data for testing, or before re-registering a plugin after breaking schema changes.' +
-        'dry-run (always shows what will happen) and confirmed teardown (only with confirm_destroy: true). ' +
-        'Plugin tables are dropped, document ownership is cleared, and watcher claims are removed. ' +
-        'Vault files are not deleted.',
+        'Unregister a plugin registry entry. Without force, live records return a structured conflict. With force:true, plugin registry and pending-review state are removed while existing plugin table rows are left orphaned.',
       inputSchema: {
         plugin_id: z.string().describe('Plugin identifier'),
         plugin_instance: z.string().optional().describe('Plugin instance identifier. Omit for single-instance plugins.'),
-        confirm_destroy: z.boolean().optional().describe('Must be true to execute teardown. Omit or false for dry-run only.'),
+        force: z.boolean().optional().describe('When true, unregister even when live records exist; existing plugin table records are left orphaned.'),
       },
     },
-    async ({ plugin_id, plugin_instance, confirm_destroy = false }) => {
+    async ({ plugin_id, plugin_instance, force = false }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -493,22 +496,21 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         }
 
         if (!registryRow) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Error: Plugin '${plugin_id}' instance '${instanceName}' is not registered.`,
-              },
-            ],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'not_found',
+            message: `Plugin '${plugin_id}' instance '${instanceName}' is not registered.`,
+            identifier: plugin_id,
+            details: { plugin_instance: instanceName },
+          });
         }
 
         // Parse schema to get table names
         let tablesToDrop: string[] = [];
+        let pluginName = plugin_id;
         try {
           const schema = parsePluginSchema(registryRow.schema_yaml as string);
           tablesToDrop = schema.tables.map((t) => resolveTableName(plugin_id, instanceName, t.name));
+          pluginName = schema.plugin.name;
         } catch (err) {
           logger.warn(`unregister_plugin: failed to parse schema for ${plugin_id}: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -529,9 +531,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
               );
               const tableExists = ((result.rows[0] as { count?: unknown })?.count ?? 0) > 0;
               if (tableExists) {
-                const countResult = await pgClient.query(
-                  `SELECT COUNT(*) as count FROM "${table}" WHERE status = 'active'`
-                );
+                const countResult = await pgClient.query(`SELECT COUNT(*) as count FROM "${table}" WHERE instance_id = $1 AND status = 'active'`, [config.instance.id]);
                 tableStats.push({
                   table,
                   count: Number((countResult.rows[0] as { count?: unknown })?.count ?? 0),
@@ -543,6 +543,16 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           }
         } finally {
           await pgClient.end();
+        }
+
+        const liveRecordCount = tableStats.reduce((sum, stat) => sum + stat.count, 0);
+        if (liveRecordCount > 0 && !force) {
+          return jsonExpectedError({
+            error: 'conflict',
+            message: `Plugin '${plugin_id}' has ${liveRecordCount} live record(s); pass force:true to unregister and leave records orphaned.`,
+            identifier: plugin_id,
+            details: { live_record_count: liveRecordCount },
+          });
         }
 
         // Count affected documents
@@ -558,63 +568,6 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           .select('*', { count: 'exact', head: true })
           .eq('plugin_scope', plugin_id)
           .eq('instance_id', config.instance.id);
-
-        // Build dry-run response
-        const dryRunLines: string[] = [
-          `Unregister plugin '${plugin_id}' instance '${instanceName}' — DRY RUN`,
-          '',
-          'Tables to drop:',
-        ];
-
-        for (const stat of tableStats) {
-          dryRunLines.push(`  ${stat.table} — ${stat.count} active records`);
-        }
-
-        dryRunLines.push('', 'Other changes:');
-        dryRunLines.push(`  ${docCount ?? 0} documents will have ownership cleared (files remain in vault)`);
-        dryRunLines.push(`  ${memCount ?? 0} plugin-scoped memories will be deleted`);
-        dryRunLines.push('', 'Registry entry will be deleted.');
-        dryRunLines.push('In-memory plugin entry will be unloaded.');
-        dryRunLines.push('Manifest folder mappings will be cleared.');
-
-        if (!confirm_destroy) {
-          dryRunLines.push('', 'To execute: call unregister_plugin with confirm_destroy: true');
-          return { content: [{ type: 'text' as const, text: dryRunLines.join('\n') }] };
-        }
-
-        // Phase 2: Teardown (only if confirm_destroy: true)
-        const pgClient2 = createPgClientIPv4(config.supabase.databaseUrl);
-        const teardownLines: string[] = [
-          `Plugin '${plugin_id}' instance '${instanceName}' has been unregistered.`,
-          '',
-          'Tables dropped:',
-        ];
-
-        try {
-          await pgClient2.connect();
-
-          // Drop tables
-          for (const table of tablesToDrop) {
-            try {
-              await pgClient2.query(`DROP TABLE IF EXISTS "${table}" CASCADE`);
-              const stat = tableStats.find((s) => s.table === table);
-              if (stat) {
-                teardownLines.push(`  ${table} — ${stat.count} records removed`);
-              } else {
-                teardownLines.push(`  ${table} — already dropped or not found`);
-              }
-            } catch (err) {
-              logger.error(`Failed to drop table ${table}: ${err instanceof Error ? err.message : String(err)}`);
-              teardownLines.push(`  ${table} — ERROR: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          }
-
-          // Notify PostgREST to reload schema cache
-          await pgClient2.query(`SELECT pg_notify('pgrst', 'reload schema')`);
-          await new Promise((resolve) => setTimeout(resolve, 500));
-        } finally {
-          await pgClient2.end();
-        }
 
         // Clear document ownership
         try {
@@ -678,15 +631,23 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           logger.error(`Failed to reload manifests: ${err instanceof Error ? err.message : String(err)}`);
         }
 
-        // Build final response
-        teardownLines.push('', 'Other changes:');
-        teardownLines.push(`  ${docCount ?? 0} documents — ownership cleared (files remain in vault, marked for re-discovery)`);
-        teardownLines.push(`  ${memCount ?? 0} plugin-scoped memories deleted`);
-        teardownLines.push('  Registry entry deleted');
-        teardownLines.push('  In-memory plugin entry unloaded');
-        teardownLines.push('  Manifest folder mappings cleared');
-
-        return { content: [{ type: 'text' as const, text: teardownLines.join('\n') }] };
+        return jsonToolResult(
+          withWarnings(
+            {
+              ...pluginIdentification({
+                plugin_id,
+                name: pluginName,
+                status: 'unregistered',
+                table_count: tablesToDrop.length,
+              }),
+              plugin_instance: instanceName,
+              unregistered_at: new Date().toISOString(),
+              documents_ownership_cleared: docCount ?? 0,
+              plugin_scoped_memories_deleted: memCount ?? 0,
+            },
+            liveRecordCount > 0 ? [`orphaned_records: ${liveRecordCount}`] : []
+          )
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`unregister_plugin failed: ${msg}`);

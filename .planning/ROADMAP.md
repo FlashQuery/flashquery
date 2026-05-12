@@ -47,7 +47,7 @@
 | 123 | Document Read + Standard Output Migration | 4/4 | Complete    | 2026-05-12 |
 | 124 | Document Write Primitives | 7/7 | Complete    | 2026-05-12 |
 | 125 | Unified Search + Memory Consolidation | 6/6 | Completed |  |
-| 126 | Plugin + Record Consolidation | 0/5 | Planned    |  |
+| 126 | Plugin + Record Consolidation | 1/5 | In Progress|  |
 | 127 | Removal, Directory, And Vault Maintenance | Add `remove_document`, `manage_directory`, and `maintain_vault` with safe filesystem/git semantics. | DOC-09, SYS-01..03 | 6 |
 | 128 | Legacy Surface Removal + Final Audit | Remove merged/dead tools, preserve transitional macro gates, and close coverage/preflight. | DOC-10, MEM-05, SYS-04..06, TEST-07, TEST-08 | 6 |
 
@@ -200,11 +200,11 @@ Plans:
 4. `clear_pending_reviews` uses explicit list/clear actions and structured item envelopes.
 5. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
 
-**Plans:** 0/5 plans executed
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 126-01-PLAN.md — Create traceability, record validation, and record output helper contracts.
+- [x] 126-01-PLAN.md — Create traceability, record validation, and record output helper contracts.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 126-02-PLAN.md — Migrate plugin register/unregister/info tools to structured envelopes.
