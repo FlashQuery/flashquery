@@ -22,6 +22,8 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-foundation-tools-4 | Suspicious host category combinations remain warning-only startup diagnostics. | foundation_host_tool_exposure | 2026-05-11   | 2026-05-11   |
 | INT-foundation-tools-5 | Removed-status purpose tool names remain valid while their legacy tools are still registered; hard-fail suggestions are deferred until actual removal. | foundation_host_tool_exposure; Unit: llm-config.test.ts | 2026-05-11   | 2026-05-11   |
 | INT-foundation-frontmatter-1 | Foundation frontmatter constant guardrails are represented in integration coverage traceability for later migration phases. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
+| INT-gdoc-error-1 | get_document JSON error-shape coverage proves missing identifiers use canonical `not_found` envelopes without runtime `isError:true`. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
+| INT-gdoc-error-2 | get_document JSON error-shape coverage proves invalid include/section requests use canonical `invalid_input` envelopes with conflict details preserved. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
 
 ---
 

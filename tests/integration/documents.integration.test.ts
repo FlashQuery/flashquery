@@ -55,9 +55,15 @@ describe.skipIf(SKIP)('Document Embedding Integration', () => {
     await initSupabase(config);
     initEmbedding(config);
     await initVault(config);
-  });
+  }, 60_000);
 
   afterAll(async () => {
+    if (!supabaseManager) {
+      if (vaultPath) {
+        await rm(vaultPath, { recursive: true, force: true });
+      }
+      return;
+    }
     // Clean up test documents from fqc_documents
     await supabaseManager.getClient()
       .from('fqc_documents')
@@ -172,9 +178,15 @@ describe.skipIf(!HAS_SUPABASE)('search_documents status filtering (STAT-04, STAT
     await initSupabase(config);
     initEmbedding(config);
     await initVault(config);
-  });
+  }, 60_000);
 
   afterAll(async () => {
+    if (!supabaseManager) {
+      if (vaultPath) {
+        await rm(vaultPath, { recursive: true, force: true });
+      }
+      return;
+    }
     await supabaseManager.getClient()
       .from('fqc_documents')
       .delete()
@@ -238,5 +250,80 @@ describe.skipIf(!HAS_SUPABASE)('search_documents status filtering (STAT-04, STAT
     expect(result.content[0].text).not.toContain('Archived Case Mixed');
     // Normal active doc should appear
     expect(result.content[0].text).toContain('Normal Active');
+  });
+});
+
+describe.skipIf(!HAS_SUPABASE)('get_document canonical expected errors', () => {
+  let vaultPath: string;
+  let config: FlashQueryConfig;
+
+  function makeNoEmbedConfig(vp: string): FlashQueryConfig {
+    return {
+      instance: { name: 'gdoc-error-test', id: 'gdoc-error-test-id', vault: { path: vp, markdownExtensions: ['.md'] } },
+      supabase: { url: TEST_SUPABASE_URL, serviceRoleKey: TEST_SUPABASE_KEY, databaseUrl: TEST_DATABASE_URL, skipDdl: false },
+      embedding: { provider: 'none' as never, model: '', apiKey: '', dimensions: 1536 },
+      logging: { level: 'error', output: 'stdout' },
+      locking: { enabled: false, ttlSeconds: 30 },
+    } as unknown as FlashQueryConfig;
+  }
+
+  function parseJsonResult(result: { content: Array<{ text: string }>; isError?: boolean }): Record<string, unknown> {
+    expect(result.content[0]?.text).toBeTruthy();
+    return JSON.parse(result.content[0]!.text) as Record<string, unknown>;
+  }
+
+  beforeAll(async () => {
+    vaultPath = await mkdtemp(join(tmpdir(), 'fqc-gdoc-errors-'));
+    config = makeNoEmbedConfig(vaultPath);
+    initLogger(config);
+    await initSupabase(config);
+    initEmbedding(config);
+    await initVault(config);
+  }, 60_000);
+
+  afterAll(async () => {
+    if (!supabaseManager) {
+      if (vaultPath) {
+        await rm(vaultPath, { recursive: true, force: true });
+      }
+      return;
+    }
+    await supabaseManager.getClient()
+      .from('fqc_documents')
+      .delete()
+      .eq('instance_id', 'gdoc-error-test-id');
+    await rm(vaultPath, { recursive: true, force: true });
+  });
+
+  it('returns not_found JSON with isError:false for missing single get_document identifiers', async () => {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const result = await getHandler('get_document')({
+      identifiers: 'missing.md',
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBe(false);
+    expect(parseJsonResult(result)).toMatchObject({
+      error: 'not_found',
+      identifier: 'missing.md',
+    });
+  });
+
+  it('returns invalid_input JSON with isError:false for invalid section/include combinations', async () => {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const result = await getHandler('get_document')({
+      identifiers: 'missing.md',
+      include: ['headings'],
+      sections: ['Summary'],
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBe(false);
+    expect(parseJsonResult(result)).toMatchObject({
+      error: 'invalid_input',
+      details: { conflict: 'sections_without_body' },
+    });
   });
 });

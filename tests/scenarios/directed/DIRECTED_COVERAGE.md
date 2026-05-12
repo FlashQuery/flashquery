@@ -68,6 +68,8 @@ Core CRUD operations on vault documents via MCP.
 | D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
 | D-51 | get_document with array identifiers returns array output; each element succeeds independently (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
 | D-52 | get_document batch partial failure — one identifier not found returns error object at position; other succeeds; MCP response is not isError (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
+| D-gdoc-error-1 | get_document missing single identifier returns canonical JSON `not_found` envelope with `isError:false` instead of runtime failure. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
+| D-gdoc-error-2 | get_document invalid section/include combination returns canonical JSON `invalid_input` envelope with `details.conflict` preserved. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
 | D-53 | get_document with follow_ref returns source envelope + followed_ref nested object with resolved target content (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
 | D-54 | get_document follow_ref + include: ["headings"] returns headings in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
 | D-55 | get_document follow_ref + include: ["frontmatter","headings"] returns both in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
