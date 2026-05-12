@@ -48,7 +48,7 @@
 | 124 | Document Write Primitives | 7/7 | Complete    | 2026-05-12 |
 | 125 | Unified Search + Memory Consolidation | 6/6 | Completed |  |
 | 126 | Plugin + Record Consolidation | 5/5 | Complete   | 2026-05-12 |
-| 127 | Removal, Directory, And Vault Maintenance | 6/6 | Complete   | 2026-05-12 |
+| 127 | Removal, Directory, And Vault Maintenance | 6/6 | Complete    | 2026-05-12 |
 | 128 | Legacy Surface Removal + Final Audit | Remove merged/dead tools, preserve transitional macro gates, and close coverage/preflight. | DOC-10, MEM-05, SYS-04..06, TEST-07, TEST-08 | 6 |
 
 ## Phase Details
