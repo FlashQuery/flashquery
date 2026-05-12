@@ -139,14 +139,16 @@ Plans:
 5. Legacy create/update/header/append behavior is ported into new tests before those legacy tools are removed later.
 6. Unit, integration, E2E, directed scenario, and integration scenario coverage ship with the phase.
 
-**Plans:** 5 plans
+**Plans:** 7 plans
 
 Plans:
 - [ ] 124-01-PLAN.md — Create traceability and implement `write_document` create/update primitives.
 - [ ] 124-02-PLAN.md — Migrate `insert_in_doc` nested-section semantics and JSON metadata.
 - [ ] 124-03-PLAN.md — Migrate `replace_doc_section` nested replacement/deletion semantics.
 - [ ] 124-04-PLAN.md — Migrate `apply_tags` explicit targets and ordered results.
-- [ ] 124-05-PLAN.md — Port scenario coverage and close Phase 124 validation.
+- [ ] 124-05-PLAN.md — Update scenario coverage ledgers and traceability before scenario edits.
+- [ ] 124-06-PLAN.md — Port directed Python scenarios to final Phase 124 primitives.
+- [ ] 124-07-PLAN.md — Port YAML integration scenarios and close Phase 124 validation evidence.
 
 **UI hint:** no
 
