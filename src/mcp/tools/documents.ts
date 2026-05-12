@@ -33,6 +33,7 @@ import {
   jsonToolResult,
   documentArchiveResult,
   documentIdentification,
+  withWarnings,
   type ErrorEnvelope,
 } from '../utils/response-formats.js';
 import {
@@ -1713,7 +1714,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
       description:
         'Move or rename a document in the vault while preserving its fqc_id, history, and all plugin associations. Creates intermediate directories automatically. Renaming is a special case — move to the same directory with a different filename. Use this when the user wants to reorganize files, rename a document, or move files between folders. The document\'s identity is preserved — no data is lost.' +
         'The document file is moved atomically on the filesystem, and its path is updated in the database. ' +
-        'References to this document in other files are NOT automatically updated. ' +
+        'Existing links in other files are NOT automatically updated. ' +
         'If destination extension is omitted, the source extension is used.',
       inputSchema: {
         identifier: z.string().describe('Source document path, fqc_id, or filename'),
@@ -1759,7 +1760,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const sourceFqcId = resolved.fqcId;
 
         // Step 1.5: Check for plugin ownership
-        let pluginOwnershipWarning = '';
+        const warnings: string[] = [];
         if (sourceFqcId) {
           const { data: docData } = await supabase
             .from('fqc_documents')
@@ -1769,16 +1770,17 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             .maybeSingle();
 
           if (docData?.ownership_plugin_id) {
-            pluginOwnershipWarning = `Warning: This document is owned by plugin '${docData.ownership_plugin_id}'. The plugin may expect the original path and may not find it at the new location.`;
+            warnings.push('plugin_ownership_path_expectation');
           }
         }
 
         // Step 2: Validate source file exists
         if (!existsSync(sourceAbsPath)) {
-          return {
-            content: [{ type: 'text' as const, text: `Error: Source document not found at "${resolved.relativePath}".` }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'not_found',
+            message: `Source document not found at "${resolved.relativePath}".`,
+            identifier,
+          });
         }
 
         // Step 3: Validate and normalize destination path
@@ -1794,32 +1796,33 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const destAbsPath = join(vaultRoot, destPath);
         const normalizedDest = normalize(destAbsPath);
         if (!normalizedDest.startsWith(vaultRoot + sep) && normalizedDest !== vaultRoot) {
-          return {
-            content: [{ type: 'text' as const, text: `Error: Destination path escapes vault root.` }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'Destination path escapes vault root.',
+            identifier: destPath,
+            details: { reason: 'path_traversal' },
+          });
         }
 
         // Step 4: Check if destination already exists
         if (existsSync(destAbsPath)) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Error: A file already exists at '${destPath}'. Choose a different destination or remove the existing file first.`,
-              },
-            ],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'conflict',
+            message: `A file already exists at '${destPath}'. Choose a different destination or remove the existing file first.`,
+            identifier: destPath,
+            details: { reason: 'path_exists' },
+          });
         }
 
         // Step 5: Check if source and destination are identical
         const normalizedSource = normalize(sourceAbsPath);
         if (normalizedDest === normalizedSource) {
-          return {
-            content: [{ type: 'text' as const, text: `Error: Source and destination are identical. No move needed.` }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'conflict',
+            message: 'Source and destination are identical. No move needed.',
+            identifier: destPath,
+            details: { reason: 'identical_path' },
+          });
         }
 
         // Step 6: Create intermediate directories
@@ -1844,6 +1847,8 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           }
         }
 
+        let responseTitle = basename(destPath).replace(/\.md$/, '');
+
         // Step 8: Update database path
         // Check if document is tracked (has fqc_id)
         if (sourceFqcId) {
@@ -1865,6 +1870,9 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
           if (currentTitle && sourceFilename && currentTitle === sourceFilename && newFilename) {
             updateData.title = newFilename;
+            responseTitle = newFilename;
+          } else if (currentTitle) {
+            responseTitle = currentTitle;
           }
 
           await supabase
@@ -1874,28 +1882,37 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             .eq('instance_id', config.instance.id);
         }
 
-        // Step 9: Build response
-        const responseLines: string[] = [
-          `Document moved successfully.`,
-          '',
-          formatKeyValueEntry('Old path', resolved.relativePath),
-          formatKeyValueEntry('New path', destPath),
-        ];
+        const moved = await vaultManager.readMarkdown(destPath);
+        const movedTitle = typeof moved.data[FM.TITLE] === 'string' ? moved.data[FM.TITLE] : responseTitle;
+        const modified = typeof moved.data[FM.UPDATED] === 'string' ? moved.data[FM.UPDATED] : new Date().toISOString();
+        const responseFqcId = sourceFqcId ?? (typeof moved.data[FM.ID] === 'string' ? moved.data[FM.ID] : 'untracked');
+        const payload = documentIdentification({
+          identifier: destPath,
+          title: movedTitle,
+          path: destPath,
+          fq_id: responseFqcId,
+          modified,
+          chars: moved.content.length,
+        });
 
-        if (sourceFqcId) {
-          responseLines.push(formatKeyValueEntry('Document ID', sourceFqcId));
-        } else {
-          responseLines.push(formatKeyValueEntry('Tracked', 'false'));
-        }
-
-        if (pluginOwnershipWarning) {
-          responseLines.push('', pluginOwnershipWarning);
-        }
-
-        responseLines.push('', 'Note: References to this document in other files have not been updated. Update wikilinks manually if needed.');
-
-        return { content: [{ type: 'text' as const, text: responseLines.join('\n') }] };
+        return jsonToolResult(withWarnings(payload, warnings));
       } catch (err) {
+        if (err instanceof DocumentNotFoundError) {
+          return jsonExpectedError({
+            error: 'not_found',
+            message: `No document found for identifier: ${identifier}`,
+            identifier,
+          });
+        }
+
+        if (err instanceof AmbiguousDocumentIdentifierError) {
+          return jsonExpectedError({
+            error: 'ambiguous_identifier',
+            message: err.message,
+            identifier,
+          });
+        }
+
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`move_document failed - ${msg}`);
         return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };

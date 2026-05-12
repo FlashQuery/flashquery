@@ -29,7 +29,7 @@ describe('move_document JSON output contract', () => {
       path: 'Moved/Renamed.md',
       fq_id: sourceFqId,
     });
-    expect((payload.size as { chars: number }).chars).toBe(body.length);
+    expect((payload.size as { chars: number }).chars, 'size.chars').toBe(body.length);
   });
 
   it('normalizes extensionless destination paths to the source extension in the returned path', () => {

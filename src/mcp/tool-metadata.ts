@@ -105,6 +105,12 @@ const D = {
     'Do not use when you need batch copy behavior; copy_document intentionally accepts one source identifier and one destination per call.',
     'copy_document({ "identifier": "Templates/Contact.md", "destination": "People/Ada.md" })'
   ),
+  moveDocument: description(
+    'Move or rename one vault document and return a JSON document identification block for the moved document.',
+    'Use when you need a single-target path change that preserves fq_id identity; plugin-owned moves return warnings:["plugin_ownership_path_expectation"].',
+    'Do not use when you need batch move behavior or automatic link rewriting; call move_document once per destination-sensitive move and update references separately.',
+    'move_document({ "identifier": "Notes/Draft.md", "destination": "Archive/Draft.md" })'
+  ),
   listVault: description(
     'List vault files and folders with optional metadata.',
     'Use when you need to browse vault structure or inspect matching files without reading full bodies.',
@@ -165,7 +171,7 @@ export const TOOL_METADATA = [
   current('append_to_doc', ['doc-write'], 'read-write', legacyDescription('append_to_doc', 'insert_in_doc', 'Append content to the end of a document.')),
   current('update_doc_header', ['doc-write'], 'read-write', legacyDescription('update_doc_header', 'write_document', 'Update document frontmatter fields.')),
   current('copy_document', ['doc-write'], 'read-write', D.copyDocument),
-  current('move_document', ['doc-write'], 'read-write', legacyDescription('move_document', 'move_document', 'Move or rename a vault document.')),
+  current('move_document', ['doc-write'], 'read-write', D.moveDocument),
   current('archive_document', ['doc-write'], 'read-write', D.archiveDocument),
   current('insert_in_doc', ['doc-write'], 'read-write', legacyDescription('insert_in_doc', 'insert_in_doc', 'Insert content at a specific markdown-aware position.')),
   current('replace_doc_section', ['doc-write'], 'read-write', legacyDescription('replace_doc_section', 'replace_doc_section', 'Replace a named markdown section in a document.')),
