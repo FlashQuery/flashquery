@@ -35,6 +35,18 @@ export interface ScanResult {
   embedsAwaited: number; // Number of embed promises awaited during drain
 }
 
+export interface FrontmatterRepairOptions {
+  dryRun?: boolean;
+}
+
+export interface FrontmatterRepairResult {
+  scanned: number;
+  added: number;
+  updated: number;
+  repaired: number;
+  archived: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // titleFromFilename — derives title from filename (D-03: not from H1 heading)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1121,11 +1133,21 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
 // CRITICAL: This runs AFTER runScanOnce, outside the mutex lock.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function repairFrontmatter(config: FlashQueryConfig): Promise<void> {
+export async function repairFrontmatter(
+  config: FlashQueryConfig,
+  options: FrontmatterRepairOptions = {}
+): Promise<FrontmatterRepairResult> {
   const { supabaseManager } = await import('../storage/supabase.js');
   const supabase = supabaseManager.getClient();
   const vaultRoot = config.instance.vault.path;
   const instanceId = config.instance.id;
+  const counts: FrontmatterRepairResult = {
+    scanned: 0,
+    added: 0,
+    updated: 0,
+    repaired: 0,
+    archived: 0,
+  };
 
   try {
     const { data: repairFiles } = await supabase
@@ -1135,11 +1157,20 @@ export async function repairFrontmatter(config: FlashQueryConfig): Promise<void>
       .eq('needs_frontmatter_repair', true);
 
     if (repairFiles && repairFiles.length > 0) {
+      counts.scanned = repairFiles.length;
       for (const row of repairFiles) {
         const filePath = row.path as string;
         const fqcId = row.id as string;
         const createdAt = (row.created_at as string) || new Date().toISOString();
         const status = (row.status as string) || 'active';
+        if (status === 'archived') {
+          counts.archived++;
+        }
+
+        if (options.dryRun) {
+          counts.repaired++;
+          continue;
+        }
 
         try {
           // Read file to extract existing content and frontmatter
@@ -1180,6 +1211,8 @@ export async function repairFrontmatter(config: FlashQueryConfig): Promise<void>
               updated_at: new Date().toISOString(),
             })
             .eq('id', fqcId);
+          counts.updated++;
+          counts.repaired++;
 
           logger.debug(`[TSA-02] frontmatter repaired: "${filePath}" (fqc_id=${fqcId}) — hash updated to ${updatedHash}`);
         } catch (writeErr: unknown) {
@@ -1208,4 +1241,5 @@ export async function repairFrontmatter(config: FlashQueryConfig): Promise<void>
       `[TSA-02] frontmatter repair phase failed: ${err instanceof Error ? err.message : String(err)}`
     );
   }
+  return counts;
 }

@@ -79,7 +79,7 @@ describe('maintainVault service contract', () => {
       payload: {
         actions: [
           { action: 'repair', dry_run: false, counts: { scanned: 7, repaired: 6, archived: 1 } },
-          { action: 'sync', dry_run: false, counts: { scanned: 14, added: 2, updated: 7, repaired: 0, archived: 5 } },
+          { action: 'sync', dry_run: false, counts: { scanned: 15, added: 2, updated: 7, repaired: 0, archived: 5 } },
         ],
       },
     });
