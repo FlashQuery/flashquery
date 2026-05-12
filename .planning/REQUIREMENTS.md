@@ -36,7 +36,7 @@
 ### Document Tool Consolidation
 
 - [x] **DOC-01**: `get_document` keeps the shipped include/sections/follow_ref surface while migrating single-result errors to canonical envelopes and expected-error `isError: false` semantics.
-- [ ] **DOC-02**: `archive_document` returns document identification blocks with persisted `archived_at`, preserves idempotent re-archive behavior, and returns ordered per-element results for batches.
+- [x] **DOC-02**: `archive_document` returns document identification blocks with persisted `archived_at`, preserves idempotent re-archive behavior, and returns ordered per-element results for batches.
 - [ ] **DOC-03**: `write_document(mode:"create")` replaces `create_document` by creating markdown files from `path`, `title`, optional content, frontmatter, and tags while rejecting conflicts and reserved FQ-managed frontmatter.
 - [ ] **DOC-04**: `write_document(mode:"update")` replaces `update_document` and `update_doc_header` by updating body, title, frontmatter, or tags on one resolved document while preserving omitted fields.
 - [x] **DOC-05**: `copy_document`, `move_document`, and `list_vault` retain their existing behavior while returning structured JSON envelopes instead of prose/table text.
@@ -132,7 +132,7 @@
 | CFG-05 | Phase 122 | Complete |
 | CFG-06 | Phase 122 | Complete |
 | DOC-01 | Phase 123 | Complete |
-| DOC-02 | Phase 123 | Pending |
+| DOC-02 | Phase 123 | Complete |
 | DOC-03 | Phase 124 | Pending |
 | DOC-04 | Phase 124 | Pending |
 | DOC-05 | Phase 123 | Complete |

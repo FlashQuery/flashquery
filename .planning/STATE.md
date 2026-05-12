@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: MCP Tools Consolidation
 status: executing
-stopped_at: v3.3 milestone initialized
-last_updated: "2026-05-12T00:16:08.753Z"
+stopped_at: Completed 123-02-PLAN.md
+last_updated: "2026-05-12T00:37:39.796Z"
 last_activity: 2026-05-12
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 11
-  completed_plans: 8
-  percent: 73
+  completed_plans: 9
+  percent: 82
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-11)
 ## Current Position
 
 Phase: 123 (document-read-standard-output-migration) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-05-12
 
@@ -82,6 +82,7 @@ Last activity: 2026-05-12
 | Phase 120 P04 | 49 | 3 tasks | 5 files |
 | Phase 121 P02 | 6min | 3 tasks | 5 files |
 | Phase 123 P01 | 6min | 3 tasks | 8 files |
+| Phase 123 P02 | 17min | 3 tasks | 13 files |
 
 ## Decisions
 
@@ -130,6 +131,8 @@ Last activity: 2026-05-12
 - [Phase 121]: 121-02: Mapped get_document validation and missing-document responses to expected JSON errors with isError false.
 - [Phase 123]: 123-01 kept get_document input and success response shape unchanged while canonicalizing expected errors only.
 - [Phase 123]: 123-01 recorded get_document canonical error-shape evidence in existing directed and integration coverage ledgers.
+- [Phase 123]: 123-02: Stored archive_document archived_at as TIMESTAMPTZ while preserving frontmatter fq_archived_at as exact ISO string.
+- [Phase 123]: 123-02: Used managed YAML scenario runs when no external FlashQuery server was listening on localhost:3100.
 
 ## Accumulated Context
 
@@ -240,8 +243,8 @@ Last activity: 2026-05-12
 
 ## Session Continuity
 
-Last session: 2026-05-12T00:15:05.612Z
-Stopped at: v3.3 milestone initialized
+Last session: 2026-05-12T00:37:39.772Z
+Stopped at: Completed 123-02-PLAN.md
 Resume: Plan Phase 121
 
 ## Deferred Items
