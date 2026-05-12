@@ -203,10 +203,19 @@ Plans:
 **Plans:** 5 plans
 
 Plans:
+**Wave 1**
 - [ ] 126-01-PLAN.md — Create traceability, record validation, and record output helper contracts.
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 126-02-PLAN.md — Migrate plugin register/unregister/info tools to structured envelopes.
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 126-03-PLAN.md — Implement `write_record(mode:"create" | "update")` with integration and E2E coverage.
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 126-04-PLAN.md — Migrate `get_record`, `archive_record`, and `search_records` structured envelopes.
+
+**Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 126-05-PLAN.md — Migrate `clear_pending_reviews` actions and close scenario/validation coverage.
 
 **UI hint:** no

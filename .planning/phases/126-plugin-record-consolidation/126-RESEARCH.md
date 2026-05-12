@@ -375,17 +375,15 @@ server.registerTool(
 | A1 | No OS-registered service state embeds old tool names in this workspace. | Runtime State Inventory | Low; if user has external service wrappers, planner may need a manual restart/check step. |
 | A2 | No dependency upgrade is intended despite newer npm registry versions. | Standard Stack | Medium; upgrading SDK/Zod/Supabase during this phase would expand scope and test risk. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should current `unregister_plugin(confirm_destroy)` remain as a transitional parameter in addition to `force`, or should Phase 126 hard-switch the input schema?**
    - What we know: product contract says live records conflict unless `force:true`; current implementation uses dry-run/confirmed destructive teardown. [VERIFIED: `src/mcp/tools/plugins.ts`; CITED: MCP Tool Consolidation Requirements §4.25]
-   - What's unclear: whether any existing internal cleanup test relies on `confirm_destroy` before Phase 128 final legacy cleanup. [VERIFIED: tests grep found many `confirm_destroy` uses]
-   - Recommendation: plan an explicit migration decision and port tests in the same wave. [VERIFIED: Test Plan §8]
+   - RESOLVED: Phase 126 hard-switches the public MCP input schema to `force?: boolean` and ports tests in the plugin-envelope wave. `confirm_destroy` is not retained as a public compatibility parameter because the product contract specifies conflict/force semantics and Phase 128 owns the broad final legacy surface audit. [VERIFIED: `126-02-PLAN.md`; CITED: MCP Tool Consolidation Requirements §4.25; CITED: Test Plan §8]
 
 2. **Where should final `schema_metadata` come from for records?**
    - What we know: `PluginTableSpec.columns` carries names/types/required/default/description and is available via `pluginManager.getTableSpec`. [VERIFIED: `src/plugins/manager.ts`]
-   - What's unclear: exact metadata shape beyond examples of `required_fields`. [CITED: MCP Tool Consolidation Requirements §4.28]
-   - Recommendation: use minimal stable metadata `{ required_fields, fields }` and lock it in unit tests unless product docs specify more during implementation. [ASSUMED]
+   - RESOLVED: Phase 126 uses the verifier-safe public shape `schema_metadata: { required_fields: string[] }`, derived from `PluginTableSpec.columns`. Broader field metadata is not exposed in this phase because the product docs only ground `required_fields`; expanding the public response shape requires a later explicit contract update. [VERIFIED: `126-01-PLAN.md`; CITED: MCP Tool Consolidation Requirements §4.28]
 
 ## Environment Availability
 
