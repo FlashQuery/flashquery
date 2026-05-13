@@ -71,6 +71,7 @@ describe('host MCP tool exposure', () => {
     expect(readWrite).toContain('list_vault');
     expect(readWrite).toContain('write_document');
     expect(readWrite).toContain('manage_directory');
+    expect(readWrite).toContain('get_llm_usage');
   });
 
 

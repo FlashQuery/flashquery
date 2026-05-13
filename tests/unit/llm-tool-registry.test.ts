@@ -25,24 +25,53 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const READ_ONLY_TOOLS = [
   'get_document',
+  'list_vault',
+  'get_briefing',
   'search',
   'get_memory',
-  'search_records',
   'get_record',
-  'get_briefing',
+  'search_records',
 ];
 
 const READ_WRITE_EXTRA_TOOLS = [
-  'write_document',
+  'copy_document',
   'move_document',
-  'write_record',
-  'apply_tags',
   'archive_document',
   'remove_document',
+  'insert_in_doc',
+  'replace_doc_section',
+  'apply_tags',
+  'insert_doc_link',
+  'write_document',
   'archive_memory',
+  'write_memory',
+  'write_record',
   'archive_record',
   'manage_directory',
+];
+
+const READ_WRITE_TOOLS = [
+  'get_document',
+  'list_vault',
+  'copy_document',
+  'move_document',
+  'archive_document',
+  'remove_document',
+  'insert_in_doc',
+  'replace_doc_section',
+  'apply_tags',
+  'get_briefing',
   'insert_doc_link',
+  'write_document',
+  'search',
+  'get_memory',
+  'archive_memory',
+  'write_memory',
+  'write_record',
+  'get_record',
+  'archive_record',
+  'search_records',
+  'manage_directory',
 ];
 
 const HARD_EXCLUDED_TOOLS = [
@@ -199,10 +228,34 @@ describe('TOOL_TIERS', () => {
 
   it('defines the exact tier:read-only native tool allowlist', () => {
     expect(TOOL_TIERS['tier:read-only']).toEqual(READ_ONLY_TOOLS);
+    expect(TOOL_TIERS['tier:read-only']).toContain('list_vault');
+    expect(TOOL_TIERS['tier:read-only']).not.toEqual(expect.arrayContaining([
+      'get_llm_usage',
+      'call_model',
+      'maintain_vault',
+      'create_document',
+      'save_memory',
+      'list_projects',
+      'get_project_info',
+    ]));
   });
 
   it('defines tier:read-write as read-only plus write-capable native tools', () => {
-    expect(TOOL_TIERS['tier:read-write']).toEqual([...READ_ONLY_TOOLS, ...READ_WRITE_EXTRA_TOOLS]);
+    expect(TOOL_TIERS['tier:read-write']).toEqual(READ_WRITE_TOOLS);
+    expect(TOOL_TIERS['tier:read-write']).toEqual(expect.arrayContaining([
+      'copy_document',
+      'insert_in_doc',
+      'replace_doc_section',
+    ]));
+    expect(TOOL_TIERS['tier:read-write']).not.toEqual(expect.arrayContaining([
+      'get_llm_usage',
+      'call_model',
+      'maintain_vault',
+      'create_document',
+      'save_memory',
+      'list_projects',
+      'get_project_info',
+    ]));
   });
 
   it('contains only currently registered native MCP tools', () => {
@@ -266,7 +319,7 @@ describe('assembleNativeToolRegistry', () => {
     const hostFilteredCatalog = CATALOG.filter((tool) => ['get_document', 'list_vault', 'search'].includes(tool.name));
     const result = assembleNativeToolRegistry(makeConfig(['tier:read-only']), 'research', hostFilteredCatalog);
 
-    expect(result.nativeToolNames).toEqual(['get_document', 'search']);
+    expect(result.nativeToolNames).toEqual(['get_document', 'list_vault', 'search']);
     expect(result.nativeToolNames).not.toContain('search_memory');
     expect(result.nativeToolNames).not.toContain('get_memory');
     expect(result.nativeToolNames).not.toContain('list_memories');
@@ -303,9 +356,9 @@ describe('assembleNativeToolRegistry', () => {
   it('expands tier:read-write to read-only and write-capable native tools', () => {
     const result = assembleNativeToolRegistry(makeConfig(['tier:read-write']), 'research', CATALOG);
 
-    expect(result.nativeToolNames).toEqual([...READ_ONLY_TOOLS, ...READ_WRITE_EXTRA_TOOLS]);
+    expect(result.nativeToolNames).toEqual(READ_WRITE_TOOLS);
     expect(result.diagnostics.expandedTiers).toEqual([
-      { tier: 'tier:read-write', tools: [...READ_ONLY_TOOLS, ...READ_WRITE_EXTRA_TOOLS] },
+      { tier: 'tier:read-write', tools: READ_WRITE_TOOLS },
     ]);
   });
 
@@ -329,10 +382,11 @@ describe('assembleNativeToolRegistry', () => {
 
     expect(result.nativeToolNames).toEqual([
       'get_document',
-      'search',
-      'search_records',
-      'get_record',
+      'list_vault',
       'get_briefing',
+      'search',
+      'get_record',
+      'search_records',
     ]);
     expect(result.diagnostics.excluded).toEqual(['get_memory', 'custom_native_tool']);
   });
