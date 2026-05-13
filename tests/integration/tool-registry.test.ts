@@ -184,4 +184,26 @@ describe('delegated native tool registry tier assembly (Integration)', () => {
       { tool: 'maintain_vault', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
     ]);
   });
+
+  it('I-tier-5b allows explicit admin-tier fixtures when they are not hard-excluded', () => {
+    const catalog = [
+      ...CATALOG,
+      {
+        name: 'admin_status_fixture',
+        description: 'Synthetic explicit-admin fixture',
+        inputSchema: {},
+        handler: noopNativeHandler,
+      },
+    ];
+    const result = assembleNativeToolRegistry(
+      makeConfig(['admin_status_fixture']),
+      'registry-check',
+      catalog
+    );
+
+    expect(result.nativeToolNames).toEqual(['admin_status_fixture']);
+    expect(result.providerTools?.map((tool) => tool.function.name)).toEqual(['admin_status_fixture']);
+    expect(result.diagnostics.explicitTools).toEqual(['admin_status_fixture']);
+    expect(result.diagnostics.hardExcluded).toEqual([]);
+  });
 });

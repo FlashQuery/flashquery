@@ -294,8 +294,15 @@ export function listToolMetadata(
 }
 
 export function getToolNamesByTier(tier: ToolTierSelector): string[] {
+  return getToolNamesByTierFromMetadata(TOOL_METADATA, tier);
+}
+
+export function getToolNamesByTierFromMetadata(
+  metadata: readonly ToolMetadata[],
+  tier: ToolTierSelector
+): string[] {
   const targetTier = tier === 'tier:read-only' ? 'read-only' : 'read-write';
-  return TOOL_METADATA
+  return metadata
     .filter((entry) => isDelegatedTierEligible(entry))
     .filter((entry) => entry.tier === 'read-only' || targetTier === 'read-write' && entry.tier === 'read-write')
     .map((entry) => entry.name);

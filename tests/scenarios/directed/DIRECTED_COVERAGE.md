@@ -26,6 +26,21 @@ This document defines every behavioral coverage point we want to verify through 
 | MT-02 | POST-01 / §3.11.1.1: a delegated `tier:read-write` purpose can dispatch at least one corrected edit/list tool through `call_model`. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
 | MT-03 | POST-01 / §3.11.1.1: broad delegated tier metadata excludes non-data and hard-excluded tools such as `get_llm_usage` and `call_model`. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
 | MT-04 | POST-01 / §3.11.1.1: delegated edit dispatch is externally observable by reading back the mutated document. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-1 | §3.11.1.1 U-tier-1: `tier:read-only` derives from canonical metadata and includes `list_vault` while excluding non-data tools. | tests/unit/tool-metadata.test.ts (`U-tier-1`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-2 | §3.11.1.1 U-tier-2: `tier:read-write` derives from canonical metadata and includes the corrected document tools. | tests/unit/tool-metadata.test.ts (`U-tier-2`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-3 | §3.11.1.1 U-tier-3: read-only tier output remains a subset of read-write tier output. | tests/unit/tool-metadata.test.ts (`U-tier-3`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-4 | §3.11.1.1 U-tier-4: tools with `delegatedHardExcludedReason` appear in neither broad delegated tier. | tests/unit/tool-metadata.test.ts (`U-tier-4`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-5 | §3.11.1.1 U-tier-5: admin-tier tools are kept out of broad delegated tier expansion. | tests/unit/tool-metadata.test.ts (`U-tier-5`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-6 | §3.11.1.1 U-tier-6: removed tools remain absent from delegated tier expansion. | tests/unit/tool-metadata.test.ts (`U-tier-6`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-7 | §3.11.1.1 U-tier-7: non-data-category read-only tools such as `get_llm_usage` are excluded from broad delegated tiers. | tests/unit/tool-metadata.test.ts (`U-tier-7`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-8 | §3.11.1.1 U-tier-8: synthetic `delegatedExclusionReason` excludes a fixture from tier derivation and preserves the diagnostic reason. | tests/unit/tool-metadata.test.ts (`U-tier-8`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-9 | §3.11.1.1 U-tier-9: the pre-refactor to post-refactor diff is exactly the four corrected additions with no removals. | tests/unit/tool-metadata.test.ts (`U-tier-9`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-1 | §3.11.1.1 I-tier-1: delegated `tools:["tier:read-only"]` includes corrected read tools and excludes admin/LLM tools. | tests/integration/tool-registry.test.ts (`I-tier-1`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-2 | §3.11.1.1 I-tier-2: delegated `tools:["tier:read-write"]` includes corrected write tools and excludes admin/LLM tools. | tests/integration/tool-registry.test.ts (`I-tier-2`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-3 | §3.11.1.1 I-tier-3: per-purpose `excludedTools` compose after read-write tier expansion. | tests/integration/tool-registry.test.ts (`I-tier-3`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-4 | §3.11.1.1 I-tier-4: hard-excluded tools such as `call_model` remain unavailable even when explicitly requested. | tests/integration/tool-registry.test.ts (`I-tier-4`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-5a | §3.11.1.1 I-tier-5 hard-exclusion branch: explicit `maintain_vault` is rejected because it is admin-tier and hard-excluded. | tests/integration/tool-registry.test.ts (`I-tier-5`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-5b | §3.11.1.1 I-tier-5 reachability branch: explicit admin-style fixtures without hard exclusion remain reachable. | tests/integration/tool-registry.test.ts (`I-tier-5b`) | 2026-05-13 | 2026-05-13 |
 
 ## 1. Document Lifecycle
 

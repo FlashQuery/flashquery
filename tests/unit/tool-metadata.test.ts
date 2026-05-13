@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
   TOOL_METADATA,
+  type ToolMetadata,
   assertRegisteredToolsHaveMetadata,
   expandToolSelectors,
   getDelegatedHardExcludedTools,
   getLegacyToolSuggestion,
   getToolMetadata,
   getToolNamesByTier,
+  getToolNamesByTierFromMetadata,
   isDelegatedTierEligible,
   requireToolMetadata,
 } from '../../src/mcp/tool-metadata.js';
@@ -72,6 +74,11 @@ const EXPECTED_DELEGATED_READ_WRITE_TIER = [
 function addedNames(before: readonly string[], after: readonly string[]): string[] {
   const beforeSet = new Set(before);
   return after.filter((name) => !beforeSet.has(name));
+}
+
+function removedNames(before: readonly string[], after: readonly string[]): string[] {
+  const afterSet = new Set(after);
+  return before.filter((name) => !afterSet.has(name));
 }
 
 describe('tool metadata registry', () => {
@@ -287,23 +294,29 @@ describe('tool metadata registry', () => {
   it('honors synthetic delegatedExclusionReason fixtures (U-tier-8)', () => {
     const synthetic = {
       ...requireToolMetadata('list_vault'),
+      name: 'list_vault_excluded_fixture',
       delegatedEligible: true,
       delegatedExclusionReason: 'Delegated listing disabled for this fixture.',
-    };
+    } satisfies ToolMetadata;
+    const metadataWithFixture = [...TOOL_METADATA, synthetic];
 
     expect(isDelegatedTierEligible(synthetic)).toBe(false);
+    expect(getToolNamesByTierFromMetadata(metadataWithFixture, 'tier:read-only')).not.toContain(synthetic.name);
+    expect(getToolNamesByTierFromMetadata(metadataWithFixture, 'tier:read-write')).not.toContain(synthetic.name);
     expect(synthetic.delegatedExclusionReason).toContain('fixture');
     expect(TOOL_METADATA.some((entry) => entry.delegatedExclusionReason !== undefined)).toBe(false);
   });
 
   it('changes delegated tier composition by exactly the corrected four tools (U-tier-9)', () => {
     expect(addedNames(PRE_REFACTOR_READ_ONLY_TIER, getToolNamesByTier('tier:read-only'))).toEqual(['list_vault']);
+    expect(removedNames(PRE_REFACTOR_READ_ONLY_TIER, getToolNamesByTier('tier:read-only'))).toEqual([]);
     expect(addedNames(PRE_REFACTOR_READ_WRITE_TIER, getToolNamesByTier('tier:read-write'))).toEqual([
       'list_vault',
       'copy_document',
       'insert_in_doc',
       'replace_doc_section',
     ]);
+    expect(removedNames(PRE_REFACTOR_READ_WRITE_TIER, getToolNamesByTier('tier:read-write'))).toEqual([]);
 
     expect(addedNames(PRE_REFACTOR_READ_WRITE_TIER, getToolNamesByTier('tier:read-write')).filter((name) => name !== 'list_vault')).toEqual([
       'copy_document',
