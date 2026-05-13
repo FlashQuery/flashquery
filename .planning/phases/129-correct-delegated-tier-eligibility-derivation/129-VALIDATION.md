@@ -1,10 +1,11 @@
 ---
 phase: 129
 slug: correct-delegated-tier-eligibility-derivation
-status: draft
+status: passed
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-05-13
+audited: 2026-05-13
 ---
 
 # Phase 129 - Validation Strategy
@@ -87,3 +88,20 @@ created: 2026-05-13
 - `npm run build`
 
 **Approval:** Plan 129-03 directed, integration, docs, migration callout, and build evidence green.
+
+## Nyquist Coverage Audit - 2026-05-13
+
+Result: compliant. POST-01 has automated evidence across unit, integration, E2E/MCP-equivalent metadata, directed scenario dispatch, YAML integration workflow, coverage ledgers, docs, and migration callout.
+
+Audit commands run:
+
+- `npm test -- tests/unit/tool-metadata.test.ts tests/unit/llm-tool-registry.test.ts tests/unit/tool-exposure.test.ts` - green, 3 files / 58 tests.
+- `npm run test:integration -- tests/integration/tool-registry.test.ts` - green, 1 file / 5 tests.
+- `npm run test:e2e -- tests/e2e/call-model-agent-loop.e2e.test.ts` - green, 1 file / 9 tests.
+- `python3 tests/scenarios/directed/run_suite.py --managed delegated_tier_eligibility` - green, 1 test / 4 steps.
+- `python3 tests/scenarios/directed/run_suite.py --managed foundation` - green, 1 test / 4 steps.
+- `python3 tests/scenarios/integration/run_integration.py --managed delegated_tier_eligibility` - green, 1 workflow / 4 steps.
+- `python3 tests/scenarios/integration/run_integration.py --managed foundation` - green, 2 workflows / 9 steps.
+- `npm run build` - green.
+
+Notes: directed and integration scenario runners emitted existing `clean_test_tables.py` timeout warnings during cleanup, but all scenario assertions passed. No implementation files were modified.
