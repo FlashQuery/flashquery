@@ -52,7 +52,7 @@ Coverage categories:
 - **IX-** Cross-Domain — behaviors spanning documents and memories together
 - **IC-** Content Operations — update, scan, path handling, tag behavior after mutation
 
-If any target ID involves semantic body-text search (`search_documents` or `search_all` by
+If any target ID involves semantic body-text search (`search` by
 content, not title), the test needs `deps: [embeddings]`. Flag this upfront — without an
 embedding provider configured, the test will be skipped automatically (not failed).
 
@@ -113,11 +113,11 @@ steps:
 
 | `action:` | MCP tool | Binds |
 |-----------|----------|-------|
-| `vault.write` | `create_document` | `fqc_id`, `path`, `title`, `status` |
-| `memory.write` | `save_memory` | `memory_id`, `content` |
+| `vault.write` | `write_document` (`mode: create`) | `fqc_id`, `path`, `title`, `status` |
+| `memory.write` | `write_memory` (`mode: create`) | `memory_id`, `content` |
 | `archive_document` | `archive_document` | — |
-| `update_document` | `update_document` | — |
-| `scan_vault` | `force_file_scan` | — |
+| `write_document` | `write_document` (`mode: update`) | — |
+| `scan_vault` | `maintain_vault` (`action: sync`) | — |
 | *(any MCP tool name)* | called directly | — |
 
 Only `vault.write` and `memory.write` support variable binding (`name:` on other actions has no effect).
@@ -137,7 +137,7 @@ Only `vault.write` and `memory.write` support variable binding (`name:` on other
 ```yaml
 - label: "Document appears in search"
   assert:
-    op: search_all          # required — MCP tool to call
+    op: search          # required — MCP tool to call
     args:                   # args are nested inside assert:, NOT at top-level
       query: "The Stars at Midnight"
       entity_types: [documents]
@@ -189,11 +189,11 @@ The `path` field reflects the auto-prefixed path (e.g. `_integration/journal/sun
 
 **Always include a unique per-test tag.** Every `vault.write` and `memory.write` step should
 include a short tag that's unique to this test (e.g. `arc-tag`, `wts-tag`). Use it in
-`list_memories` args to scope retrieval to this test's memories only. The runner handles
+`search` memory-list args to scope retrieval to this test's memories only. The runner handles
 cleanup via IDs, but a unique tag prevents cross-test bleed in list/search operations.
 
 **Use title queries by default, not body-content queries.** Without `deps: [embeddings]`,
-`search_all` and `search_documents` fall back to title and path matching. Body content
+`search` falls back to title and path matching. Body content
 won't appear in results. If you need to assert on body content via search, declare
 `deps: [embeddings]` — the test will then skip on servers without embedding config,
 rather than fail misleadingly.
@@ -229,8 +229,8 @@ If the run generates a report in `tests/scenarios/integration/reports/`, read it
   ```yaml
   - action: scan_vault
   ```
-- **`expect_contains` fails on memory content via `search_all`**: This requires embeddings.
-  Either add `deps: [embeddings]`, or switch to `list_memories` with a tag filter.
+- **`expect_contains` fails on memory content via `search`**: This requires embeddings.
+  Either add `deps: [embeddings]`, or switch to `search` with `entity_types: [memories]` and a tag filter.
 - **`expect_count_eq: 1` fails with 0**: Check whether you're asserting on a memory result
   (count is always 0 for memories). Switch to `expect_contains`.
 - **Variable reference error**: Confirm the step that binds the variable has `name:` set,

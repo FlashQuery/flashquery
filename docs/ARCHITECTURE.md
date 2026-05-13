@@ -72,7 +72,7 @@ All three are stored in places the user owns: the vault directory on local disk,
 
 ### Request → response cycle
 
-1. An AI tool sends an MCP request: `{"method": "tools/call", "params": {"name": "save_memory", "arguments": {...}}}`.
+1. An AI tool sends an MCP request using the final memory writer: `{"method": "tools/call", "params": {"name": "write_memory", "arguments": {...}}}`.
 2. The MCP server authenticates the request (bearer token verification for streamable-http; local trust for stdio) and routes it to the matching tool handler.
 3. The handler parses and validates the arguments with Zod.
 4. The handler calls into the storage layers it needs — typically the embedding provider (to generate a vector), the Supabase client (to write the row), and the vault (if the tool produces a file).

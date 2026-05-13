@@ -89,12 +89,12 @@
 - [ ] Embedding service documented (provider options, async)
 
 ### MCP Tools (by category)
-- [ ] Memory tools (save_memory, search_memory, list_memories, etc.)
-- [ ] Document tools (create_document, get_document, search_documents, etc.)
-- [ ] Project tools (list_projects, etc.)
+- [ ] Memory tools (removed legacy migration examples: save_memory, search_memory, list_memories; current surface: write_memory, search, get_memory)
+- [ ] Document tools (removed legacy migration examples: create_document, search_documents; current surface: write_document, get_document, search)
+- [ ] Project tools (removed legacy migration example: list_projects; current path/tag scope uses list_vault and search)
 - [ ] Plugin tools (register_plugin, get_plugin_info, etc.)
-- [ ] Record tools (create_record, get_record, search_records, etc.)
-- [ ] Compound tools (get_briefing, get_doc_outline, etc.)
+- [ ] Record tools (removed legacy migration example: create_record; current surface: write_record, get_record, search_records)
+- [ ] Compound tools (transitional get_briefing uses the call_macro removal gate; current document structure reads use get_document)
 
 ## Configuration Section
 

@@ -182,13 +182,13 @@ updates.
 
 ## Common failure patterns
 
-**"No results" on a `search_all` assert right after `vault.write`.** The indexer hasn't
+**"No results" on a `search` assert right after `vault.write`.** The indexer hasn't
 caught up. Fix: add a `scan_vault` action step between the write and the assert.
 
 **`expect_count_eq: 1` fails with count 0 on a memory result.** Count assertions count
 `Title:` lines — memories don't produce `Title:` lines. Fix: switch to `expect_contains`.
 
-**Body content not found in `search_all`.** Body-content search requires embeddings. If the
+**Body content not found in `search`.** Body-content search requires embeddings. If the
 test doesn't declare `deps: [embeddings]`, the assert will fail. Either add the dep (causing
 skips on servers without embedding config) or switch to a title-only query.
 

@@ -302,8 +302,8 @@ Supported tiers:
 
 | Tier | Includes |
 |---|---|
-| `tier:read-only` | Read/search tools such as `search_documents`, `get_document`, `search_memory`, `get_memory`, `list_memories`, `search_records`, `get_record`, `search_all`, and `get_briefing`. |
-| `tier:read-write` | Everything in `tier:read-only`, plus write tools such as `create_document`, `update_document`, `append_to_doc`, `move_document`, `save_memory`, `update_memory`, record writes, tagging, archiving, and directory creation/removal. |
+| `tier:read-only` | Read/search tools such as `search`, `get_document`, `get_memory`, `search_records`, `get_record`, `list_vault`, and transitional `get_briefing` with its `call_macro` removal gate. |
+| `tier:read-write` | Everything in `tier:read-only`, plus write tools such as `write_document`, `insert_in_doc`, `replace_doc_section`, `move_document`, `write_memory`, `write_record`, `apply_tags`, archiving/removal tools, `manage_directory`, and `maintain_vault`. |
 
 You can also list explicit native tool names:
 
@@ -313,7 +313,7 @@ purposes:
     description: Can search and retrieve documents only.
     models: [fast]
     tools:
-      - search_documents
+      - search
       - get_document
 ```
 
@@ -328,7 +328,7 @@ purposes:
       - tier:read-write
     excluded_tools:
       - archive_document
-      - remove_directory
+      - manage_directory
 ```
 
 Some tools are always excluded from delegated model-visible native access, even if listed: `call_model`, `register_plugin`, `unregister_plugin`, and `get_plugin_info`.
