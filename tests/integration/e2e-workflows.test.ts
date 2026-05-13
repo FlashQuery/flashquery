@@ -594,7 +594,7 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       expect((row as { id: string }).id).toBe(copyFqcId);
     });
 
-    it('C6: remove_directory fails on non-empty dir; succeeds on empty dir (SPEC-07)', async () => {
+    it('C6: manage_directory(action:"remove") fails on non-empty dir; succeeds on empty dir (SYS-02)', async () => {
       const cleanDir = 'Work/ToClean';
       await mkdir(join(scCVaultPath, cleanDir), { recursive: true });
       const fileAId = await seedDocument({
@@ -606,8 +606,12 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
         title: 'File B', body: 'File B body.',
       });
 
-      const failResult = await scCHandlers('remove_directory')({ path: cleanDir });
-      expect(isError(failResult)).toBe(true);
+      const failResult = await scCHandlers('manage_directory')({ action: 'remove', paths: [cleanDir] });
+      expect(isError(failResult)).toBe(false);
+      expect(getJson<{ results: Array<Record<string, unknown>> }>(failResult).results[0]).toMatchObject({
+        error: 'conflict',
+        details: { reason: 'directory_not_empty' },
+      });
       expect(existsSync(join(scCVaultPath, cleanDir))).toBe(true);
 
       await rm(join(scCVaultPath, `${cleanDir}/fileA.md`));
@@ -615,8 +619,13 @@ describe.skipIf(SKIP)('Scenarios A-C: E2E File and Section Workflows', () => {
       await supabaseManager.getClient().from('fqc_documents').delete().eq('id', fileAId);
       await supabaseManager.getClient().from('fqc_documents').delete().eq('id', fileBId);
 
-      const successResult = await scCHandlers('remove_directory')({ path: cleanDir });
+      const successResult = await scCHandlers('manage_directory')({ action: 'remove', paths: [cleanDir] });
       expect(isError(successResult)).toBe(false);
+      expect(getJson<{ results: Array<Record<string, unknown>> }>(successResult).results[0]).toMatchObject({
+        path: cleanDir,
+        action: 'remove',
+        status: 'removed',
+      });
       expect(existsSync(join(scCVaultPath, cleanDir))).toBe(false);
     });
   });

@@ -105,8 +105,9 @@ export async function reconcileTrackedDocuments(
       try {
         const raw = await readFile(join(vaultRoot, file), 'utf-8');
         const { data: fm } = matter(raw);
-        if (typeof fm[FM.ID] === 'string' && fm[FM.ID].length > 0) {
-          fqcIdIndex.set(fm[FM.ID], file);
+        const fqcId: unknown = fm[FM.ID];
+        if (typeof fqcId === 'string' && fqcId.length > 0) {
+          fqcIdIndex.set(fqcId, file);
         }
       } catch {
         // Skip unreadable files during reconciliation; the missing-row archive path remains authoritative.

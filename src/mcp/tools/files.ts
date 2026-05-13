@@ -1,16 +1,17 @@
 /**
  * Filesystem primitive tools for vault operations.
  *
- * Provides create_directory, list_vault, and remove_directory — all filesystem
- * primitives for vault operations, co-located in this module.
+ * Provides manage_directory and list_vault — directory management and vault
+ * browsing primitives, co-located in this module. (The legacy create_directory
+ * and remove_directory tools were merged into manage_directory(action) in
+ * Phase 127 and are no longer registered.)
  *
  * Design:
- * - No write lock: directory creation is OS-atomic (mkdir -p), not a document op (D-02)
- * - No DB writes for create_directory: pure filesystem operation (D-06)
- * - Partial-success semantics: isError=false when at least one path succeeded (D-04)
- * - Idempotent: already-existing directories are reported, not errored (D-05)
+ * - manage_directory: directory-scoped write lock per path (DAQ-9); ordered per-path JSON results
+ * - Idempotent create: already-existing directories report status:"unchanged", not errored
+ * - Empty-only remove: non-empty directories return a conflict envelope
+ * - Partial-success semantics: outer isError=false; per-path errors are returned in input order
  * - list_vault: read-only; DB enrichment via supabaseManager.getClient() inside handler
- * - remove_directory: migrated from documents.ts in Phase 94; uses validateVaultPath()
  */
 
 import { z } from 'zod';
@@ -24,9 +25,6 @@ import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
   validateVaultPath,
   normalizePath,
-  joinWithRoot,
-  sanitizeDirectorySegment,
-  validateSegment,
 } from '../utils/path-validation.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
@@ -42,7 +40,7 @@ const DEFAULT_MARKDOWN_EXTENSIONS: string[] = ['.md'];
 
 /**
  * Register filesystem primitive tools on the MCP server.
- * Registers create_directory, list_vault, and remove_directory (migrated from documents.ts in Phase 94).
+ * Registers manage_directory and list_vault.
  */
 export function registerFileTools(server: McpServer, config: FlashQueryConfig): void {
   // ─── Tool: manage_directory ─────────────────────────────────────────────────
@@ -102,7 +100,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         let validation: Awaited<ReturnType<typeof validateVaultPath>>;
         try {
           validation = await validateVaultPath(vaultRoot, normalizedPath);
-        } catch (validationErr) {
+        } catch {
           results.push({
             error: 'invalid_input',
             message: 'Invalid directory path',
@@ -134,7 +132,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             results.push({
               error: 'conflict',
               message: 'Directory is currently locked by another operation.',
-              identifier: normalizedPath,
+              identifier: inputPath,
               details: { reason: 'lock_contention' },
             });
             continue;
@@ -152,7 +150,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
                 results.push({
                   error: 'conflict',
                   message: 'Path exists as a file, not a directory.',
-                  identifier: normalizedPath,
+                  identifier: inputPath,
                   details: { reason: 'not_directory' },
                 });
                 continue;
@@ -172,7 +170,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
                   results.push({
                     error: 'permission_denied',
                     message: 'Permission denied while checking directory.',
-                    identifier: normalizedPath,
+                    identifier: inputPath,
                     details: { operation: 'stat' },
                   });
                   continue;
@@ -195,7 +193,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
                 results.push({
                   error: 'conflict',
                   message: 'Path conflicts with an existing file.',
-                  identifier: normalizedPath,
+                  identifier: inputPath,
                   details: { reason: 'not_directory' },
                 });
                 continue;
@@ -204,7 +202,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
                 results.push({
                   error: 'permission_denied',
                   message: 'Permission denied while creating directory.',
-                  identifier: normalizedPath,
+                  identifier: inputPath,
                   details: { operation: 'mkdir' },
                 });
                 continue;
@@ -223,7 +221,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
               results.push({
                 error: 'not_found',
                 message: 'Directory does not exist.',
-                identifier: normalizedPath,
+                identifier: inputPath,
                 details: { kind: 'directory' },
               });
               continue;
@@ -232,7 +230,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
               results.push({
                 error: 'permission_denied',
                 message: 'Permission denied while checking directory.',
-                identifier: normalizedPath,
+                identifier: inputPath,
                 details: { operation: 'stat' },
               });
               continue;
@@ -244,7 +242,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             results.push({
               error: 'conflict',
               message: 'Path is a file, not a directory.',
-              identifier: normalizedPath,
+              identifier: inputPath,
               details: { reason: 'not_directory' },
             });
             continue;
@@ -258,7 +256,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
               results.push({
                 error: 'permission_denied',
                 message: 'Permission denied while reading directory.',
-                identifier: normalizedPath,
+                identifier: inputPath,
                 details: { operation: 'readdir' },
               });
               continue;
@@ -270,7 +268,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             results.push({
               error: 'conflict',
               message: 'Directory is not empty',
-              identifier: normalizedPath,
+              identifier: inputPath,
               details: { reason: 'directory_not_empty', count: entries.length },
             });
             continue;
@@ -289,7 +287,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
               results.push({
                 error: 'permission_denied',
                 message: 'Permission denied while removing directory.',
-                identifier: normalizedPath,
+                identifier: inputPath,
                 details: { operation: 'rmdir' },
               });
               continue;
@@ -302,7 +300,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           results.push({
             error: 'runtime_error',
             message: msg,
-            identifier: normalizedPath,
+            identifier: inputPath,
           });
         } finally {
           if (lockResource) {
@@ -312,305 +310,6 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
       }
 
       return { ...jsonToolResult({ results }), isError: false };
-    }
-  );
-
-  // Legacy create_directory was merged into manage_directory(action:"create").
-  if (false) server.registerTool(
-    'create_directory',
-    {
-      description:
-        'Create one or more directories in the vault. Supports single path or batch array (max 50). Creates intermediate directories automatically (mkdir -p). Idempotent: already-existing directories are reported, not errored. Pure filesystem operation — no database writes, no write lock.',
-      inputSchema: {
-        paths: z
-          .union([z.string(), z.array(z.string())])
-          .describe('One or more directory paths to create relative to root_path.'),
-        root_path: z
-          .string()
-          .optional()
-          .default('/')
-          .describe('Vault-relative base path. Paths are created relative to this.'),
-      },
-    },
-    async ({ paths, root_path }) => {
-      // Step 0: Shutdown check (D-03) — must be first
-      if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed.',
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      try {
-        const vaultRoot = config.instance.vault.path;
-
-        // Step 1: Wrap string input as array.
-        // Guard: if a string looks like a JSON array (starts with '['), attempt to parse it
-        // so that LLM-serialized inputs like '["Roadmap/Features","Reference/Product"]' are
-        // handled correctly instead of creating a single garbled directory name.
-        let rawPaths: string[];
-        if (typeof paths === 'string') {
-          const trimmed = paths.trim();
-          if (trimmed.startsWith('[')) {
-            let parsed: unknown;
-            try {
-              parsed = JSON.parse(trimmed);
-            } catch {
-              return {
-                content: [{ type: 'text' as const, text: `Invalid paths input: looks like a JSON array but could not be parsed. Provide a plain string or a proper JSON array.` }],
-                isError: true,
-              };
-            }
-            if (!Array.isArray(parsed) || !parsed.every((v) => typeof v === 'string')) {
-              return {
-                content: [{ type: 'text' as const, text: `Invalid paths input: JSON-parsed value is not a string array.` }],
-                isError: true,
-              };
-            }
-            rawPaths = parsed;
-          } else {
-            rawPaths = [paths];
-          }
-        } else {
-          rawPaths = paths;
-        }
-
-        // Step 2: Normalize root_path and validate it (pre-loop guard, D-04 Pitfall 4)
-        // Checks: traversal, symlinks, vault-root targeting, and file-conflict (F-49).
-        const normalizedRoot = normalizePath(root_path ?? '/');
-        if (normalizedRoot) {
-          const rootCheck = await validateVaultPath(vaultRoot, normalizedRoot);
-          if (!rootCheck.valid) {
-            return {
-              content: [
-                { type: 'text' as const, text: `Invalid root_path: ${rootCheck.error}` },
-              ],
-              isError: true,
-            };
-          }
-          // File-conflict check: root_path must not be an existing file (F-49)
-          try {
-            const rootStat = await stat(rootCheck.absPath);
-            if (!rootStat.isDirectory()) {
-              return {
-                content: [
-                  {
-                    type: 'text' as const,
-                    text: `Invalid root_path: "${normalizedRoot}" exists as a file, not a directory.`,
-                  },
-                ],
-                isError: true,
-              };
-            }
-          } catch (e) {
-            if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-              // Any error other than "does not exist yet" is unexpected — propagate
-              throw e;
-            }
-            // ENOENT: root_path does not exist yet; mkdir -p will create it as needed
-          }
-        }
-
-        // Step 3: Array-level guards
-        if (rawPaths.length === 0) {
-          return {
-            content: [{ type: 'text' as const, text: 'No paths provided.' }],
-            isError: true,
-          };
-        }
-        if (rawPaths.length > 50) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Too many paths: ${rawPaths.length} provided, maximum is 50.`,
-              },
-            ],
-            isError: true,
-          };
-        }
-
-        // Step 4: Normalize each input path and join with root.
-        // - Leading '/' is stripped per spec (SPEC-20: "Leading / is optional and stripped if present").
-        //   normalizePath() handles this; do NOT reject before normalization.
-        // - Silently skip paths that become empty AFTER normalization (SPEC-20 — Pitfall 1).
-        const resolvedPaths: Array<{ resolved: string; original: string }> = [];
-        for (const p of rawPaths) {
-          const normalized = normalizePath(p);
-          if (normalized === '') continue; // silently skip (SPEC-20: empty-string in array)
-          const resolved = normalizedRoot ? joinWithRoot(normalizedRoot, normalized) : normalized;
-          if (resolved !== '') resolvedPaths.push({ resolved, original: p });
-        }
-
-        // If the entire input collapses to nothing (e.g. paths=['.', '']) treat as no valid input
-        if (resolvedPaths.length === 0) {
-          return {
-            content: [{ type: 'text' as const, text: 'No paths provided.' }],
-            isError: true,
-          };
-        }
-
-        // Per-path result tracking
-        type SegmentMeta = {
-          rel: string;
-          preExisted: boolean;
-          sanitizedFrom?: string;
-          replacedChars?: string;
-        };
-        type PathResult =
-          | { kind: 'success'; original: string; segments: SegmentMeta[] }
-          | { kind: 'failed'; original: string; error: string };
-        const results: PathResult[] = [];
-
-        for (const { resolved: resolvedPath, original: originalInput } of resolvedPaths) {
-          // Step A: Per-segment sanitize + validate FIRST (T-92-05)
-          // Must happen before validateVaultPath to strip NUL/control chars that would
-          // crash lstat/path operations (Rule 1 fix).
-          const rawSegments = resolvedPath.split('/');
-          const sanitizedSegmentsMeta: Array<{ name: string; original: string; replacedChars: string }> = [];
-          let segmentError: string | null = null;
-          for (let si = 0; si < rawSegments.length; si++) {
-            const { sanitized, replacedChars } = sanitizeDirectorySegment(rawSegments[si]);
-            const segErr = validateSegment(sanitized, si);
-            if (segErr) { segmentError = segErr; break; }
-            sanitizedSegmentsMeta.push({ name: sanitized, original: rawSegments[si], replacedChars: replacedChars.join('') });
-          }
-          if (segmentError) {
-            results.push({ kind: 'failed', original: originalInput, error: segmentError });
-            continue;
-          }
-
-          const sanitizedPath = sanitizedSegmentsMeta.map(m => m.name).join('/');
-
-          // Step B: Total-path byte-length check (4096-byte limit — T-92-07)
-          // Run before validateVaultPath so the informative "(N bytes)" message fires instead
-          // of the generic traversal error that validateVaultPath would produce for long paths.
-          const totalBytes = Buffer.byteLength(sanitizedPath, 'utf8');
-          if (totalBytes > 4096) {
-            results.push({ kind: 'failed', original: originalInput, error: `Resolved path exceeds the 4,096-byte filesystem limit (${totalBytes} bytes).` });
-            continue;
-          }
-
-          // Step C: Validate the sanitized path (traversal, symlink, vault-root target)
-          // Use sanitizedPath so NUL/control chars don't reach lstat calls
-          const validation = await validateVaultPath(vaultRoot, sanitizedPath);
-          if (!validation.valid) {
-            results.push({ kind: 'failed', original: originalInput, error: validation.error ?? 'Invalid path.' });
-            continue;
-          }
-
-          // Pre-walk stat to detect pre-existing segments and file conflicts (Pitfall 6 / T-92-04)
-          const segmentStatus: SegmentMeta[] = [];
-          let fileConflictError: string | null = null;
-          let cumulative = '';
-          for (let si = 0; si < sanitizedSegmentsMeta.length; si++) {
-            const segMeta = sanitizedSegmentsMeta[si];
-            cumulative = cumulative ? `${cumulative}/${segMeta.name}` : segMeta.name;
-            let preExisted = false;
-            try {
-              const s = await stat(join(vaultRoot, cumulative));
-              if (!s.isDirectory()) {
-                fileConflictError = `"${segMeta.name}" already exists as a file at ${cumulative}. Cannot create a directory at this location.`;
-                break;
-              }
-              preExisted = true;
-            } catch (e) {
-              if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
-                fileConflictError = `Could not stat "${cumulative}": ${(e as Error).message}.`;
-                break;
-              }
-              // ENOENT — segment doesn't exist yet, will be created
-            }
-            segmentStatus.push({
-              rel: cumulative,
-              preExisted,
-              sanitizedFrom: segMeta.replacedChars ? segMeta.original : undefined,
-              replacedChars: segMeta.replacedChars || undefined,
-            });
-          }
-          if (fileConflictError) {
-            results.push({ kind: 'failed', original: originalInput, error: fileConflictError });
-            continue;
-          }
-
-          // mkdir with recursive:true — map OS errors to human-readable messages (SPEC-20)
-          try {
-            await mkdir(join(vaultRoot, sanitizedPath), { recursive: true });
-          } catch (e) {
-            const code = (e as NodeJS.ErrnoException).code;
-            let msg: string;
-            if (code === 'EACCES') msg = `Permission denied: could not create "${originalInput}".`;
-            else if (code === 'ENOSPC') msg = `Disk full: could not create "${originalInput}". Free space on the volume containing the vault.`;
-            else if (code === 'EROFS') msg = `Read-only filesystem: could not create "${originalInput}". The vault volume is mounted read-only.`;
-            else msg = `Could not create "${originalInput}": ${(e as Error).message}.`;
-            results.push({ kind: 'failed', original: originalInput, error: msg });
-            continue;
-          }
-
-          results.push({ kind: 'success', original: originalInput, segments: segmentStatus });
-          if (segmentStatus.every(s => s.preExisted)) {
-            logger.warn(`create_directory: path already exists: ${sanitizedPath}`);
-          }
-        }
-
-        // Response assembly
-        const successes = results.filter((r): r is Extract<PathResult, { kind: 'success' }> => r.kind === 'success');
-        const failures = results.filter((r): r is Extract<PathResult, { kind: 'failed' }> => r.kind === 'failed');
-
-        // Deduplicate segments across batch paths by relative path (intermediate dirs may appear multiple times)
-        const seen = new Set<string>();
-        const uniqueSegments = successes.flatMap(r => r.segments).filter(s => {
-          if (seen.has(s.rel)) return false;
-          seen.add(s.rel);
-          return true;
-        });
-
-        // Count only newly created segments (not pre-existing) — Pitfall 2
-        const createdCount = uniqueSegments.filter(s => !s.preExisted).length;
-
-        const lines: string[] = [];
-        if (normalizedRoot) lines.push(`Root: ${normalizedRoot}/`);
-
-        if (uniqueSegments.length === 0 && failures.length > 0) {
-          lines.push('All paths failed:');
-        } else {
-          lines.push(`Created ${createdCount} director${createdCount === 1 ? 'y' : 'ies'}:`);
-          for (const s of uniqueSegments) {
-            const statusWord = s.preExisted ? 'already exists' : 'created';
-            const sanitizedNote = s.sanitizedFrom
-              ? `, sanitized from "${s.sanitizedFrom}" — replaced "${s.replacedChars}"`
-              : '';
-            lines.push(`- ${s.rel}/ (${statusWord}${sanitizedNote})`);
-          }
-        }
-
-        if (failures.length > 0) {
-          if (uniqueSegments.length > 0) lines.push('');
-          lines.push(`Failed (${failures.length} path${failures.length === 1 ? '' : 's'}):`);
-          for (const f of failures) {
-            lines.push(`- "${f.original}": ${f.error}`);
-          }
-        }
-
-        // isError = true only when ALL paths failed (Pitfall 3 / D-04)
-        const successCount = successes.length;
-        const isError = successCount === 0 && failures.length > 0;
-
-        if (!isError && createdCount > 0) {
-          logger.info(`create_directory: created ${createdCount} director${createdCount === 1 ? 'y' : 'ies'}`);
-        }
-
-        return { content: [{ type: 'text' as const, text: lines.join('\n') }], isError };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`create_directory failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
-      }
     }
   );
 
@@ -667,8 +366,8 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
         const includeTracking = includeValues.includes('tracking');
 
         // ── Step 1: Path validation — vault root bypass (Pitfall 1) ────────────
-        // normalizePath('/') → '' (empty); validateVaultPath rejects empty paths (correct for
-        // create_directory), but list_vault MUST accept vault root. Short-circuit here.
+        // normalizePath('/') → '' (empty); validateVaultPath rejects empty paths
+        // (correct for directory writes), but list_vault MUST accept the vault root. Short-circuit here.
         const normalizedInput = normalizePath(path ?? '/');
         let absTargetPath: string;
         if (normalizedInput === '') {
@@ -1017,169 +716,4 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
     }
   );
 
-  // Legacy remove_directory was merged into manage_directory(action:"remove").
-  if (false) server.registerTool(
-    'remove_directory',
-    {
-      description:
-        'Safely remove an empty directory from the vault. Returns an error listing contents if the directory is not empty. No recursive deletion, no force parameter — only empty directories can be removed. Use when cleaning up temporary or staging folders.',
-      inputSchema: {
-        path: z
-          .string()
-          .describe('Vault-relative path of the directory to remove.'),
-      },
-    },
-    async ({ path: dirPath }) => {
-      // D-02b: Check shutdown flag immediately
-      if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      if (config.locking.enabled) {
-        const locked = await acquireLock(
-          supabaseManager.getClient(),
-          config.instance.id,
-          'documents',
-          { ttlSeconds: config.locking.ttlSeconds }
-        );
-        if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.' }],
-            isError: true,
-          };
-        }
-      }
-
-      try {
-        const vaultRoot = config.instance.vault.path;
-
-        // ── Step 1: Vault-root guard (mirrors list_vault pattern) ─────────────
-        // normalizePath('/') → '' (empty string). Reject the vault root explicitly
-        // before delegating to validateVaultPath so the error message is clear.
-        const normalizedInput = normalizePath(dirPath);
-        if (normalizedInput === '') {
-          return {
-            content: [{ type: 'text' as const, text: 'Cannot remove the vault root directory.' }],
-            isError: true,
-          };
-        }
-
-        // Path validation using validateVaultPath() (migrated in Phase 94 — replaces inline traversal block)
-        const validation = await validateVaultPath(vaultRoot, normalizedInput);
-        if (!validation.valid) {
-          return { content: [{ type: 'text' as const, text: validation.error ?? 'Invalid path.' }], isError: true };
-        }
-        const absPath = validation.absPath;
-
-        // Stat the path — must exist and be a directory
-        let dirStat;
-        try {
-          dirStat = await stat(absPath);
-        } catch (statErr) {
-          const code = (statErr as NodeJS.ErrnoException).code;
-          if (code === 'ENOENT') {
-            return {
-              content: [{ type: 'text' as const, text: `Directory '${dirPath}' does not exist.` }],
-              isError: true,
-            };
-          }
-          if (code === 'EACCES') {
-            return {
-              content: [{ type: 'text' as const, text: `Permission denied for directory '${dirPath}'.` }],
-              isError: true,
-            };
-          }
-          throw statErr;
-        }
-
-        if (!dirStat.isDirectory()) {
-          return {
-            content: [{ type: 'text' as const, text: `'${dirPath}' is a file, not a directory.` }],
-            isError: true,
-          };
-        }
-
-        // Read directory contents (no filtering — includes hidden files)
-        let entries: string[];
-        try {
-          entries = await readdir(absPath);
-        } catch (readdirErr) {
-          const code = (readdirErr as NodeJS.ErrnoException).code;
-          if (code === 'EACCES') {
-            return {
-              content: [{ type: 'text' as const, text: `Permission denied for directory '${dirPath}'.` }],
-              isError: true,
-            };
-          }
-          throw readdirErr;
-        }
-
-        // Non-empty check — return formatted listing
-        if (entries.length > 0) {
-          // Classify each entry as file or dir
-          const listing: string[] = [];
-          for (const entry of entries) {
-            let entryType = 'file';
-            try {
-              const entryStat = await stat(join(absPath, entry));
-              entryType = entryStat.isDirectory() ? 'dir' : 'file';
-            } catch {
-              // If stat fails, treat as file
-            }
-            listing.push(entryType === 'dir' ? `- [dir] ${entry}/` : `- [file] ${entry}`);
-          }
-
-          const errorText = [
-            `Directory "${dirPath}" is not empty.`,
-            '',
-            `Contents (${entries.length} item${entries.length === 1 ? '' : 's'}):`,
-            ...listing,
-            '',
-            'Remove or move these items first.',
-          ].join('\n');
-
-          return {
-            content: [{ type: 'text' as const, text: errorText }],
-            isError: true,
-          };
-        }
-
-        // Remove confirmed empty directory
-        try {
-          await rmdir(absPath);
-        } catch (rmdirErr) {
-          const code = (rmdirErr as NodeJS.ErrnoException).code;
-          if (code === 'EACCES') {
-            return {
-              content: [{ type: 'text' as const, text: `Permission denied for directory '${dirPath}'.` }],
-              isError: true,
-            };
-          }
-          throw rmdirErr;
-        }
-
-        logger.info(`remove_directory: removed empty directory ${dirPath}`);
-
-        return {
-          content: [{ type: 'text' as const, text: `Removed directory: ${dirPath}` }],
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`remove_directory failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
-      } finally {
-        if (config.locking.enabled) {
-          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-        }
-      }
-    }
-  );
 }

@@ -1,8 +1,11 @@
 /**
- * Phase 67 UAT: File Ops P2 — copy_document, remove_directory
+ * Phase 67 UAT: File Ops P2 — copy_document
  *
- * Tests the copy_document and remove_directory MCP tools via the
- * streamable-http transport on an isolated port (4300).
+ * Tests the copy_document MCP tool via the streamable-http transport on an
+ * isolated port (4300). (The directory tests that used to live here were
+ * dropped when remove_directory was merged into manage_directory in Phase 127;
+ * directory create/remove behavior is covered by
+ * tests/integration/manage-directory.integration.test.ts.)
  *
  * Requires: Supabase running (HAS_SUPABASE env vars set).
  * Run: npm run test:integration -- uat-phase-67
@@ -10,7 +13,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
-import { writeFileSync, unlinkSync, existsSync } from 'node:fs';
+import { writeFileSync, unlinkSync } from 'node:fs';
 import { mkdir, rm, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -127,7 +130,7 @@ async function mcpCall(toolName: string, args: Record<string, unknown>): Promise
   };
 }
 
-describe.skipIf(!HAS_SUPABASE)('Phase 67 UAT: File Ops P2 (copy_document, remove_directory)', () => {
+describe.skipIf(!HAS_SUPABASE)('Phase 67 UAT: File Ops P2 (copy_document)', () => {
   let serverProcess: ChildProcess | null = null;
   let vaultPath: string;
   let configPath: string;
@@ -257,43 +260,5 @@ describe.skipIf(!HAS_SUPABASE)('Phase 67 UAT: File Ops P2 (copy_document, remove
 
     expect(result.status).toBe(200);
     expect(result.isError).toBeFalsy();
-  });
-
-  it('Test 6: remove_directory safely removes empty directories', async () => {
-    const emptyRelPath = 'Documents/empty-to-remove';
-    await mkdir(join(vaultPath, emptyRelPath), { recursive: true });
-
-    const result = await mcpCall('remove_directory', { path: emptyRelPath });
-
-    expect(result.status).toBe(200);
-    expect(result.isError).toBeFalsy();
-    expect(existsSync(join(vaultPath, emptyRelPath))).toBe(false);
-  });
-
-  it('Test 7: remove_directory blocks removal of vault root', async () => {
-    const result = await mcpCall('remove_directory', { path: '.' });
-
-    expect(result.status).toBe(200);
-    expect(result.isError).toBe(true);
-    const text = result.content[0]?.text ?? '';
-    expect(text).toContain('Cannot remove the vault root directory');
-  });
-
-  it('Test 8: remove_directory formats non-empty error listing', async () => {
-    const nonEmptyRelPath = 'Documents/non-empty';
-    await mkdir(join(vaultPath, nonEmptyRelPath), { recursive: true });
-    await writeFile(join(vaultPath, nonEmptyRelPath, 'file1.md'), '# File 1');
-    await writeFile(join(vaultPath, nonEmptyRelPath, 'file2.md'), '# File 2');
-    await mkdir(join(vaultPath, nonEmptyRelPath, 'subdir'), { recursive: true });
-
-    const result = await mcpCall('remove_directory', { path: nonEmptyRelPath });
-
-    expect(result.status).toBe(200);
-    expect(result.isError).toBe(true);
-    const text = result.content[0]?.text ?? '';
-    expect(text).toContain('is not empty');
-    expect(text).toContain('[file]');
-    expect(text).toContain('[dir]');
-    expect(text).toContain('Contents (');
   });
 });
