@@ -49,7 +49,7 @@
 | 125 | Unified Search + Memory Consolidation | 6/6 | Completed |  |
 | 126 | Plugin + Record Consolidation | 5/5 | Complete   | 2026-05-12 |
 | 127 | Removal, Directory, And Vault Maintenance | 6/6 | Complete    | 2026-05-12 |
-| 128 | Legacy Surface Removal + Final Audit | Remove merged/dead tools, preserve transitional macro gates, and close coverage/preflight. | DOC-10, MEM-05, SYS-04..06, TEST-07, TEST-08 | 6 |
+| 128 | Legacy Surface Removal + Final Audit | 1/8 | In Progress|  |
 
 ## Phase Details
 
@@ -264,10 +264,10 @@ Plans:
 5. Coverage ledgers and scenario matrices show every v3.3 requirement mapped to implemented unit, integration, E2E, directed scenario, and integration scenario evidence.
 6. Final validation runs lint, unit, integration, E2E, directed scenarios, YAML integration scenarios, build, and a coverage audit with no untriaged v3.3 gaps.
 
-**Plans:** 8 plans
+**Plans:** 1/8 plans executed
 
 Plans:
-- [ ] 128-01-PLAN.md — Create traceability and legacy audit harness.
+- [x] 128-01-PLAN.md — Create traceability and legacy audit harness.
 - [ ] 128-02-PLAN.md — Finalize metadata, config, delegated, and protocol absence behavior.
 - [ ] 128-03-PLAN.md — Remove active legacy/dead handlers and obsolete behavior tests.
 - [ ] 128-04-PLAN.md — Port directed scenario ledgers and runnable cases to final surfaces.

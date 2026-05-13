@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.3
 milestone_name: MCP Tools Consolidation
-status: ready_to_plan
+status: executing
 stopped_at: Completed 127-06-PLAN.md
-last_updated: "2026-05-12T21:14:50.799Z"
-last_activity: 2026-05-12
+last_updated: "2026-05-13T00:23:08.661Z"
+last_activity: 2026-05-13 -- Phase 128 execution started
 progress:
   total_phases: 8
-  completed_phases: 8
-  total_plans: 35
+  completed_phases: 7
+  total_plans: 43
   completed_plans: 35
-  percent: 100
+  percent: 81
 ---
 
 # FlashQuery Core — State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-11)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 127 — Removal, Directory, And Vault Maintenance
+**Current focus:** Phase 128 — legacy-surface-removal-final-audit
 
 ## Current Position
 
-Phase: 128
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-12
+Phase: 128 (legacy-surface-removal-final-audit) — EXECUTING
+Plan: 1 of 8
+Status: Executing Phase 128
+Last activity: 2026-05-13 -- Phase 128 execution started
 
 ## Performance Metrics
 
