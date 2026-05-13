@@ -170,6 +170,14 @@ llm:
         max_iterations: 4
         timeout_ms: 10000
         max_tokens: 64
+    - name: delegated_tier_round_trip
+      description: Delegated tier metadata round-trip purpose
+      models: [agent-model]
+      tools: [tier:read-write]
+      defaults:
+        max_iterations: 2
+        timeout_ms: 10000
+        max_tokens: 64
     - name: structured_fail
       description: ATL-E2E-08 structured output compatibility failure
       models: [structured-incompatible-model]
@@ -313,6 +321,49 @@ describe('call_model agent-loop public E2E contracts', () => {
           expect.objectContaining({ role: 'tool', tool_call_id: 'call_search_1' }),
         ]),
       });
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('I-tier MCP-equivalent exposes corrected delegated tier:read-write metadata', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('delegated tier metadata visible', 17, 5),
+    ]);
+    await provider.start();
+    try {
+      const envelope = await withManagedMcp(provider, (client) => callModel(client, {
+        resolver: 'purpose',
+        name: 'delegated_tier_round_trip',
+        messages: [{ role: 'user', content: 'Verify delegated tier native tool metadata.' }],
+      }));
+      const metadata = envelope.metadata as {
+        tools?: {
+          native_tool_names?: string[];
+        };
+      };
+
+      expect(metadata.tools?.native_tool_names).toEqual(expect.arrayContaining([
+        'list_vault',
+        'copy_document',
+        'insert_in_doc',
+        'replace_doc_section',
+      ]));
+      expect(metadata.tools?.native_tool_names).not.toEqual(expect.arrayContaining([
+        'get_llm_usage',
+        'call_model',
+      ]));
+      expect(provider.requests[0]).toMatchObject({
+        tools: expect.arrayContaining([
+          expect.objectContaining({ function: expect.objectContaining({ name: 'list_vault' }) }),
+          expect.objectContaining({ function: expect.objectContaining({ name: 'copy_document' }) }),
+          expect.objectContaining({ function: expect.objectContaining({ name: 'insert_in_doc' }) }),
+          expect.objectContaining({ function: expect.objectContaining({ name: 'replace_doc_section' }) }),
+        ]),
+      });
+      const providerToolNames = ((provider.requests[0].tools ?? []) as Array<{ function?: { name?: string } }>)
+        .map((tool) => tool.function?.name);
+      expect(providerToolNames).not.toEqual(expect.arrayContaining(['get_llm_usage', 'call_model']));
     } finally {
       await provider.stop();
     }
