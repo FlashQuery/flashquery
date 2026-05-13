@@ -8,7 +8,7 @@ document or memory primitives.
 """
 from __future__ import annotations
 
-COVERAGE = ["B-01", "B-02", "B-03"]
+COVERAGE = ["B-01", "B-02", "B-03", "D-briefing-degrade-1", "D-briefing-degrade-2"]
 
 import argparse
 import sys
@@ -126,6 +126,74 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail=expectation_detail(briefing) or briefing.error or "",
             timing_ms=briefing.timing_ms,
             tool_result=briefing,
+        )
+
+    with TestContext(
+        fqc_dir=args.fqc_dir,
+        url=None,
+        secret=None,
+        vault_path=None,
+        managed=True,
+        port_range=port_range,
+        require_embedding=False,
+        extra_config={"host_mcp_tools": {"tools": ["category:doc-write"]}},
+    ) as ctx:
+        degrade_tag = f"briefing-degrade-{run.run_id}"
+        doc = ctx.client.call_tool(
+            "write_document",
+            mode="create",
+            title=f"Briefing Degrade Doc {run.run_id}",
+            content=f"Briefing degradation fixture for run {run.run_id}.",
+            path=f"_test/{TEST_NAME}_{run.run_id}_degrade.md",
+            tags=[degrade_tag, "fqc-test"],
+        )
+        doc_id = _json_field(doc, "fq_id") if doc.ok else ""
+        doc_path = _json_field(doc, "path") if doc.ok else ""
+        if doc_path:
+            ctx.cleanup.track_file(doc_path, mcp_identifier=doc_id or doc_path)
+        run.step(
+            label="D-briefing-degrade setup: write document with memory category disabled",
+            passed=doc.ok and doc.status == "pass" and bool(doc_id),
+            detail=expectation_detail(doc) or doc.error or "",
+            timing_ms=doc.timing_ms,
+            tool_result=doc,
+        )
+        if not doc.ok or not doc_id:
+            return run
+
+        mixed = ctx.client.call_tool(
+            "get_briefing",
+            tags=[degrade_tag],
+            entity_types=["documents", "memories"],
+            limit=5,
+        )
+        mixed.expect_json_equals("warnings[0]", "memory_category_disabled")
+        mixed.expect_json_equals("entity_types[0]", "documents")
+        mixed.expect_json_path("groups[0].items[0].fq_id")
+        mixed.expect_not_contains("memory_id")
+        run.step(
+            label="D-briefing-degrade-1: memory-disabled mixed request warns and returns documents only",
+            passed=mixed.ok and mixed.status == "pass",
+            detail=expectation_detail(mixed) or mixed.error or "",
+            timing_ms=mixed.timing_ms,
+            tool_result=mixed,
+        )
+
+        only_memory = ctx.client.call_tool(
+            "get_briefing",
+            tags=[degrade_tag],
+            entity_types=["memories"],
+            limit=5,
+        )
+        only_memory.expect_json_equals("error", "unsupported")
+        only_memory.expect_json_equals("identifier", "memories")
+        only_memory.expect_json_equals("details.disabled_entity_types[0]", "memories")
+        run.step(
+            label="D-briefing-degrade-2: memory-disabled memories-only request returns unsupported envelope",
+            passed=only_memory.ok and only_memory.status == "pass",
+            detail=expectation_detail(only_memory) or only_memory.error or "",
+            timing_ms=only_memory.timing_ms,
+            tool_result=only_memory,
         )
 
     return run

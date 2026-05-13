@@ -1,0 +1,48 @@
+name: briefing_category_degradation
+description: >
+  Transitional get_briefing degrades consistently when the memory category is
+  hidden from the host MCP surface: mixed requests warn and continue with
+  documents, while memories-only requests return a canonical unsupported
+  envelope without runtime isError semantics.
+coverage:
+  - INT-briefing-degrade-1
+  - INT-briefing-degrade-2
+
+extra_config:
+  host_mcp_tools:
+    tools:
+      - category:doc-write
+
+steps:
+  - label: "Create document for document-only briefing"
+    action: vault.write
+    name: briefing_doc
+    path: "_integration/briefing/category-degrade.md"
+    title: "Briefing Category Degrade"
+    content: "Document retained when memory category is disabled."
+    tags: ["briefing-degrade-${run.id}", "fqc-test"]
+
+  - label: "Mixed documents/memories briefing warns and returns document item"
+    assert:
+      op: get_briefing
+      args:
+        tags: ["briefing-degrade-${run.id}"]
+        entity_types: ["documents", "memories"]
+        limit: 5
+      expect_json_equals:
+        path: "warnings[0]"
+        value: "memory_category_disabled"
+      expect_contains: "\"entity_type\":\"document\""
+      expect_not_contains: "\"entity_type\":\"memory\""
+
+  - label: "Memories-only briefing returns unsupported envelope without runtime error"
+    assert:
+      op: get_briefing
+      args:
+        tags: ["briefing-degrade-${run.id}"]
+        entity_types: ["memories"]
+        limit: 5
+      expect_json_equals:
+        path: "error"
+        value: "unsupported"
+      expect_contains: "\"identifier\":\"memories\""

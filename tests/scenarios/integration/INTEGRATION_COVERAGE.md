@@ -14,6 +14,8 @@ Coverage IDs use the prefix `INT-` to avoid collision with the directed test IDs
 |----|----------|------------|--------------|--------------|
 | legacy_surface_final_audit | Phase 128 removed/dead MCP tool names are absent from public listTools and YAML scenario migration keeps only final replacements plus transitional get_briefing/insert_doc_link coverage. | legacy_surface_final_audit   | 2026-05-13   | 2026-05-13   |
 | legacy_surface_migration_decisions | Phase 128 integration migration decisions classify old document/memory/directory/record/search/project rows as historical removed-tool evidence before YAML cleanup. | legacy_surface_final_audit; historical integration ledgers | 2026-05-13 |  |
+| INT-briefing-degrade-1 | Transitional get_briefing with memory disabled and mixed documents/memories request returns documents plus memory_category_disabled warning. | briefing_category_degradation | 2026-05-13   | 2026-05-13   |
+| INT-briefing-degrade-2 | Transitional get_briefing with memory disabled and memories-only request returns canonical unsupported envelope with isError:false. | briefing_category_degradation | 2026-05-13   | 2026-05-13   |
 
 ## INT — Foundation Harness
 

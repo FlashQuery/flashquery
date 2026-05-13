@@ -620,7 +620,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const activeEntityTypes = requestedEntityTypes.filter((entityType) => {
           if (enabled[entityType]) return true;
           if (explicitEntityTypes) {
-            warnings.push(`${entityType === 'records' ? 'plugin' : entityType.slice(0, -1)}_category_disabled`);
+            const disabledCategory = entityType === 'records'
+              ? 'plugin'
+              : entityType === 'memories'
+                ? 'memory'
+                : 'document';
+            warnings.push(`${disabledCategory}_category_disabled`);
           }
           return false;
         });

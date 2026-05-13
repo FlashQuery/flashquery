@@ -449,6 +449,8 @@ Cross-entity summary tools.
 | B-01 | get_briefing returns documents and memories grouped by type (VALIDATED) | test_briefing | 2026-04-14 | 2026-05-07 |
 | B-02 | get_briefing with tag filtering (VALIDATED) | test_briefing | 2026-04-14 | 2026-05-07 |
 | B-03 | get_briefing with plugin_id includes plugin record counts (VALIDATED) | test_briefing | 2026-04-14 | 2026-05-07 |
+| D-briefing-degrade-1 | get_briefing with memory disabled and mixed documents/memories request returns documents plus memory_category_disabled warning. | test_briefing | 2026-05-13 |  |
+| D-briefing-degrade-2 | get_briefing with memory disabled and memories-only request returns canonical unsupported envelope with isError:false. | test_briefing | 2026-05-13 |  |
 
 ## 11. Scale and Correctness
 
