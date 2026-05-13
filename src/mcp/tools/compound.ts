@@ -32,7 +32,6 @@ import {
 } from '../utils/markdown-sections.js';
 import { getToolMetadata } from '../tool-metadata.js';
 import { FM } from '../../constants/frontmatter-fields.js';
-import { serializeOrderedFrontmatter } from '../utils/frontmatter-sanitizer.js';
 import {
   mergeSearchResults,
   resolveSearchIntent,
@@ -220,6 +219,10 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         await vaultManager.writeMarkdown(sourceResolved.relativePath, parsed.data, parsed.content);
 
         logger.info(`insert_doc_link: ${alreadyLinked ? 'unchanged' : 'added'} ${wikilink} in ${sourceResolved.relativePath}`);
+        const sourceFrontmatter: Record<string, unknown> = parsed.data;
+        const sourceTags = sourceFrontmatter[FM.TAGS];
+        const sourceTitle = sourceFrontmatter[FM.TITLE];
+        const sourceStatus = sourceFrontmatter[FM.STATUS];
 
         return jsonToolResult({
           status: alreadyLinked ? 'unchanged' : 'updated',
@@ -230,9 +233,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             identifier: fqcId,
             fq_id: fqcId,
             path: sourceResolved.relativePath,
-            title: typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] : undefined,
-            status: typeof parsed.data[FM.STATUS] === 'string' ? parsed.data[FM.STATUS] : undefined,
-            tags: Array.isArray(parsed.data[FM.TAGS]) ? parsed.data[FM.TAGS] as string[] : undefined,
+            title: typeof sourceTitle === 'string' ? sourceTitle : undefined,
+            status: typeof sourceStatus === 'string' ? sourceStatus : undefined,
+            tags: Array.isArray(sourceTags) && sourceTags.every((tag): tag is string => typeof tag === 'string')
+              ? sourceTags
+              : undefined,
           },
           target: {
             identifier: targetResolved.fqcId ?? targetResolved.relativePath,

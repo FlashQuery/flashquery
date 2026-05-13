@@ -20,11 +20,6 @@ import {
 import { serializeOrderedFrontmatter } from '../utils/frontmatter-sanitizer.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
-  formatKeyValueEntry,
-  formatEmptyResults,
-  joinBatchEntries,
-  shouldShowProgress,
-  progressMessage,
   jsonExpectedError,
   jsonRuntimeError,
   jsonToolResult,

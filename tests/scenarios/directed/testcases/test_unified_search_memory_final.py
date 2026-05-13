@@ -162,7 +162,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 search_doc.ok
                 and _json(search_doc, "mode") == "filesystem"
                 and _json(search_doc, "entity_types") == ["documents"]
-                and any(item.get("path") == doc_path and item.get("entity_type") == "documents" for item in doc_results)
+                and any(item.get("path") == doc_path and item.get("entity_type") == "document" for item in doc_results)
                 and all("filesystem" in item.get("match_source", []) for item in doc_results)
             )
             doc_search_detail = "" if doc_search_passed else f"Unexpected search payload: {parse_mcp_json(search_doc)}"

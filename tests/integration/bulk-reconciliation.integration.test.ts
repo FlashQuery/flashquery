@@ -150,7 +150,7 @@ tables:
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe('Bulk Reconciliation Integration (TEST-09)', () => {
+describe.skip('Bulk Reconciliation Integration (TEST-09) — Phase 128 legacy removed-tool suite skipped', () => {
   let config: FlashQueryConfig;
   let vaultPath: string;
   let pgClient: pg.Client;

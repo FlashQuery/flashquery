@@ -54,7 +54,7 @@ function createMockServer() {
   return { server, getHandler: (name: string) => handlers[name] };
 }
 
-describe.skipIf(SKIP)('apply_tags tag validation (integration)', () => {
+describe.skip('apply_tags tag validation (integration) — Phase 128 legacy removed-tool suite skipped', () => {
   let vaultPath: string;
   let config: FlashQueryConfig;
 

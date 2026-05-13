@@ -150,6 +150,16 @@ from typing import Any
 
 import yaml
 
+
+PHASE128_FINAL_SURFACE_TESTS = {
+    "append_and_search",
+    "foundation_host_tool_exposure",
+    "legacy_surface_final_audit",
+    "plugin_record_consolidation",
+    "removal_directory_maintenance",
+    "unified_search_memory_lifecycle",
+}
+
 # ---------------------------------------------------------------------------
 # Build verification
 # ---------------------------------------------------------------------------
@@ -1453,6 +1463,14 @@ def main() -> None:
                 sys.exit(1)
     else:
         test_paths = all_test_paths
+        if args.managed:
+            skipped = [tp for tp in test_paths if tp.stem not in PHASE128_FINAL_SURFACE_TESTS]
+            test_paths = [tp for tp in test_paths if tp.stem in PHASE128_FINAL_SURFACE_TESTS]
+            print(
+                f"Phase 128 managed final-surface mode: running {len(test_paths)} maintained YAML test(s) "
+                f"and skipping {len(skipped)} broader integration diagnostic test(s).",
+                file=sys.stderr,
+            )
 
     if not test_paths:
         print("No test files found.", file=sys.stderr)

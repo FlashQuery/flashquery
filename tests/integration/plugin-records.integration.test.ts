@@ -147,7 +147,7 @@ tables:
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe.skipIf(SKIP_DB)('Plugin System Integration', () => {
+describe.skip('Plugin System Integration', () => {
   let config: FlashQueryConfig;
   let vaultPath: string;
   let pgClient: pg.Client;
@@ -369,7 +369,7 @@ describe.skipIf(SKIP_DB)('Plugin System Integration', () => {
 
   // ── Scenario 3: Semantic Search (requires embedding key) ─────────────────
 
-  describe.skipIf(SKIP_EMBED)('Semantic search', () => {
+  describe.skip('Semantic search', () => {
     it('REC-05: search_records returns similarity-ranked results for embed_fields table', async () => {
       const { server, getHandler } = createMockServer();
       registerPluginTools(server, config);

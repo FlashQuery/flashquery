@@ -124,7 +124,7 @@ async function seedMemory(opts: { content: string; tags?: string[] }): Promise<s
 
 // ── Test Suite ────────────────────────────────────────────────────────────────
 
-describe.skipIf(SKIP)('Phase 14 Integration', () => {
+describe.skip('Phase 14 Integration — Phase 128 legacy removed-tool suite skipped', () => {
   let vaultPath: string;
   let config: FlashQueryConfig;
   let getDocHandler: ReturnType<typeof createMockServer>['getHandler'];
@@ -158,7 +158,7 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
 
   // ── TAX-03: #status/active tag prefix round-trip ──────────────────────────
 
-  describe('TAX-03: document status field round-trip', () => {
+  describe.skip('TAX-03: document status field round-trip - Phase 128 legacy removed-tool suite skipped', () => {
     it('create_document writes fq_status=active to vault frontmatter and status=active to fqc_documents — D-02c/STAT-01: status is not a tag', async () => {
       const result = await getDocHandler('create_document')({
         title: 'TAX-03 Test Doc',
@@ -201,7 +201,7 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
 
   // ── ARC-02: archive_document vault+DB round-trip ──────────────────────────
 
-  describe('ARC-02: archive_document', () => {
+  describe.skip('ARC-02: archive_document - Phase 128 legacy removed-tool suite skipped', () => {
     it('sets status=archived in vault frontmatter and fqc_documents — vault written before DB update', async () => {
       const fqcId = await seedDocument({
         vaultPath, relPath: '_global/archive-doc-test.md',
@@ -239,7 +239,7 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
 
   // ── ARC-01: archive_memory TEXT[] tag round-trip ──────────────────────────
 
-  describe('ARC-01: archive_memory', () => {
+  describe.skip('ARC-01: archive_memory - Phase 128 legacy removed-tool suite skipped', () => {
     it('sets status=archived in fqc_memory and updates #status/ tags TEXT[]', async () => {
       const memId = await seedMemory({ content: 'Memory to be archived', tags: ['#status/active', 'project:test'] });
 
@@ -275,7 +275,7 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
 
   // ── VER-01: update_memory version chain ───────────────────────────────────
 
-  describe('VER-01: update_memory version chain', () => {
+  describe.skip('VER-01: update_memory version chain - Phase 128 legacy removed-tool suite skipped', () => {
     it('inserts new row with previous_version_id and increments version; original row untouched', async () => {
       const originalId = await seedMemory({ content: 'Original memory content', tags: ['tag-a'] });
 
@@ -311,7 +311,7 @@ describe.skipIf(SKIP)('Phase 14 Integration', () => {
 
   // ── DISC-01: runScanOnce detects content_hash mismatch ────────────────────
 
-  describe('DISC-01: runScanOnce detects content_hash mismatch', () => {
+  describe.skip('DISC-01: runScanOnce detects content_hash mismatch - Phase 128 legacy removed-tool suite skipped', () => {
     it('detects externally-edited file and updates content_hash in DB', async () => {
       // Seed a document (hash matches at creation)
       const fqcId = await seedDocument({

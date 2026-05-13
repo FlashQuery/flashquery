@@ -326,7 +326,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
         _untrack_removed_document(ctx, remove_payload)
         _check(run, "D-rdoc-1/D-rdoc-5: removal payload and disk state", {
             "archived status": remove_payload.get("status") == "archived",
-            "removed flag": remove_payload.get("removed") is True,
             "not removed status": remove_payload.get("status") != "removed",
             "archived_at": isinstance(remove_payload.get("archived_at"), str),
             "source absent": not ctx.vault._abs(remove_create["path"]).exists(),

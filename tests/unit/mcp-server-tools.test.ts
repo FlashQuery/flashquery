@@ -52,7 +52,7 @@ describe('MCP tool registration metadata', () => {
     } as unknown as McpServer, { hostEnabledToolNames: new Set(['get_document']) });
 
     server.registerTool('get_document', { description: 'Get document', inputSchema: {} }, vi.fn() as never);
-    server.registerTool('save_memory', { description: 'Save memory', inputSchema: {} }, vi.fn() as never);
+    server.registerTool('write_memory', { description: 'Write memory', inputSchema: {} }, vi.fn() as never);
 
     expect(getNativeToolCatalog(server).map((tool) => tool.name)).toEqual(['get_document']);
     expect(originalRegisterTool).toHaveBeenCalledTimes(1);

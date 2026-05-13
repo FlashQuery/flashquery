@@ -51,7 +51,7 @@ def _record_tool_expectation(run: TestRun, label: str, names: list[str], present
     run.step(label=label, passed=passed, detail=detail.strip(), timing_ms=0)
 
 
-def _removed_status_purpose_name_starts(args: argparse.Namespace, port_range: tuple[int, int] | None) -> tuple[bool, str]:
+def _removed_status_purpose_name_rejected(args: argparse.Namespace, port_range: tuple[int, int] | None) -> tuple[bool, str]:
     server = FQCServer(
         fqc_dir=args.fqc_dir,
         port_range=port_range,
@@ -77,10 +77,11 @@ def _removed_status_purpose_name_starts(args: argparse.Namespace, port_range: tu
     )
     try:
         server.start()
-        return True, ""
+        return False, "Server accepted a removed legacy tool in purpose config"
     except Exception as exc:
         text = f"{exc}\n" + "\n".join(server.captured_logs)
-        return False, text[-1000:]
+        passed = "has been replaced by 'search'" in text or "does not alias legacy tool names" in text
+        return passed, text[-1000:]
     finally:
         server.stop()
 
@@ -103,7 +104,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run,
             "D-foundation-tools-2: omitted host_mcp_tools keeps default host surface",
             default_names,
-            ["save_memory", "get_document", "search_all", "call_model"],
+            ["write_memory", "get_document", "search", "call_model"],
             ["get_doc_outline", "list_projects"],
         )
 
@@ -114,8 +115,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         require_embedding=False,
         extra_config={
             "host_mcp_tools": {
-                "tools": ["tier:read-only", "category:llm", "save_memory"],
-                "excluded_tools": ["get_briefing", "save_memory"],
+                "tools": ["tier:read-only", "category:llm", "write_memory"],
+                "excluded_tools": ["get_briefing", "write_memory"],
             }
         },
     ) as filtered_ctx:
@@ -124,8 +125,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run,
             "D-foundation-tools-3/4: category/name selectors filter host catalog",
             filtered_names,
-            ["get_document", "list_vault", "search_documents", "search_all", "call_model"],
-            ["save_memory", "create_document", "force_file_scan", "get_briefing"],
+            ["get_document", "list_vault", "search", "call_model"],
+            ["write_memory", "create_document", "force_file_scan", "get_briefing"],
         )
 
     with TestContext(
@@ -140,13 +141,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run,
             "D-foundation-tools-5: doc-write includes doc-read tools",
             doc_write_names,
-            ["get_document", "list_vault", "create_document", "archive_document"],
-            ["save_memory"],
+            ["get_document", "list_vault", "write_document", "archive_document"],
+            ["write_memory"],
         )
 
-    passed, detail = _removed_status_purpose_name_starts(args, port_range)
+    passed, detail = _removed_status_purpose_name_rejected(args, port_range)
     run.step(
-        label="D-foundation-tools-7: removed-status purpose names remain valid while registered",
+        label="D-foundation-tools-7: removed legacy purpose tools are rejected without aliasing",
         passed=passed,
         detail=detail,
         timing_ms=0,

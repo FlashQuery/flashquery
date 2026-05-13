@@ -2,16 +2,13 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { supabaseManager } from '../../storage/supabase.js';
-import { embeddingProvider, NullEmbeddingProvider } from '../../embedding/provider.js';
+import { embeddingProvider } from '../../embedding/provider.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { validateAllTags } from '../../utils/tag-validator.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
-  formatKeyValueEntry,
-  formatEmptyResults,
-  joinBatchEntries,
   jsonExpectedError,
   jsonRuntimeError,
   jsonToolResult,

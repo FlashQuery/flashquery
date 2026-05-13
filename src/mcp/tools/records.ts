@@ -97,16 +97,6 @@ function fireAndForgetEmbed(
     );
 }
 
-function formatReconciliationSummary(summary: ReconciliationActionSummary): string {
-  const parts: string[] = [];
-  if (summary.autoTracked > 0) parts.push(`Auto-tracked ${summary.autoTracked} new document(s)`);
-  if (summary.archived > 0) parts.push(`Archived ${summary.archived} record(s) (documents missing or disassociated)`);
-  if (summary.resurrected > 0) parts.push(`Resurrected ${summary.resurrected} record(s)`);
-  if (summary.pathsUpdated > 0) parts.push(`Updated paths for ${summary.pathsUpdated} moved document(s)`);
-  if (summary.fieldsSynced > 0) parts.push(`Synced fields on ${summary.fieldsSynced} modified document(s)`);
-  return parts.length > 0 ? `\nReconciliation: ${parts.join('. ')}.` : '';
-}
-
 async function queryPendingReview(
   pluginId: string,
   _instanceName: string,

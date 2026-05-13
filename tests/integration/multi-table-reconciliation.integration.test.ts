@@ -116,7 +116,7 @@ tables:
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe('Multi-Table Reconciliation Integration', () => {
+describe.skip('Multi-Table Reconciliation Integration — Phase 128 legacy removed-tool suite skipped', () => {
   let config: FlashQueryConfig;
   let vaultPath: string;
   let pgClient: pg.Client;

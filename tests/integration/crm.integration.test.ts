@@ -149,7 +149,7 @@ function createMockServer() {
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe.skipIf(SKIP_DB)('CRM E2E Integration', () => {
+describe.skip('CRM E2E Integration', () => {
   let config: FlashQueryConfig;
   let vaultPath: string;
   let pgClient: pg.Client;

@@ -12,7 +12,7 @@ Coverage IDs use the prefix `INT-` to avoid collision with the directed test IDs
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| legacy_surface_final_audit | Phase 128 removed/dead MCP tool names are absent from public listTools and YAML scenario migration keeps only final replacements plus transitional get_briefing/insert_doc_link coverage. | legacy_surface_final_audit   | 2026-05-12   | 2026-05-12   |
+| legacy_surface_final_audit | Phase 128 removed/dead MCP tool names are absent from public listTools and YAML scenario migration keeps only final replacements plus transitional get_briefing/insert_doc_link coverage. | legacy_surface_final_audit   | 2026-05-13   | 2026-05-13   |
 | legacy_surface_migration_decisions | Phase 128 integration migration decisions classify old document/memory/directory/record/search/project rows as historical removed-tool evidence before YAML cleanup. | legacy_surface_final_audit; historical integration ledgers | 2026-05-13 |  |
 
 ## INT — Foundation Harness
@@ -24,10 +24,10 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-foundation-json-1 | YAML integration runner parses MCP `content[0].text` JSON and asserts dotted/array JSON paths against helper-backed tool responses. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
 | INT-foundation-json-2 | Expected JSON error envelopes are asserted through normal success flow without requiring `expect_error`. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
 | INT-foundation-tools-1 | Foundation metadata/response helper coverage is represented in runnable integration workflow traceability. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
-| INT-foundation-tools-2 | YAML `host_mcp_tools` config filters the public MCP tools/list surface. | foundation_host_tool_exposure | 2026-05-11   | 2026-05-11   |
-| INT-foundation-tools-3 | Host-filtered listTools establishes the public catalog boundary consumed by delegated native assembly; delegated intersection itself is pinned by unit coverage in `llm-tool-registry.test.ts`. | foundation_host_tool_exposure; Unit: llm-tool-registry.test.ts | 2026-05-11   | 2026-05-11   |
-| INT-foundation-tools-4 | Suspicious host category combinations remain warning-only startup diagnostics. | foundation_host_tool_exposure | 2026-05-11   | 2026-05-11   |
-| INT-foundation-tools-5 | Removed-status purpose tool names remain valid while their legacy tools are still registered; hard-fail suggestions are deferred until actual removal. | foundation_host_tool_exposure; Unit: llm-config.test.ts | 2026-05-11   | 2026-05-11   |
+| INT-foundation-tools-2 | YAML `host_mcp_tools` config filters the public MCP tools/list surface. | foundation_host_tool_exposure | 2026-05-13   | 2026-05-13   |
+| INT-foundation-tools-3 | Host-filtered listTools establishes the public catalog boundary consumed by delegated native assembly; delegated intersection itself is pinned by unit coverage in `llm-tool-registry.test.ts`. | foundation_host_tool_exposure | 2026-05-13   | 2026-05-13   |
+| INT-foundation-tools-4 | Suspicious host category combinations remain warning-only startup diagnostics. | foundation_host_tool_exposure | 2026-05-13   | 2026-05-13   |
+| INT-foundation-tools-5 | Removed-status purpose tool names remain valid while their legacy tools are still registered; hard-fail suggestions are deferred until actual removal. | foundation_host_tool_exposure | 2026-05-13   | 2026-05-13   |
 | INT-foundation-frontmatter-1 | Foundation frontmatter constant guardrails are represented in integration coverage traceability for later migration phases. | foundation_json_response     | 2026-05-11   | 2026-05-11   |
 | INT-gdoc-error-1 | get_document JSON error-shape coverage proves missing identifiers use canonical `not_found` envelopes without runtime `isError:true`. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
 | INT-gdoc-error-2 | get_document JSON error-shape coverage proves invalid include/section requests use canonical `invalid_input` envelopes with conflict details preserved. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
@@ -45,27 +45,27 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-replace-1 | `replace_doc_section` composes with section-scoped LLM reference resolution after mutation. | llm_ref_section_after_replace; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
 | INT-tags-1 | `apply_tags` composes across explicit document/memory targets with ordered result envelopes and disabled-memory per-target errors. | apply_tags_composition; tests/integration/apply-tags.test.ts; tests/integration/write-document.integration.test.ts | 2026-05-12 | 2026-05-12 |
 | INT-search-1 | `search` composes with `write_document` and returns final JSON document results filtered by explicit `entity_types`. | unified_search_documents     | 2026-05-12   | 2026-05-12   |
-| INT-search-2 | `search` composes with `write_memory` and mixed document/memory result limits through the final unified search surface. | unified_search_memory_lifecycle | 2026-05-12   | 2026-05-12   |
-| INT-search-3 | `search` excludes archived memory results by default and returns them when `include_archived:true`. | unified_search_memory_lifecycle | 2026-05-12   | 2026-05-12   |
+| INT-search-2 | `search` composes with `write_memory` and mixed document/memory result limits through the final unified search surface. | unified_search_memory_lifecycle | 2026-05-13   | 2026-05-13   |
+| INT-search-3 | `search` excludes archived memory results by default and returns them when `include_archived:true`. | unified_search_memory_lifecycle | 2026-05-13   | 2026-05-13   |
 | INT-search-4 | `search` integration coverage verifies doc-read-only host config keeps document search available while disabled memory requests narrow with warnings or return canonical unsupported; accepted substitute coverage because this is host-config behavior, not a managed YAML scenario. | search.integration.test.ts | 2026-05-12 | 2026-05-12 |
-| INT-wmem-1 | `write_memory(mode:"create")` creates memories whose JSON identifiers feed later composed MCP calls. | unified_search_memory_lifecycle | 2026-05-12   | 2026-05-12   |
-| INT-wmem-2 | `write_memory(mode:"update")` creates a latest version that is retrievable and discoverable through composed workflows. | unified_search_memory_lifecycle | 2026-05-12   | 2026-05-12   |
-| INT-wmem-3 | `get_memory` reads final `write_memory` output by `memory_ids` with JSON projection semantics. | unified_search_memory_lifecycle | 2026-05-12   | 2026-05-12   |
-| INT-wmem-4 | `archive_memory(memory_ids)` composes with `search` archived visibility controls. | unified_search_memory_lifecycle | 2026-05-12   | 2026-05-12   |
-| INT-rdoc-1 | `remove_document` composes with `write_document` by archiving lifecycle state before the vault file is removed. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-rdoc-4 | `remove_document` followed by `maintain_vault(action:"repair")` and `maintain_vault(action:"sync")` keeps the intentional removal out of active search and does not reclassify it as missing or stale active content. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-rdoc-5 | Removed archived documents remain absent from default final `search` document results. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mdir-1 | `manage_directory(action:"create")` composes with `list_vault` through ordered JSON directory creation. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mdir-2 | Repeated `manage_directory(action:"create")` on an existing directory returns unchanged without duplicate listing state. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mdir-3 | `manage_directory(action:"remove")` removes empty directories and the result is reflected by `list_vault`. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mdir-4 | `manage_directory(action:"remove")` reports a JSON conflict for non-empty directories created through normal document workflows. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mdir-5 | Ordered `manage_directory` results remain usable by declarative YAML assertions. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mvault-1 | `maintain_vault(action:"sync")` is available as the final YAML maintenance action and returns structured counts. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mvault-2 | `maintain_vault(action:"repair", dry_run:true)` returns structured repair counts without mutating state. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mvault-3 | Combined `maintain_vault(action:["sync","repair"])` normalizes execution order to repair before sync. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mvault-4 | YAML integration helpers document and dispatch final `maintain_vault` instead of relying on legacy scan shortcuts for new Phase 127 coverage. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mvault-5 | `maintain_vault(action:"repair", background:true)` returns canonical `invalid_input`. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
-| INT-mvault-6 | `maintain_vault(action:"status")` returns canonical `not_found` for an unknown job id. | removal_directory_maintenance | 2026-05-12   | 2026-05-12   |
+| INT-wmem-1 | `write_memory(mode:"create")` creates memories whose JSON identifiers feed later composed MCP calls. | unified_search_memory_lifecycle | 2026-05-13   | 2026-05-13   |
+| INT-wmem-2 | `write_memory(mode:"update")` creates a latest version that is retrievable and discoverable through composed workflows. | unified_search_memory_lifecycle | 2026-05-13   | 2026-05-13   |
+| INT-wmem-3 | `get_memory` reads final `write_memory` output by `memory_ids` with JSON projection semantics. | unified_search_memory_lifecycle | 2026-05-13   | 2026-05-13   |
+| INT-wmem-4 | `archive_memory(memory_ids)` composes with `search` archived visibility controls. | unified_search_memory_lifecycle | 2026-05-13   | 2026-05-13   |
+| INT-rdoc-1 | `remove_document` composes with `write_document` by archiving lifecycle state before the vault file is removed. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-rdoc-4 | `remove_document` followed by `maintain_vault(action:"repair")` and `maintain_vault(action:"sync")` keeps the intentional removal out of active search and does not reclassify it as missing or stale active content. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-rdoc-5 | Removed archived documents remain absent from default final `search` document results. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mdir-1 | `manage_directory(action:"create")` composes with `list_vault` through ordered JSON directory creation. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mdir-2 | Repeated `manage_directory(action:"create")` on an existing directory returns unchanged without duplicate listing state. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mdir-3 | `manage_directory(action:"remove")` removes empty directories and the result is reflected by `list_vault`. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mdir-4 | `manage_directory(action:"remove")` reports a JSON conflict for non-empty directories created through normal document workflows. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mdir-5 | Ordered `manage_directory` results remain usable by declarative YAML assertions. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mvault-1 | `maintain_vault(action:"sync")` is available as the final YAML maintenance action and returns structured counts. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mvault-2 | `maintain_vault(action:"repair", dry_run:true)` returns structured repair counts without mutating state. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mvault-3 | Combined `maintain_vault(action:["sync","repair"])` normalizes execution order to repair before sync. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mvault-4 | YAML integration helpers document and dispatch final `maintain_vault` instead of relying on legacy scan shortcuts for new Phase 127 coverage. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mvault-5 | `maintain_vault(action:"repair", background:true)` returns canonical `invalid_input`. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
+| INT-mvault-6 | `maintain_vault(action:"status")` returns canonical `not_found` for an unknown job id. | removal_directory_maintenance | 2026-05-13   | 2026-05-13   |
 
 ---
 
@@ -145,7 +145,7 @@ discoverable through search after the mutation.
 | IC-01  | Append content to document → appended content appears in search_documents (VALIDATED)         | append_then_search           | 2026-05-12   | 2026-05-12   |
 | IC-02  | Update document body → updated content appears in search_documents (VALIDATED)                | write_document_then_search   | 2026-05-12   | 2026-05-12 (Phase 128 legacy migration evidence) |
 | IC-03  | Replace section in document → replaced content appears, original absent (VALIDATED)           | replace_section              | 2026-05-12   | 2026-05-12   |
-| IC-04  | Append to document → search reflects appended text immediately after append (VALIDATED)       | append_and_search            | 2026-05-12   | 2026-05-12   |
+| IC-04  | Append to document → search reflects appended text immediately after append (VALIDATED)       | append_and_search            | 2026-05-13   | 2026-05-13   |
 
 ---
 
@@ -169,9 +169,9 @@ multi-step workflows involving plugin tables, record tools, scan, and frontmatte
 | IR-11  | Document moved between plugin-owned folders reports moved in source table, not added in destination (VALIDATED)  | ir11_plugin_cross_folder_move | 2026-05-07   | 2026-05-07   |
 | IR-12  | Pending review items appear in record tool response even when reconciliation staleness check skips diff (VALIDATED) | ir12_plugin_pending_review_staleness | 2026-05-07   | 2026-05-07   |
 | IR-13  | Frontmatter-based type discovery: document outside all watched folders picked up via fqc_type (VALIDATED)        | ir13_plugin_frontmatter_discovery | 2026-05-07   | 2026-05-07   |
-| IR-14  | `register_plugin -> write_record(create) -> search_records` final plugin-record workflow (VALIDATED)             | plugin_record_consolidation  | 2026-05-12   | 2026-05-12   |
-| IR-15  | `write_record(update) -> plugin reconciliation -> clear_pending_reviews(action:"list")` final workflow (VALIDATED) | plugin_record_consolidation  | 2026-05-12   | 2026-05-12   |
-| IR-16  | `write_record -> archive_record -> search_records` archived visibility workflow (VALIDATED)                      | plugin_record_consolidation  | 2026-05-12   | 2026-05-12   |
+| IR-14  | `register_plugin -> write_record(create) -> search_records` final plugin-record workflow (VALIDATED)             | plugin_record_consolidation  | 2026-05-13   | 2026-05-13   |
+| IR-15  | `write_record(update) -> plugin reconciliation -> clear_pending_reviews(action:"list")` final workflow (VALIDATED) | plugin_record_consolidation  | 2026-05-13   | 2026-05-13   |
+| IR-16  | `write_record -> archive_record -> search_records` archived visibility workflow (VALIDATED)                      | plugin_record_consolidation  | 2026-05-13   | 2026-05-13   |
 
 ---
 

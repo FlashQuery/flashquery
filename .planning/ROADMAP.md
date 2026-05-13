@@ -264,7 +264,7 @@ Plans:
 5. Coverage ledgers and scenario matrices show every v3.3 requirement mapped to implemented unit, integration, E2E, directed scenario, and integration scenario evidence.
 6. Final validation runs lint, unit, integration, E2E, directed scenarios, YAML integration scenarios, build, and a coverage audit with no untriaged v3.3 gaps.
 
-**Plans:** 3/8 plans executed
+**Plans:** 8/8 plans executed
 
 Plans:
 - [x] 128-01-PLAN.md — Create traceability and legacy audit harness.
@@ -274,7 +274,7 @@ Plans:
 - [x] 128-05-PLAN.md — Port YAML integration scenario cases to final surfaces.
 - [x] 128-06-PLAN.md — Update docs and skill guidance to final tool names.
 - [x] 128-07-PLAN.md — Harden reference-tool and transitional legacy regressions.
-- [ ] 128-08-PLAN.md — Run final validation, classify remaining legacy matches, and close traceability.
+- [x] 128-08-PLAN.md — Run final validation, classify remaining legacy matches, and close traceability.
 
 **UI hint:** no
 

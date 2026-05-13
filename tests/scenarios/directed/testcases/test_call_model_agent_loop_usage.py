@@ -40,7 +40,7 @@ class UsageProvider:
                     "message": {
                         "role": "assistant",
                         "content": None,
-                        "tool_calls": [{"id": "call_usage_1", "type": "function", "function": {"name": "search_documents", "arguments": json.dumps({"query": "usage"})}}],
+                        "tool_calls": [{"id": "call_usage_1", "type": "function", "function": {"name": "search", "arguments": json.dumps({"query": "usage", "entity_types": ["documents"]})}}],
                     },
                     "finish_reason": "tool_calls",
                 }],
@@ -104,7 +104,7 @@ def _config(url: str) -> dict[str, Any]:
         "llm": {
             "providers": [{"name": "mock", "type": "openai-compatible", "endpoint": url, "api_key": "sk-test"}],
             "models": [{"name": "agent-model", "provider_name": "mock", "model": "agent-model", "type": "language", "cost_per_million": {"input": 1, "output": 2}, "capabilities": caps}],
-            "purposes": [{"name": "agentic_usage", "description": "ATL-DS-13", "models": ["agent-model"], "tools": ["search_documents"], "defaults": {"max_iterations": 3, "timeout_ms": 10000}}],
+            "purposes": [{"name": "agentic_usage", "description": "ATL-DS-13", "models": ["agent-model"], "tools": ["search"], "defaults": {"max_iterations": 3, "timeout_ms": 10000}}],
         }
     }
 

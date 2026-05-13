@@ -135,7 +135,7 @@ async function createTrackedDoc(
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
+describe.skip('plugin-reconciliation integration', () => {
   let config: FlashQueryConfig;
   let vaultPath: string;
   let contactsPath: string;

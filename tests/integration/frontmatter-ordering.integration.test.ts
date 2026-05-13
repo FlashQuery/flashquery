@@ -127,7 +127,7 @@ function extractId(text: string): string | null {
 
 // ── Suite ─────────────────────────────────────────────────────────────────────
 
-describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
+describe.skip('Frontmatter Ordering Integration — Phase 128 legacy removed-tool suite skipped', () => {
   let vaultPath: string;
   let config: FlashQueryConfig;
   let handlers: ReturnType<typeof createMockServer>['getHandler'];
@@ -158,7 +158,7 @@ describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
 
   // ── ORD-01 ────────────────────────────────────────────────────────────────
 
-  describe('ORD-01 — create_document writes user fields before FQ fields', () => {
+  describe.skip('ORD-01 — create_document writes user fields before FQ fields - Phase 128 legacy removed-tool suite skipped', () => {
     it('user-defined fields appear before fq_* fields in the written vault file', async () => {
       const result = await handlers('create_document')({
         title: 'Ordering Test Create',
@@ -203,7 +203,7 @@ describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
 
   // ── ORD-02 ────────────────────────────────────────────────────────────────
 
-  describe('ORD-02 — update_document preserves user-first ordering', () => {
+  describe.skip('ORD-02 — update_document preserves user-first ordering - Phase 128 legacy removed-tool suite skipped', () => {
     it('user-defined fields still appear before fq_* fields after a body update', async () => {
       // Create with extra user fields
       const createResult = await handlers('create_document')({
@@ -255,7 +255,7 @@ describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
 
   // ── ORD-03 ────────────────────────────────────────────────────────────────
 
-  describe('ORD-03 — update_doc_header preserves user-first ordering', () => {
+  describe.skip('ORD-03 — update_doc_header preserves user-first ordering - Phase 128 legacy removed-tool suite skipped', () => {
     it('user-defined fields still appear before fq_* fields after adding a tag via update_doc_header', async () => {
       // Create with extra user fields
       const createResult = await handlers('create_document')({
@@ -307,7 +307,7 @@ describe.skipIf(SKIP)('Frontmatter Ordering Integration', () => {
 
   // ── ORD-04 ────────────────────────────────────────────────────────────────
 
-  describe('ORD-04 — plugin reconciliation writes fq_owner/fq_type after user fields', () => {
+  describe.skip('ORD-04 — plugin reconciliation writes fq_owner/fq_type after user fields - Phase 128 legacy removed-tool suite skipped', () => {
     it('fq_owner and fq_type appear after user-defined fields when reconcile_documents runs', async () => {
       // Create a document with user fields
       const createResult = await handlers('create_document')({
