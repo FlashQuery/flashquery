@@ -50,7 +50,7 @@
 | 126 | Plugin + Record Consolidation | 5/5 | Complete   | 2026-05-12 |
 | 127 | Removal, Directory, And Vault Maintenance | 6/6 | Complete    | 2026-05-12 |
 | 128 | Legacy Surface Removal + Final Audit | 8/8 | Complete | 2026-05-13 |
-| 129 | Correct Delegated Tier Eligibility Derivation | 2/3 | In Progress|  |
+| 129 | Correct Delegated Tier Eligibility Derivation | 3/3 | Complete   | 2026-05-13 |
 
 ## Phase Details
 
@@ -294,7 +294,7 @@ Plans:
 4. `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section` appear in the correct delegated tier expansions, and no other unintended tool gains or loses delegated tier eligibility.
 5. Unit, integration, E2E, directed scenario, integration scenario, coverage ledger, and documentation updates satisfy §3.11.1.1.
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -302,7 +302,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [x] 129-02-PLAN.md — Prove corrected delegated tiers through registry assembly, host regression guards, and MCP-level evidence.
-- [ ] 129-03-PLAN.md — Close scenario coverage, documentation, traceability, validation, and migration callout evidence.
+- [x] 129-03-PLAN.md — Close scenario coverage, documentation, traceability, validation, and migration callout evidence.
 
 **UI hint:** no
 
