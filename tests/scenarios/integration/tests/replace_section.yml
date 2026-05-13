@@ -52,7 +52,9 @@ steps:
       args:
         query: "old approach"
         entity_types: [documents]
-      expect_not_contains: "old approach"
+      expect_json_equals:
+        path: total
+        value: 0
 
   - label: "Old content is not returned by get_document"
     assert:

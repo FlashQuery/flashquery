@@ -57,7 +57,9 @@ steps:
         plugin_id: ir05
         plugin_instance: ir05test
         table: items
-      expect_not_contains: "Auto-tracked"
+      expect_json_equals:
+        path: total
+        value: 0
 
   - label: "Item Alpha does not appear in the items table — it was ignored"
     assert:
@@ -66,6 +68,7 @@ steps:
         plugin_id: ir05
         plugin_instance: ir05test
         table: items
+        include: [data]
       expect_not_contains: "Item Alpha"
 
   - label: "Item Beta does not appear in the items table — it was also ignored"
@@ -75,6 +78,7 @@ steps:
         plugin_id: ir05
         plugin_instance: ir05test
         table: items
+        include: [data]
       expect_not_contains: "Item Beta"
 
   - label: "Reconciliation summary confirms 0 records tracked (ignored new docs)"
@@ -84,7 +88,9 @@ steps:
         plugin_id: ir05
         plugin_instance: ir05test
         table: items
-      expect_not_contains: "Auto-tracked"
+      expect_json_equals:
+        path: total
+        value: 0
 
   # ── Verify a second plugin WITH auto-track DOES track the same docs ────────────
   # This confirms on_added=ignore is plugin-specific, not a global setting.
@@ -121,7 +127,9 @@ steps:
         plugin_id: ir05b
         plugin_instance: ir05b
         table: tracked_items
-      expect_contains: "Auto-tracked 2"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 2
 
   - label: "Item Alpha appears in ir05b's tracked_items (was ignored by ir05)"
     assert:
@@ -130,4 +138,5 @@ steps:
         plugin_id: ir05b
         plugin_instance: ir05b
         table: tracked_items
+        include: [data]
       expect_contains: "Item Alpha"

@@ -30,7 +30,7 @@ steps:
       op: search
       args:
         tags: [smo-tag]
-        entity_types: [documents, memories]
+        entity_types: [memories]
       expect_contains: "redwood forests"
 
   - label: "Memory listing does not contain document title"
@@ -38,7 +38,7 @@ steps:
       op: search
       args:
         tags: [smo-tag]
-        entity_types: [documents, memories]
+        entity_types: [memories]
       expect_not_contains: "Ancient Forests and Ecosystems"
 
   - label: "search_all with entity_types=[memories] returns memory content (IS-05)"

@@ -354,7 +354,7 @@ class SkipResult:
 # Variable reference substitution  (${name.field} syntax)
 # ---------------------------------------------------------------------------
 
-_REF_RE = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
+_REF_RE = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\.([^}]+)\}")
 
 
 def _substitute(value: Any, variables: dict[str, dict]) -> Any:
@@ -371,12 +371,15 @@ def _substitute(value: Any, variables: dict[str, dict]) -> Any:
                     f"Unresolved reference ${{{name}.{field}}}: "
                     f"step '{name}' has not run or did not produce output"
                 )
-            if field not in variables[name]:
+            if field in variables[name]:
+                return str(variables[name][field])
+            actual = get_json_path(variables[name], field)
+            if actual is None:
                 raise ValueError(
                     f"Unresolved reference ${{{name}.{field}}}: "
                     f"step '{name}' ran but did not return field '{field}'"
                 )
-            return str(variables[name][field])
+            return str(actual)
         return _REF_RE.sub(_replace, value)
     return value
 
@@ -716,6 +719,14 @@ def _execute_action(
     if step_name:
         extract_fields = _ACTION_EXTRACT_FIELDS.get(op, ())
         extracted_vars = _extract(result.text, *extract_fields)
+        try:
+            payload = json.loads(result.text)
+            if isinstance(payload, dict):
+                extracted_vars.update(payload)
+            elif isinstance(payload, list):
+                extracted_vars["items"] = payload
+        except json.JSONDecodeError:
+            pass
         # Ensure the path we actually used is always available
         if op == "vault.write" and "path" not in extracted_vars:
             extracted_vars["path"] = args.get("path", "")

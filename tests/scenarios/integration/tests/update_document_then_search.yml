@@ -50,7 +50,7 @@ steps:
       args:
         query: "Expedition Notes Draft"
         entity_types: [documents]
-      expect_not_contains: "Expedition Notes Draft"
+      expect_not_contains: '"title":"Expedition Notes Draft"'
 
   - label: "search_documents finds document by updated title (exercises search_documents API for IC-02)"
     assert:

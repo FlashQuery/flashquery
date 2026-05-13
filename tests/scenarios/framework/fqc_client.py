@@ -318,12 +318,27 @@ class ToolResult:
     def _count_results(self) -> int:
         """Count the number of result entries in the response text.
 
-        FQC formats tool responses as key-value entries separated by '---'.
-        Each entry starts with 'Title: ...'. We count entries by counting
-        'Title:' lines. If the response is the empty-results message
-        ('No documents found.' etc.), this returns 0.
+        Prefer structured JSON envelopes from the consolidated MCP surface. Older
+        FQC responses used key-value entries separated by '---', with each
+        document entry starting with 'Title: ...', so retain that fallback for
+        legacy/transitional tools.
         """
         import re
+        try:
+            payload = json.loads(self.text)
+            if isinstance(payload, dict):
+                total = payload.get("total")
+                if isinstance(total, int):
+                    return total
+                for key in ("results", "entries", "items", "groups"):
+                    value = payload.get(key)
+                    if isinstance(value, list):
+                        return len(value)
+            if isinstance(payload, list):
+                return len(payload)
+        except json.JSONDecodeError:
+            pass
+
         # Each result entry begins with a 'Title: ...' line
         return len(re.findall(r"^Title: ", self.text, re.MULTILINE))
 

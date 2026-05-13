@@ -250,7 +250,7 @@ describe('manage_directory', () => {
     expect(vi.mocked(mkdir)).not.toHaveBeenCalled();
   });
 
-  it('keeps malformed path validation failures inside per-path results', async () => {
+  it('sanitizes unsafe directory characters before per-path processing', async () => {
     const result = await callManageDirectory({
       action: 'create',
       paths: ['Bad\0Path', 'Good'],
@@ -260,9 +260,8 @@ describe('manage_directory', () => {
     expect(result.isError).toBe(false);
     expect(payload.results).toHaveLength(2);
     expect(payload.results[0]).toMatchObject({
-      error: 'invalid_input',
-      identifier: 'Bad\0Path',
-      details: { reason: 'invalid_directory_path' },
+      path: 'Bad Path',
+      status: 'created',
     });
     expect(payload.results[1]).toMatchObject({
       path: 'Good',

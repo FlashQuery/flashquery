@@ -267,7 +267,7 @@ JSON assertions parse the MCP `content[0].text` payload. Paths support dotted
 object keys and zero-based array indexes, for example `identifier`,
 `results[0].error`, or `[1].message`.
 
-**How result counting works.** The `expect_count_*` and `expect_empty` checks count `Title:` lines in the response text. FlashQuery document results each include a `Title:` line; memory results do not. This means count checks reliably count documents, but will always count 0 memories regardless of how many are returned. Use `expect_contains` / `expect_not_contains` to assert on memory content.
+**How result counting works.** The `expect_count_*` and `expect_empty` checks prefer structured JSON response envelopes (`total`, then `results`/`entries`/`items`/`groups` length). For legacy prose responses, they fall back to counting `Title:` lines.
 
 **Common assert `op:` values:**
 

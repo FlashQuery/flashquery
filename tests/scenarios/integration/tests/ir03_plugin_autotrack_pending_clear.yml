@@ -52,7 +52,9 @@ steps:
         plugin_id: ir03
         plugin_instance: ir03test
         table: leads
-      expect_contains: "pending review item"
+      expect_json_equals:
+        path: reconciliation.pending_reviews_created
+        value: 1
 
   - label: "Acme Corp Lead is tracked in the leads table"
     assert:
@@ -61,26 +63,38 @@ steps:
         plugin_id: ir03
         plugin_instance: ir03test
         table: leads
+        include: [data]
       expect_contains: "Acme Corp Lead"
 
-  - label: "clear_pending_reviews (query mode) shows the pending item"
+  - label: "clear_pending_reviews list action shows the pending item"
+    action: clear_pending_reviews
+    name: pending_reviews
+    args:
+      action: list
+      plugin_id: ir03
+      plugin_instance: ir03test
+
+  - label: "Pending-review list contains one item"
     assert:
       op: clear_pending_reviews
       args:
+        action: list
         plugin_id: ir03
         plugin_instance: ir03test
-        fqc_ids: []
-      expect_contains: "item"
+      expect_json_equals:
+        path: pending
+        value: 1
 
   # ── Clear the pending review ──────────────────────────────────────────────────
 
   - label: "Clear the pending review for the lead doc"
     action: clear_pending_reviews
     args:
+      action: clear
       plugin_id: ir03
       plugin_instance: ir03test
-      fqc_ids:
-        - "${lead_doc.fq_id}"
+      ids:
+        - "${pending_reviews.items[0].id}"
 
   # ── Assert: no pending items after clear ─────────────────────────────────────
 
@@ -94,13 +108,15 @@ steps:
         plugin_id: ir03
         plugin_instance: ir03test
         table: leads
-      expect_not_contains: "pending review item"
+      expect_not_contains: '"pending_review"'
 
-  - label: "clear_pending_reviews (query mode) now reports no pending items"
+  - label: "clear_pending_reviews list action now reports no pending items"
     assert:
       op: clear_pending_reviews
       args:
+        action: list
         plugin_id: ir03
         plugin_instance: ir03test
-        fqc_ids: []
-      expect_contains: "No pending reviews"
+      expect_json_equals:
+        path: pending
+        value: 0

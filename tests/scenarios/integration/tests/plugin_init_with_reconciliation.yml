@@ -63,4 +63,5 @@ steps:
         plugin_id: if14
         plugin_instance: if14test
         table: contacts
+        include: [data]
       expect_contains: "Bob"

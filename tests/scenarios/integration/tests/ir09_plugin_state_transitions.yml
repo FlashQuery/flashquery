@@ -61,7 +61,9 @@ steps:
         plugin_id: ir09
         plugin_instance: ir09test
         table: files
-      expect_contains: "Auto-tracked 2"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 2
 
   # ── Two moves outside the watched folder before the next reconciliation ────────
   # File A is moved to an intermediate outside location, then to a final outside location.
@@ -91,7 +93,9 @@ steps:
         plugin_id: ir09
         plugin_instance: ir09test
         table: files
-      expect_contains: "Updated paths for 1"
+      expect_json_equals:
+        path: reconciliation.paths_updated
+        value: 1
 
   - label: "File A's plugin row reflects the final destination path, not the intermediate"
     assert:
@@ -100,7 +104,11 @@ steps:
         plugin_id: ir09
         plugin_instance: ir09test
         table: files
-      expect_contains: "file_a_final"
+        filters:
+          path: "_integration/ir09_final/file_a_final.md"
+      expect_json_equals:
+        path: total
+        value: 1
 
   - label: "Intermediate path is not present in the record results"
     assert:
@@ -109,7 +117,11 @@ steps:
         plugin_id: ir09
         plugin_instance: ir09test
         table: files
-      expect_not_contains: "file_a_interim"
+        filters:
+          path: "_integration/ir09_staging/file_a_interim.md"
+      expect_json_equals:
+        path: total
+        value: 0
 
   - label: "File B record is still active and unchanged"
     assert:
@@ -118,4 +130,5 @@ steps:
         plugin_id: ir09
         plugin_instance: ir09test
         table: files
+        include: [data]
       expect_contains: "File B"

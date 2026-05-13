@@ -7,6 +7,7 @@ coverage:
   - INT-foundation-tools-3
   - INT-foundation-tools-4
   - INT-foundation-tools-5
+server_modes: [managed]
 
 extra_config:
   host_mcp_tools:

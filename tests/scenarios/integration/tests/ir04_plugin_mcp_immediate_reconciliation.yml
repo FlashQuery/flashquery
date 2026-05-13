@@ -52,7 +52,9 @@ steps:
         plugin_id: ir04
         plugin_instance: ir04test
         table: contacts
-      expect_contains: "Auto-tracked"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 1
 
   - label: "Alice Chen appears as a tracked contact in the plugin table"
     assert:
@@ -61,4 +63,5 @@ steps:
         plugin_id: ir04
         plugin_instance: ir04test
         table: contacts
+        include: [data]
       expect_contains: "Alice Chen"

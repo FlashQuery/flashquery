@@ -23,8 +23,10 @@ import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
-  validateVaultPath,
   normalizePath,
+  sanitizeDirectorySegment,
+  validateSegment,
+  validateVaultPath,
 } from '../utils/path-validation.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
@@ -97,9 +99,33 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           continue;
         }
 
+        const sanitizedSegments: string[] = [];
+        let segmentError: string | null = null;
+        for (const [index, segment] of normalizedPath.split('/').entries()) {
+          const { sanitized } = sanitizeDirectorySegment(segment);
+          const error = validateSegment(sanitized, index);
+          if (error) {
+            segmentError = error;
+            break;
+          }
+          sanitizedSegments.push(sanitized);
+        }
+
+        if (segmentError) {
+          results.push({
+            error: 'invalid_input',
+            message: 'Invalid directory path',
+            identifier: inputPath,
+            details: { reason: 'invalid_directory_path', message: segmentError },
+          });
+          continue;
+        }
+
+        const safePath = sanitizedSegments.join('/');
+
         let validation: Awaited<ReturnType<typeof validateVaultPath>>;
         try {
-          validation = await validateVaultPath(vaultRoot, normalizedPath);
+          validation = await validateVaultPath(vaultRoot, safePath);
         } catch {
           results.push({
             error: 'invalid_input',
@@ -120,7 +146,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           continue;
         }
 
-        const lockResource = config.locking.enabled ? `directory:${normalizedPath}` : null;
+        const lockResource = config.locking.enabled ? `directory:${safePath}` : null;
         if (lockResource) {
           const locked = await acquireLock(
             client,
@@ -157,7 +183,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
               }
 
               results.push(directoryResult({
-                path: normalizedPath,
+                path: safePath,
                 action,
                 status: 'unchanged',
                 timestamp,
@@ -182,7 +208,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             try {
               await mkdir(absPath, { recursive: true });
               results.push(directoryResult({
-                path: normalizedPath,
+                path: safePath,
                 action,
                 status: 'created',
                 timestamp,
@@ -277,7 +303,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           try {
             await rmdir(absPath);
             results.push(directoryResult({
-              path: normalizedPath,
+              path: safePath,
               action,
               status: 'removed',
               timestamp,
@@ -296,7 +322,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          logger.error(`manage_directory ${action} failed for ${normalizedPath}: ${msg}`);
+          logger.error(`manage_directory ${action} failed for ${safePath}: ${msg}`);
           results.push({
             error: 'runtime_error',
             message: msg,

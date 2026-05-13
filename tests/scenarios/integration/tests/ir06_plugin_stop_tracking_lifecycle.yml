@@ -53,7 +53,9 @@ steps:
         plugin_id: ir06
         plugin_instance: ir06test
         table: projects
-      expect_contains: "Auto-tracked"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 1
 
   - label: "Project Aurora is active in the projects table"
     assert:
@@ -62,6 +64,7 @@ steps:
         plugin_id: ir06
         plugin_instance: ir06test
         table: projects
+        include: [data]
       expect_contains: "Project Aurora"
 
   # ── Step 2: Move document OUT of watched folder ──────────────────────────────
@@ -82,7 +85,9 @@ steps:
         plugin_id: ir06
         plugin_instance: ir06test
         table: projects
-      expect_contains: "Archived"
+      expect_json_equals:
+        path: reconciliation.archived
+        value: 1
 
   - label: "Project Aurora no longer appears as active"
     assert:
@@ -91,6 +96,7 @@ steps:
         plugin_id: ir06
         plugin_instance: ir06test
         table: projects
+        include: [data]
       expect_not_contains: "Project Aurora"
 
   # ── Step 3: Move document BACK into watched folder ───────────────────────────
@@ -111,7 +117,9 @@ steps:
         plugin_id: ir06
         plugin_instance: ir06test
         table: projects
-      expect_contains: "Resurrected"
+      expect_json_equals:
+        path: reconciliation.resurrected
+        value: 1
 
   - label: "Project Aurora is active again after resurrection"
     assert:
@@ -120,4 +128,5 @@ steps:
         plugin_id: ir06
         plugin_instance: ir06test
         table: projects
+        include: [data]
       expect_contains: "Project Aurora"
