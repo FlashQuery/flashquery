@@ -7,8 +7,72 @@ import {
   getLegacyToolSuggestion,
   getToolMetadata,
   getToolNamesByTier,
+  isDelegatedTierEligible,
   requireToolMetadata,
 } from '../../src/mcp/tool-metadata.js';
+
+const PRE_REFACTOR_READ_ONLY_TIER = [
+  'get_document',
+  'search',
+  'get_memory',
+  'search_records',
+  'get_record',
+  'get_briefing',
+];
+
+const PRE_REFACTOR_READ_WRITE_TIER = [
+  ...PRE_REFACTOR_READ_ONLY_TIER,
+  'write_document',
+  'move_document',
+  'apply_tags',
+  'archive_document',
+  'remove_document',
+  'archive_memory',
+  'write_memory',
+  'write_record',
+  'archive_record',
+  'manage_directory',
+  'insert_doc_link',
+];
+
+const EXPECTED_DELEGATED_READ_ONLY_TIER = [
+  'get_document',
+  'list_vault',
+  'get_briefing',
+  'search',
+  'get_memory',
+  'get_record',
+  'search_records',
+];
+
+const EXPECTED_DELEGATED_READ_WRITE_TIER = [
+  'get_document',
+  'list_vault',
+  'copy_document',
+  'move_document',
+  'archive_document',
+  'remove_document',
+  'insert_in_doc',
+  'replace_doc_section',
+  'apply_tags',
+  'get_briefing',
+  'insert_doc_link',
+  'write_document',
+  'search',
+  'get_memory',
+  'archive_memory',
+  'write_memory',
+  'write_record',
+  'get_record',
+  'archive_record',
+  'search_records',
+  'manage_directory',
+];
+
+function addedNames(before: readonly string[], after: readonly string[]): string[] {
+  const beforeSet = new Set(before);
+  return after.filter((name) => !beforeSet.has(name));
+}
 
 describe('tool metadata registry', () => {
   it('defines unique metadata entries', () => {
@@ -118,30 +182,134 @@ describe('tool metadata registry', () => {
     expect(description).toContain('include');
   });
 
-  it('expands delegated tiers from metadata', () => {
-    expect(getToolNamesByTier('tier:read-only')).toEqual([
-      'get_document',
-      'search',
-      'get_memory',
-      'search_records',
-      'get_record',
-      'get_briefing',
-    ]);
-    expect(getToolNamesByTier('tier:read-write')).toEqual(expect.arrayContaining([
-      'move_document',
-      'write_document',
-      'write_record',
-      'apply_tags',
-      'archive_document',
-      'remove_document',
-      'archive_memory',
-      'archive_record',
-      'manage_directory',
-      'insert_doc_link',
+  it('expands tier:read-only from metadata-derived delegated eligibility (U-tier-1)', () => {
+    const readOnlyTools = getToolNamesByTier('tier:read-only');
+
+    expect(readOnlyTools).toEqual(EXPECTED_DELEGATED_READ_ONLY_TIER);
+    expect(readOnlyTools).toContain('list_vault');
+    expect(readOnlyTools).not.toContain('get_llm_usage');
+
+    for (const name of readOnlyTools) {
+      expect(requireToolMetadata(name).tier, name).toBe('read-only');
+    }
+  });
+
+  it('expands tier:read-write from metadata-derived delegated eligibility (U-tier-2)', () => {
+    const readWriteTools = getToolNamesByTier('tier:read-write');
+
+    expect(readWriteTools).toEqual(EXPECTED_DELEGATED_READ_WRITE_TIER);
+    expect(readWriteTools).toEqual(expect.arrayContaining([
+      'copy_document',
+      'insert_in_doc',
+      'replace_doc_section',
     ]));
-    expect(getToolNamesByTier('tier:read-write')).not.toContain('create_document');
-    expect(getToolNamesByTier('tier:read-write')).not.toContain('list_projects');
-    expect(getToolNamesByTier('tier:read-write')).not.toContain('get_project_info');
+    expect(readWriteTools).not.toContain('get_llm_usage');
+    expect(readWriteTools).not.toContain('list_projects');
+    expect(readWriteTools).not.toContain('get_project_info');
+  });
+
+  it('keeps tier:read-only as a subset of tier:read-write (U-tier-3)', () => {
+    const readWriteTools = getToolNamesByTier('tier:read-write');
+
+    for (const name of getToolNamesByTier('tier:read-only')) {
+      expect(readWriteTools, name).toContain(name);
+    }
+  });
+
+  it('keeps hard-excluded tools out of delegated tier expansions (U-tier-4)', () => {
+    const tierTools = new Set([
+      ...getToolNamesByTier('tier:read-only'),
+      ...getToolNamesByTier('tier:read-write'),
+    ]);
+
+    for (const name of [
+      'call_model',
+      'register_plugin',
+      'unregister_plugin',
+      'clear_pending_reviews',
+      'force_file_scan',
+      'reconcile_documents',
+      'maintain_vault',
+      'get_plugin_info',
+    ]) {
+      expect(requireToolMetadata(name).delegatedHardExcludedReason, name).toBeDefined();
+      expect(tierTools.has(name), name).toBe(false);
+    }
+  });
+
+  it('keeps admin-tier tools out of broad delegated tiers (U-tier-5)', () => {
+    const tierTools = new Set([
+      ...getToolNamesByTier('tier:read-only'),
+      ...getToolNamesByTier('tier:read-write'),
+    ]);
+
+    for (const entry of TOOL_METADATA.filter((tool) => tool.tier === 'admin')) {
+      expect(tierTools.has(entry.name), entry.name).toBe(false);
+    }
+  });
+
+  it('keeps removed tools out of delegated tier expansions (U-tier-6)', () => {
+    const tierTools = new Set([
+      ...getToolNamesByTier('tier:read-only'),
+      ...getToolNamesByTier('tier:read-write'),
+    ]);
+
+    for (const name of [
+      'create_document',
+      'update_document',
+      'search_documents',
+      'save_memory',
+      'update_memory',
+      'create_record',
+      'update_record',
+    ]) {
+      expect(requireToolMetadata(name).status, name).toBe('removed');
+      expect(tierTools.has(name), name).toBe(false);
+    }
+  });
+
+  it('excludes non-data-category tools from broad delegated tiers (U-tier-7)', () => {
+    const llmUsage = requireToolMetadata('get_llm_usage');
+
+    expect(llmUsage).toMatchObject({
+      status: 'final',
+      categories: ['llm'],
+      tier: 'read-only',
+      hostEligible: true,
+      delegatedEligible: false,
+    });
+    expect(llmUsage.delegatedHardExcludedReason).toBeUndefined();
+    expect(llmUsage.delegatedExclusionReason).toBeUndefined();
+    expect(getToolNamesByTier('tier:read-only')).not.toContain('get_llm_usage');
+    expect(getToolNamesByTier('tier:read-write')).not.toContain('get_llm_usage');
+  });
+
+  it('honors synthetic delegatedExclusionReason fixtures (U-tier-8)', () => {
+    const synthetic = {
+      ...requireToolMetadata('list_vault'),
+      delegatedEligible: true,
+      delegatedExclusionReason: 'Delegated listing disabled for this fixture.',
+    };
+
+    expect(isDelegatedTierEligible(synthetic)).toBe(false);
+    expect(synthetic.delegatedExclusionReason).toContain('fixture');
+    expect(TOOL_METADATA.some((entry) => entry.delegatedExclusionReason !== undefined)).toBe(false);
+  });
+
+  it('changes delegated tier composition by exactly the corrected four tools (U-tier-9)', () => {
+    expect(addedNames(PRE_REFACTOR_READ_ONLY_TIER, getToolNamesByTier('tier:read-only'))).toEqual(['list_vault']);
+    expect(addedNames(PRE_REFACTOR_READ_WRITE_TIER, getToolNamesByTier('tier:read-write'))).toEqual([
+      'list_vault',
+      'copy_document',
+      'insert_in_doc',
+      'replace_doc_section',
+    ]);
+
+    expect(addedNames(PRE_REFACTOR_READ_WRITE_TIER, getToolNamesByTier('tier:read-write')).filter((name) => name !== 'list_vault')).toEqual([
+      'copy_document',
+      'insert_in_doc',
+      'replace_doc_section',
+    ]);
   });
 
   it('applies additive doc-write category expansion', () => {
