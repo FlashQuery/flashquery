@@ -107,6 +107,7 @@ describe('tool metadata registry', () => {
   it('expands delegated tiers from metadata', () => {
     expect(getToolNamesByTier('tier:read-only')).toEqual([
       'get_document',
+      'search',
       'get_memory',
       'search_records',
       'get_record',

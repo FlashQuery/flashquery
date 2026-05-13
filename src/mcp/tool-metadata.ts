@@ -32,6 +32,7 @@ const SYSTEM_ADMIN_REASON = 'Tool performs administrative maintenance and is not
 const CURRENT_DELEGATED_TIER_ORDER = [
   'search_documents',
   'get_document',
+  'search',
   'search_memory',
   'get_memory',
   'list_memories',

@@ -165,7 +165,7 @@ llm:
     - name: agentic
       description: Agent loop test purpose
       models: [agent-model, fallback-agent-model]
-      tools: [get_document, search_documents]
+      tools: [get_document, search]
       defaults:
         max_iterations: 4
         timeout_ms: 10000
@@ -277,7 +277,11 @@ describe('call_model agent-loop public E2E contracts', () => {
 
   it('ATL-E2E-02 runs a native tool loop and returns final_response calls_log metadata', async () => {
     const provider = new ScriptedOpenAiProvider([
-      toolCallResponse([{ id: 'call_search_1', name: 'search_documents', args: { query: 'ATL-E2E-02' } }]),
+      toolCallResponse([{
+        id: 'call_search_1',
+        name: 'search',
+        args: { query: 'ATL-E2E-02', entity_types: ['documents'], mode: 'filesystem' },
+      }]),
       finalTextResponse('native loop complete', 21, 8),
     ]);
     await provider.start();
@@ -285,7 +289,7 @@ describe('call_model agent-loop public E2E contracts', () => {
       const envelope = await withManagedMcp(provider, (client) => callModel(client, {
         resolver: 'purpose',
         name: 'agentic',
-        messages: [{ role: 'user', content: 'ATL-E2E-02 use search_documents then answer.' }],
+        messages: [{ role: 'user', content: 'ATL-E2E-02 use search then answer.' }],
         return_messages: true,
       }));
       expect(envelope).toMatchObject({
@@ -447,7 +451,11 @@ describe('call_model agent-loop public E2E contracts', () => {
 
   it('ATL-E2E-07 preserves message history across fallback and computes aggregate fallback cost with per-model rates', async () => {
     const provider = new ScriptedOpenAiProvider([
-      toolCallResponse([{ id: 'call_first_model', name: 'search_documents', args: { query: 'fallback' } }], 10, 4),
+      toolCallResponse([{
+        id: 'call_first_model',
+        name: 'search',
+        args: { query: 'fallback', entity_types: ['documents'], mode: 'filesystem' },
+      }], 10, 4),
       { status: 500, body: { error: { message: 'provider error for fallback exercise' } } },
       finalTextResponse('fallback final', 20, 5),
     ]);

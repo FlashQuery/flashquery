@@ -25,6 +25,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const READ_ONLY_TOOLS = [
   'get_document',
+  'search',
   'get_memory',
   'search_records',
   'get_record',
@@ -244,10 +245,10 @@ describe('assembleNativeToolRegistry', () => {
   });
 
   it('does not regain memory tools from tier selectors when the host catalog is doc-read only', () => {
-    const hostFilteredCatalog = CATALOG.filter((tool) => ['get_document', 'list_vault', 'search_documents'].includes(tool.name));
+    const hostFilteredCatalog = CATALOG.filter((tool) => ['get_document', 'list_vault', 'search'].includes(tool.name));
     const result = assembleNativeToolRegistry(makeConfig(['tier:read-only']), 'research', hostFilteredCatalog);
 
-    expect(result.nativeToolNames).toEqual(['get_document']);
+    expect(result.nativeToolNames).toEqual(['get_document', 'search']);
     expect(result.nativeToolNames).not.toContain('search_memory');
     expect(result.nativeToolNames).not.toContain('get_memory');
     expect(result.nativeToolNames).not.toContain('list_memories');
@@ -310,6 +311,7 @@ describe('assembleNativeToolRegistry', () => {
 
     expect(result.nativeToolNames).toEqual([
       'get_document',
+      'search',
       'search_records',
       'get_record',
       'get_briefing',
