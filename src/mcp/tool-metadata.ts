@@ -14,6 +14,7 @@ export interface ToolMetadata {
   hostEligible: boolean;
   delegatedEligible: boolean;
   delegatedHardExcludedReason?: string;
+  delegatedExclusionReason?: string;
   legacyNames?: string[];
   replacement?: string;
   description: string;
@@ -29,39 +30,7 @@ const RECURSIVE_MODEL_REASON = 'Tool can recursively call models and is not safe
 const PLUGIN_ADMIN_REASON = 'Tool mutates or exposes plugin administration and is not safe for delegated native access.';
 const SYSTEM_ADMIN_REASON = 'Tool performs administrative maintenance and is not safe for delegated native access.';
 
-const CURRENT_DELEGATED_TIER_ORDER = [
-  'search_documents',
-  'get_document',
-  'search',
-  'search_memory',
-  'get_memory',
-  'list_memories',
-  'search_records',
-  'get_record',
-  'search_all',
-  'get_briefing',
-  'write_document',
-  'create_document',
-  'update_document',
-  'append_to_doc',
-  'move_document',
-  'save_memory',
-  'update_memory',
-  'create_record',
-  'write_record',
-  'update_record',
-  'apply_tags',
-  'archive_document',
-  'remove_document',
-  'archive_memory',
-  'archive_record',
-  'manage_directory',
-  'create_directory',
-  'remove_directory',
-  'insert_doc_link',
-] as const;
-
-const CURRENT_DELEGATED_TIER_TOOLS = new Set<string>(CURRENT_DELEGATED_TIER_ORDER);
+const DATA_CATEGORIES = new Set<ToolCategory>(['doc-read', 'doc-write', 'memory', 'plugin']);
 
 const TRANSITIONAL_CURRENT_TOOLS = new Set<string>([
   'get_briefing',
@@ -326,13 +295,23 @@ export function listToolMetadata(
 
 export function getToolNamesByTier(tier: ToolTierSelector): string[] {
   const targetTier = tier === 'tier:read-only' ? 'read-only' : 'read-write';
-  return CURRENT_DELEGATED_TIER_ORDER
-    .map((name) => getToolMetadata(name))
-    .filter((entry): entry is ToolMetadata => entry !== undefined)
-    .filter((entry) => entry.status !== 'removed')
-    .filter((entry) => entry.delegatedEligible)
+  return TOOL_METADATA
+    .filter((entry) => isDelegatedTierEligible(entry))
     .filter((entry) => entry.tier === 'read-only' || targetTier === 'read-write' && entry.tier === 'read-write')
     .map((entry) => entry.name);
+}
+
+export function isDelegatedTierEligible(
+  metadata: Pick<
+    ToolMetadata,
+    'hostEligible' | 'status' | 'categories' | 'delegatedHardExcludedReason' | 'delegatedExclusionReason'
+  >
+): boolean {
+  return metadata.hostEligible === true &&
+    metadata.status !== 'removed' &&
+    metadata.delegatedHardExcludedReason === undefined &&
+    metadata.delegatedExclusionReason === undefined &&
+    metadata.categories.some((category) => DATA_CATEGORIES.has(category));
 }
 
 export function getDelegatedHardExcludedTools(): Array<{ tool: string; reason: string }> {
@@ -422,21 +401,27 @@ function current(
   categories: ToolCategory[],
   tier: ToolTier,
   toolDescription: string,
-  hardExcludedReason?: string
+  hardExcludedReason?: string,
+  delegatedExclusionReason?: string
 ): ToolMetadata {
-  return {
+  const status = currentToolStatus(name);
+  const replacement = legacyReplacement(name);
+  const metadata = {
     name,
-    status: currentToolStatus(name),
+    status,
     categories,
     tier,
     hostEligible: true,
-    delegatedEligible:
-      hardExcludedReason === undefined &&
-      CURRENT_DELEGATED_TIER_TOOLS.has(name) &&
-      currentToolStatus(name) !== 'removed',
+    delegatedEligible: false,
     ...(hardExcludedReason === undefined ? {} : { delegatedHardExcludedReason: hardExcludedReason }),
-    ...(legacyReplacement(name) === undefined ? {} : { replacement: legacyReplacement(name) }),
+    ...(delegatedExclusionReason === undefined ? {} : { delegatedExclusionReason }),
+    ...(replacement === undefined ? {} : { replacement }),
     description: toolDescription,
+  } satisfies ToolMetadata;
+
+  return {
+    ...metadata,
+    delegatedEligible: isDelegatedTierEligible(metadata),
   };
 }
 
