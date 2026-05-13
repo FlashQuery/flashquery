@@ -49,6 +49,35 @@ created: 2026-05-12
 - [ ] Focused Phase 128 directed and YAML integration scenario subset names - planner should either create phase-specific subsets or explicitly use existing current-surface suites plus audit commands.
 - [ ] Final audit command list - planner should define exact `rg` scopes and allowed classifications for removed names, transitional legacy tools, migration suggestions, and historical planning artifacts.
 
+## Phase 128 Legacy Audit Vocabulary
+
+This block is the canonical old-name audit contract for Phase 128 implementation and final validation. The audit checks active source, tests, docs, and local skill guidance, while excluding dependency folders and generated worktrees.
+
+**Removed/dead old-name regex:**
+
+```bash
+LEGACY_REMOVED_REGEX='append_to_doc|create_document|update_document|update_doc_header|search_documents|save_memory|update_memory|search_memory|list_memories|force_file_scan|reconcile_documents|create_directory|remove_directory|create_record|update_record|search_all|list_projects|get_project_info'
+rg -n "$LEGACY_REMOVED_REGEX" src tests docs .agents .claude --glob '!**/node_modules/**' --glob '!**/.claude/worktrees/**'
+```
+
+**Transitional-only names, not removed in Phase 128:**
+
+```bash
+TRANSITIONAL_ONLY_REGEX='get_briefing|insert_doc_link'
+rg -n "$TRANSITIONAL_ONLY_REGEX" src tests docs .agents .claude --glob '!**/node_modules/**' --glob '!**/.claude/worktrees/**'
+```
+
+Remaining matches for removed/dead names must be classified as exactly one of:
+
+| Classification | Meaning |
+|----------------|---------|
+| allowed migration suggestion | Validation, metadata, or documentation tells users what final tool replaces a removed name without preserving an alias. |
+| historical planning artifact | Non-active planning or evidence text records prior phases, migration rationale, or audit evidence. |
+| transitional legacy tool | Only applies to `get_briefing` and `insert_doc_link`, which remain macro-dependent legacy tools until `call_macro` parity exists. |
+| bug to remove | Any active source, test, scenario, doc, skill, config, or registry reference that would keep a removed/dead tool callable or instruct users to call it. |
+
+Do not classify `get_briefing` or `insert_doc_link` as removed; they are transitional-only names with explicit removal gates. All other matches in active `src tests docs .agents .claude` scopes must be either an allowed migration suggestion, a historical planning artifact, or a bug to remove.
+
 ## Manual-Only Verifications
 
 All phase behaviors should have automated verification or classified audit evidence. User review is only needed if a legacy reference cannot be classified from the product docs, phase artifacts, or existing migration suggestion rules.
