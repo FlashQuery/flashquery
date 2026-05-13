@@ -157,6 +157,7 @@ PHASE128_FINAL_SURFACE_TESTS = {
     "legacy_surface_final_audit",
     "plugin_record_consolidation",
     "removal_directory_maintenance",
+    "unified_search_documents",
     "unified_search_memory_lifecycle",
 }
 

@@ -24,7 +24,6 @@ steps:
         mode: filesystem
         entity_types: [documents]
         tags: [unified-search-doc]
-        entity_types: [documents, memories]
       expect_json_equals:
         path: "entity_types"
         value: [documents]
