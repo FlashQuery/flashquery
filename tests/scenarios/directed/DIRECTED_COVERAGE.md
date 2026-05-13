@@ -18,6 +18,15 @@ This document defines every behavioral coverage point we want to verify through 
 | legacy_surface | Phase 128 removed/dead MCP tool names are absent from host listTools while final replacements and transitional tools remain present. | test_phase128_legacy_surface | 2026-05-13 |  |
 | legacy_surface_migration_decisions | Phase 128 directed migration decisions: removed document/memory/directory/record/search/project names are ported to final tools or retained only as historical/removed migration evidence; get_briefing and insert_doc_link are transitional. | test_phase128_legacy_surface; historical directed ledgers | 2026-05-13 |  |
 
+## Phase 129 Metadata and Tool Registry
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| MT-01 | POST-01 / §3.11.1.1: delegated `tier:read-write` provider-visible metadata includes corrected data tools `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
+| MT-02 | POST-01 / §3.11.1.1: a delegated `tier:read-write` purpose can dispatch at least one corrected edit/list tool through `call_model`. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
+| MT-03 | POST-01 / §3.11.1.1: broad delegated tier metadata excludes non-data and hard-excluded tools such as `get_llm_usage` and `call_model`. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
+| MT-04 | POST-01 / §3.11.1.1: delegated edit dispatch is externally observable by reading back the mutated document. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
+
 ## 1. Document Lifecycle
 
 Core CRUD operations on vault documents via MCP.
