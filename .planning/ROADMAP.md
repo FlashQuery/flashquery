@@ -50,7 +50,7 @@
 | 126 | Plugin + Record Consolidation | 5/5 | Complete   | 2026-05-12 |
 | 127 | Removal, Directory, And Vault Maintenance | 6/6 | Complete    | 2026-05-12 |
 | 128 | Legacy Surface Removal + Final Audit | 8/8 | Complete | 2026-05-13 |
-| 129 | Correct Delegated Tier Eligibility Derivation | 3/3 | Complete   | 2026-05-13 |
+| 129 | Correct Delegated Tier Eligibility Derivation | 3/3 | Complete    | 2026-05-13 |
 
 ## Phase Details
 
