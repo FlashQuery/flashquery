@@ -302,8 +302,8 @@ Supported tiers:
 
 | Tier | Includes |
 |---|---|
-| `tier:read-only` | `get_document`, `search`, `get_memory`, `search_records`, `get_record`, and transitional `get_briefing` with its `call_macro` removal gate. |
-| `tier:read-write` | Everything in `tier:read-only`, plus `write_document`, `move_document`, `write_record`, `apply_tags`, `archive_document`, `remove_document`, `archive_memory`, `archive_record`, `manage_directory`, and transitional `insert_doc_link` with its `call_macro` removal gate. |
+| `tier:read-only` | Data-category read/list/search tools: `get_document`, `list_vault`, `search`, `get_memory`, `search_records`, `get_record`, and transitional `get_briefing` with its `call_macro` removal gate. Non-data categories are not part of broad delegated tier expansion; for example, `get_llm_usage` is an `llm` tool and is excluded from `tier:read-only`. |
+| `tier:read-write` | Everything in `tier:read-only`, plus data-category write/edit/archive/remove tools: `write_document`, `move_document`, `copy_document`, `insert_in_doc`, `replace_doc_section`, `write_record`, `apply_tags`, `archive_document`, `remove_document`, `archive_memory`, `archive_record`, `manage_directory`, and transitional `insert_doc_link` with its `call_macro` removal gate. |
 
 You can also list explicit delegated native tool names from the same tier-backed allowlist:
 
@@ -331,7 +331,7 @@ purposes:
       - manage_directory
 ```
 
-Some tools are always excluded from delegated model-visible native access, even if listed: `call_model`, `register_plugin`, `unregister_plugin`, and `get_plugin_info`.
+Some tools are always excluded from delegated model-visible native access, even if listed: `call_model`, `register_plugin`, `unregister_plugin`, plugin administration tools, and `get_plugin_info`.
 
 Administrative tools are also hard-excluded from delegated native access: `clear_pending_reviews` and `maintain_vault`. Removed legacy administrative names such as `force_file_scan` and `reconcile_documents` are not available as current host tools and are rejected by startup validation when used in purpose tool configuration.
 

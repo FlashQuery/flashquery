@@ -43,7 +43,7 @@ created: 2026-05-13
 | 129-02-01 | 02 | 1 | POST-01 / I-tier-1..I-tier-5 | T-129-03 | Delegated registry expansion cannot bypass host catalog or hard exclusions. | integration | `npm test -- tests/unit/llm-tool-registry.test.ts && npm run test:integration -- tests/integration/tool-registry.test.ts` | ✅ / ❌ W0 | ⬜ pending |
 | 129-03-01 | 03 | 2 | POST-01 / directed scenario | T-129-04 | Corrected delegated edit/list tools are accepted and dispatchable by delegated purpose workflows via `test_delegated_tier_eligibility.py`. | directed scenario | `python3 tests/scenarios/directed/run_suite.py --managed delegated_tier_eligibility` and `python3 tests/scenarios/directed/run_suite.py --managed foundation` | ✅ | ✅ green |
 | 129-03-02 | 03 | 2 | POST-01 / integration scenario | T-129-04 | YAML workflow proves corrected delegated purpose surface end to end via `delegated_tier_eligibility.yml`. | integration scenario | `python3 tests/scenarios/integration/run_integration.py --managed delegated_tier_eligibility` and `python3 tests/scenarios/integration/run_integration.py --managed foundation` | ✅ | ✅ green |
-| 129-03-03 | 03 | 2 | POST-01 / docs and migration callout | T-129-05 | Documentation and PR notes explain the intentional four-tool delegated tier expansion. | docs/build | `npm run build` | ✅ | ⬜ pending |
+| 129-03-03 | 03 | 2 | POST-01 / docs and migration callout | T-129-05 | Documentation and PR notes explain the intentional four-tool delegated tier expansion. | docs/build | `npm run build` | ✅ | ✅ green |
 
 *Status: ⬜ pending / ✅ green / ❌ red / ⚠ flaky*
 
@@ -84,4 +84,4 @@ created: 2026-05-13
 - `python3 tests/scenarios/integration/run_integration.py --managed foundation`
 - `npm run build`
 
-**Approval:** Plan 129-03 scenario and traceability evidence green; final docs/build evidence remains in Task 3.
+**Approval:** Plan 129-03 directed, integration, docs, migration callout, and build evidence green.
