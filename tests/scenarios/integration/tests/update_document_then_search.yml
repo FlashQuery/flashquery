@@ -17,7 +17,7 @@ steps:
 
   - label: "Original title is findable in search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Expedition Notes Draft"
       expect_path: "reports/expedition-notes.md"
@@ -32,7 +32,7 @@ steps:
 
   - label: "Updated title is now findable in search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Expedition Notes Final"
       expect_path: "reports/expedition-notes.md"
@@ -46,7 +46,7 @@ steps:
 
   - label: "Original draft title no longer appears in search results"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Expedition Notes Draft"
         entity_types: [documents]
@@ -54,7 +54,7 @@ steps:
 
   - label: "search_documents finds document by updated title (exercises search_documents API for IC-02)"
     assert:
-      op: search_documents
+      op: search
       args:
         query: "Expedition Notes Final"
       expect_contains: "expedition-notes.md"

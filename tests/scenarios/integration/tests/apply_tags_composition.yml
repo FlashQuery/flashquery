@@ -17,9 +17,10 @@ steps:
 
   - label: "Document is searchable by initial tag atc-physics"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [atc-physics]
+        entity_types: [documents, memories]
       expect_contains: "Quantum Mechanics Fundamentals"
 
   - label: "Apply additional tags [atc-math, atc-advanced] to the document"
@@ -30,29 +31,33 @@ steps:
 
   - label: "Document is now searchable by new tag atc-math"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [atc-math]
+        entity_types: [documents, memories]
       expect_contains: "Quantum Mechanics Fundamentals"
 
   - label: "Document is still searchable by original tag atc-physics"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [atc-physics]
+        entity_types: [documents, memories]
       expect_contains: "Quantum Mechanics Fundamentals"
 
   - label: "Document is searchable by newly applied tag atc-advanced"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [atc-advanced]
+        entity_types: [documents, memories]
       expect_contains: "Quantum Mechanics Fundamentals"
 
   - label: "Document matches filter combining original and new tags"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [atc-physics, atc-advanced]
+        entity_types: [documents, memories]
       expect_contains: "Quantum Mechanics Fundamentals"
       expect_count_eq: 1

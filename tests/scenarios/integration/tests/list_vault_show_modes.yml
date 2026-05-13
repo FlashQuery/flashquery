@@ -8,8 +8,9 @@ coverage: [IF-11]
 
 steps:
   - label: "Create a directory for IF-11"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if11/subdir"
 
   - label: "Write a document in the same parent path for IF-11"

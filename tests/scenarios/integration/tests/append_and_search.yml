@@ -19,7 +19,7 @@ steps:
 
   - label: "Initial content is searchable"
     assert:
-      op: search_documents
+      op: search
       args:
         query: "Activity Log"
       expect_contains: "Activity Log"
@@ -33,7 +33,7 @@ steps:
 
   - label: "Document is findable by title immediately after append — no scan step needed"
     assert:
-      op: search_documents
+      op: search
       args:
         query: "Activity Log"
       expect_contains: "Activity Log"

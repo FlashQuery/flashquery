@@ -1,0 +1,132 @@
+name: legacy_surface_final_audit
+description: >
+  Phase 128 final YAML audit for the public MCP tool surface. Removed/dead tool
+  names are asserted absent from listTools while final replacements and explicitly
+  transitional helpers remain available.
+coverage: [legacy_surface_final_audit]
+
+steps:
+  - label: "Removed/dead append_to_doc is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"append_to_doc\""
+
+  - label: "Removed/dead document tools are absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"create_document\""
+
+  - label: "Removed/dead update_document is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"update_document\""
+
+  - label: "Removed/dead update_doc_header is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"update_doc_header\""
+
+  - label: "Removed/dead search_documents is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"search_documents\""
+
+  - label: "Removed/dead memory tools are absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"save_memory\""
+
+  - label: "Removed/dead update_memory is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"update_memory\""
+
+  - label: "Removed/dead search_memory is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"search_memory\""
+
+  - label: "Removed/dead list_memories is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"list_memories\""
+
+  - label: "Removed/dead maintenance tools are absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"force_file_scan\""
+
+  - label: "Removed/dead reconcile_documents is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"reconcile_documents\""
+
+  - label: "Removed/dead create_directory is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"create_directory\""
+
+  - label: "Removed/dead remove_directory is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"remove_directory\""
+
+  - label: "Removed/dead create_record is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"create_record\""
+
+  - label: "Removed/dead update_record is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"update_record\""
+
+  - label: "Removed/dead search_all is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"search_all\""
+
+  - label: "Dead project list tool is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"list_projects\""
+
+  - label: "Dead project info tool is absent"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "\"get_project_info\""
+
+  - label: "Final replacement tools remain present"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"write_document\""
+
+  - label: "Final search remains present"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"search\""
+
+  - label: "Final memory write remains present"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"write_memory\""
+
+  - label: "Final maintenance remains present"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"maintain_vault\""
+
+  - label: "Final directory management remains present"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"manage_directory\""
+
+  - label: "Final record write remains present"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"write_record\""
+
+  - label: "Transitional macro-gated helpers remain present"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"get_briefing\""

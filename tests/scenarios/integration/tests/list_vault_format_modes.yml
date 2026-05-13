@@ -7,8 +7,9 @@ coverage: [IF-15]
 
 steps:
   - label: "Create a test directory for IF-15"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if15/test-dir"
 
   - label: "list_vault default mode returns structured entries (IF-15)"

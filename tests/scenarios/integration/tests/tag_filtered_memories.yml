@@ -21,35 +21,40 @@ steps:
 
   - label: "list_memories with tmf-alpha returns the thermodynamics memory"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [tmf-alpha]
+        entity_types: [documents, memories]
       expect_contains: "Entropy"
 
   - label: "list_memories with tmf-alpha does not return the electromagnetism memory"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [tmf-alpha]
+        entity_types: [documents, memories]
       expect_not_contains: "Maxwell"
 
   - label: "list_memories with tmf-beta returns the electromagnetism memory"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [tmf-beta]
+        entity_types: [documents, memories]
       expect_contains: "Maxwell"
 
   - label: "list_memories with tmf-beta does not return the thermodynamics memory"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [tmf-beta]
+        entity_types: [documents, memories]
       expect_not_contains: "Entropy"
 
   - label: "list_memories with both tags returns both memories"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [tmf-alpha, tmf-beta]
+        entity_types: [documents, memories]
       expect_contains: "Entropy"

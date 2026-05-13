@@ -17,7 +17,7 @@ steps:
 
   - label: "Document appears in search_all by title"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Tidal Patterns and Lunar Cycles"
       expect_path: "oceanography/tidal-patterns.md"

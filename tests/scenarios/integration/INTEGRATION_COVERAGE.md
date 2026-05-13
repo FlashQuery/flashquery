@@ -12,7 +12,7 @@ Coverage IDs use the prefix `INT-` to avoid collision with the directed test IDs
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| legacy_surface_final_audit | Phase 128 removed/dead MCP tool names are absent from public listTools and YAML scenario migration keeps only final replacements plus transitional get_briefing/insert_doc_link coverage. | legacy_surface_final_audit | 2026-05-13 |  |
+| legacy_surface_final_audit | Phase 128 removed/dead MCP tool names are absent from public listTools and YAML scenario migration keeps only final replacements plus transitional get_briefing/insert_doc_link coverage. | legacy_surface_final_audit   | 2026-05-12   | 2026-05-12   |
 | legacy_surface_migration_decisions | Phase 128 integration migration decisions classify old document/memory/directory/record/search/project rows as historical removed-tool evidence before YAML cleanup. | legacy_surface_final_audit; historical integration ledgers | 2026-05-13 |  |
 
 ## INT — Foundation Harness
@@ -81,7 +81,7 @@ Verifies that content written through one path is discoverable through the expec
 | IS-04  | search_all with entity_types=['documents'] returns only documents (VALIDATED)     | cross_domain_search          | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
 | IS-05  | search_all with entity_types=['memories'] returns only memories (VALIDATED)       | search_memories_only         | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
 | IS-06  | Tagged document appears in tag-filtered search_documents (VALIDATED)              | tag_filtered_documents       | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
-| IS-07  | Tagged memory appears in tag-filtered search_memories (VALIDATED)                 | tag_filtered_memories        | 2026-05-07   | 2026-05-07   |
+| IS-07  | Tagged memory appears in tag-filtered search_memories (VALIDATED)                 | tag_filtered_memories        | 2026-05-12   | 2026-05-12   |
 | IS-08  | Multi-tag filter returns only documents matching all specified tags (VALIDATED)    | multitag_filter              | 2026-05-07   | 2026-05-07   |
 
 ---
@@ -111,7 +111,7 @@ Verifies behaviors that span more than one FlashQuery domain (documents, memorie
 | ID     | Behavior                                                                    | Covered By           | Date Updated | Last Passing |
 |--------|-----------------------------------------------------------------------------|----------------------|--------------|--------------|
 | IX-01  | Document and memory share a tag → search_all with that tag returns both (VALIDATED)      | cross_domain_search_embeddings | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
-| IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
+| IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-05-12   | 2026-05-12   |
 | IX-03  | Create via vault.write, update via update_document → search returns new content (VALIDATED) | write_document_then_search   | 2026-05-12   | 2026-05-12 (Phase 128 legacy migration evidence) |
 | IX-04  | Create document, get_document by fqc_id → returns correct content (VALIDATED)           | document_retrieval_by_id     | 2026-05-07   | 2026-05-07   |
 | IX-05  | Create document with tags, apply_tags to add more → all tags searchable (VALIDATED)     | apply_tags_composition       | 2026-05-07   | 2026-05-07   |
@@ -142,7 +142,7 @@ discoverable through search after the mutation.
 
 | ID     | Behavior                                                                         | Covered By | Date Updated | Last Passing |
 |--------|----------------------------------------------------------------------------------|------------|--------------|--------------|
-| IC-01  | Append content to document → appended content appears in search_documents (VALIDATED)         | append_then_search           | 2026-05-12   | 2026-05-12 (Phase 128 legacy migration evidence) |
+| IC-01  | Append content to document → appended content appears in search_documents (VALIDATED)         | append_then_search           | 2026-05-12   | 2026-05-12   |
 | IC-02  | Update document body → updated content appears in search_documents (VALIDATED)                | write_document_then_search   | 2026-05-12   | 2026-05-12 (Phase 128 legacy migration evidence) |
 | IC-03  | Replace section in document → replaced content appears, original absent (VALIDATED)           | replace_section              | 2026-05-12   | 2026-05-12   |
 | IC-04  | Append to document → search reflects appended text immediately after append (VALIDATED)       | append_and_search            | 2026-05-12   | 2026-05-12   |
@@ -184,11 +184,11 @@ FlashQuery tools (create_document, move_document, register_plugin, search_docume
 |--------|-------------------------------------------------------------------------------------------------------|------------|--------------|--------------|
 | IF-01  | create_directory → list_vault(show: "directories") confirms created directory (VALIDATED)                         | create_then_list_directories | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
 | IF-02  | create_directory with root_path → list_vault recursive shows full tree (VALIDATED)                               | create_then_list_directories | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
-| IF-03  | create_directory → create_document → list_vault(show: "all") shows both directory and document (VALIDATED)       | create_directory_then_document | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
-| IF-04  | create_directory → create_document → search_documents finds document by title (VALIDATED)                        | create_directory_then_search | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
-| IF-05  | create_directory → remove_directory (empty) → list_vault confirms absence (VALIDATED)                            | directory_lifecycle          | 2026-05-07   | 2026-05-07   |
-| IF-06  | batch create_directory → list_vault recursive → remove leaf directories first → list_vault confirms (VALIDATED)  | directory_lifecycle          | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
-| IF-07  | create_directory called twice with same path → list_vault shows no duplicate entries (idempotency) (VALIDATED)   | create_directory_idempotent  | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
+| IF-03  | create_directory → create_document → list_vault(show: "all") shows both directory and document (VALIDATED)       | create_directory_then_document | 2026-05-12   | 2026-05-12   |
+| IF-04  | create_directory → create_document → search_documents finds document by title (VALIDATED)                        | create_directory_then_search | 2026-05-12   | 2026-05-12   |
+| IF-05  | create_directory → remove_directory (empty) → list_vault confirms absence (VALIDATED)                            | directory_lifecycle          | 2026-05-12   | 2026-05-12   |
+| IF-06  | batch create_directory → list_vault recursive → remove leaf directories first → list_vault confirms (VALIDATED)  | directory_lifecycle          | 2026-05-12   | 2026-05-12   |
+| IF-07  | create_directory called twice with same path → list_vault shows no duplicate entries (idempotency) (VALIDATED)   | create_directory_idempotent  | 2026-05-12   | 2026-05-12   |
 | IF-08  | dot-prefixed directory created → list_vault shows it is invisible to default listing (VALIDATED)                 | dot_directory_invisible      | 2026-05-07   | 2026-05-07   |
 | IF-09  | create_directory with name requiring sanitization → list_vault shows sanitized name → create_document in it succeeds (VALIDATED) | sanitized_directory_usable   | 2026-05-07   | 2026-05-07 (Phase 128 legacy migration evidence) |
 | IF-10  | create_directory → move_document into new directory → list_vault confirms moved document (VALIDATED)             | move_document_to_new_directory | 2026-05-11   | 2026-05-11 (Phase 128 legacy migration evidence) |

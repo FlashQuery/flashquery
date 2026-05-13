@@ -25,14 +25,14 @@ steps:
 
   - label: "Document appears in search_all by title"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Ocean at Dawn"
       expect_path: "nature/ocean.md"
 
   - label: "Document not returned when searching only memories"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Ocean at Dawn"
         entity_types: [documents]
@@ -41,14 +41,15 @@ steps:
 
   - label: "Document appears in search_documents by title (IS-01)"
     assert:
-      op: search_documents
+      op: search
       args:
         query: "The Ocean at Dawn"
       expect_contains: "The Ocean at Dawn"
 
   - label: "Memory listable by unique tag"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [wts-tag]
+        entity_types: [documents, memories]
       expect_contains: "mountain peaks"

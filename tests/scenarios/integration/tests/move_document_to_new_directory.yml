@@ -15,8 +15,9 @@ steps:
     tags: [if10-tag]
 
   - label: "Create the destination directory for IF-10"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if10/new-dir"
 
   - label: "Move the document into the new directory (IF-10)"

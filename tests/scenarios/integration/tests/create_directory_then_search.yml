@@ -7,8 +7,9 @@ coverage: [IF-04]
 
 steps:
   - label: "Create directory for IF-04"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if04/notes"
 
   - label: "Write a document in the new directory"
@@ -24,7 +25,7 @@ steps:
 
   - label: "search_documents finds document by title (IF-04)"
     assert:
-      op: search_documents
+      op: search
       args:
         query: "IF-04 Search Entry"
       expect_contains: "IF-04 Search Entry"

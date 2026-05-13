@@ -59,8 +59,8 @@ Step types
 ────────────────────────────────────────────────────────────
 
   action:  Perform an operation. Supported actions:
-             vault.write        → create_document MCP tool
-             memory.write       → save_memory MCP tool
+             vault.write        → write_document MCP tool
+             memory.write       → write_memory MCP tool
              archive_document   → archive_document MCP tool
              update_document    → update_document MCP tool
              maintain_vault     → maintain_vault MCP tool
@@ -74,7 +74,7 @@ Step types
                label: "Wait for embedding to write"
 
   assert:  Call an MCP tool and check the result. Fields:
-             op               MCP tool name (e.g. search_documents)
+             op               MCP tool name (e.g. search)
              args             keyword arguments passed to the tool
              expect_contains      response text contains this string
              expect_not_contains  response text does NOT contain this
@@ -272,7 +272,7 @@ def _probe_embeddings(args: argparse.Namespace) -> bool:
     """
     Probe the external FQC server to detect whether embeddings are configured.
 
-    Makes a single read-only call (search_all scoped to memories) and checks
+    Makes a single read-only call (search scoped to memories) and checks
     whether the response indicates embeddings are unavailable. No side effects.
 
     Returns True if embeddings appear to be configured, False if not.
@@ -285,7 +285,7 @@ def _probe_embeddings(args: argparse.Namespace) -> bool:
             fqc_dir=args.fqc_dir,
         )
         result = client.call_tool(
-            "search_all",
+            "search",
             query="_dep_probe_",
             entity_types=["memories"],
         )
@@ -381,9 +381,6 @@ _EXTRACT_PATTERNS: dict[str, str] = {
     "path":      r"^Path:\s*(.+)$",
     "title":     r"^Title:\s*(.+)$",
     "status":    r"^Status:\s*(.+)$",
-    # save_memory returns: "Memory saved (id: <uuid>). Tags: ..."
-    # list_memories/search_memory return: "Memory ID: <uuid>"
-    # Both forms are handled by this pattern.
     "memory_id": r"(?:Memory ID:\s*|\(id:\s*)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
     "content":   r"^Content:\s*(.+)$",
 }
@@ -592,7 +589,7 @@ def _evaluate_assertions(
 # Any MCP tool name can also be used directly as an action value.
 _ACTION_TOOL_MAP: dict[str, str] = {
     "vault.write":      "write_document",
-    "memory.write":     "save_memory",
+    "memory.write":     "write_memory",
     "archive_document": "archive_document",
     "update_document":  "write_document",
     "append_to_doc":    "insert_in_doc",
@@ -640,6 +637,8 @@ def _execute_action(
 
     if op == "vault.write":
         raw_args.setdefault("mode", "create")
+    elif op == "memory.write":
+        raw_args.setdefault("mode", "create")
     elif op == "update_document":
         raw_args.setdefault("mode", "update")
     elif op == "update_doc_header":
@@ -648,6 +647,14 @@ def _execute_action(
             raw_args["frontmatter"] = raw_args.pop("updates")
     elif op == "append_to_doc":
         raw_args.setdefault("position", "bottom")
+    elif tool_name == "manage_directory":
+        if "path" in raw_args and "paths" not in raw_args:
+            raw_args["paths"] = [raw_args.pop("path")]
+        elif isinstance(raw_args.get("paths"), str):
+            raw_args["paths"] = [raw_args["paths"]]
+        if "root_path" in raw_args and isinstance(raw_args.get("paths"), list):
+            root = str(raw_args.pop("root_path")).strip("/")
+            raw_args["paths"] = [f"{root}/{str(p).strip('/')}" for p in raw_args["paths"]]
 
     # Keep legacy scan_vault YAML steps on the final synchronous maintenance surface.
     if op == "scan_vault":

@@ -23,14 +23,15 @@ steps:
 
   - label: "Before archive: memory is listable by tag"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [amem-tag]
+        entity_types: [documents, memories]
       expect_contains: "Anglerfish"
 
   - label: "Before archive: document is findable in search_all by title"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Deep Sea Creatures"
       expect_path: "biology/deep-sea-creatures.md"
@@ -42,14 +43,15 @@ steps:
 
   - label: "After archive: memory no longer appears in list_memories"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [amem-tag]
+        entity_types: [documents, memories]
       expect_not_contains: "Anglerfish"
 
   - label: "After archive: document is still findable in search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Deep Sea Creatures"
       expect_path: "biology/deep-sea-creatures.md"

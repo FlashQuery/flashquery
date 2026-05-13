@@ -25,7 +25,7 @@ steps:
 
   - label: "Before archive: document is findable in search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Ocean Tides at Dusk"
         entity_types: [documents]
@@ -38,7 +38,7 @@ steps:
 
   - label: "After archive: document is absent from search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Ocean Tides at Dusk"
         entity_types: [documents]
@@ -46,7 +46,7 @@ steps:
 
   - label: "After archive: memory still appears in search_all with entity_types=['memories']"
     assert:
-      op: search_all
+      op: search
       args:
         query: "ocean tides dusk calming"
         entity_types: [memories]

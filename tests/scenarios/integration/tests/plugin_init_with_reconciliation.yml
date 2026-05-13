@@ -37,8 +37,9 @@ steps:
   # ── Scaffold plugin directories ─────────────────────────────────────────────
 
   - label: "Scaffold plugin directory with create_directory"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       root_path: "_integration/if14"
       paths: ["contacts"]
 

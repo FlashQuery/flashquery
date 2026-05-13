@@ -46,16 +46,18 @@ steps:
 
   - label: "Step 1: search_documents by tag returns both candidates"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [ix09-tag]
+        entity_types: [documents, memories]
       expect_contains: "Eval Candidate Alpha"
 
   - label: "Step 1b: search_documents result also includes the distractor"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [ix09-tag]
+        entity_types: [documents, memories]
       expect_contains: "Eval Candidate Beta"
 
   - label: "Step 2: batch get_document with include=[frontmatter,headings] returns headings for both"

@@ -8,8 +8,9 @@ coverage: [IF-12]
 
 steps:
   - label: "Create a directory for IF-12"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if12/docs"
 
   - label: "Write a markdown document for IF-12"

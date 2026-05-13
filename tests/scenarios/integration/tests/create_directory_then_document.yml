@@ -7,8 +7,9 @@ coverage: [IF-03]
 
 steps:
   - label: "Create subdirectory for IF-03"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if03/docs"
 
   - label: "Write a document in the parent directory"
@@ -25,7 +26,7 @@ steps:
       args:
         path: "_integration/if03"
         show: "all"
-      expect_contains: "docs/"
+      expect_contains: "\"name\":\"docs\""
 
   - label: "list_vault(show: all) shows document (IF-03)"
     assert:

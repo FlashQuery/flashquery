@@ -7,8 +7,9 @@ coverage: [IF-16]
 
 steps:
   - label: "Create a directory for IF-16"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if16/docs"
 
   - label: "Write a document in the new directory for IF-16"

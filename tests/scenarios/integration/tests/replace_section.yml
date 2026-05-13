@@ -17,7 +17,7 @@ steps:
 
   - label: "Original title is findable by search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Project Proposal"
       expect_path: "drafts/proposal.md"
@@ -34,7 +34,7 @@ steps:
 
   - label: "Document title still findable after update"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Project Proposal"
       expect_path: "drafts/proposal.md"
@@ -48,7 +48,7 @@ steps:
 
   - label: "Old content is no longer in search results"
     assert:
-      op: search_all
+      op: search
       args:
         query: "old approach"
         entity_types: [documents]

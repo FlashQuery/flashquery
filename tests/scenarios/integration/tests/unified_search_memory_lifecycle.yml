@@ -21,6 +21,7 @@ steps:
         query: ""
         entity_types: [memories]
         tags: [unified-search-memory]
+        entity_types: [documents, memories]
       expect_json_equals:
         path: "mode"
         value: "list"

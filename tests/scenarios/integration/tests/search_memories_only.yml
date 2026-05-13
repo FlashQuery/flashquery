@@ -27,21 +27,23 @@ steps:
 
   - label: "Memory is listable by tag"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [smo-tag]
+        entity_types: [documents, memories]
       expect_contains: "redwood forests"
 
   - label: "Memory listing does not contain document title"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [smo-tag]
+        entity_types: [documents, memories]
       expect_not_contains: "Ancient Forests and Ecosystems"
 
   - label: "search_all with entity_types=[memories] returns memory content (IS-05)"
     assert:
-      op: search_all
+      op: search
       args:
         query: "hiking through redwood forests"
         entity_types: [memories]
@@ -49,7 +51,7 @@ steps:
 
   - label: "search_all with entity_types=[memories] does not return the document (IS-05)"
     assert:
-      op: search_all
+      op: search
       args:
         query: "hiking through redwood forests"
         entity_types: [memories]

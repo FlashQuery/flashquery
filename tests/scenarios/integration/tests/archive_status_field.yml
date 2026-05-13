@@ -25,9 +25,10 @@ steps:
 
   - label: "Verify document appears in search before archive"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [asf-tag]
+        entity_types: [documents, memories]
       expect_count_eq: 2
 
   - label: "Archive documents and assert ordered JSON archive envelopes"
@@ -45,9 +46,10 @@ steps:
 
   - label: "Archived document is excluded from search by default"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [asf-tag]
+        entity_types: [documents, memories]
       expect_count_eq: 0
 
   - label: "Document is still retrievable after archive by fqc_id"

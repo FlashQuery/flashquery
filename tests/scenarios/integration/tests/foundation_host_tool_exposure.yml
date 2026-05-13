@@ -32,7 +32,7 @@ steps:
   - label: "Host-filtered listTools keeps search helpers but excludes briefing"
     assert:
       op: mcp.list_tools
-      expect_contains: "\"search_all\""
+      expect_contains: "\"search\""
       expect_not_contains: "\"get_briefing\""
 
   - label: "Warning-only suspicious categories still allow startup"
@@ -44,7 +44,7 @@ steps:
       expect_tools_contains:
         - call_model
 
-  - label: "Removed-status purpose tool names remain valid while registered"
+  - label: "Final purpose tool names remain valid after legacy removal"
     startup_success:
       extra_config:
         llm:
@@ -61,7 +61,7 @@ steps:
                 input: 1
                 output: 1
           purposes:
-            - name: legacy
-              description: Legacy tool config
+            - name: final_search
+              description: Final tool config
               models: [gpt-4o]
-              tools: [search_documents]
+              tools: [search]

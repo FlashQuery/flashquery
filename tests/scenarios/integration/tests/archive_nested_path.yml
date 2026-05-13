@@ -36,7 +36,8 @@ steps:
 
   - label: "Confirm archived nested document is absent from search"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [anp-tag]
+        entity_types: [documents, memories]
       expect_empty: true

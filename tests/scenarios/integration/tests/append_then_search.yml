@@ -18,7 +18,7 @@ steps:
 
   - label: "Document is findable by title before append"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Coastal Survey Field Notes"
       expect_path: "fieldwork/coastal-survey.md"
@@ -42,7 +42,7 @@ steps:
 
   - label: "Document is still discoverable by title after append"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Coastal Survey Field Notes"
       expect_path: "fieldwork/coastal-survey.md"
@@ -56,7 +56,7 @@ steps:
 
   - label: "search_documents finds document by title after append (exercises search_documents API)"
     assert:
-      op: search_documents
+      op: search
       args:
         query: "Coastal Survey Field Notes"
       expect_contains: "Coastal Survey Field Notes"

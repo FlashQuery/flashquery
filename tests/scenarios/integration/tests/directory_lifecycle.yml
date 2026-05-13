@@ -9,8 +9,9 @@ steps:
   # ── IF-05: Simple create → remove lifecycle ─────────────────────────────────
 
   - label: "Create an empty directory for IF-05"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if05/temp"
 
   - label: "Before remove: list_vault confirms directory exists (IF-05)"
@@ -19,11 +20,12 @@ steps:
       args:
         path: "_integration/if05"
         show: "directories"
-      expect_contains: "temp/"
+      expect_contains: "temp"
 
   - label: "Remove the empty directory"
-    action: remove_directory
+    action: manage_directory
     args:
+      action: remove
       path: "_integration/if05/temp"
 
   - label: "After remove: list_vault confirms directory is gone (IF-05)"
@@ -37,8 +39,9 @@ steps:
   # ── IF-06: Batch create → recursive list → leaf-first removal ───────────────
 
   - label: "Batch create nested directories for IF-06"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       root_path: "_integration/if06"
       paths: ["parent", "parent/child-a", "parent/child-b"]
 
@@ -49,7 +52,7 @@ steps:
         path: "_integration/if06"
         show: "directories"
         recursive: true
-      expect_contains: "parent/"
+      expect_contains: "parent"
 
   - label: "list_vault recursive shows child-a/ (IF-06)"
     assert:
@@ -58,7 +61,7 @@ steps:
         path: "_integration/if06"
         show: "directories"
         recursive: true
-      expect_contains: "child-a/"
+      expect_contains: "child-a"
 
   - label: "list_vault recursive shows child-b/ (IF-06)"
     assert:
@@ -67,21 +70,24 @@ steps:
         path: "_integration/if06"
         show: "directories"
         recursive: true
-      expect_contains: "child-b/"
+      expect_contains: "child-b"
 
   - label: "Remove leaf directory child-a first (IF-06)"
-    action: remove_directory
+    action: manage_directory
     args:
+      action: remove
       path: "_integration/if06/parent/child-a"
 
   - label: "Remove leaf directory child-b next (IF-06)"
-    action: remove_directory
+    action: manage_directory
     args:
+      action: remove
       path: "_integration/if06/parent/child-b"
 
   - label: "Remove parent directory now that it is empty (IF-06)"
-    action: remove_directory
+    action: manage_directory
     args:
+      action: remove
       path: "_integration/if06/parent"
 
   - label: "After leaf-first removal: list_vault confirms parent/ gone (IF-06)"
