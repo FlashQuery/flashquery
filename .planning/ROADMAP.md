@@ -270,10 +270,10 @@ Plans:
 - [x] 128-01-PLAN.md — Create traceability and legacy audit harness.
 - [x] 128-02-PLAN.md — Finalize metadata, config, delegated, and protocol absence behavior.
 - [x] 128-03-PLAN.md — Remove active legacy/dead handlers and obsolete behavior tests.
-- [ ] 128-04-PLAN.md — Port directed scenario ledgers and runnable cases to final surfaces.
+- [x] 128-04-PLAN.md — Port directed scenario ledgers and runnable cases to final surfaces.
 - [ ] 128-05-PLAN.md — Port YAML integration scenario cases to final surfaces.
 - [ ] 128-06-PLAN.md — Update docs and skill guidance to final tool names.
-- [ ] 128-07-PLAN.md — Harden reference-tool and transitional legacy regressions.
+- [x] 128-07-PLAN.md — Harden reference-tool and transitional legacy regressions.
 - [ ] 128-08-PLAN.md — Run final validation, classify remaining legacy matches, and close traceability.
 
 **UI hint:** no
