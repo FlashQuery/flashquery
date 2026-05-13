@@ -297,7 +297,10 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
+**Wave 1**
 - [ ] 129-01-PLAN.md — Replace delegated tier allow-list derivation with metadata-derived eligibility and unit coverage.
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 129-02-PLAN.md — Prove corrected delegated tiers through registry assembly, host regression guards, and MCP-level evidence.
 - [ ] 129-03-PLAN.md — Close scenario coverage, documentation, traceability, validation, and migration callout evidence.
 

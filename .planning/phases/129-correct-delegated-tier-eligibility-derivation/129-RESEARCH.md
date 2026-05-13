@@ -342,17 +342,19 @@ if (selector === 'tier:read-only' || selector === 'tier:read-write') {
 |---|-------|---------|---------------|
 | A1 | A pure helper export or synthetic local metadata object is safer than mutating `TOOL_METADATA` in tests. | Don't Hand-Roll | If the repo prefers private helper testing only, planner should instead test through exported public functions. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the durable U-tier-9 expected-diff test remain after merge?** [CITED: MCP Tool Consolidation Requirements §3.11.1.1]
    - What we know: §3.11.1.1 says U-tier-9 can be run once during refactor and removed after merge. [CITED: MCP Tool Consolidation Requirements §3.11.1.1]
    - What's unclear: The project may prefer keeping an exact final membership assertion as durable regression coverage. [ASSUMED]
    - Recommendation: Keep durable exact expected membership assertions in `tests/unit/tool-metadata.test.ts` and phrase the "pre-refactor diff" as a comment or one-time implementation aid. [VERIFIED: tests/unit/tool-metadata.test.ts]
+   - RESOLVED: Plans keep durable exact final membership assertions and use the old-to-new diff only as a refactor guard; downstream agents should not preserve a production copy of the old allow-list.
 
 2. **Which scenario row prefix should be used for metadata/tool-registry coverage?** [CITED: MCP Tool Consolidation Requirements §3.11.1.1]
    - What we know: The product requirements prefer a new `M-` metadata/tool-registry section, but the current directed matrix already uses `M-` for memory lifecycle rows. [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md + CITED: MCP Tool Consolidation Requirements §3.11.1.1]
    - What's unclear: Reusing `M-` would collide with memory IDs. [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md]
    - Recommendation: Use a non-colliding section such as `D-delegated-tier-*` or `TIER-*`, and explicitly note it fulfills §3.11.1.1's preferred metadata/tool-registry coverage intent. [ASSUMED]
+   - RESOLVED: Plans direct implementation agents to choose a non-colliding metadata/tool-registry prefix, with `MT-01` through `MT-04` as the preferred starting point unless the coverage file reveals a better unused convention.
 
 ## Environment Availability
 
