@@ -222,7 +222,7 @@ def _clean_test_tables(project_dir: Path) -> None:
             cwd=str(project_dir),
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
         )
         if result.returncode != 0:
             print(
