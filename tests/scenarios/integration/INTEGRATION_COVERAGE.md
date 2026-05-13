@@ -253,6 +253,7 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 | IL-40  | ATL-INT-05: Mixed path, section, pointer, alias, and `_items` template/reference modes compose in one `call_model` flow; parsed directed coverage asserts metadata ordering, parent list entry, same-document sections, and default `_separator` shape | llm_mixed_reference_modes    | 2026-05-13   | 2026-05-13   |
 | IL-41  | Help resolver participates in no-usage-row contract: baseline get_llm_usage → call_model resolver=help returns help body → get_llm_usage total_calls delta is 0 (help is a no-LLM-dispatch resolver and writes no `fqc_llm_usage` row) | llm_help_no_usage_row        | 2026-05-13   | 2026-05-13   |
 | IL-42  | Template metadata freshness reaches discovery surface: vault.write template (`fq_template: true`, `fq_expose_as_tool: true`, `fq_desc: A`) → list_purposes shows description A in template_tools → update_document rewrites frontmatter with `fq_desc: B` → next list_purposes shows description B (template registry reads frontmatter fresh from disk per call) | llm_template_metadata_freshness | 2026-05-13   | 2026-05-13   |
+| IL-43  | POST-01 / §3.11.1.1 delegated purpose workflow with `tools: ["tier:read-write"]` exposes corrected tier-derived tools and uses `insert_in_doc` before read-back. | delegated_tier_eligibility   | 2026-05-13   | 2026-05-13   |
 
 ---
 
