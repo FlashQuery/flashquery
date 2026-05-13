@@ -302,10 +302,10 @@ Supported tiers:
 
 | Tier | Includes |
 |---|---|
-| `tier:read-only` | Read/search tools such as `search`, `get_document`, `get_memory`, `search_records`, `get_record`, `list_vault`, and transitional `get_briefing` with its `call_macro` removal gate. |
-| `tier:read-write` | Everything in `tier:read-only`, plus write tools such as `write_document`, `insert_in_doc`, `replace_doc_section`, `move_document`, `write_memory`, `write_record`, `apply_tags`, archiving/removal tools, `manage_directory`, and `maintain_vault`. |
+| `tier:read-only` | `get_document`, `search`, `get_memory`, `search_records`, `get_record`, and transitional `get_briefing` with its `call_macro` removal gate. |
+| `tier:read-write` | Everything in `tier:read-only`, plus `write_document`, `move_document`, `write_record`, `apply_tags`, `archive_document`, `remove_document`, `archive_memory`, `archive_record`, `manage_directory`, and transitional `insert_doc_link` with its `call_macro` removal gate. |
 
-You can also list explicit native tool names:
+You can also list explicit delegated native tool names from the same tier-backed allowlist:
 
 ```yaml
 purposes:
@@ -332,6 +332,8 @@ purposes:
 ```
 
 Some tools are always excluded from delegated model-visible native access, even if listed: `call_model`, `register_plugin`, `unregister_plugin`, and `get_plugin_info`.
+
+Administrative tools are also hard-excluded from delegated native access: `clear_pending_reviews` and `maintain_vault`. Removed legacy administrative names such as `force_file_scan` and `reconcile_documents` are not available as current host tools and are rejected by startup validation when used in purpose tool configuration.
 
 ## Purpose Templates
 
@@ -402,7 +404,7 @@ Template access is covered in more detail in `Document Reference System.md`, but
 
 ## Embedding Purpose
 
-FlashQuery can represent embedding generation through the same LLM structure:
+FlashQuery can represent embedding generation through the same LLM structure. When a purpose named `embedding` exists, FlashQuery uses that purpose first for semantic-search embeddings and ignores the legacy top-level `embedding:` provider path for routing.
 
 ```yaml
 llm:
@@ -423,7 +425,7 @@ llm:
         - embeddings
 ```
 
-Embedding models should declare `type: embedding` and `dimensions`. The dimensions must match the actual embedding model.
+Embedding models should declare `type: embedding` and `dimensions`. The dimensions must match the actual embedding model. If the `embedding` purpose is missing, FlashQuery falls back to the legacy top-level `embedding:` section when present; if neither path is usable, semantic search is disabled through the null embedding provider.
 
 ## Discovery
 
@@ -494,7 +496,8 @@ FlashQuery validates LLM config on startup:
 - Every model's `provider_name` must reference an existing provider.
 - Every purpose model entry must reference an existing model alias.
 - `excluded_tools` requires `tools`.
-- Tool names and tool tiers must be known.
+- Tool tiers must be known.
+- Purpose `tools` and `excluded_tools` entries must be known delegated tool names, known hard-excluded names, or known tiers. Removed legacy tool names are rejected with replacement suggestions.
 - Purpose loop-control defaults such as `timeout_ms` and `max_iterations` must be numbers.
 
 If a value is not recognized in a strict section, FlashQuery reports a config error rather than silently accepting it.
