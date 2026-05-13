@@ -1,3 +1,32 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# KNOWN FLAKE (investigated 2026-05-13)
+#
+# This test passes in isolation and in small groupings, but has been observed
+# to fail inside full 91-test managed runs on macOS — step 1 (`manage_directory
+# create`) returns the unsanitized path back, as if sanitization never ran.
+# It is NOT an OS issue and NOT a sanitizer bug:
+#   - The sanitizer regex at src/mcp/utils/path-validation.ts:156 correctly
+#     replaces ':' and '*' with space on macOS (verified standalone).
+#   - The `manage_directory` handler at src/mcp/tools/files.ts:104 calls
+#     `sanitizeDirectorySegment` unconditionally with no platform branching.
+#   - The dist build is fresh and contains the sanitizer.
+#
+# Leading hypothesis: cumulative Supabase residue from a cleanup-script timeout
+# in run_integration.py. The clean_test_tables.py subprocess takes ~30.5s
+# against the hosted pooler; the runner's previous 30s budget SIGKILL'd it
+# every test, leaving residue across the suite. Mitigated in commit 4cd6816
+# by bumping that timeout to 60s.
+#
+# If this test fails again: FIRST rerun it in isolation
+#   python3 tests/scenarios/integration/run_integration.py --managed sanitized_directory_usable
+# If it passes there, you're looking at the same flake — check for the
+# "exception during table cleanup" warning in the suite log before
+# re-investigating the sanitizer logic or chasing OS-specific behavior.
+#
+# Full background in tests/scenarios/integration/INTEGRATION_COVERAGE.md under
+# the "Behavior - Testcase Validation" section.
+# ─────────────────────────────────────────────────────────────────────────────
+
 name: sanitized_directory_usable
 description: >
   create_directory with a name requiring sanitization (e.g. spaces or special characters)

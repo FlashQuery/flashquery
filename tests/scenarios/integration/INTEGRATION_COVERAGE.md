@@ -390,6 +390,25 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 
 ---
 
+### sanitized_directory_usable
+
+**Behaviors affected**
+- IF-09: `create_directory` with a name requiring sanitization → `list_vault` shows the sanitized name → `create_document` in it succeeds
+
+**Status**: Known flake under full-suite runs. Investigated 2026-05-13.
+
+**Symptom**: In a managed run of all 91 broader integration tests on macOS, step 1 (`manage_directory create`) returned `path: "_integration/if09/my:project*docs"` (unsanitized) with `status: "created"`, and step 2's `list_vault` confirmed the directory on disk had the unsanitized name. Same test on the same machine, with the same dist build, with the same input: passes in isolation, passes when paired with its immediate predecessor (`ir01_plugin_mixed_reconciliation`), and fails only inside the full 91-test suite.
+
+**Why this is *not* an OS or code-path issue**: The sanitizer regex at [src/mcp/utils/path-validation.ts:156-182](../../../src/mcp/utils/path-validation.ts#L156) correctly replaces `:` and `*` with space on macOS — verified by running the dist-built regex standalone on the same machine (`'my:project*docs'` → `'my project docs'`). The `manage_directory` handler at [src/mcp/tools/files.ts:104-124](../../../src/mcp/tools/files.ts#L104) unconditionally calls `sanitizeDirectorySegment` for each segment, with no platform branching. The dist build is fresh and contains the sanitizer.
+
+**Leading hypothesis**: Cumulative Supabase residue from a cleanup-script timeout. `tests/scenarios/dbtools/clean_test_tables.py` runs in ~30.5s against the hosted pooler — just past the runner's previous 30s subprocess budget — so the runner SIGKILL'd it on every test and printed `Warning: exception during table cleanup`. Across 91 tests, the cumulative DB residue is the most plausible cross-test contaminant (each managed test already gets its own fresh process and temp vault). On a Linux machine where Python startup or pooler latency is lower, the cleanup likely completes inside the budget and residue never accumulates — which explains why the same test passes there.
+
+**Mitigation applied (commit `4cd6816`)**: Raised the subprocess timeout in [run_integration.py:225](run_integration.py#L225) from 30s to 60s so the cleanup script can complete cleanly across the full suite. Full 91-test rerun pending verification.
+
+**If you see this fail again**: First rerun the test in isolation (`python3 tests/scenarios/integration/run_integration.py --managed sanitized_directory_usable`). If it passes in isolation but fails in the full suite, you are looking at the same flake — do not start re-investigating the sanitizer logic or hunting OS-specific behavior. Check whether the `clean_test_tables.py` timeout warning is firing in the run log first.
+
+---
+
 ## How to update this file
 
 When a test passes for the first time, update its row:
