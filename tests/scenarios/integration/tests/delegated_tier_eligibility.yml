@@ -1,9 +1,10 @@
 name: delegated_tier_eligibility
 description: >
   POST-01 delegated purpose workflow: a managed purpose configured with
-  tools: ["tier:read-write"] exposes corrected tier-derived tools, then the
-  corrected insert_in_doc final path mutates a document that is read back
-  through get_document.
+  tools: ["tier:read-write"] exposes corrected tier-derived tools through
+  call_model metadata, then composes that surface with the corrected
+  insert_in_doc final path and read-back. Deterministic delegated dispatch is
+  asserted in the directed mock-provider scenario and E2E coverage.
 coverage: [IL-43]
 deps: [llm]
 server_modes: [managed]
@@ -56,14 +57,14 @@ steps:
             content: "Reply with delegated tier metadata visible."
       expect_contains: '"insert_in_doc"'
 
-  - label: "Corrected insert_in_doc final path mutates the document"
+  - label: "Direct corrected insert_in_doc final path mutates the document"
     action: insert_in_doc
     args:
       identifier: "${delegated_doc.path}"
       position: bottom
       content: "\n\nYAML delegated tier marker ${run.id}\n"
 
-  - label: "Read-back proves corrected insert_in_doc changed the document"
+  - label: "Read-back proves corrected final tool path changed the document"
     assert:
       op: get_document
       args:

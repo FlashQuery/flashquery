@@ -22,6 +22,8 @@ POST-01 / MCP Tool Consolidation Requirements §3.11.1 and §3.11.1.1 are closed
 - `npm test -- tests/unit/tool-metadata.test.ts tests/unit/llm-tool-registry.test.ts tests/unit/tool-exposure.test.ts`
 - `npm run test:integration -- tests/integration/tool-registry.test.ts`
 - `npm run test:e2e -- tests/e2e/call-model-agent-loop.e2e.test.ts`
+- `python3 tests/scenarios/directed/run_suite.py --managed delegated_tier_eligibility`
 - `python3 tests/scenarios/directed/run_suite.py --managed foundation`
+- `python3 tests/scenarios/integration/run_integration.py --managed delegated_tier_eligibility`
 - `python3 tests/scenarios/integration/run_integration.py --managed foundation`
 - `npm run build`
