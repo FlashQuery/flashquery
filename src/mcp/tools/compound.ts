@@ -18,9 +18,6 @@ import { searchMemoriesSemantic } from './memory.js';
 import { vaultManager } from '../../storage/vault.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
-  formatKeyValueEntry,
-  joinBatchEntries,
-  formatEmptyResults,
   jsonExpectedError,
   jsonRuntimeError,
   jsonToolResult,
@@ -141,7 +138,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'insert_doc_link',
     {
       description:
-        'Add a wiki-style document link ([[Target Doc]]) to a document\'s frontmatter links array. Deduplicates automatically — adding the same link twice is a no-op. Both source and target documents are resolved by path, fqc_id, or filename. Optionally specify which frontmatter property to use (default: "links"; alternatives: "related", "parent", etc.).',
+        'Transitional macro-dependent helper retained until call_macro parity: add a wiki-style document link ([[Target Doc]]) to a document\'s frontmatter links array. Deduplicates automatically and returns structured JSON with status:"updated" or status:"unchanged". Both source and target documents are resolved by path, fqc_id, or filename. Optionally specify which frontmatter property to use (default: "links"; alternatives: "related", "parent", etc.). Removal gate: call_macro must cover this workflow before this transitional tool is removed.',
       inputSchema: {
         identifier: z
           .string()
@@ -203,6 +200,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const existing: string[] = Array.isArray(parsed.data[targetProperty])
           ? (parsed.data[targetProperty] as string[])
           : [];
+        const alreadyLinked = existing.includes(wikilink);
         const merged = [...new Set([...existing, wikilink])];
 
         parsed.data[targetProperty] = merged;
@@ -221,20 +219,32 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         // Write back atomically via vaultManager (DCP-05)
         await vaultManager.writeMarkdown(sourceResolved.relativePath, parsed.data, parsed.content);
 
-        logger.info(`insert_doc_link: added ${wikilink} to ${targetProperty} in ${sourceResolved.relativePath}`);
+        logger.info(`insert_doc_link: ${alreadyLinked ? 'unchanged' : 'added'} ${wikilink} in ${sourceResolved.relativePath}`);
 
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `Added document link [[${targetTitle}]] to ${targetProperty} in ${sourceResolved.relativePath}`,
-            },
-          ],
-        };
+        return jsonToolResult({
+          status: alreadyLinked ? 'unchanged' : 'updated',
+          property: targetProperty,
+          link: wikilink,
+          removal_gate: 'call_macro parity',
+          source: {
+            identifier: fqcId,
+            fq_id: fqcId,
+            path: sourceResolved.relativePath,
+            title: typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] : undefined,
+            status: typeof parsed.data[FM.STATUS] === 'string' ? parsed.data[FM.STATUS] : undefined,
+            tags: Array.isArray(parsed.data[FM.TAGS]) ? parsed.data[FM.TAGS] as string[] : undefined,
+          },
+          target: {
+            identifier: targetResolved.fqcId ?? targetResolved.relativePath,
+            fq_id: targetResolved.fqcId,
+            path: targetResolved.relativePath,
+            title: targetTitle,
+          },
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`insert_doc_link failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       }
     }
   );
@@ -522,9 +532,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'get_briefing',
     {
       description:
-        'Get a summary of documents and memories matching specified tags. Returns document metadata (title, path, tags, fqc_id) and memory content, grouped by type. Use this when the user wants an overview of everything related to a topic — e.g. "brief me on the CRM" or "what do we have tagged \'project-alpha\'". Optionally pass a plugin_id to include plugin record counts. For full-text search, use search instead.' +
-        'Returns document metadata and memory content scoped by tag filters. ' +
-        'Optionally includes plugin records when plugin_id is provided.',
+        'Transitional macro-dependent helper retained until call_macro parity: get structured JSON groups of documents and memories matching specified tags. Use this when the user wants an overview of everything related to a topic. Optionally pass plugin_id to include plugin record counts. For full-text search, use search instead. Removal gate: call_macro must cover this workflow before this transitional tool is removed.',
       inputSchema: {
         tags: z.array(z.string()).describe('Tags to filter by (required). Documents and memories with any/all of these tags are included.'),
         tag_match: z.enum(['any', 'all']).optional().describe('Tag matching mode: "any" = at least one tag matches, "all" = every tag must be present. Default: "any"'),
@@ -551,7 +559,6 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const maxResults = limit ?? 20;
         const supabase = supabaseManager.getClient();
 
-        // ── Documents section (SPEC-14: section headers with counts, key-value blocks) ───────────
         let docQuery = supabase
           .from('fqc_documents')
           .select('id, title, tags, status, path')
@@ -568,28 +575,10 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         const { data: docs, error: docError } = await docQuery;
         if (docError) {
-          return { content: [{ type: 'text' as const, text: `Error querying documents: ${docError.message}` }], isError: true };
+          return jsonRuntimeError(`Error querying documents: ${docError.message}`);
         }
         const docRows = (docs ?? []) as Array<{ id: string; title: string; tags: string[]; status: string; path: string }>;
 
-        let docSectionText = `## Documents (${docRows.length})`;
-        if (docRows.length > 0) {
-          const docEntries = docRows.map((row) => {
-            const lines = [
-              formatKeyValueEntry('Title', row.title),
-              formatKeyValueEntry('Path', row.path),
-              formatKeyValueEntry('FQC ID', row.id),
-              formatKeyValueEntry('Tags', row.tags && row.tags.length > 0 ? row.tags : 'none'),
-              formatKeyValueEntry('Status', row.status),
-            ];
-            return lines.join('\n');
-          });
-          docSectionText += '\n\n' + joinBatchEntries(docEntries);
-        } else {
-          docSectionText += '\n\n' + formatEmptyResults('documents');
-        }
-
-        // ── Memories section (SPEC-14: section headers with counts, key-value blocks) ──────────────────────────────
         let memQuery = supabase
           .from('fqc_memory')
           .select('id, content, tags, created_at')
@@ -606,36 +595,40 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         const { data: mems, error: memError } = await memQuery;
         if (memError) {
-          return { content: [{ type: 'text' as const, text: `Error querying memories: ${memError.message}` }], isError: true };
+          return jsonRuntimeError(`Error querying memories: ${memError.message}`);
         }
         const memRows = (mems ?? []) as Array<{ id: string; content: string; tags: string[]; created_at: string }>;
 
-        let memSectionText = `## Memories (${memRows.length})`;
-        if (memRows.length > 0) {
-          const memEntries = memRows.map((m) => {
-            // Truncate content to 200 chars for briefing
-            const truncatedContent = m.content.length > 200 ? m.content.substring(0, 200) + '...' : m.content;
-            const lines = [
-              formatKeyValueEntry('Memory ID', m.id),
-              formatKeyValueEntry('Content', truncatedContent),
-              formatKeyValueEntry('Tags', m.tags && m.tags.length > 0 ? m.tags : 'none'),
-              formatKeyValueEntry('Created', m.created_at),
-            ];
-            return lines.join('\n');
-          });
-          memSectionText += '\n\n' + joinBatchEntries(memEntries);
-        } else {
-          memSectionText += '\n\n' + formatEmptyResults('memories');
-        }
+        const groups: Record<string, unknown> = {
+          documents: {
+            count: docRows.length,
+            results: docRows.map((row) => ({
+              identifier: row.id,
+              fq_id: row.id,
+              path: row.path,
+              title: row.title,
+              status: row.status,
+              tags: row.tags,
+            })),
+          },
+          memories: {
+            count: memRows.length,
+            results: memRows.map((m) => ({
+              memory_id: m.id,
+              tags: m.tags,
+              created_at: m.created_at,
+              content_preview: m.content.length > 200 ? m.content.substring(0, 200) + '...' : m.content,
+            })),
+          },
+        };
+        const entityTypes = ['documents', 'memories'];
 
-        // ── Plugin records section (BRIEF-04) ────────────────────────────
-        let pluginSectionText = '';
         if (plugin_id) {
           const allEntries = pluginManager.getAllEntries();
           const pluginEntries = allEntries.filter(e => e.plugin_id === plugin_id);
 
           let pluginRecordCount = 0;
-          const pluginEntryTexts: string[] = [];
+          const pluginResults: Array<Record<string, unknown>> = [];
           if (pluginEntries.length > 0) {
             for (const entry of pluginEntries) {
               for (const tableSpec of entry.schema.tables) {
@@ -650,33 +643,32 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 if (!recError && records && records.length > 0) {
                   for (const rec of records as Array<Record<string, unknown>>) {
                     pluginRecordCount++;
-                    const recLines: string[] = [];
-                    for (const [key, value] of Object.entries(rec)) {
-                      recLines.push(formatKeyValueEntry(key, value));
-                    }
-                    pluginEntryTexts.push(recLines.join('\n'));
+                    pluginResults.push({ plugin_id, table: tableSpec.name, data: rec });
                   }
                 }
               }
             }
           }
 
-          pluginSectionText = `\n\n## Plugin Records (${pluginRecordCount})`;
-          if (pluginEntryTexts.length > 0) {
-            pluginSectionText += '\n\n' + joinBatchEntries(pluginEntryTexts);
-          } else {
-            pluginSectionText += '\n\n' + formatEmptyResults('plugin records');
-          }
+          groups.plugin_records = { count: pluginRecordCount, results: pluginResults };
+          entityTypes.push('plugin_records');
         }
 
-        const text = docSectionText + '\n\n' + memSectionText + pluginSectionText;
         logger.info(`get_briefing: tags=[${tags.join(',')}] match=${matchMode} docs=${docRows.length} memories=${memRows.length}`);
-        return { content: [{ type: 'text' as const, text }] };
+        return jsonToolResult({
+          generated_at: new Date().toISOString(),
+          entity_types: entityTypes,
+          tags,
+          tag_match: matchMode,
+          limit: maxResults,
+          removal_gate: 'call_macro parity',
+          groups,
+        });
 
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_briefing failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       }
     }
   );

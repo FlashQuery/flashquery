@@ -159,7 +159,7 @@ describe.sequential('MCP protocol E2E', () => {
     }
   }, 30000);
 
-  it('listTools reflects host_mcp_tools filtered registration', async () => {
+  it('listTools reflects host_mcp_tools filtered registration for category:doc-read', async () => {
     let filteredClient: Client | undefined;
     let filteredTransport: StdioClientTransport | undefined;
 
@@ -595,20 +595,22 @@ describe.sequential('MCP protocol E2E', () => {
   }, 30000);
 
   it('insert_in_doc and replace_doc_section mutate sections with JSON envelopes', async () => {
-    await client.callTool({
+    const sectionPath = `e2e-json/section-edit-${Date.now()}.md`;
+    const createSectionResult = await client.callTool({
       name: 'write_document',
       arguments: {
         mode: 'create',
-        path: 'e2e-json/section-edit.md',
+        path: sectionPath,
         title: 'E2E Section Edit',
         content: ['# E2E Section Edit', '## Tasks', 'First task.', '## Done', 'Old done.'].join('\n'),
       },
-    });
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    expect(createSectionResult.isError, getText(createSectionResult)).toBeFalsy();
 
     const insertResult = await client.callTool({
       name: 'insert_in_doc',
       arguments: {
-        identifier: 'e2e-json/section-edit.md',
+        identifier: sectionPath,
         position: 'end_of_section',
         heading: 'Tasks',
         heading_match: 'exact',
@@ -616,14 +618,14 @@ describe.sequential('MCP protocol E2E', () => {
       },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
-    expect(insertResult.isError).toBeFalsy();
+    expect(insertResult.isError, getText(insertResult)).toBeFalsy();
     const inserted = JSON.parse(getText(insertResult));
     expect(inserted.inserted_at).toMatchObject({ heading: 'Tasks', heading_match: 'exact' });
 
     const replaceResult = await client.callTool({
       name: 'replace_doc_section',
       arguments: {
-        identifier: 'e2e-json/section-edit.md',
+        identifier: sectionPath,
         heading: 'Done',
         heading_match: 'exact',
         content: 'Replacement done.',
@@ -636,7 +638,7 @@ describe.sequential('MCP protocol E2E', () => {
 
     const getResult = await client.callTool({
       name: 'get_document',
-      arguments: { identifiers: 'e2e-json/section-edit.md' },
+      arguments: { identifiers: sectionPath },
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
     const doc = JSON.parse(getText(getResult));
     expect(doc.body).toContain('Inserted task.');

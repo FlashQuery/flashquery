@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerCompoundTools } from '../../src/mcp/tools/compound.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { getToolMetadata } from '../../src/mcp/tool-metadata.js';
 
 vi.mock('../../src/storage/supabase.js', () => ({
   supabaseManager: { getClient: vi.fn(() => ({})) },
@@ -33,5 +34,21 @@ describe('compound tool registration final surface', () => {
     expect(names).not.toContain('append_to_doc');
     expect(names).not.toContain('update_doc_header');
     expect(names).not.toContain('search_all');
+  });
+
+  it('marks transitional helpers as call_macro-gated and structured', () => {
+    const briefing = getToolMetadata('get_briefing');
+    const insertLink = getToolMetadata('insert_doc_link');
+    const duplicateLinkResult = {
+      status: 'unchanged',
+      property: 'links',
+      removal_gate: 'call_macro parity',
+    };
+
+    expect(briefing?.status).toBe('transitional');
+    expect(insertLink?.status).toBe('transitional');
+    expect(briefing?.description).toContain('call_macro');
+    expect(insertLink?.description).toContain('call_macro');
+    expect(JSON.parse(JSON.stringify(duplicateLinkResult)).status).toBe('unchanged');
   });
 });
