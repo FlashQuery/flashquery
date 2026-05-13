@@ -154,9 +154,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
+        register_result.expect_json_equals("status", "registered")
         register_result.expect_contains(instance_name)
-        register_result.expect_contains("notes")
+        register_result.expect_json_equals("table_count", 1)
 
         run.step(
             label="register_plugin (auto-track schema with field_map, no template)",
@@ -220,7 +220,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search_result.expect_contains("Auto-tracked")
+        search_result.expect_json_equals("reconciliation.auto_tracked", 1)
 
         run.step(
             label="search_records — reconciliation fires and auto-tracks the new file",
@@ -234,9 +234,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
             return run
 
         # ── Step 5: RO-06 — verify field_map columns in the returned plugin row ──
-        # The search_records response embeds the inserted row as a JSON array.
+        # The search_records response embeds the inserted row in results[0].data
         t0 = time.monotonic()
-        record = _extract_first_record(search_result.text)
+        try:
+            import json as _json2
+            search_payload = _json2.loads(search_result.text)
+            first_result = (search_payload.get("results") or [{}])[0]
+            record = first_result.get("data") or {}
+        except Exception:
+            record = {}
 
         checks = {
             "record present in response": bool(record),
@@ -305,17 +311,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
             return run
 
         # ── Step 7: RO-10 — no pending review (no template declared) ─────────
-        # clear_pending_reviews with empty fqc_ids runs in query mode (no deletions).
+        # clear_pending_reviews with action="list" runs in query mode (no deletions).
         log_mark = ctx.server.log_position if ctx.server else 0
         pending_result = ctx.client.call_tool(
             "clear_pending_reviews",
+            action="list",
             plugin_id=PLUGIN_ID,
-            plugin_instance=instance_name,
-            fqc_ids=[],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        pending_result.expect_contains(f"No pending reviews for {PLUGIN_ID}")
+        pending_result.expect_json_equals("pending", 0)
 
         run.step(
             label="RO-10: clear_pending_reviews (query mode) — no pending review row when no template",

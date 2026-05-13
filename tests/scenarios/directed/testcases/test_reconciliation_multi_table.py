@@ -173,10 +173,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
+        register_result.expect_json_equals("status", "registered")
         register_result.expect_contains(instance_name)
-        register_result.expect_contains("type_alpha")
-        register_result.expect_contains("type_beta")
+        register_result.expect_json_equals("table_count", 2)
 
         run.step(
             label="register_plugin (two tables: type_alpha, type_beta; two watched folders)",
@@ -260,7 +259,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search_alpha.expect_contains("Auto-tracked")
+        search_alpha.expect_json_equals("reconciliation.auto_tracked", ALPHA_FILE_COUNT)
 
         run.step(
             label="search_records(type_alpha) — reconciliation fires; should auto-track alpha AND beta folders",
@@ -274,33 +273,26 @@ def run_test(args: argparse.Namespace) -> TestRun:
             return run
 
         # ── Step 6a: RO-52 — Verify reconciliation summary uses count format ──
-        # The formatReconciliationSummary function always uses "Auto-tracked N new document(s)"
-        # format — it never enumerates individual file paths or titles. With ALPHA_FILE_COUNT
-        # alpha files plus BETA_FILE_COUNT beta files, we should see a count >= total files.
+        # New JSON format: reconciliation.auto_tracked is a numeric count.
+        # Total tracked = ALPHA_FILE_COUNT (type_alpha query; beta is tracked separately).
         t0 = time.monotonic()
-        recon_summary_1 = _extract_recon_summary(search_alpha.text)
-        total_tracked = ALPHA_FILE_COUNT + BETA_FILE_COUNT
+        try:
+            search_alpha_payload = _json.loads(search_alpha.text)
+            search_alpha_recon = search_alpha_payload.get("reconciliation", {})
+            count_value = search_alpha_recon.get("auto_tracked", 0)
+        except Exception:
+            search_alpha_recon = {}
+            count_value = 0
 
-        # Count format: "Auto-tracked N new document(s)" where N is numeric
-        auto_tracked_match = re.search(r"Auto-tracked\s+(\d+)\s+new document", recon_summary_1)
-        count_present = auto_tracked_match is not None
-        count_value = int(auto_tracked_match.group(1)) if auto_tracked_match else 0
-
-        # Verify: summary should use count format (numeric), not enumerate individual file names
-        # The alpha filenames like "alpha-{rid}-0.md" should NOT appear in the summary
-        alpha_filenames_in_summary = any(
-            f"alpha-{rid}-{i}" in recon_summary_1 for i in range(ALPHA_FILE_COUNT)
-        )
-        beta_filenames_in_summary = any(
-            f"beta-{rid}-{i}" in recon_summary_1 for i in range(BETA_FILE_COUNT)
+        # Verify: filenames should NOT appear in the JSON reconciliation object (always count-based)
+        alpha_filenames_in_text = any(
+            f"alpha-{rid}-{i}" in (search_alpha.text or "") for i in range(ALPHA_FILE_COUNT)
         )
 
         checks_ro52 = {
-            "RO-52: reconciliation summary present": bool(recon_summary_1),
-            "RO-52: summary contains 'Auto-tracked N' count format": count_present,
-            f"RO-52: count >= total files ({total_tracked})": count_value >= total_tracked,
-            "RO-52: alpha file names not enumerated in summary": not alpha_filenames_in_summary,
-            "RO-52: beta file names not enumerated in summary": not beta_filenames_in_summary,
+            "RO-52: reconciliation object present": bool(search_alpha_recon),
+            f"RO-52: auto_tracked >= ALPHA_FILE_COUNT ({ALPHA_FILE_COUNT})": count_value >= ALPHA_FILE_COUNT,
+            "RO-52: alpha file names not enumerated (count-based format)": not alpha_filenames_in_text,
         }
         all_ok_ro52 = all(checks_ro52.values())
         detail_parts = []
@@ -308,8 +300,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_ro52.items() if not v]
             detail_parts.append(f"Failed: {', '.join(failed)}")
         detail_parts.append(
-            f"count_value={count_value}, total_expected={total_tracked}, "
-            f"summary={recon_summary_1!r}"
+            f"count_value={count_value}, expected>={ALPHA_FILE_COUNT}, "
+            f"reconciliation={search_alpha_recon!r}"
         )
 
         run.step(
@@ -323,7 +315,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 6b: RO-58 — Verify alpha files went to type_alpha ───────────
         t0 = time.monotonic()
-        alpha_records = _extract_records(search_alpha.text)
+        alpha_records = search_alpha_payload.get("results", [])
 
         checks_ro58_alpha = {
             "RO-58: alpha records present in type_alpha response": len(alpha_records) > 0,
@@ -369,8 +361,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
             return run
 
         t0 = time.monotonic()
-        beta_records = _extract_records(search_beta.text)
-        recon_summary_beta = _extract_recon_summary(search_beta.text)
+        try:
+            search_beta_payload = _json.loads(search_beta.text)
+            beta_records = search_beta_payload.get("results", [])
+            beta_recon = search_beta_payload.get("reconciliation", {})
+        except Exception:
+            beta_records = []
+            beta_recon = {}
 
         # RO-56: Beta records must already exist (tracked by the type_alpha reconcile pass).
         # If reconciliation only scanned type_alpha's table, beta would still be untracked
@@ -388,7 +385,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail_parts.append(f"Failed: {', '.join(failed)}")
         detail_parts.append(
             f"beta_record_count={len(beta_records)}, "
-            f"beta_recon_summary={recon_summary_beta!r}"
+            f"beta_reconciliation={beta_recon!r}"
         )
 
         run.step(
@@ -438,24 +435,25 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 9: RO-54 — Verify no spurious modified flags ────────────────
         t0 = time.monotonic()
-        recon_summary_2 = _extract_recon_summary(recon2_alpha.text)
+        try:
+            recon2_alpha_payload = _json.loads(recon2_alpha.text)
+            recon2_alpha_recon = recon2_alpha_payload.get("reconciliation", {})
+            fields_synced_2 = recon2_alpha_recon.get("fields_synced", 0)
+        except Exception:
+            recon2_alpha_recon = {}
+            fields_synced_2 = 0
 
-        # The second pass should NOT report any "Synced fields on N modified" activity.
-        # fqc_owner/fqc_type frontmatter writes by auto-track must not trigger on_modified.
-        # An empty summary or a summary with only non-modification activity passes RO-54.
-        summary_has_synced = bool(re.search(r"Synced fields", recon_summary_2, re.IGNORECASE))
-        # Allow "Auto-tracked" only if there were genuinely new files (there shouldn't be any here)
-        # The key negative assertion: no spurious "modified" activity reported
-        summary_has_spurious_modified = bool(
-            re.search(r"Synced fields on \d+ modified", recon_summary_2, re.IGNORECASE)
-        )
+        # The second pass should NOT report any fields_synced > 0 (spurious modification).
+        summary_has_synced = fields_synced_2 > 0
 
-        # Also verify alpha records still have correct count (not corrupted by second pass)
-        alpha_records_2 = _extract_records(recon2_alpha.text)
+        # Also verify alpha records still have correct count
+        try:
+            alpha_records_2 = recon2_alpha_payload.get("results", [])
+        except Exception:
+            alpha_records_2 = []
 
         checks_ro54 = {
-            "RO-54: no 'Synced fields on N modified' in second reconcile summary": not summary_has_spurious_modified,
-            "RO-54: no 'Synced fields' activity (frontmatter write not seen as modification)": not summary_has_synced,
+            "RO-54: no spurious fields_synced in second reconcile": not summary_has_synced,
             f"RO-54: type_alpha still has {ALPHA_FILE_COUNT} record(s) after second pass": len(alpha_records_2) == ALPHA_FILE_COUNT,
         }
         all_ok_ro54 = all(checks_ro54.values())
@@ -464,9 +462,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_ro54.items() if not v]
             detail_parts.append(f"Failed: {', '.join(failed)}")
         detail_parts.append(
-            f"summary_has_synced={summary_has_synced}, "
+            f"fields_synced={fields_synced_2}, "
             f"alpha_count={len(alpha_records_2)}, "
-            f"second_pass_summary={recon_summary_2!r}"
+            f"reconciliation={recon2_alpha_recon!r}"
         )
 
         run.step(

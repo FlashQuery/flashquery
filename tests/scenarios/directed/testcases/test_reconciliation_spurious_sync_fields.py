@@ -59,7 +59,7 @@ from __future__ import annotations
 COVERAGE = ["RO-74"]
 
 import argparse
-import re
+import json as _json
 import sys
 import time
 from pathlib import Path
@@ -111,12 +111,6 @@ def _build_schema_yaml(folder: str) -> str:
     )
 
 
-def _extract_recon_summary(text: str) -> str:
-    """Extract the reconciliation summary block from a tool response."""
-    m = re.search(r"Reconciliation:.*", text, re.DOTALL)
-    return m.group(0).strip() if m else ""
-
-
 # ---------------------------------------------------------------------------
 # Test implementation
 # ---------------------------------------------------------------------------
@@ -161,9 +155,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
+        register_result.expect_json_equals("status", "registered")
         register_result.expect_contains(instance_name)
-        register_result.expect_contains("items")
+        register_result.expect_json_equals("table_count", 1)
 
         run.step(
             label="register_plugin (auto-track schema; on_modified: sync-fields — PIR-02 observable signal)",
@@ -230,7 +224,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon1_result.expect_contains("Auto-tracked")
+        recon1_result.expect_json_equals("reconciliation.auto_tracked", 1)
 
         run.step(
             label="search_records — reconciliation #1 fires; auto-track writes fqc_owner/fqc_type to frontmatter",
@@ -322,14 +316,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # the second reconciliation summary, the auto-track frontmatter write was mis-
         # classified as a user modification — PIR-02 is present.
         t0 = time.monotonic()
-        recon2_summary = _extract_recon_summary(recon2_result.text)
-
-        summary_has_synced_fields = bool(
-            re.search(r"Synced fields on", recon2_summary, re.IGNORECASE)
-        )
+        recon2_data = _json.loads(recon2_result.text).get("reconciliation", {}) if recon2_result.ok else {}
+        summary_has_synced_fields = recon2_data.get("fields_synced", 0) > 0
 
         checks_sfs = {
-            "RO-74: 'Synced fields on' absent from second reconciliation summary": not summary_has_synced_fields,
+            "RO-74: 'fields_synced' is 0 in second reconciliation (no spurious sync)": not summary_has_synced_fields,
         }
         all_ok_sfs = all(checks_sfs.values())
         detail_parts = []
@@ -342,8 +333,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 "on_modified: sync-fields fired spuriously"
             )
         detail_parts.append(
-            f"summary_has_synced_fields={summary_has_synced_fields}, "
-            f"summary={recon2_summary!r}"
+            f"fields_synced={recon2_data.get('fields_synced', 0)}, "
+            f"summary_has_synced_fields={summary_has_synced_fields}"
         )
 
         run.step(

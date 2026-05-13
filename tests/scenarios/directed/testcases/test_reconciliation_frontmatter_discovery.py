@@ -52,6 +52,7 @@ from __future__ import annotations
 COVERAGE = ["RO-31", "RO-32"]
 
 import argparse
+import json as _json_fd
 import re
 import sys
 import time
@@ -228,7 +229,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
+        register_result.expect_json_equals("status", "registered")
         register_result.expect_contains(instance_name)
 
         run.step(
@@ -318,20 +319,25 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # RO-31 assertion: reconciliation should have auto-tracked doc_a
-        prime_result.expect_contains("Auto-tracked")
+        prime_result.expect_json_equals("reconciliation.auto_tracked", 2)
 
-        recon_summary_prime = _extract_recon_summary(prime_result.text)
-        auto_tracked_in_prime = "Auto-tracked" in recon_summary_prime
+        try:
+            import json as _json_fd
+            prime_payload = _json_fd.loads(prime_result.text)
+            auto_tracked_count = prime_payload.get("reconciliation", {}).get("auto_tracked", 0)
+        except Exception:
+            auto_tracked_count = 0
+        auto_tracked_in_prime = auto_tracked_count >= 1
 
         run.step(
-            label="RO-31: search_records — global type registry discovers outside doc (Auto-tracked)",
+            label="RO-31: search_records — global type registry discovers outside doc (auto_tracked>=1)",
             passed=(prime_result.ok and auto_tracked_in_prime),
             detail=(
                 expectation_detail(prime_result)
                 or (
-                    f"recon_summary={recon_summary_prime!r}"
+                    f"auto_tracked={auto_tracked_count}"
                     if not auto_tracked_in_prime
-                    else f"Auto-tracked confirmed | recon_summary={recon_summary_prime!r}"
+                    else f"auto_tracked confirmed ({auto_tracked_count})"
                 )
                 or prime_result.error
                 or ""
@@ -349,7 +355,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     detail=(
                         "DEFECT: Expected reconciler to auto-track doc_a (outside watched folder) "
                         f"via global type registry (fqc_type={DOC_TYPE_ID!r}). "
-                        f"Got recon_summary={recon_summary_prime!r}. "
+                        f"Got auto_tracked={auto_tracked_count}. "
                         "The reconciler appears to only scan watched folders and ignores the "
                         "global type registry (Path 2). This is a FlashQuery defect."
                     ),
@@ -464,15 +470,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon_summary2 = _extract_recon_summary(recon2_result.text)
-        archived_in_recon2 = "Archived" in recon_summary2
-
-        # RO-32 assertion: doc_b's changed ownership should cause its plugin row to be archived
-        m_archived = re.search(r"Archived (\d+) record", recon_summary2)
-        archived_count2 = int(m_archived.group(1)) if m_archived else 0
+        try:
+            recon2_payload = _json_fd.loads(recon2_result.text)
+            recon2_reconciliation = recon2_payload.get("reconciliation", {})
+            archived_count2 = recon2_reconciliation.get("archived", 0)
+        except Exception:
+            recon2_reconciliation = {}
+            archived_count2 = 0
 
         checks_32a = {
-            "RO-32: reconciliation ran (non-empty summary)": len(recon_summary2) > 0,
+            "RO-32: reconciliation ran (reconciliation object present)": bool(recon2_reconciliation),
             "RO-32: at least 1 plugin row archived (doc_b ownership changed away)": archived_count2 >= 1,
         }
         all_ok_32a = all(checks_32a.values())
@@ -480,7 +487,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not all_ok_32a:
             failed = [k for k, v in checks_32a.items() if not v]
             detail_32a_parts.append(f"Failed: {', '.join(failed)}")
-            if not archived_in_recon2:
+            if archived_count2 == 0:
                 detail_32a_parts.append(
                     "DEFECT: Expected doc_b to be disassociated (archived) after scanner synced "
                     f"ownership_plugin_id to {other_owner!r}. If the scanner did not update the "
@@ -488,7 +495,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "and would NOT archive it. This proves RO-32 is not implemented."
                 )
         detail_32a_parts.append(
-            f"archived_count={archived_count2} | recon_summary={recon_summary2!r}"
+            f"archived_count={archived_count2} | reconciliation={recon2_reconciliation!r}"
         )
 
         run.step(
@@ -558,12 +565,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon_summary3 = _extract_recon_summary(recon3_result.text)
-        m_archived3 = re.search(r"Archived (\d+) record", recon_summary3)
-        archived_count3 = int(m_archived3.group(1)) if m_archived3 else 0
+        try:
+            recon3_payload = _json_fd.loads(recon3_result.text)
+            recon3_reconciliation = recon3_payload.get("reconciliation", {})
+            archived_count3 = recon3_reconciliation.get("archived", 0)
+        except Exception:
+            recon3_reconciliation = {}
+            archived_count3 = 0
 
         checks_32b = {
-            "RO-32 null: reconciliation ran": len(recon_summary3) > 0,
+            "RO-32 null: reconciliation ran": bool(recon3_reconciliation),
             "RO-32 null: at least 1 plugin row archived (NULL ownership disassociation)": archived_count3 >= 1,
         }
         all_ok_32b = all(checks_32b.values())
@@ -579,7 +590,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "RO-32 (NULL removal path) is not implemented."
                 )
         detail_32b_parts.append(
-            f"archived_count={archived_count3} | recon_summary={recon_summary3!r}"
+            f"archived_count={archived_count3} | reconciliation={recon3_reconciliation!r}"
         )
 
         run.step(

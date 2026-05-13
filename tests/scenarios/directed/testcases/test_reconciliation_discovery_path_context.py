@@ -132,7 +132,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg_result.expect_contains("registered successfully")
+        reg_result.expect_json_equals("status", "registered")
         reg_result.expect_contains(instance_name)
 
         reg_ok = reg_result.ok and reg_result.status == "pass"
@@ -226,11 +226,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon_result.expect_contains("Auto-tracked")
+        recon_result.expect_json_equals("reconciliation.auto_tracked", 1)
 
         recon_ok = recon_result.ok and recon_result.status == "pass"
         run.step(
-            label="search_records — Path 2 reconciliation auto-tracks outside doc (Auto-tracked expected)",
+            label="search_records — Path 2 reconciliation auto-tracks outside doc (auto_tracked expected)",
             passed=recon_ok,
             detail=expectation_detail(recon_result) or recon_result.error or "",
             timing_ms=recon_result.timing_ms,
@@ -239,14 +239,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         if not recon_ok:
             # If Path 2 auto-track didn't fire, report the defect clearly
-            if recon_result.ok and "Auto-tracked" not in (recon_result.text or ""):
+            try:
+                _p = _json.loads(recon_result.text or "{}")
+                _at = _p.get("reconciliation", {}).get("auto_tracked", 0)
+            except Exception:
+                _at = 0
+            if recon_result.ok and _at == 0:
                 run.step(
                     label="DEFECT: Path 2 auto-track did not fire — cannot test RO-75",
                     passed=False,
                     detail=(
                         "DEFECT: Expected the global type registry (Path 2) to auto-track the "
                         f"outside document (fqc_type={DOC_TYPE_ID!r}) during reconciliation. "
-                        f"'Auto-tracked' not found in response. "
+                        f"auto_tracked=0 in response. "
                         f"Response preview: {(recon_result.text or '')[:400]!r}"
                     ),
                 )
@@ -255,23 +260,27 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run.record_cleanup(ctx.cleanup_errors)
             return run
 
-        # ── Step 5: clear_pending_reviews (query mode) — retrieve pending rows ──
+        # ── Step 5: clear_pending_reviews (list mode) — retrieve pending rows ──
         log_mark = ctx.server.log_position if ctx.server else 0
         pending_result = ctx.client.call_tool(
             "clear_pending_reviews",
+            action="list",
             plugin_id=PLUGIN_ID,
-            plugin_instance=instance_name,
-            fqc_ids=[],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         pending_text = pending_result.text or ""
 
         # First verify we actually got at least one pending review row back
-        has_pending_row = "item(s)" in pending_text
+        try:
+            pending_payload = _json.loads(pending_text)
+            has_pending_row = pending_payload.get("pending", 0) >= 1
+        except Exception:
+            pending_payload = {}
+            has_pending_row = False
 
         run.step(
-            label="clear_pending_reviews (query mode, fqc_ids=[]) — pending review row exists",
+            label="clear_pending_reviews (list mode) — pending review row exists",
             passed=pending_result.ok and has_pending_row,
             detail=(
                 f"ok={pending_result.ok} has_pending_row={has_pending_row} | "
@@ -297,14 +306,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             return run
 
         # ── Step 6: Parse the context JSONB and assert discoveryPath ─────────
-        # The response text looks like:
-        #   Pending reviews for <plugin_id>/<instance>: 1 item(s)
-        #
-        #   1. FQC ID: <uuid>
-        #      Context: {"template": "review-template", "folder": "...", ...}
-        #
-        # Extract the JSON object embedded in the response, then check for
-        # discoveryPath="frontmatter-type".
+        # New response format: {"pending": N, "items": [{"fqc_id": "...", "context": {...}, ...}]}
         #
         # RO-75 CRITICAL: we must assert on the `discoveryPath` key specifically,
         # NOT merely on the presence of the canonical folder string — that passes
@@ -312,17 +314,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # exists to guard that discoveryPath is written for Path 2 docs so a skill
         # can distinguish Path 2 discovery from Path 1 (folder) discovery.
 
-        # Response format: "Pending reviews for ...: N item(s)\n[...JSON array...]"
-        # Parse the JSON array directly — the regex approach can't handle the
-        # quoted-key format ("context": {...}) emitted by JSON.stringify.
         parsed_context: dict | None = None
         parse_error: str = ""
 
         try:
-            bracket_idx = pending_text.index('[')
-            items_json = _json.loads(pending_text[bracket_idx:])
-            if items_json and isinstance(items_json, list) and len(items_json) > 0:
-                first_item = items_json[0]
+            items_list = pending_payload.get("items", [])
+            if items_list and isinstance(items_list, list) and len(items_list) > 0:
+                first_item = items_list[0]
                 if isinstance(first_item, dict) and 'context' in first_item:
                     ctx_val = first_item['context']
                     if isinstance(ctx_val, dict):
@@ -335,9 +333,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
                         f"Keys: {sorted(first_item.keys() if isinstance(first_item, dict) else [])!r}"
                     )
             else:
-                parse_error = f"JSON array is empty or not a list: {items_json!r}"
-        except (ValueError, _json.JSONDecodeError) as exc:
-            parse_error = f"Failed to parse JSON response: {exc} | Response: {pending_text[:500]!r}"
+                parse_error = f"items list is empty or not a list: {items_list!r}"
+        except Exception as exc:
+            parse_error = f"Failed to parse pending_payload: {exc} | Response: {pending_text[:500]!r}"
 
         if parsed_context is None:
             # Could not parse context — report as failure

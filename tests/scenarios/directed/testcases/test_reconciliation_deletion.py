@@ -39,6 +39,7 @@ from __future__ import annotations
 COVERAGE = ["RO-13", "RO-14", "RO-15"]
 
 import argparse
+import json as _json
 import re
 import sys
 import time
@@ -135,9 +136,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
+        register_result.expect_json_equals("status", "registered")
         register_result.expect_contains(instance_name)
-        register_result.expect_contains("items")
+        register_result.expect_json_equals("table_count", 1)
 
         run.step(
             label="register_plugin (auto-track schema, no template)",
@@ -204,7 +205,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime_result.expect_contains("Auto-tracked")
+        prime_result.expect_json_equals("reconciliation.auto_tracked", 2)
 
         run.step(
             label="search_records (prime) — auto-tracks both docs",
@@ -351,36 +352,37 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 9: RO-13 + RO-14 — verify reconciliation archived >= 2 rows ──
         t0 = time.monotonic()
-        response_text = recon_result.text
-        recon_summary = _extract_recon_summary(response_text)
+        try:
+            recon_payload = _json.loads(recon_result.text)
+            recon_reconciliation = recon_payload.get("reconciliation", {})
+            archived_count = recon_reconciliation.get("archived", 0)
+        except Exception:
+            recon_reconciliation = {}
+            archived_count = 0
 
         checks: dict[str, bool] = {}
         detail_parts: list[str] = []
 
-        # Reconciliation must have run (non-empty summary)
-        checks["reconciliation ran (non-empty summary)"] = len(recon_summary) > 0
-        if not recon_summary:
+        # Reconciliation must have run (non-empty reconciliation object)
+        checks["reconciliation ran (reconciliation object present)"] = bool(recon_reconciliation)
+        if not recon_reconciliation:
             detail_parts.append(
-                "Reconciliation summary is empty — staleness cache may still be active. "
+                "Reconciliation object missing — staleness cache may still be active. "
                 "Ensure the 32s sleep elapsed before the main call."
             )
 
         # Both doc_missing (status='missing' → RO-13) and doc_archived (status='archived' → RO-14)
         # should result in their plugin rows being archived. Archived count >= 2.
-        m_archived = re.search(r"Archived (\d+) record", recon_summary)
-        archived_count = int(m_archived.group(1)) if m_archived else 0
         checks["RO-13 + RO-14: archived count >= 2 (missing doc + archived doc)"] = archived_count >= 2
         if archived_count < 2:
             detail_parts.append(
-                f"Expected 'Archived >= 2' (for missing + archived docs), got {archived_count}. "
-                f"recon_summary={recon_summary!r}"
+                f"Expected archived >= 2 (for missing + archived docs), got {archived_count}. "
+                f"reconciliation={recon_reconciliation!r}"
             )
 
         all_ok = all(checks.values())
         detail_parts.append(f"archived_count={archived_count}")
-        detail_parts.append(f"recon_summary={recon_summary!r}")
-        if not all_ok:
-            detail_parts.append(f"full_response_preview={response_text[:400]!r}")
+        detail_parts.append(f"reconciliation={recon_reconciliation!r}")
 
         elapsed = int((time.monotonic() - t0) * 1000)
         run.step(

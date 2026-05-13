@@ -102,32 +102,32 @@ Core CRUD operations on vault documents via MCP.
 | D-47 | get_document title fallback when fq_title missing — uses file basename (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-48 | get_document title coercion when fq_title is a number — returns string representation (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-49 | get_document title trim when fq_title has leading/trailing whitespace — returns trimmed string (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
-| D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 | D-51 | get_document with array identifiers returns array output; each element succeeds independently (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
 | D-52 | get_document batch partial failure — one identifier not found returns error object at position; other succeeds; MCP response is not isError (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
 | D-gdoc-error-1 | get_document missing single identifier returns canonical JSON `not_found` envelope with `isError:false` instead of runtime failure. | test_consolidated_get_document_errors | 2026-05-12 |  |
 | D-gdoc-error-2 | get_document invalid section/include combination returns canonical JSON `invalid_input` envelope with `details.conflict` preserved. | test_consolidated_get_document_errors | 2026-05-12 |  |
-| D-53 | get_document with follow_ref returns source envelope + followed_ref nested object with resolved target content (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-54 | get_document follow_ref + include: ["headings"] returns headings in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-55 | get_document follow_ref + include: ["frontmatter","headings"] returns both in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-56 | get_document follow_ref + sections extracts sections from target document, returned in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-57 | get_document follow_ref pre-resolution error: follow_ref_path_not_found when frontmatter path does not exist (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-58 | get_document follow_ref pre-resolution error: follow_ref_invalid_type when frontmatter value is not a string (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-59 | get_document follow_ref pre-resolution error: follow_ref_target_not_found when resolved path does not exist in vault (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-60 | get_document batch + follow_ref: per-element partial failure semantics apply (one element missing pointer returns per-element error; other succeeds) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-61 | get_document follow_ref via UUID-typed pointer (Example 11) — projections.summary is a UUID string; resolves via fq_id branch (Phase 2 Gap 1) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-62 | get_document follow_ref_target_not_found with bare-filename pointer asserts resolution_method == 'filename' (Phase 2 Gap 2) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-63 | get_document follow_ref_target_not_found with UUID pointer asserts resolution_method == 'fq_id' (Phase 2 Gap 3) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-64 | get_document batch + follow_ref with 3-element success/failure/success interleaving — positional correspondence holds across all positions (Phase 2 Gap 4) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-65 | get_document follow_ref + multi-section section_not_found nested under followed_ref (Phase 2 Gap 5) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-66 | get_document follow_ref + multi-section partial-failure aggregation per OQ #12 — exactly 2 entries (no_match + insufficient_occurrences with requested_count/found_count) (Phase 2 Gap 6) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-67 | get_document batch + follow_ref pre-resolution error variants (follow_ref_invalid_type + follow_ref_target_not_found per element) (Phase 2 Gap 7) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-39a | get_document follow_ref + sections without "body" in include -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
-| D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-53 | get_document with follow_ref returns source envelope + followed_ref nested object with resolved target content (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-54 | get_document follow_ref + include: ["headings"] returns headings in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-55 | get_document follow_ref + include: ["frontmatter","headings"] returns both in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-56 | get_document follow_ref + sections extracts sections from target document, returned in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-57 | get_document follow_ref pre-resolution error: follow_ref_path_not_found when frontmatter path does not exist (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-58 | get_document follow_ref pre-resolution error: follow_ref_invalid_type when frontmatter value is not a string (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-59 | get_document follow_ref pre-resolution error: follow_ref_target_not_found when resolved path does not exist in vault (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-60 | get_document batch + follow_ref: per-element partial failure semantics apply (one element missing pointer returns per-element error; other succeeds) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-61 | get_document follow_ref via UUID-typed pointer (Example 11) — projections.summary is a UUID string; resolves via fq_id branch (Phase 2 Gap 1) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-62 | get_document follow_ref_target_not_found with bare-filename pointer asserts resolution_method == 'filename' (Phase 2 Gap 2) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-63 | get_document follow_ref_target_not_found with UUID pointer asserts resolution_method == 'fq_id' (Phase 2 Gap 3) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-64 | get_document batch + follow_ref with 3-element success/failure/success interleaving — positional correspondence holds across all positions (Phase 2 Gap 4) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-65 | get_document follow_ref + multi-section section_not_found nested under followed_ref (Phase 2 Gap 5) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-66 | get_document follow_ref + multi-section partial-failure aggregation per OQ #12 — exactly 2 entries (no_match + insufficient_occurrences with requested_count/found_count) (Phase 2 Gap 6) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-67 | get_document batch + follow_ref pre-resolution error variants (follow_ref_invalid_type + follow_ref_target_not_found per element) (Phase 2 Gap 7) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-39a | get_document follow_ref + sections without "body" in include -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 
 ## 2. Document Content Operations
 
@@ -514,8 +514,8 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-02 | Reconciliation classifies every document into exactly one of six categories (added/resurrected/deleted/disassociated/moved/modified) plus an unchanged count (VALIDATED) | test_reconciliation_six_categories | 2026-04-29 | 2026-05-07 |
 | RO-03 | Reconciliation is idempotent (re-run with no changes produces all unchanged, zero in other categories) (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-05-07 |
 | RO-04 | New file in watched folder with no plugin row (active or archived) is classified as `added` (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-05-07 |
-| RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-07 |
-| RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-13 |
+| RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-13 |
 | RO-70 | After background `force_file_scan` completes asynchronously, the next record tool call performs a full reconciliation diff and sees the updated `fqc_documents` state — staleness cache is not prematurely consumed by a pre-scan reconciliation (VALIDATED) | test_reconciliation_background_scan_cache | 2026-04-22 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | RO-76 | A record tool call made BEFORE a background `force_file_scan` completes does not consume the staleness cache — after the scan finishes a subsequent record tool call still performs a full diff and sees the scan results (PIR-05 race guard; test MUST include an immediate intermediate record tool call between scan trigger and scan completion — pre-populating 100+ files in the vault ensures the scan takes ≥2s so the intermediate call reliably lands in the race window) (VALIDATED) | test_reconciliation_background_scan_race | 2026-04-22 | 2026-05-07 (Phase 128 legacy migration evidence) |
 
@@ -525,13 +525,13 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 |----|----------|------------|--------------|--------------|
 | RO-06 | `on_added: auto-track` creates a plugin table row with columns populated from `field_map` (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
 | RO-07 | `on_added: auto-track` writes `fqc_owner` and `fqc_type` into the document's frontmatter on disk (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
-| RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-07 |
+| RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-13 |
 | RO-09 | `on_added: auto-track` does NOT modify the document's body content (only frontmatter is changed) (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
 | RO-10 | `on_added: auto-track` without a `template` does NOT create a pending review row (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
 | RO-67 | After auto-track writes `fqc_owner`/`fqc_type` frontmatter to disk, `fqc_documents.content_hash` is updated to reflect the post-write file content (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-29 | 2026-05-07 |
 | RO-68 | After auto-track completes, `last_seen_updated_at` on the new plugin row equals `fqc_documents.updated_at` as of the post-frontmatter-write state — no stale timestamp mismatch (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-29 | 2026-05-07 |
 | RO-69 | Scanner's first pass after auto-track does not re-detect the frontmatter write as a file modification — `fqc_documents.updated_at` is not bumped again because `content_hash` already matches the post-write file (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-05-07 |
-| RO-74 | Auto-tracked document with `on_modified: sync-fields` policy is NOT spuriously classified as `modified` on the next reconciliation pass (past staleness window, after an intervening `force_file_scan`) — "Synced fields on N modified" does not appear in the summary (PIR-02 regression guard; test MUST use `sync-fields` — `ignore` masks this defect because no observable signal is emitted for a silent modified pass) (VALIDATED) | test_reconciliation_spurious_sync_fields | 2026-04-22 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| RO-74 | Auto-tracked document with `on_modified: sync-fields` policy is NOT spuriously classified as `modified` on the next reconciliation pass (past staleness window, after an intervening `force_file_scan`) — "Synced fields on N modified" does not appear in the summary (PIR-02 regression guard; test MUST use `sync-fields` — `ignore` masks this defect because no observable signal is emitted for a silent modified pass) (VALIDATED) | test_reconciliation_spurious_sync_fields | 2026-04-22 | 2026-05-13 |
 
 ### 14.3 Ignore Policy
 
@@ -560,11 +560,12 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-07 |
-| RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-07 |
-| RO-22 | Template is NOT surfaced on resurrection; `field_map` IS re-applied from current frontmatter (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-07 |
-| RO-71 | Resurrected document outside the plugin's watched folders with `on_moved: untrack` — resurrection succeeds unconditionally, then `on_moved` follow-up re-archives the row; net result: plugin row is archived (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-07 |
-| RO-72 | Resurrected document outside the plugin's watched folders with `on_moved: keep-tracking` — resurrection succeeds and `on_moved` follow-up keeps the row active at the new out-of-folder path (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-07 |
+| RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-13 |
+| RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-13 |
+| RO-22a | Template is NOT surfaced on resurrection — template body content absent from plugin row after resurrection (VALIDATED) | test_reconciliation_resurrection | 2026-05-13 | 2026-05-13 |
+| RO-22b | `field_map` IS re-applied from current frontmatter on resurrection — tracked field values updated from resurrected doc | test_reconciliation_resurrection* | 2026-05-13 | FAIL (2026-05-13) |
+| RO-71 | Resurrected document outside the plugin's watched folders with `on_moved: untrack` — resurrection succeeds unconditionally, then `on_moved` follow-up re-archives the row; net result: plugin row is archived (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-13 |
+| RO-72 | Resurrected document outside the plugin's watched folders with `on_moved: keep-tracking` — resurrection succeeds and `on_moved` follow-up keeps the row active at the new out-of-folder path (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-13 |
 
 ### 14.7 Movement
 
@@ -574,7 +575,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-25 | `on_moved: untrack` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
 | RO-26 | `on_moved` defaults to `keep-tracking` when not declared (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
 | RO-27 | After `keep-tracking` path update, subsequent reconciliation reports the document as `unchanged` (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
-| RO-64 | `on_moved: untrack` (spec vocabulary) is accepted at plugin registration and at reconciliation time archives the plugin row with frontmatter preserved — NOT silently treated as a no-op (VALIDATED) | test_reconciliation_untrack_policy | 2026-04-22 | 2026-05-07 |
+| RO-64 | `on_moved: untrack` (spec vocabulary) is accepted at plugin registration and at reconciliation time archives the plugin row with frontmatter preserved — NOT silently treated as a no-op (VALIDATED) | test_reconciliation_untrack_policy | 2026-04-22 | 2026-05-13 |
 | RO-65 | A `keep-tracking` document moved outside watched folders is re-discovered via Path 2 (frontmatter `fqc_type`) on subsequent reconciliations and classified as `unchanged` — NOT re-classified as `moved` (VALIDATED) | test_reconciliation_keep_tracking_stability | 2026-04-22 | 2026-05-07 |
 
 ### 14.8 Modification and Field Sync
@@ -1383,7 +1384,7 @@ Covers: RO-13, RO-14, RO-15
 Covers: RO-16, RO-17, RO-18
 
 ### test_reconciliation_resurrection
-Covers: RO-19, RO-20, RO-22
+Covers: RO-19, RO-20, RO-22a, RO-22b* (FAIL — field_map not re-applied on resurrection)
 
 ### test_reconciliation_movement
 Covers: RO-24, RO-25, RO-26, RO-27

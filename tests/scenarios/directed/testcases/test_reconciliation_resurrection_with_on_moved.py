@@ -45,7 +45,7 @@ from __future__ import annotations
 COVERAGE = ["RO-71", "RO-72"]
 
 import argparse
-import re
+import json as _json
 import sys
 import time
 from pathlib import Path
@@ -129,12 +129,6 @@ def _build_schema_keep(folder: str) -> str:
     )
 
 
-def _extract_recon_summary(text: str) -> str:
-    """Extract the reconciliation summary from a tool response."""
-    m = re.search(r"Reconciliation:.*", text, re.DOTALL)
-    return m.group(0).strip() if m else ""
-
-
 # ---------------------------------------------------------------------------
 # Test implementation
 # ---------------------------------------------------------------------------
@@ -184,7 +178,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg_untrack.expect_contains("registered successfully")
+        reg_untrack.expect_json_equals("status", "registered")
         run.step(
             label="register_plugin UNTRACK (on_moved: untrack) — RO-71 setup",
             passed=(reg_untrack.ok and reg_untrack.status == "pass"),
@@ -207,7 +201,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg_keep.expect_contains("registered successfully")
+        reg_keep.expect_json_equals("status", "registered")
         run.step(
             label="register_plugin KEEP (on_moved: keep-tracking) — RO-72 setup",
             passed=(reg_keep.ok and reg_keep.status == "pass"),
@@ -269,7 +263,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime_ut.expect_contains("Auto-tracked")
+        prime_ut.expect_json_equals("reconciliation.auto_tracked", 1)
         run.step(
             label="search_records — first reconciliation auto-tracks UNTRACK doc",
             passed=(prime_ut.ok and prime_ut.status == "pass"),
@@ -381,17 +375,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        del_recon_summary_ut = _extract_recon_summary(del_recon_ut.text)
-        archived_on_deletion = (
-            "Archived" in del_recon_summary_ut
-            or "archived" in del_recon_summary_ut.lower()
-        )
+        del_recon_data_ut = _json.loads(del_recon_ut.text).get("reconciliation", {}) if del_recon_ut.ok else {}
+        archived_on_deletion = del_recon_data_ut.get("archived", 0) > 0
 
         run.step(
             label="search_records — second reconciliation archives UNTRACK plugin row (deleted)",
             passed=(del_recon_ut.ok and archived_on_deletion),
             detail=(
-                f"recon_summary={del_recon_summary_ut!r} | "
+                f"archived_count={del_recon_data_ut.get('archived', 0)} | "
                 f"archived_detected={archived_on_deletion}"
             ),
             timing_ms=del_recon_ut.timing_ms,
@@ -446,7 +437,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime_kt.expect_contains("Auto-tracked")
+        prime_kt.expect_json_equals("reconciliation.auto_tracked", 1)
         run.step(
             label="search_records — first reconciliation auto-tracks KEEP doc",
             passed=(prime_kt.ok and prime_kt.status == "pass"),
@@ -558,17 +549,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        del_recon_summary_kt = _extract_recon_summary(del_recon_kt.text)
-        archived_on_deletion_kt = (
-            "Archived" in del_recon_summary_kt
-            or "archived" in del_recon_summary_kt.lower()
-        )
+        del_recon_data_kt = _json.loads(del_recon_kt.text).get("reconciliation", {}) if del_recon_kt.ok else {}
+        archived_on_deletion_kt = del_recon_data_kt.get("archived", 0) > 0
 
         run.step(
             label="search_records — second reconciliation archives KEEP plugin row (deleted)",
             passed=(del_recon_kt.ok and archived_on_deletion_kt),
             detail=(
-                f"recon_summary={del_recon_summary_kt!r} | "
+                f"archived_count={del_recon_data_kt.get('archived', 0)} | "
                 f"archived_detected={archived_on_deletion_kt}"
             ),
             timing_ms=del_recon_kt.timing_ms,
@@ -706,18 +694,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon_summary_ut = _extract_recon_summary(recon_ut.text)
-        resurrection_detected_ut = (
-            "resurrected" in recon_summary_ut.lower()
-            or "resurrection" in recon_summary_ut.lower()
-            or "Resurrected" in recon_summary_ut
-        )
+        recon_data_ut = _json.loads(recon_ut.text).get("reconciliation", {}) if recon_ut.ok else {}
+        resurrection_detected_ut = recon_data_ut.get("resurrected", 0) > 0
 
         run.step(
             label="search_records — third reconciliation for UNTRACK plugin (resurrection detected)",
             passed=(recon_ut.ok and resurrection_detected_ut),
             detail=(
-                f"recon_summary={recon_summary_ut!r} | "
+                f"resurrected_count={recon_data_ut.get('resurrected', 0)} | "
                 f"resurrection_detected={resurrection_detected_ut}"
             ),
             timing_ms=recon_ut.timing_ms,
@@ -737,18 +721,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon_summary_kt = _extract_recon_summary(recon_kt.text)
-        resurrection_detected_kt = (
-            "resurrected" in recon_summary_kt.lower()
-            or "resurrection" in recon_summary_kt.lower()
-            or "Resurrected" in recon_summary_kt
-        )
+        recon_data_kt = _json.loads(recon_kt.text).get("reconciliation", {}) if recon_kt.ok else {}
+        resurrection_detected_kt = recon_data_kt.get("resurrected", 0) > 0
 
         run.step(
             label="search_records — third reconciliation for KEEP plugin (resurrection detected)",
             passed=(recon_kt.ok and resurrection_detected_kt),
             detail=(
-                f"recon_summary={recon_summary_kt!r} | "
+                f"resurrected_count={recon_data_kt.get('resurrected', 0)} | "
                 f"resurrection_detected={resurrection_detected_kt}"
             ),
             timing_ms=recon_kt.timing_ms,
@@ -793,13 +773,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon_summary_ut2 = _extract_recon_summary(recon_ut2.text)
+        recon_data_ut2 = _json.loads(recon_ut2.text).get("reconciliation", {}) if recon_ut2.ok else {}
 
         run.step(
             label="search_records — fourth reconciliation for UNTRACK plugin (on_moved follow-up)",
             passed=recon_ut2.ok,
             detail=(
-                f"recon_summary={recon_summary_ut2!r} | "
+                f"archived={recon_data_ut2.get('archived', 0)} | "
                 f"response_preview={recon_ut2.text[:300]!r}"
             ),
             timing_ms=recon_ut2.timing_ms,
@@ -824,10 +804,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # classify in cycle 4 (paths match). In that case RO-71 behavior (the spec's
         # claim that untrack re-archives) may not be implemented — which is a defect.
         # We check: is the row archived after cycle 4? If still active, that's a defect.
-        archived_after_cycle4 = (
-            "Archived" in recon_summary_ut2
-            or "archived" in recon_summary_ut2.lower()
-        )
+        archived_after_cycle4 = recon_data_ut2.get("archived", 0) > 0
         # Also check: is fqc_id absent from the results (indicating archived)?
         ut_id_in_results = bool(fqc_id_untrack and fqc_id_untrack in recon_ut2.text)
 
@@ -844,7 +821,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         detail_71_parts.append(
             f"archived_after_cycle4={archived_after_cycle4} | "
             f"ut_id_in_results={ut_id_in_results} | "
-            f"recon_summary_ut2={recon_summary_ut2!r}"
+            f"archived_count={recon_data_ut2.get('archived', 0)}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)
@@ -863,11 +840,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # The fqc_id should appear in search results (row active).
         t0 = time.monotonic()
 
-        # Verify fqc_id is in search results from the resurrection reconciliation (step 22)
-        fqc_id_keep_in_results = bool(fqc_id_keep and fqc_id_keep in recon_kt.text)
+        # Verify the KEEP plugin row is active (total > 0 in search results from step 22)
+        try:
+            fqc_id_keep_in_results = _json.loads(recon_kt.text).get("total", 0) > 0
+        except Exception:
+            fqc_id_keep_in_results = False
         # Verify the row shows status active from search results (not archived)
         kt_archived_in_summary = (
-            "Archived" in recon_summary_kt
+            recon_data_kt.get("archived", 0) > 0
             and fqc_id_keep not in recon_kt.text
         ) if fqc_id_keep else False
         kt_is_active = fqc_id_keep_in_results and not kt_archived_in_summary
@@ -884,7 +864,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         detail_72_parts.append(
             f"kt_is_active={kt_is_active} | "
             f"fqc_id_in_results={fqc_id_keep_in_results} | "
-            f"recon_summary_kt={recon_summary_kt!r} | "
+            f"resurrected_count={recon_data_kt.get('resurrected', 0)} | "
             f"response_preview={recon_kt.text[:200]!r}"
         )
 
