@@ -120,6 +120,8 @@ describe.sequential('MCP protocol E2E', () => {
       'remove_document',
       'manage_directory',
       'maintain_vault',
+      'get_briefing',
+      'insert_doc_link',
     ];
 
     // At least the core tools must be present (compound/plugin tools may also be registered)
@@ -131,17 +133,30 @@ describe.sequential('MCP protocol E2E', () => {
     }
     // Phase 107: get_doc_outline was removed — must not appear in the tool list
     expect(toolNames).not.toContain('get_doc_outline');
-    // Phase 127 local merged surfaces must use the final tool names.
-    expect(toolNames).not.toContain('create_directory');
-    expect(toolNames).not.toContain('remove_directory');
-    expect(toolNames).not.toContain('force_file_scan');
-    expect(toolNames).not.toContain('reconcile_documents');
-    expect(toolNames).not.toContain('save_memory');
-    expect(toolNames).not.toContain('search_memory');
-    expect(toolNames).not.toContain('list_memories');
-    expect(toolNames).not.toContain('create_document');
-    expect(toolNames).not.toContain('search_documents');
-    expect(toolNames).not.toContain('search_all');
+    // Phase 128 removed/dead surfaces must use final tool names or stay absent.
+    const removedOrDeadTools = [
+      'append_to_doc',
+      'create_document',
+      'update_document',
+      'update_doc_header',
+      'search_documents',
+      'save_memory',
+      'update_memory',
+      'search_memory',
+      'list_memories',
+      'force_file_scan',
+      'reconcile_documents',
+      'create_directory',
+      'remove_directory',
+      'create_record',
+      'update_record',
+      'search_all',
+      'list_projects',
+      'get_project_info',
+    ];
+    for (const removed of removedOrDeadTools) {
+      expect(toolNames).not.toContain(removed);
+    }
   }, 30000);
 
   it('listTools reflects host_mcp_tools filtered registration', async () => {
@@ -170,6 +185,7 @@ describe.sequential('MCP protocol E2E', () => {
       expect(toolNames).not.toContain('archive_document');
       expect(toolNames).not.toContain('force_file_scan');
       expect(toolNames).not.toContain('get_briefing');
+      expect(toolNames).not.toContain('insert_doc_link');
     } finally {
       if (filteredClient && filteredTransport) {
         await stopMcpServerFixture(filteredClient, filteredTransport);

@@ -234,6 +234,24 @@ describe('assembleNativeToolRegistry', () => {
     expect(result.diagnostics.unknown).toEqual(expect.arrayContaining(['save_memory']));
   });
 
+  it('reports removed and dead requested tools as diagnostics without provider exposure', () => {
+    const result = assembleNativeToolRegistry(
+      makeConfig(['append_to_doc', 'create_document', 'list_projects', 'get_project_info']),
+      'research',
+      CATALOG
+    );
+
+    expect(result.nativeToolNames).toEqual([]);
+    expect(result.providerTools).toBeUndefined();
+    expect(result.diagnostics.unknown).toEqual([
+      'append_to_doc',
+      'create_document',
+      'list_projects',
+      'get_project_info',
+    ]);
+    expect(result.diagnostics.explicitTools).toEqual([]);
+  });
+
   it('keeps call_model hard-excluded even when host-enabled and explicitly requested', () => {
     const hostFilteredCatalog = CATALOG.filter((tool) => ['call_model'].includes(tool.name));
     const result = assembleNativeToolRegistry(makeConfig(['call_model']), 'research', hostFilteredCatalog);
