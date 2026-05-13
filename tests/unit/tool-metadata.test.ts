@@ -56,6 +56,19 @@ describe('tool metadata registry', () => {
     }
   });
 
+  it('does not apply legacy replacement wording to kept plugin and LLM tools', () => {
+    for (const name of ['get_record', 'archive_record', 'search_records', 'clear_pending_reviews', 'call_model', 'get_llm_usage']) {
+      const description = requireToolMetadata(name).description;
+
+      expect(description, name).not.toContain('still exposes');
+      expect(description, name).not.toContain('canonical replacement when available');
+      expect(description, name).toContain('Summary:');
+      expect(description, name).toContain('Use when:');
+      expect(description, name).toContain('Do not use when:');
+      expect(description, name).toContain('Example:');
+    }
+  });
+
   it('documents get_document canonical expected-error envelopes and include vocabulary', () => {
     const description = requireToolMetadata('get_document').description;
 

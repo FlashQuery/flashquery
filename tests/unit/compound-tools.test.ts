@@ -39,16 +39,11 @@ describe('compound tool registration final surface', () => {
   it('marks transitional helpers as call_macro-gated and structured', () => {
     const briefing = getToolMetadata('get_briefing');
     const insertLink = getToolMetadata('insert_doc_link');
-    const duplicateLinkResult = {
-      status: 'unchanged',
-      property: 'links',
-      removal_gate: 'call_macro parity',
-    };
 
     expect(briefing?.status).toBe('transitional');
     expect(insertLink?.status).toBe('transitional');
     expect(briefing?.description).toContain('call_macro');
     expect(insertLink?.description).toContain('call_macro');
-    expect(JSON.parse(JSON.stringify(duplicateLinkResult)).status).toBe('unchanged');
+    expect(insertLink?.description).not.toContain('identifier({})');
   });
 });

@@ -12,6 +12,7 @@ import { pluginManager } from '../../plugins/manager.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { validateAllTags, normalizeTags, deduplicateTags } from '../../utils/tag-validator.js';
 import { resolveDocumentIdentifier, targetedScan } from '../utils/resolve-document.js';
+import { AmbiguousDocumentIdentifierError, DocumentNotFoundError } from '../utils/resolve-document.js';
 import { searchDocumentsSemantic, listMarkdownFiles, parseDocMeta } from './documents.js';
 import type { DocMeta } from './documents.js';
 import { searchMemoriesSemantic } from './memory.js';
@@ -23,6 +24,7 @@ import {
   jsonToolResult,
   documentIdentification,
   memoryIdentification,
+  recordIdentification,
 } from '../utils/response-formats.js';
 import {
   insertAtPosition,
@@ -63,7 +65,7 @@ function memoryCategoryEnabled(config: FlashQueryConfig): boolean {
   }
 
   const enabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
-  const memoryOnlyTools = ['save_memory', 'search_memory', 'update_memory', 'list_memories', 'get_memory', 'archive_memory'];
+  const memoryOnlyTools = ['write_memory', 'get_memory', 'archive_memory'];
   return memoryOnlyTools.some((toolName) => enabledToolNames.has(toolName) && !excludedSelectors.has(toolName));
 }
 
@@ -77,6 +79,40 @@ function documentCategoryEnabled(config: FlashQueryConfig): boolean {
     return true;
   }
   return getResolvedHostToolExposure(config).hostEnabledToolNames.includes('get_document');
+}
+
+function pluginCategoryEnabled(config: FlashQueryConfig): boolean {
+  const selectors = config.hostMcpTools?.tools;
+  if (selectors === undefined) return true;
+  if (selectors.some((selector) => selector === 'category:plugin')) return true;
+  if (selectors.some((selector) => getToolMetadata(selector)?.categories.includes('plugin') === true)) return true;
+  return getResolvedHostToolExposure(config).hostEnabledToolNames.some((toolName) =>
+    getToolMetadata(toolName)?.categories.includes('plugin') === true
+  );
+}
+
+function documentResolutionError(err: unknown, identifier: string): Record<string, unknown> {
+  if (err instanceof AmbiguousDocumentIdentifierError) {
+    return {
+      error: 'ambiguous_identifier',
+      message: err.message,
+      identifier,
+      details: { matches: err.matches },
+    };
+  }
+  if (err instanceof DocumentNotFoundError) {
+    return {
+      error: 'not_found',
+      message: `No document matches identifier '${identifier}'`,
+      identifier,
+    };
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return {
+    error: 'runtime_error',
+    message,
+    identifier,
+  };
 }
 
 function headingErrorMatches(matches: Array<{ text: string; level: number; line: number; occurrence: number }>): Array<{
@@ -137,12 +173,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'insert_doc_link',
     {
       description:
-        'Transitional macro-dependent helper retained until call_macro parity: add a wiki-style document link ([[Target Doc]]) to a document\'s frontmatter links array. Deduplicates automatically and returns structured JSON with status:"updated" or status:"unchanged". Both source and target documents are resolved by path, fqc_id, or filename. Optionally specify which frontmatter property to use (default: "links"; alternatives: "related", "parent", etc.). Removal gate: call_macro must cover this workflow before this transitional tool is removed.',
+        'Transitional macro-dependent helper retained until call_macro parity: add a wiki-style document link ([[Target Doc]]) to one or more source documents and return ordered JSON document identification results. Deduplicates automatically and returns status:"unchanged" per source when the link already exists. Resolve the single target by target_identifier and sources by identifiers. Optionally specify which frontmatter property to use (default: "links"; alternatives: "related", "parent", etc.). Removal gate: call_macro must cover this workflow before this transitional tool is removed.',
       inputSchema: {
-        identifier: z
-          .string()
-          .describe('Source document identifier — accepts UUID, vault-relative path, or filename'),
-        target: z
+        identifiers: z
+          .union([z.string(), z.array(z.string())])
+          .describe('Source document identifier or identifiers — each accepts UUID, vault-relative path, or filename'),
+        target_identifier: z
           .string()
           .describe('Target document identifier — accepts UUID, vault-relative path, or filename. The display text for the link is derived from the resolved document title.'),
         property: z
@@ -153,7 +189,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           ),
       },
     },
-    async ({ identifier, target, property }) => {
+    async ({ identifiers, target_identifier, property }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -170,12 +206,20 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
       try {
         const supabase = supabaseManager.getClient();
         const targetProperty = property ?? 'links';
+        const sourceIdentifiers = Array.isArray(identifiers) ? identifiers : [identifiers];
 
-        // Resolve source document
-        const sourceResolved = await resolveDocumentIdentifier(config, supabase, identifier, logger);
-
-        // Resolve target document to get its title
-        const targetResolved = await resolveDocumentIdentifier(config, supabase, target, logger);
+        let targetResolved: Awaited<ReturnType<typeof resolveDocumentIdentifier>>;
+        try {
+          targetResolved = await resolveDocumentIdentifier(config, supabase, target_identifier, logger);
+        } catch (targetErr) {
+          const envelope = documentResolutionError(targetErr, target_identifier);
+          return jsonExpectedError({
+            error: envelope.error === 'ambiguous_identifier' ? 'ambiguous_identifier' : 'not_found',
+            message: String(envelope.message),
+            identifier: target_identifier,
+            details: envelope.details as Record<string, unknown> | undefined,
+          });
+        }
 
         // Get target title from frontmatter
         let targetTitle: string;
@@ -190,61 +234,56 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Build wikilink string using resolved title
         const wikilink = `[[${targetTitle}]]`;
+        const results: Array<Record<string, unknown>> = [];
 
-        // Read source document
-        const raw = await readFile(sourceResolved.absPath, 'utf-8');
-        const parsed = matter(raw);
+        for (const sourceIdentifier of sourceIdentifiers) {
+          try {
+            const sourceResolved = await resolveDocumentIdentifier(config, supabase, sourceIdentifier, logger);
+            const raw = await readFile(sourceResolved.absPath, 'utf-8');
+            const parsed = matter(raw);
 
-        // Merge without duplication
-        const existing: string[] = Array.isArray(parsed.data[targetProperty])
-          ? (parsed.data[targetProperty] as string[])
-          : [];
-        const alreadyLinked = existing.includes(wikilink);
-        const merged = [...new Set([...existing, wikilink])];
+            const existing: string[] = Array.isArray(parsed.data[targetProperty])
+              ? (parsed.data[targetProperty] as string[])
+              : [];
+            const alreadyLinked = existing.includes(wikilink);
+            parsed.data[targetProperty] = [...new Set([...existing, wikilink])];
 
-        parsed.data[targetProperty] = merged;
+            const serialized = matter.stringify(parsed.content, parsed.data);
+            const newHash = computeHash(serialized);
+            const preScan = await targetedScan(config, supabase, sourceResolved, newHash, logger);
+            const fqcId = preScan.capturedFrontmatter.fqcId;
+            parsed.data[FM.ID] = fqcId;
 
-        // Compute hash of the new content about to be written
-        const serialized = matter.stringify(parsed.content, parsed.data);
-        const newHash = computeHash(serialized);
+            await vaultManager.writeMarkdown(sourceResolved.relativePath, parsed.data, parsed.content);
 
-        // Call targetedScan to update frontmatter and get fqcId
-        const preScan = await targetedScan(config, supabase, sourceResolved, newHash, logger);
-        const fqcId = preScan.capturedFrontmatter.fqcId;
-
-        // Update fm with fq_id from targetedScan
-        parsed.data[FM.ID] = fqcId;
-
-        // Write back atomically via vaultManager (DCP-05)
-        await vaultManager.writeMarkdown(sourceResolved.relativePath, parsed.data, parsed.content);
-
-        logger.info(`insert_doc_link: ${alreadyLinked ? 'unchanged' : 'added'} ${wikilink} in ${sourceResolved.relativePath}`);
-        const sourceFrontmatter: Record<string, unknown> = parsed.data;
-        const sourceTags = sourceFrontmatter[FM.TAGS];
-        const sourceTitle = sourceFrontmatter[FM.TITLE];
-        const sourceStatus = sourceFrontmatter[FM.STATUS];
+            logger.info(`insert_doc_link: ${alreadyLinked ? 'unchanged' : 'added'} ${wikilink} in ${sourceResolved.relativePath}`);
+            results.push({
+              ...documentIdentification({
+                identifier: sourceIdentifier,
+                title: typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] as string : sourceResolved.relativePath,
+                path: sourceResolved.relativePath,
+                fq_id: fqcId,
+                modified: typeof parsed.data[FM.UPDATED] === 'string' ? parsed.data[FM.UPDATED] as string : new Date().toISOString(),
+                chars: parsed.content.length,
+              }),
+              status: alreadyLinked ? 'unchanged' : 'updated',
+              property: targetProperty,
+              link: wikilink,
+              target: {
+                identifier: target_identifier,
+                fq_id: targetResolved.fqcId,
+                path: targetResolved.relativePath,
+                title: targetTitle,
+              },
+            });
+          } catch (sourceErr) {
+            results.push(documentResolutionError(sourceErr, sourceIdentifier));
+          }
+        }
 
         return jsonToolResult({
-          status: alreadyLinked ? 'unchanged' : 'updated',
-          property: targetProperty,
-          link: wikilink,
+          results,
           removal_gate: 'call_macro parity',
-          source: {
-            identifier: fqcId,
-            fq_id: fqcId,
-            path: sourceResolved.relativePath,
-            title: typeof sourceTitle === 'string' ? sourceTitle : undefined,
-            status: typeof sourceStatus === 'string' ? sourceStatus : undefined,
-            tags: Array.isArray(sourceTags) && sourceTags.every((tag): tag is string => typeof tag === 'string')
-              ? sourceTags
-              : undefined,
-          },
-          target: {
-            identifier: targetResolved.fqcId ?? targetResolved.relativePath,
-            fq_id: targetResolved.fqcId,
-            path: targetResolved.relativePath,
-            title: targetTitle,
-          },
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -542,10 +581,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         tags: z.array(z.string()).describe('Tags to filter by (required). Documents and memories with any/all of these tags are included.'),
         tag_match: z.enum(['any', 'all']).optional().describe('Tag matching mode: "any" = at least one tag matches, "all" = every tag must be present. Default: "any"'),
         limit: z.number().optional().describe('Maximum results per section. Default: 20'),
+        entity_types: z.array(z.enum(['documents', 'memories', 'records'])).optional().describe('Entity domains to include. Default: enabled documents and memories, plus records when plugin_id is provided.'),
         plugin_id: z.string().optional().describe('Include records from this plugin. Omit to exclude plugin records.'),
       },
     },
-    async ({ tags, tag_match, limit, plugin_id }) => {
+    async ({ tags, tag_match, limit, entity_types, plugin_id }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -563,110 +603,177 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const matchMode = tag_match ?? 'any';
         const maxResults = limit ?? 20;
         const supabase = supabaseManager.getClient();
-
-        let docQuery = supabase
-          .from('fqc_documents')
-          .select('id, title, tags, status, path')
-          .eq('instance_id', config.instance.id)
-          .eq('status', 'active')
-          .order('updated_at', { ascending: false })
-          .limit(maxResults);
-
-        if (matchMode === 'any') {
-          docQuery = docQuery.overlaps('tags', tags);
-        } else {
-          docQuery = docQuery.contains('tags', tags);
-        }
-
-        const { data: docs, error: docError } = await docQuery;
-        if (docError) {
-          return jsonRuntimeError(`Error querying documents: ${docError.message}`);
-        }
-        const docRows = (docs ?? []) as Array<{ id: string; title: string; tags: string[]; status: string; path: string }>;
-
-        let memQuery = supabase
-          .from('fqc_memory')
-          .select('id, content, tags, created_at')
-          .eq('instance_id', config.instance.id)
-          .eq('status', 'active')
-          .order('updated_at', { ascending: false })
-          .limit(maxResults);
-
-        if (matchMode === 'any') {
-          memQuery = memQuery.overlaps('tags', tags);
-        } else {
-          memQuery = memQuery.contains('tags', tags);
-        }
-
-        const { data: mems, error: memError } = await memQuery;
-        if (memError) {
-          return jsonRuntimeError(`Error querying memories: ${memError.message}`);
-        }
-        const memRows = (mems ?? []) as Array<{ id: string; content: string; tags: string[]; created_at: string }>;
-
-        const groups: Record<string, unknown> = {
-          documents: {
-            count: docRows.length,
-            results: docRows.map((row) => ({
-              identifier: row.id,
-              fq_id: row.id,
-              path: row.path,
-              title: row.title,
-              status: row.status,
-              tags: row.tags,
-            })),
-          },
-          memories: {
-            count: memRows.length,
-            results: memRows.map((m) => ({
-              memory_id: m.id,
-              tags: m.tags,
-              created_at: m.created_at,
-              content_preview: m.content.length > 200 ? m.content.substring(0, 200) + '...' : m.content,
-            })),
-          },
+        const enabled = {
+          documents: documentCategoryEnabled(config),
+          memories: memoryCategoryEnabled(config),
+          records: pluginCategoryEnabled(config),
         };
-        const entityTypes = ['documents', 'memories'];
+        const explicitEntityTypes = Array.isArray(entity_types) && entity_types.length > 0;
+        const requestedEntityTypes = explicitEntityTypes
+          ? entity_types
+          : ([
+              ...(enabled.documents ? ['documents' as const] : []),
+              ...(enabled.memories ? ['memories' as const] : []),
+              ...(plugin_id && enabled.records ? ['records' as const] : []),
+            ]);
+        const warnings: string[] = [];
+        const activeEntityTypes = requestedEntityTypes.filter((entityType) => {
+          if (enabled[entityType]) return true;
+          if (explicitEntityTypes) {
+            warnings.push(`${entityType === 'records' ? 'plugin' : entityType.slice(0, -1)}_category_disabled`);
+          }
+          return false;
+        });
 
-        if (plugin_id) {
+        if (requestedEntityTypes.length > 0 && activeEntityTypes.length === 0) {
+          return jsonExpectedError({
+            error: 'unsupported',
+            message: 'All requested briefing entity types are disabled by config',
+            identifier: requestedEntityTypes.join(','),
+            details: { disabled_entity_types: requestedEntityTypes },
+          });
+        }
+
+        const docItemsByTag = new Map<string, Array<Record<string, unknown>>>(tags.map((tag) => [tag, []]));
+        if (activeEntityTypes.includes('documents')) {
+          let docQuery = supabase
+            .from('fqc_documents')
+            .select('id, title, tags, status, path, updated_at')
+            .eq('instance_id', config.instance.id)
+            .eq('status', 'active')
+            .order('updated_at', { ascending: false })
+            .limit(maxResults);
+
+          docQuery = matchMode === 'any' ? docQuery.overlaps('tags', tags) : docQuery.contains('tags', tags);
+          const { data: docs, error: docError } = await docQuery;
+          if (docError) return jsonRuntimeError(`Error querying documents: ${docError.message}`);
+
+          for (const row of (docs ?? []) as Array<{ id: string; title: string; tags: string[]; status: string; path: string; updated_at?: string }>) {
+            const meta = await parseDocMeta(config.instance.vault.path, row.path);
+            const item = {
+              entity_type: 'document',
+              ...documentIdentification({
+                identifier: row.path,
+                title: row.title,
+                path: row.path,
+                fq_id: row.id,
+                modified: meta?.modified ?? row.updated_at ?? new Date().toISOString(),
+                chars: meta?.size.chars ?? 0,
+              }),
+            };
+            for (const tag of tags) {
+              if (row.tags?.includes(tag)) docItemsByTag.get(tag)?.push(item);
+            }
+          }
+        }
+
+        const memoryItemsByTag = new Map<string, Array<Record<string, unknown>>>(tags.map((tag) => [tag, []]));
+        if (activeEntityTypes.includes('memories')) {
+          let memQuery = supabase
+            .from('fqc_memory')
+            .select('id, content, tags, plugin_scope, created_at, updated_at')
+            .eq('instance_id', config.instance.id)
+            .eq('status', 'active')
+            .eq('is_latest', true)
+            .order('updated_at', { ascending: false })
+            .limit(maxResults);
+
+          memQuery = matchMode === 'any' ? memQuery.overlaps('tags', tags) : memQuery.contains('tags', tags);
+          const { data: mems, error: memError } = await memQuery;
+          if (memError) return jsonRuntimeError(`Error querying memories: ${memError.message}`);
+
+          for (const row of (mems ?? []) as Array<{ id: string; content: string; tags: string[]; plugin_scope?: string | null; created_at: string; updated_at: string }>) {
+            const item = {
+              entity_type: 'memory',
+              ...memoryIdentification({
+                memory_id: row.id,
+                content_preview: row.content.length > 120 ? `${row.content.slice(0, 117)}...` : row.content,
+                tags: row.tags ?? [],
+                plugin_scope: row.plugin_scope ?? 'global',
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+              }),
+            };
+            for (const tag of tags) {
+              if (row.tags?.includes(tag)) memoryItemsByTag.get(tag)?.push(item);
+            }
+          }
+        }
+
+        const recordItemsByTag = new Map<string, Array<Record<string, unknown>>>(tags.map((tag) => [tag, []]));
+        if (activeEntityTypes.includes('records')) {
           const allEntries = pluginManager.getAllEntries();
-          const pluginEntries = allEntries.filter(e => e.plugin_id === plugin_id);
-
-          let pluginRecordCount = 0;
-          const pluginResults: Array<Record<string, unknown>> = [];
-          if (pluginEntries.length > 0) {
-            for (const entry of pluginEntries) {
-              for (const tableSpec of entry.schema.tables) {
-                const fullTableName = `${entry.table_prefix}${tableSpec.name}`;
-                const { data: records, error: recError } = await supabase
-                  .from(fullTableName)
-                  .select('*')
-                  .eq('instance_id', config.instance.id)
-                  .order('created_at', { ascending: false })
-                  .limit(maxResults);
-
-                if (!recError && records && records.length > 0) {
-                  for (const rec of records as Array<Record<string, unknown>>) {
-                    pluginRecordCount++;
-                    pluginResults.push({ plugin_id, table: tableSpec.name, data: rec });
+          const pluginEntries = plugin_id ? allEntries.filter((entry) => entry.plugin_id === plugin_id) : allEntries;
+          let sawTaggableTable = false;
+          for (const entry of pluginEntries) {
+            for (const tableSpec of entry.schema.tables) {
+              const tagColumn = tableSpec.columns.some((column) => column.name === 'tags')
+                ? 'tags'
+                : tableSpec.columns.some((column) => column.name === 'tag')
+                  ? 'tag'
+                  : null;
+              if (!tagColumn) continue;
+              sawTaggableTable = true;
+              const fullTableName = `${entry.table_prefix}${tableSpec.name}`;
+              let recordQuery = supabase
+                .from(fullTableName)
+                .select('*')
+                .eq('instance_id', config.instance.id)
+                .eq('status', 'active')
+                .order('created_at', { ascending: false })
+                .limit(maxResults);
+              recordQuery = tagColumn === 'tags'
+                ? (matchMode === 'any' ? recordQuery.overlaps(tagColumn, tags) : recordQuery.contains(tagColumn, tags))
+                : recordQuery.in(tagColumn, tags);
+              const { data: records, error: recError } = await recordQuery;
+              if (recError) {
+                logger.warn(`get_briefing taggable query failed for ${fullTableName}: ${recError.message}`);
+                continue;
+              }
+              for (const rec of (records ?? []) as Array<Record<string, unknown>>) {
+                const recTags = Array.isArray(rec[tagColumn]) ? rec[tagColumn] as string[] : [rec[tagColumn]].filter((tag): tag is string => typeof tag === 'string');
+                const item = {
+                  entity_type: 'record',
+                  ...recordIdentification({
+                    id: typeof rec.id === 'string' ? rec.id : '',
+                    plugin_id: entry.plugin_id,
+                    table: tableSpec.name,
+                    created_at: typeof rec.created_at === 'string' ? rec.created_at : '',
+                    updated_at: typeof rec.updated_at === 'string' ? rec.updated_at : '',
+                  }),
+                };
+                for (const tag of tags) {
+                  if (recTags.includes(tag)) {
+                    recordItemsByTag.get(tag)?.push(item);
                   }
                 }
               }
             }
           }
-
-          groups.plugin_records = { count: pluginRecordCount, results: pluginResults };
-          entityTypes.push('plugin_records');
+          if (explicitEntityTypes && requestedEntityTypes.includes('records') && !sawTaggableTable) {
+            warnings.push('plugin_no_taggable_tables');
+          }
         }
 
-        logger.info(`get_briefing: tags=[${tags.join(',')}] match=${matchMode} docs=${docRows.length} memories=${memRows.length}`);
+        const groups = tags.map((tag) => ({
+          type: 'tag',
+          tag,
+          items: [
+            ...(docItemsByTag.get(tag) ?? []),
+            ...(memoryItemsByTag.get(tag) ?? []),
+            ...(recordItemsByTag.get(tag) ?? []),
+          ].slice(0, maxResults),
+        }));
+
+        logger.info(`get_briefing: tags=[${tags.join(',')}] match=${matchMode} entity_types=${activeEntityTypes.join(',')}`);
         return jsonToolResult({
           generated_at: new Date().toISOString(),
-          entity_types: entityTypes,
+          entity_types: activeEntityTypes,
           tags,
           tag_match: matchMode,
           limit: maxResults,
           removal_gate: 'call_macro parity',
+          ...(warnings.length > 0 ? { warnings: [...new Set(warnings)] } : {}),
           groups,
         });
 

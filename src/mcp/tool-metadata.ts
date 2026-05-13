@@ -182,6 +182,42 @@ const D = {
     'Do not use when you need to create, update, or unregister a plugin; use register_plugin or unregister_plugin instead.',
     'get_plugin_info({ "plugin_id": "crm", "include": ["tables", "schema"] })'
   ),
+  getRecord: description(
+    'Retrieve one plugin-owned structured record and return a JSON record identification block with include-gated data.',
+    'Use when you already know the plugin_id, table, and record id and need record metadata, data, schema_metadata, or reconciliation side-effect details.',
+    'Do not use when you need to discover records by filters, text, or tags; use search_records instead.',
+    'get_record({ "plugin_id": "crm", "table": "contacts", "id": "record-id", "include": ["data"] })'
+  ),
+  archiveRecord: description(
+    'Archive one or more plugin-owned structured records with ordered JSON record identification results.',
+    'Use when records should be hidden from normal plugin searches while preserving plugin-owned history and per-record expected errors.',
+    'Do not use when you need to change record fields; use write_record(mode:"update") instead.',
+    'archive_record({ "plugin_id": "crm", "table": "contacts", "ids": ["record-id"] })'
+  ),
+  searchRecords: description(
+    'Search plugin-owned structured records by filters, text query, semantic fields, or taggable plugin tables.',
+    'Use when you need to find plugin records, filter a table, or aggregate taggable plugin rows through the record surface.',
+    'Do not use for markdown documents or memories; use search with entity_types instead.',
+    'search_records({ "plugin_id": "crm", "table": "contacts", "filters": { "stage": "active" }, "include": ["data"] })'
+  ),
+  clearPendingReviews: description(
+    'List or clear pending plugin review rows with explicit action-based semantics.',
+    'Use when administering plugin reconciliation review queues by pending-review row ids or plugin scope.',
+    'Do not use for normal record lifecycle changes; use write_record, archive_record, or search_records for plugin records.',
+    'clear_pending_reviews({ "action": "list", "plugin_id": "crm" })'
+  ),
+  callModel: description(
+    'Call configured LLM models or purposes and return structured model-call identification, usage, and response data.',
+    'Use when you need FlashQuery to resolve a configured model or purpose, hydrate document references, and execute an LLM call.',
+    'Do not use as a delegated native tool or to recursively call tools from a model without an explicit purpose; use direct MCP tools for local data operations.',
+    'call_model({ "purpose": "summarize", "prompt": "Summarize {{ref:Notes/Plan.md}}" })'
+  ),
+  getLlmUsage: description(
+    'Inspect recorded LLM usage and cost data with structured summaries and filters.',
+    'Use when you need usage totals, per-purpose cost reporting, model filters, or trace-level LLM accounting.',
+    'Do not use to call a model; use call_model for execution and this tool only for usage inspection.',
+    'get_llm_usage({ "purpose": "summarize", "limit": 20 })'
+  ),
   maintainVault: description(
     'Run vault maintenance actions such as sync, repair, or status checks.',
     'Use when an operator needs administrative vault maintenance through the dedicated system tool.',
@@ -246,14 +282,14 @@ export const TOOL_METADATA = [
   current('get_plugin_info', ['plugin'], 'read-only', D.getPluginInfo, PLUGIN_ADMIN_REASON),
   current('create_record', ['plugin'], 'read-write', legacyDescription('create_record', 'write_record', 'Create a plugin-owned structured record.')),
   current('write_record', ['plugin'], 'read-write', D.writeRecord),
-  current('get_record', ['plugin'], 'read-only', legacyDescription('get_record', 'get_record', 'Retrieve one plugin-owned structured record.')),
+  current('get_record', ['plugin'], 'read-only', D.getRecord),
   current('update_record', ['plugin'], 'read-write', legacyDescription('update_record', 'write_record', 'Update plugin-owned structured record fields.')),
-  current('archive_record', ['plugin'], 'read-write', legacyDescription('archive_record', 'archive_record', 'Archive a plugin-owned structured record.')),
-  current('search_records', ['plugin'], 'read-only', legacyDescription('search_records', 'search_records', 'Search plugin-owned structured records.')),
-  current('clear_pending_reviews', ['plugin'], 'admin', legacyDescription('clear_pending_reviews', 'clear_pending_reviews', 'List or clear pending plugin review items.'), SYSTEM_ADMIN_REASON),
+  current('archive_record', ['plugin'], 'read-write', D.archiveRecord),
+  current('search_records', ['plugin'], 'read-only', D.searchRecords),
+  current('clear_pending_reviews', ['plugin'], 'admin', D.clearPendingReviews, SYSTEM_ADMIN_REASON),
 
-  current('call_model', ['llm'], 'admin', legacyDescription('call_model', 'call_model', 'Call configured LLM models or purposes.'), RECURSIVE_MODEL_REASON),
-  current('get_llm_usage', ['llm'], 'read-only', legacyDescription('get_llm_usage', 'get_llm_usage', 'Inspect recorded LLM usage and cost data.')),
+  current('call_model', ['llm'], 'admin', D.callModel, RECURSIVE_MODEL_REASON),
+  current('get_llm_usage', ['llm'], 'read-only', D.getLlmUsage),
 
   current('force_file_scan', ['system'], 'admin', legacyDescription('force_file_scan', 'maintain_vault', 'Force a vault file scan.'), SYSTEM_ADMIN_REASON),
   current('reconcile_documents', ['system'], 'admin', legacyDescription('reconcile_documents', 'maintain_vault', 'Reconcile database document rows with vault files.'), SYSTEM_ADMIN_REASON),

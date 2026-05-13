@@ -97,6 +97,8 @@ async function seedMemory(opts: { content: string; tags?: string[] }): Promise<s
     content: opts.content,
     status: 'active',
     tags: opts.tags ?? [],
+    plugin_scope: 'global',
+    is_latest: true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   });
@@ -164,27 +166,48 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
 
   it('insert_doc_link returns structured updated and unchanged statuses', async () => {
     const first = await handlers('insert_doc_link')({
-      identifier: sourcePath,
-      target: targetId,
+      identifiers: sourcePath,
+      target_identifier: targetId,
       property: 'links',
     });
 
     expect(isError(first)).toBe(false);
     const firstJson = JSON.parse(getText(first));
-    expect(firstJson.status).toBe('updated');
-    expect(firstJson.source.fq_id).toBe(sourceId);
-    expect(firstJson.target.fq_id).toBe(targetId);
+    expect(firstJson.results).toHaveLength(1);
+    expect(firstJson.results[0]).toMatchObject({
+      identifier: sourcePath,
+      fq_id: sourceId,
+      path: sourcePath,
+      status: 'updated',
+      size: { chars: expect.any(Number) },
+      target: { fq_id: targetId, path: targetPath },
+    });
     expect(firstJson.removal_gate).toContain('call_macro');
 
     const second = await handlers('insert_doc_link')({
-      identifier: sourcePath,
-      target: targetPath,
+      identifiers: [sourcePath, 'missing-source.md'],
+      target_identifier: targetPath,
       property: 'links',
     });
 
     expect(isError(second)).toBe(false);
     const secondJson = JSON.parse(getText(second));
-    expect(secondJson.status).toBe('unchanged');
+    expect(secondJson.results).toHaveLength(2);
+    expect(secondJson.results[0]).toMatchObject({ identifier: sourcePath, status: 'unchanged' });
+    expect(secondJson.results[1]).toMatchObject({
+      error: 'not_found',
+      identifier: 'missing-source.md',
+    });
+
+    const missingTarget = await handlers('insert_doc_link')({
+      identifiers: sourcePath,
+      target_identifier: 'missing-target.md',
+    });
+    expect(isError(missingTarget)).toBe(false);
+    expect(JSON.parse(getText(missingTarget))).toMatchObject({
+      error: 'not_found',
+      identifier: 'missing-target.md',
+    });
 
     const raw = await readFile(join(vaultPath, sourcePath), 'utf-8');
     const parsed = matter(raw);
@@ -202,10 +225,27 @@ describe.skipIf(SKIP)('Compound Tools Integration', () => {
     const parsed = JSON.parse(getText(result));
     expect(parsed.generated_at).toEqual(expect.any(String));
     expect(parsed.entity_types).toEqual(['documents', 'memories']);
-    expect(parsed.groups.documents.count).toBe(1);
-    expect(parsed.groups.documents.results[0].fq_id).toBe(briefingDocId);
-    expect(parsed.groups.memories.count).toBe(1);
-    expect(parsed.groups.memories.results[0].memory_id).toBe(briefingMemoryId);
+    expect(parsed.groups).toEqual([
+      expect.objectContaining({
+        type: 'tag',
+        tag: briefingTag,
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            entity_type: 'document',
+            fq_id: briefingDocId,
+            modified: expect.any(String),
+            size: { chars: expect.any(Number) },
+          }),
+          expect.objectContaining({
+            entity_type: 'memory',
+            memory_id: briefingMemoryId,
+            plugin_scope: 'global',
+            created_at: expect.any(String),
+            updated_at: expect.any(String),
+          }),
+        ]),
+      }),
+    ]);
     expect(parsed.removal_gate).toContain('call_macro');
   });
 });

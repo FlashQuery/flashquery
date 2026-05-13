@@ -305,8 +305,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         link1_result = ctx.client.call_tool(
             "insert_doc_link",
-            identifier=primary_identifier,
-            target=target_a_identifier,
+            identifiers=primary_identifier,
+            target_identifier=target_a_identifier,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -346,8 +346,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         link2_result = ctx.client.call_tool(
             "insert_doc_link",
-            identifier=primary_identifier,
-            target=target_a_identifier,
+            identifiers=primary_identifier,
+            target_identifier=target_a_identifier,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -385,8 +385,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         link3_result = ctx.client.call_tool(
             "insert_doc_link",
-            identifier=primary_identifier,
-            target=target_b_identifier,
+            identifiers=primary_identifier,
+            target_identifier=target_b_identifier,
             property="related",
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
