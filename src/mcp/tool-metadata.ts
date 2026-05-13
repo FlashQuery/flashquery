@@ -1,6 +1,6 @@
 export type ToolCategory = 'doc-read' | 'doc-write' | 'memory' | 'plugin' | 'llm' | 'system';
 export type ToolTier = 'read-only' | 'read-write' | 'admin';
-export type ToolStatus = 'final' | 'transitional' | 'removed' | 'dead';
+export type ToolStatus = 'final' | 'transitional' | 'removed';
 
 export type ToolTierSelector = 'tier:read-only' | 'tier:read-write';
 export type ToolCategorySelector = `category:${ToolCategory}`;
@@ -261,9 +261,6 @@ export const TOOL_METADATA = [
   current('remove_directory', ['doc-write'], 'read-write', legacyDescription('remove_directory', 'manage_directory', 'Remove empty vault directories.')),
   current('manage_directory', ['doc-write'], 'read-write', D.manageDirectory),
   current('maintain_vault', ['system'], 'admin', D.maintainVault, SYSTEM_ADMIN_REASON),
-
-  dead('list_projects', ['system'], legacyDescription('list_projects', undefined, 'List configured legacy projects.')),
-  dead('get_project_info', ['system'], legacyDescription('get_project_info', undefined, 'Get legacy project metadata.')),
 ] as const satisfies readonly ToolMetadata[];
 
 const TOOL_METADATA_BY_NAME = new Map<string, ToolMetadata>(TOOL_METADATA.map((entry) => [entry.name, entry]));
@@ -403,18 +400,6 @@ function current(
       currentToolStatus(name) !== 'removed',
     ...(hardExcludedReason === undefined ? {} : { delegatedHardExcludedReason: hardExcludedReason }),
     ...(legacyReplacement(name) === undefined ? {} : { replacement: legacyReplacement(name) }),
-    description: toolDescription,
-  };
-}
-
-function dead(name: string, categories: ToolCategory[], toolDescription: string): ToolMetadata {
-  return {
-    name,
-    status: 'dead',
-    categories,
-    tier: 'admin',
-    hostEligible: false,
-    delegatedEligible: false,
     description: toolDescription,
   };
 }

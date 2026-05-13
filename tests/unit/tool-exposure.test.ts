@@ -74,12 +74,15 @@ describe('host MCP tool exposure', () => {
   });
 
 
-  it('rejects unknown selectors, host-ineligible tools, and dead tools', () => {
+  it('rejects unknown selectors, host-ineligible tools, and removed tools with suggestions', () => {
     expect(validateToolSelectors(['category:not-real'])).toEqual(["unknown tool selector 'category:not-real'"]);
     expect(validateToolSelectors(['not_a_tool'])).toEqual(["unknown tool selector 'not_a_tool'"]);
     expect(validateToolSelectors(['write_document'])).toEqual([]);
-    expect(validateToolSelectors(['list_projects'])).toEqual(["tool 'list_projects' is not available for host MCP exposure"]);
-    expect(validateToolSelectors(['create_document'])).toEqual(["tool 'create_document' is not available for host MCP exposure"]);
+    expect(validateToolSelectors(['list_projects'])).toEqual(["unknown tool selector 'list_projects'"]);
+    expect(validateToolSelectors(['get_project_info'])).toEqual(["unknown tool selector 'get_project_info'"]);
+    expect(validateToolSelectors(['create_document'])).toEqual([
+      "Tool 'create_document' has been replaced by 'write_document'. Update configuration or calls to use the canonical tool name; FlashQuery does not alias legacy tool names.",
+    ]);
     expect(validateToolSelectors(['manage_directory'])).toEqual([]);
   });
 

@@ -25,14 +25,15 @@ describe('tool metadata registry', () => {
     );
   });
 
-  it('covers current, final, transitional, removed, and dead tool names', () => {
+  it('covers current, final, transitional, and removed tool names while omitting dead project tools', () => {
     expect(requireToolMetadata('get_document').status).toBe('final');
     expect(requireToolMetadata('create_document').status).toBe('removed');
     expect(requireToolMetadata('search_documents').status).toBe('removed');
     expect(requireToolMetadata('get_briefing').status).toBe('transitional');
     expect(requireToolMetadata('insert_doc_link').status).toBe('transitional');
     expect(requireToolMetadata('write_document').status).toBe('final');
-    expect(requireToolMetadata('list_projects').status).toBe('dead');
+    expect(getToolMetadata('list_projects')).toBeUndefined();
+    expect(getToolMetadata('get_project_info')).toBeUndefined();
     expect(TOOL_METADATA.filter((entry) => entry.status === 'removed').length).toBeGreaterThan(10);
   });
 
@@ -126,6 +127,8 @@ describe('tool metadata registry', () => {
       'insert_doc_link',
     ]));
     expect(getToolNamesByTier('tier:read-write')).not.toContain('create_document');
+    expect(getToolNamesByTier('tier:read-write')).not.toContain('list_projects');
+    expect(getToolNamesByTier('tier:read-write')).not.toContain('get_project_info');
   });
 
   it('applies additive doc-write category expansion', () => {
@@ -221,5 +224,7 @@ describe('tool metadata registry', () => {
     expect(getLegacyToolSuggestion('get_briefing')).toBeUndefined();
     expect(getLegacyToolSuggestion('insert_doc_link')).toBeUndefined();
     expect(getLegacyToolSuggestion('get_document')).toBeUndefined();
+    expect(getLegacyToolSuggestion('list_projects')).toBeUndefined();
+    expect(getLegacyToolSuggestion('get_project_info')).toBeUndefined();
   });
 });

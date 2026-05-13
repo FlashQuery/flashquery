@@ -1,4 +1,5 @@
 import {
+  getLegacyToolSuggestion,
   getToolMetadata,
   listToolMetadata,
   type ToolMetadata,
@@ -42,7 +43,8 @@ export function validateToolSelectors(selectors: readonly string[] = []): string
     }
 
     if (!isCurrentHostSelectable(metadata)) {
-      errors.push(`tool '${selector}' is not available for host MCP exposure`);
+      const suggestion = getLegacyToolSuggestion(selector);
+      errors.push(suggestion?.message ?? `tool '${selector}' is not available for host MCP exposure`);
     }
   }
 
