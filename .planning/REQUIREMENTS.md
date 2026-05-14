@@ -16,8 +16,8 @@
 - [ ] **MACRO-SRC-04**: Archived macro-library documents resolve as `not_found` for `source_ref`.
 - [x] **MACRO-SRC-05**: Macro library docs support `fqm name=<identifier>` fenced blocks with structured parse failures for malformed attributes.
 - [x] **MACRO-SRC-06**: `source_ref::name` selects named macro blocks and returns the full named-block error matrix.
-- [ ] **MACRO-SRC-07**: `input_var` declarations are collected before execution and missing required inputs are reported together.
-- [ ] **MACRO-SRC-08**: `input_vars` support the v0 value domain, including `null` and default-literal semantics.
+- [x] **MACRO-SRC-07**: `input_var` declarations are collected before execution and missing required inputs are reported together.
+- [x] **MACRO-SRC-08**: `input_vars` support the v0 value domain, including `null` and default-literal semantics.
 
 ### Lexer And Parser
 
@@ -58,7 +58,7 @@
 - [ ] **MACRO-BI-01**: Data builtins `count`, `unique`, `append`, and `concat` match the spec and POC semantics.
 - [ ] **MACRO-BI-02**: Arithmetic builtins `add`, `sub`, `mul`, `div`, and `mod` validate numeric inputs and return deterministic results.
 - [ ] **MACRO-BI-03**: `fail` and `exit` halt execution with canonical envelopes.
-- [ ] **MACRO-BI-04**: The runtime `input_var` builtin reads caller bindings and defaults consistently with pre-flight.
+- [x] **MACRO-BI-04**: The runtime `input_var` builtin reads caller bindings and defaults consistently with pre-flight.
 - [ ] **MACRO-BI-05**: `range` supports one-, two-, and three-argument forms including negative steps.
 - [ ] **MACRO-BI-06**: `echo` and `status` write to distinct trace/progress channels.
 - [ ] **MACRO-BI-07**: `task_id` and `list_tasks` expose only the current invocation/session scope.
