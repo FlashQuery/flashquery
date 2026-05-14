@@ -109,7 +109,7 @@ export class MacroTaskRegistry {
     };
     onTransition?.({ ...terminal });
     this.tasks.delete(taskId);
-    if (status !== 'cancelled') {
+    if (status !== 'cancelled' || !this.cancellationRequests.has(taskId)) {
       this.cancellationRequests.delete(taskId);
     }
     return true;
@@ -128,5 +128,5 @@ function taskSourcePreview(options: CreateMacroTaskOptions): Pick<MacroTaskRecor
 }
 
 function isSameSession(record: MacroTaskRecord, sessionId: string | undefined): boolean {
-  return sessionId === undefined || record.session_id === undefined || record.session_id === sessionId;
+  return record.session_id === sessionId;
 }

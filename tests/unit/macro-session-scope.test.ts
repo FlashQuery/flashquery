@@ -33,6 +33,7 @@ describe('macro task session scoping', () => {
     const otherTask = taskRegistry.create({ sessionId: 'session-b', source: 'sleep 1000' });
 
     expect(taskRegistry.cancel(otherTask.task_id, 'session-a')).toBe(false);
+    expect(taskRegistry.cancel(otherTask.task_id)).toBe(false);
     expect(taskRegistry.get(otherTask.task_id, 'session-b')).toMatchObject({
       task_id: otherTask.task_id,
       status: 'working',
@@ -51,6 +52,7 @@ describe('macro task session scoping', () => {
     expect(taskRegistry.list('session-a').map((task) => task.task_id)).toEqual([sessionATask.task_id]);
     expect(taskRegistry.list('session-a').map((task) => task.task_id)).not.toContain(sessionBTask.task_id);
     expect(taskRegistry.cancel(sessionBTask.task_id, 'session-a')).toBe(false);
+    expect(taskRegistry.cancel(sessionBTask.task_id)).toBe(false);
     expect(taskRegistry.cancel(sessionATask.task_id, 'session-a')).toBe(true);
   });
 });

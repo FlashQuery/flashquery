@@ -242,6 +242,7 @@ function transitionTaskFromResult(
   const payload = parseResultPayload(result);
   if (isCancelledPayload(payload)) {
     taskRegistry.cancel(task.task_id, task.session_id, onTransition);
+    taskRegistry.clearCancellationRequest(task.task_id);
     return;
   }
   if (result.isError === true || isExpectedFailurePayload(payload)) {

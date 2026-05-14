@@ -117,6 +117,7 @@ describe('macro task registry lifecycle', () => {
 
     expect(observed).toContain('cancelled');
     expect(registry.get(created.task_id, 'session-a')).toBeUndefined();
+    expect(registry.isCancellationRequested(created.task_id)).toBe(false);
   });
 
   it('T-U-176 registry construction and lifecycle operations do not touch storage modules', () => {
