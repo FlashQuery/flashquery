@@ -17,6 +17,11 @@ import {
   type ToolResult,
   type TraceStep,
 } from '../mcp/utils/response-formats.js';
+import {
+  MacroPreflightError,
+  collectInputVarContract,
+  validateInputVars,
+} from './preflight.js';
 
 const ESCAPED_DOLLAR_SENTINEL = '\uE000';
 
@@ -28,8 +33,11 @@ export type MacroValue =
   | MacroValue[]
   | { [key: string]: MacroValue };
 
+export type MacroNamedArgs = Record<string, MacroValue>;
+
 export type MacroBuiltin = (
-  args: MacroValue[],
+  positional: MacroValue[],
+  named: MacroNamedArgs,
   context: MacroInvocationContext
 ) => MacroValue | Promise<MacroValue>;
 
@@ -207,6 +215,8 @@ export async function evaluateProgram(
 
   try {
     preflightProgram(program);
+    const inputVarContract = collectInputVarContract(program);
+    validateInputVars(inputVarContract, context.inputVars);
     await execBlock(program.statements, env, context);
     return macroResult(buildSuccessPayload(context, null));
   } catch (error) {
@@ -223,6 +233,13 @@ export async function evaluateProgram(
       });
     }
     if (error instanceof MacroExpectedError) {
+      return jsonExpectedError({
+        error: error.error,
+        message: error.message,
+        details: error.details,
+      });
+    }
+    if (error instanceof MacroPreflightError) {
       return jsonExpectedError({
         error: error.error,
         message: error.message,
@@ -479,7 +496,7 @@ async function evalCall(
   context: MacroInvocationContext
 ): Promise<MacroValue> {
   await context.checkCancelled(`before call ${call.name}`);
-  const positional = await evalPositionalArgs(call.args, env, context);
+  const { positional, named } = await evalCallArgs(call.args, env, context);
 
   if (call.name === 'exit') {
     if (positional.length > 1) {
@@ -497,6 +514,25 @@ async function evalCall(
     throw new MacroFailError(message, call.line);
   }
 
+  if (call.name === 'input_var') {
+    const key = positional[0];
+    if (typeof key !== 'string') {
+      throw new MacroRuntimeError('input_var key must be a string.', call.line, {
+        reason: 'input_var_key_type',
+      });
+    }
+    if (Object.prototype.hasOwnProperty.call(context.inputVars, key)) {
+      return context.inputVars[key];
+    }
+    if (Object.prototype.hasOwnProperty.call(named, 'default')) {
+      return named['default'] ?? null;
+    }
+    throw new MacroRuntimeError(`Missing required input_var "${key}".`, call.line, {
+      reason: 'input_var_missing',
+      key,
+    });
+  }
+
   const builtin = context.builtins[call.name];
   if (!builtin) {
     throw new MacroRuntimeError(`Unknown builtin: ${call.name}`, call.line, {
@@ -506,7 +542,7 @@ async function evalCall(
   }
 
   try {
-    return await builtin(positional, context);
+    return await builtin(positional, named, context);
   } catch (error) {
     if (
       error instanceof MacroRuntimeError ||
@@ -524,18 +560,21 @@ async function evalCall(
   }
 }
 
-async function evalPositionalArgs(
+async function evalCallArgs(
   args: Arg[],
   env: Env,
   context: MacroInvocationContext
-): Promise<MacroValue[]> {
-  const values: MacroValue[] = [];
+): Promise<{ positional: MacroValue[]; named: MacroNamedArgs }> {
+  const positional: MacroValue[] = [];
+  const named: MacroNamedArgs = {};
   for (const arg of args) {
     if (arg.kind === 'PositionalArg') {
-      values.push(await evalExpr(arg.value, env, context));
+      positional.push(await evalExpr(arg.value, env, context));
+    } else {
+      named[arg.name] = await evalExpr(arg.value, env, context);
     }
   }
-  return values;
+  return { positional, named };
 }
 
 async function evalObjectLit(

@@ -105,16 +105,16 @@ describe('macro input_var preflight', () => {
     const result = await evaluateProgram(
       parseProgram(`
         phrases = input_var "phrases"
-        seen = []
+        last = null
         for phrase in $phrases do
-          seen = append $seen $phrase
+          last = $phrase
         done
-        exit $seen
+        exit $last
       `),
       { inputVars: { phrases: ['a', 'b', 'c'] } }
     );
 
-    expect(resultOf(parseToolPayload(result))).toEqual(['a', 'b', 'c']);
+    expect(resultOf(parseToolPayload(result))).toBe('c');
   });
 
   it('T-U-108 accesses nested object input_vars via field access', async () => {

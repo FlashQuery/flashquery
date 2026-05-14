@@ -19,11 +19,23 @@ export function parseToolPayload(result: ToolResult): Record<string, unknown> {
 }
 
 export function basicBuiltins(extra: Record<string, MacroBuiltin> = {}): Record<string, MacroBuiltin> {
+  const adaptedExtra = Object.fromEntries(
+    Object.entries(extra).map(([name, builtin]) => [
+      name,
+      ((positional, named, context) =>
+        builtin.length < 3
+          ? (builtin as unknown as (args: MacroValue[], context: unknown) => MacroValue | Promise<MacroValue>)(
+              positional,
+              context
+            )
+          : builtin(positional, named, context)) satisfies MacroBuiltin,
+    ])
+  ) as Record<string, MacroBuiltin>;
   const builtins: Record<string, MacroBuiltin> = {
     add: (positional) => Number(positional[0] ?? 0) + Number(positional[1] ?? 0),
     echo: (positional) => positional[0] ?? null,
     exit: (positional) => positional[0] ?? null,
-    ...extra,
+    ...adaptedExtra,
   };
   return builtins;
 }
