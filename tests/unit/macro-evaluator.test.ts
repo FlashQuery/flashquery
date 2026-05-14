@@ -95,7 +95,35 @@ describe('macro evaluator expression semantics', () => {
     });
   });
 
-  it('T-U-073 treats null, 0, empty string, empty arrays, and empty objects as falsy', () => {
+  it('T-U-073 treats null, 0, 0.0, "", [], and {} as falsy in if', async () => {
+    for (const falsy of ['null', '0', '0.0', '""', '[]', '{}']) {
+      const result = await evaluateProgram(
+        parseProgram(`if ${falsy} then\n  exit "then"\nelse\n  exit "else"\nfi`),
+        { builtins: basicBuiltins() }
+      );
+      expect(resultOf(parseToolPayload(result))).toBe('else');
+    }
+  });
+
+  it('T-U-074 treats "false" and "0" strings as truthy in if', async () => {
+    for (const truthy of ['"false"', '"0"']) {
+      const result = await evaluateProgram(
+        parseProgram(`if ${truthy} then\n  exit "then"\nelse\n  exit "else"\nfi`),
+        { builtins: basicBuiltins() }
+      );
+      expect(resultOf(parseToolPayload(result))).toBe('then');
+    }
+  });
+
+  it('T-U-075 treats negative numbers as truthy in if', async () => {
+    const result = await evaluateProgram(
+      parseProgram('if -1 then\n  exit "then"\nelse\n  exit "else"\nfi'),
+      { builtins: basicBuiltins() }
+    );
+    expect(resultOf(parseToolPayload(result))).toBe('then');
+  });
+
+  it('keeps direct isTruthy helper semantics aligned with truthiness consumers', () => {
     expect([null, 0, 0.0, '', [], {}].map((value) => isTruthy(value))).toEqual([
       false,
       false,
@@ -104,14 +132,8 @@ describe('macro evaluator expression semantics', () => {
       false,
       false,
     ]);
-  });
-
-  it('T-U-074 treats "false" and "0" strings as truthy', () => {
     expect(isTruthy('false')).toBe(true);
     expect(isTruthy('0')).toBe(true);
-  });
-
-  it('T-U-075 treats negative numbers as truthy', () => {
     expect(isTruthy(-1)).toBe(true);
   });
 

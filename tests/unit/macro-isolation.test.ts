@@ -34,7 +34,7 @@ describe('macro evaluator invocation isolation', () => {
     expect(secondTrace).toEqual([expect.objectContaining({ kind: 'exit', result: 'second' })]);
   });
 
-  it('owns inputVars, budget, progress, cancellation state, and task IDs per context', () => {
+  it('T-U-094 owns trace, inputVars, budget, progress, cancellation state, and task IDs per invocation', () => {
     const inputVars = { nested: { value: 1 } };
     const first = createInvocationContext({ inputVars, builtins: basicBuiltins() });
     const second = createInvocationContext({ input_vars: inputVars, builtins: basicBuiltins() });
@@ -82,7 +82,7 @@ describe('macro evaluator invocation isolation', () => {
     expect(seen).toContain('between pipeline stages');
   });
 
-  it('keeps concurrent unit invocations isolated; T-I-002 remains later integration scope', async () => {
+  it('T-U-094 concurrent smoke keeps unit invocations isolated; T-I-002 owner: Phase 136', async () => {
     const builtins = basicBuiltins({
       capture: async (_args, context) => {
         context.budget.external_tool_calls += 1;

@@ -18,17 +18,27 @@ describe('macro evaluator scope semantics', () => {
     expect(resultOf(parseToolPayload(result))).toBe(3);
   });
 
-  it('T-U-068 keeps a new if-branch name local to that branch', async () => {
+  it('T-U-068 creates a new if-branch name in the innermost scope only', async () => {
+    const observed: unknown[] = [];
     const result = await evaluateProgram(
       parseProgram(`
         if 1 == 1 then
           X = "branch"
+          observe $X
         fi
-        echo $X
+        observe $X
       `),
-      { builtins: basicBuiltins() }
+      {
+        builtins: basicBuiltins({
+          observe: (args) => {
+            observed.push(args[0]);
+            return null;
+          },
+        }),
+      }
     );
 
+    expect(observed).toEqual(['branch']);
     expect(result.isError).toBe(true);
     expect(parseToolPayload(result)['error']).toBe('tool_call_failed');
   });

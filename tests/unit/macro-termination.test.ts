@@ -90,11 +90,18 @@ describe('macro evaluator termination envelopes', () => {
     expect(resultOf(parseToolPayload(result))).toBeNull();
   });
 
-  it('T-U-091 multi-arg exit a b returns expected invalid_input with exit_argument_count', async () => {
-    const result = await evaluateProgram(parseProgram('a = 1\nb = 2\nexit $a $b'), {
-      builtins: basicBuiltins(),
+  it('T-U-091 multi-arg exit a b fails preflight before prior statements execute', async () => {
+    let echoed = false;
+    const result = await evaluateProgram(parseProgram('echo "should not run"\nexit "a" "b"'), {
+      builtins: basicBuiltins({
+        echo: () => {
+          echoed = true;
+          return null;
+        },
+      }),
     });
     expect(result.isError).toBe(false);
+    expect(echoed).toBe(false);
     expect(parseToolPayload(result)).toMatchObject({
       error: 'invalid_input',
       details: { reason: 'exit_argument_count' },
