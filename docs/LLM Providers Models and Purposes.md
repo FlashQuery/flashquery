@@ -302,8 +302,8 @@ Supported tiers:
 
 | Tier | Includes |
 |---|---|
-| `tier:read-only` | Data-category read/list/search tools: `get_document`, `list_vault`, `search`, `get_memory`, `search_records`, `get_record`, and transitional `get_briefing` with its `call_macro` removal gate. Non-data categories are not part of broad delegated tier expansion; for example, `get_llm_usage` is an `llm` tool and is excluded from `tier:read-only`. |
-| `tier:read-write` | Everything in `tier:read-only`, plus data-category write/edit/archive/remove tools: `write_document`, `move_document`, `copy_document`, `insert_in_doc`, `replace_doc_section`, `write_record`, `apply_tags`, `archive_document`, `remove_document`, `archive_memory`, `archive_record`, `manage_directory`, and transitional `insert_doc_link` with its `call_macro` removal gate. |
+| `tier:read-only` | Data-category read/list/search tools: `get_document`, `list_vault`, transitional `get_briefing` with its `call_macro` removal gate, `search`, `get_memory`, `get_record`, and `search_records`. Non-data categories are not part of broad delegated tier expansion; for example, `get_llm_usage` is an `llm` tool and is excluded from `tier:read-only`. |
+| `tier:read-write` | Everything in `tier:read-only`, plus data-category write/edit/archive/remove tools: `copy_document`, `move_document`, `archive_document`, `remove_document`, `insert_in_doc`, `replace_doc_section`, `apply_tags`, transitional `insert_doc_link` with its `call_macro` removal gate, `write_document`, `archive_memory`, `write_memory`, `write_record`, `archive_record`, and `manage_directory`. |
 
 You can also list explicit delegated native tool names from the same tier-backed allowlist:
 

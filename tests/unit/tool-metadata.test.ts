@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   TOOL_METADATA,
   type ToolMetadata,
@@ -79,6 +80,26 @@ function addedNames(before: readonly string[], after: readonly string[]): string
 function removedNames(before: readonly string[], after: readonly string[]): string[] {
   const afterSet = new Set(after);
   return before.filter((name) => !afterSet.has(name));
+}
+
+function documentedTierTools(tier: 'tier:read-only' | 'tier:read-write'): string[] {
+  const doc = readFileSync(new URL('../../docs/LLM Providers Models and Purposes.md', import.meta.url), 'utf8');
+  const row = doc.split('\n').find((line) => line.startsWith(`| \`${tier}\``));
+  if (!row) throw new Error(`Missing documented ${tier} row`);
+
+  const tierToolNames = new Set([
+    ...getToolNamesByTier('tier:read-only'),
+    ...getToolNamesByTier('tier:read-write'),
+  ]);
+  const explicitTools = [...row.matchAll(/`([^`]+)`/g)]
+    .map((match) => match[1])
+    .filter((name) => tierToolNames.has(name));
+
+  const documented = tier === 'tier:read-write' && row.includes('Everything in `tier:read-only`')
+    ? new Set([...documentedTierTools('tier:read-only'), ...explicitTools])
+    : new Set(explicitTools);
+
+  return getToolNamesByTier(tier).filter((name) => documented.has(name));
 }
 
 describe('tool metadata registry', () => {
@@ -323,6 +344,11 @@ describe('tool metadata registry', () => {
       'insert_in_doc',
       'replace_doc_section',
     ]);
+  });
+
+  it('keeps LLM purpose tier documentation aligned with metadata-derived delegated tiers', () => {
+    expect(documentedTierTools('tier:read-only')).toEqual(EXPECTED_DELEGATED_READ_ONLY_TIER);
+    expect(documentedTierTools('tier:read-write')).toEqual(EXPECTED_DELEGATED_READ_WRITE_TIER);
   });
 
   it('applies additive doc-write category expansion', () => {
