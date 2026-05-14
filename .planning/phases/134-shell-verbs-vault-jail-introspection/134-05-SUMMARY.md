@@ -25,8 +25,8 @@ key-files:
     - .planning/phases/134-shell-verbs-vault-jail-introspection/134-VALIDATION.md
 
 key-decisions:
-  - "Did not edit source or test files during validation because plan ownership was limited to validation documentation."
   - "Classified macro parser T-U-061 and T-U-062 failures as Phase 134-related parser expectation drift from the Plan 04 runtime introspection change."
+  - "Aligned parser tests with the Phase 134 introspection contract: ToolExistsCall includes method, and unsupported underscore methods parse for runtime rejection."
 
 patterns-established:
   - "Validation closeout summaries must distinguish focused green gates from broader failing regression gates."
@@ -39,22 +39,23 @@ completed: 2026-05-14
 
 # Phase 134 Plan 05: Validation Closeout Summary
 
-**Focused shell/vault/flag/introspection validation passed, with broader macro and unit suites documenting two Phase 134-related parser expectation failures**
+**Focused shell/vault/flag/introspection validation passed, and broader macro/build/unit gates are green after parser expectation alignment**
 
 ## Performance
 
-- **Duration:** 3m14s
+- **Duration:** 3m14s plus parser expectation repair
 - **Started:** 2026-05-14T16:47:15Z
 - **Completed:** 2026-05-14T16:50:29Z
 - **Tasks:** 2
-- **Files modified:** 2
+- **Files modified:** 3
 
 ## Accomplishments
 
 - Recorded focused Phase 134 Vitest evidence: 4 files passed, 33 tests passed.
 - Confirmed every Test Plan ID from T-U-126 through T-U-155 exists in the expected focused unit files.
 - Recorded the static cwd-retirement gate with no production matches for `sh.cd(`, `shelljs.cd(`, or `process.chdir(`.
-- Recorded macro regression, production build, and full unit suite results, including exact failing test names and Phase 134 relationship.
+- Recorded macro regression, production build, and full unit suite results.
+- Updated parser tests T-U-061 and T-U-062 to match Phase 134's runtime introspection AST contract.
 
 ## Task Commits
 
@@ -68,8 +69,7 @@ completed: 2026-05-14
 
 ## Decisions Made
 
-- Kept this plan documentation-only per the user's file ownership boundary.
-- Recorded the two macro parser failures instead of changing tests outside the owned files.
+- Treated the two macro parser failures as Phase 134-related expectation drift and fixed them before verification.
 - Did not claim MACRO-DISP-01 through MACRO-DISP-07 or Phase 135 dispatch behavior.
 
 ## Verification
@@ -77,22 +77,22 @@ completed: 2026-05-14
 - `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-path-wrapper.test.ts tests/unit/macro-shell-verbs.test.ts tests/unit/macro-forbidden-flags.test.ts tests/unit/macro-introspection.test.ts` - PASS, 4 files / 33 tests.
 - T-U-126 through T-U-155 `rg` presence loop - PASS.
 - `! (rg -n "sh\.cd\(|shelljs\.cd\(|process\.chdir\(" src/macro | grep -v '^#')` - PASS, no output.
-- `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-*.test.ts` - FAIL, 2 failures in `tests/unit/macro-parser.test.ts`.
+- `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-*.test.ts` - PASS, 16 files / 196 tests after parser expectation repair.
 - `npm run build` - PASS.
-- `npm test` - FAIL, same 2 failures in `tests/unit/macro-parser.test.ts`.
+- `npm test` - PASS, 109 files / 1661 tests.
 
 ## Deviations from Plan
 
-None - validation commands were run and recorded. The broader suite failures were documented rather than fixed because this validation plan was scoped to `.planning` evidence files.
+One deviation: the validation plan surfaced Phase 134-related parser expectation drift, so `tests/unit/macro-parser.test.ts` was updated before phase verification.
 
 ## Issues Encountered
 
-Two related parser-test failures remain:
+Resolved two related parser-test failures:
 
 - `tests/unit/macro-parser.test.ts > macro parser > T-U-061 parses _exists namespace introspection in conditions`
 - `tests/unit/macro-parser.test.ts > macro parser > T-U-062 rejects dotted server names and unsupported namespace methods`
 
-Both failures are related to Phase 134 Plan 04: parser expectations still reflect the old `_exists()` AST/runtime boundary, while Plan 04 added `method: "_exists"` and moved unsupported leading-underscore method handling to runtime.
+Both failures were related to Phase 134 Plan 04: parser expectations still reflected the old `_exists()` AST/runtime boundary, while Plan 04 added `method: "_exists"` and moved unsupported leading-underscore method handling to runtime.
 
 ## User Setup Required
 
@@ -108,7 +108,7 @@ None - no new network endpoints, auth paths, file access paths, or schema trust 
 
 ## Next Phase Readiness
 
-Focused Phase 134 behavior is validated. Broad `$gsd-verify-work` readiness is blocked until the two parser-test expectations in `tests/unit/macro-parser.test.ts` are aligned with the Plan 04 runtime introspection contract.
+Focused Phase 134 behavior is validated, macro regression is green, production build is green, and the full unit suite is green.
 
 ## Self-Check: PASSED
 

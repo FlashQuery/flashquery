@@ -192,21 +192,31 @@ describe('macro parser', () => {
     expect(statement.condition).toEqual({
       kind: 'ToolExistsCall',
       server: 'fq',
+      method: '_exists',
       line: 1,
     });
 
-    const [brokered] = parse('if brave_search._exists() then\necho "ok"\nfi').statements as IfStmt[];
+    const [brokered] = parse('if brave_search._exists() then\necho "ok"\nfi')
+      .statements as IfStmt[];
     expect(brokered.condition).toEqual({
       kind: 'ToolExistsCall',
       server: 'brave_search',
+      method: '_exists',
       line: 1,
     });
   });
 
-  it('T-U-062 rejects dotted server names and unsupported namespace methods', () => {
+  it('T-U-062 rejects dotted server names while parsing underscore namespace methods', () => {
     expect(parseError('a.b.tool({})').details.reason).toBe('unexpected_token');
     expect(parseError('fq.x._exists()').details.reason).toBe('unexpected_token');
-    expect(parseError('fq._missing()').details.reason).toBe('unexpected_token');
+
+    const [statement] = parse('if fq._missing() then\necho "ok"\nfi').statements as IfStmt[];
+    expect(statement.condition).toEqual({
+      kind: 'ToolExistsCall',
+      server: 'fq',
+      method: '_missing',
+      line: 1,
+    });
   });
 
   it('T-U-063 returns structured parse_error envelopes', () => {
