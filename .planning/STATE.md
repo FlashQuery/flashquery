@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
 status: planning
-last_updated: "2026-05-14T03:27:03.314Z"
-last_activity: 2026-05-14
+last_updated: "2026-05-14T03:34:00.000Z"
+last_activity: 2026-05-14 — Milestone v3.4 roadmap created
 progress:
-  total_phases: 0
+  total_phases: 9
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Planning next milestone
+**Current focus:** Phase 130 — Foundation, Metadata, Broker Shim, Archive Lock
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 130 — Foundation, Metadata, Broker Shim, Archive Lock
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-14 — Milestone v3.4 started
+Status: Ready for phase discussion/planning
+Last activity: 2026-05-14 — Milestone v3.4 roadmap created
 
 ## Performance Metrics
 
