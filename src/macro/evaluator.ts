@@ -750,6 +750,7 @@ async function evalToolCall(
   env: Env,
   context: MacroInvocationContext
 ): Promise<MacroValue> {
+  const arg = await evalToolArg(call, env, context);
   await context.checkCancelled(`before tool call ${call.server}.${call.tool}`);
   if (!context.toolRegistry && !context.dispatchTool) {
     throw new MacroRuntimeError(
@@ -764,7 +765,6 @@ async function evalToolCall(
     );
   }
 
-  const arg = await evalToolArg(call, env, context);
   if (context.toolRegistry && context.allowedToolNames) {
     const dispatched = await dispatchMacroTool({
       registry: context.toolRegistry,

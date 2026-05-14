@@ -224,7 +224,7 @@ export function registerMacroTools(
           catalog,
           broker,
           taskRegistry,
-          sessionId: options.sessionIdProvider?.(extra) ?? registrationSessionId,
+          sessionId: options.sessionIdProvider?.(extra) ?? resolveSessionId(extra) ?? registrationSessionId,
           nativeDispatchContext: createNativeDispatchContext(config, extra?.signal),
           brokerTools: options.brokerTools,
           templateReverseMap: templateMetadata.templateReverseMap,
@@ -276,4 +276,19 @@ function isExpectedFailurePayload(payload: unknown): boolean {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function resolveSessionId(extra: unknown): string | undefined {
+  if (!isRecord(extra)) return undefined;
+  for (const key of ['sessionId', 'session_id', 'transportSessionId']) {
+    const value = extra[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  for (const key of ['session', 'transport', 'requestInfo']) {
+    const nested = extra[key];
+    if (!isRecord(nested)) continue;
+    const value = nested['id'] ?? nested['sessionId'] ?? nested['session_id'];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return undefined;
 }
