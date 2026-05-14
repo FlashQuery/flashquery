@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: ready_to_plan
+status: executing
 stopped_at: Completed 130-02-PLAN.md
-last_updated: "2026-05-14T04:20:48.380Z"
+last_updated: "2026-05-14T11:26:36.421Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
-  completed_phases: 2
-  total_plans: 2
-  completed_plans: 2
-  percent: 22
+  completed_phases: 1
+  total_plans: 7
+  completed_plans: 3
+  percent: 43
 ---
 
 # FlashQuery Core — State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 130 — foundation-metadata-broker-shim-archive-lock
+**Current focus:** Phase 131 — lexer-parser-fence-extraction
 
 ## Current Position
 
-Phase: 131
-Plan: Not started
-Status: Ready to plan
+Phase: 131 (lexer-parser-fence-extraction) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-05-14
 
 ## Performance Metrics
@@ -102,6 +102,7 @@ Last activity: 2026-05-14
 | Phase 129 P03 | 24m26s | 3 tasks | 9 files |
 | Phase 130 P02 | 4m32s | 2 tasks | 4 files |
 | Phase 130 P01 | 8m04s | 3 tasks | 9 files |
+| Phase 131 P01 | 20 min | 2 tasks | 6 files |
 
 ## Decisions
 

@@ -21,16 +21,16 @@
 
 ### Lexer And Parser
 
-- [ ] **MACRO-PARSE-01**: The lexer reserves the v0 keyword set and avoids prefix-token misclassification.
+- [x] **MACRO-PARSE-01**: The lexer reserves the v0 keyword set and avoids prefix-token misclassification.
 - [ ] **MACRO-PARSE-02**: Assignments to builtin names are rejected before execution.
-- [ ] **MACRO-PARSE-03**: Numeric, string, list, object, `null`, and comment grammar matches the v0 spec.
+- [x] **MACRO-PARSE-03**: Numeric, string, list, object, `null`, and comment grammar matches the v0 spec.
 - [ ] **MACRO-PARSE-04**: Comparison operators parse and evaluate according to v0 semantics.
 - [ ] **MACRO-PARSE-05**: Boolean combinators parse with short-circuit semantics.
 - [ ] **MACRO-PARSE-06**: The `..` range operator and `range` builtin are parsed and represented correctly.
 - [ ] **MACRO-PARSE-07**: `while $cond do ... done` parses and executes.
 - [ ] **MACRO-PARSE-08**: `for X in $list do ... done` requires `do`.
 - [ ] **MACRO-PARSE-09**: Namespaced JSON-arg tool calls parse as statement and expression forms.
-- [ ] **MACRO-PARSE-10**: Parse failures return structured `parse_error` envelopes with stable reasons, line numbers, and near tokens.
+- [x] **MACRO-PARSE-10**: Parse failures return structured `parse_error` envelopes with stable reasons, line numbers, and near tokens.
 
 ### Evaluator Semantics
 
