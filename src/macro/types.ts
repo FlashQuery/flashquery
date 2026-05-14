@@ -5,7 +5,14 @@ export interface Program {
   statements: Statement[];
 }
 
-export type Statement = Binding | Pipeline | ForLoop | WhileLoop | IfStmt | ToolCall;
+export type Statement =
+  | Binding
+  | Pipeline
+  | ForLoop
+  | WhileLoop
+  | IfStmt
+  | ToolCall
+  | ToolExistsCall;
 
 export interface Binding {
   kind: 'Binding';
@@ -72,6 +79,13 @@ export interface ToolCall {
   line: number;
 }
 
+export interface ToolExistsCall {
+  kind: 'ToolExistsCall';
+  server: string;
+  tool: string;
+  line: number;
+}
+
 export type Expr =
   | StringLit
   | NumLit
@@ -83,8 +97,10 @@ export type Expr =
   | RangeExpr
   | BinaryExpr
   | UnaryExpr
+  | Call
   | Pipeline
-  | ToolCall;
+  | ToolCall
+  | ToolExistsCall;
 
 export interface StringLit {
   kind: 'StringLit';
@@ -123,7 +139,7 @@ export interface ObjectEntry {
 
 export interface FieldAccess {
   kind: 'FieldAccess';
-  target: VarRef | FieldAccess | ToolCall;
+  target: VarRef | FieldAccess | ToolCall | ToolExistsCall;
   field: string;
 }
 
@@ -152,4 +168,6 @@ export interface MacroSourceBlock {
   openingLine: number;
 }
 
-export type MacroParseResult = { ok: true; program: Program } | { ok: false; error: MacroParseErrorEnvelope };
+export type MacroParseResult =
+  | { ok: true; program: Program }
+  | { ok: false; error: MacroParseErrorEnvelope };

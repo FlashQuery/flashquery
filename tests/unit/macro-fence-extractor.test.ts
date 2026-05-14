@@ -60,7 +60,10 @@ describe('macro fence extraction', () => {
   });
 
   it('T-U-005 rejects block names over 64 characters', () => {
-    expectMalformed(['```fqm name=A'.concat('a'.repeat(64)), 'echo "x"', '```'].join('\n'), `fqm name=A${'a'.repeat(64)}`);
+    expectMalformed(
+      ['```fqm name=A'.concat('a'.repeat(64)), 'echo "x"', '```'].join('\n'),
+      `fqm name=A${'a'.repeat(64)}`
+    );
   });
 
   it('T-U-006 rejects empty name attributes', () => {
@@ -68,7 +71,10 @@ describe('macro fence extraction', () => {
   });
 
   it('T-U-007 rejects duplicate name attributes', () => {
-    expectMalformed(['```fqm name=foo name=bar', 'echo "x"', '```'].join('\n'), 'fqm name=foo name=bar');
+    expectMalformed(
+      ['```fqm name=foo name=bar', 'echo "x"', '```'].join('\n'),
+      'fqm name=foo name=bar'
+    );
   });
 
   it('T-U-008 rejects quoted name attributes', () => {

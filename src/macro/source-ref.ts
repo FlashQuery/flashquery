@@ -39,7 +39,10 @@ export function splitMacroSourceRef(value: string): MacroSourceRefSplitResult {
   if (blockName.length === 0 || !validateMacroBlockName(blockName)) {
     return {
       valid: false,
-      error: macroInvalidInput('invalid_block_name_format', { source_ref: value, block_name: blockName }),
+      error: macroInvalidInput('invalid_block_name_format', {
+        source_ref: value,
+        block_name: blockName,
+      }),
     };
   }
 
@@ -47,9 +50,7 @@ export function splitMacroSourceRef(value: string): MacroSourceRefSplitResult {
 }
 
 export function describeAvailableMacroBlocks(blocks: MacroSourceBlock[]): AvailableMacroBlocks {
-  const named = blocks
-    .map((block) => block.name)
-    .filter((name): name is string => name !== null);
+  const named = blocks.map((block) => block.name).filter((name): name is string => name !== null);
   const unnamedCount = blocks.filter((block) => block.name === null).length;
 
   return {
