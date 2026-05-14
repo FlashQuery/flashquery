@@ -68,7 +68,7 @@ completed: 2026-05-14
 1. **Task 1: Define registry contracts and buildToolRegistry** - `6eda9ce` (feat)
 2. **Task 2: Implement dispatchMacroTool lookup and backstop** - `30e0b8d` (feat)
 
-**Plan metadata:** pending final docs commit
+**Plan metadata:** `01533c1` (state/roadmap), `d36f6e1` (summary artifact)
 
 ## Files Created/Modified
 
