@@ -34,8 +34,9 @@ function expectForbiddenPath(fn: () => unknown, path: string): void {
   } catch (error) {
     expect(error).toBeInstanceOf(MacroExpectedError);
     expect((error as MacroExpectedError).error).toBe('forbidden_path');
+    // REQ-042 ac3 pins this public envelope message exactly.
     expect((error as MacroExpectedError).message).toBe(
-      'Macro shell path resolves outside the vault root.'
+      'macro shell verbs cannot reach outside the vault root'
     );
     expect((error as MacroExpectedError).details).toMatchObject({
       path,

@@ -42,6 +42,13 @@ This document defines every behavioral coverage point we want to verify through 
 | MT-I-tier-5a | §3.11.1.1 I-tier-5 hard-exclusion branch: explicit `maintain_vault` is rejected because it is admin-tier and hard-excluded. | tests/integration/tool-registry.test.ts (`I-tier-5`) | 2026-05-13 | 2026-05-13 |
 | MT-I-tier-5b | §3.11.1.1 I-tier-5 reachability branch: explicit admin-style fixtures without hard exclusion remain reachable. | tests/integration/tool-registry.test.ts (`I-tier-5b`) | 2026-05-13 | 2026-05-13 |
 
+## Phase 134 Macro Shell Verbs
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| ML-09 | REQ-042 / T-S-009: `call_macro` rejects shell path arguments that escape the vault jail with a `forbidden_path` expected-error envelope. | test_macro_vault_jail_escape | 2026-05-14 | 2026-05-14 |
+| ML-10 | REQ-043 / T-S-010: `call_macro` rejects forbidden mutation flags such as `sed -i` before execution with a `forbidden_shell_flag` expected-error envelope. | test_macro_forbidden_shell_flag | 2026-05-14 | 2026-05-14 |
+
 ## 1. Document Lifecycle
 
 Core CRUD operations on vault documents via MCP.

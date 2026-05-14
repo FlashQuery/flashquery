@@ -19,7 +19,7 @@ function assertInsideVault(hostPath: string, vaultRoot: string, originalPath: st
   if (normalized !== normalizedRoot && !normalized.startsWith(rootWithSep)) {
     throw new MacroExpectedError(
       'forbidden_path',
-      'Macro shell path resolves outside the vault root.',
+      'macro shell verbs cannot reach outside the vault root',
       { path: originalPath, reason: 'resolves_outside_vault' }
     );
   }

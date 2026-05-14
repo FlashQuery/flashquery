@@ -1,0 +1,35 @@
+name: macro_shell_pipeline_and_exists
+description: >
+  Phase 134 macro scenario combining native and brokered _exists() introspection
+  with multiple read-only shell verbs against the vault jail.
+coverage:
+  - IS-09
+  - IX-23
+
+steps:
+  - label: "Write shell pipeline fixture"
+    action: vault.write
+    name: macro_shell_doc
+    path: "macro/shell-notes.md"
+    title: "Macro Shell Notes"
+    content: |
+      TODO one
+      keep
+      TODO two
+    tags: [macro-shell]
+
+  - label: "call_macro combines _exists, cat, grep, wc, and find"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          fq_ok = fq._exists()
+          broker_ok = brave_search._exists()
+          todo_count = cat "/_integration/macro/shell-notes.md" | grep "TODO" | wc -l
+          found = find "/_integration/macro" --name "*.md"
+          exit { fq_ok: $fq_ok, broker_ok: $broker_ok, todo_count: $todo_count, found: $found }
+      expect_json_equals:
+        path: result.todo_count
+        value: 2
+      expect_contains: "\"fq_ok\":true"
+      expect_not_contains: "\"broker_ok\":true"

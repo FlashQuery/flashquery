@@ -25,10 +25,10 @@ Phase 134 delivers the shell verb, vault jail, forbidden flag, cwd-retirement, a
 | Requirement | Evidence | Status |
 |-------------|----------|--------|
 | MACRO-SHELL-01 | `src/macro/shell-verbs.ts` exports exactly `grep`, `find`, `sed`, `cat`, `wc`, `head`, `tail`, and `ls`; `tests/unit/macro-shell-verbs.test.ts` covers T-U-126 through T-U-136. | passed |
-| MACRO-SHELL-02 | `src/macro/path-wrapper.ts` provides `resolveMacroPath`, `toMacroPath`, and realpath containment; shell reads/listing check real paths before access; tests cover lexical escapes, symlink escapes, and glob behavior. | passed |
-| MACRO-SHELL-03 | `src/macro/forbidden-flag-scan.ts` rejects forbidden `sed` and `find` mutation flags before execution; evaluator calls `preScanForbiddenShellFlags(program)` before runtime execution. | passed |
+| MACRO-SHELL-02 | `src/macro/path-wrapper.ts` provides `resolveMacroPath`, `toMacroPath`, and realpath containment; shell reads/listing check real paths before access and return the REQ-042 ac3 `forbidden_path` message. Unit, integration, and directed scenario coverage now cover lexical escapes, symlink escapes, glob behavior, and MCP transport envelope shape (`ML-09`). | passed |
+| MACRO-SHELL-03 | `src/macro/forbidden-flag-scan.ts` rejects forbidden `sed` and `find` mutation flags before execution; evaluator calls `preScanForbiddenShellFlags(program)` before runtime execution. Directed scenario `ML-10` verifies the MCP transport envelope for `sed -i`. | passed |
 | MACRO-SHELL-04 | `src/macro/shell-verbs.ts` avoids `sh.cd`, `shelljs.cd`, and `process.chdir`; static T-U-143 and concurrent T-U-151 prove cwd preservation. | passed |
-| MACRO-SHELL-05 | `src/macro/introspection.ts`, parser/types/evaluator support native `fq._exists()` and brokered `<server>._exists()` without tool dispatch or caching; tests cover T-U-152 through T-U-155. | passed |
+| MACRO-SHELL-05 | `src/macro/introspection.ts`, parser/types/evaluator support native `fq._exists()` and brokered `<server>._exists()` without tool dispatch or caching; broker probes time out to `false` after 5 seconds. Tests cover T-U-152 through T-U-156 and YAML integration scenario `macro_shell_pipeline_and_exists`. | passed |
 
 ## Automated Gates
 
@@ -37,6 +37,11 @@ Phase 134 delivers the shell verb, vault jail, forbidden flag, cwd-retirement, a
 - `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-*.test.ts` - passed, 16 files / 200 tests.
 - `npm run build` - passed.
 - `npm test` - passed, 109 files / 1665 tests.
+- `npm test -- tests/unit/macro-path-wrapper.test.ts tests/unit/macro-introspection.test.ts tests/unit/macro-shell-verbs.test.ts tests/unit/macro-forbidden-flags.test.ts` - passed, 4 files / 38 tests after gap remediation.
+- `npm run test:integration -- tests/integration/macro-shell-verbs.integration.test.ts` - passed, 1 file / 2 tests after gap remediation.
+- `python3 tests/scenarios/directed/testcases/test_macro_vault_jail_escape.py --managed --fqc-dir . --port-range 9300 9399` - passed.
+- `python3 tests/scenarios/directed/testcases/test_macro_forbidden_shell_flag.py --managed --fqc-dir . --port-range 9300 9399` - passed.
+- `python3 tests/scenarios/integration/run_integration.py --managed macro_shell_pipeline_and_exists --port-range 9400 9499` - passed, 1/1 scenarios.
 - Schema drift check - `drift_detected: false`.
 - Codebase drift check - skipped, `no-structure-md`.
 
@@ -55,4 +60,4 @@ Phase 134 does not claim MACRO-DISP-01 through MACRO-DISP-07. Namespaced dispatc
 
 ## Gaps
 
-None.
+Phase 134 gap-analysis follow-up on 2026-05-14 added public directed scenarios, YAML integration scenario coverage, a focused Vitest integration test, the REQ-042 ac3 message correction, and the REQ-045 ac4 broker probe timeout guard. The directed matrix uses `ML-09` / `ML-10` rather than the gap proposal's `M-09` / `M-10` because `M-09` and `M-10` were already occupied by memory lifecycle coverage.

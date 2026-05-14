@@ -111,19 +111,17 @@ describe('MCP tool registration metadata', () => {
     expect(() => assertRegisteredToolsHaveMetadata(catalog)).not.toThrow();
   });
 
-  it('registers call_macro as a non-executing canonical expected-error scaffold', async () => {
+  it('registers call_macro with inline production evaluator execution', async () => {
     const server = makeCatalogServer();
     registerAllCurrentTools(server);
 
     const callMacro = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro');
     expect(callMacro).toBeDefined();
 
-    const result = await callMacro?.handler({ source: 'echo "hello"' }, {} as never);
-    expect(result?.isError).toBe(false);
-    expect(JSON.parse(result?.content[0]?.text ?? '')).toEqual({
-      error: 'unsupported',
-      message: 'call_macro is registered but macro execution is not implemented in Phase 130.',
-      details: { reason: 'phase_130_scaffold' },
+    const result = await callMacro?.handler({ source: 'exit "hello"' }, {} as never);
+    expect(result?.isError).toBeUndefined();
+    expect(JSON.parse(result?.content[0]?.text ?? '')).toMatchObject({
+      result: 'hello',
     });
   });
 

@@ -1,11 +1,13 @@
 import type { McpBroker } from '../services/mcp-broker.js';
 import { MacroRuntimeError } from './evaluator.js';
 
+export const DEFAULT_BROKER_PROBE_TIMEOUT_MS = 5000;
+
 export async function resolveNamespaceIntrospection(
   server: string,
   method: string,
   broker: McpBroker,
-  context: { line?: number }
+  context: { line?: number; probeTimeoutMs?: number }
 ): Promise<boolean> {
   if (method !== '_exists') {
     throw new MacroRuntimeError('Unsupported namespace introspection method.', context.line, {
@@ -19,5 +21,33 @@ export async function resolveNamespaceIntrospection(
     return true;
   }
 
-  return broker.isConnected(server);
+  return brokerIsConnectedWithTimeout(
+    broker,
+    server,
+    context.probeTimeoutMs ?? DEFAULT_BROKER_PROBE_TIMEOUT_MS
+  );
+}
+
+async function brokerIsConnectedWithTimeout(
+  broker: McpBroker,
+  server: string,
+  timeoutMs: number
+): Promise<boolean> {
+  if (timeoutMs <= 0) {
+    return false;
+  }
+
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      broker.isConnected(server),
+      new Promise<false>((resolve) => {
+        timeout = setTimeout(() => resolve(false), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) {
+      clearTimeout(timeout);
+    }
+  }
 }

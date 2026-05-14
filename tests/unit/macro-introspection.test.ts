@@ -75,4 +75,26 @@ describe('macro namespace introspection', () => {
     expect(broker.isConnected).toHaveBeenNthCalledWith(2, 'brave_search');
     expect(dispatchTool).not.toHaveBeenCalled();
   });
+
+  it('T-U-156 returns false when a brokered _exists probe exceeds the 5-second timeout', async () => {
+    vi.useFakeTimers();
+    const broker = {
+      isConnected: vi.fn(() => new Promise<boolean>(() => {})),
+      getToolHandler: vi.fn(() => null),
+    } satisfies McpBroker;
+    const dispatchTool = throwingDispatch();
+
+    const evaluation = evaluateProgram(parseProgram('exit brave_search._exists()'), {
+      broker,
+      dispatchTool,
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    const result = await evaluation;
+
+    expect(resultOf(parseToolPayload(result))).toBe(false);
+    expect(broker.isConnected).toHaveBeenCalledTimes(1);
+    expect(broker.isConnected).toHaveBeenCalledWith('brave_search');
+    expect(dispatchTool).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
 });
