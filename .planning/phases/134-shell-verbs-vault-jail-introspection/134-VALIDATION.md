@@ -77,4 +77,84 @@ All phase behaviors have automated verification.
 - [x] Feedback latency < 60s for focused macro unit files
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved by Phase 134 Plan 05 validation gate
+
+---
+
+## Final Phase 134 Validation Evidence
+
+**Started:** 2026-05-14T16:47:15Z
+**Validator:** 134-05
+**Scope:** MACRO-SHELL-01 through MACRO-SHELL-05 only. This validation does not claim Phase 135 dispatch permissions, namespaced tool dispatch permission pre-scan, or dispatch hard exclusions are implemented.
+
+### Task 1: Focused Phase Validation And Source Gates
+
+#### Focused Vitest Gate
+
+```bash
+npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-path-wrapper.test.ts tests/unit/macro-shell-verbs.test.ts tests/unit/macro-forbidden-flags.test.ts tests/unit/macro-introspection.test.ts
+```
+
+**Exit status:** 0
+**Result:** PASS
+
+```text
+RUN  v4.1.1 /Users/matt/Documents/Claude/Projects/FlashQuery/flashquery
+
+Test Files  4 passed (4)
+     Tests  33 passed (33)
+  Start at  13:47:53
+  Duration  1.06s (transform 1.24s, setup 0ms, import 2.15s, tests 159ms, environment 0ms)
+```
+
+#### Test Plan ID Presence Gate
+
+```bash
+for id in T-U-126 T-U-127 T-U-128 T-U-129 T-U-130 T-U-131 T-U-132 T-U-133 T-U-134 T-U-135 T-U-136 T-U-137 T-U-138 T-U-139 T-U-140 T-U-141 T-U-142 T-U-143 T-U-144 T-U-145 T-U-146 T-U-147 T-U-148 T-U-149 T-U-150 T-U-151 T-U-152 T-U-153 T-U-154 T-U-155; do rg -q "$id" tests/unit/macro-path-wrapper.test.ts tests/unit/macro-shell-verbs.test.ts tests/unit/macro-forbidden-flags.test.ts tests/unit/macro-introspection.test.ts || exit 1; echo "PASS $id"; done
+```
+
+**Exit status:** 0
+**Result:** PASS
+
+| Test Plan ID | Status |
+|--------------|--------|
+| T-U-126 | PASS |
+| T-U-127 | PASS |
+| T-U-128 | PASS |
+| T-U-129 | PASS |
+| T-U-130 | PASS |
+| T-U-131 | PASS |
+| T-U-132 | PASS |
+| T-U-133 | PASS |
+| T-U-134 | PASS |
+| T-U-135 | PASS |
+| T-U-136 | PASS |
+| T-U-137 | PASS |
+| T-U-138 | PASS |
+| T-U-139 | PASS |
+| T-U-140 | PASS |
+| T-U-141 | PASS |
+| T-U-142 | PASS |
+| T-U-143 | PASS |
+| T-U-144 | PASS |
+| T-U-145 | PASS |
+| T-U-146 | PASS |
+| T-U-147 | PASS |
+| T-U-148 | PASS |
+| T-U-149 | PASS |
+| T-U-150 | PASS |
+| T-U-151 | PASS |
+| T-U-152 | PASS |
+| T-U-153 | PASS |
+| T-U-154 | PASS |
+| T-U-155 | PASS |
+
+#### Static Cwd-Retirement Gate
+
+```bash
+! (rg -n "sh\.cd\(|shelljs\.cd\(|process\.chdir\(" src/macro | grep -v '^#')
+```
+
+**Exit status:** 0
+**Result:** PASS
+**Output:** No production matches in `src/macro` for `sh.cd(`, `shelljs.cd(`, or `process.chdir(`.
