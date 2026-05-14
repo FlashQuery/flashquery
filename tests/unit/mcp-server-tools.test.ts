@@ -51,7 +51,7 @@ function registerAllCurrentTools(server: McpServer): void {
 }
 
 describe('MCP tool registration metadata', () => {
-  it('skips host-disabled tools before native catalog capture and SDK registration', () => {
+  it('keeps host-disabled tools in the native catalog while skipping SDK registration', () => {
     const originalRegisterTool = vi.fn();
     const server = wrapServerWithToolCatalog({
       registerTool: originalRegisterTool,
@@ -60,12 +60,12 @@ describe('MCP tool registration metadata', () => {
     server.registerTool('get_document', { description: 'Get document', inputSchema: {} }, vi.fn() as never);
     server.registerTool('write_memory', { description: 'Write memory', inputSchema: {} }, vi.fn() as never);
 
-    expect(getNativeToolCatalog(server).map((tool) => tool.name)).toEqual(['get_document']);
+    expect(getNativeToolCatalog(server).map((tool) => tool.name)).toEqual(['get_document', 'write_memory']);
     expect(originalRegisterTool).toHaveBeenCalledTimes(1);
     expect(originalRegisterTool).toHaveBeenCalledWith('get_document', expect.any(Object), expect.any(Function));
   });
 
-  it('registers all modules against a host-filtered doc-read catalog', () => {
+  it('registers all modules against a full native catalog while SDK registration stays host-filtered', () => {
     const server = wrapServerWithToolCatalog(
       new McpServer({ name: 'test', version: '0.1.0' }),
       { hostEnabledToolNames: new Set(resolveHostToolExposure({ tools: ['category:doc-read'] }).hostEnabledToolNames) }
@@ -75,9 +75,7 @@ describe('MCP tool registration metadata', () => {
 
     const names = getNativeToolCatalog(server).map((tool) => tool.name);
     expect(names).toEqual(expect.arrayContaining(['get_document', 'list_vault']));
-    expect(names).not.toContain('save_memory');
-    expect(names).not.toContain('create_document');
-    expect(names).not.toContain('call_model');
+    expect(names).toEqual(expect.arrayContaining(['write_memory', 'write_document', 'call_model']));
   });
 
   it('registers current tool modules into the native catalog', () => {

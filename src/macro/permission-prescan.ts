@@ -18,7 +18,6 @@ export interface PreScanToolReferencesOptions {
   callerContext?: MacroCallerContext;
   templateToolNames?: ReadonlySet<string> | readonly string[];
   hardExcludedReasons?: ReadonlyMap<string, string>;
-  knownToolNames?: ReadonlySet<string> | readonly string[];
 }
 
 interface UnknownToolReference extends ToolReference {
@@ -34,7 +33,6 @@ export function collectToolReferences(program: Program): ToolReference[] {
 export function preScanToolReferences(options: PreScanToolReferencesOptions): ToolResult | undefined {
   const references = collectToolReferences(options.program);
   const templateToolNames = toStringSet(options.templateToolNames);
-  const knownToolNames = toStringSet(options.knownToolNames);
   const templateReference = references.find((reference) =>
     isTemplateReference(reference, templateToolNames)
   );
@@ -78,7 +76,6 @@ export function preScanToolReferences(options: PreScanToolReferencesOptions): To
       .map((reference): UnknownToolReference | undefined => {
         const serverEntry = options.registry[reference.server];
         if (serverEntry.tools[reference.tool] !== undefined) return undefined;
-        if (knownToolNames.has(formatToolReference(reference))) return undefined;
         return {
           ...reference,
           available: Object.keys(serverEntry.tools).sort(),

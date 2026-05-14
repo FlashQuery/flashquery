@@ -101,6 +101,19 @@ describe('macro ToolRegistry construction', () => {
     expect(await searchTool({}, {} as Parameters<ToolFn>[1])).toMatchObject({ ok: true, name: 'search' });
   });
 
+  it('keeps fq.tools at full native catalog breadth while host allowlist stays narrowed', async () => {
+    const result = await buildToolRegistry({
+      config: makeConfig({ hostMcpTools: { tools: ['search'] } }),
+      callerContext: { origin: 'host' },
+      broker: new NullMcpBroker(),
+      catalog: [nativeTool('search'), nativeTool('archive_document'), nativeTool('call_macro')],
+      nativeDispatchContext: nativeDispatchContext(),
+    });
+
+    expect(Object.keys(result.registry.fq.tools).sort()).toEqual(['archive_document', 'search']);
+    expect(result.allowedToolNames).toEqual(['fq.search']);
+  });
+
   it('builds delegated fq registry entries from assembleNativeToolRegistry nativeToolNames for origin: delegated', async () => {
     const result = await buildToolRegistry({
       config: makeConfig(),

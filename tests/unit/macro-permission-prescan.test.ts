@@ -177,28 +177,35 @@ describe('preScanToolReferences', () => {
     });
 
     expect(parseEnvelope(result)).toMatchObject({
-      error: 'unknown_tool',
+      error: 'forbidden_tools',
       details: {
-        server: 'fq',
-        tool: 'write_document',
-        available: ['search'],
+        forbidden: ['fq.write_document'],
+        allowed: ['fq.search'],
       },
     });
   });
 
-  it('classifies known but unavailable FlashQuery tools as forbidden when registry metadata says they exist', () => {
+  it('classifies catalog tools outside the allowlist as forbidden and true typos as unknown_tool', async () => {
+    const built = await buildToolRegistry({
+      config: makeConfig({ hostMcpTools: { tools: ['search'] } }),
+      callerContext: { origin: 'host' },
+      broker: new NullMcpBroker(),
+      catalog: [
+        { name: 'search', description: 'search', inputSchema: {}, handler: vi.fn() },
+        { name: 'archive_document', description: 'archive', inputSchema: {}, handler: vi.fn() },
+      ],
+      nativeDispatchContext: nativeDispatchContext(),
+    });
+
     const result = preScanToolReferences({
       program: parseProgram('exit fq.archive_document({ identifier: "draft.md" })'),
-      registry: {
-        fq: {
-          label: 'FlashQuery',
-          tools: {
-            search: vi.fn(async () => ({ ok: true })),
-          },
-        },
-      },
-      allowlist: new Set(['fq.search']),
-      knownToolNames: new Set(['fq.search', 'fq.archive_document']),
+      registry: built.registry,
+      allowlist: new Set(built.allowedToolNames),
+    });
+    const typo = preScanToolReferences({
+      program: parseProgram('exit fq.foobar({ query: "x" })'),
+      registry: built.registry,
+      allowlist: new Set(built.allowedToolNames),
     });
 
     expect(parseEnvelope(result)).toMatchObject({
@@ -206,6 +213,14 @@ describe('preScanToolReferences', () => {
       details: {
         forbidden: ['fq.archive_document'],
         allowed: ['fq.search'],
+      },
+    });
+    expect(parseEnvelope(typo)).toMatchObject({
+      error: 'unknown_tool',
+      details: {
+        server: 'fq',
+        tool: 'foobar',
+        available: ['archive_document', 'search'],
       },
     });
   });

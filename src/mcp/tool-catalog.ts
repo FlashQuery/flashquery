@@ -33,12 +33,10 @@ export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalo
   const catalog = getNativeToolCatalog(server);
   const originalRegisterTool = server.registerTool.bind(server);
 
-  // Preserve the SDK call surface exactly while recording model-visible metadata.
+  // Preserve the SDK call surface exactly while recording the full native
+  // catalog. Host exposure filters SDK registration, not macro/agent dispatch
+  // catalog membership.
   server.registerTool = ((name: string, config: ToolRegistrationConfig, cb: unknown) => {
-    if (options.hostEnabledToolNames && !options.hostEnabledToolNames.has(name)) {
-      return undefined;
-    }
-
     const metadataDescription = getToolMetadata(name)?.description;
     const registeredConfig = metadataDescription === undefined
       ? config
@@ -52,6 +50,9 @@ export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalo
       inputSchema: registeredConfig.inputSchema ?? {},
       handler,
     });
+    if (options.hostEnabledToolNames && !options.hostEnabledToolNames.has(name)) {
+      return undefined;
+    }
     return originalRegisterTool(name, registeredConfig, cb as never);
   }) as RegisterToolFunction;
 

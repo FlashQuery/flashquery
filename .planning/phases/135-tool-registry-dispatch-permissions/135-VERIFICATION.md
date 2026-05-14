@@ -1,6 +1,6 @@
 ---
 phase: 135-tool-registry-dispatch-permissions
-verified: 2026-05-14T19:28:30Z
+verified: 2026-05-14T21:40:00Z
 status: passed
 score: 12/12 must-haves verified
 overrides_applied: 0
@@ -9,9 +9,9 @@ overrides_applied: 0
 # Phase 135: Tool Registry, Dispatch, Permissions Verification Report
 
 **Phase Goal:** Route namespaced macro tool calls through the native/broker registry with static pre-scan, dispatch backstop, caller identity, and hard exclusions.  
-**Verified:** 2026-05-14T19:28:30Z  
+**Verified:** 2026-05-14T21:40:00Z  
 **Status:** passed  
-**Re-verification:** No - initial verification
+**Re-verification:** Yes - Gap 6 registry/allowlist architecture remediation
 
 ## Goal Achievement
 
@@ -19,8 +19,8 @@ overrides_applied: 0
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | `fq.*` references dispatch through the same native catalog/registry path used by agentic tools. | VERIFIED | `src/mcp/tools/macro.ts:143-152` gets `getNativeToolCatalog(server)`, builds the registry, and passes it to evaluation; `src/macro/registry.ts:192-210` builds `fq` handlers from catalog entries. |
-| 2 | Permission pre-scan reports unknown/forbidden references before any mutation. | VERIFIED | `src/macro/evaluator.ts:278-296` runs `preScanToolReferences` before `execBlock`; `src/macro/permission-prescan.ts:34-108` classifies template, unknown server, hard-excluded, unknown tool, and forbidden references. T-U-160..164 cover forbidden aggregation, zero side effects, and delegated allowlist derivation through `buildToolRegistry` / `assembleNativeToolRegistry`. |
+| 1 | `fq.*` references dispatch through the same native catalog/registry path used by agentic tools. | VERIFIED | `src/mcp/tools/macro.ts` gets `getNativeToolCatalog(server)`, builds the registry, and passes it to evaluation; `src/macro/registry.ts:193-212` builds `fq` handlers from the full native catalog while keeping `allowedToolNames` separate. |
+| 2 | Permission pre-scan reports unknown/forbidden references before any mutation. | VERIFIED | `src/macro/evaluator.ts` runs `preScanToolReferences` before `execBlock`; `src/macro/permission-prescan.ts:33-104` classifies template, unknown server, hard-excluded, unknown tool, and forbidden references in order. T-U-160..164 cover forbidden aggregation, zero side effects, and delegated allowlist derivation through `buildToolRegistry` / `assembleNativeToolRegistry`; the Gap 6 regression test now proves catalog-present but allowlist-absent tools return `forbidden_tools` while true typos return `unknown_tool`. |
 | 3 | Dispatch refuses forbidden references even if pre-scan is bypassed. | VERIFIED | `src/macro/dispatcher.ts:37-47` checks allowlist immediately before handler invocation; T-U-163 proves `fq.archive_document` handler is not called. |
 | 4 | `fq.call_macro`, template-masqueraded tools, and delegated `fq.call_model` are blocked as specified. | VERIFIED | `src/macro/registry.ts:174-181` records delegated hard-exclusion reasons while leaving `call_macro` opaque as `unknown_tool`; `src/mcp/tools/macro.ts` now wires template metadata from `assembleTemplateToolRegistry`; T-U-165..168 cover required error codes/reason. |
 | 5 | Tool-dispatch integration tests execute representative POC workflows against real handlers. | VERIFIED | `tests/integration/macro-tool-dispatch.test.ts:81-117` verifies `fq.write_document` persistence; `:119-155` verifies `fq.search` result shape through public `call_macro`. |
@@ -39,10 +39,11 @@ overrides_applied: 0
 | Artifact | Expected | Status | Details |
 |---|---|---|---|
 | `src/macro/types.ts` | Shared registry, reference, and caller-context types | VERIFIED | Exports `ToolFn`, `ServerEntry`, `ToolRegistry`, `ToolReference`, `MacroCallerContext`. |
-| `src/macro/registry.ts` | `buildToolRegistry` for native/broker registry construction | VERIFIED | Uses `resolveHostToolExposure`, `assembleNativeToolRegistry`, catalog handlers, Zod validation, broker entries, template metadata, and hard-exclusion reasons. |
+| `src/macro/registry.ts` | `buildToolRegistry` for native/broker registry construction | VERIFIED | Builds `fq.tools` from the full native catalog minus `call_macro` and delegated hard exclusions; derives `allowedToolNames` separately from `resolveHostToolExposure` or `assembleNativeToolRegistry`; uses catalog handlers, Zod validation, broker entries, template metadata, and hard-exclusion reasons. |
 | `src/macro/dispatcher.ts` | Lookup errors and allowlist backstop | VERIFIED | Returns `unknown_server`, `unknown_tool`, `forbidden_tools`; invokes handler only after backstop. |
 | `src/macro/permission-prescan.ts` | Recursive AST walker and error classification | VERIFIED | Exports `collectToolReferences` and `preScanToolReferences`; walks control flow, expressions, pipelines, field access, and tool args. |
 | `src/macro/evaluator.ts` | Pre-execution scan chain and dispatcher wiring | VERIFIED | Pre-scan before `execBlock`; `evalToolCall` routes through `dispatchMacroTool` for registry-backed calls. |
+| `src/mcp/tool-catalog.ts` | Native catalog capture and host SDK exposure filter | VERIFIED | Records every registered native handler in the catalog while applying `host_mcp_tools` only to public SDK registration, so macro registry construction can distinguish catalog membership from host visibility. |
 | `src/mcp/tools/macro.ts` | Public `call_macro` schema and registry wiring | VERIFIED | Schema omits caller identity; public handler builds native catalog registry and dispatch context. |
 | `tests/unit/macro-*.test.ts` | T-U-156..T-U-171 coverage | VERIFIED | All required unit test IDs are present. |
 | `tests/integration/macro-tool-dispatch.test.ts` | T-I-003/T-I-004 real handler coverage | VERIFIED | Integration suite passes locally. |
@@ -61,6 +62,7 @@ overrides_applied: 0
 | `src/mcp/tools/macro.ts` | `src/mcp/tool-catalog.ts` | `getNativeToolCatalog(server)` | WIRED | Public handler passes catalog into `runMacroSource`. |
 | `src/mcp/tools/macro.ts` | `src/macro/registry.ts` | `buildToolRegistry` | WIRED | `runMacroSource` builds registry with caller context, broker, catalog, and native dispatch context. |
 | `src/mcp/tools/macro.ts` | `src/macro/evaluator.ts` | `evaluateProgram` registry/allowlist options | WIRED | Registry, allowed names, template names, hard exclusions, and caller context are passed. |
+| `src/mcp/tool-catalog.ts` | `src/mcp/tools/macro.ts` | `getNativeToolCatalog(server)` | WIRED | Catalog includes host-hidden native handlers; public SDK registration remains filtered by `host_mcp_tools`. |
 | `src/macro/evaluator.ts` | `src/macro/permission-prescan.ts` | `preScanToolReferences` before `execBlock` | WIRED | Verified at `src/macro/evaluator.ts:283-296`. |
 | `src/macro/evaluator.ts` | `src/macro/dispatcher.ts` | `dispatchMacroTool` in `evalToolCall` | WIRED | Verified at `src/macro/evaluator.ts:768-779`. |
 | `tests/config/vitest.integration.config.ts` | `tests/integration/macro-tool-dispatch.test.ts` | explicit include entry | WIRED | Manual check: `rg ... | wc -l` returned `1`; helper false-negative was due escaped pattern matching. |
@@ -72,7 +74,7 @@ overrides_applied: 0
 | `src/mcp/tools/macro.ts` | `result` | `runMacroSource` parses source, builds registry, calls `evaluateProgram` | Yes | FLOWING |
 | `src/mcp/tools/macro.ts` | `templateReverseMap` / `templateToolNames` | `assembleTemplateToolRegistry` over the vault template surface | Yes | FLOWING |
 | `src/mcp/tools/macro.ts` | `NativeToolDispatchContext.signal` | inbound MCP request `extra.signal` | Yes | FLOWING |
-| `src/macro/registry.ts` | `fqTools` / `allowedToolNames` | Native catalog + host/delegated allowlist source | Yes | FLOWING |
+| `src/macro/registry.ts` | `fqTools` / `allowedToolNames` | `fqTools` from full native catalog; `allowedToolNames` from host/delegated allowlist source | Yes | FLOWING |
 | `src/macro/evaluator.ts` | tool-call result | `dispatchMacroTool` result from registry `ToolFn` | Yes | FLOWING |
 | `tests/integration/macro-tool-dispatch.test.ts` | document/search assertions | Public MCP `call_macro` -> native handlers -> Supabase/search | Yes | FLOWING |
 
@@ -80,7 +82,8 @@ overrides_applied: 0
 
 | Behavior | Command | Result | Status |
 |---|---|---|---|
-| Focused registry, pre-scan, dispatcher unit behavior | `npm test -- --reporter=verbose macro-registry macro-permission-prescan macro-dispatcher` | 3 files, 15 tests passed locally | PASS |
+| Focused registry, pre-scan, dispatcher unit behavior | `npm test -- --reporter=verbose macro-registry macro-permission-prescan macro-dispatcher` | 3 files, 18 tests passed locally in Gap 6 remediation | PASS |
+| Phase 135 permission boundary and catalog regression | `npm test -- --reporter=verbose mcp-server-tools macro-registry macro-permission-prescan macro-dispatcher macro-hard-exclusions macro-caller-identity` | 6 files, 39 tests passed locally in Gap 6 remediation | PASS |
 | Real native dispatch integration | `npm run test:integration -- --reporter=verbose macro-tool-dispatch` | 1 file, 2 tests passed locally | PASS |
 | Public directed hard-exclusion coverage | `python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed` | Passed: 2/2 steps | PASS |
 | Public directed permission pre-scan coverage | `python3 tests/scenarios/directed/testcases/test_macro_permission_prescan.py --managed` | Passed: 2/2 steps | PASS |
@@ -91,14 +94,14 @@ overrides_applied: 0
 | Integration include registered exactly once | `rg -n "tests/integration/macro-tool-dispatch\\.test\\.ts" tests/config/vitest.integration.config.ts \| wc -l` | `1` | PASS |
 | No public `callerKind` in production schema/options | `rg -n "callerKind" src/mcp/tools/macro.ts src/macro src/llm tests/unit/macro-caller-identity.test.ts` | Matches only schema absence test | PASS |
 | No direct macro imports from `src/mcp/tools/*` | `rg -n "from ['\\\"].*(mcp/tools)\|src/mcp/tools\|\\.\\./mcp/tools\|\\.\\./\\.\\./mcp/tools" src/macro src/mcp/tools/macro.ts` | No matches | PASS |
-| Latest full gates supplied for verification context | `npm test`; `npm run test:integration`; `npm run test:e2e`; `npm run preflight` | User-reported latest gates: unit 114 files/1692 tests, integration 9 files/20 tests, e2e 7 files/66 tests, preflight lint + 1692 tests + package contents OK + Docker skipped because Docker not found | PASS |
+| Full unit regression | `npm test` | 114 files, 1698 tests passed locally in Gap 6 remediation | PASS |
 
 ### Requirements Coverage
 
 | Requirement | Source Plan | Product Requirement | Status | Evidence |
 |---|---|---|---|---|
-| MACRO-DISP-01 | 135-01, 135-02, 135-04 | REQ-027 namespaced dispatch | SATISFIED | Registry types, `buildToolRegistry`, `dispatchMacroTool`, and integration T-I-003/T-I-004. |
-| MACRO-DISP-02 | 135-01, 135-03, 135-04 | REQ-028 static permission pre-scan | SATISFIED | Pre-scan runs before `execBlock`; T-U-160..164 present and passing. |
+| MACRO-DISP-01 | 135-01, 135-02, 135-04 | REQ-027 namespaced dispatch | SATISFIED | Registry types, `buildToolRegistry`, `dispatchMacroTool`, and integration T-I-003/T-I-004; `fq.tools` now reflects real catalog membership, so known-server unknown-tool errors are limited to genuine absent tools. |
+| MACRO-DISP-02 | 135-01, 135-03, 135-04 | REQ-028 static permission pre-scan | SATISFIED | Pre-scan runs before `execBlock`; T-U-160..164 present and passing; added regression coverage distinguishes catalog-present/allowlist-absent tools from true unknown tools. |
 | MACRO-DISP-03 | 135-01, 135-02, 135-03, 135-04 | REQ-029 dispatch-time backstop | SATISFIED | Dispatcher allowlist check before handler; T-U-163 passing. |
 | MACRO-DISP-04 | 135-01, 135-02, 135-03, 135-04 | REQ-030 `fq.call_macro` hard exclusion | SATISFIED | Registry omits `call_macro`; T-U-165 passing. |
 | MACRO-DISP-05 | 135-01, 135-03, 135-04 | REQ-031 template masquerade hard exclusion | SATISFIED | Template metadata pre-scan path; T-U-166 passing. |
@@ -125,5 +128,5 @@ No blocking gaps found. The phase goal is achieved in code: public `call_macro` 
 
 ---
 
-_Verified: 2026-05-14T19:28:30Z_  
+_Verified: 2026-05-14T21:40:00Z_  
 _Verifier: the agent (gsd-verifier)_

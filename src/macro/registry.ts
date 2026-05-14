@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import type { FlashQueryConfig } from '../config/loader.js';
-import { listToolMetadata } from '../mcp/tool-metadata.js';
 import { resolveHostToolExposure } from '../mcp/tool-exposure.js';
 import type { McpBroker } from '../services/mcp-broker.js';
 import {
@@ -38,7 +37,6 @@ export interface BuildToolRegistryResult {
   templateToolNames: string[];
   templateReverseMap?: Map<string, string>;
   hardExcludedReasons: Map<string, string>;
-  knownToolNames: string[];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -192,33 +190,15 @@ function deriveTemplateToolNames(options: BuildToolRegistryOptions): string[] {
   return options.templateToolNames ?? [...(options.templateReverseMap?.keys() ?? [])];
 }
 
-function deriveKnownToolNames(options: BuildToolRegistryOptions, allowedNativeNames: string[]): string[] {
-  const names = new Set<string>();
-  for (const toolName of options.catalog.map((tool) => tool.name)) {
-    if (toolName === 'call_macro') continue;
-    names.add(`${FQ_SERVER}.${toolName}`);
-  }
-  for (const toolName of allowedNativeNames) {
-    if (toolName === 'call_macro') continue;
-    names.add(`${FQ_SERVER}.${toolName}`);
-  }
-  for (const metadata of listToolMetadata({ hostEligible: true })) {
-    if (metadata.status === 'removed' || metadata.name === 'call_macro') continue;
-    names.add(`${FQ_SERVER}.${metadata.name}`);
-  }
-  return [...names].sort();
-}
-
 export function buildToolRegistry(options: BuildToolRegistryOptions): BuildToolRegistryResult {
-  const catalogByName = new Map(options.catalog.map((tool) => [tool.name, tool]));
   const { nativeToolNames, hardExcludedReasons } = deriveNativeToolNames(options);
   const allowedNativeNames = nativeToolNames.filter((toolName) => toolName !== 'call_macro');
-  const knownToolNames = deriveKnownToolNames(options, allowedNativeNames);
   const fqTools: Record<string, ToolFn> = {};
 
-  for (const toolName of allowedNativeNames) {
-    const tool = catalogByName.get(toolName);
-    if (!tool) continue;
+  for (const tool of options.catalog) {
+    if (tool.name === 'call_macro') continue;
+    if (hardExcludedReasons.has(`${FQ_SERVER}.${tool.name}`)) continue;
+    const toolName = tool.name;
     fqTools[toolName] = wrapNativeTool(tool, options.nativeDispatchContext);
   }
 
@@ -257,6 +237,5 @@ export function buildToolRegistry(options: BuildToolRegistryOptions): BuildToolR
     templateToolNames,
     ...(options.templateReverseMap === undefined ? {} : { templateReverseMap: options.templateReverseMap }),
     hardExcludedReasons,
-    knownToolNames,
   };
 }
