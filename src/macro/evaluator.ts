@@ -58,9 +58,16 @@ export interface MacroProgressEntry {
   total?: number;
 }
 
+export interface MacroTaskRecord {
+  task_id: string;
+  status: 'working';
+  progress?: MacroProgressEntry;
+}
+
 export interface MacroInvocationContext {
   inputVars: Record<string, MacroValue>;
   trace: TraceStep[];
+  log: string[];
   budget: MacroBudget;
   taskId: string;
   progress: MacroProgressEntry[];
@@ -73,6 +80,11 @@ export interface MacroInvocationContext {
     context: MacroInvocationContext
   ) => ToolResult | Promise<ToolResult>;
   toolExists?: (server: string, context: MacroInvocationContext) => boolean | Promise<boolean>;
+  progressSink?: (
+    entry: MacroProgressEntry,
+    context: MacroInvocationContext
+  ) => void | Promise<void>;
+  listTasks?: (context: MacroInvocationContext) => MacroValue[] | Promise<MacroValue[]>;
   checkCancelled(where: string): void | Promise<void>;
 }
 
@@ -82,11 +94,14 @@ export interface EvaluateProgramOptions {
   input_vars?: Record<string, MacroValue>;
   taskId?: string;
   trace?: TraceStep[];
+  log?: string[];
   budget?: Partial<MacroBudget>;
   progress?: MacroProgressEntry[];
   cancelled?: boolean | MacroCancellationState;
   dispatchTool?: MacroInvocationContext['dispatchTool'];
   toolExists?: MacroInvocationContext['toolExists'];
+  progressSink?: MacroInvocationContext['progressSink'];
+  listTasks?: MacroInvocationContext['listTasks'];
   checkCancelled?: (where: string) => void | Promise<void>;
 }
 
@@ -186,6 +201,7 @@ export function createInvocationContext(options: EvaluateProgramOptions = {}): M
   const context: MacroInvocationContext = {
     inputVars,
     trace: [...(options.trace ?? [])],
+    log: [...(options.log ?? [])],
     budget,
     taskId: options.taskId ?? randomUUID(),
     progress: [...(options.progress ?? [])],
@@ -193,6 +209,8 @@ export function createInvocationContext(options: EvaluateProgramOptions = {}): M
     builtins: { ...standardBuiltins, ...(options.builtins ?? {}) },
     dispatchTool: options.dispatchTool,
     toolExists: options.toolExists,
+    progressSink: options.progressSink,
+    listTasks: options.listTasks,
     checkCancelled: async (where: string) => {
       if (cancelled.value) {
         throw new MacroRuntimeError(`Macro cancelled at ${where}`, undefined, {
@@ -787,6 +805,8 @@ function buildSuccessPayload(context: MacroInvocationContext, result: MacroValue
     task_id: context.taskId,
     result,
     trace: context.trace,
+    ...(context.log.length === 0 ? {} : { log: context.log }),
+    ...(context.progress.length === 0 ? {} : { progress: context.progress }),
     token_total: context.budget.token_total,
     model_calls: context.budget.model_calls,
     external_tool_calls: context.budget.external_tool_calls,

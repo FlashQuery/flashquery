@@ -129,6 +129,49 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     if (numbers.length === 2) return buildRange(numbers[0], numbers[1], 1);
     return buildRange(numbers[0], numbers[1], numbers[2]);
   },
+  echo: (positional, _named, context) => {
+    const message = positional.map(stringifyMacroValue).join(' ');
+    context.log.push(message);
+    context.trace.push({ kind: 'log', message, at: new Date().toISOString() });
+    return null;
+  },
+  status: async (positional, named, context) => {
+    const message =
+      positional.length > 0 ? positional.map(stringifyMacroValue).join(' ') : undefined;
+    const progress = optionalNumber(named['progress'], 'status_progress_type');
+    const total = optionalNumber(named['total'], 'status_progress_type');
+    const entry = {
+      ...(message === undefined ? {} : { message }),
+      ...(progress === undefined ? {} : { progress }),
+      ...(total === undefined ? {} : { total }),
+    };
+    const result = {
+      ...(progress === undefined ? {} : { progress }),
+      ...(total === undefined ? {} : { total }),
+    };
+    context.progress.push(entry);
+    context.trace.push({
+      kind: 'progress',
+      ...(message === undefined ? {} : { message }),
+      result,
+      at: new Date().toISOString(),
+    });
+    await context.progressSink?.(entry, context);
+    return null;
+  },
+  task_id: (_positional, _named, context) => context.taskId,
+  list_tasks: async (_positional, _named, context) => {
+    if (context.listTasks) {
+      return context.listTasks(context);
+    }
+    return [
+      {
+        task_id: context.taskId,
+        status: 'working',
+        progress: context.progress[context.progress.length - 1] ?? null,
+      },
+    ];
+  },
   sleep: async (positional, _named, context) => {
     const duration = requireDuration(positional[0] ?? 0, 'sleep');
     await sleepWithCancellation(duration, context.checkCancelled);
@@ -198,6 +241,16 @@ function requireDuration(value: MacroValue, builtin: 'sleep' | 'slow_op'): numbe
   if (value < 0) {
     throw new MacroRuntimeError(`${builtin} duration must be non-negative.`, undefined, {
       reason: builtin === 'sleep' ? 'sleep_duration_negative' : 'slow_op_argument_type',
+    });
+  }
+  return value;
+}
+
+function optionalNumber(value: MacroValue | undefined, reason: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new MacroRuntimeError('status progress values must be finite numbers.', undefined, {
+      reason,
     });
   }
   return value;
