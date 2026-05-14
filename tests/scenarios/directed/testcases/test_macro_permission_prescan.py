@@ -43,13 +43,14 @@ def _has_items(values: object, expected: list[str]) -> bool:
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     port_range = tuple(args.port_range) if args.port_range else None
+    requires_isolated_config = bool(args.url or args.secret)
 
     with TestContext(
         fqc_dir=args.fqc_dir,
-        url=args.url,
-        secret=args.secret,
+        url=None if requires_isolated_config else args.url,
+        secret=None if requires_isolated_config else args.secret,
         vault_path=getattr(args, "vault_path", None),
-        managed=args.managed,
+        managed=args.managed or requires_isolated_config,
         port_range=port_range,
         extra_config={
             "host_mcp_tools": {"tools": ["call_macro", "search"]},
@@ -80,7 +81,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
 
         source = """
-if true then
+if 1 then
   found = fq.search({ query: "allowed prescan probe" })
   for item in [1] do
     fq.write_document({ mode: "create", path: "blocked-a.md", title: "Blocked A", content: "blocked" })
