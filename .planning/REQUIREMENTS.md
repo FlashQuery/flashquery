@@ -76,9 +76,9 @@
 - [x] **MACRO-OBS-01**: Trace steps are emitted as a flat ordered list with the specified kind/value shape.
 - [ ] **MACRO-OBS-02**: Trace verbosity modes and per-value truncation are enforced.
 - [ ] **MACRO-OBS-03**: Progress verbosity modes are enforced and degrade cleanly without a progress token, including REQ-039 ac3 auto-emitted progress at for-loop iteration and model-call boundaries routed through the same mode-aware emission path.
-- [ ] **MACRO-OBS-04**: The in-process task registry transitions `working` to terminal states and removes terminal records immediately.
-- [ ] **MACRO-OBS-05**: Cooperative cancellation checks every required safe point.
-- [ ] **MACRO-OBS-06**: Task visibility and cancellation are scoped to the active session.
+- [x] **MACRO-OBS-04**: The in-process task registry transitions `working` to terminal states and removes terminal records immediately.
+- [x] **MACRO-OBS-05**: Cooperative cancellation checks every required safe point.
+- [x] **MACRO-OBS-06**: Task visibility and cancellation are scoped to the active session.
 
 ### Response Envelopes
 

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: ready_to_plan
-stopped_at: Completed 135-04-PLAN.md
-last_updated: "2026-05-14T18:48:20.083Z"
+status: executing
+stopped_at: Completed 136-01-PLAN.md
+last_updated: "2026-05-14T22:07:58.192Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
-  completed_phases: 7
-  total_plans: 23
-  completed_plans: 23
-  percent: 78
+  completed_phases: 6
+  total_plans: 27
+  completed_plans: 24
+  percent: 89
 ---
 
 # FlashQuery Core — State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 135 — tool-registry-dispatch-permissions
+**Current focus:** Phase 136 — task-lifecycle-and-cancellation
 
 ## Current Position
 
-Phase: 136
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-14
+Phase: 136 (task-lifecycle-and-cancellation) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-05-14 -- Completed 136-01-PLAN.md
 
 ## Performance Metrics
 
@@ -115,9 +115,12 @@ Last activity: 2026-05-14
 | Phase 135 P02 | 3m15s | 2 tasks | 3 files |
 | Phase 135 P03 | 4m29s | 2 tasks | 3 files |
 | Phase 135 P04 | 6m14s | 3 tasks | 4 files |
+| Phase 136 P01 | 4m | 3 tasks | 4 files |
 
 ## Decisions
 
+- [Phase 136]: 136-01 Wave 0 tests intentionally remain RED until `src/macro/task-registry.ts` and dedicated cancellation behavior land.
+- [Phase 136]: 136-01 existing T-U-125 `list_tasks` coverage was extended with a real `MacroTaskRegistry` provider contract.
 - Kept template rendering inside src/llm/reference-resolver.ts and reused resolveAndBuildDocument for document params.
 - Requested frontmatter during body reference resolution so only fq_template true documents enter template rendering.
 - 114-03: Kept @alias resolution strictly keyed to template_params[alias]; alias names are never sent through vault lookup.
@@ -313,8 +316,8 @@ Last activity: 2026-05-14
 
 ## Session Continuity
 
-Last session: 2026-05-14T18:48:20.060Z
-Stopped at: Completed 135-04-PLAN.md
+Last session: 2026-05-14T22:07:58.170Z
+Stopped at: Completed 136-01-PLAN.md
 Resume: None
 
 ## Deferred Items
