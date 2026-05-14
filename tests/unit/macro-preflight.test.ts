@@ -21,7 +21,13 @@ describe('macro input_var preflight', () => {
     const payload = parseToolPayload(result);
     expect(payload).toMatchObject({
       error: 'invalid_input',
-      details: { missing_inputs: ['x'] },
+      message: expect.stringContaining('Macro is missing required input(s):'),
+      details: {
+        required_inputs: ['x'],
+        optional_inputs: [],
+        provided_inputs: [],
+        missing_inputs: ['x'],
+      },
     });
     expect((payload['trace'] as unknown[] | undefined) ?? []).toEqual([]);
   });
@@ -33,7 +39,32 @@ describe('macro input_var preflight', () => {
 
     expect(parseToolPayload(result)).toMatchObject({
       error: 'invalid_input',
-      details: { missing_inputs: ['x', 'y'] },
+      message: expect.stringContaining('Macro is missing required input(s):'),
+      details: {
+        required_inputs: ['x', 'y'],
+        optional_inputs: [],
+        provided_inputs: [],
+        missing_inputs: ['x', 'y'],
+      },
+    });
+  });
+
+  it('T-U-099b reports required, optional, provided, and missing inputs together', async () => {
+    const result = await evaluateProgram(
+      parseProgram('x = input_var "x"\ny = input_var "y" --default 2\nexit $x'),
+      {
+        inputVars: { extra: 'accepted' },
+      }
+    );
+
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'invalid_input',
+      details: {
+        required_inputs: ['x'],
+        optional_inputs: ['y'],
+        provided_inputs: ['extra'],
+        missing_inputs: ['x'],
+      },
     });
   });
 

@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { evaluateProgram } from '../../src/macro/evaluator.js';
+import { standardBuiltins } from '../../src/macro/builtins.js';
+import {
+  evaluateProgram,
+  MacroExpectedError,
+  type MacroInvocationContext,
+} from '../../src/macro/evaluator.js';
 import { parseProgram, parseToolPayload, resultOf } from './macro-test-helpers.js';
 
 async function run(source: string, options: Parameters<typeof evaluateProgram>[1] = {}) {
@@ -110,8 +115,12 @@ describe('macro standard library arithmetic builtins', () => {
   it('T-U-118 div truncates integer division and rejects divide by zero', async () => {
     expect(resultOf((await run('exit div 10 3')).payload)).toBe(3);
     const invalid = await run('exit div 1 0');
+    const missingOne = await run('exit div 1');
+    const missingAll = await run('exit div');
     expect(invalid.result.isError).toBe(true);
     expect(invalid.payload).toMatchObject({ details: { reason: 'div_by_zero' } });
+    expect(missingOne.payload).toMatchObject({ details: { reason: 'div_argument_count' } });
+    expect(missingAll.payload).toMatchObject({ details: { reason: 'div_argument_count' } });
   });
 
   it('T-U-119 mod returns a positive-result modulus and rejects bad calls', async () => {
@@ -147,11 +156,38 @@ describe('macro standard library async utility builtins', () => {
 
   it('L-133-SLOWOP-002 slow_op rejects invalid duration and label values', async () => {
     const invalidDuration = await run('exit slow_op "x" "label"');
+    const negativeDuration = await run('exit slow_op -1 "label"');
     const invalidLabel = await run('exit slow_op 0 1');
     const extra = await run('exit slow_op 0 "label" "extra"');
     expect(invalidDuration.payload).toMatchObject({ details: { reason: 'slow_op_argument_type' } });
+    expect(negativeDuration.payload).toMatchObject({
+      details: { reason: 'slow_op_duration_negative' },
+    });
     expect(invalidLabel.payload).toMatchObject({ details: { reason: 'slow_op_label_type' } });
     expect(extra.payload).toMatchObject({ details: { reason: 'slow_op_argument_count' } });
+  });
+});
+
+describe('macro standard library input_var registry path', () => {
+  it('L-133-INPUTVAR-001 registry input_var emits the canonical invalid_input arity contract', () => {
+    const context: MacroInvocationContext = {
+      inputVars: { x: 1 },
+      trace: [],
+      log: [],
+      budget: { token_total: 0, model_calls: 0, external_tool_calls: 0 },
+      taskId: 'task-input-var',
+      progress: [],
+      cancelled: { value: false },
+      builtins: standardBuiltins,
+      checkCancelled: () => undefined,
+    };
+
+    expect(() => standardBuiltins['input_var'](['x', 'extra'], {}, context)).toThrow(
+      MacroExpectedError
+    );
+    expect(() => standardBuiltins['input_var'](['x'], { unexpected: 1 }, context)).toThrow(
+      MacroExpectedError
+    );
   });
 });
 
@@ -226,6 +262,21 @@ describe('macro standard library channel and task builtins', () => {
     expect(resultOf(injected.payload)).toEqual([{ task_id: 'session-task', status: 'working' }]);
     expect(resultOf(fallback.payload)).toEqual([
       { task_id: 'task-fallback', status: 'working', progress: { message: 'half', progress: 1, total: 2 } },
+    ]);
+  });
+
+  it('T-U-125b list_tasks filters provider records to the current session', async () => {
+    const { payload } = await run('exit list_tasks', {
+      taskId: 'task-current',
+      sessionId: 'session-a',
+      listTasks: async () => [
+        { task_id: 'task-current', status: 'working', session_id: 'session-a' },
+        { task_id: 'task-other', status: 'working', session_id: 'session-b' },
+      ],
+    });
+
+    expect(resultOf(payload)).toEqual([
+      { task_id: 'task-current', status: 'working' },
     ]);
   });
 });

@@ -29,8 +29,18 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     throw new MacroExitError(positional[0] ?? null);
   },
   input_var: (positional, named, context) => {
-    requireArgCount('input_var', positional, 1, 1, 'input_var_argument_count');
-    requireNamedArgs('input_var', named, ['default']);
+    if (positional.length !== 1) {
+      throw new MacroExpectedError('invalid_input', 'input_var expects exactly one positional argument.', {
+        reason: 'input_var_argument_count',
+      });
+    }
+    const unsupportedNamedArgs = Object.keys(named).filter((key) => key !== 'default');
+    if (unsupportedNamedArgs.length > 0) {
+      throw new MacroExpectedError('invalid_input', 'input_var received unsupported named arguments.', {
+        reason: 'input_var_named_argument',
+        named_args: unsupportedNamedArgs,
+      });
+    }
     const key = positional[0];
     if (typeof key !== 'string') {
       throw new MacroRuntimeError('input_var key must be a string.', undefined, {
@@ -116,12 +126,8 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
   },
   div: (positional, named) => {
     requireNamedArgs('div', named, []);
+    requireArgCount('div', positional, 2, Number.POSITIVE_INFINITY, 'div_argument_count');
     const numbers = positional.map((value) => requireNumber(value, 'div'));
-    if (numbers.length < 2) {
-      throw new MacroRuntimeError('div expects at least two numeric arguments.', undefined, {
-        reason: 'arithmetic_operand_type',
-      });
-    }
     return numbers.slice(1).reduce((total, value) => {
       if (value === 0) {
         throw new MacroRuntimeError('Division by zero.', undefined, { reason: 'div_by_zero' });
@@ -188,7 +194,8 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     requireNamedArgs('list_tasks', named, []);
     requireArgCount('list_tasks', positional, 0, 0, 'list_tasks_argument_count');
     if (context.listTasks) {
-      return context.listTasks(context);
+      const tasks = await context.listTasks(context);
+      return filterSessionTasks(tasks, context.sessionId);
     }
     return [
       {
@@ -298,10 +305,27 @@ function requireDuration(value: MacroValue, builtin: 'sleep' | 'slow_op'): numbe
   }
   if (value < 0) {
     throw new MacroRuntimeError(`${builtin} duration must be non-negative.`, undefined, {
-      reason: builtin === 'sleep' ? 'sleep_duration_negative' : 'slow_op_argument_type',
+      reason: builtin === 'sleep' ? 'sleep_duration_negative' : 'slow_op_duration_negative',
     });
   }
   return value;
+}
+
+function filterSessionTasks(tasks: MacroValue[], sessionId: string | undefined): MacroValue[] {
+  if (!sessionId) return tasks;
+  return tasks
+    .filter((task) => {
+      if (!isRecord(task)) return true;
+      const marker = task['session_id'] ?? task['sessionId'];
+      return marker === undefined || marker === sessionId;
+    })
+    .map((task) => {
+      if (!isRecord(task)) return task;
+      const visibleTask = { ...task };
+      delete visibleTask['session_id'];
+      delete visibleTask['sessionId'];
+      return visibleTask;
+    });
 }
 
 function optionalNumber(value: MacroValue | undefined, reason: string): number | undefined {

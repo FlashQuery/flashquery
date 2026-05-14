@@ -61,6 +61,8 @@ export interface MacroProgressEntry {
 export interface MacroTaskRecord {
   task_id: string;
   status: 'working';
+  session_id?: string;
+  sessionId?: string;
   progress?: MacroProgressEntry;
 }
 
@@ -70,6 +72,7 @@ export interface MacroInvocationContext {
   log: string[];
   budget: MacroBudget;
   taskId: string;
+  sessionId?: string;
   progress: MacroProgressEntry[];
   cancelled: MacroCancellationState;
   builtins: Record<string, MacroBuiltin>;
@@ -84,6 +87,11 @@ export interface MacroInvocationContext {
     entry: MacroProgressEntry,
     context: MacroInvocationContext
   ) => void | Promise<void>;
+  /**
+   * Returns task records visible to the current MCP session only (REQ-040 ac3).
+   * Implementations must filter cross-session records before returning. The
+   * builtin applies a defensive session marker filter when sessionId is present.
+   */
   listTasks?: (context: MacroInvocationContext) => MacroValue[] | Promise<MacroValue[]>;
   checkCancelled(where: string): void | Promise<void>;
 }
@@ -93,6 +101,7 @@ export interface EvaluateProgramOptions {
   inputVars?: Record<string, MacroValue>;
   input_vars?: Record<string, MacroValue>;
   taskId?: string;
+  sessionId?: string;
   trace?: TraceStep[];
   log?: string[];
   budget?: Partial<MacroBudget>;
@@ -204,6 +213,7 @@ export function createInvocationContext(options: EvaluateProgramOptions = {}): M
     log: [...(options.log ?? [])],
     budget,
     taskId: options.taskId ?? randomUUID(),
+    sessionId: options.sessionId,
     progress: [...(options.progress ?? [])],
     cancelled,
     builtins: { ...standardBuiltins, ...(options.builtins ?? {}) },
@@ -539,39 +549,6 @@ async function evalCall(
       });
     }
     throw new MacroFailError(positional[0] ?? 'macro aborted', call.line);
-  }
-
-  if (call.name === 'input_var') {
-    if (positional.length !== 1) {
-      throw new MacroExpectedError('invalid_input', 'input_var expects exactly one positional argument.', {
-        reason: 'input_var_argument_count',
-        line: call.line,
-      });
-    }
-    const unsupportedNamedArgs = Object.keys(named).filter((key) => key !== 'default');
-    if (unsupportedNamedArgs.length > 0) {
-      throw new MacroExpectedError('invalid_input', 'input_var received unsupported named arguments.', {
-        reason: 'input_var_named_argument',
-        named_args: unsupportedNamedArgs,
-        line: call.line,
-      });
-    }
-    const key = positional[0];
-    if (typeof key !== 'string') {
-      throw new MacroRuntimeError('input_var key must be a string.', call.line, {
-        reason: 'input_var_key_type',
-      });
-    }
-    if (Object.prototype.hasOwnProperty.call(context.inputVars, key)) {
-      return context.inputVars[key];
-    }
-    if (Object.prototype.hasOwnProperty.call(named, 'default')) {
-      return named['default'] ?? null;
-    }
-    throw new MacroRuntimeError(`Missing required input_var "${key}".`, call.line, {
-      reason: 'input_var_missing',
-      key,
-    });
   }
 
   const builtin = context.builtins[call.name];
