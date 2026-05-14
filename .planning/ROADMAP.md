@@ -132,7 +132,7 @@ Plans:
 
 **Requirements:** MACRO-SHELL-01 through MACRO-SHELL-05
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 
 Plans:
 **Wave 1**
@@ -143,7 +143,7 @@ Plans:
 - [x] 134-03-PLAN.md - Add read-only shell verb registry, pipeline stdin, and cwd-retirement coverage.
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 134-04-PLAN.md - Add `_exists()` namespace introspection through native and broker layers.
+- [x] 134-04-PLAN.md - Add `_exists()` namespace introspection through native and broker layers.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 134-05-PLAN.md - Run and record full Phase 134 validation gates.
