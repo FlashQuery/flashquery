@@ -58,6 +58,31 @@ describe('macro cooperative cancellation safe points', () => {
     expect(markers).toEqual(['first']);
   });
 
+  it('T-U-178b cancellation before a statement halts before that statement side effect', async () => {
+    const markers: string[] = [];
+
+    const result = await evaluateProgram(parseProgram('mark "never"'), {
+      taskId: 'task-cancel-before-statement',
+      builtins: cancellationBuiltins(markers),
+      checkCancelled: (where) => {
+        if (where === 'before statement') {
+          cancellationAt('task-cancel-before-statement', where);
+        }
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'cancelled',
+      message: 'Macro cancelled',
+      details: {
+        task_id: 'task-cancel-before-statement',
+        at_safe_point: 'before statement',
+      },
+    });
+    expect(markers).toEqual([]);
+  });
+
   it('T-U-179 checks cancellation after tool arg evaluation and before dispatch', async () => {
     const markers: string[] = [];
     const toolCalls: string[] = [];
