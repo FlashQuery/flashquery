@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: ready_to_plan
+status: completed
 stopped_at: Completed 130-02-PLAN.md
-last_updated: "2026-05-14T11:42:32.153Z"
-last_activity: 2026-05-14
+last_updated: "2026-05-14T13:39:36.763Z"
+last_activity: 2026-05-14 -- Phase 132 marked complete
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 7
-  completed_plans: 7
+  total_plans: 11
+  completed_plans: 11
   percent: 33
 ---
 
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: 132
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-14
+Phase: 132 — COMPLETE
+Plan: 4 of 4
+Status: Phase 132 complete
+Last activity: 2026-05-14 -- Phase 132 marked complete
 
 ## Performance Metrics
 
@@ -183,6 +183,8 @@ Last activity: 2026-05-14
 - [Phase 130]: 130-01: call_macro is final admin llm metadata and delegated-hard-excluded with RECURSIVE_MODEL_REASON.
 - [Phase 130]: 130-01: Phase 130 call_macro registration is a non-executing unsupported scaffold; parser, source_ref, dry-run, progress, budgets, and execution remain deferred.
 - [Phase 130]: 130-01: NullMcpBroker reuses NativeToolHandler for future dispatch compatibility while exposing no brokered connectivity in v0.
+- [Phase 132]: Evaluator core returns canonical ToolResult envelopes directly from evaluateProgram, with later MCP handler phases calling the same surface.
+- [Phase 132]: Escaped dollars in interpolated parser strings are preserved with an evaluator-only sentinel so \$name remains literal while normal $name interpolates.
 
 ## Accumulated Context
 

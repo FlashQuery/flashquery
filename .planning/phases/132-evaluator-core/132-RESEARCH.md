@@ -353,22 +353,19 @@ return parseToolPayload(result);
 | A1 | Isolation bugs often hide in shared trace/progress/budget containers after variable scope tests pass. | Common Pitfalls | Tests may under-cover MACRO-EVAL-07. |
 | A2 | Boolean operator short-circuiting is required by normal `&&`/`||` semantics even though the requirement emphasizes truthiness more than evaluation order. | Common Pitfalls | If full eager evaluation is intended, short-circuit-specific tests would need user/spec confirmation. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Should Phase 132 expose a public `evaluateProgram` returning `ToolResult`, or return an internal discriminated result that the later MCP handler wraps?** [VERIFIED: .planning/phases/132-evaluator-core/132-CONTEXT.md]
+1. **RESOLVED: Phase 132 exposes `evaluateProgram` returning `ToolResult`.** [VERIFIED: .planning/phases/132-evaluator-core/132-CONTEXT.md; VERIFIED: .planning/phases/132-evaluator-core/132-01-PLAN.md; VERIFIED: .planning/phases/132-evaluator-core/132-03-PLAN.md]
    - What we know: Phase 132 must test termination envelopes and existing helpers are available. [CITED: Macro Requirements §6.3.6; VERIFIED: src/mcp/utils/response-formats.ts]
-   - What's unclear: Whether the evaluator itself or a thin adapter should own MCP `ToolResult` wrapping. [ASSUMED]
-   - Recommendation: Return `ToolResult` from `evaluateProgram` only if tests need the exact final shape; otherwise return `MacroEvaluationOutcome` plus a small exported `toToolResult` mapper. [ASSUMED]
+   - Resolution: Plans 132-01 and 132-03 require `export async function evaluateProgram(program: Program, options?: EvaluateProgramOptions): Promise<ToolResult>` and map fall-off, `exit`, `fail`, and runtime/tool failures through `macroResult`, `jsonExpectedError`, and `jsonRuntimeError`. This gives Phase 132 tests the exact envelope behavior required by REQ-024 while later MCP handler phases can call the same evaluator surface. [RESOLVED]
 
-2. **Should `Value` runtime types be added to `src/macro/types.ts` or kept local to `evaluator.ts`?** [VERIFIED: src/macro/types.ts]
+2. **RESOLVED: Runtime value and invocation types live in `src/macro/evaluator.ts` for Phase 132.** [VERIFIED: src/macro/types.ts; VERIFIED: .planning/phases/132-evaluator-core/132-01-PLAN.md]
    - What we know: Phase 131 intentionally excluded evaluator runtime state and `Value`; POC has `Value`, `BuiltinFn`, and `ToolRegistry` types. [VERIFIED: .planning/phases/131-lexer-parser-fence-extraction/131-01-SUMMARY.md; VERIFIED: macro-prototype/src/types.ts]
-   - What's unclear: Whether maintainers prefer parser and runtime types in one file or separated. [ASSUMED]
-   - Recommendation: Add exported `MacroValue`, `MacroBuiltinFn`, and `MacroToolDispatcher` to `src/macro/evaluator.ts` or a new `src/macro/runtime-types.ts`; avoid bloating parser-only `types.ts` unless local convention favors a single macro type module. [ASSUMED]
+   - Resolution: Plan 132-01 requires concrete exports from `src/macro/evaluator.ts`, including `MacroValue`, `MacroBuiltin`, `MacroInvocationContext`, `createInvocationContext`, `evaluateProgram`, and `MacroRuntimeError`. Parser-only AST types remain in `src/macro/types.ts`; runtime types stay with the evaluator until later phases justify a split. [RESOLVED]
 
-3. **Should T-I-002 integration concurrency land now?** [VERIFIED: .planning/phases/132-evaluator-core/132-CONTEXT.md]
+3. **RESOLVED: T-I-002 integration concurrency is deferred; Phase 132 covers isolation with unit tests and a unit concurrency smoke.** [VERIFIED: .planning/phases/132-evaluator-core/132-CONTEXT.md; VERIFIED: .planning/phases/132-evaluator-core/132-04-PLAN.md]
    - What we know: Context says include `tests/integration/macro-concurrency.test.ts` only if the invocation boundary is meaningful in this phase. [VERIFIED: .planning/phases/132-evaluator-core/132-CONTEXT.md]
-   - What's unclear: If `evaluateProgram` alone is considered enough of a simulated-session boundary. [ASSUMED]
-   - Recommendation: Defer `tests/integration/macro-concurrency.test.ts` if Phase 132 does not wire through `call_macro`; add a unit-level concurrent Promise test in `macro-isolation.test.ts` instead. [ASSUMED]
+   - Resolution: Plan 132-04 explicitly leaves `tests/integration/macro-concurrency.test.ts` out of Phase 132 because the public/session invocation boundary lands later. Phase 132 still proves MACRO-EVAL-07 through T-U-092 through T-U-094 plus a `Promise.all` unit-level concurrency smoke in `tests/unit/macro-isolation.test.ts`. [RESOLVED]
 
 ## Environment Availability
 

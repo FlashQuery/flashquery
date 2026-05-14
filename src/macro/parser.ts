@@ -91,12 +91,15 @@ type ParseReason =
   | 'invalid_literal'
   | 'input_var_key_must_be_literal';
 
-class MacroSyntaxFailure {
+class MacroSyntaxFailure extends Error {
   constructor(
     public readonly reason: ParseReason,
     public readonly token: IToken | undefined,
     public readonly message: string
-  ) {}
+  ) {
+    super(message);
+    this.name = 'MacroSyntaxFailure';
+  }
 }
 
 export function parseMacroSource(source: string, identifier?: string): MacroParseResult {
@@ -322,7 +325,7 @@ class TokenStreamParser {
       }
       return {
         kind: 'StringLit',
-        raw: unquoteDouble(token.image),
+        raw: unquoteDoubleForInterpolatedString(token.image),
         interpolated: true,
       } satisfies StringLit;
     }
@@ -574,7 +577,7 @@ class TokenStreamParser {
   private advance(): IToken {
     const token = this.tokens[this.index];
     this.index += 1;
-    return token as IToken;
+    return token;
   }
 
   private peek(): IToken | undefined {
@@ -608,4 +611,22 @@ class TokenStreamParser {
   private fail(reason: ParseReason, token: IToken | undefined, message: string): never {
     throw new MacroSyntaxFailure(reason, token, message);
   }
+}
+
+function unquoteDoubleForInterpolatedString(image: string): string {
+  const inner = image.slice(1, -1);
+  return inner.replace(/\\([ntr"\\$])/g, (_match: string, escaped: string) => {
+    switch (escaped) {
+      case 'n':
+        return '\n';
+      case 't':
+        return '\t';
+      case 'r':
+        return '\r';
+      case '$':
+        return '\uE000';
+      default:
+        return escaped;
+    }
+  });
 }

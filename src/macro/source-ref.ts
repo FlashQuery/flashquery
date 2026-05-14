@@ -73,7 +73,7 @@ export function selectMacroSourceBlock(
 
   if (blockName === null) {
     if (blocks.length === 1) {
-      return { ok: true, block: blocks[0] as MacroSourceBlock };
+      return { ok: true, block: blocks[0] };
     }
 
     return {
@@ -84,7 +84,7 @@ export function selectMacroSourceBlock(
 
   const matches = blocks.filter((block) => block.name === blockName);
   if (matches.length === 1) {
-    return { ok: true, block: matches[0] as MacroSourceBlock };
+    return { ok: true, block: matches[0] };
   }
 
   if (matches.length === 0) {

@@ -1,0 +1,731 @@
+import { randomUUID } from 'node:crypto';
+import type {
+  Arg,
+  Call,
+  Expr,
+  FieldAccess,
+  ObjectLit,
+  Pipeline,
+  Program,
+  Statement,
+  ToolCall,
+} from './types.js';
+import {
+  jsonExpectedError,
+  jsonRuntimeError,
+  macroResult,
+  type ToolResult,
+  type TraceStep,
+} from '../mcp/utils/response-formats.js';
+
+const ESCAPED_DOLLAR_SENTINEL = '\uE000';
+
+export type MacroValue =
+  | null
+  | boolean
+  | number
+  | string
+  | MacroValue[]
+  | { [key: string]: MacroValue };
+
+export type MacroBuiltin = (
+  args: MacroValue[],
+  context: MacroInvocationContext
+) => MacroValue | Promise<MacroValue>;
+
+export interface MacroBudget {
+  token_total: number;
+  model_calls: number;
+  external_tool_calls: number;
+}
+
+export interface MacroCancellationState {
+  value: boolean;
+}
+
+export interface MacroProgressEntry {
+  message?: string;
+  progress?: number;
+  total?: number;
+}
+
+export interface MacroInvocationContext {
+  inputVars: Record<string, MacroValue>;
+  trace: TraceStep[];
+  budget: MacroBudget;
+  taskId: string;
+  progress: MacroProgressEntry[];
+  cancelled: MacroCancellationState;
+  builtins: Record<string, MacroBuiltin>;
+  dispatchTool?: (
+    server: string,
+    tool: string,
+    arg: Record<string, MacroValue>,
+    context: MacroInvocationContext
+  ) => ToolResult | Promise<ToolResult>;
+  toolExists?: (server: string, context: MacroInvocationContext) => boolean | Promise<boolean>;
+  checkCancelled(where: string): void | Promise<void>;
+}
+
+export interface EvaluateProgramOptions {
+  builtins?: Record<string, MacroBuiltin>;
+  inputVars?: Record<string, MacroValue>;
+  input_vars?: Record<string, MacroValue>;
+  taskId?: string;
+  trace?: TraceStep[];
+  budget?: Partial<MacroBudget>;
+  progress?: MacroProgressEntry[];
+  cancelled?: boolean | MacroCancellationState;
+  dispatchTool?: MacroInvocationContext['dispatchTool'];
+  toolExists?: MacroInvocationContext['toolExists'];
+  checkCancelled?: (where: string) => void | Promise<void>;
+}
+
+export class MacroRuntimeError extends Error {
+  constructor(
+    message: string,
+    public readonly line?: number,
+    public readonly details?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'MacroRuntimeError';
+  }
+}
+
+export class MacroExitError extends Error {
+  constructor(
+    public readonly value: MacroValue,
+    public readonly line?: number
+  ) {
+    super('macro exited');
+    this.name = 'MacroExitError';
+  }
+}
+
+export class MacroFailError extends Error {
+  constructor(
+    message: string,
+    public readonly line?: number
+  ) {
+    super(message);
+    this.name = 'MacroFailError';
+  }
+}
+
+class MacroExpectedError extends Error {
+  constructor(
+    public readonly error: string,
+    message: string,
+    public readonly details?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = 'MacroExpectedError';
+  }
+}
+
+class Env {
+  private readonly bindings = new Map<string, MacroValue>();
+
+  constructor(private readonly parent: Env | null = null) {}
+
+  get(name: string): MacroValue {
+    if (this.bindings.has(name)) {
+      return this.bindings.get(name) as MacroValue;
+    }
+    if (this.parent) {
+      return this.parent.get(name);
+    }
+    throw new MacroRuntimeError(`Unknown variable: $${name}`, undefined, {
+      reason: 'unknown_variable',
+      name,
+    });
+  }
+
+  set(name: string, value: MacroValue): void {
+    const owner = this.findOwner(name);
+    if (owner) {
+      owner.bindings.set(name, value);
+      return;
+    }
+    this.bindings.set(name, value);
+  }
+
+  setLocal(name: string, value: MacroValue): void {
+    this.bindings.set(name, value);
+  }
+
+  private findOwner(name: string): Env | null {
+    if (this.bindings.has(name)) {
+      return this;
+    }
+    return this.parent?.findOwner(name) ?? null;
+  }
+}
+
+export function createInvocationContext(options: EvaluateProgramOptions = {}): MacroInvocationContext {
+  const cancelled =
+    typeof options.cancelled === 'object'
+      ? { value: options.cancelled.value }
+      : { value: options.cancelled ?? false };
+  const budget = {
+    token_total: options.budget?.token_total ?? 0,
+    model_calls: options.budget?.model_calls ?? 0,
+    external_tool_calls: options.budget?.external_tool_calls ?? 0,
+  };
+  const inputVars = cloneMacroObject(options.inputVars ?? options.input_vars ?? {});
+
+  const context: MacroInvocationContext = {
+    inputVars,
+    trace: [...(options.trace ?? [])],
+    budget,
+    taskId: options.taskId ?? randomUUID(),
+    progress: [...(options.progress ?? [])],
+    cancelled,
+    builtins: { ...(options.builtins ?? {}) },
+    dispatchTool: options.dispatchTool,
+    toolExists: options.toolExists,
+    checkCancelled: async (where: string) => {
+      if (cancelled.value) {
+        throw new MacroRuntimeError(`Macro cancelled at ${where}`, undefined, {
+          reason: 'cancelled',
+          where,
+        });
+      }
+      await options.checkCancelled?.(where);
+    },
+  };
+
+  return context;
+}
+
+export async function evaluateProgram(
+  program: Program,
+  options: EvaluateProgramOptions = {}
+): Promise<ToolResult> {
+  const context = createInvocationContext(options);
+  const env = new Env();
+
+  try {
+    await execBlock(program.statements, env, context);
+    return macroResult(buildSuccessPayload(context, null));
+  } catch (error) {
+    if (error instanceof MacroExitError) {
+      pushTrace(context, { kind: 'exit', result: error.value });
+      return macroResult(buildSuccessPayload(context, error.value));
+    }
+    if (error instanceof MacroFailError) {
+      pushTrace(context, { kind: 'fail', message: error.message });
+      return jsonExpectedError({
+        error: 'macro_aborted',
+        message: error.message,
+        details: { line: error.line },
+      });
+    }
+    if (error instanceof MacroExpectedError) {
+      return jsonExpectedError({
+        error: error.error,
+        message: error.message,
+        details: error.details,
+      });
+    }
+    if (error instanceof MacroRuntimeError) {
+      return jsonRuntimeError({
+        error: 'tool_call_failed',
+        message: error.message,
+        details: {
+          ...(error.details ?? {}),
+          ...(error.line === undefined ? {} : { line: error.line }),
+        },
+      });
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return jsonRuntimeError({
+      error: 'tool_call_failed',
+      message,
+      details: { underlying_error: serializeError(error) },
+    });
+  }
+}
+
+export function isTruthy(value: MacroValue): boolean {
+  if (value === null || value === false) return false;
+  if (typeof value === 'number') return value !== 0;
+  if (typeof value === 'string') return value.length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value).length > 0;
+  return true;
+}
+
+async function execBlock(
+  statements: Statement[],
+  env: Env,
+  context: MacroInvocationContext
+): Promise<void> {
+  for (const stmt of statements) {
+    await context.checkCancelled('between statements');
+    await execStatement(stmt, env, context);
+  }
+}
+
+async function execStatement(
+  stmt: Statement,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<void> {
+  switch (stmt.kind) {
+    case 'Binding': {
+      const value = await evalExpr(stmt.value, env, context);
+      env.set(stmt.name, value);
+      return;
+    }
+    case 'Pipeline':
+      await execPipeline(stmt, env, context);
+      return;
+    case 'ToolCall':
+      await evalToolCall(stmt, env, context);
+      return;
+    case 'ToolExistsCall':
+      await evalToolExists(stmt, context);
+      return;
+    case 'ForLoop': {
+      const iterable = await evalExpr(stmt.iterable, env, context);
+      if (!Array.isArray(iterable)) {
+        throw new MacroRuntimeError('For-loop iterable must be a list.', stmt.line, {
+          reason: 'for_iterable_type_mismatch',
+        });
+      }
+      for (const itemValue of iterable) {
+        await context.checkCancelled('for-loop iteration');
+        const child = new Env(env);
+        child.setLocal(stmt.varName, itemValue);
+        await execBlock(stmt.body, child, context);
+      }
+      return;
+    }
+    case 'WhileLoop': {
+      const child = new Env(env);
+      while (isTruthy(await evalExpr(stmt.condition, child, context))) {
+        await context.checkCancelled('while-loop iteration');
+        await execBlock(stmt.body, child, context);
+      }
+      return;
+    }
+    case 'IfStmt': {
+      const branch = isTruthy(await evalExpr(stmt.condition, env, context))
+        ? stmt.thenBody
+        : (stmt.elseBody ?? []);
+      await execBlock(branch, new Env(env), context);
+      return;
+    }
+  }
+}
+
+async function evalExpr(
+  expr: Expr,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<MacroValue> {
+  switch (expr.kind) {
+    case 'StringLit':
+      return expr.interpolated ? interpolate(expr.raw, env) : expr.raw;
+    case 'NumLit':
+      return expr.value;
+    case 'NullLit':
+      return null;
+    case 'VarRef':
+      return env.get(expr.name);
+    case 'ListLit':
+      return Promise.all(expr.items.map((item) => evalExpr(item, env, context)));
+    case 'ObjectLit':
+      return evalObjectLit(expr, env, context);
+    case 'FieldAccess':
+      return evalFieldAccess(expr, env, context);
+    case 'RangeExpr':
+      return evalRange(expr.start, expr.end, env, context);
+    case 'BinaryExpr':
+      return evalBinaryExpr(expr, env, context);
+    case 'UnaryExpr':
+      return !isTruthy(await evalExpr(expr.expr, env, context));
+    case 'Call':
+      return evalCall(expr, env, context);
+    case 'Pipeline':
+      return evalPipeline(expr, env, context);
+    case 'ToolCall':
+      return evalToolCall(expr, env, context);
+    case 'ToolExistsCall':
+      return evalToolExists(expr, context);
+  }
+}
+
+async function execPipeline(
+  pipeline: Pipeline,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<void> {
+  await evalPipeline(pipeline, env, context);
+}
+
+async function evalPipeline(
+  pipeline: Pipeline,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<MacroValue> {
+  let value: MacroValue = null;
+  for (let index = 0; index < pipeline.stages.length; index += 1) {
+    if (index > 0) {
+      await context.checkCancelled('between pipeline stages');
+    }
+    value = await evalCall(pipeline.stages[index], env, context);
+  }
+  return value;
+}
+
+async function evalCall(
+  call: Call,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<MacroValue> {
+  await context.checkCancelled(`before call ${call.name}`);
+  const positional = await evalPositionalArgs(call.args, env, context);
+
+  if (call.name === 'exit') {
+    if (positional.length > 1) {
+      throw new MacroExpectedError('invalid_input', 'exit accepts at most one argument.', {
+        reason: 'exit_argument_count',
+        line: call.line,
+      });
+    }
+    throw new MacroExitError(positional[0] ?? null, call.line);
+  }
+
+  if (call.name === 'fail') {
+    const message =
+      positional.length > 0 ? positional.map((value) => stringifyMacroValue(value)).join(' ') : 'macro aborted';
+    throw new MacroFailError(message, call.line);
+  }
+
+  const builtin = context.builtins[call.name];
+  if (!builtin) {
+    throw new MacroRuntimeError(`Unknown builtin: ${call.name}`, call.line, {
+      reason: 'unknown_builtin',
+      name: call.name,
+    });
+  }
+
+  try {
+    return await builtin(positional, context);
+  } catch (error) {
+    if (
+      error instanceof MacroRuntimeError ||
+      error instanceof MacroExitError ||
+      error instanceof MacroFailError ||
+      error instanceof MacroExpectedError
+    ) {
+      throw error;
+    }
+    throw new MacroRuntimeError(error instanceof Error ? error.message : String(error), call.line, {
+      reason: 'builtin_failed',
+      name: call.name,
+      underlying_error: serializeError(error),
+    });
+  }
+}
+
+async function evalPositionalArgs(
+  args: Arg[],
+  env: Env,
+  context: MacroInvocationContext
+): Promise<MacroValue[]> {
+  const values: MacroValue[] = [];
+  for (const arg of args) {
+    if (arg.kind === 'PositionalArg') {
+      values.push(await evalExpr(arg.value, env, context));
+    }
+  }
+  return values;
+}
+
+async function evalObjectLit(
+  objectLit: ObjectLit,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<Record<string, MacroValue>> {
+  const output: Record<string, MacroValue> = {};
+  for (const entry of objectLit.entries) {
+    output[entry.key] = await evalExpr(entry.value, env, context);
+  }
+  return output;
+}
+
+async function evalFieldAccess(
+  access: FieldAccess,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<MacroValue> {
+  const target = await evalExpr(access.target, env, context);
+  return stepField(target, access.field);
+}
+
+function stepField(target: MacroValue, field: string): MacroValue {
+  if (target === null || typeof target !== 'object' || Array.isArray(target)) {
+    throw new MacroRuntimeError(`Cannot access .${field} on ${describeValue(target)}.`, undefined, {
+      reason: 'invalid_field_target',
+      field,
+    });
+  }
+  if (!Object.prototype.hasOwnProperty.call(target, field)) {
+    throw new MacroRuntimeError(`Missing field .${field}.`, undefined, {
+      reason: 'missing_field',
+      field,
+    });
+  }
+  return target[field];
+}
+
+async function evalRange(
+  startExpr: Expr,
+  endExpr: Expr,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<MacroValue[]> {
+  const start = await evalExpr(startExpr, env, context);
+  const end = await evalExpr(endExpr, env, context);
+  if (
+    typeof start !== 'number' ||
+    typeof end !== 'number' ||
+    !Number.isInteger(start) ||
+    !Number.isInteger(end)
+  ) {
+    throw new MacroRuntimeError('Range operands must be integers.', undefined, {
+      reason: 'range_operand_type_mismatch',
+    });
+  }
+  const values: MacroValue[] = [];
+  const step = start <= end ? 1 : -1;
+  for (let value = start; step > 0 ? value < end : value > end; value += step) {
+    values.push(value);
+  }
+  return values;
+}
+
+async function evalBinaryExpr(
+  expr: Extract<Expr, { kind: 'BinaryExpr' }>,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<MacroValue> {
+  if (expr.op === '&&') {
+    const left = await evalExpr(expr.left, env, context);
+    return isTruthy(left) && isTruthy(await evalExpr(expr.right, env, context));
+  }
+  if (expr.op === '||') {
+    const left = await evalExpr(expr.left, env, context);
+    return isTruthy(left) || isTruthy(await evalExpr(expr.right, env, context));
+  }
+
+  const left = await evalExpr(expr.left, env, context);
+  const right = await evalExpr(expr.right, env, context);
+
+  if (expr.op === '==') return deepEqual(left, right);
+  if (expr.op === '!=') return !deepEqual(left, right);
+
+  if (typeof left !== 'number' || typeof right !== 'number') {
+    throw new MacroRuntimeError('Ordering comparisons require numeric operands.', undefined, {
+      reason: 'comparison_type_mismatch',
+      op: expr.op,
+    });
+  }
+
+  switch (expr.op) {
+    case '<':
+      return left < right;
+    case '<=':
+      return left <= right;
+    case '>':
+      return left > right;
+    case '>=':
+      return left >= right;
+  }
+}
+
+async function evalToolCall(
+  call: ToolCall,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<MacroValue> {
+  await context.checkCancelled(`before tool call ${call.server}.${call.tool}`);
+  if (!context.dispatchTool) {
+    throw new MacroRuntimeError(`No tool dispatcher configured for ${call.server}.${call.tool}.`, call.line, {
+      reason: 'tool_dispatcher_missing',
+      server: call.server,
+      tool: call.tool,
+      line: call.line,
+    });
+  }
+
+  const arg = await evalToolArg(call, env, context);
+  let result: ToolResult;
+  try {
+    result = await context.dispatchTool(call.server, call.tool, arg, context);
+  } catch (error) {
+    throw new MacroRuntimeError(`Tool call failed: ${call.server}.${call.tool}`, call.line, {
+      server: call.server,
+      tool: call.tool,
+      line: call.line,
+      underlying_error: serializeError(error),
+    });
+  }
+
+  const parsed = parseToolResultPayload(result);
+  if (result.isError === true) {
+    throw new MacroRuntimeError(`Tool call failed: ${call.server}.${call.tool}`, call.line, {
+      server: call.server,
+      tool: call.tool,
+      line: call.line,
+      underlying_error: parsed,
+    });
+  }
+
+  context.budget.external_tool_calls += 1;
+  pushTrace(context, {
+    kind: 'tool_call',
+    name: `${call.server}.${call.tool}`,
+    args: arg,
+    result: parsed,
+  });
+  return coerceMacroValue(parsed);
+}
+
+async function evalToolArg(
+  call: ToolCall,
+  env: Env,
+  context: MacroInvocationContext
+): Promise<Record<string, MacroValue>> {
+  if (!call.arg) {
+    return {};
+  }
+  const value = await evalExpr(call.arg, env, context);
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+    throw new MacroRuntimeError('Tool argument must evaluate to an object.', call.line, {
+      reason: 'tool_argument_type_mismatch',
+      server: call.server,
+      tool: call.tool,
+      line: call.line,
+    });
+  }
+  return value;
+}
+
+async function evalToolExists(
+  expr: Extract<Expr | Statement, { kind: 'ToolExistsCall' }>,
+  context: MacroInvocationContext
+): Promise<MacroValue> {
+  return (await context.toolExists?.(expr.server, context)) ?? false;
+}
+
+function interpolate(raw: string, env: Env): string {
+  return raw
+    .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}/g, (_match, path: string) =>
+      stringifyMacroValue(resolvePath(path, env))
+    )
+    .replace(/\$([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)/g, (_match, path: string) =>
+      stringifyMacroValue(resolvePath(path, env))
+    )
+    .replaceAll(ESCAPED_DOLLAR_SENTINEL, '$');
+}
+
+function resolvePath(path: string, env: Env): MacroValue {
+  const [name, ...fields] = path.split('.');
+  if (!name) {
+    throw new MacroRuntimeError('Interpolation path is empty.', undefined, {
+      reason: 'empty_interpolation_path',
+    });
+  }
+  let value = env.get(name);
+  for (const field of fields) {
+    value = stepField(value, field);
+  }
+  return value;
+}
+
+function stringifyMacroValue(value: MacroValue): string {
+  if (typeof value === 'string') return value;
+  if (value === null) return 'null';
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+}
+
+function buildSuccessPayload(context: MacroInvocationContext, result: MacroValue) {
+  return {
+    task_id: context.taskId,
+    result,
+    trace: context.trace,
+    token_total: context.budget.token_total,
+    model_calls: context.budget.model_calls,
+    external_tool_calls: context.budget.external_tool_calls,
+  };
+}
+
+function pushTrace(
+  context: MacroInvocationContext,
+  step: Omit<TraceStep, 'at'>
+): void {
+  context.trace.push({ ...step, at: new Date().toISOString() });
+}
+
+function parseToolResultPayload(result: ToolResult): unknown {
+  const text = result.content[0]?.text ?? 'null';
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function coerceMacroValue(value: unknown): MacroValue {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(coerceMacroValue);
+  }
+  if (typeof value === 'object') {
+    const output: Record<string, MacroValue> = {};
+    for (const [key, child] of Object.entries(value)) {
+      output[key] = coerceMacroValue(child);
+    }
+    return output;
+  }
+  throw new MacroRuntimeError('Unsupported macro value type.', undefined, {
+    reason: 'unsupported_value_type',
+    value_type: typeof value,
+  });
+}
+
+function cloneMacroObject(input: Record<string, MacroValue>): Record<string, MacroValue> {
+  return coerceMacroValue(structuredClone(input)) as Record<string, MacroValue>;
+}
+
+function deepEqual(left: MacroValue, right: MacroValue): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function describeValue(value: MacroValue): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'list';
+  return typeof value;
+}
+
+function serializeError(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message };
+  }
+  if (typeof error === 'object' && error !== null) {
+    return error as Record<string, unknown>;
+  }
+  return { message: String(error) };
+}
