@@ -15,7 +15,7 @@ This document defines every behavioral coverage point we want to verify through 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| legacy_surface | Phase 128 removed/dead MCP tool names are absent from host listTools while final replacements and transitional tools remain present. | test_phase128_legacy_surface | 2026-05-13 |  |
+| legacy_surface | Phase 128 removed/dead MCP tool names are absent from host listTools while final replacements and transitional tools remain present. | test_phase128_legacy_surface | 2026-05-13 | 2026-05-13 |
 | legacy_surface_migration_decisions | Phase 128 directed migration decisions: removed document/memory/directory/record/search/project names are ported to final tools or retained only as historical/removed migration evidence; get_briefing and insert_doc_link are transitional. | test_phase128_legacy_surface; historical directed ledgers | 2026-05-13 |  |
 
 ## Phase 129 Metadata and Tool Registry
@@ -96,13 +96,13 @@ Core CRUD operations on vault documents via MCP.
 | D-move-3 | move_document destination conflict returns canonical `conflict` with `details.reason="path_exists"` and `isError:false`. | test_document_copy_and_move | 2026-05-12 |  |
 | D-move-4 | move_document plugin ownership notice is represented as `warnings:["plugin_ownership_path_expectation"]` rather than appended prose. | tests/unit/move-document.test.ts | 2026-05-12 |  |
 | D-move-5 | move_document reference durability preserves fq_id-based retrieval after the path move. | test_document_copy_and_move; existing IX-19/IX-22 workflows | 2026-05-12 |  |
-| D-rdoc-1 | `remove_document` hard-deletes when trash is disabled and returns `status:"archived"`. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-rdoc-1 | `remove_document` hard-deletes when trash is disabled and returns `status:"archived"`. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
 | D-rdoc-2 | `remove_document` trash-folder moves use basename-only destinations. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
 | D-rdoc-3 | `remove_document` external trash moves leave the source absent and external file present. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
 | D-rdoc-4 | `remove_document` collision strategy preserves all removed files. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
-| D-rdoc-5 | `remove_document` archives lifecycle state before filesystem removal and never emits a `removed` lifecycle status. | test_removal_directory_maintenance; tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
-| D-rdoc-6 | `remove_document` batch partial failure preserves input order. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-rdoc-7 | `remove_document` bulk removal emits a warning for more than five identifiers. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-rdoc-5 | `remove_document` archives lifecycle state before filesystem removal and never emits a `removed` lifecycle status. | test_removal_directory_maintenance; tests/integration/remove-document.integration.test.ts | 2026-05-12 | 2026-05-13 |
+| D-rdoc-6 | `remove_document` batch partial failure preserves input order. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-rdoc-7 | `remove_document` bulk removal emits a warning for more than five identifiers. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
 | D-rdoc-8 | `remove_document` trash-folder moves write manual recovery metadata. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
 | D-27 | get_document default response returns JSON envelope with body field (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-28 | get_document include=["frontmatter"] returns frontmatter projection in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
@@ -159,21 +159,21 @@ Surgical editing tools for modifying document content at specific locations.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| C-01 | Append content to end of document (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-02 | Insert content at top of document body (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-03 | Insert content after a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-04 | Insert content before a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-05 | Insert content at end of a section (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-06 | Replace section content (preserves heading line) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
-| C-07 | Replace section with include_nested=true (replaces nested) (VALIDATED) | test_content_replace_section | 2026-05-12 | 2026-05-12 |
-| C-08 | Replace section with include_nested=false (preserves nested) (VALIDATED) | test_content_replace_section | 2026-05-12 | 2026-05-12 |
-| C-09 | Insert at heading with occurrence > 1 (duplicate headings) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
-| C-10 | Update frontmatter header only (body untouched) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-11 | Update frontmatter with null value removes field (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-12 | Insert doc link (wiki-style) into frontmatter links array (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-13 | Insert doc link deduplicates (same link twice = one entry) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-14 | Insert doc link with custom property name (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-15 | Get document with sections filter returns only requested sections (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-07 |
+| C-01 | Append content to end of document (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-02 | Insert content at top of document body (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-03 | Insert content after a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-04 | Insert content before a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-05 | Insert content at end of a section (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-06 | Replace section content (preserves heading line) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-13 |
+| C-07 | Replace section with include_nested=true (replaces nested) (VALIDATED) | test_content_replace_section | 2026-05-12 | 2026-05-13 |
+| C-08 | Replace section with include_nested=false (preserves nested) (VALIDATED) | test_content_replace_section | 2026-05-12 | 2026-05-13 |
+| C-09 | Insert at heading with occurrence > 1 (duplicate headings) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-13 |
+| C-10 | Update frontmatter header only (body untouched) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-11 | Update frontmatter with null value removes field (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-12 | Insert doc link (wiki-style) into frontmatter links array (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-13 | Insert doc link deduplicates (same link twice = one entry) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-14 | Insert doc link with custom property name (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-15 | Get document with sections filter returns only requested sections (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-13 |
 | C-16 | Get document sections with include_subheadings=true (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-07 |
 | C-17 | Get document sections with include_subheadings=false (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-07 |
 | C-18 | User-defined custom frontmatter fields survive content-editing operations (append_to_doc, insert_in_doc, replace_doc_section leave unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
@@ -233,13 +233,13 @@ Unified search across documents and memories.
 | SA-03 | search_all with entity_types filter restricts results (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | SA-04 | search_all with tag filtering (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | SA-05 | search_all falls back to filesystem when embeddings disabled (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
-| D-search-1 | `search` returns a JSON envelope for document filesystem results with `query`, `entity_types`, `mode`, `total`, and typed result items. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-search-2 | `search` returns memory results through the final unified surface without using `search_memory` or `search_all`. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 (Phase 128 legacy migration evidence) |
-| D-search-3 | `search(mode:"filesystem")` honors explicit mode selection for document search. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-search-4 | `search` enters list mode for empty filtered memory searches when `entity_types:["memories"]` is explicit. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-search-5 | `search` applies one global limit to mixed document and memory result sets. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-search-6 | `search` result items carry entity type, identifier, and match-source metadata usable by MCP clients. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-search-7 | `search` excludes archived memories by default and surfaces them only when `include_archived:true`. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-search-1 | `search` returns a JSON envelope for document filesystem results with `query`, `entity_types`, `mode`, `total`, and typed result items. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-2 | `search` returns memory results through the final unified surface without using `search_memory` or `search_all`. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-3 | `search(mode:"filesystem")` honors explicit mode selection for document search. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-4 | `search` enters list mode for empty filtered memory searches when `entity_types:["memories"]` is explicit. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-5 | `search` applies one global limit to mixed document and memory result sets. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-6 | `search` result items carry entity type, identifier, and match-source metadata usable by MCP clients. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-7 | `search` excludes archived memories by default and surfaces them only when `include_archived:true`. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
 | D-search-8 | `search` reports disabled/unsupported memory category requests through JSON envelope semantics; accepted substitute coverage because this is host-config behavior, not a managed directed scenario. | tests/unit/search.test.ts; tests/integration/search.integration.test.ts | 2026-05-12 | 2026-05-12 |
 
 ## 6. Memory Lifecycle
@@ -250,26 +250,26 @@ Core CRUD operations on memories.
 |----|----------|------------|--------------|--------------|
 | M-01 | Save memory with content and tags (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-02 | Search memory by query returns saved memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
-| M-03 | Search memory by tags (any) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
-| M-04 | Search memory by tags (all) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
-| M-05 | Search memory with threshold parameter filters low-similarity (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-03 | Search memory by tags (any) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
+| M-04 | Search memory by tags (all) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
+| M-05 | Search memory with threshold parameter filters low-similarity (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
 | M-06 | Update memory creates new version (preserves history) (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-07 | Update memory without tags preserves existing tags (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-08 | Get memory by single ID returns full content (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
-| M-09 | Get memory batch (multiple IDs) returns all (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-09 | Get memory batch (multiple IDs) returns all (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
 | M-10 | List memories by tags returns recent, truncated to 200 chars (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
-| M-11 | List memories respects limit parameter (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-11 | List memories respects limit parameter (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
 | M-12 | Archive memory sets status=archived (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-13 | Archived memory excluded from search_memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | M-14 | Archive memory manages status tags automatically (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-15 | Save memory with plugin_scope (fuzzy matched) (VALIDATED) | test_memory_plugin_scope | 2026-04-14 | 2026-05-07 |
-| D-wmem-1 | `write_memory(mode:"create")` creates a memory and returns parseable JSON identification with `memory_id`, `content_preview`, tags, and lifecycle fields. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-wmem-2 | `write_memory(mode:"create")` supports include projections for full content and full tags. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-wmem-3 | `write_memory(mode:"update")` creates a new latest version linked to the previous memory. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-wmem-4 | `write_memory(mode:"update")` preserves existing tags when tags are omitted. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-wmem-5 | `get_memory` returns ordered JSON arrays for batch input with per-element content projection. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-wmem-6 | `archive_memory` accepts `memory_ids` batch input and returns ordered JSON archive envelopes. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
-| D-wmem-7 | `archive_memory` preserves expected-error semantics for missing batch elements without turning the outer MCP response into a runtime error. | test_unified_search_memory_final | 2026-05-12 | 2026-05-12 |
+| D-wmem-1 | `write_memory(mode:"create")` creates a memory and returns parseable JSON identification with `memory_id`, `content_preview`, tags, and lifecycle fields. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-2 | `write_memory(mode:"create")` supports include projections for full content and full tags. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-3 | `write_memory(mode:"update")` creates a new latest version linked to the previous memory. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-4 | `write_memory(mode:"update")` preserves existing tags when tags are omitted. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-5 | `get_memory` returns ordered JSON arrays for batch input with per-element content projection. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-6 | `archive_memory` accepts `memory_ids` batch input and returns ordered JSON archive envelopes. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-7 | `archive_memory` preserves expected-error semantics for missing batch elements without turning the outer MCP response into a runtime error. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
 
 ## 7. Plugin Lifecycle
 
@@ -294,14 +294,14 @@ Registration, record CRUD, and teardown of plugin schemas.
 | P-15 | Plugin instance isolation (same plugin, different instances) (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-05-07 |
 | P-16 | Plugin with both document-backed tables (`track_as`) and non-document-backed tables registers without DDL errors (no duplicate or conflicting implicit columns) (VALIDATED) | test_plugin_mixed_tables | 2026-04-22 | 2026-05-07 |
 | P-17 | Plugin schema that explicitly declares `fqc_id` on a document-backed table (per §8.4.7 — the CRM plugin pattern) registers without a DDL error — the DDL builder de-duplicates the plugin-defined and implicit `fqc_id` columns rather than producing a duplicate column definition (PIR-03 regression guard; test schema MUST include `fqc_id` explicitly in the document-backed table columns — P-16 deliberately omits it, masking this defect) (VALIDATED) | test_plugin_explicit_fqc_id | 2026-04-22 | 2026-05-07 |
-| P-18 | `register_plugin` returns structured registered envelope with `was_new` for new/existing registration (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
-| P-19 | `unregister_plugin` conflicts on live records and `force:true` unregisters with orphan warning (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
-| P-20 | `get_plugin_info` include variants gate schema, tables, and status detail (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
-| P-21 | `write_record` create/update validates required, generated, unknown fields and include-gated data (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
-| P-22 | `get_record` supports default data, `include: []`, schema metadata, and expected not_found envelope (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
-| P-23 | `archive_record` ordered batch returns per-target results and `archived_at_unavailable` warnings (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
-| P-24 | `search_records` returns structured envelopes with include-gated data, archived filtering, scores, and taggable warnings (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
-| P-25 | `clear_pending_reviews` action list/clear/no-match uses pending-review row IDs (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-12 |
+| P-18 | `register_plugin` returns structured registered envelope with `was_new` for new/existing registration (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-19 | `unregister_plugin` conflicts on live records and `force:true` unregisters with orphan warning (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-20 | `get_plugin_info` include variants gate schema, tables, and status detail (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-21 | `write_record` create/update validates required, generated, unknown fields and include-gated data (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-22 | `get_record` supports default data, `include: []`, schema metadata, and expected not_found envelope (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-23 | `archive_record` ordered batch returns per-target results and `archived_at_unavailable` warnings (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-24 | `search_records` returns structured envelopes with include-gated data, archived filtering, scores, and taggable warnings (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-25 | `clear_pending_reviews` action list/clear/no-match uses pending-review row IDs (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
 
 ## 8. Tag Operations
 
@@ -387,12 +387,12 @@ Vault scanning, file listing, and directory management.
 | F-50 | Dot-prefixed directory (`.staging/temp`) created successfully (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-05-07 |
 | F-51 | Dot-prefixed directory is invisible to `list_vault` (scanner ignore patterns) (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-05-07 |
 | F-52 | Shutdown check — call during shutdown returns `isError: true` with shutdown message (DEFERRED — cannot inject in-process shutdown state from subprocess; unit-tested in files-tools.test.ts) | test_create_directory_special | 2026-04-29 | 2026-04-29 |
-| D-mdir-1 | `manage_directory(action:"create")` creates directories through the final surface. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mdir-2 | `manage_directory(action:"create")` returns `status:"unchanged"` for idempotent re-create. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mdir-3 | `manage_directory(action:"remove")` removes empty directories through the final surface. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mdir-4 | `manage_directory(action:"remove")` rejects non-empty directories with `details.reason:"directory_not_empty"`. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mdir-5 | `manage_directory` batch order and per-element errors are stable. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mdir-6 | `manage_directory` rejects traversal paths as ordered per-element errors. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mdir-1 | `manage_directory(action:"create")` creates directories through the final surface. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-2 | `manage_directory(action:"create")` returns `status:"unchanged"` for idempotent re-create. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-3 | `manage_directory(action:"remove")` removes empty directories through the final surface. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-4 | `manage_directory(action:"remove")` rejects non-empty directories with `details.reason:"directory_not_empty"`. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-5 | `manage_directory` batch order and per-element errors are stable. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-6 | `manage_directory` rejects traversal paths as ordered per-element errors. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
 
 ### 9.4 Vault Listing (`list_vault`)
 
@@ -455,12 +455,12 @@ Vault scanning, file listing, and directory management.
 | D-list-vault-5 | Invalid include values return canonical `{ error:"invalid_input" }` JSON with `isError:false` | tests/unit/list-vault.test.ts | 2026-05-12 | 2026-05-12 |
 | D-list-vault-6 | Dot-prefixed entries remain hidden from default structured listings | tests/integration/list-vault.integration.test.ts | 2026-05-12 | 2026-05-12 |
 | D-list-vault-7 | Extension filtering preserves directories and filters files in the structured `entries` array | tests/integration/list-vault.integration.test.ts, list_vault_extension_filter_with_directories | 2026-05-12 | 2026-05-12 |
-| D-mvault-1 | `maintain_vault(action:"sync")` indexes external filesystem changes. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mvault-2 | `maintain_vault(action:"repair")` reports structured repair action results. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mvault-3 | `maintain_vault(["sync","repair"])` returns repair before sync. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mvault-4 | `maintain_vault` accepts `dry_run` only for repair. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mvault-5 | `maintain_vault` rejects background execution outside sync. | test_removal_directory_maintenance | 2026-05-12 |  |
-| D-mvault-6 | `maintain_vault(action:"status")` returns `not_found` for an unknown job id. | test_removal_directory_maintenance | 2026-05-12 |  |
+| D-mvault-1 | `maintain_vault(action:"sync")` indexes external filesystem changes. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-2 | `maintain_vault(action:"repair")` reports structured repair action results. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-3 | `maintain_vault(["sync","repair"])` returns repair before sync. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-4 | `maintain_vault` accepts `dry_run` only for repair. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-5 | `maintain_vault` rejects background execution outside sync. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-6 | `maintain_vault(action:"status")` returns `not_found` for an unknown job id. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
 | D-mvault-7 | `maintain_vault` concurrent maintenance conflicts are covered at unit/integration level. | tests/unit/maintain-vault.test.ts; tests/integration/maintain-vault.integration.test.ts | 2026-05-12 |  |
 | D-mvault-8 | `maintain_vault(action:"status")` output excludes scanner internals. | tests/unit/maintain-vault.test.ts; tests/integration/maintain-vault.integration.test.ts | 2026-05-12 |  |
 
@@ -1619,12 +1619,12 @@ Phase 121 foundation behaviors for MCP tool consolidation metadata, response hel
 | D-foundation-json-1 | Directed scenario helpers parse MCP `content[0].text` JSON and assert dotted/array JSON paths against helper-backed tool responses. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
 | D-foundation-json-2 | Expected JSON error envelopes can be asserted without treating `isError:false` responses as transport/runtime failures. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
 | D-foundation-tools-1 | Foundation metadata registry coverage ties registered tool behavior to central tool metadata and descriptions. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
-| D-foundation-tools-2 | Omitted `host_mcp_tools` preserves the default host MCP tool surface. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
-| D-foundation-tools-3 | Host selector expansion accepts category, tier, and explicit tool names. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
-| D-foundation-tools-4 | `excluded_tools` is applied as the final host tool deny layer. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
-| D-foundation-tools-5 | `category:doc-write` implies read tools while `category:doc-read` remains read-only. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
+| D-foundation-tools-2 | Omitted `host_mcp_tools` preserves the default host MCP tool surface. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-13 |
+| D-foundation-tools-3 | Host selector expansion accepts category, tier, and explicit tool names. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-13 |
+| D-foundation-tools-4 | `excluded_tools` is applied as the final host tool deny layer. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-13 |
+| D-foundation-tools-5 | `category:doc-write` implies read tools while `category:doc-read` remains read-only. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-13 |
 | D-foundation-tools-6 | Delegated native tool assembly cannot regain host-disabled tools. | Unit: llm-tool-registry.test.ts (`does not regain memory tools from tier selectors when the host catalog is doc-read only`); directed host boundary in test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
-| D-foundation-tools-7 | Removed-status purpose tool names remain valid while their legacy tools are still registered; hard-fail suggestions are deferred until actual removal. | test_foundation_host_tool_exposure; llm-config.test.ts | 2026-05-11 | 2026-05-11 |
+| D-foundation-tools-7 | Removed-status purpose tool names remain valid while their legacy tools are still registered; hard-fail suggestions are deferred until actual removal. | test_foundation_host_tool_exposure; llm-config.test.ts | 2026-05-11 | 2026-05-13 |
 | D-foundation-frontmatter-1 | Foundation frontmatter constant guardrails prevent new unmanaged raw `fq_*` field literals outside explicit legacy/fixture allowlists. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
 | D-foundation-description-1 | MCP `tools/list` exposes registered tool descriptions that include the XC-8 four-block template. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
 
