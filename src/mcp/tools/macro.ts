@@ -3,8 +3,97 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { evaluateProgram, type MacroValue } from '../../macro/evaluator.js';
 import { parseMacroSource } from '../../macro/parser.js';
+import { buildToolRegistry, type BuildToolRegistryResult } from '../../macro/registry.js';
+import type { MacroCallerContext } from '../../macro/types.js';
+import type { NativeToolDefinition, NativeToolDispatchContext } from '../../llm/tool-registry.js';
+import { getNativeToolCatalog } from '../tool-catalog.js';
+import type { McpBroker } from '../../services/mcp-broker.js';
+import { NullMcpBroker } from '../../services/mcp-broker.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError } from '../utils/response-formats.js';
+
+export const callMacroInputSchema = z.object({
+  source: z.string().optional(),
+  source_ref: z.string().optional(),
+  input_vars: z.record(z.string(), z.unknown()).optional(),
+  budget: z.record(z.string(), z.unknown()).optional(), // inputSchema only; runtime budgets are later-phase work.
+  dry_run: z.boolean().optional(), // inputSchema only; dry-run execution is later-phase work.
+  trace: z.enum(['full', 'summary', 'none']).optional(),
+  progress: z.enum(['full', 'milestones', 'silent']).optional(), // inputSchema only.
+});
+
+export interface RunMacroSourceOptions {
+  source: string;
+  inputVars?: Record<string, MacroValue>;
+  input_vars?: Record<string, MacroValue>;
+  callerContext?: MacroCallerContext;
+  config: FlashQueryConfig;
+  catalog: NativeToolDefinition[];
+  broker: McpBroker;
+  nativeDispatchContext: NativeToolDispatchContext;
+}
+
+export interface RunMacroSourceResult {
+  result: Awaited<ReturnType<typeof evaluateProgram>>;
+  registryBuild: {
+    callerContext: MacroCallerContext;
+    allowlistSource: 'resolveHostToolExposure' | 'assembleNativeToolRegistry';
+    allowedToolNames: string[];
+    toolRegistry: BuildToolRegistryResult;
+  };
+}
+
+export async function runMacroSource(options: RunMacroSourceOptions): Promise<RunMacroSourceResult> {
+  const callerContext = options.callerContext ?? { origin: 'host' as const };
+  const toolRegistry = buildToolRegistry({
+    config: options.config,
+    callerContext,
+    broker: options.broker,
+    catalog: options.catalog,
+    nativeDispatchContext: options.nativeDispatchContext,
+  });
+  const parseResult = parseMacroSource(options.source, 'inline');
+  if (!parseResult.ok) {
+    return {
+      result: jsonExpectedError(parseResult.error),
+      registryBuild: {
+        callerContext,
+        allowlistSource: callerContext.origin === 'host' ? 'resolveHostToolExposure' : 'assembleNativeToolRegistry',
+        allowedToolNames: toolRegistry.allowedToolNames,
+        toolRegistry,
+      },
+    };
+  }
+
+  const result = await evaluateProgram(parseResult.program, {
+    inputVars: options.inputVars ?? options.input_vars,
+    vaultRoot: options.config.instance.vault.path,
+    broker: options.broker,
+    toolRegistry: toolRegistry.registry,
+    allowedToolNames: toolRegistry.allowedToolNames,
+    templateToolNames: toolRegistry.templateToolNames,
+    hardExcludedReasons: toolRegistry.hardExcludedReasons,
+    callerContext,
+  });
+
+  return {
+    result,
+    registryBuild: {
+      callerContext,
+      allowlistSource: callerContext.origin === 'host' ? 'resolveHostToolExposure' : 'assembleNativeToolRegistry',
+      allowedToolNames: toolRegistry.allowedToolNames,
+      toolRegistry,
+    },
+  };
+}
+
+function createNativeDispatchContext(config: FlashQueryConfig): NativeToolDispatchContext {
+  return {
+    signal: new AbortController().signal,
+    instanceId: config.instance.id,
+    logContext: { tool: 'call_macro' },
+  };
+}
 
 export function registerMacroTools(server: McpServer, config: FlashQueryConfig): void {
   server.registerTool(
@@ -12,15 +101,7 @@ export function registerMacroTools(server: McpServer, config: FlashQueryConfig):
     {
       description:
         'Run a FlashQuery macro as one structured orchestration request. Supports inline macro source execution through the production parser and evaluator.',
-      inputSchema: {
-        source: z.string().optional(),
-        source_ref: z.string().optional(),
-        input_vars: z.record(z.string(), z.unknown()).optional(),
-        budget: z.record(z.string(), z.unknown()).optional(), // inputSchema only; runtime budgets are later-phase work.
-        dry_run: z.boolean().optional(), // inputSchema only; dry-run execution is later-phase work.
-        trace: z.enum(['full', 'summary', 'none']).optional(),
-        progress: z.enum(['full', 'milestones', 'silent']).optional(), // inputSchema only.
-      },
+      inputSchema: callMacroInputSchema.shape,
     },
     async (params) => {
       if (getIsShuttingDown()) {
@@ -36,14 +117,15 @@ export function registerMacroTools(server: McpServer, config: FlashQueryConfig):
       }
 
       if (typeof params.source === 'string' && params.source.length > 0) {
-        const parseResult = parseMacroSource(params.source, 'inline');
-        if (!parseResult.ok) {
-          return jsonExpectedError(parseResult.error);
-        }
-        return evaluateProgram(parseResult.program, {
+        const { result } = await runMacroSource({
+          source: params.source,
           input_vars: params.input_vars as Record<string, MacroValue> | undefined,
-          vaultRoot: config.instance.vault.path,
+          config,
+          catalog: getNativeToolCatalog(server),
+          broker: new NullMcpBroker(),
+          nativeDispatchContext: createNativeDispatchContext(config),
         });
+        return result;
       }
 
       return jsonExpectedError({

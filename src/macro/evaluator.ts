@@ -751,7 +751,7 @@ async function evalToolCall(
   context: MacroInvocationContext
 ): Promise<MacroValue> {
   await context.checkCancelled(`before tool call ${call.server}.${call.tool}`);
-  if (!context.dispatchTool) {
+  if (!context.toolRegistry && !context.dispatchTool) {
     throw new MacroRuntimeError(
       `No tool dispatcher configured for ${call.server}.${call.tool}.`,
       call.line,
