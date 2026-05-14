@@ -149,7 +149,7 @@ describe('tool metadata registry', () => {
   });
 
   it('does not apply legacy replacement wording to kept plugin and LLM tools', () => {
-    for (const name of ['get_record', 'archive_record', 'search_records', 'clear_pending_reviews', 'call_model', 'get_llm_usage']) {
+    for (const name of ['get_record', 'archive_record', 'search_records', 'clear_pending_reviews', 'call_model', 'call_macro', 'get_llm_usage']) {
       const description = requireToolMetadata(name).description;
 
       expect(description, name).not.toContain('still exposes');
@@ -252,6 +252,7 @@ describe('tool metadata registry', () => {
 
     for (const name of [
       'call_model',
+      'call_macro',
       'register_plugin',
       'unregister_plugin',
       'clear_pending_reviews',
@@ -424,12 +425,32 @@ describe('tool metadata registry', () => {
 
     expect(exclusions).toEqual(expect.arrayContaining([
       expect.objectContaining({ tool: 'call_model', reason: expect.stringContaining('recursively call models') }),
+      expect.objectContaining({ tool: 'call_macro', reason: expect.stringContaining('recursively call models') }),
       expect.objectContaining({ tool: 'register_plugin', reason: expect.stringContaining('plugin administration') }),
       expect.objectContaining({ tool: 'unregister_plugin', reason: expect.stringContaining('plugin administration') }),
       expect.objectContaining({ tool: 'maintain_vault', reason: expect.stringContaining('maintenance') }),
       expect.objectContaining({ tool: 'force_file_scan', reason: expect.stringContaining('maintenance') }),
       expect.objectContaining({ tool: 'reconcile_documents', reason: expect.stringContaining('maintenance') }),
     ]));
+  });
+
+  it('registers call_macro as final admin LLM metadata with recursive delegated exclusion', () => {
+    expect(requireToolMetadata('call_macro')).toMatchObject({
+      status: 'final',
+      categories: ['llm'],
+      tier: 'admin',
+      hostEligible: true,
+      delegatedEligible: false,
+      delegatedHardExcludedReason: expect.stringContaining('recursively call models'),
+    });
+    expect(requireToolMetadata('call_macro').description).toContain('Run a FlashQuery macro');
+    expect(getToolNamesByTier('tier:read-only')).not.toContain('call_macro');
+    expect(getToolNamesByTier('tier:read-write')).not.toContain('call_macro');
+  });
+
+  it('keeps transitional briefing and doc-link descriptions pointing at call_macro', () => {
+    expect(requireToolMetadata('get_briefing').description).toContain('call_macro');
+    expect(requireToolMetadata('insert_doc_link').description).toContain('call_macro');
   });
 
   it('returns legacy replacement suggestions without aliasing', () => {

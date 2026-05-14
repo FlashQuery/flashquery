@@ -11,6 +11,7 @@ import { registerPendingReviewTools } from '../../src/mcp/tools/pending-review.j
 import { registerFileTools } from '../../src/mcp/tools/files.js';
 import { registerLlmTools } from '../../src/mcp/tools/llm.js';
 import { registerLlmUsageTools } from '../../src/mcp/tools/llm-usage.js';
+import { registerMacroTools } from '../../src/mcp/tools/macro.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
 import {
   assertRegisteredToolsHaveMetadata,
@@ -42,6 +43,7 @@ function registerAllCurrentTools(server: McpServer): void {
   registerFileTools(server, mockConfig);
   registerLlmTools(server, mockConfig);
   registerLlmUsageTools(server, mockConfig);
+  registerMacroTools(server, mockConfig);
 }
 
 describe('MCP tool registration metadata', () => {
@@ -84,6 +86,7 @@ describe('MCP tool registration metadata', () => {
 
     expect(registeredNames).toContain('get_document');
     expect(registeredNames).toContain('call_model');
+    expect(registeredNames).toContain('call_macro');
     expect(registeredNames).toContain('list_vault');
     expect(registeredNames).not.toContain('get_doc_outline');
     expect(registeredNames).not.toContain('list_projects');
@@ -96,6 +99,22 @@ describe('MCP tool registration metadata', () => {
     const catalog = getNativeToolCatalog(server);
 
     expect(() => assertRegisteredToolsHaveMetadata(catalog)).not.toThrow();
+  });
+
+  it('registers call_macro as a non-executing canonical expected-error scaffold', async () => {
+    const server = makeCatalogServer();
+    registerAllCurrentTools(server);
+
+    const callMacro = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro');
+    expect(callMacro).toBeDefined();
+
+    const result = await callMacro?.handler({ source: 'echo "hello"' }, {} as never);
+    expect(result?.isError).toBe(false);
+    expect(JSON.parse(result?.content[0]?.text ?? '')).toEqual({
+      error: 'unsupported',
+      message: 'call_macro is registered but macro execution is not implemented in Phase 130.',
+      details: { reason: 'phase_130_scaffold' },
+    });
   });
 
   it('uses metadata descriptions for the registered native catalog', () => {
