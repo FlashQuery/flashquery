@@ -4,14 +4,14 @@ milestone: v3.4
 milestone_name: macro-support
 status: executing
 stopped_at: Completed 136-01-PLAN.md
-last_updated: "2026-05-14T22:07:58.192Z"
+last_updated: "2026-05-14T22:16:12.865Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 27
-  completed_plans: 24
-  percent: 89
+  completed_plans: 25
+  percent: 93
 ---
 
 # FlashQuery Core — State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 136 (task-lifecycle-and-cancellation) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
-Last activity: 2026-05-14 -- Completed 136-01-PLAN.md
+Last activity: 2026-05-14
 
 ## Performance Metrics
 
@@ -116,6 +116,7 @@ Last activity: 2026-05-14 -- Completed 136-01-PLAN.md
 | Phase 135 P03 | 4m29s | 2 tasks | 3 files |
 | Phase 135 P04 | 6m14s | 3 tasks | 4 files |
 | Phase 136 P01 | 4m | 3 tasks | 4 files |
+| Phase 136 P02 | 4m10s | 2 tasks | 3 files |
 
 ## Decisions
 
@@ -203,6 +204,9 @@ Last activity: 2026-05-14 -- Completed 136-01-PLAN.md
 - [Phase 135]: 135-03: ToolExistsCall remains introspection-only and is excluded from collected dispatch references.
 - [Phase 135]: 135-04 macro dispatch integration follows current fqc_documents status and unified search total contracts.
 - [Phase 135]: 135-04 inbound MCP call_macro always uses host caller context; delegated macro execution uses internal runMacroSource with purposeName.
+- [Phase 136]: 136-02 runs tool-call cancellation checks after argument evaluation and before handler dispatch.
+- [Phase 136]: 136-02 tracks cancellation requests separately from enumerable task records so terminal records can be removed immediately while in-flight evaluation can still observe cancellation.
+- [Phase 136]: 136-02 lazily imports template metadata dependencies in src/mcp/tools/macro.ts so importing runMacroSource for registry tests does not load storage modules.
 
 ## Accumulated Context
 
@@ -316,7 +320,7 @@ Last activity: 2026-05-14 -- Completed 136-01-PLAN.md
 
 ## Session Continuity
 
-Last session: 2026-05-14T22:07:58.170Z
+Last session: 2026-05-14T22:15:33.890Z
 Stopped at: Completed 136-01-PLAN.md
 Resume: None
 

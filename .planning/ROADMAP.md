@@ -189,11 +189,11 @@ Plans:
 
 **Requirements:** MACRO-OBS-04, MACRO-OBS-05, MACRO-OBS-06, MACRO-INT-01
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 - [x] 136-01-PLAN.md — Create Wave 0 lifecycle, cancellation, session-scope, and task builtin test contracts.
-- [ ] 136-02-PLAN.md — Implement the instance-scoped task registry and run lifecycle wiring.
+- [x] 136-02-PLAN.md — Implement the instance-scoped task registry and run lifecycle wiring.
 - [ ] 136-03-PLAN.md — Implement dedicated cancellation signaling and safe-point placement.
 - [ ] 136-04-PLAN.md — Add concurrency integration, directed cancellation coverage, and final gates.
 
