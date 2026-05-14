@@ -8,13 +8,13 @@ FlashQuery Core is an open source, local-first data management layer for individ
 
 **v3.0 complete (2026-04-30).** Native LLM Access milestone closed: three-layer provider/model/purpose config, completions client with fallback chains, `call_model` MCP tool, cost tracking, embedding migration, config template hardened (B-01 BLOCKER fixed), and v3.0 audit gaps resolved (Phase 106). 1306 unit tests passing. Ready for `/gsd-complete-milestone v3.0`.
 
-## Current State: v3.3 shipped — MCP Tools Consolidation
+## Current State: v3.4 in progress — Macro Support
 
 **Last shipped:** v3.3 MCP Tools Consolidation (57/57 requirements complete; phases 121-129 shipped 2026-05-14). FlashQuery now has a smaller final MCP surface with centralized tool metadata, host/delegated exposure parity, consistent JSON response contracts, canonical expected-error envelopes, and same-phase test/scenario coverage for migrated tools.
 
 **Current tool surface:** Final primitives now center on `write_document`, `write_memory`, `write_record`, `search`, `manage_directory`, `maintain_vault`, and structured read/archive/get flows. Removed legacy tool names are absent from host and delegated surfaces with replacement suggestions rather than compatibility aliases. Delegated broad tiers derive from canonical metadata, including corrected data tools such as `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`.
 
-**Current focus:** Awaiting next milestone. Start new planning with `$gsd-new-milestone`.
+**Current focus:** Phase 133 complete — macro standard library builtins now cover input preflight, data/arithmetic/range helpers, canonical termination, echo/status channels, task introspection, and sleep/slow_op without deferred shell or tool-dispatch verbs. Next up is Phase 134 shell verbs, vault jail, and introspection.
 
 ## Current Milestone: v3.4 macro-support
 
