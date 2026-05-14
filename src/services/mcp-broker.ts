@@ -6,8 +6,8 @@ export interface McpBroker {
 }
 
 export class NullMcpBroker implements McpBroker {
-  async isConnected(_serverId: string): Promise<boolean> {
-    return false;
+  isConnected(_serverId: string): Promise<boolean> {
+    return Promise.resolve(false);
   }
 
   getToolHandler(_serverId: string, _toolName: string): NativeToolHandler | null {

@@ -22,7 +22,7 @@ export function registerMacroTools(server: McpServer, config: FlashQueryConfig):
         progress: z.enum(['full', 'milestones', 'silent']).optional(),
       },
     },
-    async () => {
+    () => {
       if (getIsShuttingDown()) {
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed.');
       }
