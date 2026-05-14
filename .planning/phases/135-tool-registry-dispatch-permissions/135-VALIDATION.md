@@ -49,7 +49,11 @@ created: 2026-05-14
 | 135-04-02 | 04 | 4 | MACRO-DISP-01 through MACRO-DISP-07 | T-I-003 / T-I-004 | Real `fq.write_document` and `fq.search` macro dispatch works through registered native handlers | integration | `npm run test:integration -- --reporter=verbose macro-tool-dispatch` | ❌ W0 | ⬜ pending |
 | 135-04-03 | 04 | 4 | MACRO-DISP-04, MACRO-DISP-05 | ML-11 / ML-12 | Public directed scenario coverage verifies nested `fq.call_macro` and template-masquerade hard exclusions. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed` | ✅ | ⬜ pending |
 | 135-04-04 | 04 | 4 | MACRO-DISP-01 | IS-11 | YAML integration scenario composes multiple native handlers through one macro. | YAML integration | `python3 tests/scenarios/integration/run_integration.py --managed macro_dispatch_get_then_write` | ✅ | ⬜ pending |
-| 135-04-05 | 04 | 4 | MACRO-DISP-01 through MACRO-DISP-07 | Phase gate | Required unit, integration, directed, YAML, build, and source-grep verification gates pass | unit + integration + scenarios + build | `npm test -- --reporter=verbose macro-registry macro-permission-prescan macro-dispatcher macro-hard-exclusions mcp-server-tools && npm run test:integration -- --reporter=verbose macro-tool-dispatch && python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed && python3 tests/scenarios/integration/run_integration.py --managed macro_dispatch_get_then_write && npm run build` | ❌ W0 | ⬜ pending |
+| 135-04-05 | 04 | 4 | MACRO-DISP-02, MACRO-DISP-03 | ML-13 / ML-14 | Public directed scenario coverage verifies permission pre-scan forbidden lists, nested forbidden aggregation, and no nested execution result. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_permission_prescan.py --managed` | ✅ | ⬜ pending |
+| 135-04-06 | 04 | 4 | MACRO-DISP-06 | ML-15 / ML-16 | Directed helper drives `runMacroSource` for delegated and host caller identities, proving delegated `fq.call_model` hard exclusion and host reachability. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py --managed` | ✅ | ⬜ pending |
+| 135-04-07 | 04 | 4 | MACRO-DISP-07 | ML-17 | Public directed scenario coverage verifies no public `callerKind` schema, ignored caller identity input, and no echo. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_caller_identity.py --managed` | ✅ | ⬜ pending |
+| 135-04-08 | 04 | 4 | MACRO-DISP-02, MACRO-DISP-03 | IS-12 | YAML integration scenario verifies forbidden macro writes fail before dispatch and the blocked target remains absent. | YAML integration | `python3 tests/scenarios/integration/run_integration.py --managed macro_permission_failure_zero_side_effects` | ✅ | ⬜ pending |
+| 135-04-09 | 04 | 4 | MACRO-DISP-01 through MACRO-DISP-07 | Phase gate | Required unit, integration, directed, YAML, build, and source-grep verification gates pass | unit + integration + scenarios + build | `npm test -- --reporter=verbose macro-registry macro-permission-prescan macro-dispatcher macro-hard-exclusions mcp-server-tools && npm run test:integration -- --reporter=verbose macro-tool-dispatch && python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed && python3 tests/scenarios/directed/testcases/test_macro_permission_prescan.py --managed && python3 tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py --managed && python3 tests/scenarios/directed/testcases/test_macro_caller_identity.py --managed && python3 tests/scenarios/integration/run_integration.py --managed macro_dispatch_get_then_write && python3 tests/scenarios/integration/run_integration.py --managed macro_permission_failure_zero_side_effects && npm run build` | ❌ W0 | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -64,7 +68,11 @@ created: 2026-05-14
 - [ ] `tests/integration/macro-tool-dispatch.test.ts` — integration tests for T-I-003 and T-I-004.
 - [ ] `tests/config/vitest.integration.config.ts` — include `tests/integration/macro-tool-dispatch.test.ts` in the explicit integration include list.
 - [ ] `tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py` — directed hard-exclusion coverage for ML-11 and ML-12.
+- [ ] `tests/scenarios/directed/testcases/test_macro_permission_prescan.py` — directed permission pre-scan coverage for ML-13 and ML-14.
+- [ ] `tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py` — directed delegated/host hard-exclusion coverage for ML-15 and ML-16.
+- [ ] `tests/scenarios/directed/testcases/test_macro_caller_identity.py` — directed public caller identity boundary coverage for ML-17.
 - [ ] `tests/scenarios/integration/tests/macro_dispatch_get_then_write.yml` — YAML multi-native-handler macro workflow coverage for IS-11.
+- [ ] `tests/scenarios/integration/tests/macro_permission_failure_zero_side_effects.yml` — YAML permission failure zero-side-effect coverage for IS-12.
 
 ---
 
@@ -96,6 +104,10 @@ All phase behaviors have automated verification. Manual review is limited to con
 |---------|------|---------|
 | `npm test -- --reporter=verbose macro-registry macro-permission-prescan macro-dispatcher` | 0 | Passed: 3 files, 15 tests. Registry, permission pre-scan, and dispatcher gates are green. |
 | `npm run test:integration -- --reporter=verbose macro-tool-dispatch` | 0 | Passed: 1 file, 2 tests. Real `fq.write_document` and `fq.search` dispatch through public `call_macro` using `.env.test` credentials. |
+| `python3 tests/scenarios/directed/testcases/test_macro_permission_prescan.py --managed` | 0 | Passed: 2/2 steps. Public `call_macro` rejects known host-disallowed tools as `forbidden_tools` before nested execution. |
+| `python3 tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py --managed` | 0 | Passed: 2/2 steps. Delegated `runMacroSource` rejects `fq.call_model`; host `runMacroSource` reaches the fake native handler. |
+| `python3 tests/scenarios/directed/testcases/test_macro_caller_identity.py --managed` | 0 | Passed: 2/2 steps. Public `call_macro` schema omits `callerKind`; supplied caller identity input is ignored and not echoed. |
+| `python3 tests/scenarios/integration/run_integration.py --managed macro_permission_failure_zero_side_effects` | 0 | Passed: 1/1 tests, 2/2 steps. Forbidden macro write is rejected and the target remains absent. |
 | `npm run build` | 0 | Passed: production ESM and DTS build completed successfully. |
 
 Notes:

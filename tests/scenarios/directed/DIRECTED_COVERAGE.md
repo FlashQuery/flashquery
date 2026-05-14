@@ -55,6 +55,11 @@ This document defines every behavioral coverage point we want to verify through 
 |----|----------|------------|--------------|--------------|
 | ML-11 | REQ-030 / T-U-165: `call_macro` universally hides nested `fq.call_macro` references from macro authors as `unknown_tool`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
 | ML-12 | REQ-031 / T-U-166: `call_macro` rejects real template-masqueraded tool names with `template_masquerade_tools_not_callable_from_macro`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
+| ML-13 | REQ-028 / T-U-160: public `call_macro` reports a known but host-disallowed FlashQuery tool as `forbidden_tools`, including forbidden and allowed lists, before dispatch. | test_macro_permission_prescan | 2026-05-14 | 2026-05-14 |
+| ML-14 | REQ-028 / T-U-161 / T-U-162: public `call_macro` reports multiple forbidden tool references across nested control-flow bodies before any nested result or side effect can occur. | test_macro_permission_prescan | 2026-05-14 | 2026-05-14 |
+| ML-15 | REQ-032 / T-U-167 / T-U-168: delegated-origin `runMacroSource` hard-excludes `fq.call_model` with `recursive_model_excluded_from_delegated_macros`. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
+| ML-16 | REQ-027 / REQ-032: host-origin `runMacroSource` can invoke host-exposed `fq.call_model` through the native registry while delegated callers remain blocked. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
+| ML-17 | REQ-033 / T-U-171: public `call_macro` omits `callerKind` from tools/list schema, ignores supplied caller identity fields, and does not echo them. | test_macro_caller_identity | 2026-05-14 | 2026-05-14 |
 
 ## 1. Document Lifecycle
 

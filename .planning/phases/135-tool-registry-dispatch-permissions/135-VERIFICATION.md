@@ -47,7 +47,11 @@ overrides_applied: 0
 | `tests/unit/macro-*.test.ts` | T-U-156..T-U-171 coverage | VERIFIED | All required unit test IDs are present. |
 | `tests/integration/macro-tool-dispatch.test.ts` | T-I-003/T-I-004 real handler coverage | VERIFIED | Integration suite passes locally. |
 | `tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py` | Phase 135 directed hard-exclusion coverage | VERIFIED | Covers `ML-11` and `ML-12` for nested `fq.call_macro` and real template-masqueraded tool rejection. |
+| `tests/scenarios/directed/testcases/test_macro_permission_prescan.py` | Phase 135 public permission pre-scan coverage | VERIFIED | Covers `ML-13` and `ML-14` for forbidden known tools, aggregated nested forbidden references, and no nested result. |
+| `tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py` | Phase 135 delegated hard-exclusion coverage | VERIFIED | Covers `ML-15` and `ML-16` by driving `runMacroSource` programmatically for delegated versus host `fq.call_model`. |
+| `tests/scenarios/directed/testcases/test_macro_caller_identity.py` | Phase 135 public caller identity boundary coverage | VERIFIED | Covers `ML-17` by asserting tools/list omits `callerKind`, supplied `callerKind` is ignored, and no caller identity is echoed. |
 | `tests/scenarios/integration/tests/macro_dispatch_get_then_write.yml` | Phase 135 YAML macro-to-handler workflow | VERIFIED | Covers `IS-11` with one macro composing `get_document`, `write_document`, and `get_document`. |
+| `tests/scenarios/integration/tests/macro_permission_failure_zero_side_effects.yml` | Phase 135 YAML permission failure workflow | VERIFIED | Covers `IS-12` with public `call_macro` rejecting a forbidden write before dispatch and proving the blocked target remains absent. |
 | `tests/config/vitest.integration.config.ts` | Explicit include entry | VERIFIED | Include entry exists exactly once at line 16. |
 
 ### Key Link Verification
@@ -79,7 +83,11 @@ overrides_applied: 0
 | Focused registry, pre-scan, dispatcher unit behavior | `npm test -- --reporter=verbose macro-registry macro-permission-prescan macro-dispatcher` | 3 files, 15 tests passed locally | PASS |
 | Real native dispatch integration | `npm run test:integration -- --reporter=verbose macro-tool-dispatch` | 1 file, 2 tests passed locally | PASS |
 | Public directed hard-exclusion coverage | `python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed` | Passed: 2/2 steps | PASS |
+| Public directed permission pre-scan coverage | `python3 tests/scenarios/directed/testcases/test_macro_permission_prescan.py --managed` | Passed: 2/2 steps | PASS |
+| Directed delegated hard-exclusion coverage | `python3 tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py --managed` | Passed: 2/2 steps | PASS |
+| Public directed caller identity coverage | `python3 tests/scenarios/directed/testcases/test_macro_caller_identity.py --managed` | Passed: 2/2 steps | PASS |
 | YAML multi-handler macro dispatch coverage | `python3 tests/scenarios/integration/run_integration.py --managed macro_dispatch_get_then_write` | Passed: 1/1 tests, 2/2 steps | PASS |
+| YAML permission failure zero-side-effect coverage | `python3 tests/scenarios/integration/run_integration.py --managed macro_permission_failure_zero_side_effects` | Passed: 1/1 tests, 2/2 steps | PASS |
 | Integration include registered exactly once | `rg -n "tests/integration/macro-tool-dispatch\\.test\\.ts" tests/config/vitest.integration.config.ts \| wc -l` | `1` | PASS |
 | No public `callerKind` in production schema/options | `rg -n "callerKind" src/mcp/tools/macro.ts src/macro src/llm tests/unit/macro-caller-identity.test.ts` | Matches only schema absence test | PASS |
 | No direct macro imports from `src/mcp/tools/*` | `rg -n "from ['\\\"].*(mcp/tools)\|src/mcp/tools\|\\.\\./mcp/tools\|\\.\\./\\.\\./mcp/tools" src/macro src/mcp/tools/macro.ts` | No matches | PASS |

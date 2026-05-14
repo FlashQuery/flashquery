@@ -81,6 +81,7 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | IS-11 | REQ-027: `call_macro` composes multiple native FlashQuery handlers through registry-backed dispatch in one workflow. | macro_dispatch_get_then_write | 2026-05-14   | 2026-05-14   |
+| IS-12 | REQ-028 / REQ-029: `call_macro` rejects a forbidden native write reference before dispatch and the blocked target remains absent. | macro_permission_failure_zero_side_effects | 2026-05-14   | 2026-05-14   |
 
 ---
 
