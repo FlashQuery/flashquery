@@ -64,13 +64,14 @@ Plans:
 
 **Requirements:** MACRO-SRC-05, MACRO-SRC-06, MACRO-PARSE-01 through MACRO-PARSE-10
 
-**Plans:** 4 plans
+**Plans:** 5 plans
 
 Plans:
 - [ ] 131-01-PLAN.md — Add Chevrotain, parser contracts, errors, and v0 lexer coverage.
 - [ ] 131-02-PLAN.md — Implement fqm fence extraction and source_ref named-block selection.
 - [ ] 131-03-PLAN.md — Implement parser grammar, AST conversion, and parse-error classification.
-- [ ] 131-04-PLAN.md — Parse all migrated POC examples and expose inline parse_error at call_macro boundary.
+- [ ] 131-04-PLAN.md — Parse all migrated POC examples as final-v0 fixtures.
+- [ ] 131-05-PLAN.md — Expose inline parse_error at the call_macro boundary with integration coverage.
 
 **Success criteria:**
 1. Chevrotain lexer/parser supports the full v0 two-layer DSL surface.
