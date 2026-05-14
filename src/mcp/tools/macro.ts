@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
-import { evaluateProgram, MacroRuntimeError, type MacroValue } from '../../macro/evaluator.js';
+import { evaluateProgram, MacroCancellationError, type MacroValue } from '../../macro/evaluator.js';
 import { parseMacroSource } from '../../macro/parser.js';
 import { buildToolRegistry, type BrokerToolServerConfig, type BuildToolRegistryResult } from '../../macro/registry.js';
 import type { MacroCallerContext } from '../../macro/types.js';
@@ -111,10 +111,7 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
     listTasks: (context) => taskRegistry.list(context.sessionId),
     checkCancelled: (where) => {
       if (taskRegistry.isCancellationRequested(task.task_id)) {
-        throw new MacroRuntimeError(`Macro cancelled at ${where}`, undefined, {
-          reason: 'cancelled',
-          where,
-        });
+        throw new MacroCancellationError(task.task_id, where);
       }
     },
   });

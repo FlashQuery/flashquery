@@ -105,7 +105,7 @@ export interface MacroInvocationContext {
    * builtin applies a defensive session marker filter when sessionId is present.
    */
   listTasks?: (context: MacroInvocationContext) => MacroValue[] | Promise<MacroValue[]>;
-  checkCancelled(where: string): void | Promise<void>;
+  checkCancelled(atSafePoint: string): void | Promise<void>;
 }
 
 export interface EvaluateProgramOptions {
@@ -131,7 +131,7 @@ export interface EvaluateProgramOptions {
   listTasks?: MacroInvocationContext['listTasks'];
   vaultRoot?: string;
   stdin?: MacroValue;
-  checkCancelled?: (where: string) => void | Promise<void>;
+  checkCancelled?: (atSafePoint: string) => void | Promise<void>;
 }
 
 export class MacroRuntimeError extends Error {
@@ -142,6 +142,16 @@ export class MacroRuntimeError extends Error {
   ) {
     super(message);
     this.name = 'MacroRuntimeError';
+  }
+}
+
+export class MacroCancellationError extends Error {
+  constructor(
+    public readonly taskId: string,
+    public readonly atSafePoint: string
+  ) {
+    super('Macro cancelled');
+    this.name = 'MacroCancellationError';
   }
 }
 
@@ -254,14 +264,11 @@ export function createInvocationContext(
     dispatchTool: options.dispatchTool,
     progressSink: options.progressSink,
     listTasks: options.listTasks,
-    checkCancelled: async (where: string) => {
+    checkCancelled: async (atSafePoint: string) => {
       if (cancelled.value) {
-        throw new MacroRuntimeError(`Macro cancelled at ${where}`, undefined, {
-          reason: 'cancelled',
-          where,
-        });
+        throw new MacroCancellationError(context.taskId, atSafePoint);
       }
-      await options.checkCancelled?.(where);
+      await options.checkCancelled?.(atSafePoint);
     },
   };
 
@@ -313,6 +320,16 @@ export async function evaluateProgram(
         error: error.error,
         message: error.message,
         details: error.details,
+      });
+    }
+    if (error instanceof MacroCancellationError) {
+      return jsonExpectedError({
+        error: 'cancelled',
+        message: 'Macro cancelled',
+        details: {
+          task_id: error.taskId,
+          at_safe_point: error.atSafePoint,
+        },
       });
     }
     if (error instanceof MacroPreflightError) {
@@ -617,6 +634,7 @@ async function evalCall(
   } catch (error) {
     if (
       error instanceof MacroRuntimeError ||
+      error instanceof MacroCancellationError ||
       error instanceof MacroExitError ||
       error instanceof MacroFailError ||
       error instanceof MacroExpectedError
