@@ -11,6 +11,7 @@ export default defineConfig({
       'tests/integration/llm-config-sync.test.ts',
       'tests/integration/tool-registry.test.ts',
       'tests/integration/archive-document-lock.test.ts',
+      'tests/integration/macro-parse-error.test.ts',
     ],
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],
     globals: true,
