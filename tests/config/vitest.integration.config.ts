@@ -13,6 +13,7 @@ export default defineConfig({
       'tests/integration/archive-document-lock.test.ts',
       'tests/integration/macro-parse-error.test.ts',
       'tests/integration/macro-shell-verbs.integration.test.ts',
+      'tests/integration/macro-tool-dispatch.test.ts',
     ],
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],
     globals: true,
