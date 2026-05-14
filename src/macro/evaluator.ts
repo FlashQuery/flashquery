@@ -22,6 +22,7 @@ import {
   collectInputVarContract,
   validateInputVars,
 } from './preflight.js';
+import { preScanForbiddenShellFlags } from './forbidden-flag-scan.js';
 import { buildRange, standardBuiltins } from './builtins.js';
 
 const ESCAPED_DOLLAR_SENTINEL = '\uE000';
@@ -243,6 +244,7 @@ export async function evaluateProgram(
   const env = new Env();
 
   try {
+    preScanForbiddenShellFlags(program);
     preflightProgram(program);
     const inputVarContract = collectInputVarContract(program);
     validateInputVars(inputVarContract, context.inputVars);

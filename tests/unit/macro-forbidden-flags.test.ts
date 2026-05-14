@@ -95,7 +95,7 @@ describe('macro forbidden shell flag pre-scan', () => {
       verb: 'find',
       flag: '--exec',
       reason: 'find_exec_mutates_or_executes',
-      line: 5,
+      line: 4,
     });
   });
 
