@@ -210,9 +210,27 @@ Plans:
 
 **Requirements:** MACRO-OBS-02, MACRO-OBS-03, MACRO-RESP-05, MACRO-INT-04, MACRO-INT-07
 
+**Plans:** 5 plans
+
+Plans:
+**Wave 0**
+- [ ] 137-01-PLAN.md — Create trace, progress, dry-run, budget, warning, and handler contract tests.
+
+**Wave 1** *(blocked on Wave 0 completion)*
+- [ ] 137-02-PLAN.md — Implement mode-aware trace writing and warning propagation.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 137-03-PLAN.md — Implement shared progress emission and progress-token capture.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 137-04-PLAN.md — Implement dry-run pre-flight and runtime budget enforcement.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 137-05-PLAN.md — Add directed coverage rows/scenarios and final validation gates.
+
 **Success criteria:**
 1. Trace modes `full`, `summary`, and `none` behave exactly as specified, including value truncation.
-2. Progress modes `full`, `milestones`, and `silent` honor progress token availability and throttling.
+2. Progress modes `full`, `milestones`, and `silent` honor progress token availability and throttling, including REQ-039 ac3 auto-emitted progress at for-loop iteration and model-call boundaries through the same mode-aware emission path.
 3. Dry-run parses, pre-scans, and reports structure without executing side effects.
 4. Token/model/external-tool/time budgets halt with the correct budget envelope.
 5. `warnings[]` carries truncation/throttle/broker warnings through the shared response convention.
