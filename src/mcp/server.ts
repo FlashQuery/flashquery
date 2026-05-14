@@ -20,6 +20,7 @@ import { registerPendingReviewTools } from './tools/pending-review.js';
 import { registerFileTools } from './tools/files.js';
 import { registerLlmTools } from './tools/llm.js';
 import { registerLlmUsageTools } from './tools/llm-usage.js';
+import { registerMacroTools } from './tools/macro.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from './tool-catalog.js';
 import { validateAndCacheNativeToolSchemas } from '../llm/tool-registry.js';
 import { getResolvedHostToolExposure, type FlashQueryConfig } from '../config/loader.js';
@@ -459,6 +460,7 @@ function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
   registerFileTools(server, config);
   registerLlmTools(server, config);
   registerLlmUsageTools(server, config);
+  registerMacroTools(server, config);
   validateAndCacheNativeToolSchemas(getNativeToolCatalog(server));
   return server;
 }

@@ -181,6 +181,12 @@ const D = {
     'Do not use as a delegated native tool or to recursively call tools from a model without an explicit purpose; use direct MCP tools for local data operations.',
     'call_model({ "purpose": "summarize", "prompt": "Summarize {{ref:Notes/Plan.md}}" })'
   ),
+  callMacro: description(
+    'Run a FlashQuery macro as one structured orchestration request.',
+    'Use when you need deterministic multi-step FlashQuery orchestration through call_macro.',
+    'Do not use when you need direct model recursion or when macro execution is unavailable in this phase.',
+    'call_macro({ "source": "echo \\"hello\\"" })'
+  ),
   getLlmUsage: description(
     'Inspect recorded LLM usage and cost data with structured summaries and filters.',
     'Use when you need usage totals, per-purpose cost reporting, model filters, or trace-level LLM accounting.',
@@ -258,6 +264,7 @@ export const TOOL_METADATA = [
   current('clear_pending_reviews', ['plugin'], 'admin', D.clearPendingReviews, SYSTEM_ADMIN_REASON),
 
   current('call_model', ['llm'], 'admin', D.callModel, RECURSIVE_MODEL_REASON),
+  current('call_macro', ['llm'], 'admin', D.callMacro, RECURSIVE_MODEL_REASON),
   current('get_llm_usage', ['llm'], 'read-only', D.getLlmUsage),
 
   current('force_file_scan', ['system'], 'admin', legacyDescription('force_file_scan', 'maintain_vault', 'Force a vault file scan.'), SYSTEM_ADMIN_REASON),
