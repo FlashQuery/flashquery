@@ -80,6 +80,7 @@ const HARD_EXCLUDED_TOOLS = [
   'get_plugin_info',
   'clear_pending_reviews',
   'call_model',
+  'call_macro',
   'force_file_scan',
   'reconcile_documents',
   'maintain_vault',
@@ -400,6 +401,7 @@ describe('assembleNativeToolRegistry', () => {
         'unregister_plugin',
         'get_plugin_info',
         'clear_pending_reviews',
+        'call_macro',
         'force_file_scan',
         'reconcile_documents',
       ]),
@@ -414,6 +416,7 @@ describe('assembleNativeToolRegistry', () => {
     expect(result.nativeToolNames).not.toContain('unregister_plugin');
     expect(result.nativeToolNames).not.toContain('get_plugin_info');
     expect(result.nativeToolNames).not.toContain('clear_pending_reviews');
+    expect(result.nativeToolNames).not.toContain('call_macro');
     expect(result.nativeToolNames).not.toContain('force_file_scan');
     expect(result.nativeToolNames).not.toContain('reconcile_documents');
     expect(result.diagnostics.hardExcluded).toEqual([
@@ -422,6 +425,7 @@ describe('assembleNativeToolRegistry', () => {
       { tool: 'unregister_plugin', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
       { tool: 'get_plugin_info', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
       { tool: 'clear_pending_reviews', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
+      { tool: 'call_macro', reason: 'Tool can recursively call models and is not safe for delegated native access.' },
       { tool: 'force_file_scan', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
       { tool: 'reconcile_documents', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
     ]);
