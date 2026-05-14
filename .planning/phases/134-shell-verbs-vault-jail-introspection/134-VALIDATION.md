@@ -158,3 +158,93 @@ for id in T-U-126 T-U-127 T-U-128 T-U-129 T-U-130 T-U-131 T-U-132 T-U-133 T-U-13
 **Exit status:** 0
 **Result:** PASS
 **Output:** No production matches in `src/macro` for `sh.cd(`, `shelljs.cd(`, or `process.chdir(`.
+
+### Task 2: Macro Regression And Build Gates
+
+#### Macro Regression Suite
+
+```bash
+npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-*.test.ts
+```
+
+**Exit status:** 1
+**Result:** FAIL
+
+```text
+Test Files  1 failed | 15 passed (16)
+     Tests  2 failed | 194 passed (196)
+  Duration  4.90s
+```
+
+Failing tests:
+
+| Test | Related to Phase 134? | Classification |
+|------|------------------------|----------------|
+| `tests/unit/macro-parser.test.ts > macro parser > T-U-061 parses _exists namespace introspection in conditions` | Yes | Existing parser test expects the pre-134-04 AST shape without `method`; Plan 04 intentionally added `method: "_exists"` so unsupported underscore methods can fail at runtime. |
+| `tests/unit/macro-parser.test.ts > macro parser > T-U-062 rejects dotted server names and unsupported namespace methods` | Yes | Existing parser test still expects unsupported underscore methods to fail at parse time; Plan 04 intentionally changed unsupported leading-underscore methods to parse and fail at runtime, as covered by T-U-154. |
+
+Exact failure excerpts:
+
+```text
+FAIL  tests/unit/macro-parser.test.ts > macro parser > T-U-061 parses _exists namespace introspection in conditions
+AssertionError: expected { kind: 'ToolExistsCall', ...(3) } to deeply equal { kind: 'ToolExistsCall', ...(2) }
+
+- Expected
++ Received
+
+  {
+    "kind": "ToolExistsCall",
+    "line": 1,
++   "method": "_exists",
+    "server": "fq",
+  }
+
+FAIL  tests/unit/macro-parser.test.ts > macro parser > T-U-062 rejects dotted server names and unsupported namespace methods
+AssertionError: expected true to be false
+```
+
+No source or test files were modified in this validation plan because plan ownership is limited to validation documentation and the focused Phase 134 behavior is already proven by `tests/unit/macro-introspection.test.ts` T-U-154.
+
+#### Production Build
+
+```bash
+npm run build
+```
+
+**Exit status:** 0
+**Result:** PASS
+
+```text
+> flashquery@3.0.0 build
+> tsup src/index.ts --format esm --dts
+
+ESM Build success in 268ms
+DTS Build success in 5737ms
+DTS dist/index.d.ts 3.45 KB
+```
+
+#### Full Unit Suite
+
+```bash
+npm test
+```
+
+**Exit status:** 1
+**Result:** FAIL
+
+```text
+Test Files  1 failed | 108 passed (109)
+     Tests  2 failed | 1659 passed (1661)
+  Duration  16.03s
+```
+
+Failing tests:
+
+| Test | Related to Phase 134? | Classification |
+|------|------------------------|----------------|
+| `tests/unit/macro-parser.test.ts > macro parser > T-U-061 parses _exists namespace introspection in conditions` | Yes | Same parser expectation drift as the macro regression suite. |
+| `tests/unit/macro-parser.test.ts > macro parser > T-U-062 rejects dotted server names and unsupported namespace methods` | Yes | Same parser expectation drift as the macro regression suite. |
+
+#### Phase 135 Scope Claim Check
+
+This validation records that Phase 134 covers shell verbs, vault jail, forbidden shell flags, cwd retirement, and `_exists()` only. It does not claim MACRO-DISP-01 through MACRO-DISP-07, namespaced tool dispatch permission pre-scan, dispatch backstops, or hard exclusions are implemented.
