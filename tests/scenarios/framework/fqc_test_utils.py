@@ -212,6 +212,13 @@ class FQCServer:
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
 
+    @property
+    def config_path(self) -> str:
+        """Return the generated managed-server config path while the server is running."""
+        if not self._config_path:
+            raise RuntimeError("FQCServer config path is not available before start()")
+        return self._config_path
+
     # -- Config generation -------------------------------------------------
 
     def _generate_config(self) -> str:

@@ -61,6 +61,13 @@ This document defines every behavioral coverage point we want to verify through 
 | ML-16 | REQ-027 / REQ-032: host-origin `runMacroSource` can invoke host-exposed `fq.call_model` through the native registry while delegated callers remain blocked. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
 | ML-17 | REQ-033 / T-U-171: public `call_macro` omits `callerKind` from tools/list schema, ignores supplied caller identity fields, and does not echo them. | test_macro_caller_identity | 2026-05-14 | 2026-05-14 |
 
+## Phase 136 Macro Task Lifecycle And Cancellation
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| MLC-01 | REQ-050 / T-S-001: in-process macro cancellation is observed at a safe point and returns the canonical `cancelled` envelope. | test_macro_cancellation | 2026-05-14 | 2026-05-14 |
+| MLC-02 | REQ-050 / T-S-002: cancellation during loop execution prevents document mutation after the safe point. | test_macro_no_partial_side_effects_after_cancel | 2026-05-14 | 2026-05-14 |
+
 ## 1. Document Lifecycle
 
 Core CRUD operations on vault documents via MCP.
