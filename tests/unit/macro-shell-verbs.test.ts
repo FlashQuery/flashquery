@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -61,9 +61,7 @@ describe('macro shell verb builtins', () => {
     expect(resultOf((await run('exit find "/" --type "f"', vaultRoot)).payload)).toContain(
       '/notes.md'
     );
-    expect(resultOf((await run('exit find "/" --type "d"', vaultRoot)).payload)).toContain(
-      '/docs'
-    );
+    expect(resultOf((await run('exit find "/" --type "d"', vaultRoot)).payload)).toContain('/docs');
   });
 
   it('T-U-128 sed "s/OLD/NEW/g" file returns rewritten text and does not mutate the file', async () => {
@@ -123,7 +121,11 @@ describe('macro shell verb builtins', () => {
     expect(resultOf((await run('exit ls -d "/docs"', vaultRoot)).payload)).toEqual(['/docs']);
     expect(resultOf((await run('exit ls -l "/"', vaultRoot)).payload)).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ name: 'notes.md', size: expect.any(Number), mtime: expect.any(String) }),
+        expect.objectContaining({
+          name: 'notes.md',
+          size: expect.any(Number),
+          mtime: expect.any(String),
+        }),
       ])
     );
     expect(resultOf((await run('exit ls -R "/"', vaultRoot)).payload)).toEqual(
@@ -150,7 +152,10 @@ describe('macro shell verb builtins', () => {
   it('T-U-135 cat file | grep PATTERN | wc -l works end to end', async () => {
     const vaultRoot = await makeVault();
 
-    const { payload } = await run('exit cat "/notes.md" | grep "Alpha" | wc -l', vaultRoot);
+    const { payload } = await run(
+      'matches = cat "/notes.md" | grep "Alpha" | wc -l\nexit $matches',
+      vaultRoot
+    );
 
     expect(resultOf(payload)).toBe(2);
   });
@@ -158,9 +163,11 @@ describe('macro shell verb builtins', () => {
   it('T-U-136 matching globs expand and empty glob matches return explicit errors', async () => {
     const vaultRoot = await makeVault();
 
-    expect(resultOf((await run('exit cat "/*.md" | grep "TODO" | wc -l', vaultRoot)).payload)).toBe(
-      1
-    );
+    expect(
+      resultOf(
+        (await run('matches = cat "/*.md" | grep "TODO" | wc -l\nexit $matches', vaultRoot)).payload
+      )
+    ).toBe(1);
     const empty = await run('exit cat "/*.missing"', vaultRoot);
     expect(empty.result.isError).toBe(true);
     expect(empty.payload).toMatchObject({ details: { reason: 'glob_no_matches' } });

@@ -17,13 +17,10 @@ import {
   type ToolResult,
   type TraceStep,
 } from '../mcp/utils/response-formats.js';
-import {
-  MacroPreflightError,
-  collectInputVarContract,
-  validateInputVars,
-} from './preflight.js';
+import { MacroPreflightError, collectInputVarContract, validateInputVars } from './preflight.js';
 import { preScanForbiddenShellFlags } from './forbidden-flag-scan.js';
 import { buildRange, standardBuiltins } from './builtins.js';
+import { shellBuiltins } from './shell-verbs.js';
 
 const ESCAPED_DOLLAR_SENTINEL = '\uE000';
 
@@ -77,6 +74,8 @@ export interface MacroInvocationContext {
   progress: MacroProgressEntry[];
   cancelled: MacroCancellationState;
   builtins: Record<string, MacroBuiltin>;
+  vaultRoot?: string;
+  stdin?: MacroValue;
   dispatchTool?: (
     server: string,
     tool: string,
@@ -112,6 +111,8 @@ export interface EvaluateProgramOptions {
   toolExists?: MacroInvocationContext['toolExists'];
   progressSink?: MacroInvocationContext['progressSink'];
   listTasks?: MacroInvocationContext['listTasks'];
+  vaultRoot?: string;
+  stdin?: MacroValue;
   checkCancelled?: (where: string) => void | Promise<void>;
 }
 
@@ -196,7 +197,9 @@ class Env {
   }
 }
 
-export function createInvocationContext(options: EvaluateProgramOptions = {}): MacroInvocationContext {
+export function createInvocationContext(
+  options: EvaluateProgramOptions = {}
+): MacroInvocationContext {
   const cancelled =
     typeof options.cancelled === 'object'
       ? { value: options.cancelled.value }
@@ -217,7 +220,9 @@ export function createInvocationContext(options: EvaluateProgramOptions = {}): M
     sessionId: options.sessionId,
     progress: [...(options.progress ?? [])],
     cancelled,
-    builtins: { ...standardBuiltins, ...(options.builtins ?? {}) },
+    builtins: { ...standardBuiltins, ...shellBuiltins, ...(options.builtins ?? {}) },
+    vaultRoot: options.vaultRoot,
+    stdin: options.stdin,
     dispatchTool: options.dispatchTool,
     toolExists: options.toolExists,
     progressSink: options.progressSink,
@@ -516,7 +521,13 @@ async function evalPipeline(
     if (index > 0) {
       await context.checkCancelled('between pipeline stages');
     }
-    value = await evalCall(pipeline.stages[index], env, context);
+    const previousStdin = context.stdin;
+    context.stdin = index === 0 ? previousStdin : value;
+    try {
+      value = await evalCall(pipeline.stages[index], env, context);
+    } finally {
+      context.stdin = previousStdin;
+    }
   }
   return value;
 }
@@ -701,12 +712,16 @@ async function evalToolCall(
 ): Promise<MacroValue> {
   await context.checkCancelled(`before tool call ${call.server}.${call.tool}`);
   if (!context.dispatchTool) {
-    throw new MacroRuntimeError(`No tool dispatcher configured for ${call.server}.${call.tool}.`, call.line, {
-      reason: 'tool_dispatcher_missing',
-      server: call.server,
-      tool: call.tool,
-      line: call.line,
-    });
+    throw new MacroRuntimeError(
+      `No tool dispatcher configured for ${call.server}.${call.tool}.`,
+      call.line,
+      {
+        reason: 'tool_dispatcher_missing',
+        server: call.server,
+        tool: call.tool,
+        line: call.line,
+      }
+    );
   }
 
   const arg = await evalToolArg(call, env, context);
@@ -771,8 +786,9 @@ async function evalToolExists(
 
 function interpolate(raw: string, env: Env): string {
   return raw
-    .replace(/\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}/g, (_match, path: string) =>
-      stringifyMacroValue(resolvePath(path, env))
+    .replace(
+      /\$\{([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\}/g,
+      (_match, path: string) => stringifyMacroValue(resolvePath(path, env))
     )
     .replace(/\$([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)/g, (_match, path: string) =>
       stringifyMacroValue(resolvePath(path, env))
@@ -814,10 +830,7 @@ function buildSuccessPayload(context: MacroInvocationContext, result: MacroValue
   };
 }
 
-function pushTrace(
-  context: MacroInvocationContext,
-  step: Omit<TraceStep, 'at'>
-): void {
+function pushTrace(context: MacroInvocationContext, step: Omit<TraceStep, 'at'>): void {
   context.trace.push({ ...step, at: new Date().toISOString() });
 }
 
