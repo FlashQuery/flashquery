@@ -73,9 +73,19 @@ completed: 2026-05-14
 
 ## Deviations from Plan
 
+### Accepted Architectural Deviation
+
+**1. [Planner drift] Implemented a token-stream parser over the Chevrotain lexer instead of `CstParser`**
+- **Found during:** Post-phase gap analysis.
+- **Issue:** Plan 03 and the pattern/research artifacts specified `MacroParser extends CstParser` with `performSelfAnalysis()`. The shipped parser intentionally consumes Chevrotain lexer tokens with a hand-rolled recursive-descent `TokenStreamParser` and returns the same `parseMacroSource` / typed-AST boundary.
+- **Rationale:** The token-stream parser kept Phase 131 error envelopes direct and stable (`reason`, 1-indexed line, `near_token`) without a CST-to-AST visitor layer. Downstream phases consume only the `MacroParseResult` boundary, so the parser-internal choice does not change evaluator or handler contracts.
+- **Files modified:** `src/macro/parser.ts`, `tests/unit/macro-parser.test.ts`.
+- **Verification:** Existing Phase 131 parser/fence/source-ref coverage plus the 17 migrated POC parser fixtures pass through the public boundary.
+- **Committed in:** Pending gap-resolution commit.
+
 ### Auto-fixed Issues
 
-**1. [Rule 3 - Blocking] Corrected EOF line reporting**
+**2. [Rule 3 - Blocking] Corrected EOF line reporting**
 - **Found during:** Task 1 verification
 - **Issue:** Unterminated list/object EOF errors initially defaulted to line 1 instead of anchoring to the last token line.
 - **Fix:** `consume()` now uses the previous token when the current token is EOF-like.
@@ -85,8 +95,8 @@ completed: 2026-05-14
 
 ---
 
-**Total deviations:** 1 auto-fixed.
-**Impact on plan:** Improved parse-error accuracy; no scope expansion.
+**Total deviations:** 1 accepted architectural deviation; 1 auto-fixed.
+**Impact on plan:** Parser internals differ from the original CST pattern, but the public parser contract and downstream AST boundary remain unchanged. EOF parse-error accuracy also improved.
 
 ## Issues Encountered
 

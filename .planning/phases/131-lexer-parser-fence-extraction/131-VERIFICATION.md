@@ -36,3 +36,5 @@ PASS. Phase 131 delivers the macro lexer, parser contracts, fqm fence extraction
 ## Notes
 
 Review surfaced and the implementation fixed several parser/fence edge cases before verification: non-fqm fences beginning with `fqm`, malformed fence attributes with extra `=`, Markdown-compatible close fences, indented open fences, MCP client-path integration testing, and server-level `_exists()` AST handling for `fq._exists()` / brokered `<server>._exists()`.
+
+Post-phase gap analysis also surfaced a test-plan wording conflict: T-U-061 named `fq.x._exists()`, while REQ-017 and REQ-045 define `_exists()` as the two-segment `<server>._exists()` form and reject dotted server names. The test plan was corrected to `fq._exists()`, and parser coverage now explicitly rejects `fq.x._exists()`.

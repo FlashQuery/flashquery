@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { parseMacroSource } from '../../src/macro/parser.js';
 import {
   AndAnd,
   BangEq,
@@ -70,9 +71,12 @@ describe('macro lexer', () => {
   });
 
   it('T-U-026 does not accept exponent, hex, or octal as a single number literal', () => {
-    for (const source of ['1e5', '0xFF', '0o7']) {
-      const result = macroLexer.tokenize(source);
-      expect(result.tokens.map((token) => token.image)).not.toEqual([source]);
+    for (const literal of ['1e5', '0xFF', '0o7']) {
+      const result = parseMacroSource(`x = ${literal}`);
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.error.error).toBe('parse_error');
+      expect(['unexpected_token', 'invalid_literal']).toContain(result.error.details.reason);
     }
   });
 

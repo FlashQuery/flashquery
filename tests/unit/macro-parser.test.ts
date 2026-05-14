@@ -1,7 +1,9 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { MacroParseErrorReason } from '../../src/macro/errors.js';
 import { parseMacroSource } from '../../src/macro/parser.js';
+import { BUILTIN_NAMES } from '../../src/macro/tokens.js';
 import type {
   BinaryExpr,
   Binding,
@@ -47,6 +49,48 @@ function collectToolExistsCalls(value: unknown): ToolExistsCall[] {
   return calls;
 }
 
+const V0_PARSE_REASONS = [
+  'unexpected_token',
+  'missing_do',
+  'missing_done',
+  'missing_then',
+  'missing_fi',
+  'malformed_fence_attributes',
+  'reserved_keyword_assignment',
+  'builtin_name_shadowing',
+  'invalid_literal',
+  'input_var_key_must_be_literal',
+] as const satisfies readonly MacroParseErrorReason[];
+
+function describeParseReason(reason: MacroParseErrorReason): string {
+  switch (reason) {
+    case 'unexpected_token':
+      return 'unexpected token';
+    case 'missing_do':
+      return 'missing do';
+    case 'missing_done':
+      return 'missing done';
+    case 'missing_then':
+      return 'missing then';
+    case 'missing_fi':
+      return 'missing fi';
+    case 'malformed_fence_attributes':
+      return 'malformed fence attributes';
+    case 'reserved_keyword_assignment':
+      return 'reserved keyword assignment';
+    case 'builtin_name_shadowing':
+      return 'builtin name shadowing';
+    case 'invalid_literal':
+      return 'invalid literal';
+    case 'input_var_key_must_be_literal':
+      return 'input_var key must be literal';
+    default: {
+      const exhaustive: never = reason;
+      return exhaustive;
+    }
+  }
+}
+
 describe('macro parser', () => {
   it('T-U-021 rejects reserved keyword assignment', () => {
     expect(parseError('for = 5').details).toMatchObject({
@@ -65,15 +109,19 @@ describe('macro parser', () => {
   });
 
   it('T-U-023 rejects variable shadowing for every builtin name', () => {
-    for (const name of ['status', 'task_id', 'input_var', 'range', 'grep', 'ls']) {
-      expect(parseError(`${name} = 1`).details.reason).toBe('builtin_name_shadowing');
+    for (const name of BUILTIN_NAMES) {
+      expect(parseError(`${name} = 1`).details).toMatchObject({
+        reason: 'builtin_name_shadowing',
+        near_token: name,
+      });
     }
   });
 
   it('T-U-030 parses empty and trailing-comma lists', () => {
-    const statements = parse('a = []\nb = [1, 2, 3,]').statements as Binding[];
+    const statements = parse('a = []\nb = [1,]\nc = [1, 2, 3,]').statements as Binding[];
     expect(statements[0]?.value).toMatchObject({ kind: 'ListLit', items: [] });
-    expect(statements[1]?.value).toMatchObject({ kind: 'ListLit' });
+    expect((statements[1]?.value as { items: unknown[] }).items).toHaveLength(1);
+    expect((statements[2]?.value as { items: unknown[] }).items).toHaveLength(3);
   });
 
   it('T-U-031 parses empty and trailing-comma objects', () => {
@@ -157,6 +205,7 @@ describe('macro parser', () => {
 
   it('T-U-062 rejects dotted server names and unsupported namespace methods', () => {
     expect(parseError('a.b.tool({})').details.reason).toBe('unexpected_token');
+    expect(parseError('fq.x._exists()').details.reason).toBe('unexpected_token');
     expect(parseError('fq._missing()').details.reason).toBe('unexpected_token');
   });
 
@@ -174,8 +223,9 @@ describe('macro parser', () => {
   });
 
   it('T-U-066 uses stable snake_case reason values', () => {
-    for (const reason of ['unexpected_token', 'missing_do', 'missing_then', 'missing_fi']) {
-      expect(reason).toMatch(/^[a-z]+(_[a-z]+)*$/);
+    for (const reason of V0_PARSE_REASONS) {
+      expect(reason).toMatch(/^[a-z][a-z0-9_]*$/);
+      expect(describeParseReason(reason)).not.toBe('');
     }
   });
 
