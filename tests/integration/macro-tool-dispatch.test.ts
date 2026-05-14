@@ -103,7 +103,7 @@ describe.skipIf(!HAS_SUPABASE)('macro native tool dispatch integration', () => {
 
     const { data, error } = await supabaseManager.getClient()
       .from('fqc_documents')
-      .select('path,title,lifecycle_state')
+      .select('path,title,status')
       .eq('instance_id', INSTANCE_ID)
       .eq('path', 'macro-dispatch/write-document.md')
       .single();
@@ -112,7 +112,7 @@ describe.skipIf(!HAS_SUPABASE)('macro native tool dispatch integration', () => {
     expect(data).toMatchObject({
       path: 'macro-dispatch/write-document.md',
       title: 'Macro Dispatch Write Document',
-      lifecycle_state: 'active',
+      status: 'active',
     });
   });
 
@@ -155,7 +155,7 @@ describe.skipIf(!HAS_SUPABASE)('macro native tool dispatch integration', () => {
           title: 'Macro Dispatch Search Target',
         }),
       ]),
-      counts: expect.any(Object),
+      total: expect.any(Number),
     });
   });
 });
