@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   CANONICAL_ERROR_CODES,
+  MACRO_ERROR_CODES,
   batchResult,
   directoryResult,
   documentIdentification,
@@ -14,11 +15,18 @@ import {
   jsonRuntimeError,
   jsonToolResult,
   llmCallIdentification,
+  macroResult,
   maintenanceActionResult,
   memoryIdentification,
   pluginIdentification,
   recordIdentification,
   withWarnings,
+} from '../../src/mcp/utils/response-formats.js';
+import type {
+  MacroDryRunResult,
+  MacroErrorCode,
+  MacroExecutionResult,
+  TraceStep,
 } from '../../src/mcp/utils/response-formats.js';
 import {
   buildContentPreview,
@@ -104,6 +112,87 @@ describe('JSON MCP response helpers', () => {
     for (const code of CANONICAL_ERROR_CODES) {
       expect(code).toMatch(/^[a-z]+(?:_[a-z]+)*$/);
     }
+  });
+});
+
+describe('macro response helpers', () => {
+  it('exports the stable v0 macro error code set', () => {
+    expect(MACRO_ERROR_CODES).toEqual([
+      'macro_aborted',
+      'forbidden_tools',
+      'unknown_server',
+      'unknown_tool',
+      'forbidden_path',
+      'forbidden_shell_flag',
+      'template_masquerade_tools_not_callable_from_macro',
+      'budget_exceeded',
+      'timeout',
+      'tool_call_failed',
+      'cancelled',
+      'parse_error',
+    ]);
+
+    const code: MacroErrorCode = 'forbidden_tools';
+    expect(code).toBe('forbidden_tools');
+  });
+
+  it('supports flat trace steps without children', () => {
+    const step: TraceStep = {
+      kind: 'tool_call',
+      name: 'fq.search',
+      args: { query: 'macro' },
+      result: { count: 1 },
+      at: '2026-05-14T00:00:00.000Z',
+      elapsed_ms: 12,
+    };
+
+    expect(step).toEqual({
+      kind: 'tool_call',
+      name: 'fq.search',
+      args: { query: 'macro' },
+      result: { count: 1 },
+      at: '2026-05-14T00:00:00.000Z',
+      elapsed_ms: 12,
+    });
+    expect(Object.hasOwn(step, 'children')).toBe(false);
+  });
+
+  it('wraps MacroExecutionResult payloads in a JSON ToolResult envelope', () => {
+    const payload: MacroExecutionResult = {
+      task_id: 'task-1',
+      result: { ok: true },
+      trace: [
+        {
+          kind: 'log',
+          message: 'started',
+          at: '2026-05-14T00:00:00.000Z',
+        },
+      ],
+      token_total: 42,
+      model_calls: 1,
+      external_tool_calls: 0,
+      warnings: ['trace_value_truncated'],
+    };
+
+    expect(parseToolText(macroResult(payload))).toEqual(payload);
+  });
+
+  it('wraps MacroDryRunResult payloads with the canonical input_var_contract shape', () => {
+    const payload: MacroDryRunResult = {
+      task_id: 'task-2',
+      parsed_ok: true,
+      input_var_contract: {
+        required: ['query'],
+        optional: [{ key: 'limit', default: 5 }],
+      },
+      tool_references: ['fq.search'],
+      server_references: ['fq'],
+    };
+
+    expect(payload.parsed_ok).toBe(true);
+    expect(payload.input_var_contract.required).toEqual(['query']);
+    expect(payload.input_var_contract.optional).toEqual([{ key: 'limit', default: 5 }]);
+    expect(parseToolText(macroResult(payload))).toEqual(payload);
   });
 });
 
