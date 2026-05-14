@@ -1,341 +1,269 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import {
-  formatKeyValueEntry,
-  formatEmptyResults,
-  joinBatchEntries,
-} from '../../src/mcp/utils/response-formats.js';
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerCompoundTools } from '../../src/mcp/tools/compound.js';
+import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { getToolMetadata } from '../../src/mcp/tool-metadata.js';
+import { parseDocMeta } from '../../src/mcp/tools/documents.js';
+import { pluginManager } from '../../src/plugins/manager.js';
 
-vi.mock('../../src/storage/supabase.js');
-vi.mock('../../src/storage/vault.js');
-vi.mock('../../src/logging/logger.js');
+interface QueryResult {
+  data: unknown[];
+  error: { message: string } | null;
+}
 
-describe('get_briefing response format (SPEC-14)', () => {
+class QueryBuilder implements PromiseLike<QueryResult> {
+  private filters = new Map<string, unknown>();
+  private tags: string[] = [];
+  private tagMode: 'any' | 'all' = 'any';
+
+  constructor(private readonly rows: unknown[]) {}
+
+  select(): this { return this; }
+  order(): this { return this; }
+  limit(): this { return this; }
+  eq(field: string, value: unknown): this {
+    this.filters.set(field, value);
+    return this;
+  }
+  overlaps(_field: string, tags: string[]): this {
+    this.tags = tags;
+    this.tagMode = 'any';
+    return this;
+  }
+  contains(_field: string, tags: string[]): this {
+    this.tags = tags;
+    this.tagMode = 'all';
+    return this;
+  }
+  in(_field: string, tags: string[]): this {
+    this.tags = tags;
+    this.tagMode = 'any';
+    return this;
+  }
+
+  then<TResult1 = QueryResult, TResult2 = never>(
+    onfulfilled?: ((value: QueryResult) => TResult1 | PromiseLike<TResult1>) | null,
+    _onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
+  ): PromiseLike<TResult1 | TResult2> {
+    return Promise.resolve(this.result()).then(onfulfilled ?? ((value) => value as TResult1));
+  }
+
+  private result(): QueryResult {
+    const rows = this.rows.filter((row) => {
+      if (!row || typeof row !== 'object') return false;
+      const record = row as Record<string, unknown>;
+      for (const [field, value] of this.filters.entries()) {
+        if (record[field] !== value) return false;
+      }
+      if (this.tags.length === 0) return true;
+      const rowTags = Array.isArray(record.tags)
+        ? record.tags
+        : typeof record.tag === 'string'
+          ? [record.tag]
+          : [];
+      return this.tagMode === 'all'
+        ? this.tags.every((tag) => rowTags.includes(tag))
+        : this.tags.some((tag) => rowTags.includes(tag));
+    });
+    return { data: rows, error: null };
+  }
+}
+
+vi.mock('../../src/storage/supabase.js', () => ({
+  supabaseManager: { getClient: vi.fn(() => mockSupabaseClient) },
+}));
+
+vi.mock('../../src/logging/logger.js', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    debug: vi.fn(),
+  },
+}));
+
+vi.mock('../../src/mcp/tools/documents.js', () => ({
+  parseDocMeta: vi.fn(),
+  searchDocumentsSemantic: vi.fn(),
+  listMarkdownFiles: vi.fn(),
+}));
+
+vi.mock('../../src/mcp/tools/memory.js', () => ({
+  searchMemoriesSemantic: vi.fn(),
+}));
+
+vi.mock('../../src/plugins/manager.js', () => ({
+  pluginManager: { getAllEntries: vi.fn() },
+}));
+
+let tableRows: Record<string, unknown[]> = {};
+const mockSupabaseClient = {
+  from: vi.fn((table: string) => new QueryBuilder(tableRows[table] ?? [])),
+};
+
+type Handler = (params: Record<string, unknown>) => Promise<{
+  content: Array<{ type: string; text: string }>;
+  isError?: boolean;
+}>;
+
+function makeConfig(hostTools?: string[]): FlashQueryConfig {
+  return {
+    instance: { id: 'unit', name: 'Unit', vault: { path: '/tmp/fq-unit', markdownExtensions: ['.md'] } },
+    supabase: { url: 'https://example.invalid', serviceRoleKey: 'key', databaseUrl: 'postgresql://localhost/db' },
+    embedding: { provider: 'none', model: '', dimensions: 1536 },
+    logging: { level: 'error', output: 'stderr' },
+    locking: { enabled: false, ttlSeconds: 30 },
+    git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
+    mcp: { transport: 'stdio' },
+    ...(hostTools === undefined ? {} : { hostMcpTools: { tools: hostTools, excludedTools: [] } }),
+  } as FlashQueryConfig;
+}
+
+function captureGetBriefing(config: FlashQueryConfig): Handler {
+  let handler: Handler | undefined;
+  const server = {
+    registerTool: vi.fn((name: string, _config: unknown, toolHandler: Handler) => {
+      if (name === 'get_briefing') handler = toolHandler;
+    }),
+  } as unknown as McpServer;
+
+  registerCompoundTools(server, config);
+  if (!handler) throw new Error('get_briefing handler not registered');
+  return handler;
+}
+
+function parseText(result: Awaited<ReturnType<Handler>>): Record<string, unknown> {
+  return JSON.parse(result.content[0]?.text ?? '{}') as Record<string, unknown>;
+}
+
+describe('get_briefing transitional JSON contract', () => {
   beforeEach(() => {
+    tableRows = {
+      fqc_documents: [{
+        id: 'doc-id',
+        title: 'Phase 128 Doc',
+        path: 'phase-128.md',
+        tags: ['phase-128'],
+        status: 'active',
+        instance_id: 'unit',
+        updated_at: '2026-05-13T10:00:00.000Z',
+      }],
+      fqc_memory: [{
+        id: 'memory-id',
+        content: 'Phase 128 memory',
+        tags: ['phase-128'],
+        plugin_scope: 'global',
+        status: 'active',
+        is_latest: true,
+        instance_id: 'unit',
+        created_at: '2026-05-13T09:00:00.000Z',
+        updated_at: '2026-05-13T10:00:00.000Z',
+      }],
+      fqc_contacts: [{
+        id: 'record-id',
+        tags: ['phase-128'],
+        status: 'active',
+        instance_id: 'unit',
+        created_at: '2026-05-13T08:00:00.000Z',
+        updated_at: '2026-05-13T10:00:00.000Z',
+      }],
+    };
+    vi.mocked(parseDocMeta).mockResolvedValue({
+      relativePath: 'phase-128.md',
+      title: 'Phase 128 Doc',
+      tags: ['phase-128'],
+      status: 'active',
+      fqcId: 'doc-id',
+      modified: '2026-05-13T10:00:00.000Z',
+      size: { chars: 128 },
+    });
+    vi.mocked(pluginManager.getAllEntries).mockReturnValue([]);
+  });
+
+  afterEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('Section headers with counts', () => {
-    it('should display Documents section header with count', () => {
-      const count = 5;
-      const header = `## Documents (${count})`;
+  it('documents the call_macro removal gate in metadata', () => {
+    const metadata = getToolMetadata('get_briefing');
 
-      expect(header).toBe('## Documents (5)');
-    });
+    expect(metadata?.status).toBe('transitional');
+    expect(metadata?.description).toContain('call_macro');
+  });
 
-    it('should display Memories section header with count', () => {
-      const count = 3;
-      const header = `## Memories (${count})`;
+  it('returns tag-group arrays with discriminated identification items by default', async () => {
+    const handler = captureGetBriefing(makeConfig());
+    const result = await handler({ tags: ['phase-128'], limit: 5 });
+    const payload = parseText(result) as { groups: Array<{ items: Array<Record<string, unknown>> }> };
 
-      expect(header).toBe('## Memories (3)');
-    });
-
-    it('should display Plugin Records section header with count', () => {
-      const count = 10;
-      const header = `## Plugin Records (${count})`;
-
-      expect(header).toContain('Plugin Records (10)');
-    });
-
-    it('should show (0) for empty sections', () => {
-      const emptyDocHeader = `## Documents (0)`;
-      const emptyMemHeader = `## Memories (0)`;
-
-      expect(emptyDocHeader).toContain('(0)');
-      expect(emptyMemHeader).toContain('(0)');
+    expect(result.isError).not.toBe(true);
+    expect(payload).toMatchObject({
+      entity_types: ['documents', 'memories'],
+      groups: [{
+        type: 'tag',
+        tag: 'phase-128',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            entity_type: 'document',
+            identifier: 'phase-128.md',
+            fq_id: 'doc-id',
+            modified: '2026-05-13T10:00:00.000Z',
+            size: { chars: 128 },
+          }),
+          expect.objectContaining({
+            entity_type: 'memory',
+            memory_id: 'memory-id',
+            plugin_scope: 'global',
+            created_at: '2026-05-13T09:00:00.000Z',
+            updated_at: '2026-05-13T10:00:00.000Z',
+          }),
+        ]),
+      }],
     });
   });
 
-  describe('Key-value blocks within sections', () => {
-    it('should format document entry as key-value pairs', () => {
-      const doc = {
-        title: 'Important Document',
-        path: 'clients/acme/notes.md',
-        fqcId: 'uuid-123',
-        tags: ['client', 'notes'],
-        status: 'active',
-      };
+  it('returns unsupported when only memories are requested and memory tools are disabled', async () => {
+    const handler = captureGetBriefing(makeConfig(['category:doc-read']));
+    const result = await handler({ tags: ['phase-128'], entity_types: ['memories'] });
 
-      const lines = [
-        formatKeyValueEntry('Title', doc.title),
-        formatKeyValueEntry('Path', doc.path),
-        formatKeyValueEntry('FQC ID', doc.fqcId),
-        formatKeyValueEntry('Tags', doc.tags),
-        formatKeyValueEntry('Status', doc.status),
-      ];
-
-      const entry = lines.join('\n');
-
-      expect(entry).toContain('Title: Important Document');
-      expect(entry).toContain('Path: clients/acme/notes.md');
-      expect(entry).toContain('FQC ID: uuid-123');
-      expect(entry).toContain('Status: active');
-    });
-
-    it('should format memory entry with truncated content', () => {
-      const memory = {
-        id: 'mem-uuid-1',
-        content: 'This is a memory about something important that happened during a meeting'.substring(0, 200),
-        tags: ['meeting', 'notes'],
-        created: '2026-04-12T10:00:00Z',
-      };
-
-      const lines = [
-        formatKeyValueEntry('Memory ID', memory.id),
-        formatKeyValueEntry('Content', memory.content),
-        formatKeyValueEntry('Tags', memory.tags),
-        formatKeyValueEntry('Created', memory.created),
-      ];
-
-      const entry = lines.join('\n');
-
-      expect(entry).toContain('Memory ID: mem-uuid-1');
-      expect(entry).toContain('Content:');
-      expect(entry).toContain('Tags:');
+    expect(result.isError).toBe(false);
+    expect(parseText(result)).toMatchObject({
+      error: 'unsupported',
+      identifier: 'memories',
+      details: { disabled_entity_types: ['memories'] },
     });
   });
 
-  describe('Batch separators', () => {
-    it('should use --- separator between items', () => {
-      const entries = [
-        'First document entry',
-        'Second document entry',
-        'Third document entry',
-      ];
+  it('warns and returns documents only when mixed request includes disabled memory', async () => {
+    const handler = captureGetBriefing(makeConfig(['category:doc-read']));
+    const result = await handler({ tags: ['phase-128'], entity_types: ['documents', 'memories'] });
+    const payload = parseText(result) as { groups: Array<{ items: Array<Record<string, unknown>> }> };
 
-      const response = joinBatchEntries(entries);
-
-      expect(response).toContain('---');
-      expect(response).toContain('First document entry\n---\nSecond document entry');
+    expect(result.isError).not.toBe(true);
+    expect(payload).toMatchObject({
+      entity_types: ['documents'],
+      warnings: ['memory_category_disabled'],
     });
-
-    it('should have exactly 2 separators for 3 items', () => {
-      const entries = ['Item 1', 'Item 2', 'Item 3'];
-      const response = joinBatchEntries(entries);
-      const separatorCount = (response.match(/---/g) || []).length;
-
-      expect(separatorCount).toBe(2);
-    });
-
-    it('should not have separators for single item', () => {
-      const entries = ['Single item'];
-      const response = joinBatchEntries(entries);
-
-      expect(response).toBe('Single item');
-      expect(response).not.toContain('---');
-    });
+    expect(payload.groups[0].items).toEqual([
+      expect.objectContaining({ entity_type: 'document', fq_id: 'doc-id' }),
+    ]);
   });
 
-  describe('Empty sections', () => {
-    it('should show "No documents found." when documents empty', () => {
-      const message = formatEmptyResults('documents');
-      expect(message).toBe('No documents found.');
-    });
+  it('warns when records are requested but no plugin table is taggable', async () => {
+    vi.mocked(pluginManager.getAllEntries).mockReturnValue([{
+      plugin_id: 'crm',
+      plugin_instance: 'default',
+      table_prefix: 'fqc_',
+      schema: { tables: [{ name: 'contacts', columns: [{ name: 'name' }] }] },
+    } as never]);
+    const handler = captureGetBriefing(makeConfig(['category:plugin']));
+    const result = await handler({ tags: ['phase-128'], entity_types: ['records'] });
 
-    it('should show "No memories found." when memories empty', () => {
-      const message = formatEmptyResults('memories');
-      expect(message).toBe('No memories found.');
-    });
-
-    it('should show "No plugin records found." when plugin records empty', () => {
-      const message = formatEmptyResults('plugin records');
-      expect(message).toBe('No plugin records found.');
-    });
-
-    it('should display header even for empty section', () => {
-      const sectionText = `## Documents (0)\n\n${formatEmptyResults('documents')}`;
-
-      expect(sectionText).toContain('## Documents (0)');
-      expect(sectionText).toContain('No documents found.');
-    });
-  });
-
-  describe('Multiple sections together', () => {
-    it('should include both Documents and Memories sections', () => {
-      const text = `## Documents (2)\n\nTitle: Doc 1\n\n---\n\nTitle: Doc 2\n\n## Memories (1)\n\nContent: Memory 1`;
-
-      expect(text).toContain('## Documents (2)');
-      expect(text).toContain('## Memories (1)');
-      expect(text.indexOf('## Documents')).toBeLessThan(text.indexOf('## Memories'));
-    });
-
-    it('should have blank line between sections', () => {
-      const docSection = `## Documents (1)\n\nTitle: Document`;
-      const memSection = `## Memories (1)\n\nContent: Memory`;
-      const combined = docSection + '\n\n' + memSection;
-
-      expect(combined).toContain('\n\n## Memories');
-    });
-
-    it('should include Plugin Records when available', () => {
-      const text = `## Documents (1)\n\nTitle: Doc\n\n## Memories (0)\n\nNo memories found.\n\n## Plugin Records (2)\n\nRecord 1\n\n---\n\nRecord 2`;
-
-      expect(text).toContain('## Plugin Records (2)');
-      expect(text.indexOf('## Documents')).toBeLessThan(text.indexOf('## Plugin Records'));
-    });
-  });
-
-  describe('Missing/deleted items', () => {
-    it('should skip silently if a tagged document has been deleted', () => {
-      // Implementation should filter out deleted documents
-      const docs = [
-        { title: 'Active Doc', fqcId: 'uuid-1', tags: ['tag1'] },
-        // Deleted document not in list
-      ];
-
-      expect(docs.length).toBe(1);
-      expect(docs[0].title).toBe('Active Doc');
-    });
-
-    it('should skip silently if a tagged memory has been deleted', () => {
-      // Implementation should filter out deleted memories
-      const memories = [
-        { id: 'mem-1', content: 'Active memory', tags: ['tag1'] },
-        // Deleted memory not in list
-      ];
-
-      expect(memories.length).toBe(1);
-      expect(memories[0].id).toBe('mem-1');
-    });
-
-    it('should not show "missing" markers in briefing', () => {
-      const docSection = `## Documents (1)\n\nTitle: Active Document`;
-
-      // Should not contain missing/deleted markers
-      expect(docSection).not.toContain('(deleted)');
-      expect(docSection).not.toContain('(missing)');
-    });
-  });
-
-  describe('Tag filtering', () => {
-    it('should only include documents matching filter tags', () => {
-      const docs = [
-        { title: 'Tagged Doc', tags: ['client', 'notes'] },
-        { title: 'Other Doc', tags: ['other'] },
-      ];
-
-      const filtered = docs.filter((d) => d.tags.includes('client'));
-
-      expect(filtered.length).toBe(1);
-      expect(filtered[0].title).toBe('Tagged Doc');
-    });
-
-    it('should only include memories matching filter tags', () => {
-      const memories = [
-        { id: 'mem-1', tags: ['important'] },
-        { id: 'mem-2', tags: ['routine'] },
-      ];
-
-      const filtered = memories.filter((m) => m.tags.includes('important'));
-
-      expect(filtered.length).toBe(1);
-    });
-  });
-
-  describe('Field formatting edge cases', () => {
-    it('should handle null/undefined tags gracefully', () => {
-      const response = formatKeyValueEntry('Tags', 'none');
-      expect(response).toBe('Tags: none');
-    });
-
-    it('should handle truncated content for memory', () => {
-      const longContent = 'A'.repeat(300);
-      const truncated = longContent.length > 200 ? longContent.substring(0, 200) + '...' : longContent;
-
-      const line = formatKeyValueEntry('Content', truncated);
-      expect(line).toContain('...');
-    });
-
-    it('should handle special characters in document title', () => {
-      const title = 'Q4 2024: "Year-End" Review & Planning';
-      const line = formatKeyValueEntry('Title', title);
-
-      expect(line).toContain(title);
-    });
-
-    it('should handle paths with spaces and special chars', () => {
-      const path = 'clients/acme corp/2024 planning/notes (draft).md';
-      const line = formatKeyValueEntry('Path', path);
-
-      expect(line).toContain(path);
-    });
-  });
-
-  describe('Tenant isolation', () => {
-    it('should only include documents from correct instance', () => {
-      const docs = [
-        { title: 'Doc1', instance: 'instance-1' },
-        { title: 'Doc2', instance: 'instance-2' },
-      ];
-
-      const filtered = docs.filter((d) => d.instance === 'instance-1');
-
-      expect(filtered.length).toBe(1);
-      expect(filtered[0].title).toBe('Doc1');
-    });
-  });
-
-  describe('Database error handling', () => {
-    it('should return isError: true on query failure', () => {
-      const errorResponse = {
-        content: [{ type: 'text' as const, text: 'Error querying documents: database connection failed' }],
-        isError: true,
-      };
-
-      expect(errorResponse.isError).toBe(true);
-      expect(errorResponse.content[0].text).toContain('Error');
-    });
-  });
-
-  describe('Plugin records section (when plugin_id provided)', () => {
-    it('should include plugin records in separate section', () => {
-      const text = `## Documents (1)\n\nTitle: Doc\n\n## Memories (1)\n\nContent: Mem\n\n## Plugin Records (2)\n\nRecord 1\n\n---\n\nRecord 2`;
-
-      expect(text).toContain('## Plugin Records (2)');
-    });
-
-    it('should use same key-value format for plugin records', () => {
-      const record = {
-        id: 'rec-1',
-        name: 'Record Name',
-        status: 'active',
-        created: '2026-04-12',
-      };
-
-      const lines = [
-        formatKeyValueEntry('id', record.id),
-        formatKeyValueEntry('name', record.name),
-        formatKeyValueEntry('status', record.status),
-      ];
-
-      const entry = lines.join('\n');
-      expect(entry).toContain('id: rec-1');
-      expect(entry).toContain('name: Record Name');
-    });
-
-    it('should show (0) for empty plugin records', () => {
-      const header = `## Plugin Records (0)`;
-      expect(header).toContain('(0)');
-    });
-  });
-
-  describe('Integration: full briefing structure', () => {
-    it('should produce correctly structured briefing with all sections', () => {
-      const briefing = [
-        '## Documents (2)',
-        '',
-        'Title: Document 1\nPath: doc1.md\nFQC ID: uuid-1',
-        '---',
-        'Title: Document 2\nPath: doc2.md\nFQC ID: uuid-2',
-        '',
-        '## Memories (1)',
-        '',
-        'Memory ID: mem-1\nContent: Memory content here\nTags: tag1',
-      ].join('\n');
-
-      expect(briefing).toContain('## Documents (2)');
-      expect(briefing).toContain('## Memories (1)');
-      expect(briefing).toContain('---');
-      expect(briefing.indexOf('## Documents')).toBeLessThan(briefing.indexOf('## Memories'));
+    expect(result.isError).not.toBe(true);
+    expect(parseText(result)).toMatchObject({
+      entity_types: ['records'],
+      warnings: ['plugin_no_taggable_tables'],
+      groups: [{ type: 'tag', tag: 'phase-128', items: [] }],
     });
   });
 });

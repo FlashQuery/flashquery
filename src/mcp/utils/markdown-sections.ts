@@ -15,6 +15,17 @@ export interface Heading {
   line: number;
 }
 
+export type HeadingMatchMode = 'contains' | 'exact';
+
+export interface HeadingMatchOptions {
+  headingMatch?: HeadingMatchMode;
+  headingLevel?: number;
+}
+
+export interface MatchedHeading extends Heading {
+  occurrence: number;
+}
+
 /**
  * Two-rule matching strategy for section headings (GDOC-06)
  * Rule 1 (text query): case-insensitive substring match anywhere in heading text
@@ -23,10 +34,17 @@ export interface Heading {
  *        `"12"` matches `"12. Appendix"` (next char `.` is not a digit) but NOT
  *        `"120. Other"` (next char `0` is a digit).
  */
-function headingMatchesQuery(headingText: string, query: string): boolean {
+function headingMatchesQuery(
+  headingText: string,
+  query: string,
+  headingMatch: HeadingMatchMode = 'contains'
+): boolean {
   if (query.length === 0) return false;
   const headingLower = headingText.toLowerCase();
   const queryLower = query.toLowerCase();
+  if (headingMatch === 'exact') {
+    return headingLower === queryLower;
+  }
   if (/^\d/.test(query)) {
     if (!headingLower.startsWith(queryLower)) return false;
     // Only apply the digit-continuation guard when the query ENDS with a digit.
@@ -40,6 +58,58 @@ function headingMatchesQuery(headingText: string, query: string): boolean {
     return true;
   }
   return headingLower.includes(queryLower);
+}
+
+export function findMatchingHeadings(
+  contentOrHeadings: string | Heading[],
+  query: string,
+  options: HeadingMatchOptions = {}
+): MatchedHeading[] {
+  const headings = typeof contentOrHeadings === 'string'
+    ? extractHeadings(contentOrHeadings)
+    : contentOrHeadings;
+  const headingMatch = options.headingMatch ?? 'contains';
+  let occurrence = 0;
+  const matches: MatchedHeading[] = [];
+
+  for (const heading of headings) {
+    if (options.headingLevel !== undefined && heading.level !== options.headingLevel) {
+      continue;
+    }
+    if (!headingMatchesQuery(heading.text, query, headingMatch)) {
+      continue;
+    }
+    occurrence++;
+    matches.push({ ...heading, occurrence });
+  }
+
+  return matches;
+}
+
+export function resolveHeadingTarget(
+  matches: MatchedHeading[],
+  occurrence?: number
+): { status: 'matched'; heading: MatchedHeading } | {
+  status: 'ambiguous';
+  matches: Array<{ heading: string; level: number; line: number; occurrence: number }>;
+} | { status: 'not_found' } {
+  if (matches.length === 0) return { status: 'not_found' };
+  if (occurrence === undefined && matches.length > 1) {
+    return {
+      status: 'ambiguous',
+      matches: matches.map((match) => ({
+        heading: match.text,
+        level: match.level,
+        line: match.line,
+        occurrence: match.occurrence,
+      })),
+    };
+  }
+
+  const targetOccurrence = occurrence ?? 1;
+  const heading = matches[targetOccurrence - 1];
+  if (!heading) return { status: 'not_found' };
+  return { status: 'matched', heading };
 }
 
 /**
@@ -157,24 +227,15 @@ export function extractSection(
 export function findHeadingOccurrence(
   headings: Heading[],
   name: string,
-  occurrence: number = 1
+  occurrence: number = 1,
+  options: HeadingMatchOptions = {}
 ): Heading | null {
   if (occurrence < 1) {
     throw new Error('occurrence must be >= 1');
   }
-
-  let count = 0;
-  for (const heading of headings) {
-    if (headingMatchesQuery(heading.text, name)) {
-      count++;
-      if (count === occurrence) {
-        return heading;
-      }
-    }
-  }
-
-  // No match at this occurrence
-  return null;
+  const match = findMatchingHeadings(headings, name, options)[occurrence - 1];
+  if (!match) return null;
+  return { level: match.level, text: match.text, line: match.line };
 }
 
 /**
@@ -216,13 +277,14 @@ export function getSectionBoundaries(
   content: string,
   headingName: string,
   includeSubheadings: boolean = true,
-  occurrence: number = 1
+  occurrence: number = 1,
+  options: HeadingMatchOptions = {}
 ): { startLine: number; endLine: number; content: string } {
   const headings = extractHeadings(content);
   const lines = content.split('\n');
 
   // Find the target heading
-  const targetHeading = findHeadingOccurrence(headings, headingName, occurrence);
+  const targetHeading = findHeadingOccurrence(headings, headingName, occurrence, options);
   if (!targetHeading) {
     throw new Error(`Heading "${headingName}" not found`);
   }
@@ -231,7 +293,10 @@ export function getSectionBoundaries(
   let headingIndex = -1;
   let count = 0;
   for (let i = 0; i < headings.length; i++) {
-    if (headingMatchesQuery(headings[i].text, headingName)) {
+    if (
+      (options.headingLevel === undefined || headings[i].level === options.headingLevel) &&
+      headingMatchesQuery(headings[i].text, headingName, options.headingMatch ?? 'contains')
+    ) {
       count++;
       if (count === occurrence) {
         headingIndex = i;
@@ -309,7 +374,9 @@ export function insertAtPosition(
   position: 'top' | 'bottom' | 'after_heading' | 'before_heading' | 'end_of_section',
   insertContent: string,
   anchorHeading?: string,
-  occurrence: number = 1
+  occurrence: number = 1,
+  includeNested: boolean = true,
+  options: HeadingMatchOptions = {}
 ): string {
   // Validate position
   const validPositions = ['top', 'bottom', 'after_heading', 'before_heading', 'end_of_section'];
@@ -340,10 +407,10 @@ export function insertAtPosition(
   }
 
   const headings = extractHeadings(content);
-  const targetHeading = findHeadingOccurrence(headings, anchorHeading, occurrence);
+  const targetHeading = findHeadingOccurrence(headings, anchorHeading, occurrence, options);
 
   if (!targetHeading) {
-    const total = headings.filter((h) => headingMatchesQuery(h.text, anchorHeading)).length;
+    const total = findMatchingHeadings(headings, anchorHeading, options).length;
     if (total > 1) {
       throw new Error(
         `Heading "${anchorHeading}" appears ${total} times; specify occurrence parameter (1-${total}) to select which one`
@@ -356,7 +423,10 @@ export function insertAtPosition(
   let headingIndex = -1;
   let count = 0;
   for (let i = 0; i < headings.length; i++) {
-    if (headingMatchesQuery(headings[i].text, anchorHeading)) {
+    if (
+      (options.headingLevel === undefined || headings[i].level === options.headingLevel) &&
+      headingMatchesQuery(headings[i].text, anchorHeading, options.headingMatch ?? 'contains')
+    ) {
       count++;
       if (count === occurrence) {
         headingIndex = i;
@@ -380,8 +450,10 @@ export function insertAtPosition(
   }
 
   if (position === 'end_of_section') {
-    // Find next heading at same-or-higher level
-    const nextHeadingIndex = getNextHeadingIndex(headings, headingIndex, targetHeading.level);
+    // includeNested=true inserts after child sections; false inserts before the first child heading.
+    const nextHeadingIndex = includeNested
+      ? getNextHeadingIndex(headings, headingIndex, targetHeading.level)
+      : headings.findIndex((h, index) => index > headingIndex && h.level !== 0);
     let insertLineNum: number;
 
     if (nextHeadingIndex !== -1) {

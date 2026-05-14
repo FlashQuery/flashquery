@@ -1,12 +1,259 @@
 /**
  * Shared response formatting utilities for MCP tools
- * Establishes consistent key-value pair format and batch separators across all tools
+ * Establishes JSON MCP response helpers plus legacy key-value helpers.
+ *
+ * Pattern (Phase 121):
+ * - JSON helpers return MCP text content whose text parses as JSON
+ * - Expected errors are structured JSON and do not set runtime isError semantics
+ * - Runtime errors set isError: true
  *
  * Pattern (Phase 62):
  * - Single-entry tools: Content first, blank line, then key-value metadata
  * - Multi-entry tools: Key-value pairs separated by `---` (three dashes)
  * - All key-value pairs: `Label: value` format on single lines
  */
+
+export const CANONICAL_ERROR_CODES = [
+  'not_found',
+  'ambiguous_identifier',
+  'permission_denied',
+  'invalid_input',
+  'conflict',
+  'unsupported',
+  'not_supported_in_mode',
+] as const;
+
+export type CanonicalErrorCode = (typeof CANONICAL_ERROR_CODES)[number];
+export type WarningCode = string;
+
+export interface ErrorEnvelope {
+  error: string;
+  message: string;
+  identifier?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface ToolResult {
+  content: Array<{ type: 'text'; text: string }>;
+  isError?: boolean;
+}
+
+export interface DocumentIdentificationInput {
+  identifier: string;
+  title: string;
+  path: string;
+  fq_id: string;
+  modified: string;
+  chars: number;
+}
+
+export interface DocumentArchiveResultInput extends DocumentIdentificationInput {
+  archived_at: string | null;
+}
+
+export interface DocumentRemovalResultInput extends DocumentArchiveResultInput {
+  moved_to: string | null;
+}
+
+export interface DirectoryResult {
+  path: string;
+  action: 'create' | 'remove';
+  status: 'created' | 'removed' | 'unchanged';
+  timestamp: string;
+}
+
+export interface MaintenanceActionResult {
+  action: 'sync' | 'repair';
+  started_at: string;
+  finished_at: string;
+  dry_run: boolean;
+  counts: {
+    scanned: number;
+    added: number;
+    updated: number;
+    repaired: number;
+    archived: number;
+  };
+  warnings?: WarningCode[];
+}
+
+export interface MemoryIdentificationInput {
+  memory_id: string;
+  content_preview: string;
+  tags: string[];
+  plugin_scope: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface RecordIdentificationInput {
+  id: string;
+  plugin_id: string;
+  table: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PluginIdentificationInput {
+  plugin_id: string;
+  name: string;
+  status: string;
+  table_count: number;
+}
+
+export interface LlmCallIdentificationInput {
+  resolver: string;
+  name: string;
+  resolved_model_name: string;
+  provider_name: string;
+}
+
+export function jsonToolResult(payload: unknown): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
+}
+
+export function jsonExpectedError(error: ErrorEnvelope): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(error) }], isError: false };
+}
+
+export function jsonRuntimeError(message: string, details?: Record<string, unknown>): ToolResult;
+export function jsonRuntimeError(error: Omit<ErrorEnvelope, 'error'> & { error?: string }): ToolResult;
+export function jsonRuntimeError(
+  messageOrError: string | (Omit<ErrorEnvelope, 'error'> & { error?: string }),
+  details?: Record<string, unknown>
+): ToolResult {
+  if (typeof messageOrError === 'string') {
+    return jsonRuntimeErrorFromEnvelope({ error: 'runtime_error', message: messageOrError, details });
+  }
+
+  return jsonRuntimeErrorFromEnvelope({
+    error: messageOrError.error ?? 'runtime_error',
+    message: messageOrError.message,
+    ...(messageOrError.identifier === undefined ? {} : { identifier: messageOrError.identifier }),
+    ...(messageOrError.details === undefined ? {} : { details: messageOrError.details }),
+  });
+}
+
+function jsonRuntimeErrorFromEnvelope(error: ErrorEnvelope): ToolResult {
+  return { content: [{ type: 'text', text: JSON.stringify(error) }], isError: true };
+}
+
+export function withWarnings<T extends Record<string, unknown>>(
+  payload: T,
+  warnings: WarningCode[]
+): T & { warnings?: WarningCode[] } {
+  if (warnings.length === 0) {
+    return payload;
+  }
+  return { ...payload, warnings };
+}
+
+export function batchResult(results: unknown[]): unknown[] {
+  return results;
+}
+
+export function documentIdentification(input: DocumentIdentificationInput): {
+  identifier: string;
+  title: string;
+  path: string;
+  fq_id: string;
+  modified: string;
+  size: { chars: number };
+} {
+  return {
+    identifier: input.identifier,
+    title: input.title,
+    path: input.path,
+    fq_id: input.fq_id,
+    modified: input.modified,
+    size: { chars: input.chars },
+  };
+}
+
+export function documentArchiveResult(input: DocumentArchiveResultInput): ReturnType<typeof documentIdentification> & {
+  status: 'archived';
+  archived_at: string | null;
+} {
+  return {
+    ...documentIdentification(input),
+    status: 'archived',
+    archived_at: input.archived_at,
+  };
+}
+
+export function documentRemovalResult(input: DocumentRemovalResultInput): ReturnType<typeof documentArchiveResult> & {
+  moved_to: string | null;
+} {
+  return {
+    ...documentArchiveResult(input),
+    moved_to: input.moved_to,
+  };
+}
+
+export function directoryResult(input: DirectoryResult): DirectoryResult {
+  return {
+    path: input.path,
+    action: input.action,
+    status: input.status,
+    timestamp: input.timestamp,
+  };
+}
+
+export function maintenanceActionResult(input: MaintenanceActionResult): MaintenanceActionResult {
+  return {
+    action: input.action,
+    started_at: input.started_at,
+    finished_at: input.finished_at,
+    dry_run: input.dry_run,
+    counts: {
+      scanned: input.counts.scanned,
+      added: input.counts.added,
+      updated: input.counts.updated,
+      repaired: input.counts.repaired,
+      archived: input.counts.archived,
+    },
+    ...(input.warnings === undefined ? {} : { warnings: input.warnings }),
+  };
+}
+
+export function memoryIdentification(input: MemoryIdentificationInput): MemoryIdentificationInput {
+  return {
+    memory_id: input.memory_id,
+    content_preview: input.content_preview,
+    tags: input.tags,
+    plugin_scope: input.plugin_scope,
+    created_at: input.created_at,
+    updated_at: input.updated_at,
+  };
+}
+
+export function recordIdentification(input: RecordIdentificationInput): RecordIdentificationInput {
+  return {
+    id: input.id,
+    plugin_id: input.plugin_id,
+    table: input.table,
+    created_at: input.created_at,
+    updated_at: input.updated_at,
+  };
+}
+
+export function pluginIdentification(input: PluginIdentificationInput): PluginIdentificationInput {
+  return {
+    plugin_id: input.plugin_id,
+    name: input.name,
+    status: input.status,
+    table_count: input.table_count,
+  };
+}
+
+export function llmCallIdentification(input: LlmCallIdentificationInput): LlmCallIdentificationInput {
+  return {
+    resolver: input.resolver,
+    name: input.name,
+    resolved_model_name: input.resolved_model_name,
+    provider_name: input.provider_name,
+  };
+}
 
 /**
  * Format a key-value pair for response output

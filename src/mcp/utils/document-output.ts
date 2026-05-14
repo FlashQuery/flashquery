@@ -227,7 +227,7 @@ export function validateParameterCombinations(input: {
   sections?: string[];
   occurrence?: number;
 }): {
-  error: 'invalid_parameter_combination';
+  error: 'invalid_input';
   message: string;
   details: {
     conflict: 'sections_without_body' | 'occurrence_with_multi_section';
@@ -240,7 +240,7 @@ export function validateParameterCombinations(input: {
 
   if (sections.length > 0 && !include.includes('body')) {
     return {
-      error: 'invalid_parameter_combination',
+      error: 'invalid_input',
       message: 'sections requires "body" in include',
       details: {
         conflict: 'sections_without_body',
@@ -252,7 +252,7 @@ export function validateParameterCombinations(input: {
 
   if (sections.length > 1 && occurrence !== 1) {
     return {
-      error: 'invalid_parameter_combination',
+      error: 'invalid_input',
       message: 'occurrence is only valid when sections has exactly one element',
       details: {
         conflict: 'occurrence_with_multi_section',

@@ -109,11 +109,11 @@ Draft the entry using the [Keep a Changelog](https://keepachangelog.com/en/1.1.0
 **Preamble** (MINOR/MAJOR releases only): Write 1–2 sentences that capture the significance and reasoning behind the release at a glance. This is for the developer scanning the changelog to understand *why* this version matters, not just *what* changed. Think of it as the release's headline. Leave it out entirely for patch releases — the Fixed entries tell the story.
 
 Good preamble example:
-> This release introduces native filesystem navigation to the vault. The new `list_vault`, `create_directory`, and `remove_directory` tools give AI tools direct control over vault structure without requiring manual file system access.
+> This release introduces native filesystem navigation to the vault. Historical removed legacy release note: the release originally introduced `list_vault`, `create_directory`, and `remove_directory` tools give AI tools direct control over vault structure without requiring manual file system access.
 
 **Entry style rules:**
 - One bullet per distinct behavior, not per commit
-- Lead with the capability, not the implementation: "Add `create_directory` MCP tool" not "Implement handler in files.ts"
+- Lead with the capability, not the implementation: "Add directory creation MCP capability" not "Implement handler in files.ts"
 - Breaking changes get a `**BREAKING:**` prefix on their bullet
 - Omit sections that have no entries — don't include empty `### Deprecated` headings
 
@@ -225,7 +225,7 @@ Read the entry itself against the writing standards:
 
 **Section placement** — Are all bullets in the right section? New capabilities → Added. Behavioral shifts in existing features → Changed. Deletions → Removed. Defect fixes → Fixed. Misplaced entries dilute the signal for users scanning the changelog.
 
-**Writing style** — Bullets should lead with the user-facing capability, not the implementation detail. Flag any bullet that reads like a commit message ("Implement handler in files.ts") rather than a changelog entry ("Add `create_directory` MCP tool").
+**Writing style** — Bullets should lead with the user-facing capability, not the implementation detail. Flag any bullet that reads like a commit message ("Implement handler in files.ts") rather than a changelog entry ("Add directory creation MCP capability").
 
 **Breaking changes** — Any breaking change must carry a `**BREAKING:**` prefix on its bullet.
 

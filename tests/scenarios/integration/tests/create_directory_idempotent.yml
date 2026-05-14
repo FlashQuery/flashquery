@@ -8,13 +8,15 @@ coverage: [IF-07]
 
 steps:
   - label: "Create directory for IF-07 (first call)"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if07/repeated-dir"
 
   - label: "Create same directory again (second call — must not error)"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if07/repeated-dir"
 
   - label: "list_vault shows directory appears (IF-07)"
@@ -23,7 +25,7 @@ steps:
       args:
         path: "_integration/if07"
         show: "directories"
-      expect_contains: "repeated-dir/"
+      expect_contains: "repeated-dir"
 
   - label: "list_vault response does not contain a doubled directory name (IF-07)"
     assert:

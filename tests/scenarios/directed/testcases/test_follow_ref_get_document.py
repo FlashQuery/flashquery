@@ -500,47 +500,39 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d57_passed = False
         d57_detail = ""
-        if not d57_result.ok:
-            try:
-                env = json.loads(d57_result.text)
-                traversal = env.get("traversal", {})
-                avail = traversal.get("available_keys") if isinstance(traversal, dict) else None
-                checks = {
-                    "error == follow_ref_path_not_found": env.get("error") == "follow_ref_path_not_found",
-                    "identifier present at top level": "identifier" in env,
-                    "reference present at top level": "reference" in env,
-                    "traversal present at top level": "traversal" in env,
-                    "NO followed_ref key (pre-resolution = not nested)": "followed_ref" not in env,
-                    "traversal has resolved (TC2-W4)":
-                        isinstance(traversal, dict) and "resolved" in traversal,
-                    "traversal has failed_at (TC2-W4)":
-                        isinstance(traversal, dict) and "failed_at" in traversal,
-                    "traversal has available_keys list (TC2-W4)":
-                        isinstance(traversal, dict)
-                        and isinstance(traversal.get("available_keys"), list),
-                    # Phase 2 Gap 8: available_keys content assertions.
-                    # simple_path's frontmatter has fq_title (set via title=)
-                    # but no `projections` key — so the failure is at the
-                    # top level and available_keys must list the keys present
-                    # at that level.
-                    "available_keys is non-empty (Phase 2 Gap 8)":
-                        isinstance(avail, list) and len(avail) > 0,
-                    "available_keys contains 'fq_title' (Phase 2 Gap 8)":
-                        isinstance(avail, list) and "fq_title" in avail,
-                    "available_keys does NOT contain 'projections' (Phase 2 Gap 8)":
-                        isinstance(avail, list) and "projections" not in avail,
-                    "traversal.failed_at == 'projections' (Phase 2 Gap 8)":
-                        isinstance(traversal, dict)
-                        and traversal.get("failed_at") == "projections",
-                }
-                d57_passed = all(checks.values())
-                if not d57_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d57_detail = f"Failed: {', '.join(failed)}. env keys={list(env.keys())}"
-            except Exception as e:
-                d57_detail = f"JSON parse error: {e}"
-        else:
-            d57_detail = f"Expected isError=True but got ok. text={d57_result.text[:200]}"
+        try:
+            env = json.loads(d57_result.text)
+            traversal = env.get("traversal", {})
+            avail = traversal.get("available_keys") if isinstance(traversal, dict) else None
+            checks = {
+                "error == follow_ref_path_not_found": env.get("error") == "follow_ref_path_not_found",
+                "identifier present at top level": "identifier" in env,
+                "reference present at top level": "reference" in env,
+                "traversal present at top level": "traversal" in env,
+                "NO followed_ref key (pre-resolution = not nested)": "followed_ref" not in env,
+                "traversal has resolved (TC2-W4)":
+                    isinstance(traversal, dict) and "resolved" in traversal,
+                "traversal has failed_at (TC2-W4)":
+                    isinstance(traversal, dict) and "failed_at" in traversal,
+                "traversal has available_keys list (TC2-W4)":
+                    isinstance(traversal, dict)
+                    and isinstance(traversal.get("available_keys"), list),
+                "available_keys is non-empty (Phase 2 Gap 8)":
+                    isinstance(avail, list) and len(avail) > 0,
+                "available_keys contains 'fq_title' (Phase 2 Gap 8)":
+                    isinstance(avail, list) and "fq_title" in avail,
+                "available_keys does NOT contain 'projections' (Phase 2 Gap 8)":
+                    isinstance(avail, list) and "projections" not in avail,
+                "traversal.failed_at == 'projections' (Phase 2 Gap 8)":
+                    isinstance(traversal, dict)
+                    and traversal.get("failed_at") == "projections",
+            }
+            d57_passed = all(checks.values())
+            if not d57_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d57_detail = f"Failed: {', '.join(failed)}. env keys={list(env.keys())}"
+        except Exception as e:
+            d57_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-57: follow_ref pre-resolution error: follow_ref_path_not_found (NOT nested under followed_ref)",
@@ -565,27 +557,24 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d58_passed = False
         d58_detail = ""
-        if not d58_result.ok:
-            try:
-                env = json.loads(d58_result.text)
-                checks = {
-                    "error == follow_ref_invalid_type": env.get("error") == "follow_ref_invalid_type",
-                    "found_type == 'number'": env.get("found_type") == "number",
-                    "identifier present at top level": "identifier" in env,
-                    "reference present at top level": "reference" in env,
-                    "found_value_preview present": "found_value_preview" in env,
-                    "NO followed_ref key": "followed_ref" not in env,
-                    "found_value_preview contains '42' (TC2-W5)":
-                        "42" in str(env.get("found_value_preview", "")),
-                }
-                d58_passed = all(checks.values())
-                if not d58_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d58_detail = f"Failed: {', '.join(failed)}. env={env!r}"
-            except Exception as e:
-                d58_detail = f"JSON parse error: {e}"
-        else:
-            d58_detail = f"Expected isError=True but got ok. text={d58_result.text[:200]}"
+        try:
+            env = json.loads(d58_result.text)
+            checks = {
+                "error == follow_ref_invalid_type": env.get("error") == "follow_ref_invalid_type",
+                "found_type == 'number'": env.get("found_type") == "number",
+                "identifier present at top level": "identifier" in env,
+                "reference present at top level": "reference" in env,
+                "found_value_preview present": "found_value_preview" in env,
+                "NO followed_ref key": "followed_ref" not in env,
+                "found_value_preview contains '42' (TC2-W5)":
+                    "42" in str(env.get("found_value_preview", "")),
+            }
+            d58_passed = all(checks.values())
+            if not d58_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d58_detail = f"Failed: {', '.join(failed)}. env={env!r}"
+        except Exception as e:
+            d58_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-58: follow_ref pre-resolution error: follow_ref_invalid_type (NOT nested)",
@@ -610,31 +599,26 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d59_passed = False
         d59_detail = ""
-        if not d59_result.ok:
-            try:
-                env = json.loads(d59_result.text)
-                checks = {
-                    "error == follow_ref_target_not_found":
-                        env.get("error") == "follow_ref_target_not_found",
-                    # Per Verification Correction 5 + Deviation 5: resolution_method is now classified
-                    # from the targetIdentifier string, not hard-coded to 'unknown'.
-                    "resolution_method == 'path'":
-                        env.get("resolution_method") == "path",
-                    "resolved_value matches the bad path":
-                        env.get("resolved_value") == "_test/does_not_exist_at_all.md",
-                    "reference == 'projections.summary'":
-                        env.get("reference") == "projections.summary",
-                    "identifier present at top level": "identifier" in env,
-                    "NO followed_ref key": "followed_ref" not in env,
-                }
-                d59_passed = all(checks.values())
-                if not d59_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d59_detail = f"Failed: {', '.join(failed)}. env keys={list(env.keys())}"
-            except Exception as e:
-                d59_detail = f"JSON parse error: {e}"
-        else:
-            d59_detail = f"Expected isError=True but got ok. text={d59_result.text[:200]}"
+        try:
+            env = json.loads(d59_result.text)
+            checks = {
+                "error == follow_ref_target_not_found":
+                    env.get("error") == "follow_ref_target_not_found",
+                "resolution_method == 'path'":
+                    env.get("resolution_method") == "path",
+                "resolved_value matches the bad path":
+                    env.get("resolved_value") == "_test/does_not_exist_at_all.md",
+                "reference == 'projections.summary'":
+                    env.get("reference") == "projections.summary",
+                "identifier present at top level": "identifier" in env,
+                "NO followed_ref key": "followed_ref" not in env,
+            }
+            d59_passed = all(checks.values())
+            if not d59_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d59_detail = f"Failed: {', '.join(failed)}. env keys={list(env.keys())}"
+        except Exception as e:
+            d59_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-59: follow_ref pre-resolution error: follow_ref_target_not_found (NOT nested)",
@@ -702,7 +686,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ─────────────────────────────────────────────────────────────
         # D-39a: follow_ref + sections without "body" in include
-        #         -> invalid_parameter_combination
+        #         -> invalid_input
         # ─────────────────────────────────────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         d39a_result = ctx.client.call_tool(
@@ -716,22 +700,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d39a_passed = False
         d39a_detail = ""
-        if not d39a_result.ok:
-            try:
-                env = json.loads(d39a_result.text)
-                checks = {
-                    "error == invalid_parameter_combination": env.get("error") == "invalid_parameter_combination",
-                }
-                d39a_passed = all(checks.values())
-                if not d39a_passed:
-                    d39a_detail = f"Wrong error type: {env.get('error')}. env={env!r}"
-            except Exception as e:
-                d39a_detail = f"JSON parse error: {e}"
-        else:
-            d39a_detail = f"Expected isError=True but got ok. text={d39a_result.text[:200]}"
+        try:
+            env = json.loads(d39a_result.text)
+            checks = {
+                "error == invalid_input": env.get("error") == "invalid_input",
+            }
+            d39a_passed = all(checks.values())
+            if not d39a_passed:
+                d39a_detail = f"Wrong error type: {env.get('error')}. env={env!r}"
+        except Exception as e:
+            d39a_detail = f"JSON parse error: {e}"
 
         run.step(
-            label="D-39a: follow_ref + sections without 'body' in include -> invalid_parameter_combination",
+            label="D-39a: follow_ref + sections without 'body' in include -> invalid_input",
             passed=d39a_passed,
             detail=d39a_detail,
             timing_ms=d39a_result.timing_ms,
@@ -741,7 +722,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ─────────────────────────────────────────────────────────────
         # D-39b: follow_ref + multi-element sections + occurrence
-        #         -> invalid_parameter_combination
+        #         -> invalid_input
         # ─────────────────────────────────────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         d39b_result = ctx.client.call_tool(
@@ -755,22 +736,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d39b_passed = False
         d39b_detail = ""
-        if not d39b_result.ok:
-            try:
-                env = json.loads(d39b_result.text)
-                checks = {
-                    "error == invalid_parameter_combination": env.get("error") == "invalid_parameter_combination",
-                }
-                d39b_passed = all(checks.values())
-                if not d39b_passed:
-                    d39b_detail = f"Wrong error type: {env.get('error')}. env={env!r}"
-            except Exception as e:
-                d39b_detail = f"JSON parse error: {e}"
-        else:
-            d39b_detail = f"Expected isError=True but got ok. text={d39b_result.text[:200]}"
+        try:
+            env = json.loads(d39b_result.text)
+            checks = {
+                "error == invalid_input": env.get("error") == "invalid_input",
+            }
+            d39b_passed = all(checks.values())
+            if not d39b_passed:
+                d39b_detail = f"Wrong error type: {env.get('error')}. env={env!r}"
+        except Exception as e:
+            d39b_detail = f"JSON parse error: {e}"
 
         run.step(
-            label="D-39b: follow_ref + multi-element sections + occurrence -> invalid_parameter_combination",
+            label="D-39b: follow_ref + multi-element sections + occurrence -> invalid_input",
             passed=d39b_passed,
             detail=d39b_detail,
             timing_ms=d39b_result.timing_ms,
@@ -880,27 +858,24 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d39d_passed = False
         d39d_detail = ""
-        if not d39d_result.ok:
-            try:
-                env = json.loads(d39d_result.text)
-                fr = env.get("followed_ref", {})
-                checks = {
-                    "error == section_not_found": env.get("error") == "section_not_found",
-                    "identifier present at top level (source)": "identifier" in env,
-                    "followed_ref key present (post-resolution nesting)": "followed_ref" in env,
-                    "followed_ref.reference present": "reference" in fr,
-                    "followed_ref.missing_sections present": "missing_sections" in fr,
-                    "followed_ref.available_headings present": "available_headings" in fr,
-                    "available_headings contains Summary": any("Summary" in h for h in fr.get("available_headings", [])),
-                }
-                d39d_passed = all(checks.values())
-                if not d39d_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d39d_detail = f"Failed: {', '.join(failed)}. fr={fr!r}"
-            except Exception as e:
-                d39d_detail = f"JSON parse error: {e}"
-        else:
-            d39d_detail = f"Expected isError=True but got ok. text={d39d_result.text[:200]}"
+        try:
+            env = json.loads(d39d_result.text)
+            fr = env.get("followed_ref", {})
+            checks = {
+                "error == section_not_found": env.get("error") == "section_not_found",
+                "identifier present at top level (source)": "identifier" in env,
+                "followed_ref key present (post-resolution nesting)": "followed_ref" in env,
+                "followed_ref.reference present": "reference" in fr,
+                "followed_ref.missing_sections present": "missing_sections" in fr,
+                "followed_ref.available_headings present": "available_headings" in fr,
+                "available_headings contains Summary": any("Summary" in h for h in fr.get("available_headings", [])),
+            }
+            d39d_passed = all(checks.values())
+            if not d39d_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d39d_detail = f"Failed: {', '.join(failed)}. fr={fr!r}"
+        except Exception as e:
+            d39d_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-39d: follow_ref + sections: section_not_found on target nested under followed_ref",
@@ -928,38 +903,35 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d39e_passed = False
         d39e_detail = ""
-        if not d39e_result.ok:
-            try:
-                env = json.loads(d39e_result.text)
-                fr = env.get("followed_ref", {})
-                checks = {
-                    # Per spec §4.5 Error 3 follow_ref variant + OQ #17 (post-resolution nesting)
-                    "error == occurrence_out_of_range":
-                        env.get("error") == "occurrence_out_of_range",
-                    "identifier present at top level (source)": "identifier" in env,
-                    "followed_ref key present (post-resolution nesting)":
-                        "followed_ref" in env,
-                    "followed_ref.reference present": "reference" in fr,
-                    "followed_ref.resolved_to present": "resolved_to" in fr,
-                    "followed_ref.resolved_fq_id present": "resolved_fq_id" in fr,
-                    "followed_ref.query == 'Action Items'":
-                        fr.get("query") == "Action Items",
-                    "followed_ref.matches_found == 2": fr.get("matches_found") == 2,
-                    "followed_ref.matched_headings is list":
-                        isinstance(fr.get("matched_headings"), list),
-                    "followed_ref.requested_occurrence == 99":
-                        fr.get("requested_occurrence") == 99,
-                    "no missing_sections key under followed_ref":
-                        "missing_sections" not in fr,
-                }
-                d39e_passed = all(checks.values())
-                if not d39e_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d39e_detail = f"Failed: {', '.join(failed)}. fr={fr!r}"
-            except Exception as e:
-                d39e_detail = f"JSON parse error: {e}"
-        else:
-            d39e_detail = f"Expected isError=True but got ok. text={d39e_result.text[:200]}"
+        try:
+            env = json.loads(d39e_result.text)
+            fr = env.get("followed_ref", {})
+            checks = {
+                # Per spec §4.5 Error 3 follow_ref variant + OQ #17 (post-resolution nesting)
+                "error == occurrence_out_of_range":
+                    env.get("error") == "occurrence_out_of_range",
+                "identifier present at top level (source)": "identifier" in env,
+                "followed_ref key present (post-resolution nesting)":
+                    "followed_ref" in env,
+                "followed_ref.reference present": "reference" in fr,
+                "followed_ref.resolved_to present": "resolved_to" in fr,
+                "followed_ref.resolved_fq_id present": "resolved_fq_id" in fr,
+                "followed_ref.query == 'Action Items'":
+                    fr.get("query") == "Action Items",
+                "followed_ref.matches_found == 2": fr.get("matches_found") == 2,
+                "followed_ref.matched_headings is list":
+                    isinstance(fr.get("matched_headings"), list),
+                "followed_ref.requested_occurrence == 99":
+                    fr.get("requested_occurrence") == 99,
+                "no missing_sections key under followed_ref":
+                    "missing_sections" not in fr,
+            }
+            d39e_passed = all(checks.values())
+            if not d39e_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d39e_detail = f"Failed: {', '.join(failed)}. fr={fr!r}"
+        except Exception as e:
+            d39e_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-39e: follow_ref + sections + occurrence out of range -> nested followed_ref error",
@@ -986,21 +958,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d39f_passed = False
         d39f_detail = ""
-        if not d39f_result.ok:
-            try:
-                env = json.loads(d39f_result.text)
-                checks = {
-                    "error == follow_ref_path_not_found": env.get("error") == "follow_ref_path_not_found",
-                    "NO followed_ref key (pre-resolution stays top-level)": "followed_ref" not in env,
-                }
-                d39f_passed = all(checks.values())
-                if not d39f_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d39f_detail = f"Failed: {', '.join(failed)}. env keys={list(env.keys())}"
-            except Exception as e:
-                d39f_detail = f"JSON parse error: {e}"
-        else:
-            d39f_detail = f"Expected isError=True but got ok. text={d39f_result.text[:200]}"
+        try:
+            env = json.loads(d39f_result.text)
+            checks = {
+                "error == follow_ref_path_not_found": env.get("error") == "follow_ref_path_not_found",
+                "NO followed_ref key (pre-resolution stays top-level)": "followed_ref" not in env,
+            }
+            d39f_passed = all(checks.values())
+            if not d39f_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d39f_detail = f"Failed: {', '.join(failed)}. env keys={list(env.keys())}"
+        except Exception as e:
+            d39f_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-39f: pre-resolution follow_ref_path_not_found NOT nested even when sections set",
@@ -1075,29 +1044,26 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d62_passed = False
         d62_detail = ""
-        if not d62_result.ok:
-            try:
-                env = json.loads(d62_result.text)
-                checks = {
-                    "error == follow_ref_target_not_found":
-                        env.get("error") == "follow_ref_target_not_found",
-                    "resolution_method == 'filename' (Phase 2 Gap 2)":
-                        env.get("resolution_method") == "filename",
-                    "resolved_value matches the bad filename":
-                        env.get("resolved_value") == bad_filename_value,
-                    "reference == 'projections.summary'":
-                        env.get("reference") == "projections.summary",
-                    "identifier present at top level": "identifier" in env,
-                    "NO followed_ref key": "followed_ref" not in env,
-                }
-                d62_passed = all(checks.values())
-                if not d62_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d62_detail = f"Failed: {', '.join(failed)}. env={env!r}"
-            except Exception as e:
-                d62_detail = f"JSON parse error: {e}"
-        else:
-            d62_detail = f"Expected isError=True but got ok. text={d62_result.text[:200]}"
+        try:
+            env = json.loads(d62_result.text)
+            checks = {
+                "error == follow_ref_target_not_found":
+                    env.get("error") == "follow_ref_target_not_found",
+                "resolution_method == 'filename' (Phase 2 Gap 2)":
+                    env.get("resolution_method") == "filename",
+                "resolved_value matches the bad filename":
+                    env.get("resolved_value") == bad_filename_value,
+                "reference == 'projections.summary'":
+                    env.get("reference") == "projections.summary",
+                "identifier present at top level": "identifier" in env,
+                "NO followed_ref key": "followed_ref" not in env,
+            }
+            d62_passed = all(checks.values())
+            if not d62_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d62_detail = f"Failed: {', '.join(failed)}. env={env!r}"
+        except Exception as e:
+            d62_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-62: follow_ref_target_not_found with resolution_method='filename' (Phase 2 Gap 2)",
@@ -1123,29 +1089,26 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d63_passed = False
         d63_detail = ""
-        if not d63_result.ok:
-            try:
-                env = json.loads(d63_result.text)
-                checks = {
-                    "error == follow_ref_target_not_found":
-                        env.get("error") == "follow_ref_target_not_found",
-                    "resolution_method == 'fq_id' (Phase 2 Gap 3)":
-                        env.get("resolution_method") == "fq_id",
-                    "resolved_value matches the bad UUID":
-                        env.get("resolved_value") == bad_uuid_value,
-                    "reference == 'projections.summary'":
-                        env.get("reference") == "projections.summary",
-                    "identifier present at top level": "identifier" in env,
-                    "NO followed_ref key": "followed_ref" not in env,
-                }
-                d63_passed = all(checks.values())
-                if not d63_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d63_detail = f"Failed: {', '.join(failed)}. env={env!r}"
-            except Exception as e:
-                d63_detail = f"JSON parse error: {e}"
-        else:
-            d63_detail = f"Expected isError=True but got ok. text={d63_result.text[:200]}"
+        try:
+            env = json.loads(d63_result.text)
+            checks = {
+                "error == follow_ref_target_not_found":
+                    env.get("error") == "follow_ref_target_not_found",
+                "resolution_method == 'fq_id' (Phase 2 Gap 3)":
+                    env.get("resolution_method") == "fq_id",
+                "resolved_value matches the bad UUID":
+                    env.get("resolved_value") == bad_uuid_value,
+                "reference == 'projections.summary'":
+                    env.get("reference") == "projections.summary",
+                "identifier present at top level": "identifier" in env,
+                "NO followed_ref key": "followed_ref" not in env,
+            }
+            d63_passed = all(checks.values())
+            if not d63_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d63_detail = f"Failed: {', '.join(failed)}. env={env!r}"
+        except Exception as e:
+            d63_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-63: follow_ref_target_not_found with resolution_method='fq_id' (Phase 2 Gap 3)",
@@ -1233,38 +1196,35 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d65_passed = False
         d65_detail = ""
-        if not d65_result.ok:
-            try:
-                env = json.loads(d65_result.text)
-                fr = env.get("followed_ref", {})
-                missing = fr.get("missing_sections", [])
-                ghosta = next((m for m in missing if m.get("query") == "GhostA"), None)
-                ghostb = next((m for m in missing if m.get("query") == "GhostB"), None)
-                checks = {
-                    "error == section_not_found":
-                        env.get("error") == "section_not_found",
-                    "followed_ref present (post-resolution nesting)":
-                        "followed_ref" in env,
-                    "followed_ref.missing_sections has exactly 2 entries":
-                        len(missing) == 2,
-                    "GhostA entry exists with reason no_match":
-                        ghosta is not None and ghosta.get("reason") == "no_match",
-                    "GhostB entry exists with reason no_match":
-                        ghostb is not None and ghostb.get("reason") == "no_match",
-                    "followed_ref.available_headings is non-empty":
-                        isinstance(fr.get("available_headings"), list)
-                        and len(fr.get("available_headings", [])) > 0,
-                    "available_headings contains target's 'Summary'":
-                        any("Summary" in h for h in fr.get("available_headings", [])),
-                }
-                d65_passed = all(checks.values())
-                if not d65_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d65_detail = f"Failed: {', '.join(failed)}. fr={fr!r}"
-            except Exception as e:
-                d65_detail = f"JSON parse error: {e}"
-        else:
-            d65_detail = f"Expected isError=True but got ok. text={d65_result.text[:200]}"
+        try:
+            env = json.loads(d65_result.text)
+            fr = env.get("followed_ref", {})
+            missing = fr.get("missing_sections", [])
+            ghosta = next((m for m in missing if m.get("query") == "GhostA"), None)
+            ghostb = next((m for m in missing if m.get("query") == "GhostB"), None)
+            checks = {
+                "error == section_not_found":
+                    env.get("error") == "section_not_found",
+                "followed_ref present (post-resolution nesting)":
+                    "followed_ref" in env,
+                "followed_ref.missing_sections has exactly 2 entries":
+                    len(missing) == 2,
+                "GhostA entry exists with reason no_match":
+                    ghosta is not None and ghosta.get("reason") == "no_match",
+                "GhostB entry exists with reason no_match":
+                    ghostb is not None and ghostb.get("reason") == "no_match",
+                "followed_ref.available_headings is non-empty":
+                    isinstance(fr.get("available_headings"), list)
+                    and len(fr.get("available_headings", [])) > 0,
+                "available_headings contains target's 'Summary'":
+                    any("Summary" in h for h in fr.get("available_headings", [])),
+            }
+            d65_passed = all(checks.values())
+            if not d65_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d65_detail = f"Failed: {', '.join(failed)}. fr={fr!r}"
+        except Exception as e:
+            d65_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-65: follow_ref + multi-section section_not_found nested under followed_ref (Phase 2 Gap 5)",
@@ -1294,46 +1254,43 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         d66_passed = False
         d66_detail = ""
-        if not d66_result.ok:
-            try:
-                env = json.loads(d66_result.text)
-                fr = env.get("followed_ref", {})
-                missing = fr.get("missing_sections", [])
-                foo = next((m for m in missing if m.get("query") == "Foo"), None)
-                ai = next(
-                    (m for m in missing
-                     if m.get("query") == "Action Items"
-                     and m.get("reason") == "insufficient_occurrences"),
-                    None,
-                )
-                checks = {
-                    "error == section_not_found":
-                        env.get("error") == "section_not_found",
-                    "followed_ref present (post-resolution nesting)":
-                        "followed_ref" in env,
-                    "followed_ref.missing_sections has exactly 2 entries (OQ #12)":
-                        len(missing) == 2,
-                    "Foo entry has reason no_match":
-                        foo is not None and foo.get("reason") == "no_match",
-                    "Foo entry has no requested_count":
-                        foo is not None and "requested_count" not in foo,
-                    "Foo entry has no found_count":
-                        foo is not None and "found_count" not in foo,
-                    "Action Items entry: insufficient_occurrences":
-                        ai is not None,
-                    "Action Items entry: requested_count == 3":
-                        ai is not None and ai.get("requested_count") == 3,
-                    "Action Items entry: found_count == 2":
-                        ai is not None and ai.get("found_count") == 2,
-                }
-                d66_passed = all(checks.values())
-                if not d66_passed:
-                    failed = [k for k, v in checks.items() if not v]
-                    d66_detail = f"Failed: {', '.join(failed)}. missing={missing!r}"
-            except Exception as e:
-                d66_detail = f"JSON parse error: {e}"
-        else:
-            d66_detail = f"Expected isError=True but got ok. text={d66_result.text[:200]}"
+        try:
+            env = json.loads(d66_result.text)
+            fr = env.get("followed_ref", {})
+            missing = fr.get("missing_sections", [])
+            foo = next((m for m in missing if m.get("query") == "Foo"), None)
+            ai = next(
+                (m for m in missing
+                 if m.get("query") == "Action Items"
+                 and m.get("reason") == "insufficient_occurrences"),
+                None,
+            )
+            checks = {
+                "error == section_not_found":
+                    env.get("error") == "section_not_found",
+                "followed_ref present (post-resolution nesting)":
+                    "followed_ref" in env,
+                "followed_ref.missing_sections has exactly 2 entries (OQ #12)":
+                    len(missing) == 2,
+                "Foo entry has reason no_match":
+                    foo is not None and foo.get("reason") == "no_match",
+                "Foo entry has no requested_count":
+                    foo is not None and "requested_count" not in foo,
+                "Foo entry has no found_count":
+                    foo is not None and "found_count" not in foo,
+                "Action Items entry: insufficient_occurrences":
+                    ai is not None,
+                "Action Items entry: requested_count == 3":
+                    ai is not None and ai.get("requested_count") == 3,
+                "Action Items entry: found_count == 2":
+                    ai is not None and ai.get("found_count") == 2,
+            }
+            d66_passed = all(checks.values())
+            if not d66_passed:
+                failed = [k for k, v in checks.items() if not v]
+                d66_detail = f"Failed: {', '.join(failed)}. missing={missing!r}"
+        except Exception as e:
+            d66_detail = f"JSON parse error: {e}"
 
         run.step(
             label="D-66: follow_ref + multi-section partial-failure aggregation (OQ #12) (Phase 2 Gap 6)",

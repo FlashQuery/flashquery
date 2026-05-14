@@ -64,7 +64,9 @@ steps:
         plugin_id: ir11
         plugin_instance: ir11test
         table: active_docs
-      expect_contains: "Auto-tracked"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 1
 
   - label: "Q1 Report appears in active_docs table"
     assert:
@@ -73,6 +75,7 @@ steps:
         plugin_id: ir11
         plugin_instance: ir11test
         table: active_docs
+        include: [data]
       expect_contains: "Q1 Report"
 
   - label: "First search_records on archive_docs — nothing there yet"
@@ -82,6 +85,7 @@ steps:
         plugin_id: ir11
         plugin_instance: ir11test
         table: archive_docs
+        include: [data]
       expect_not_contains: "Q1 Report"
 
   # ── Move the document to the archive folder ───────────────────────────────────
@@ -104,6 +108,7 @@ steps:
         plugin_id: ir11
         plugin_instance: ir11test
         table: active_docs
+        include: [data]
       expect_contains: "Q1 Report"
 
   - label: "search_records on archive_docs — Q1 Report NOT added as a new entry (IR-11)"
@@ -113,7 +118,9 @@ steps:
         plugin_id: ir11
         plugin_instance: ir11test
         table: archive_docs
-      expect_not_contains: "Auto-tracked"
+      expect_json_equals:
+        path: total
+        value: 0
 
   - label: "Q1 Report does not appear as a new entry in archive_docs"
     assert:
@@ -122,4 +129,5 @@ steps:
         plugin_id: ir11
         plugin_instance: ir11test
         table: archive_docs
+        include: [data]
       expect_not_contains: "Q1 Report"

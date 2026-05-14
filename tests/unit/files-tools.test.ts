@@ -1,31 +1,21 @@
 /**
- * Unit tests for create_directory and list_vault MCP tools (Phase 92 + 93)
+ * Unit tests for the list_vault MCP tool (Phase 93).
  *
- * Covers:
- * - F-52 (DIR-09): shutdown check
- * - DIR-10: no lock / no DB (source inspection — create_directory only)
- * - Array-level guards: empty array, too many paths
- * - String wrapping: single string input reaches the per-path loop
- * - Partial success semantics (D-04): some pass + some fail → isError:false
- * - All-fail: isError:true
- * - Idempotency (D-05): already-existing dir is not an error
- * - File conflict (T-92-04): pre-walk stat detects file-at-path
+ * Covers U-34 through U-43, U-54 through U-58, U-66 through U-69.
  *
- * list_vault tests (Phase 93):
- * - U-34 through U-43, U-54 through U-58, U-66 through U-69
- *
- * Handler is exercised via the registerFileTools factory, following the same
- * pattern as tests/unit/remove-directory.test.ts.
+ * Handler is exercised via the registerFileTools factory. (The legacy
+ * create_directory unit tests were removed when that tool was merged into
+ * manage_directory in Phase 127; manage_directory coverage now lives in
+ * tests/unit/manage-directory.test.ts and tests/integration/manage-directory.integration.test.ts.)
  */
 
 import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
-import { mkdir, stat, readdir } from 'node:fs/promises';
-import { readFileSync } from 'node:fs';
+import { stat, readdir } from 'node:fs/promises';
+import { FM } from '../../src/constants/frontmatter-fields.js';
 
 // ─── Module mocks ─────────────────────────────────────────────────────────────
 
 vi.mock('node:fs/promises', () => ({
-  mkdir: vi.fn(),
   stat: vi.fn(),
   readdir: vi.fn(),
 }));
@@ -56,8 +46,8 @@ vi.mock('../../src/server/shutdown-state.js', () => ({
 
 // Mock path-validation.ts to avoid lstat calls on non-existent paths.
 // We use a partial mock: validateVaultPath is mocked to approve safe paths,
-// while normalizePath / joinWithRoot / sanitizeDirectorySegment / validateSegment
-// are passed through from the real implementation so response formatting works correctly.
+// while normalizePath (and other helpers) are passed through from the real
+// implementation so response formatting works correctly.
 vi.mock('../../src/mcp/utils/path-validation.js', async () => {
   const actual = await vi.importActual<typeof import('../../src/mcp/utils/path-validation.js')>(
     '../../src/mcp/utils/path-validation.js'
@@ -99,55 +89,12 @@ function makeConfig(vaultPath = '/vault') {
 }
 
 /**
- * Invoke create_directory by capturing handlers[0] registered via registerFileTools.
- * create_directory is the FIRST registerTool call (handlers[0]).
- * Follows the same dynamic-import + handler-capture pattern as remove-directory.test.ts.
- */
-async function callCreateDirectory({
-  paths,
-  root_path,
-}: {
-  paths: string | string[];
-  root_path?: string;
-}): Promise<ToolResult> {
-  const { registerFileTools } = await import('../../src/mcp/tools/files.js');
-
-  const handlers: Array<(args: Record<string, unknown>) => Promise<ToolResult>> = [];
-
-  const mockServer = {
-    registerTool: vi.fn(
-      (
-        _name: string,
-        _config: unknown,
-        handler: (args: Record<string, unknown>) => Promise<ToolResult>
-      ) => {
-        handlers.push(handler);
-      }
-    ),
-  } as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer;
-
-  registerFileTools(mockServer, makeConfig());
-
-  // create_directory is registered first (handlers[0])
-  const createDirHandler = handlers[0];
-  if (!createDirHandler) {
-    throw new Error('registerFileTools did not call server.registerTool');
-  }
-
-  const args: Record<string, unknown> = { paths };
-  if (root_path !== undefined) args['root_path'] = root_path;
-
-  return createDirHandler(args);
-}
-
-/**
- * Invoke list_vault by capturing handlers[1] registered via registerFileTools.
- * create_directory is registered first (handlers[0]); list_vault is second (handlers[1]).
+ * Invoke list_vault by capturing the handler registered under that name by registerFileTools.
  */
 async function callListVault(params: {
   path?: string;
   show?: 'files' | 'directories' | 'all';
-  format?: 'table' | 'detailed';
+  include?: Array<'metadata' | 'tracking'>;
   recursive?: boolean;
   extensions?: string[];
   after?: string;
@@ -156,19 +103,28 @@ async function callListVault(params: {
   limit?: number;
 }): Promise<ToolResult> {
   const { registerFileTools } = await import('../../src/mcp/tools/files.js');
-  const handlers: Array<(args: Record<string, unknown>) => Promise<ToolResult>> = [];
+  const handlers = new Map<string, (args: Record<string, unknown>) => Promise<ToolResult>>();
   const mockServer = {
     registerTool: vi.fn(
-      (_name: string, _config: unknown, handler: (args: Record<string, unknown>) => Promise<ToolResult>) => {
-        handlers.push(handler);
+      (name: string, _config: unknown, handler: (args: Record<string, unknown>) => Promise<ToolResult>) => {
+        handlers.set(name, handler);
       }
     ),
   } as unknown as import('@modelcontextprotocol/sdk/server/mcp.js').McpServer;
   registerFileTools(mockServer, makeConfig());
-  // create_directory is registered first (handlers[0]); list_vault is second (handlers[1])
-  const listVaultHandler = handlers[1];
-  if (!listVaultHandler) throw new Error('list_vault handler not registered (expected handlers[1])');
+  const listVaultHandler = handlers.get('list_vault');
+  if (!listVaultHandler) throw new Error('list_vault handler not registered');
   return listVaultHandler(params as Record<string, unknown>);
+}
+
+function parseListVault(result: ToolResult) {
+  return JSON.parse(result.content[0].text) as {
+    path: string;
+    total: number;
+    displayed: number;
+    truncated: boolean;
+    entries: Array<Record<string, unknown>>;
+  };
 }
 
 /**
@@ -182,202 +138,6 @@ function makeDirent(name: string, isDir: boolean) {
     isSymbolicLink: () => false,
   } as unknown as Awaited<ReturnType<typeof readdir>>[number];
 }
-
-// ─── Tests ────────────────────────────────────────────────────────────────────
-
-describe('create_directory handler', () => {
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    // Reset getIsShuttingDown to false for every test (F-52 sets it to true)
-    const { getIsShuttingDown } = await import('../../src/server/shutdown-state.js');
-    (getIsShuttingDown as MockedFunction<typeof getIsShuttingDown>).mockReturnValue(false);
-    // Restore validateVaultPath to the default approving implementation
-    const { validateVaultPath } = await import('../../src/mcp/utils/path-validation.js');
-    (validateVaultPath as MockedFunction<typeof validateVaultPath>).mockImplementation(
-      async (_vaultRoot: string, userPath: string) => {
-        if (userPath.startsWith('..')) {
-          return { valid: false, absPath: '', relativePath: userPath, error: 'Path traversal detected — path must be within the vault root.' };
-        }
-        if (userPath === '' || userPath === '.') {
-          return { valid: false, absPath: '', relativePath: userPath, error: 'Path cannot target the vault root itself.' };
-        }
-        return { valid: true, absPath: `/vault/${userPath}`, relativePath: userPath };
-      }
-    );
-    // Default: mkdir resolves successfully
-    vi.mocked(mkdir).mockResolvedValue(undefined);
-    // Default: stat throws ENOENT (path doesn't exist yet → will be created)
-    vi.mocked(stat).mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
-  });
-
-  // ── Test 1 (F-52): shutdown check ────────────────────────────────────────────
-
-  it('F-52: returns error immediately when server is shutting down', async () => {
-    const { getIsShuttingDown } = await import('../../src/server/shutdown-state.js');
-    (getIsShuttingDown as MockedFunction<typeof getIsShuttingDown>).mockReturnValue(true);
-
-    const result = await callCreateDirectory({ paths: ['valid/path'] });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe(
-      'Server is shutting down; new requests cannot be processed.'
-    );
-  });
-
-  // ── Test 2 (DIR-10): no lock / no DB in create_directory handler ─────────────
-  // Note: list_vault (registered after create_directory) DOES use supabase.
-  // This test verifies that the create_directory handler itself does NOT reference
-  // acquireLock, supabaseManager, or embeddingProvider within its own handler body.
-  // We check by extracting the create_directory section only (before 'list_vault').
-
-  it('DIR-10: create_directory handler source does not reference acquireLock or embeddingProvider', () => {
-    const source = readFileSync('src/mcp/tools/files.ts', 'utf8');
-    // Extract only the create_directory handler body (between its tool comment and list_vault section).
-    // acquireLock is imported at module level for remove_directory (Phase 94), so we must start
-    // extraction from the handler comment rather than the file start.
-    const createDirStart = source.indexOf('// ─── Tool: create_directory');
-    const createDirEnd = source.indexOf('// ─── Tool: list_vault');
-    const createDirSource = (createDirStart > 0 && createDirEnd > createDirStart)
-      ? source.slice(createDirStart, createDirEnd)
-      : source;
-    expect(createDirSource).not.toMatch(/acquireLock|embeddingProvider/i);
-  });
-
-  // ── Test 3: empty array guard ─────────────────────────────────────────────────
-
-  it('No paths provided: empty array returns isError:true with exact message', async () => {
-    const result = await callCreateDirectory({ paths: [] });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toBe('No paths provided.');
-  });
-
-  // ── Test 4: too-many-paths guard ─────────────────────────────────────────────
-
-  it('Too many paths: 51-element array returns isError:true with exact message', async () => {
-    const result = await callCreateDirectory({ paths: Array(51).fill('a') });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Too many paths: 51 provided, maximum is 50.');
-  });
-
-  // ── Test 5: string input is wrapped in array ──────────────────────────────────
-
-  it('String wrap: single string path reaches mkdir', async () => {
-    vi.mocked(mkdir).mockResolvedValue(undefined);
-
-    const result = await callCreateDirectory({ paths: 'CRM' });
-
-    expect(result.isError).toBeFalsy();
-    expect(vi.mocked(mkdir)).toHaveBeenCalledWith(
-      expect.stringContaining('CRM'),
-      { recursive: true }
-    );
-  });
-
-  // ── Test 6: partial success (D-04) ───────────────────────────────────────────
-
-  it('Partial success: valid path succeeds, invalid path fails, isError:false (D-04)', async () => {
-    // validateVaultPath is mocked to approve 'valid' but reject '../escape'
-    // (default mock rejects anything starting with '..')
-    vi.mocked(mkdir).mockResolvedValue(undefined);
-
-    const result = await callCreateDirectory({ paths: ['valid', '../escape'] });
-
-    // isError must be false — at least one path succeeded
-    expect(result.isError).toBeFalsy();
-    // Response should contain a success entry and a Failed block
-    expect(result.content[0].text).toContain('valid/');
-    expect(result.content[0].text).toContain('Failed (1 path):');
-    expect(result.content[0].text).toContain('../escape');
-  });
-
-  // ── Test 7: all-fail → isError:true ──────────────────────────────────────────
-
-  it('All paths failed: isError:true with "All paths failed:" header', async () => {
-    const result = await callCreateDirectory({ paths: ['../a', '../b'] });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('All paths failed:');
-  });
-
-  // ── Test 8: idempotency (D-05) ───────────────────────────────────────────────
-
-  it('Idempotent (D-05): already-existing dir is reported with "(already exists)", isError:false', async () => {
-    // stat returns a directory stat (preExisted=true for the single segment 'CRM')
-    vi.mocked(stat).mockResolvedValue({ isDirectory: () => true } as unknown as Awaited<ReturnType<typeof stat>>);
-    vi.mocked(mkdir).mockResolvedValue(undefined);
-    const { logger } = await import('../../src/logging/logger.js');
-
-    const result = await callCreateDirectory({ paths: 'CRM' });
-
-    expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('already exists');
-    expect(result.content[0].text).toContain('Created 0 directories:');
-    expect(vi.mocked(logger.warn)).toHaveBeenCalled();
-  });
-
-  // ── Test 9: file conflict (T-92-04) ──────────────────────────────────────────
-
-  it('File conflict (T-92-04): file-at-path returns error with "already exists as a file at"', async () => {
-    // stat returns a non-directory (isDirectory()=false) → file conflict
-    vi.mocked(stat).mockResolvedValue({ isDirectory: () => false } as unknown as Awaited<ReturnType<typeof stat>>);
-
-    const result = await callCreateDirectory({ paths: 'notes.md/subfolder' });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('already exists as a file at');
-    // mkdir should NOT have been called
-    expect(vi.mocked(mkdir)).not.toHaveBeenCalled();
-  });
-
-  // ── Test 10: JSON array string input is parsed and creates each directory ───────
-
-  it('JSON array string: valid JSON array string is parsed and each path is created (DIR-JSON-01)', async () => {
-    vi.mocked(mkdir).mockResolvedValue(undefined);
-
-    const result = await callCreateDirectory({ paths: '["Roadmap/Features", "Reference/Product"]' });
-
-    expect(result.isError).toBeFalsy();
-    // Both paths should be created
-    expect(vi.mocked(mkdir)).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(mkdir)).toHaveBeenCalledWith(
-      expect.stringContaining('Roadmap'),
-      { recursive: true }
-    );
-    expect(vi.mocked(mkdir)).toHaveBeenCalledWith(
-      expect.stringContaining('Reference'),
-      { recursive: true }
-    );
-  });
-
-  // ── Test 11: malformed JSON array string returns parse error ─────────────────────
-
-  it('JSON array string malformed: returns isError:true with descriptive parse error (DIR-JSON-02)', async () => {
-    const result = await callCreateDirectory({ paths: '["Roadmap/Features", "Reference/Product"' });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('JSON array');
-  });
-
-  // ── Test 12: JSON array string with non-string elements is rejected ──────────────
-
-  it('JSON array string non-string elements: returns isError:true (DIR-JSON-03)', async () => {
-    const result = await callCreateDirectory({ paths: '[1, 2, 3]' });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('string array');
-  });
-
-  // ── Test 13: plain string starting with '[' that isn't JSON is rejected ──────────
-
-  it('Plain string starting with "[" that is not JSON: returns isError:true (DIR-JSON-04)', async () => {
-    const result = await callCreateDirectory({ paths: '[not json' });
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('JSON array');
-  });
-});
 
 // ─── list_vault handler tests ─────────────────────────────────────────────────
 
@@ -439,13 +199,14 @@ describe('list_vault handler', () => {
 
   // ── U-35: non-existent path ───────────────────────────────────────────────────
 
-  it('U-35: returns isError:true when target path does not exist (ENOENT)', async () => {
+  it('U-35: returns expected not_found JSON when target path does not exist (ENOENT)', async () => {
     vi.mocked(stat).mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
     const result = await callListVault({ path: 'nonexistent/dir' });
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('not found');
+    expect(result.isError).toBe(false);
+    expect(payload).toMatchObject({ error: 'not_found', identifier: 'nonexistent/dir' });
   });
 
   // ── U-36: invalid after date ──────────────────────────────────────────────────
@@ -453,9 +214,11 @@ describe('list_vault handler', () => {
   it('U-36: returns isError:true with date format error for invalid after date string', async () => {
     const result = await callListVault({ after: 'not-a-date' });
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Invalid date format: "not-a-date"');
-    expect(result.content[0].text).toContain('YYYY-MM-DD');
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(result.isError).toBe(false);
+    expect(payload).toMatchObject({ error: 'invalid_input' });
+    expect(payload.message).toContain('Invalid date format: "not-a-date"');
+    expect(payload.message).toContain('YYYY-MM-DD');
   });
 
   // ── U-37: invalid before date ─────────────────────────────────────────────────
@@ -463,8 +226,10 @@ describe('list_vault handler', () => {
   it('U-37: returns isError:true with date format error for invalid before date string', async () => {
     const result = await callListVault({ before: 'bad' });
 
-    expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain('Invalid date format: "bad"');
+    const payload = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    expect(result.isError).toBe(false);
+    expect(payload).toMatchObject({ error: 'invalid_input' });
+    expect(payload.message).toContain('Invalid date format: "bad"');
   });
 
   // ── U-38: show='files' filters out directories ────────────────────────────────
@@ -566,9 +331,9 @@ describe('list_vault handler', () => {
     expect(subdirPos).toBeLessThan(notesPos); // directories before files
   });
 
-  // ── U-41: format='table' includes table header ────────────────────────────────
+  // ── U-41: default output is structured JSON ──────────────────────────────────
 
-  it('U-41: format="table" response text contains table header "| Name | Type | Size | Created | Updated |"', async () => {
+  it('U-41: default response text is parseable JSON with entries', async () => {
     vi.mocked(readdir).mockResolvedValue([makeDirent('notes.md', false)]);
     vi.mocked(stat)
       .mockResolvedValueOnce({
@@ -586,15 +351,16 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', format: 'table' });
+    const result = await callListVault({ path: '/' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('| Name | Type | Size | Created | Updated |');
+    expect(payload.entries[0]).toMatchObject({ name: 'notes.md', type: 'file', size: { chars: 500 } });
   });
 
-  // ── U-42: format='detailed' does NOT include table header ────────────────────
+  // ── U-42: legacy table header is absent ──────────────────────────────────────
 
-  it('U-42: format="detailed" response text does NOT contain table header "| Name |"', async () => {
+  it('U-42: structured JSON response text does NOT contain table header "| Name |"', async () => {
     vi.mocked(readdir).mockResolvedValue([makeDirent('notes.md', false)]);
     vi.mocked(stat)
       .mockResolvedValueOnce({
@@ -612,7 +378,7 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', format: 'detailed' });
+    const result = await callListVault({ path: '/' });
 
     expect(result.isError).toBeFalsy();
     expect(result.content[0].text).not.toContain('| Name |');
@@ -627,9 +393,9 @@ describe('list_vault handler', () => {
     expect(result.isError).toBeFalsy();
   });
 
-  // ── U-54: directory entry size column reads 'N items' ────────────────────────
+  // ── U-54: directory entry size reads entries count ───────────────────────────
 
-  it('U-54: directory entry in table format shows "N items" in size column matching readdir child count', async () => {
+  it('U-54: directory entry in JSON has size.entries matching readdir child count', async () => {
     // Target path has one subdirectory
     vi.mocked(readdir)
       .mockResolvedValueOnce([makeDirent('projects', true)]) // target path contents
@@ -654,15 +420,16 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'directories', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'directories' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('3 items');
+    expect(payload.entries[0]).toMatchObject({ size: { entries: 3 } });
   });
 
-  // ── U-55: file entry size column reads formatted file size ────────────────────
+  // ── U-55: file entry size reads chars ────────────────────────────────────────
 
-  it('U-55: file entry in table format shows formatted file size from stat().size', async () => {
+  it('U-55: file entry in JSON uses size.chars from stat().size', async () => {
     vi.mocked(readdir).mockResolvedValue([makeDirent('report.md', false)]);
     vi.mocked(stat)
       .mockResolvedValueOnce({
@@ -680,10 +447,11 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'files', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'files' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('2.3 KB');
+    expect(payload.entries[0]).toMatchObject({ size: { chars: 2340 } });
   });
 
   // ── U-56: children count for directory matches readdir() call on that directory path ─
@@ -709,15 +477,16 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'directories', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'directories' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('2 items');
+    expect(payload.entries[0]).toMatchObject({ size: { entries: 2 } });
   });
 
-  // ── U-57: untracked file in results → trailing note contains 'untracked file(s) included' ──
+  // ── U-57: untracked file in results omits tracking filler ───────────────────
 
-  it('U-57: untracked file in results → trailing note contains "untracked file(s) included"', async () => {
+  it('U-57: untracked file in results omits tracking fields', async () => {
     vi.mocked(readdir).mockResolvedValue([makeDirent('untracked.md', false)]);
     vi.mocked(stat)
       .mockResolvedValueOnce({
@@ -737,9 +506,11 @@ describe('list_vault handler', () => {
 
     // supabaseManager returns empty data — no tracked files
     const result = await callListVault({ path: '/', show: 'files' });
+    const payload = parseListVault(result);
 
     expect(result.isError).toBeFalsy();
-    expect(result.content[0].text).toContain('untracked file(s) included');
+    expect(payload.entries[0]).not.toHaveProperty('title');
+    expect(payload.entries[0]).not.toHaveProperty(FM.ID);
   });
 
   // ── U-58: all files tracked → no untracked note ───────────────────────────────
@@ -806,7 +577,7 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'directories', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'directories' });
 
     expect(result.isError).toBeFalsy();
     const text = result.content[0].text;
@@ -876,7 +647,7 @@ describe('list_vault handler', () => {
         birthtime: new Date('2026-01-01'),
       } as unknown as Awaited<ReturnType<typeof stat>>);
 
-    const result = await callListVault({ path: '/', show: 'all', format: 'table' });
+    const result = await callListVault({ path: '/', show: 'all' });
 
     expect(result.isError).toBeFalsy();
     const text = result.content[0].text;

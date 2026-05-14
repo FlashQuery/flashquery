@@ -1,0 +1,72 @@
+name: delegated_tier_eligibility
+description: >
+  POST-01 delegated purpose workflow: a managed purpose configured with
+  tools: ["tier:read-write"] exposes corrected tier-derived tools through
+  call_model metadata, then composes that surface with the corrected
+  insert_in_doc final path and read-back. Deterministic delegated dispatch is
+  asserted in the directed mock-provider scenario and E2E coverage.
+coverage: [IL-43]
+deps: [llm]
+server_modes: [managed]
+
+extra_config:
+  llm:
+    models:
+      - name: fast
+        provider_name: openai
+        model: gpt-4o-mini
+        type: language
+        cost_per_million:
+          input: 0.15
+          output: 0.6
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+          strict_tools: true
+          parallel_tool_calls: true
+          structured_outputs_with_tools: true
+    purposes:
+      - name: delegated_tier_yaml
+        description: Delegated tier eligibility YAML fixture
+        models: [fast]
+        tools: [tier:read-write]
+        defaults:
+          max_iterations: 3
+          timeout_ms: 30000
+          max_tokens: 128
+
+steps:
+  - label: "Create delegated workflow document"
+    action: write_document
+    name: delegated_doc
+    mode: create
+    path: "delegated-tier-yaml-${run.id}.md"
+    title: "Delegated Tier YAML"
+    content: "# Delegated Tier YAML\n\nOriginal YAML body."
+    tags: [delegated-tier-yaml]
+
+  - label: "Delegated purpose exposes corrected tier-derived native tools"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: delegated_tier_yaml
+        return_messages: true
+        messages:
+          - role: user
+            content: "Reply with delegated tier metadata visible."
+      expect_contains: '"insert_in_doc"'
+
+  - label: "Direct corrected insert_in_doc final path mutates the document"
+    action: insert_in_doc
+    args:
+      identifier: "${delegated_doc.path}"
+      position: bottom
+      content: "\n\nYAML delegated tier marker ${run.id}\n"
+
+  - label: "Read-back proves corrected final tool path changed the document"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${delegated_doc.path}"
+      expect_contains: "YAML delegated tier marker ${run.id}"

@@ -77,7 +77,9 @@ steps:
         plugin_id: ir07a
         plugin_instance: ir07a
         table: assets
-      expect_contains: "Auto-tracked"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 1
 
   - label: "Shared Asset is tracked in Plugin A's assets table"
     assert:
@@ -86,6 +88,7 @@ steps:
         plugin_id: ir07a
         plugin_instance: ir07a
         table: assets
+        include: [data]
       expect_contains: "Shared Asset"
 
   # ── Assert: Plugin B independently discovers and tracks the doc ───────────────
@@ -97,7 +100,9 @@ steps:
         plugin_id: ir07b
         plugin_instance: ir07b
         table: resources
-      expect_contains: "Auto-tracked"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 1
 
   - label: "Shared Asset is tracked in Plugin B's resources table"
     assert:
@@ -106,4 +111,5 @@ steps:
         plugin_id: ir07b
         plugin_instance: ir07b
         table: resources
+        include: [data]
       expect_contains: "Shared Asset"

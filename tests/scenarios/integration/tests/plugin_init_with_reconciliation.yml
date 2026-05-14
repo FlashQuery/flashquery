@@ -37,8 +37,9 @@ steps:
   # ── Scaffold plugin directories ─────────────────────────────────────────────
 
   - label: "Scaffold plugin directory with create_directory"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       root_path: "_integration/if14"
       paths: ["contacts"]
 
@@ -62,4 +63,5 @@ steps:
         plugin_id: if14
         plugin_instance: if14test
         table: contacts
+        include: [data]
       expect_contains: "Bob"

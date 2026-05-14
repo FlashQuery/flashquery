@@ -131,7 +131,7 @@ Every failure gets slotted into one of five buckets. Use the criteria below as g
 
 **Test bug.** The test is wrong. Examples:
 - Assertion looks for a string that doesn't match FlashQuery's actual response format
-- Missing `force_file_scan` between a vault write and a search
+- Missing `maintain_vault` between a vault write and a search
 - Forgot to pass `vault_path=getattr(args, "vault_path", None)` (or used `managed=args.managed` alongside an opt-in flag; see WRITING_SCENARIOS.md for the "force managed" pattern)
 - Cleanup registration is missing for a resource the test created
 - Argparse or import error

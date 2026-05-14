@@ -27,35 +27,40 @@ steps:
 
   - label: "search_documents with tfd-alpha returns the volcano document"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [tfd-alpha]
+        entity_types: [documents, memories]
       expect_contains: "Volcanic Eruptions and Lava Flows"
 
   - label: "search_documents with tfd-alpha does not return the glacier document"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [tfd-alpha]
+        entity_types: [documents, memories]
       expect_not_contains: "Glaciers and Ice Sheets"
 
   - label: "search_documents with tfd-beta returns the glacier document"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [tfd-beta]
+        entity_types: [documents, memories]
       expect_contains: "Glaciers and Ice Sheets"
 
   - label: "search_documents with tfd-beta does not return the volcano document"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [tfd-beta]
+        entity_types: [documents, memories]
       expect_not_contains: "Volcanic Eruptions and Lava Flows"
 
   - label: "search_documents with both tags returns both documents"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [tfd-alpha, tfd-beta]
+        entity_types: [documents, memories]
       expect_contains: "Volcanic Eruptions and Lava Flows"

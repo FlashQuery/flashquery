@@ -122,9 +122,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
+        register_result.expect_json_equals("status", "registered")
         register_result.expect_contains(instance_name)
-        register_result.expect_contains("notes")
+        register_result.expect_json_equals("table_count", 1)
 
         run.step(
             label="register_plugin (auto-track, template declared, field_map)",
@@ -178,7 +178,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search1_result.expect_contains("Auto-tracked")
+        search1_result.expect_json_equals("reconciliation.auto_tracked", 1)
 
         run.step(
             label="search_records (1st call) — reconciliation auto-tracks file 1 with template",
@@ -193,18 +193,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 4: clear_pending_reviews (query mode) — verify 1 pending row ─
         # RO-08: auto-track with template declared inserts a pending review row.
-        # Empty fqc_ids list = query mode (lists without deleting).
+        # action="list" = query mode (lists without deleting).
         log_mark = ctx.server.log_position if ctx.server else 0
         pending1_result = ctx.client.call_tool(
             "clear_pending_reviews",
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
-            fqc_ids=[],
+            action="list",
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Response format: "Pending reviews for {plugin_id}: N item(s)\n[...]"
-        pending1_result.expect_contains("1 item(s)")
+        pending1_result.expect_json_equals("pending", 1)
 
         run.step(
             label="RO-08: clear_pending_reviews (query mode) — 1 pending review row from auto-track+template",
@@ -230,13 +229,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Diff was skipped — no new auto-track lines
-        search2_result.expect_not_contains("Auto-tracked")
-        # Pending review query still ran despite staleness
-        search2_result.expect_contains("pending review item(s)")
+        # Diff was skipped — reconciliation key absent from JSON response (all zeros → omitted)
+        search2_result.expect_json_no_path("reconciliation")
 
         run.step(
-            label="RO-05: search_records (2nd call) — staleness skips diff but pending review query runs",
+            label="RO-05: search_records (2nd call) — staleness skips diff (no reconciliation key in response)",
             passed=(search2_result.ok and search2_result.status == "pass"),
             detail=expectation_detail(search2_result) or search2_result.error or "",
             timing_ms=search2_result.timing_ms,
@@ -286,7 +283,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Full diff ran after cache invalidation — file 2 was detected as added and auto-tracked
-        search3_result.expect_contains("Auto-tracked")
+        search3_result.expect_json_equals("reconciliation.auto_tracked", 1)
 
         run.step(
             label="RO-61: search_records (3rd call) — full diff runs after force_file_scan invalidation",

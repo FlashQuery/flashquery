@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
+import { getResolvedHostToolExposure } from '../../config/loader.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { embeddingProvider, NullEmbeddingProvider } from '../../embedding/provider.js';
 import { logger } from '../../logging/logger.js';
@@ -11,19 +12,33 @@ import { pluginManager } from '../../plugins/manager.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { validateAllTags, normalizeTags, deduplicateTags } from '../../utils/tag-validator.js';
 import { resolveDocumentIdentifier, targetedScan } from '../utils/resolve-document.js';
+import { AmbiguousDocumentIdentifierError, DocumentNotFoundError } from '../utils/resolve-document.js';
 import { searchDocumentsSemantic, listMarkdownFiles, parseDocMeta } from './documents.js';
 import type { DocMeta } from './documents.js';
 import { searchMemoriesSemantic } from './memory.js';
 import { vaultManager } from '../../storage/vault.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
-  formatKeyValueEntry,
-  joinBatchEntries,
-  formatEmptyResults,
+  jsonExpectedError,
+  jsonRuntimeError,
+  jsonToolResult,
+  documentIdentification,
+  memoryIdentification,
+  recordIdentification,
 } from '../utils/response-formats.js';
-import { insertAtPosition, findHeadingOccurrence, getSectionBoundaries } from '../utils/markdown-sections.js';
+import {
+  insertAtPosition,
+  findMatchingHeadings,
+  getSectionBoundaries,
+  resolveHeadingTarget,
+} from '../utils/markdown-sections.js';
+import { getToolMetadata } from '../tool-metadata.js';
 import { FM } from '../../constants/frontmatter-fields.js';
-import { serializeOrderedFrontmatter } from '../utils/frontmatter-sanitizer.js';
+import {
+  mergeSearchResults,
+  resolveSearchIntent,
+  type SearchResultItem,
+} from '../utils/search-results.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: apply tag set operations (idempotent add, graceful remove)
@@ -34,6 +49,84 @@ function applyTagChanges(existing: string[], addTags: string[], removeTags: stri
   for (const tag of addTags) tagSet.add(tag);
   for (const tag of removeTags) tagSet.delete(tag);
   return Array.from(tagSet);
+}
+
+function memoryCategoryEnabled(config: FlashQueryConfig): boolean {
+  const selectors = config.hostMcpTools?.tools;
+  const excludedSelectors = new Set(config.hostMcpTools?.excludedTools ?? []);
+  if (selectors === undefined) {
+    return true;
+  }
+  if (selectors.some((selector) => selector === 'tier:read-only' || selector === 'tier:read-write' || selector === 'category:memory')) {
+    return true;
+  }
+  if (selectors.some((selector) => getToolMetadata(selector)?.categories.includes('memory') === true)) {
+    return true;
+  }
+
+  const enabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
+  const memoryOnlyTools = ['write_memory', 'get_memory', 'archive_memory'];
+  return memoryOnlyTools.some((toolName) => enabledToolNames.has(toolName) && !excludedSelectors.has(toolName));
+}
+
+function documentCategoryEnabled(config: FlashQueryConfig): boolean {
+  const selectors = config.hostMcpTools?.tools;
+  if (selectors === undefined) return true;
+  if (selectors.some((selector) => selector === 'tier:read-only' || selector === 'tier:read-write' || selector === 'category:doc-read' || selector === 'category:doc-write')) {
+    return true;
+  }
+  if (selectors.some((selector) => getToolMetadata(selector)?.categories.some((category) => category === 'doc-read' || category === 'doc-write') === true)) {
+    return true;
+  }
+  return getResolvedHostToolExposure(config).hostEnabledToolNames.includes('get_document');
+}
+
+function pluginCategoryEnabled(config: FlashQueryConfig): boolean {
+  const selectors = config.hostMcpTools?.tools;
+  if (selectors === undefined) return true;
+  if (selectors.some((selector) => selector === 'category:plugin')) return true;
+  if (selectors.some((selector) => getToolMetadata(selector)?.categories.includes('plugin') === true)) return true;
+  return getResolvedHostToolExposure(config).hostEnabledToolNames.some((toolName) =>
+    getToolMetadata(toolName)?.categories.includes('plugin') === true
+  );
+}
+
+function documentResolutionError(err: unknown, identifier: string): Record<string, unknown> {
+  if (err instanceof AmbiguousDocumentIdentifierError) {
+    return {
+      error: 'ambiguous_identifier',
+      message: err.message,
+      identifier,
+      details: { matches: err.matches },
+    };
+  }
+  if (err instanceof DocumentNotFoundError) {
+    return {
+      error: 'not_found',
+      message: `No document matches identifier '${identifier}'`,
+      identifier,
+    };
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return {
+    error: 'runtime_error',
+    message,
+    identifier,
+  };
+}
+
+function headingErrorMatches(matches: Array<{ text: string; level: number; line: number; occurrence: number }>): Array<{
+  heading: string;
+  level: number;
+  line: number;
+  occurrence: number;
+}> {
+  return matches.map((match) => ({
+    heading: match.text,
+    level: match.level,
+    line: match.line,
+    occurrence: match.occurrence,
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -74,299 +167,18 @@ function computeHash(rawContent: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function registerCompoundTools(server: McpServer, config: FlashQueryConfig): void {
-  // ─── Tool 1: append_to_doc (T2-01) ──────────────────────────────────────
-
-  server.registerTool(
-    'append_to_doc',
-    {
-      description:
-        'Append markdown content to the end of a document. Use for adding new entries, log lines, or notes at the bottom of a file. For inserting content at a specific location (after a heading, before a section, at the top), use insert_in_doc instead. For replacing an existing section\'s content, use replace_doc_section.',
-      inputSchema: {
-        identifier: z
-          .string()
-          .describe('Document identifier — accepts any of: (1) vault-relative path (e.g., "clients/acme/notes.md"), (2) fqc_id UUID, or (3) filename (e.g., "notes.md")'),
-        content: z.string().describe('Content to append (include any markdown structure such as headings)'),
-      },
-    },
-    async ({ identifier, content }) => {
-      // D-02b: Check shutdown flag immediately
-      if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      try {
-        const supabase = supabaseManager.getClient();
-
-        // Resolve identifier to a canonical path
-        const resolved = await resolveDocumentIdentifier(config, supabase, identifier, logger);
-
-        // LOGIC-03: Validate document has valid fqcId before modifying
-        if (!resolved.fqcId) {
-          return {
-            content: [{ type: 'text' as const, text: 'Error: Unable to provision document. Document must have an fq_id to be modified.' }],
-            isError: true,
-          };
-        }
-
-        const absPath = resolved.absPath;
-        const relativePath = resolved.relativePath;
-        const fqcId = resolved.fqcId;
-
-        const raw = await readFile(absPath, 'utf-8');
-        const parsed = matter(raw);
-
-        const title = (parsed.data[FM.TITLE] as string | undefined) ?? relativePath;
-
-        // Append content — two newlines before content for clean markdown spacing
-        const newBody = parsed.content + '\n\n' + content;
-
-        // Compute hash of the new content about to be written
-        const serialized = matter.stringify(newBody, parsed.data);
-        const newHash = computeHash(serialized);
-
-        // Call targetedScan to update frontmatter
-        await targetedScan(config, supabase, resolved, newHash, logger);
-
-        // Update fm with fq_id from targetedScan
-        parsed.data[FM.ID] = fqcId;
-
-        // Write back atomically via vaultManager (DCP-05)
-        await vaultManager.writeMarkdown(relativePath, parsed.data, newBody);
-
-        // LOGIC-02 (DCP-05): Read file after write to verify actual hash matches expected
-        const postWriteRaw = await readFile(absPath, 'utf-8');
-        const postWriteParsed = matter(postWriteRaw);
-        const actualSerializedAfterWrite = matter.stringify(postWriteParsed.content, postWriteParsed.data);
-        const actualHashAfterWrite = computeHash(actualSerializedAfterWrite);
-
-        logger.info(`append_to_doc: appended content to ${relativePath}`);
-        // Use actualHashAfterWrite (computed from file on disk) not newHash (pre-write computed)
-        const { error: updateError } = await supabase
-          .from('fqc_documents')
-          .update({ content_hash: actualHashAfterWrite, updated_at: new Date().toISOString() })
-          .eq('id', fqcId);
-
-        if (updateError) {
-          logger.warn(
-            `append_to_doc: fqc_documents hash update failed for ${relativePath}: ${updateError.message}`
-          );
-        }
-
-        // Fire-and-forget re-embedding (vault write is already synchronous)
-        void embeddingProvider
-          .embed(`${title}\n\n${newBody}`)
-          .then((vector) =>
-            supabaseManager
-              .getClient()
-              .from('fqc_documents')
-              .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-              .eq('id', fqcId)
-          )
-          .catch((err) =>
-            logger.warn(
-              `append_to_doc: background embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
-            )
-          );
-
-        return {
-          content: [
-            { type: 'text' as const, text: `Appended content to ${relativePath}` },
-          ],
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`append_to_doc failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
-      }
-    }
-  );
-
-  // ─── Tool 2: update_doc_header (T2-02) ──────────────────────────────────
-
-  server.registerTool(
-    'update_doc_header',
-    {
-      description:
-        'Update frontmatter fields on a document without touching the body content. Pass a map of field names to new values. Pass null as a value to remove a field. Syncs tags to the database automatically when the tags key is included. Use this for changing metadata like title, status, or custom frontmatter fields.',
-      inputSchema: {
-        identifier: z
-          .string()
-          .describe('Document identifier — accepts any of: (1) vault-relative path (e.g., "clients/acme/notes.md"), (2) fqc_id UUID, or (3) filename (e.g., "notes.md")'),
-        updates: z
-          .record(z.string(), z.unknown())
-          .describe('Map of frontmatter fields to update. Pass null to remove a field.'),
-      },
-    },
-    async ({ identifier, updates }) => {
-      // D-02b: Check shutdown flag immediately
-      if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
-      }
-
-      if (config.locking.enabled) {
-        const locked = await acquireLock(
-          supabaseManager.getClient(),
-          config.instance.id,
-          'documents',
-          { ttlSeconds: config.locking.ttlSeconds }
-        );
-        if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.' }],
-            isError: true,
-          };
-        }
-      }
-      try {
-        const supabase = supabaseManager.getClient();
-
-        // Resolve identifier to a canonical path
-        const resolved = await resolveDocumentIdentifier(config, supabase, identifier, logger);
-
-        const absPath = resolved.absPath;
-        const relativePath = resolved.relativePath;
-
-        const raw = await readFile(absPath, 'utf-8');
-        const parsed = matter(raw);
-
-        // Detect existing document conflicts before applying any updates (TAGS-06)
-        const existingTags = Array.isArray(parsed.data[FM.TAGS]) ? parsed.data[FM.TAGS] as string[] : [];
-        const existingValidation = validateAllTags(existingTags);
-        if (existingValidation.conflicts.length > 1) {
-          return {
-            content: [{ type: 'text' as const, text:
-              `Document has conflicting statuses: ${existingValidation.conflicts.join(', ')}. ` +
-              `Choose one to keep by calling apply_tags with remove_tags to drop unwanted statuses.`
-            }],
-            isError: true,
-          };
-        }
-
-        // Tag validation: if fq_tags key is in updates, validate and normalize new tags
-        if (FM.TAGS in updates && Array.isArray(updates[FM.TAGS])) {
-          const tagValidation = validateAllTags(updates[FM.TAGS] as string[]);
-          if (!tagValidation.valid) {
-            const messages = [
-              ...tagValidation.errors,
-              ...(tagValidation.conflicts.length > 1
-                ? [`Document has conflicting statuses: ${tagValidation.conflicts.join(', ')}. Choose one to keep.`]
-                : []),
-            ];
-            return {
-              content: [{ type: 'text' as const, text: `Tag validation failed: ${messages.join('; ')}` }],
-              isError: true,
-            };
-          }
-          // Replace raw tags with deduplicated version in updates before applying (D-05a)
-          updates[FM.TAGS] = deduplicateTags(tagValidation.normalized);
-        }
-
-        // Catch-all frontmatter editor — act on whatever keys are passed
-        // null value = delete the key (NOT write as YAML null)
-        for (const [key, value] of Object.entries(updates)) {
-          if (value === null) {
-            delete parsed.data[key];
-          } else {
-            parsed.data[key] = value;
-          }
-        }
-
-        // Track whether caller explicitly requested status deletion (fq_status: null)
-        // Used below to skip the D-02c guard when deletion is intentional
-        const statusExplicitlyDeleted = FM.STATUS in updates && updates[FM.STATUS] === null;
-
-        // Compute hash of the new content about to be written
-        const serialized = matter.stringify(parsed.content, parsed.data);
-        const newHash = computeHash(serialized);
-
-        // Call targetedScan to update frontmatter and get fqcId
-        const preScan = await targetedScan(config, supabase, resolved, newHash, logger);
-        const fqcId = preScan.capturedFrontmatter.fqcId;
-
-        // Update fm with fq_id from targetedScan
-        parsed.data[FM.ID] = fqcId;
-
-        // D-02c: If status is null/missing, make implicit 'active' explicit on write
-        // Skip if caller explicitly passed { fq_status: null } to delete the key
-        if (!parsed.data[FM.STATUS] && !statusExplicitlyDeleted) {
-          parsed.data[FM.STATUS] = 'active';
-          logger.info(`update_doc_header: document ${relativePath}: status was null, explicitly set to 'active' (D-02c)`);
-        }
-
-        // Write back atomically via vaultManager (DCP-05)
-        // Apply ordering sanitizer so user fields remain first (SPEC-18)
-        const sanitizedFm = serializeOrderedFrontmatter(parsed.data);
-        await vaultManager.writeMarkdown(relativePath, sanitizedFm, parsed.content);
-
-        const changedFields = Object.keys(updates).join(', ');
-        logger.info(`update_doc_header: updated fields [${changedFields}] in ${relativePath}`);
-
-        // Sync tags to Supabase fqc_documents when fq_tags key is in updates
-        const updatesMap = updates;
-        if (FM.TAGS in updatesMap && updatesMap[FM.TAGS] !== null && fqcId) {
-          // Tags in updatesMap are already deduplicated from earlier deduplication step
-          const { error: tagError } = await supabase
-            .from('fqc_documents')
-            .update({ tags: updatesMap[FM.TAGS] as string[], updated_at: new Date().toISOString() })
-            .eq('id', fqcId);
-
-          if (tagError) {
-            logger.warn(
-              `update_doc_header: fqc_documents tags sync failed for ${relativePath}: ${tagError.message}`
-            );
-          }
-        }
-
-        // Do NOT call embeddingProvider.embed — frontmatter-only change
-
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `Updated frontmatter fields [${changedFields}] in ${relativePath}`,
-            },
-          ],
-        };
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`update_doc_header failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
-      } finally {
-        if (config.locking.enabled) {
-          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-        }
-      }
-    }
-  );
-
   // ─── Tool 3: insert_doc_link (T2-03) ────────────────────────────────────
 
   server.registerTool(
     'insert_doc_link',
     {
       description:
-        'Add a wiki-style document link ([[Target Doc]]) to a document\'s frontmatter links array. Deduplicates automatically — adding the same link twice is a no-op. Both source and target documents are resolved by path, fqc_id, or filename. Optionally specify which frontmatter property to use (default: "links"; alternatives: "related", "parent", etc.).',
+        'Transitional macro-dependent helper retained until call_macro parity: add a wiki-style document link ([[Target Doc]]) to one or more source documents and return ordered JSON document identification results. Deduplicates automatically and returns status:"unchanged" per source when the link already exists. Resolve the single target by target_identifier and sources by identifiers. Optionally specify which frontmatter property to use (default: "links"; alternatives: "related", "parent", etc.). Removal gate: call_macro must cover this workflow before this transitional tool is removed.',
       inputSchema: {
-        identifier: z
-          .string()
-          .describe('Source document identifier — accepts UUID, vault-relative path, or filename'),
-        target: z
+        identifiers: z
+          .union([z.string(), z.array(z.string())])
+          .describe('Source document identifier or identifiers — each accepts UUID, vault-relative path, or filename'),
+        target_identifier: z
           .string()
           .describe('Target document identifier — accepts UUID, vault-relative path, or filename. The display text for the link is derived from the resolved document title.'),
         property: z
@@ -377,7 +189,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           ),
       },
     },
-    async ({ identifier, target, property }) => {
+    async ({ identifiers, target_identifier, property }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -394,12 +206,20 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
       try {
         const supabase = supabaseManager.getClient();
         const targetProperty = property ?? 'links';
+        const sourceIdentifiers = Array.isArray(identifiers) ? identifiers : [identifiers];
 
-        // Resolve source document
-        const sourceResolved = await resolveDocumentIdentifier(config, supabase, identifier, logger);
-
-        // Resolve target document to get its title
-        const targetResolved = await resolveDocumentIdentifier(config, supabase, target, logger);
+        let targetResolved: Awaited<ReturnType<typeof resolveDocumentIdentifier>>;
+        try {
+          targetResolved = await resolveDocumentIdentifier(config, supabase, target_identifier, logger);
+        } catch (targetErr) {
+          const envelope = documentResolutionError(targetErr, target_identifier);
+          return jsonExpectedError({
+            error: envelope.error === 'ambiguous_identifier' ? 'ambiguous_identifier' : 'not_found',
+            message: String(envelope.message),
+            identifier: target_identifier,
+            details: envelope.details as Record<string, unknown> | undefined,
+          });
+        }
 
         // Get target title from frontmatter
         let targetTitle: string;
@@ -414,47 +234,61 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Build wikilink string using resolved title
         const wikilink = `[[${targetTitle}]]`;
+        const results: Array<Record<string, unknown>> = [];
 
-        // Read source document
-        const raw = await readFile(sourceResolved.absPath, 'utf-8');
-        const parsed = matter(raw);
+        for (const sourceIdentifier of sourceIdentifiers) {
+          try {
+            const sourceResolved = await resolveDocumentIdentifier(config, supabase, sourceIdentifier, logger);
+            const raw = await readFile(sourceResolved.absPath, 'utf-8');
+            const parsed = matter(raw);
 
-        // Merge without duplication
-        const existing: string[] = Array.isArray(parsed.data[targetProperty])
-          ? (parsed.data[targetProperty] as string[])
-          : [];
-        const merged = [...new Set([...existing, wikilink])];
+            const existing: string[] = Array.isArray(parsed.data[targetProperty])
+              ? (parsed.data[targetProperty] as string[])
+              : [];
+            const alreadyLinked = existing.includes(wikilink);
+            parsed.data[targetProperty] = [...new Set([...existing, wikilink])];
 
-        parsed.data[targetProperty] = merged;
+            const serialized = matter.stringify(parsed.content, parsed.data);
+            const newHash = computeHash(serialized);
+            const preScan = await targetedScan(config, supabase, sourceResolved, newHash, logger);
+            const fqcId = preScan.capturedFrontmatter.fqcId;
+            parsed.data[FM.ID] = fqcId;
 
-        // Compute hash of the new content about to be written
-        const serialized = matter.stringify(parsed.content, parsed.data);
-        const newHash = computeHash(serialized);
+            await vaultManager.writeMarkdown(sourceResolved.relativePath, parsed.data, parsed.content);
 
-        // Call targetedScan to update frontmatter and get fqcId
-        const preScan = await targetedScan(config, supabase, sourceResolved, newHash, logger);
-        const fqcId = preScan.capturedFrontmatter.fqcId;
+            logger.info(`insert_doc_link: ${alreadyLinked ? 'unchanged' : 'added'} ${wikilink} in ${sourceResolved.relativePath}`);
+            results.push({
+              ...documentIdentification({
+                identifier: sourceIdentifier,
+                title: typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] as string : sourceResolved.relativePath,
+                path: sourceResolved.relativePath,
+                fq_id: fqcId,
+                modified: typeof parsed.data[FM.UPDATED] === 'string' ? parsed.data[FM.UPDATED] as string : new Date().toISOString(),
+                chars: parsed.content.length,
+              }),
+              status: alreadyLinked ? 'unchanged' : 'updated',
+              property: targetProperty,
+              link: wikilink,
+              target: {
+                identifier: target_identifier,
+                fq_id: targetResolved.fqcId,
+                path: targetResolved.relativePath,
+                title: targetTitle,
+              },
+            });
+          } catch (sourceErr) {
+            results.push(documentResolutionError(sourceErr, sourceIdentifier));
+          }
+        }
 
-        // Update fm with fq_id from targetedScan
-        parsed.data[FM.ID] = fqcId;
-
-        // Write back atomically via vaultManager (DCP-05)
-        await vaultManager.writeMarkdown(sourceResolved.relativePath, parsed.data, parsed.content);
-
-        logger.info(`insert_doc_link: added ${wikilink} to ${targetProperty} in ${sourceResolved.relativePath}`);
-
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `Added document link [[${targetTitle}]] to ${targetProperty} in ${sourceResolved.relativePath}`,
-            },
-          ],
-        };
+        return jsonToolResult({
+          results,
+          removal_gate: 'call_macro parity',
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`insert_doc_link failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       }
     }
   );
@@ -465,8 +299,15 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'apply_tags',
     {
       description:
-        'Add or remove tags on one or more vault documents or a memory in a single call. Supports batch operations — pass multiple identifiers to tag several documents at once. Add is idempotent; removing a tag that doesn\'t exist is a silent no-op. Use this when the user wants to tag, untag, categorize, or label documents or memories.',
+        'Add or remove tags on ordered document and memory targets in a single call. Pass targets: [{ entity_type, identifier }] to tag explicit documents or memories. Add is idempotent; removing a tag that does not exist is a silent no-op.',
       inputSchema: {
+        targets: z
+          .array(z.object({
+            entity_type: z.enum(['document', 'memory']),
+            identifier: z.string(),
+          }))
+          .optional()
+          .describe('Ordered targets to tag. Each target declares document or memory explicitly.'),
         identifiers: z
           .union([z.string(), z.array(z.string())])
           .optional()
@@ -484,7 +325,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           .describe('Tags to remove (silent no-op if not present)'),
       },
     },
-    async ({ identifiers, memory_id, add_tags, remove_tags }) => {
+    async ({ targets, identifiers, memory_id, add_tags, remove_tags }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -503,27 +344,35 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const addTags: string[] = normalizeTags(Array.isArray(add_tags) ? add_tags : []);
         const removeTags: string[] = normalizeTags(Array.isArray(remove_tags) ? remove_tags : []);
 
-        // Validate: at least one target must be provided
-        if (!identifiers && !memory_id) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: 'Error: At least one of identifiers or memory_id must be provided.',
-              },
-            ],
-            isError: true,
-          };
+        const normalizedTargets = targets ??
+          (identifiers
+            ? (Array.isArray(identifiers) ? identifiers : [identifiers]).map((id) => ({ entity_type: 'document' as const, identifier: id }))
+            : memory_id
+              ? [{ entity_type: 'memory' as const, identifier: memory_id }]
+              : []);
+
+        if (normalizedTargets.length === 0) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'targets is required',
+            details: { field: 'targets' },
+          });
+        }
+        if (addTags.length === 0 && removeTags.length === 0) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'At least one of add_tags or remove_tags is required',
+            details: { requires: ['add_tags', 'remove_tags'] },
+          });
         }
 
         const supabase = supabaseManager.getClient();
+        const canUseMemoryTargets = memoryCategoryEnabled(config);
+        const results: Array<Record<string, unknown>> = [];
 
-        if (identifiers) {
-          // ── Document tag update (batch-capable) ─────────────────────────
-          const ids = Array.isArray(identifiers) ? identifiers : [identifiers];
-          const results: string[] = [];
-
-          for (const id of ids) {
+        for (const target of normalizedTargets) {
+          if (target.entity_type === 'document') {
+            const id = target.identifier;
             try {
               // Resolve identifier
               const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
@@ -549,7 +398,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                     ? [`Document has conflicting statuses: ${docTagValidation.conflicts.join(', ')}. Choose one to keep.`]
                     : []),
                 ];
-                results.push(`"${relativePath}" failed: Tag validation failed: ${messages.join('; ')}`);
+                results.push({
+                  error: 'invalid_input',
+                  message: `Tag validation failed: ${messages.join('; ')}`,
+                  identifier: id,
+                  details: { field: 'tags' },
+                });
                 continue;
               }
 
@@ -599,46 +453,64 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 }
               }
 
-              results.push(`"${relativePath}": ${docTagValidation.normalized.join(', ') || '(none)'}`);
+              results.push({
+                ...documentIdentification({
+                  identifier: id,
+                  title: typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] as string : relativePath,
+                  path: relativePath,
+                  fq_id: fqcId,
+                  modified: typeof parsed.data[FM.UPDATED] === 'string' ? parsed.data[FM.UPDATED] as string : new Date().toISOString(),
+                  chars: parsed.content.length,
+                }),
+                tags: dedupTagsForSync,
+                entity_type: 'document',
+              });
             } catch (itemErr) {
               const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
-              results.push(`"${id}" failed: ${msg}`);
+              results.push({
+                error: msg.toLowerCase().includes('not found') ? 'not_found' : 'runtime_error',
+                message: msg,
+                identifier: id,
+              });
             }
+            continue;
           }
 
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Updated tags:\n${results.join('\n')}`,
-              },
-            ],
-          };
-        } else {
-          // ── Memory tag update ────────────────────────────────────────────
-          const memoryId = memory_id as string;
+          const memoryId = target.identifier;
+          if (!canUseMemoryTargets) {
+            results.push({
+              error: 'unsupported',
+              message: 'Memory category is disabled by config',
+              identifier: memoryId,
+              details: { disabled_category: 'memory' },
+            });
+            continue;
+          }
 
           // Fetch current tags from fqc_memory
           const { data: memRow, error: fetchError } = await supabase
             .from('fqc_memory')
-            .select('tags')
+            .select('content,tags,plugin_scope,created_at,updated_at')
             .eq('id', memoryId)
             .eq('instance_id', config.instance.id)
             .single();
 
           if (fetchError) {
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Error: Failed to fetch memory "${memoryId}": ${fetchError.message}`,
-                },
-              ],
-              isError: true,
-            };
+            results.push({
+              error: 'not_found',
+              message: `Failed to fetch memory "${memoryId}": ${fetchError.message}`,
+              identifier: memoryId,
+            });
+            continue;
           }
 
-          const memData = memRow as { tags?: string[] } | null;
+          const memData = memRow as {
+            content?: string | null;
+            tags?: string[];
+            plugin_scope?: string | null;
+            created_at?: string | null;
+            updated_at?: string | null;
+          } | null;
           const existing: string[] = Array.isArray(memData?.tags) ? memData.tags : [];
           const newTags = applyTagChanges(existing, addTags, removeTags);
 
@@ -651,10 +523,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 ? [`Memory has conflicting statuses: ${memTagValidation.conflicts.join(', ')}. Choose one to keep.`]
                 : []),
             ];
-            return {
-              content: [{ type: 'text' as const, text: `Tag validation failed: ${messages.join('; ')}` }],
-              isError: true,
-            };
+            results.push({
+              error: 'invalid_input',
+              message: `Tag validation failed: ${messages.join('; ')}`,
+              identifier: memoryId,
+              details: { field: 'tags' },
+            });
+            continue;
           }
 
           // Update fqc_memory.tags with deduplicated tags (memories have no vault file — D-13, D-05a)
@@ -673,19 +548,24 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
           logger.info(`apply_tags: updated tags on memory ${memoryId} (${memTagValidation.normalized.length} tags)`);
 
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Updated tags on memory "${memoryId}": ${memTagValidation.normalized.join(', ') || '(none)'}`,
-              },
-            ],
-          };
+          results.push({
+            ...memoryIdentification({
+              memory_id: memoryId,
+              content_preview: typeof memData?.content === 'string' ? memData.content.slice(0, 120) : '',
+              tags: dedupMemTags,
+              plugin_scope: memData?.plugin_scope ?? 'global',
+              created_at: memData?.created_at ?? '',
+              updated_at: new Date().toISOString(),
+            }),
+            entity_type: 'memory',
+          });
         }
+
+        return jsonToolResult(results);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`apply_tags failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError({ message: `Error applying tags: ${msg}` });
       }
     }
   );
@@ -696,17 +576,16 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'get_briefing',
     {
       description:
-        'Get a summary of documents and memories matching specified tags. Returns document metadata (title, path, tags, fqc_id) and memory content, grouped by type. Use this when the user wants an overview of everything related to a topic — e.g. "brief me on the CRM" or "what do we have tagged \'project-alpha\'". Optionally pass a plugin_id to include plugin record counts. For full-text search, use search_all instead.' +
-        'Returns document metadata and memory content scoped by tag filters. ' +
-        'Optionally includes plugin records when plugin_id is provided.',
+        'Transitional macro-dependent helper retained until call_macro parity: get structured JSON groups of documents and memories matching specified tags. Use this when the user wants an overview of everything related to a topic. Optionally pass plugin_id to include plugin record counts. For full-text search, use search instead. Removal gate: call_macro must cover this workflow before this transitional tool is removed.',
       inputSchema: {
         tags: z.array(z.string()).describe('Tags to filter by (required). Documents and memories with any/all of these tags are included.'),
         tag_match: z.enum(['any', 'all']).optional().describe('Tag matching mode: "any" = at least one tag matches, "all" = every tag must be present. Default: "any"'),
         limit: z.number().optional().describe('Maximum results per section. Default: 20'),
+        entity_types: z.array(z.enum(['documents', 'memories', 'records'])).optional().describe('Entity domains to include. Default: enabled documents and memories, plus records when plugin_id is provided.'),
         plugin_id: z.string().optional().describe('Include records from this plugin. Omit to exclude plugin records.'),
       },
     },
-    async ({ tags, tag_match, limit, plugin_id }) => {
+    async ({ tags, tag_match, limit, entity_types, plugin_id }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -724,357 +603,408 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const matchMode = tag_match ?? 'any';
         const maxResults = limit ?? 20;
         const supabase = supabaseManager.getClient();
+        const enabled = {
+          documents: documentCategoryEnabled(config),
+          memories: memoryCategoryEnabled(config),
+          records: pluginCategoryEnabled(config),
+        };
+        const explicitEntityTypes = Array.isArray(entity_types) && entity_types.length > 0;
+        const requestedEntityTypes = explicitEntityTypes
+          ? entity_types
+          : ([
+              ...(enabled.documents ? ['documents' as const] : []),
+              ...(enabled.memories ? ['memories' as const] : []),
+              ...(plugin_id && enabled.records ? ['records' as const] : []),
+            ]);
+        const warnings: string[] = [];
+        const activeEntityTypes = requestedEntityTypes.filter((entityType) => {
+          if (enabled[entityType]) return true;
+          if (explicitEntityTypes) {
+            const disabledCategory = entityType === 'records'
+              ? 'plugin'
+              : entityType === 'memories'
+                ? 'memory'
+                : 'document';
+            warnings.push(`${disabledCategory}_category_disabled`);
+          }
+          return false;
+        });
 
-        // ── Documents section (SPEC-14: section headers with counts, key-value blocks) ───────────
-        let docQuery = supabase
-          .from('fqc_documents')
-          .select('id, title, tags, status, path')
-          .eq('instance_id', config.instance.id)
-          .eq('status', 'active')
-          .order('updated_at', { ascending: false })
-          .limit(maxResults);
-
-        if (matchMode === 'any') {
-          docQuery = docQuery.overlaps('tags', tags);
-        } else {
-          docQuery = docQuery.contains('tags', tags);
-        }
-
-        const { data: docs, error: docError } = await docQuery;
-        if (docError) {
-          return { content: [{ type: 'text' as const, text: `Error querying documents: ${docError.message}` }], isError: true };
-        }
-        const docRows = (docs ?? []) as Array<{ id: string; title: string; tags: string[]; status: string; path: string }>;
-
-        let docSectionText = `## Documents (${docRows.length})`;
-        if (docRows.length > 0) {
-          const docEntries = docRows.map((row) => {
-            const lines = [
-              formatKeyValueEntry('Title', row.title),
-              formatKeyValueEntry('Path', row.path),
-              formatKeyValueEntry('FQC ID', row.id),
-              formatKeyValueEntry('Tags', row.tags && row.tags.length > 0 ? row.tags : 'none'),
-              formatKeyValueEntry('Status', row.status),
-            ];
-            return lines.join('\n');
+        if (requestedEntityTypes.length > 0 && activeEntityTypes.length === 0) {
+          return jsonExpectedError({
+            error: 'unsupported',
+            message: 'All requested briefing entity types are disabled by config',
+            identifier: requestedEntityTypes.join(','),
+            details: { disabled_entity_types: requestedEntityTypes },
           });
-          docSectionText += '\n\n' + joinBatchEntries(docEntries);
-        } else {
-          docSectionText += '\n\n' + formatEmptyResults('documents');
         }
 
-        // ── Memories section (SPEC-14: section headers with counts, key-value blocks) ──────────────────────────────
-        let memQuery = supabase
-          .from('fqc_memory')
-          .select('id, content, tags, created_at')
-          .eq('instance_id', config.instance.id)
-          .eq('status', 'active')
-          .order('updated_at', { ascending: false })
-          .limit(maxResults);
+        const docItemsByTag = new Map<string, Array<Record<string, unknown>>>(tags.map((tag) => [tag, []]));
+        if (activeEntityTypes.includes('documents')) {
+          let docQuery = supabase
+            .from('fqc_documents')
+            .select('id, title, tags, status, path, updated_at')
+            .eq('instance_id', config.instance.id)
+            .eq('status', 'active')
+            .order('updated_at', { ascending: false })
+            .limit(maxResults);
 
-        if (matchMode === 'any') {
-          memQuery = memQuery.overlaps('tags', tags);
-        } else {
-          memQuery = memQuery.contains('tags', tags);
+          docQuery = matchMode === 'any' ? docQuery.overlaps('tags', tags) : docQuery.contains('tags', tags);
+          const { data: docs, error: docError } = await docQuery;
+          if (docError) return jsonRuntimeError(`Error querying documents: ${docError.message}`);
+
+          for (const row of (docs ?? []) as Array<{ id: string; title: string; tags: string[]; status: string; path: string; updated_at?: string }>) {
+            const meta = await parseDocMeta(config.instance.vault.path, row.path);
+            const item = {
+              entity_type: 'document',
+              ...documentIdentification({
+                identifier: row.path,
+                title: row.title,
+                path: row.path,
+                fq_id: row.id,
+                modified: meta?.modified ?? row.updated_at ?? new Date().toISOString(),
+                chars: meta?.size.chars ?? 0,
+              }),
+            };
+            for (const tag of tags) {
+              if (row.tags?.includes(tag)) docItemsByTag.get(tag)?.push(item);
+            }
+          }
         }
 
-        const { data: mems, error: memError } = await memQuery;
-        if (memError) {
-          return { content: [{ type: 'text' as const, text: `Error querying memories: ${memError.message}` }], isError: true };
-        }
-        const memRows = (mems ?? []) as Array<{ id: string; content: string; tags: string[]; created_at: string }>;
+        const memoryItemsByTag = new Map<string, Array<Record<string, unknown>>>(tags.map((tag) => [tag, []]));
+        if (activeEntityTypes.includes('memories')) {
+          let memQuery = supabase
+            .from('fqc_memory')
+            .select('id, content, tags, plugin_scope, created_at, updated_at')
+            .eq('instance_id', config.instance.id)
+            .eq('status', 'active')
+            .eq('is_latest', true)
+            .order('updated_at', { ascending: false })
+            .limit(maxResults);
 
-        let memSectionText = `## Memories (${memRows.length})`;
-        if (memRows.length > 0) {
-          const memEntries = memRows.map((m) => {
-            // Truncate content to 200 chars for briefing
-            const truncatedContent = m.content.length > 200 ? m.content.substring(0, 200) + '...' : m.content;
-            const lines = [
-              formatKeyValueEntry('Memory ID', m.id),
-              formatKeyValueEntry('Content', truncatedContent),
-              formatKeyValueEntry('Tags', m.tags && m.tags.length > 0 ? m.tags : 'none'),
-              formatKeyValueEntry('Created', m.created_at),
-            ];
-            return lines.join('\n');
-          });
-          memSectionText += '\n\n' + joinBatchEntries(memEntries);
-        } else {
-          memSectionText += '\n\n' + formatEmptyResults('memories');
+          memQuery = matchMode === 'any' ? memQuery.overlaps('tags', tags) : memQuery.contains('tags', tags);
+          const { data: mems, error: memError } = await memQuery;
+          if (memError) return jsonRuntimeError(`Error querying memories: ${memError.message}`);
+
+          for (const row of (mems ?? []) as Array<{ id: string; content: string; tags: string[]; plugin_scope?: string | null; created_at: string; updated_at: string }>) {
+            const item = {
+              entity_type: 'memory',
+              ...memoryIdentification({
+                memory_id: row.id,
+                content_preview: row.content.length > 120 ? `${row.content.slice(0, 117)}...` : row.content,
+                tags: row.tags ?? [],
+                plugin_scope: row.plugin_scope ?? 'global',
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+              }),
+            };
+            for (const tag of tags) {
+              if (row.tags?.includes(tag)) memoryItemsByTag.get(tag)?.push(item);
+            }
+          }
         }
 
-        // ── Plugin records section (BRIEF-04) ────────────────────────────
-        let pluginSectionText = '';
-        if (plugin_id) {
+        const recordItemsByTag = new Map<string, Array<Record<string, unknown>>>(tags.map((tag) => [tag, []]));
+        if (activeEntityTypes.includes('records')) {
           const allEntries = pluginManager.getAllEntries();
-          const pluginEntries = allEntries.filter(e => e.plugin_id === plugin_id);
-
-          let pluginRecordCount = 0;
-          const pluginEntryTexts: string[] = [];
-          if (pluginEntries.length > 0) {
-            for (const entry of pluginEntries) {
-              for (const tableSpec of entry.schema.tables) {
-                const fullTableName = `${entry.table_prefix}${tableSpec.name}`;
-                const { data: records, error: recError } = await supabase
-                  .from(fullTableName)
-                  .select('*')
-                  .eq('instance_id', config.instance.id)
-                  .order('created_at', { ascending: false })
-                  .limit(maxResults);
-
-                if (!recError && records && records.length > 0) {
-                  for (const rec of records as Array<Record<string, unknown>>) {
-                    pluginRecordCount++;
-                    const recLines: string[] = [];
-                    for (const [key, value] of Object.entries(rec)) {
-                      recLines.push(formatKeyValueEntry(key, value));
-                    }
-                    pluginEntryTexts.push(recLines.join('\n'));
+          const pluginEntries = plugin_id ? allEntries.filter((entry) => entry.plugin_id === plugin_id) : allEntries;
+          let sawTaggableTable = false;
+          for (const entry of pluginEntries) {
+            for (const tableSpec of entry.schema.tables) {
+              const tagColumn = tableSpec.columns.some((column) => column.name === 'tags')
+                ? 'tags'
+                : tableSpec.columns.some((column) => column.name === 'tag')
+                  ? 'tag'
+                  : null;
+              if (!tagColumn) continue;
+              sawTaggableTable = true;
+              const fullTableName = `${entry.table_prefix}${tableSpec.name}`;
+              let recordQuery = supabase
+                .from(fullTableName)
+                .select('*')
+                .eq('instance_id', config.instance.id)
+                .eq('status', 'active')
+                .order('created_at', { ascending: false })
+                .limit(maxResults);
+              recordQuery = tagColumn === 'tags'
+                ? (matchMode === 'any' ? recordQuery.overlaps(tagColumn, tags) : recordQuery.contains(tagColumn, tags))
+                : recordQuery.in(tagColumn, tags);
+              const { data: records, error: recError } = await recordQuery;
+              if (recError) {
+                logger.warn(`get_briefing taggable query failed for ${fullTableName}: ${recError.message}`);
+                continue;
+              }
+              for (const rec of (records ?? []) as Array<Record<string, unknown>>) {
+                const recTags = Array.isArray(rec[tagColumn]) ? rec[tagColumn] as string[] : [rec[tagColumn]].filter((tag): tag is string => typeof tag === 'string');
+                const item = {
+                  entity_type: 'record',
+                  ...recordIdentification({
+                    id: typeof rec.id === 'string' ? rec.id : '',
+                    plugin_id: entry.plugin_id,
+                    table: tableSpec.name,
+                    created_at: typeof rec.created_at === 'string' ? rec.created_at : '',
+                    updated_at: typeof rec.updated_at === 'string' ? rec.updated_at : '',
+                  }),
+                };
+                for (const tag of tags) {
+                  if (recTags.includes(tag)) {
+                    recordItemsByTag.get(tag)?.push(item);
                   }
                 }
               }
             }
           }
-
-          pluginSectionText = `\n\n## Plugin Records (${pluginRecordCount})`;
-          if (pluginEntryTexts.length > 0) {
-            pluginSectionText += '\n\n' + joinBatchEntries(pluginEntryTexts);
-          } else {
-            pluginSectionText += '\n\n' + formatEmptyResults('plugin records');
+          if (explicitEntityTypes && requestedEntityTypes.includes('records') && !sawTaggableTable) {
+            warnings.push('plugin_no_taggable_tables');
           }
         }
 
-        const text = docSectionText + '\n\n' + memSectionText + pluginSectionText;
-        logger.info(`get_briefing: tags=[${tags.join(',')}] match=${matchMode} docs=${docRows.length} memories=${memRows.length}`);
-        return { content: [{ type: 'text' as const, text }] };
+        const groups = tags.map((tag) => ({
+          type: 'tag',
+          tag,
+          items: [
+            ...(docItemsByTag.get(tag) ?? []),
+            ...(memoryItemsByTag.get(tag) ?? []),
+            ...(recordItemsByTag.get(tag) ?? []),
+          ].slice(0, maxResults),
+        }));
+
+        logger.info(`get_briefing: tags=[${tags.join(',')}] match=${matchMode} entity_types=${activeEntityTypes.join(',')}`);
+        return jsonToolResult({
+          generated_at: new Date().toISOString(),
+          entity_types: activeEntityTypes,
+          tags,
+          tag_match: matchMode,
+          limit: maxResults,
+          removal_gate: 'call_macro parity',
+          ...(warnings.length > 0 ? { warnings: [...new Set(warnings)] } : {}),
+          groups,
+        });
 
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_briefing failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       }
     }
   );
 
-  // ─── Tool 7: search_all (MOD-13) ──────────────────────────────────────────
-
   server.registerTool(
-    'search_all',
+    'search',
     {
       description:
-        'Search across both documents and memories in a single semantic query. Returns unified, ranked results from both types with match scores. Use this when the user\'s search could match either documents or memories — e.g. "what do I know about Acme" or "find anything related to the Q2 launch". For searching only documents, use search_documents. For searching only memories, use search_memory.' +
-        'Returns unified results from both entity types. Falls back to filesystem search for documents when semantic search is unavailable.',
+        'Search documents and memories through one unified result list. Use this when you need to find notes or memories by title/path/tags, semantic meaning, or a mixed search that combines both.\n\nUse entity_types to narrow to documents, memories, or both. Use mode: "filesystem" for title/path/tag matching, mode: "semantic" for embedding search, and mode: "mixed" when you want both; mixed is the default. Use an empty query with tags or path_filter for list-mode, or list_all: true when you intentionally want an unfiltered listing.\n\nDo not use this for literal body grep, regex, or line-range search; those belong in macro/string operations. Do not use domain-specific legacy search surfaces; use this tool with entity_types instead.\n\nExample: search({ "query": "planning", "entity_types": ["documents", "memories"], "mode": "mixed", "limit": 10 })',
       inputSchema: {
-        query: z.string().describe('The search query'),
-        tags: z.array(z.string()).optional().describe('Filter results to items with these tags.'),
-        tag_match: z.enum(['any', 'all']).optional().describe(
-          'How to combine multiple tags. "any" (default): items with at least one of the tags. "all": only items with every tag.'
-        ),
-        limit: z.number().optional().describe('Maximum results per entity type. Default: 10'),
-        entity_types: z.array(z.enum(['documents', 'memories'])).optional().describe(
-          'Which entity types to search. Default: both. Pass ["documents"] or ["memories"] to search only one type.'
-        ),
+        query: z.string().optional().describe('Search query. Empty query requires filters or list_all:true.'),
+        mode: z.enum(['filesystem', 'semantic', 'mixed']).optional().describe('Search mode. Default: mixed.'),
+        tags: z.array(z.string()).optional().describe('Filter by tags.'),
+        tag_match: z.enum(['any', 'all']).optional().describe('Tag matching mode. Default: any.'),
+        limit: z.number().optional().describe('Global result limit after merge/dedupe/sort. Default: 10.'),
+        entity_types: z.array(z.enum(['documents', 'memories'])).optional().describe('Search domains. Default: enabled searchable domains.'),
+        list_all: z.boolean().optional().describe('Allow empty unfiltered list-mode search.'),
+        path_filter: z.string().optional().describe('Document path substring filter for filesystem/list searches.'),
+        include_archived: z.boolean().optional().describe('Include archived documents and memories. Default: false.'),
+        body_contains: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        body_regex: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        regex: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        line_range: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        lines: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
+        byte_range: z.unknown().optional().describe('Unsupported deferred literal body-search parameter; use macro/string operations instead.'),
       },
     },
-    async ({ query, tags, tag_match, limit, entity_types }) => {
-      // D-02b: Check shutdown flag immediately
+    async (params) => {
+      const { tags, tag_match, path_filter, include_archived } = params;
       if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
+      const enabled = {
+        documents: documentCategoryEnabled(config),
+        memories: memoryCategoryEnabled(config),
+      };
+      const intentResult = resolveSearchIntent(
+        params,
+        enabled
+      );
+      if (intentResult.error) {
+        return jsonExpectedError(intentResult.error);
+      }
+      const intent = intentResult.intent!;
+      const warnings = [...intentResult.warnings];
+      const matchMode = tag_match ?? 'any';
+      const allResults: SearchResultItem[] = [];
+
       try {
-        const effectiveTypes = entity_types ?? ['documents', 'memories'];
-        const useEmbedding = !(embeddingProvider instanceof NullEmbeddingProvider);
-        const matchMode = tag_match ?? 'any';
-        const perLimit = limit ?? 10;
-
-        // ── Documents section (SPEC-14: section headers with counts, key-value blocks, Match%) ──────────────────────────────
-        let embeddingAvailable = useEmbedding;
-        let docSectionText = '';
-        if (effectiveTypes.includes('documents')) {
-          if (useEmbedding) {
-            // Semantic search via extracted helper; fall back to filesystem on API failure
-            let semanticDocs: Array<{ id: string; path: string; title: string; tags: string[]; similarity: number; created_at: string }> = [];
+        if (intent.entity_types.includes('documents')) {
+          const vaultRoot = config.instance.vault.path;
+          const canSemantic = !(embeddingProvider instanceof NullEmbeddingProvider);
+          if ((intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
             try {
-              semanticDocs = await searchDocumentsSemantic(config, query, {
-                tags,
-                tagMatch: matchMode,
-                limit: perLimit,
-              });
-            } catch (embedErr) {
-              logger.warn(`search_all: embedding unavailable, falling back to filesystem search: ${embedErr instanceof Error ? embedErr.message : String(embedErr)}`);
-              embeddingAvailable = false;
-            }
-
-            if (embeddingAvailable) {
-              const semanticPaths = new Set(semanticDocs.map((d) => d.path));
-
-              // Supplement with filesystem title/path search for newly-created documents
-              // that may not yet have embeddings (fire-and-forget embed still in progress).
-              const vaultRoot = config.instance.vault.path;
-              const fsFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
-              const fsMeta = (await Promise.all(fsFiles.map((f) => parseDocMeta(vaultRoot, f))))
-                .filter((m): m is DocMeta => m !== null)
-                .filter((m) => m.status !== 'archived' && !semanticPaths.has(m.relativePath));
-              let fsFiltered = fsMeta;
-              if (tags && tags.length > 0) {
-                if (matchMode === 'any') {
-                  fsFiltered = fsFiltered.filter((m) => m.tags.some((t) => tags.includes(t)));
-                } else {
-                  fsFiltered = fsFiltered.filter((m) => tags.every((t) => m.tags.includes(t)));
-                }
-              }
-              const lq = query.toLowerCase();
-              fsFiltered = fsFiltered.filter(
-                (m) => m.title.toLowerCase().includes(lq) || m.relativePath.toLowerCase().includes(lq)
-              );
-
-              const semanticEntries = semanticDocs.slice(0, perLimit).map((doc) =>
-                [
-                  formatKeyValueEntry('Title', doc.title),
-                  formatKeyValueEntry('Path', doc.path),
-                  formatKeyValueEntry('Tags', doc.tags && doc.tags.length > 0 ? doc.tags : 'none'),
-                  formatKeyValueEntry('FQC ID', doc.id),
-                  formatKeyValueEntry('Match', `${Math.round(doc.similarity * 100)}%`),
-                ].join('\n')
-              );
-              const remainingSlots = perLimit - semanticEntries.length;
-              const fsEntries = fsFiltered.slice(0, Math.max(0, remainingSlots)).map((meta) =>
-                [
-                  formatKeyValueEntry('Title', meta.title),
-                  formatKeyValueEntry('Path', meta.relativePath),
-                  formatKeyValueEntry('Tags', meta.tags.length > 0 ? meta.tags : 'none'),
-                  formatKeyValueEntry('FQC ID', meta.fqcId ?? 'unknown'),
-                ].join('\n')
-              );
-
-              const allDocEntries = [...semanticEntries, ...fsEntries];
-              docSectionText = `## Documents (${allDocEntries.length})`;
-              if (allDocEntries.length > 0) {
-                docSectionText += '\n\n' + joinBatchEntries(allDocEntries);
-              } else {
-                docSectionText += '\n\n' + formatEmptyResults('documents');
-              }
-            }
-          }
-          if (!embeddingAvailable) {
-            // Filesystem fallback (D-04)
-            const vaultRoot = config.instance.vault.path;
-            const files = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
-            const metaResults = await Promise.all(files.map((f) => parseDocMeta(vaultRoot, f)));
-            const allMeta = metaResults.filter((m): m is DocMeta => m !== null);
-            let filtered = allMeta.filter((meta) => meta.status !== 'archived');
-
-            // Tag filtering
-            if (tags && tags.length > 0) {
-              if (matchMode === 'any') {
-                filtered = filtered.filter((meta) => meta.tags.some((t) => tags.includes(t)));
-              } else {
-                filtered = filtered.filter((meta) => tags.every((t) => meta.tags.includes(t)));
-              }
-            }
-
-            // Query substring match on title or path
-            if (query) {
-              const lq = query.toLowerCase();
-              filtered = filtered.filter(
-                (meta) =>
-                  meta.title.toLowerCase().includes(lq) ||
-                  meta.relativePath.toLowerCase().includes(lq)
-              );
-            }
-
-            filtered.sort((a, b) => {
-              if (!a.modified && !b.modified) return 0;
-              if (!a.modified) return 1;
-              if (!b.modified) return -1;
-              return b.modified.localeCompare(a.modified);
-            });
-
-            const results = filtered.slice(0, perLimit);
-            docSectionText = `## Documents (${results.length})`;
-            if (results.length > 0) {
-              const docEntries = results.map((meta) => {
-                const lines = [
-                  formatKeyValueEntry('Title', meta.title),
-                  formatKeyValueEntry('Path', meta.relativePath),
-                  formatKeyValueEntry('Tags', meta.tags.length > 0 ? meta.tags : 'none'),
-                  formatKeyValueEntry('FQC ID', meta.fqcId ?? 'unknown'),
-                ];
-                return lines.join('\n');
-              });
-              docSectionText += '\n\n' + joinBatchEntries(docEntries);
-            } else {
-              docSectionText += '\n\n' + formatEmptyResults('documents');
-            }
-          }
-        }
-
-        // ── Memories section (SPEC-14: section headers with counts, key-value blocks, Match%) ───────────────────────────────
-        let memSectionText = '';
-        if (effectiveTypes.includes('memories')) {
-          if (!embeddingAvailable) {
-            // D-05: memories-only with no embedding (or API unreachable) = isError: true
-            if (!effectiveTypes.includes('documents')) {
-              return {
-                content: [{
-                  type: 'text' as const,
-                  text: 'Memory search requires semantic embeddings (no API key configured). Configure an embedding provider to search memories.',
-                }],
-                isError: true,
-              };
-            }
-            // Mixed with no embedding = omit memories section with note (isError: false)
-            memSectionText = '\n\n## Memories (0)\n\nMemory search requires embedding configuration. Use list_memories for tag-based memory browsing.';
-          } else {
-            let mems: Array<{ id: string; content: string; tags: string[]; similarity: number; created_at: string }> = [];
-            try {
-              mems = await searchMemoriesSemantic(config, query, {
-                tags,
-                tagMatch: matchMode,
-                limit: perLimit,
-              });
-            } catch (embedErr) {
-              logger.warn(`search_all: memory embedding unavailable: ${embedErr instanceof Error ? embedErr.message : String(embedErr)}`);
-              memSectionText = '\n\n## Memories (0)\n\nMemory search requires embedding configuration. Use list_memories for tag-based memory browsing.';
-            }
-            if (memSectionText === '') {
-              memSectionText = `\n\n## Memories (${mems.length})`;
-              if (mems.length > 0) {
-                const memEntries = mems.map((mem) => {
-                  const truncatedContent = mem.content.length > 200 ? mem.content.substring(0, 200) + '...' : mem.content;
-                  const lines = [
-                    formatKeyValueEntry('Content', truncatedContent),
-                    formatKeyValueEntry('Memory ID', mem.id),
-                    formatKeyValueEntry('Tags', mem.tags && mem.tags.length > 0 ? mem.tags : 'none'),
-                    formatKeyValueEntry('Match', `${Math.round(mem.similarity * 100)}%`),
-                    formatKeyValueEntry('Created', mem.created_at),
-                  ];
-                  return lines.join('\n');
+	              const docs = await searchDocumentsSemantic(config, intent.query, {
+	                tags,
+	                tagMatch: matchMode,
+	                limit: intent.limit,
+	                includeArchived: include_archived === true,
+	              });
+	              const semanticResults = await Promise.all(docs.map(async (doc) => {
+	                const meta = await parseDocMeta(config.instance.vault.path, doc.path);
+	                return {
+	                  entity_type: 'document' as const,
+	                  identifier: doc.path,
+	                  title: doc.title,
+	                  path: doc.path,
+	                  fq_id: doc.id,
+	                  tags: doc.tags,
+	                  modified: meta?.modified ?? doc.created_at,
+	                  size: meta?.size ?? { chars: 0 },
+	                  score: doc.similarity,
+	                  match_source: ['semantic' as const],
+	                };
+	              }));
+	              allResults.push(...semanticResults);
+            } catch (err) {
+              warnings.push('embedding_unavailable');
+              if (intent.requested_mode === 'semantic') {
+                return jsonExpectedError({
+                  error: 'unsupported',
+                  message: 'Semantic document search is unavailable',
+                  identifier: 'documents',
+                  details: { reason: err instanceof Error ? err.message : String(err) },
                 });
-                memSectionText += '\n\n' + joinBatchEntries(memEntries);
-              } else {
-                memSectionText += '\n\n' + formatEmptyResults('memories');
               }
             }
+          } else if (intent.requested_mode === 'semantic' && !canSemantic) {
+            return jsonExpectedError({
+              error: 'unsupported',
+              message: 'Semantic document search is unavailable',
+              identifier: 'documents',
+              details: { reason: 'embedding_unavailable' },
+            });
+          }
+
+          if (intent.requested_mode === 'filesystem' || intent.requested_mode === 'mixed' || intent.list_mode) {
+            const files = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
+            const metaResults = await Promise.all(files.map((file) => parseDocMeta(vaultRoot, file)));
+            let docs = metaResults
+              .filter((meta): meta is DocMeta => meta !== null)
+              .filter((meta) => include_archived === true || meta.status !== 'archived');
+            if (path_filter) {
+              docs = docs.filter((meta) => meta.relativePath.toLowerCase().includes(String(path_filter).toLowerCase()));
+            }
+            if (tags && tags.length > 0) {
+              docs = matchMode === 'all'
+                ? docs.filter((meta) => tags.every((tag) => meta.tags.includes(tag)))
+                : docs.filter((meta) => meta.tags.some((tag) => tags.includes(tag)));
+            }
+            if (intent.query) {
+              const lowerQuery = intent.query.toLowerCase();
+              docs = docs.filter((meta) => meta.title.toLowerCase().includes(lowerQuery) || meta.relativePath.toLowerCase().includes(lowerQuery));
+            }
+            allResults.push(...docs.map((doc) => ({
+              entity_type: 'document' as const,
+              identifier: doc.relativePath,
+              title: doc.title,
+              path: doc.relativePath,
+              fq_id: doc.fqcId ?? doc.relativePath,
+              tags: doc.tags,
+              modified: doc.modified,
+              size: doc.size,
+              match_source: [intent.list_mode ? 'list' as const : 'filesystem' as const],
+            })));
           }
         }
 
-        const text = docSectionText + memSectionText;
-        logger.info(`search_all: query="${query}" types=[${effectiveTypes.join(',')}] match=${matchMode}`);
-        return { content: [{ type: 'text' as const, text }] };
+        if (intent.entity_types.includes('memories')) {
+          const canSemantic = !(embeddingProvider instanceof NullEmbeddingProvider);
+          if ((intent.requested_mode === 'semantic' || intent.requested_mode === 'mixed') && intent.query && canSemantic) {
+            try {
+	              const memories = await searchMemoriesSemantic(config, intent.query, {
+	                tags,
+	                tagMatch: matchMode,
+	                limit: intent.limit,
+	                includeArchived: include_archived === true,
+	              });
+              allResults.push(...memories.map((memory) => ({
+                entity_type: 'memory' as const,
+                identifier: memory.id,
+                memory_id: memory.id,
+                content_preview: memory.content.length > 120 ? `${memory.content.slice(0, 117)}...` : memory.content,
+                tags: memory.tags,
+                plugin_scope: memory.plugin_scope ?? 'global',
+                created_at: memory.created_at,
+                updated_at: memory.updated_at,
+                score: memory.similarity,
+                match_source: ['semantic' as const],
+              })));
+            } catch (err) {
+              warnings.push('embedding_unavailable');
+              if (intent.requested_mode === 'semantic') {
+                return jsonExpectedError({
+                  error: 'unsupported',
+                  message: 'Semantic memory search is unavailable',
+                  identifier: 'memories',
+                  details: { reason: err instanceof Error ? err.message : String(err) },
+                });
+              }
+            }
+          } else if (intent.requested_mode === 'semantic' && !canSemantic) {
+            return jsonExpectedError({
+              error: 'unsupported',
+              message: 'Semantic memory search is unavailable',
+              identifier: 'memories',
+              details: { reason: 'embedding_unavailable' },
+            });
+          }
 
+          if (intent.requested_mode === 'filesystem' || intent.requested_mode === 'mixed' || intent.list_mode) {
+            let dbQuery = supabaseManager.getClient()
+              .from('fqc_memory')
+              .select('id, content, tags, plugin_scope, created_at, updated_at, is_latest, archived_at')
+              .eq('instance_id', config.instance.id)
+              .eq('is_latest', true);
+            if (include_archived !== true) {
+              dbQuery = dbQuery.eq('status', 'active');
+            }
+            if (tags && tags.length > 0) {
+              dbQuery = matchMode === 'all' ? dbQuery.contains('tags', tags) : dbQuery.overlaps('tags', tags);
+            }
+            const { data, error } = await dbQuery;
+            if (error) throw new Error(error.message);
+            let memories = (data ?? []) as Array<{ id: string; content: string; tags: string[]; plugin_scope: string | null; created_at: string; updated_at: string; is_latest: boolean; archived_at: string | null }>;
+            if (intent.query) {
+              const lowerQuery = intent.query.toLowerCase();
+              memories = memories.filter((memory) => memory.content.toLowerCase().includes(lowerQuery));
+            }
+            allResults.push(...memories.map((memory) => ({
+              entity_type: 'memory' as const,
+              identifier: memory.id,
+              memory_id: memory.id,
+              content_preview: memory.content.length > 120 ? `${memory.content.slice(0, 117)}...` : memory.content,
+              tags: memory.tags,
+              plugin_scope: memory.plugin_scope ?? 'global',
+              created_at: memory.created_at,
+              updated_at: memory.updated_at,
+              ...(intent.list_mode ? {} : { match_source: ['filesystem' as const] }),
+              is_latest: memory.is_latest,
+              archived_at: memory.archived_at,
+            })));
+          }
+        }
+
+        const results = mergeSearchResults(allResults, intent.limit);
+        return jsonToolResult({
+          query: intent.query,
+          entity_types: intent.entity_types,
+          mode: intent.mode,
+          total: results.length,
+          ...(warnings.length > 0 ? { warnings: [...new Set(warnings)] } : {}),
+          results,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`search_all failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        logger.error(`search failed: ${msg}`);
+        return jsonRuntimeError(msg);
       }
     }
   );
@@ -1085,7 +1015,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'insert_in_doc',
     {
       description:
-        'Insert markdown content at a specific position in a document: after a heading, at the end of a section, before a heading, at the top, or at the bottom. Use this for adding entries to a specific section (e.g. logging a new CRM interaction under "## Interactions"), prepending content to a document, or inserting between sections. For appending to the very end of a file, this replaces append_to_doc with more precise placement control.',
+        'Insert markdown content at top, bottom, before a heading, after a heading, or at the end of a section. Anchor matching supports heading_match, heading_level, occurrence, and include_nested for markdown-aware placement.',
       inputSchema: {
         identifier: z
           .string()
@@ -1103,11 +1033,16 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         occurrence: z
           .number()
           .optional()
-          .default(1)
-          .describe('Which occurrence of heading if multiple match same name (1-indexed, default: 1)'),
+          .describe('Which occurrence of heading if multiple match same name (1-indexed). Omit only when the heading query resolves to one match.'),
+        include_nested: z
+          .boolean()
+          .optional()
+          .describe('For end_of_section only: true includes child sections, false inserts before the first child heading.'),
+        heading_match: z.enum(['contains', 'exact']).optional(),
+        heading_level: z.number().optional().describe('Optional markdown heading level filter (1-6).'),
       },
     },
-    async ({ identifier, heading, position, content: insertContent, occurrence }) => {
+    async ({ identifier, heading, position, content: insertContent, occurrence, include_nested, heading_match, heading_level }) => {
       if (getIsShuttingDown()) {
         return {
           content: [
@@ -1120,19 +1055,43 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         };
       }
 
+      let lockAcquired = false;
       try {
         // Validate position
         const validPositions = ['top', 'bottom', 'after_heading', 'before_heading', 'end_of_section'];
         if (!validPositions.includes(position)) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Invalid position "${position}"; must be one of: ${validPositions.join(', ')}`,
-              },
-            ],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: `Invalid position "${position}"; must be one of: ${validPositions.join(', ')}`,
+            details: { field: 'position' },
+          });
+        }
+        if (
+          (position === 'top' || position === 'bottom') &&
+          (heading || heading_level !== undefined || include_nested !== undefined || heading_match !== undefined || occurrence !== undefined)
+        ) {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: `${position} does not accept heading, occurrence, heading_match, heading_level, or include_nested`,
+            details: { field: 'position' },
+          });
+        }
+
+        if (config.locking.enabled) {
+          lockAcquired = await acquireLock(
+            supabaseManager.getClient(),
+            config.instance.id,
+            'documents',
+            { ttlSeconds: config.locking.ttlSeconds }
+          );
+          if (!lockAcquired) {
+            return jsonExpectedError({
+              error: 'conflict',
+              message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+              identifier,
+              details: { reason: 'lock_contention' },
+            });
+          }
         }
 
         // Resolve document identifier
@@ -1150,14 +1109,42 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Insert content at specified position
         let modifiedBody: string;
+        if (heading && position !== 'top' && position !== 'bottom') {
+          const matches = findMatchingHeadings(body, heading, {
+            headingMatch: heading_match ?? 'contains',
+            headingLevel: heading_level,
+          });
+          const resolution = resolveHeadingTarget(matches, occurrence);
+          if (resolution.status === 'ambiguous') {
+            return jsonExpectedError({
+              error: 'ambiguous_identifier',
+              message: `Heading query "${heading}" matched multiple headings; provide occurrence to choose one.`,
+              identifier,
+              details: { heading, matches: resolution.matches },
+            });
+          }
+          if (resolution.status === 'not_found') {
+            return jsonExpectedError({
+              error: 'not_found',
+              message: `Heading "${heading}" not found`,
+              identifier,
+              details: { heading, matches: headingErrorMatches(matches) },
+            });
+          }
+        }
         try {
-          modifiedBody = insertAtPosition(body, position, insertContent, heading, occurrence);
+          modifiedBody = insertAtPosition(body, position, insertContent, heading, occurrence ?? 1, include_nested ?? true, {
+            headingMatch: heading_match ?? 'contains',
+            headingLevel: heading_level,
+          });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          return {
-            content: [{ type: 'text' as const, text: `Insertion failed: ${msg}` }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: msg.toLowerCase().includes('not found') ? 'not_found' : 'invalid_input',
+            message: `Insertion failed: ${msg}`,
+            identifier,
+            details: { heading },
+          });
         }
 
         // Write back to file (atomic via vaultManager)
@@ -1166,13 +1153,29 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           gitAction: 'update',
           gitTitle: `Insert in document at ${position}`,
         });
+        const postWriteRaw = await readFile(resolved.absPath, 'utf-8');
+        const postWriteHash = computeHash(postWriteRaw);
+        const fqcId = typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : resolved.fqcId;
+        if (fqcId) {
+          const { error: hashUpdateError } = await supabaseManager
+            .getClient()
+            .from('fqc_documents')
+            .update({
+              content_hash: postWriteHash,
+              updated_at: new Date().toISOString(),
+            })
+            .eq('id', fqcId)
+            .eq('instance_id', config.instance.id);
+          if (hashUpdateError) {
+            throw new Error(`Supabase insert update failed for ${relativePath}: ${hashUpdateError.message}`);
+          }
+        }
 
         // Trigger fire-and-forget embedding
         const docTitle = typeof frontmatter[FM.TITLE] === 'string' ? frontmatter[FM.TITLE] as string : relativePath;
         void (async () => {
           try {
             const vector = await embeddingProvider.embed(`${docTitle}\n\n${modifiedBody}`);
-            const fqcId = typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : undefined;
             if (fqcId) {
               await supabaseManager
                 .getClient()
@@ -1190,24 +1193,38 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
         })();
 
-        // Return confirmation
-        const preview = insertContent.split('\n').slice(0, 3).join('\n');
-        const lines = [
-          formatKeyValueEntry('Inserted at', `${position} heading "${heading || 'N/A'}"`),
-          formatKeyValueEntry('Location', `Line ${heading ? 'near heading' : 'at document'}`),
-          formatKeyValueEntry('Content preview', preview),
-          formatKeyValueEntry('Embedding', 'queued'),
-        ];
-
         logger.info(`insert_in_doc: path="${relativePath}" position="${position}" heading="${heading || 'N/A'}"`);
 
-        return {
-          content: [{ type: 'text' as const, text: lines.join('\n') }],
-        };
+        return jsonToolResult({
+          ...documentIdentification({
+            identifier,
+            title: docTitle,
+            path: relativePath,
+            fq_id: typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : resolved.fqcId,
+            modified: typeof frontmatter[FM.UPDATED] === 'string' ? frontmatter[FM.UPDATED] as string : new Date().toISOString(),
+            chars: modifiedBody.length,
+          }),
+          ...(position === 'top' || position === 'bottom'
+            ? {}
+            : {
+                inserted_at: {
+                  position,
+                  ...(heading ? { heading } : {}),
+                  heading_match: heading_match ?? 'contains',
+                  ...(heading_level !== undefined ? { heading_level } : {}),
+                  occurrence: occurrence ?? 1,
+                  include_nested: include_nested ?? true,
+                },
+              }),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`insert_in_doc failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError({ message: `Error inserting in document: ${msg}`, identifier });
+      } finally {
+        if (lockAcquired) {
+          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
+        }
       }
     }
   );
@@ -1218,18 +1235,18 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     'replace_doc_section',
     {
       description:
-        'Replace the content of a specific heading section in a document, leaving all other sections untouched. Identify the section by heading name and optionally by occurrence number if the heading appears more than once. Use include_subheadings to control whether child sections are included in the replacement. Use this when the user wants to rewrite, update, or overwrite a specific part of a document without touching the rest.' +
-        'The heading line is preserved; only the section body is replaced. ' +
-        'Use include_subheadings to control whether nested content is included.',
+        'Replace or delete a specific markdown heading section in a document. Identify the section by heading plus optional heading_match, heading_level, occurrence, and include_nested. Non-empty content preserves the heading line and replaces the section body; empty content deletes the heading and section.',
       inputSchema: {
         identifier: z.string().describe('Document path, fqc_id, or filename'),
-        heading: z.string().describe('Heading text to match (case-sensitive)'),
+        heading: z.string().describe('Heading text to match, case-insensitive by default'),
         content: z.string().describe('New markdown content for section body (does not include heading line)'),
-        include_subheadings: z.boolean().optional().describe('When true, replace full section including nested headings; when false, preserve child headings (default: true)'),
-        occurrence: z.number().optional().describe('Which occurrence if heading appears multiple times (1-indexed, default: 1)'),
+        include_nested: z.boolean().optional().default(true).describe('When true, replace full section including nested headings; when false, preserve child headings (default: true)'),
+        heading_match: z.enum(['contains', 'exact']).optional(),
+        heading_level: z.number().optional().describe('Optional markdown heading level filter (1-6).'),
+        occurrence: z.number().optional().describe('Which occurrence if heading appears multiple times (1-indexed). Omit only when the heading query resolves to one match.'),
       },
     },
-    async ({ identifier, heading, content, include_subheadings = true, occurrence = 1 }) => {
+    async ({ identifier, heading, content, include_nested = true, heading_match, heading_level, occurrence }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -1251,10 +1268,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           { ttlSeconds: config.locking.ttlSeconds }
         );
         if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.' }],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'conflict',
+            message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+            identifier,
+            details: { reason: 'lock_contention' },
+          });
         }
       }
 
@@ -1274,64 +1293,68 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Step 4: Validate heading exists
         if (headings.length === 0) {
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Error: Document has no headings. Use update_document to replace entire content, or add a heading first.`,
-              },
-            ],
-            isError: true,
-          };
+          return jsonExpectedError({
+            error: 'not_found',
+            message: 'Document has no headings',
+            identifier,
+            details: { heading },
+          });
         }
 
         // Step 5: Find target heading by name and occurrence
         // Uses markdown-sections.ts utilities (consistent with SPEC-01 get_document sections, SPEC-03 insert_in_doc)
-        const targetHeading = findHeadingOccurrence(headings, heading, occurrence);
+        const matchOptions = {
+          headingMatch: heading_match ?? 'contains',
+          headingLevel: heading_level,
+        };
+        const matches = findMatchingHeadings(headings, heading, matchOptions);
+        const resolvedHeading = resolveHeadingTarget(matches, occurrence);
 
-        if (!targetHeading) {
-          const matches = headings.filter((h) => h.text === heading);
-          if (matches.length > 0) {
-            const matchList = matches.map((m, idx) => `  - Occurrence ${idx + 1} at line ${m.line}`).join('\n');
-            return {
-              content: [
-                {
-                  type: 'text' as const,
-                  text: `Error: Heading "${heading}" appears ${matches.length} time(s). Specify occurrence parameter (1-${matches.length}):\n${matchList}`,
-                },
-              ],
-              isError: true,
-            };
-          }
-
-          const availableHeadings = headings.map((h) => `  - "${h.text}" at line ${h.line}`).join('\n');
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: `Error: Heading "${heading}" not found. Available headings:\n${availableHeadings}`,
-              },
-            ],
-            isError: true,
-          };
+        if (resolvedHeading.status === 'ambiguous') {
+          return jsonExpectedError({
+            error: 'ambiguous_identifier',
+            message: `Heading query "${heading}" matched multiple headings; provide occurrence to choose one.`,
+            identifier,
+            details: { heading, matches: resolvedHeading.matches },
+          });
         }
 
+        if (resolvedHeading.status === 'not_found') {
+          return jsonExpectedError({
+            error: 'not_found',
+            message: `Heading "${heading}" not found`,
+            identifier,
+            details: {
+              heading,
+              matches: headingErrorMatches(matches),
+              available_headings: headings.map((h) => ({ heading: h.text, level: h.level, line: h.line })),
+            },
+          });
+        }
+        const targetHeading = resolvedHeading.heading;
+        const targetOccurrence = occurrence ?? 1;
+
         // Step 6: Calculate section boundaries using shared utility
-        const boundaries = getSectionBoundaries(bodyContent, heading, include_subheadings, occurrence);
+        const boundaries = getSectionBoundaries(bodyContent, heading, include_nested, targetOccurrence, matchOptions);
         const startLine = boundaries.startLine;
         const endLine = boundaries.endLine;
 
         // Step 7: Extract old section content (for undo)
-        const oldSectionLines = lines.slice(startLine - 1, endLine); // startLine is 1-indexed; convert for slice
+        const oldSectionLines = lines.slice(startLine, endLine); // Exclude heading line; startLine is 1-indexed.
         const oldContent = oldSectionLines.join('\n');
 
-        // Step 8: Build new content
-        const newLines = [
-          ...lines.slice(0, startLine - 1),        // Everything before heading
-          ...lines.slice(startLine - 1, startLine), // The heading line itself
-          ...content.split('\n'),                    // New section body
-          ...lines.slice(endLine),                   // Everything after old section
-        ];
+        const headingRemoved = content === '';
+        const newLines = headingRemoved
+          ? [
+              ...lines.slice(0, startLine - 1),
+              ...lines.slice(endLine),
+            ]
+          : [
+              ...lines.slice(0, startLine - 1),
+              ...lines.slice(startLine - 1, startLine),
+              ...content.split('\n'),
+              ...lines.slice(endLine),
+            ];
 
         const newContent = newLines.join('\n');
 
@@ -1346,14 +1369,22 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Step 11: Update database
         if (resolved.fqcId) {
-          await supabase
+          const { data: updatedRow, error: sectionUpdateError } = await supabase
             .from('fqc_documents')
             .update({
               content_hash: newHash,
               updated_at: new Date().toISOString(),
             })
             .eq('id', resolved.fqcId)
-            .eq('instance_id', config.instance.id);
+            .eq('instance_id', config.instance.id)
+            .select('id')
+            .maybeSingle();
+          if (sectionUpdateError) {
+            throw new Error(`Supabase section update failed for ${resolved.relativePath}: ${sectionUpdateError.message}`);
+          }
+          if (!updatedRow) {
+            throw new Error(`Supabase section update affected no document row for ${resolved.relativePath}`);
+          }
 
           // Step 12: Fire-and-forget re-embedding
           const docTitle = typeof document.data[FM.TITLE] === 'string' ? document.data[FM.TITLE] as string : resolved.relativePath;
@@ -1373,25 +1404,31 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             );
         }
 
-        // Step 13: Build response
-        const responseLines: string[] = [
-          `Section "${heading}" replaced successfully.`,
-          '',
-          formatKeyValueEntry('Line range', `${startLine}-${endLine}`),
-          formatKeyValueEntry('New hash', newHash),
-        ];
-
-        if (resolved.fqcId) {
-          responseLines.push(formatKeyValueEntry('Document ID', resolved.fqcId));
-        }
-
-        responseLines.push('', 'Old section content (for undo if needed):', oldContent);
-
-        return { content: [{ type: 'text' as const, text: responseLines.join('\n') }] };
+        const docTitle = typeof document.data[FM.TITLE] === 'string' ? document.data[FM.TITLE] as string : resolved.relativePath;
+        return jsonToolResult({
+          ...documentIdentification({
+            identifier,
+            title: docTitle,
+            path: resolved.relativePath,
+            fq_id: resolved.fqcId ?? '',
+            modified: typeof document.data[FM.UPDATED] === 'string' ? document.data[FM.UPDATED] as string : new Date().toISOString(),
+            chars: newContent.length,
+          }),
+          extracted_section: {
+            heading: targetHeading.text,
+            level: targetHeading.level,
+            old_content_length: oldContent.length,
+            new_content_length: content.length,
+            include_nested,
+            heading_removed: headingRemoved,
+          },
+          heading_match: heading_match ?? 'contains',
+          ...(heading_level !== undefined ? { heading_level } : {}),
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`replace_doc_section failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError({ message: `Error replacing document section: ${msg}`, identifier });
       } finally {
         if (config.locking.enabled) {
           await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
@@ -1400,4 +1437,3 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
     }
   );
 }
-

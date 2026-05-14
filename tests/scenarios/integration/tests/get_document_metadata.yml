@@ -51,9 +51,10 @@ steps:
 
   - label: "search_documents returns Title, Path, and FQC ID in result"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [gdm-tag]
+        entity_types: [documents, memories]
       expect_contains: "Core Concepts"
       expect_path_contains: "knowledge/concepts.md"
 

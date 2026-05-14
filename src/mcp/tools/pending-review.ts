@@ -4,96 +4,102 @@ import { supabaseManager } from '../../storage/supabase.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
+import { jsonExpectedError, jsonRuntimeError, jsonToolResult, withWarnings } from '../utils/response-formats.js';
+
+interface PendingReviewRow {
+  id: string;
+  fqc_id?: string | null;
+  plugin_id: string;
+  table_name: string;
+  review_type: string;
+  context?: { path?: string } | null;
+}
+
+function publicItem(row: PendingReviewRow): Record<string, unknown> {
+  return {
+    id: row.id,
+    type: row.review_type,
+    plugin_id: row.plugin_id,
+    table: row.table_name,
+    path: row.context?.path ?? null,
+  };
+}
 
 export function registerPendingReviewTools(server: McpServer, config: FlashQueryConfig): void {
   server.registerTool(
     'clear_pending_reviews',
     {
       description:
-        'Query or clear pending review items for a plugin. ' +
-        'In query mode (fqc_ids: []), returns all pending items without deleting any. ' +
-        'In clear mode (fqc_ids non-empty), deletes the specified items and returns remaining. ' +
-        'Idempotent — non-existent IDs are silently ignored.',
+        'List or clear pending plugin review items. Use action:"list" to inspect pending row IDs, or action:"clear" with optional plugin_id and/or ids filters to clear rows.',
       inputSchema: {
-        plugin_id: z.string().describe('Plugin identifier'),
-        plugin_instance: z
-          .string()
-          .optional()
-          .default('default')
-          .describe('Plugin instance identifier (default: "default")'),
-        fqc_ids: z
-          .array(z.string())
-          .default([])
-          .describe('Document IDs to clear. Empty array = query mode.'),
+        action: z.enum(['list', 'clear']).describe('Action to perform: list pending rows or clear rows.'),
+        plugin_id: z.string().optional().describe('Optional plugin identifier filter'),
+        ids: z.array(z.string()).optional().describe('Pending review row IDs returned by action:"list"'),
       },
     },
-    async ({ plugin_id, plugin_instance, fqc_ids }) => {
+    async ({ action, plugin_id, ids }) => {
       if (getIsShuttingDown()) {
-        return {
-          content: [{ type: 'text' as const, text: 'Server is shutting down; new requests cannot be processed' }],
-          isError: true,
-        };
+        return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
       try {
-        void plugin_instance; // plugin_instance is accepted for API compatibility but not used for DB filtering
+        if (action !== 'list' && action !== 'clear') {
+          return jsonExpectedError({
+            error: 'invalid_input',
+            message: 'action is required; use action: "list" or action: "clear"',
+            details: { field: 'action' },
+          });
+        }
+
         // Use the FQC server instance ID (config.instance.id) for DB scoping, not the plugin instance name
         const fqcInstanceId = config.instance?.id ?? 'default';
         const supabase = supabaseManager.getClient();
 
-        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        const invalidIds = fqc_ids.filter(id => !UUID_RE.test(id));
-        if (invalidIds.length > 0) {
-          return {
-            content: [{ type: 'text' as const, text: `Error: invalid UUID(s) in fqc_ids: ${invalidIds.join(', ')}` }],
-            isError: true,
-          };
+        let query = supabase
+          .from('fqc_pending_plugin_review')
+          .select('id, fqc_id, plugin_id, table_name, review_type, context')
+          .eq('instance_id', fqcInstanceId);
+        if (plugin_id) query = query.eq('plugin_id', plugin_id);
+        if (ids && ids.length > 0) query = query.in('id', ids);
+
+        const { data: matchingRows, error: queryError } = await query as {
+          data: PendingReviewRow[] | null;
+          error: { message: string } | null;
+        };
+        if (queryError) {
+          logger.error(`clear_pending_reviews query failed: ${queryError.message}`);
+          return jsonRuntimeError(queryError.message);
         }
 
-        if (fqc_ids.length > 0) {
-          // Clear mode: delete specified rows (idempotent — missing IDs silently ignored by Postgres IN())
-          const { error: delError } = await supabase
+        const items = matchingRows ?? [];
+        if (action === 'list') {
+          return jsonToolResult({ pending: items.length, items: items.map(publicItem) });
+        }
+
+        if (items.length > 0 || (!plugin_id && (!ids || ids.length === 0))) {
+          let deleteQuery = supabase
             .from('fqc_pending_plugin_review')
             .delete()
-            .eq('plugin_id', plugin_id)
-            .eq('instance_id', fqcInstanceId)
-            .in('fqc_id', fqc_ids);
+            .eq('instance_id', fqcInstanceId);
+          if (plugin_id) deleteQuery = deleteQuery.eq('plugin_id', plugin_id);
+          if (ids && ids.length > 0) deleteQuery = deleteQuery.in('id', ids);
+          const { error: delError } = await deleteQuery as { error: { message: string } | null };
           if (delError) {
             logger.error(`clear_pending_reviews delete failed: ${delError.message}`);
-            return {
-              content: [{ type: 'text' as const, text: `Error: ${delError.message}` }],
-              isError: true,
-            };
+            return jsonRuntimeError(delError.message);
           }
         }
 
-        // Always return current state (query mode or remaining after clear)
-        const { data, error } = await supabase
-          .from('fqc_pending_plugin_review')
-          .select('fqc_id, table_name, review_type, context')
-          .eq('plugin_id', plugin_id)
-          .eq('instance_id', fqcInstanceId);
-
-        if (error) {
-          logger.error(`clear_pending_reviews query failed: ${error.message}`);
-          return {
-            content: [{ type: 'text' as const, text: `Error: ${error.message}` }],
-            isError: true,
-          };
-        }
-
-        const items = data ?? [];
-        const text =
-          items.length > 0
-            ? `Pending reviews for ${plugin_id}: ${items.length} item(s)\n${JSON.stringify(items, null, 2)}`
-            : `No pending reviews for ${plugin_id}.`;
         logger.info(
-          `clear_pending_reviews: ${fqc_ids.length > 0 ? `cleared ${fqc_ids.length} item(s), ` : ''}${items.length} remaining for ${plugin_id}`
+          `clear_pending_reviews: cleared ${items.length} item(s)${plugin_id ? ` for ${plugin_id}` : ''}`
         );
-        return { content: [{ type: 'text' as const, text }] };
+        return jsonToolResult(withWarnings(
+          { cleared: items.length, items: items.map(publicItem) },
+          ids && ids.length > 0 && items.length === 0 ? ['no_matching_items'] : []
+        ));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`clear_pending_reviews failed: ${msg}`);
-        return { content: [{ type: 'text' as const, text: `Error: ${msg}` }], isError: true };
+        return jsonRuntimeError(msg);
       }
     }
   );

@@ -64,7 +64,6 @@ COVERAGE = ["RO-64"]
 
 import argparse
 import json as _json
-import re
 import shutil
 import sys
 import time
@@ -117,12 +116,6 @@ def _build_schema_yaml(folder: str, run_id: str) -> str:
     )
 
 
-def _extract_recon_summary(text: str) -> str:
-    """Extract the reconciliation summary section from a search_records response."""
-    m = re.search(r"Reconciliation:.*", text, re.DOTALL)
-    return m.group(0).strip() if m else ""
-
-
 # ---------------------------------------------------------------------------
 # Test implementation
 # ---------------------------------------------------------------------------
@@ -162,7 +155,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg.expect_contains("registered successfully")
+        reg.expect_json_equals("status", "registered")
         run.step(
             label="register_plugin with on_moved: untrack — RO-64 (vocabulary accepted at registration)",
             passed=(reg.ok and reg.status == "pass"),
@@ -225,7 +218,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime.expect_contains("Auto-tracked")
+        prime.expect_json_equals("reconciliation.auto_tracked", 1)
         run.step(
             label="search_records (prime) — auto-track fires, plugin row created, frontmatter written",
             passed=(prime.ok and prime.status == "pass"),
@@ -385,7 +378,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not recon.ok:
             return run
 
-        recon_summary = _extract_recon_summary(recon.text)
+        recon_data = _json.loads(recon.text).get("reconciliation", {}) if recon.ok else {}
 
         # ── Step 10: Assert plugin row archived (fqc_id absent from results) ──
         # on_moved: untrack must behave like stop-tracking: archive the plugin
@@ -394,8 +387,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # in the response text — that is the defect.
         t0 = time.monotonic()
 
-        m_archived = re.search(r"Archived (\d+) record", recon_summary)
-        archived_count = int(m_archived.group(1)) if m_archived else 0
+        archived_count = recon_data.get("archived", 0)
         fqc_id_in_results = bool(fqc_id and fqc_id in recon.text)
 
         checks_archive: dict[str, bool] = {
@@ -410,8 +402,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_archive.items() if not v]
             detail_archive_parts.append(f"FAIL_DEFECT (PIR-01): {', '.join(failed)}")
         detail_archive_parts.append(
-            f"archived_count={archived_count} | fqc_id_in_results={fqc_id_in_results} | "
-            f"recon_summary={recon_summary!r}"
+            f"archived_count={archived_count} | fqc_id_in_results={fqc_id_in_results}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)

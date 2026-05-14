@@ -17,10 +17,15 @@ steps:
     content: "The archived secret is HIDDEN-TREASURE."
     tags: [ix14-tag]
 
-  - label: "Archive the document"
-    action: archive_document
-    args:
-      identifiers: "${archived_ref_doc.fq_id}"
+  - label: "Archive the document and assert JSON archive lifecycle output"
+    assert:
+      op: archive_document
+      args:
+        identifiers: "${archived_ref_doc.fq_id}"
+      expect_json_equals:
+        path: "status"
+        value: "archived"
+      expect_json_path: "archived_at"
 
   - label: "call_model {{ref:doc.md}} on archived document still resolves and LLM sees the body"
     assert:
@@ -55,12 +60,10 @@ steps:
             content: "{{ref:_integration/Test/ref-archived.md}} Reply OK."
       expect_contains: '"prompt_chars"'
 
-  - label: "injected_references[] entry carries 'chars' field — body had non-zero size"
-    # IX-14 explicitly requires that the metadata reports the correct chars
-    # for the injected archived doc. The body "The archived secret is
-    # HIDDEN-TREASURE." is 38 chars. Asserting on the literal `"chars":38`
-    # is brittle to whitespace — assert presence of the chars key, paired
-    # with a non-zero digit pattern that excludes the zero-only case.
+  - label: "injected_references[] entry carries the archived body char count"
+    # IX-14 requires that metadata reports the correct chars for the injected
+    # archived doc. Vault serialization stores this body with a trailing newline,
+    # so the injected content length is 40 chars.
     assert:
       op: call_model
       args:
@@ -69,7 +72,9 @@ steps:
         messages:
           - role: user
             content: "{{ref:_integration/Test/ref-archived.md}} Reply OK."
-      expect_contains: '"chars":'
+      expect_json_equals:
+        path: "metadata.injected_references[0].chars"
+        value: 40
 
   - label: "Response is not an error — archive must not surface as reference_resolution_failed"
     assert:

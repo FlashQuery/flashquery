@@ -26,7 +26,7 @@ import 'dotenv/config'; // MUST be first — loads .env before any module evalua
 import { Command } from 'commander';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { loadConfig, resolveConfigPath, getDeprecationWarnings } from './config/loader.js';
+import { loadConfig, resolveConfigPath, getDeprecationWarnings, getStartupWarnings } from './config/loader.js';
 import { unlockCommand } from './cli/commands/unlock.js';
 import { initLogger, logger } from './logging/logger.js';
 import { checkPortAvailable } from './server/port-checker.js';
@@ -204,6 +204,9 @@ if (isMain) {
         const deprecationWarnings = getDeprecationWarnings(config);
         for (const warning of deprecationWarnings) {
           logger.warn(`[DEPRECATION] ${warning}`);
+        }
+        for (const warning of getStartupWarnings(config)) {
+          logger.warn(`[CONFIG] ${warning}`);
         }
 
         // Display startup banner with instance and vault configuration

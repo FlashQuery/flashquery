@@ -62,15 +62,13 @@ steps:
     # Behavior contract: path-typed pointers are NOT auto-updated by
     # move_document. The resolver reports follow_ref_target_not_found
     # because the old path no longer resolves to a document.
-    # Single-identifier follow_ref errors return isError:true at the tool
-    # boundary, so expect_error=true is required for the runner to evaluate
-    # the response-text assertion against the error envelope.
+    # Consolidated get_document returns canonical expected error envelopes as
+    # normal JSON payloads rather than top-level MCP isError responses.
     assert:
       op: get_document
       args:
         identifiers: "${source_doc.fq_id}"
         follow_ref: "projections.summary"
-      expect_error: true
       expect_contains: "follow_ref_target_not_found"
 
   - label: "Post-move: error response identifies resolution_method='path'"
@@ -81,7 +79,6 @@ steps:
       args:
         identifiers: "${source_doc.fq_id}"
         follow_ref: "projections.summary"
-      expect_error: true
       expect_contains: '"resolution_method":"path"'
 
   - label: "Post-move: fq_id-typed pointer still resolves — UUID is durable across moves"

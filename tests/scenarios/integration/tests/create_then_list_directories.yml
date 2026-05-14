@@ -9,8 +9,9 @@ steps:
   # ── IF-01: Basic create then list ──────────────────────────────────────────
 
   - label: "Create a test directory for IF-01"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if01/project-docs"
 
   - label: "list_vault(show: directories) confirms directory appears (IF-01)"
@@ -19,13 +20,14 @@ steps:
       args:
         path: "_integration/if01"
         show: "directories"
-      expect_contains: "project-docs/"
+      expect_contains: "project-docs"
 
   # ── IF-02: root_path scaffold → recursive list ──────────────────────────────
 
   - label: "Create subdirectory tree using root_path for IF-02"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       root_path: "_integration/if02"
       paths: ["notes", "archive", "drafts"]
 
@@ -36,7 +38,7 @@ steps:
         path: "_integration/if02"
         show: "directories"
         recursive: true
-      expect_contains: "notes/"
+      expect_contains: "notes"
 
   - label: "list_vault(recursive: true) shows archive/ (IF-02)"
     assert:
@@ -45,7 +47,7 @@ steps:
         path: "_integration/if02"
         show: "directories"
         recursive: true
-      expect_contains: "archive/"
+      expect_contains: "archive"
 
   - label: "list_vault(recursive: true) shows drafts/ (IF-02)"
     assert:
@@ -54,4 +56,4 @@ steps:
         path: "_integration/if02"
         show: "directories"
         recursive: true
-      expect_contains: "drafts/"
+      expect_contains: "drafts"

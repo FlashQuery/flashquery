@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Test: append_to_doc → insert_in_doc (top, after_heading, before_heading, end_of_section).
+Test: insert_in_doc position=bottom plus targeted insertions (top, after_heading, before_heading, end_of_section).
 
 Scenario:
     1. Create a multi-section document via MCP (create_document) with H2 headings
        "Alpha", "Beta", "Gamma" each followed by a paragraph of body text.
-    2. append_to_doc: append a unique marker at the very end of the document; verify
+    2. insert_in_doc(position="bottom"): append a unique marker at the very end of the document; verify
        on disk that the marker is the final non-blank content (C-01).
     3. insert_in_doc position=top: prepend a unique marker; verify on disk that the
        marker precedes the "## Alpha" heading (C-02).
@@ -41,6 +41,7 @@ from __future__ import annotations
 COVERAGE = ["C-01", "C-02", "C-03", "C-04", "C-05"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -64,7 +65,16 @@ TEST_NAME = "test_content_append_and_insert"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
+    """Extract fields from either JSON tool results or legacy key-value text."""
+    json_keys = {"FQC ID": "fq_id", "Path": "path", "Title": "title"}
+    try:
+        payload = json.loads(text)
+        value = payload.get(json_keys.get(field, field))
+        if value is not None:
+            return str(value)
+    except json.JSONDecodeError:
+        pass
+
     m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
@@ -118,7 +128,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1: Create multi-section document via MCP ──────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=unique_title,
             content=original_body,
             path=test_path,
@@ -153,17 +164,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
         identifier = created_fqc_id or test_path
         disk_path = created_path or test_path
 
-        # ── Step 2: append_to_doc (C-01) ───────────────────────────────
+        # ── Step 2: insert_in_doc(position="bottom") (C-01) ───────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         append_result = ctx.client.call_tool(
-            "append_to_doc",
+            "insert_in_doc",
+            position="bottom",
             identifier=identifier,
             content=append_marker,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
-            label="append_to_doc appends marker at end (C-01)",
+            label="insert_in_doc position=bottom appends marker at end (C-01)",
             passed=(append_result.ok and append_result.status == "pass"),
             detail=expectation_detail(append_result) or append_result.error or "",
             timing_ms=append_result.timing_ms,
@@ -462,7 +474,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Test: append_to_doc and insert_in_doc positional content operations.",
+        description="Test: insert_in_doc position=bottom and positional content operations.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

@@ -155,9 +155,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_a.expect_contains("registered successfully")
+        register_a.expect_json_equals("status", "registered")
         register_a.expect_contains(instance_name_a)
-        register_a.expect_contains("items")
+        register_a.expect_json_equals("table_count", 1)
 
         run.step(
             label="Block A — register_plugin (on_added: ignore, table: items)",
@@ -218,8 +218,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search_a.expect_not_contains("Auto-tracked")
-        search_a.expect_contains("0 record(s)")
+        search_a.expect_json_equals("reconciliation.auto_tracked", 0)
+        search_a.expect_json_equals("total", 0)
 
         run.step(
             label="RO-11: search_records — on_added: ignore takes no action (no Auto-tracked, 0 records)",
@@ -317,9 +317,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_b.expect_contains("registered successfully")
+        register_b.expect_json_equals("status", "registered")
         register_b.expect_contains(instance_name_b)
-        register_b.expect_contains("items2")
+        register_b.expect_json_equals("table_count", 1)
 
         run.step(
             label="Block B — register_plugin (no policy fields, table: items2)",
@@ -376,8 +376,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search_b.expect_not_contains("Auto-tracked")
-        search_b.expect_contains("0 record(s)")
+        search_b.expect_json_equals("reconciliation.auto_tracked", 0)
+        search_b.expect_json_equals("total", 0)
 
         run.step(
             label="RO-12: search_records — missing policy fields default to ignore (no Auto-tracked, 0 records)",

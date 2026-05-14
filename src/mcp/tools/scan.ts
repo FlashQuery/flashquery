@@ -1,101 +1,49 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { runScanOnce } from '../../services/scanner.js';
-import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
-import { getIsShuttingDown } from '../../server/shutdown-state.js';
-import { invalidateReconciliationCache } from '../../services/plugin-reconciliation.js';
+import { maintainVault, type MaintainVaultInput } from '../../services/maintenance.js';
+import { jsonExpectedError, jsonRuntimeError, jsonToolResult } from '../utils/response-formats.js';
+
+const MaintenanceActionSchema = z.enum(['sync', 'repair', 'status']);
+const MaintenanceRunActionSchema = z.enum(['sync', 'repair']);
 
 export function registerScanTools(server: McpServer, config: FlashQueryConfig): void {
   server.registerTool(
-    'force_file_scan',
+    'maintain_vault',
     {
       description:
-        'Trigger an immediate vault scan to discover new files, detect moves, and track deletions. Updates the database index with current vault state. Use this before semantic search if you suspect files have been added or changed outside the AI chat, or after bulk file operations. Returns counts of new, moved, deleted, and hash-changed files.' +
-        'Use before semantic search to ensure the index is up-to-date. ' +
-        'Returns counts of new, moved, deleted, and hash-mismatched files.',
+        'Run administrative vault maintenance jobs. Use this when files changed outside FlashQuery and the vault index needs sync, repair, or job-status inspection.\n\n' +
+        'Use action: "sync" to scan external filesystem changes. Use action: "repair" to reconcile tracked document state. Use ["repair","sync"] when both are needed; repair runs before sync. Use background: true only for sync, and use action: "status" with job_id to inspect a background job.\n\n' +
+        'Do not use this as part of normal read/write workflows or for caller-side staleness checks; normal tools return current authoritative state. Do not expect scanner internals such as queue depth, hashes, or per-document sync versions in the response.\n\n' +
+        'Example: maintain_vault({ "action": ["repair", "sync"], "dry_run": false })',
       inputSchema: {
-        background: z
-          .boolean()
-          .optional()
-          .describe(
-            'If true, scan runs in background and returns immediately. Default: false (synchronous, waits for results).'
-          ),
+        action: z
+          .union([MaintenanceActionSchema, z.array(MaintenanceRunActionSchema)])
+          .describe('Maintenance action: sync, repair, status, or a sync/repair action array.'),
+        dry_run: z.boolean().optional().describe('Only valid for action: repair.'),
+        background: z.boolean().optional().describe('Only valid for action: sync.'),
+        job_id: z.string().optional().describe('Required for action: status.'),
       },
     },
-    async ({ background }) => {
-      // D-02b: Check shutdown flag immediately
-      if (getIsShuttingDown()) {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Server is shutting down; new requests cannot be processed',
-            },
-          ],
-          isError: true,
-        };
+    async ({ action, dry_run, background, job_id }) => {
+      const input: MaintainVaultInput = {
+        action,
+        ...(dry_run === undefined ? {} : { dry_run }),
+        ...(background === undefined ? {} : { background }),
+        ...(job_id === undefined ? {} : { job_id }),
+      };
+
+      const result = await maintainVault(config, input);
+
+      if (result.ok) {
+        return jsonToolResult(result.payload);
       }
 
-      try {
-        if (background) {
-          // PIR-05: invalidate AFTER scan completes, not before.
-          // Invalidating before the scan starts allows intermediate record tool calls
-          // (which land while the scan is running) to run a full diff against stale
-          // fqc_documents and repopulate the cache — causing the post-scan call to
-          // be skipped as a cache hit. Invalidating in .then() means intermediate
-          // calls stay within the staleness window and the first post-scan call gets
-          // the fresh invalidated cache.
-          void runScanOnce(config)
-            .then(() => {
-              invalidateReconciliationCache();
-            })
-            .catch((err: unknown) => {
-              logger.warn(
-                `force_file_scan background error: ${err instanceof Error ? err.message : String(err)}`
-              );
-            });
-          return {
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({
-                  status: 'started',
-                  message: 'Vault scan started in background. Results will be available in logs.',
-                }),
-              },
-            ],
-          };
-        }
-
-        // PIR-05: invalidate AFTER scan completes in sync mode too.
-        const result = await runScanOnce(config);
-        invalidateReconciliationCache();
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: JSON.stringify({
-                status: 'complete',
-                new_files: result.newFiles,
-                updated_files: result.hashMismatches,
-                moved_files: result.movedFiles,
-                deleted_files: result.deletedFiles,
-                status_mismatches: result.statusMismatches,
-                embedding_status: result.embeddingStatus,
-                embeds_awaited: result.embedsAwaited,
-              }),
-            },
-          ],
-        };
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.warn(`force_file_scan failed: ${message}`);
-        return {
-          content: [{ type: 'text' as const, text: `Scan failed: ${message}` }],
-          isError: true,
-        };
+      if (result.error.error === 'runtime_error') {
+        return jsonRuntimeError(result.error);
       }
+
+      return jsonExpectedError(result.error);
     }
   );
 }

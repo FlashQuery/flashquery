@@ -25,11 +25,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * @returns Promise resolving to {client, transport} when connected
  * @throws Error if client connection fails or process fails to spawn
  */
-export async function startMcpServerFixture(): Promise<{
+export async function startMcpServerFixture(options: { configPath?: string } = {}): Promise<{
   client: Client;
   transport: StdioClientTransport;
 }> {
-  const configPath = resolve(__dirname, '../fixtures/flashquery.e2e.yaml');
+  const configPath = options.configPath ?? resolve(__dirname, '../fixtures/flashquery.e2e.yaml');
   const entryPoint = resolve(__dirname, '../../src/index.ts');
   const projectRoot = resolve(__dirname, '../../');
 

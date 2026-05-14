@@ -234,7 +234,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg_a.expect_contains("registered successfully")
+        reg_a.expect_json_equals("status", "registered")
         run.step(
             label="register_plugin A (on_moved: keep-tracking, explicit) — RO-24, RO-27",
             passed=(reg_a.ok and reg_a.status == "pass"),
@@ -257,7 +257,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg_b.expect_contains("registered successfully")
+        reg_b.expect_json_equals("status", "registered")
         run.step(
             label="register_plugin B (no on_moved declared — default = keep-tracking) — RO-26",
             passed=(reg_b.ok and reg_b.status == "pass"),
@@ -283,7 +283,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg_c.expect_contains("registered successfully")
+        reg_c.expect_json_equals("status", "registered")
         run.step(
             label="register_plugin C (on_moved: stop-tracking) — RO-25 [Note: 'untrack' not recognized; using 'stop-tracking']",
             passed=(reg_c.ok and reg_c.status == "pass"),
@@ -367,9 +367,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime_a.expect_contains("Auto-tracked")
-        prime_b.expect_contains("Auto-tracked")
-        prime_c.expect_contains("Auto-tracked")
+        prime_a.expect_json_equals("reconciliation.auto_tracked", 1)
+        prime_b.expect_json_equals("reconciliation.auto_tracked", 1)
+        prime_c.expect_json_equals("reconciliation.auto_tracked", 1)
 
         all_primed = (
             prime_a.ok and prime_a.status == "pass"
@@ -570,25 +570,27 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not all_recon_ok:
             return run
 
-        recon_summary_a = _extract_recon_summary(recon_a.text)
-        recon_summary_b = _extract_recon_summary(recon_b.text)
-        recon_summary_c = _extract_recon_summary(recon_c.text)
+        def _get_recon(text):
+            try:
+                return _json.loads(text).get("reconciliation", {})
+            except Exception:
+                return {}
+
+        recon_data_a = _get_recon(recon_a.text)
+        recon_data_b = _get_recon(recon_b.text)
+        recon_data_c = _get_recon(recon_c.text)
 
         # ── Step 12: RO-24 — keep-tracking: path updated; plugin row still active ──
-        # Plugin A (on_moved: keep-tracking): the reconciler updates the stored path
-        # in the plugin row. The doc's fqc_id should still be in search results (row active).
-        # Summary: "Updated paths for 1 moved document(s)".
         t0 = time.monotonic()
 
-        # "Updated paths for N moved document(s)" is the exact phrase from formatReconciliationSummary
-        path_updated_a = bool(re.search(r"Updated paths? for \d+ moved document", recon_summary_a))
+        path_updated_a = recon_data_a.get("paths_updated", 0) >= 1
         a_in_text = bool(fqc_id_a and fqc_id_a in recon_a.text)
-        a_archived = bool(re.search(r"Archived \d+ record", recon_summary_a))
+        a_archived = recon_data_a.get("archived", 0) >= 1
 
         checks_24: dict[str, bool] = {
-            "RO-24: summary says 'Updated paths for N moved document(s)'": path_updated_a,
+            "RO-24: paths_updated >= 1 (keep-tracking applied)": path_updated_a,
             "RO-24: doc A fqc_id still in search results (row active)": a_in_text,
-            "RO-24: no archival in plugin A summary (keep-tracking preserves row)": not a_archived,
+            "RO-24: no archival in plugin A (keep-tracking preserves row)": not a_archived,
         }
         all_ok_24 = all(checks_24.values())
         detail_24_parts = []
@@ -596,8 +598,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_24.items() if not v]
             detail_24_parts.append(f"Failed: {', '.join(failed)}")
         detail_24_parts.append(
-            f"path_updated_a={path_updated_a} | a_in_text={a_in_text} | "
-            f"a_archived={a_archived} | recon_summary_a={recon_summary_a!r}"
+            f"paths_updated={recon_data_a.get('paths_updated',0)} | a_in_text={a_in_text} | "
+            f"a_archived={a_archived} | reconciliation_a={recon_data_a!r}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)
@@ -611,18 +613,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
             return run
 
         # ── Step 13: RO-26 — default on_moved behaves like keep-tracking ──────
-        # Plugin B has no on_moved declared. Default should be keep-tracking:
-        # path update in summary, fqc_id in results, no archival.
+        # Plugin B has no on_moved declared. Default should be keep-tracking.
         t0 = time.monotonic()
 
-        path_updated_b = bool(re.search(r"Updated paths? for \d+ moved document", recon_summary_b))
+        path_updated_b = recon_data_b.get("paths_updated", 0) >= 1
         b_in_text = bool(fqc_id_b and fqc_id_b in recon_b.text)
-        b_archived = bool(re.search(r"Archived \d+ record", recon_summary_b))
+        b_archived = recon_data_b.get("archived", 0) >= 1
 
         checks_26: dict[str, bool] = {
-            "RO-26: summary says 'Updated paths for N moved document(s)' (default = keep-tracking)": path_updated_b,
+            "RO-26: paths_updated >= 1 (default = keep-tracking)": path_updated_b,
             "RO-26: doc B fqc_id still in search results (row active)": b_in_text,
-            "RO-26: no archival in plugin B summary (default on_moved preserves row)": not b_archived,
+            "RO-26: no archival in plugin B (default on_moved preserves row)": not b_archived,
         }
         all_ok_26 = all(checks_26.values())
         detail_26_parts = []
@@ -630,8 +631,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_26.items() if not v]
             detail_26_parts.append(f"Failed: {', '.join(failed)}")
         detail_26_parts.append(
-            f"path_updated_b={path_updated_b} | b_in_text={b_in_text} | "
-            f"b_archived={b_archived} | recon_summary_b={recon_summary_b!r}"
+            f"paths_updated={recon_data_b.get('paths_updated',0)} | b_in_text={b_in_text} | "
+            f"b_archived={b_archived} | reconciliation_b={recon_data_b!r}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)
@@ -649,8 +650,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # row is archived. The fqc_id should NOT appear in search results.
         t0 = time.monotonic()
 
-        m_archived_c = re.search(r"Archived (\d+) record", recon_summary_c)
-        archived_count_c = int(m_archived_c.group(1)) if m_archived_c else 0
+        archived_count_c = recon_data_c.get("archived", 0)
         c_in_text = bool(fqc_id_c and fqc_id_c in recon_c.text)
 
         checks_25a: dict[str, bool] = {
@@ -664,7 +664,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail_25a_parts.append(f"Failed: {', '.join(failed)}")
         detail_25a_parts.append(
             f"archived_count_c={archived_count_c} | c_in_text={c_in_text} | "
-            f"recon_summary_c={recon_summary_c!r}"
+            f"reconciliation_c={recon_data_c!r}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)
@@ -755,17 +755,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not recon_a3.ok:
             return run
 
-        recon_summary_a3 = _extract_recon_summary(recon_a3.text)
+        recon_data_a3 = _get_recon(recon_a3.text)
 
         # ── Step 17: RO-27 — verify no new reconciliation actions ─────────────
-        # Within the staleness window the reconciler is skipped, so the summary is
-        # empty (no Reconciliation: line). The doc's fqc_id should still be in results
-        # (the search_records query returns current active rows without re-reconciling).
+        # Within the staleness window the reconciler is skipped, so reconciliation
+        # counters should all be 0. The doc's fqc_id should still be in results.
         t0 = time.monotonic()
 
-        new_auto_tracked_a3 = bool(re.search(r"Auto-tracked \d+", recon_summary_a3))
-        new_archived_a3 = bool(re.search(r"Archived \d+", recon_summary_a3))
-        new_path_update_a3 = bool(re.search(r"Updated paths? for \d+ moved document", recon_summary_a3))
+        new_auto_tracked_a3 = recon_data_a3.get("auto_tracked", 0) > 0
+        new_archived_a3 = recon_data_a3.get("archived", 0) > 0
+        new_path_update_a3 = recon_data_a3.get("paths_updated", 0) > 0
         a3_in_text = bool(fqc_id_a and fqc_id_a in recon_a3.text)
 
         checks_27: dict[str, bool] = {
@@ -780,9 +779,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_27.items() if not v]
             detail_27_parts.append(f"Failed: {', '.join(failed)}")
         detail_27_parts.append(
-            f"new_auto_tracked={new_auto_tracked_a3} | new_archived={new_archived_a3} | "
-            f"new_path_update={new_path_update_a3} | a3_in_text={a3_in_text} | "
-            f"recon_summary_a3={recon_summary_a3!r}"
+            f"auto_tracked={recon_data_a3.get('auto_tracked',0)} | archived={recon_data_a3.get('archived',0)} | "
+            f"paths_updated={recon_data_a3.get('paths_updated',0)} | a3_in_text={a3_in_text} | "
+            f"reconciliation_a3={recon_data_a3!r}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)

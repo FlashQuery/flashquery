@@ -1,6 +1,6 @@
-import { mkdir, writeFile, readFile, rename } from 'node:fs/promises';
+import { mkdir, writeFile, readFile, rename, unlink, stat } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve, relative } from 'node:path';
 import matter from 'gray-matter';
 import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
@@ -107,6 +107,10 @@ export interface WriteMarkdownOptions {
   gitTitle?: string; // document title for commit message
 }
 
+export interface RemoveMarkdownOptions {
+  gitTitle?: string;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // VaultManager interface (D-09)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,6 +135,23 @@ export interface VaultManager {
    * and body content.
    */
   readMarkdown(relativePath: string): Promise<{ data: Record<string, unknown>; content: string }>;
+
+  /**
+   * Permanently removes a markdown file from the vault and routes git side effects
+   * through GitManager removal policy.
+   */
+  removeMarkdown(relativePath: string, options?: RemoveMarkdownOptions): Promise<void>;
+
+  /**
+   * Moves a markdown file to an absolute trash path. In-vault trash destinations
+   * stage both source deletion and destination addition; external trash
+   * destinations stage only the source deletion.
+   */
+  moveMarkdownToTrash(
+    relativePath: string,
+    trashAbsPath: string,
+    options?: RemoveMarkdownOptions
+  ): Promise<void>;
 
   /**
    * Returns the absolute path for a document in the vault.
@@ -223,6 +244,74 @@ class VaultManagerImpl implements VaultManager {
       data: parsed.data,
       content: parsed.content,
     };
+  }
+
+  async removeMarkdown(relativePath: string, options?: RemoveMarkdownOptions): Promise<void> {
+    const absolutePath = join(this.rootPath, relativePath);
+    await unlink(absolutePath);
+    logger.debug(`Vault: hard delete ${relativePath} — document removed from disk`);
+
+    if (options?.gitTitle) {
+      void gitManager
+        ?.commitVaultRemoval('remove', options.gitTitle, [relativePath])
+        .catch((err) =>
+          logger.warn(
+            `Git: commitVaultRemoval error: ${err instanceof Error ? err.message : String(err)}`
+          )
+        );
+    }
+  }
+
+  async moveMarkdownToTrash(
+    relativePath: string,
+    trashAbsPath: string,
+    options?: RemoveMarkdownOptions
+  ): Promise<void> {
+    const sourceAbsPath = join(this.rootPath, relativePath);
+    await mkdir(dirname(trashAbsPath), { recursive: true });
+
+    try {
+      await rename(sourceAbsPath, trashAbsPath);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      if (errMsg.includes('EXDEV') || errMsg.includes('Invalid cross-device')) {
+        const content = await readFile(sourceAbsPath, 'utf-8');
+        await writeFile(trashAbsPath, content, 'utf-8');
+        await stat(trashAbsPath);
+        await unlink(sourceAbsPath);
+        logger.info(`Vault: cross-device trash fallback used for ${relativePath}`);
+      } else {
+        throw err;
+      }
+    }
+
+    logger.debug(`Vault: trash move ${relativePath} -> ${trashAbsPath}`);
+
+    if (options?.gitTitle) {
+      const gitPaths = [relativePath];
+      const trashRelPath = this.relativePathIfInVault(trashAbsPath);
+      if (trashRelPath) {
+        gitPaths.push(trashRelPath);
+      }
+
+      void gitManager
+        ?.commitVaultRemoval('trash', options.gitTitle, gitPaths)
+        .catch((err) =>
+          logger.warn(
+            `Git: commitVaultRemoval error: ${err instanceof Error ? err.message : String(err)}`
+          )
+        );
+    }
+  }
+
+  private relativePathIfInVault(absPath: string): string | null {
+    const resolvedRoot = resolve(this.rootPath);
+    const resolvedPath = resolve(absPath);
+    const rel = relative(resolvedRoot, resolvedPath);
+    if (rel === '' || rel === '..' || rel.startsWith(`..${'/'}`) || rel.startsWith(`..${'\\'}`)) {
+      return null;
+    }
+    return rel.replace(/\\/g, '/');
   }
 
   resolvePath(area: string, project: string | null | undefined, filename: string): string {

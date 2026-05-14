@@ -45,9 +45,23 @@ Exit codes:
 from __future__ import annotations
 
 
-COVERAGE = ["D-14", "D-15", "D-16", "D-17", "D-18"]
+COVERAGE = [
+    "D-14",
+    "D-15",
+    "D-16",
+    "D-17",
+    "D-18",
+    "D-copy-1",
+    "D-copy-2",
+    "D-copy-3",
+    "D-move-1",
+    "D-move-2",
+    "D-move-3",
+    "D-move-5",
+]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -74,6 +88,14 @@ def _extract_field(text: str, field: str) -> str:
     """Extract a 'Field: value' line from FQC key-value response text."""
     m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
+
+
+def _parse_json_object(text: str) -> dict:
+    """Parse a JSON object from an MCP text result."""
+    parsed = json.loads(text)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Expected JSON object, got {type(parsed).__name__}")
+    return parsed
 
 
 # ---------------------------------------------------------------------------
@@ -182,8 +204,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        copy_fqc_id = _extract_field(copy_result.text, "FQC ID")
-        copy_created_path = _extract_field(copy_result.text, "Path") or copy_dest_path
+        try:
+            copy_payload = _parse_json_object(copy_result.text)
+        except Exception:
+            copy_payload = {}
+        copy_fqc_id = str(copy_payload.get("fq_id") or "")
+        copy_created_path = str(copy_payload.get("path") or copy_dest_path)
 
         # Register copy for cleanup
         ctx.cleanup.track_file(copy_created_path)
@@ -203,6 +229,44 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         if not copy_result.ok:
             return run
+
+        copy_shape_ok = (
+            isinstance(copy_payload.get("identifier"), str)
+            and copy_payload.get("path") == copy_dest_path
+            and isinstance(copy_payload.get("fq_id"), str)
+            and copy_payload.get("fq_id") != orig_fqc_id
+            and isinstance(copy_payload.get("size"), dict)
+            and isinstance(copy_payload.get("size", {}).get("chars"), int)
+        )
+        run.step(
+            label="D-copy-1/D-copy-2: copy_document returns JSON identification with fresh fq_id",
+            passed=copy_shape_ok,
+            detail="" if copy_shape_ok else f"Unexpected copy payload: {copy_result.text[:300]}",
+            timing_ms=copy_result.timing_ms,
+        )
+
+        copy_conflict = ctx.client.call_tool(
+            "copy_document",
+            identifier=identifier_orig,
+            destination=copy_dest_path,
+        )
+        try:
+            copy_conflict_payload = _parse_json_object(copy_conflict.text)
+        except Exception:
+            copy_conflict_payload = {}
+        copy_conflict_ok = (
+            copy_conflict.ok
+            and copy_conflict_payload.get("error") == "conflict"
+            and isinstance(copy_conflict_payload.get("details"), dict)
+            and copy_conflict_payload.get("details", {}).get("reason") == "path_exists"
+        )
+        run.step(
+            label="D-copy-3: copy_document destination conflict returns JSON conflict envelope",
+            passed=copy_conflict_ok,
+            detail="" if copy_conflict_ok else f"Unexpected copy conflict payload: {copy_conflict.text[:300]}",
+            timing_ms=copy_conflict.timing_ms,
+            tool_result=copy_conflict,
+        )
 
         # ── Step 4: Scan vault again to index the copy ────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
@@ -370,8 +434,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        move_new_fqc_id = _extract_field(move_result.text, "FQC ID")
-        move_new_path = _extract_field(move_result.text, "Path") or move_dest_path
+        try:
+            move_payload = _parse_json_object(move_result.text)
+        except Exception:
+            move_payload = {}
+        move_new_fqc_id = str(move_payload.get("fq_id") or "")
+        move_new_path = str(move_payload.get("path") or move_dest_path)
 
         # Register the moved destination for cleanup (file is now here)
         ctx.cleanup.track_file(move_new_path)
@@ -391,6 +459,43 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         if not move_result.ok:
             return run
+
+        move_shape_ok = (
+            isinstance(move_payload.get("identifier"), str)
+            and move_payload.get("path") == move_dest_path
+            and move_payload.get("fq_id") == move_src_fqc_id
+            and isinstance(move_payload.get("size"), dict)
+            and isinstance(move_payload.get("size", {}).get("chars"), int)
+        )
+        run.step(
+            label="D-move-1/D-move-2/D-move-5: move_document returns JSON identification preserving fq_id",
+            passed=move_shape_ok,
+            detail="" if move_shape_ok else f"Unexpected move payload: {move_result.text[:300]}",
+            timing_ms=move_result.timing_ms,
+        )
+
+        move_conflict = ctx.client.call_tool(
+            "move_document",
+            identifier=move_new_fqc_id or move_identifier,
+            destination=copy_dest_path,
+        )
+        try:
+            move_conflict_payload = _parse_json_object(move_conflict.text)
+        except Exception:
+            move_conflict_payload = {}
+        move_conflict_ok = (
+            move_conflict.ok
+            and move_conflict_payload.get("error") == "conflict"
+            and isinstance(move_conflict_payload.get("details"), dict)
+            and move_conflict_payload.get("details", {}).get("reason") == "path_exists"
+        )
+        run.step(
+            label="D-move-3: move_document destination conflict returns JSON conflict envelope",
+            passed=move_conflict_ok,
+            detail="" if move_conflict_ok else f"Unexpected move conflict payload: {move_conflict.text[:300]}",
+            timing_ms=move_conflict.timing_ms,
+            tool_result=move_conflict,
+        )
 
         # ── Step 11: Scan vault to pick up the move ────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0

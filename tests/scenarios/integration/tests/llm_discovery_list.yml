@@ -13,6 +13,7 @@ description: >
   matching could not distinguish a present-but-empty value from the spec'd value.
 coverage: [IL-15, IL-16, IL-17, IL-18]
 deps: [llm]
+server_modes: [managed]
 
 # Self-contained discovery fixture. The runner's default --managed llm config (see
 # tests/scenarios/framework/fqc_test_utils.py:_resolve_llm_config) declares only the

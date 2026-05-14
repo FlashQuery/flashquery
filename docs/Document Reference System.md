@@ -315,6 +315,14 @@ Template frontmatter fields:
 
 Template placeholders use `{{name}}`, where `name` matches a declared parameter. Placeholder names must match `[A-Za-z_][A-Za-z0-9_]*`.
 
+Use a backslash when a template body should output a placeholder literally:
+
+```markdown
+\{{topic}}
+```
+
+Template placeholder escaping uses the same parity rule as document references: an odd number of preceding backslashes escapes the placeholder, and an even number leaves one literal backslash before the substituted value.
+
 Supported parameter types:
 
 | Type | Input value | What FlashQuery substitutes |
@@ -328,6 +336,7 @@ Parameter behavior:
 - Optional parameters without a value and without a default become an empty string and produce a warning.
 - Unknown supplied parameters are ignored and produce a warning.
 - Template substitution is single-pass. Values that contain `{{ref:...}}` or `{{placeholder}}` are inserted literally and are not processed again.
+- Undeclared placeholders are left literal and produce a warning.
 - A referenced template is read fresh for each `call_model` invocation.
 
 ## Supplying Template Parameters

@@ -4,7 +4,7 @@ description: >
   on the archived document reflects status='archived' in the response.
   Verifies that the status field is correctly persisted and returned
   through the retrieval API after state transitions.
-coverage: [IA-07]
+coverage: [IA-07, INT-arch-1, INT-arch-2]
 
 steps:
   - label: "Write a document with initial status"
@@ -15,17 +15,42 @@ steps:
     content: "This is a draft that will be archived."
     tags: [drafts, asf-tag]
 
+  - label: "Write a second document for ordered batch archive"
+    action: vault.write
+    name: second_doc
+    path: "documents/second-draft.md"
+    title: "Second Draft Document"
+    content: "This is the second draft that will be archived."
+    tags: [drafts, asf-tag]
+
   - label: "Verify document appears in search before archive"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [asf-tag]
-      expect_count_eq: 1
+        entity_types: [documents, memories]
+      expect_count_eq: 2
 
-  - label: "Archive the document"
-    action: archive_document
-    args:
-      identifiers: ["${draft_doc.fq_id}"]
+  - label: "Archive documents and assert ordered JSON archive envelopes"
+    assert:
+      op: archive_document
+      args:
+        identifiers: ["${draft_doc.fq_id}", "${second_doc.fq_id}"]
+      expect_json_array_length:
+        path: ""
+        equals: 2
+      expect_json_equals:
+        path: "[0].status"
+        value: "archived"
+      expect_json_path: ["[0].archived_at", "[1].status", "[1].archived_at"]
+
+  - label: "Archived document is excluded from search by default"
+    assert:
+      op: search
+      args:
+        tags: [asf-tag]
+        entity_types: [documents, memories]
+      expect_count_eq: 0
 
   - label: "Document is still retrievable after archive by fqc_id"
     assert:
@@ -33,6 +58,13 @@ steps:
       args:
         identifiers: "${draft_doc.fq_id}"
       expect_contains: "This is a draft that will be archived"
+
+  - label: "Second archived document is still retrievable after archive by fqc_id"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${second_doc.fq_id}"
+      expect_contains: "This is the second draft that will be archived"
 
   - label: "Archived document has status='archived' in frontmatter via get_document include=[frontmatter]"
     assert:

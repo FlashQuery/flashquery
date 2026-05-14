@@ -26,21 +26,22 @@ steps:
 
   - label: "search_all finds the document by title"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Spiral Galaxies"
       expect_path: "cosmos/galaxies.md"
 
   - label: "Memory is listable via shared tag"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [cds-tag]
+        entity_types: [documents, memories]
       expect_contains: "Nebulae"
 
   - label: "search_all with entity_types=documents returns document only"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Spiral Galaxies"
         entity_types: [documents]
@@ -49,7 +50,7 @@ steps:
 
   - label: "search_all scoped to documents does not find unrelated titles"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Spiral Galaxies"
         entity_types: [documents]

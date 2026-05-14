@@ -32,20 +32,23 @@ steps:
     tags: [batch, cu-tag]
 
   - label: "Update document A"
-    action: update_document
+    action: write_document
     args:
+      mode: update
       identifier: "${doc_a.fq_id}"
       content: "Updated content for A"
 
   - label: "Update document B"
-    action: update_document
+    action: write_document
     args:
+      mode: update
       identifier: "${doc_b.fq_id}"
       content: "Updated content for B"
 
   - label: "Update document C"
-    action: update_document
+    action: write_document
     args:
+      mode: update
       identifier: "${doc_c.fq_id}"
       content: "Updated content for C"
 

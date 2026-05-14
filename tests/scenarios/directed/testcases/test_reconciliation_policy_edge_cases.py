@@ -43,6 +43,7 @@ from __future__ import annotations
 COVERAGE = ["RO-66", "RO-73"]
 
 import argparse
+import json as _json
 import sys
 import time
 from pathlib import Path
@@ -187,10 +188,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # name, not a FlashQuery-generated warning). We look for warning phrases that FlashQuery
         # would emit, specifically mentioning "on_moved", "teleport", or an explicit
         # warning/error sentinel in the response body beyond metadata lines.
-        registered_successfully_inv = (
-            inv_reg_result.ok
-            and "registered successfully" in response_text_inv.lower()
-        )
+        try:
+            _inv_reg_payload = _json.loads(response_text_inv)
+            registered_successfully_inv = (
+                inv_reg_result.ok
+                and _inv_reg_payload.get("status") == "registered"
+            )
+        except Exception:
+            registered_successfully_inv = (
+                inv_reg_result.ok
+                and "registered successfully" in response_text_inv.lower()
+            )
 
         # Warning phrases FlashQuery would emit about the invalid field value.
         # We check the error field (tool error text) and the response body, but we strip
@@ -302,8 +310,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        path2_reg_result.expect_contains("registered successfully")
-        path2_reg_result.expect_contains(instance_name_p2)
+        path2_reg_result.expect_json_equals("status", "registered")
+        path2_reg_result.expect_json_equals("plugin_instance", instance_name_p2)
 
         path2_reg_ok = path2_reg_result.ok and path2_reg_result.status == "pass"
         run.step(
@@ -392,7 +400,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon_result.expect_contains("Auto-tracked")
+        recon_result.expect_json_path("reconciliation.auto_tracked", lambda v: v >= 1)
 
         recon_ok = recon_result.ok and recon_result.status == "pass"
         run.step(
@@ -405,14 +413,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         if not recon_ok:
             # If Path 2 is not implemented, this step fails — report defect
-            if recon_result.ok and "Auto-tracked" not in (recon_result.text or ""):
+            _recon_auto_tracked = 0
+            try:
+                _recon_auto_tracked = _json.loads(recon_result.text or "{}").get("reconciliation", {}).get("auto_tracked", 0)
+            except Exception:
+                pass
+            if recon_result.ok and _recon_auto_tracked == 0:
                 run.step(
                     label="RO-73 DEFECT: Path 2 auto-track did not fire",
                     passed=False,
                     detail=(
                         "DEFECT: Expected the global type registry (Path 2) to auto-track the "
                         f"outside document (fqc_type={DOC_TYPE_PATH2!r}) during reconciliation. "
-                        f"'Auto-tracked' not found in response. "
+                        f"reconciliation.auto_tracked == 0. "
                         f"Response preview: {(recon_result.text or '')[:400]!r}"
                     ),
                 )
@@ -429,8 +442,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         pending_result = ctx.client.call_tool(
             "clear_pending_reviews",
             plugin_id=PLUGIN_ID_PATH2,
-            plugin_instance=instance_name_p2,
-            fqc_ids=[],
+            action="list",
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -447,7 +459,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # Strict check: the full canonical_folder path must appear verbatim, OR an unambiguous
         # folder-path fragment that uniquely identifies it (not the run_id alone, since the run_id
         # also appears in the table_name column for unrelated reasons).
-        has_pending_row = "1 item(s)" in pending_text or "item(s)" in pending_text
+        try:
+            _pending_payload = _json.loads(pending_text)
+            has_pending_row = _pending_payload.get("pending", 0) >= 1
+        except Exception:
+            has_pending_row = "1 item(s)" in pending_text or "item(s)" in pending_text
 
         # Full canonical folder path in the response — unambiguous
         has_canonical_folder_exact = canonical_folder in pending_text

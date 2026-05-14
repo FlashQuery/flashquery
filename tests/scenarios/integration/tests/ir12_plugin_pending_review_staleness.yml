@@ -54,7 +54,9 @@ steps:
         plugin_id: ir12
         plugin_instance: ir12test
         table: items
-      expect_contains: "pending review item"
+      expect_json_equals:
+        path: reconciliation.pending_reviews_created
+        value: 1
 
   - label: "Widget Item is tracked in items table"
     assert:
@@ -63,6 +65,7 @@ steps:
         plugin_id: ir12
         plugin_instance: ir12test
         table: items
+        include: [data]
       expect_contains: "Widget Item"
 
   # ── Second call: staleness check skips diff, but pending review still shown ────
@@ -70,23 +73,34 @@ steps:
   # The reconciler should skip re-diffing documents, but still query for pending reviews.
 
   - label: "Second immediate search_records — staleness skips diff but pending review still shown (IR-12)"
+    action: clear_pending_reviews
+    name: pending_reviews
+    args:
+      action: list
+      plugin_id: ir12
+      plugin_instance: ir12test
+
+  - label: "Pending review remains visible during reconciliation staleness window"
     assert:
-      op: search_records
+      op: clear_pending_reviews
       args:
+        action: list
         plugin_id: ir12
         plugin_instance: ir12test
-        table: items
-      expect_contains: "pending review item"
+      expect_json_equals:
+        path: pending
+        value: 1
 
   # ── Third call after clearing — pending review gone ──────────────────────────
 
   - label: "Clear the pending review"
     action: clear_pending_reviews
     args:
+      action: clear
       plugin_id: ir12
       plugin_instance: ir12test
-      fqc_ids:
-        - "${item_doc.fq_id}"
+      ids:
+        - "${pending_reviews.items[0].id}"
 
   - label: "After clearing, even a staleness-skipping call shows no pending reviews"
     assert:
@@ -95,4 +109,4 @@ steps:
         plugin_id: ir12
         plugin_instance: ir12test
         table: items
-      expect_not_contains: "pending review item"
+      expect_not_contains: '"pending_review"'

@@ -48,12 +48,12 @@ typically a roadmap item in the FlashQuery product vault — something in
 
 If the user names a feature by title (e.g., "Native LLM Access"), search for
 it:
-- Try `mcp__flashquery__search_documents` first
+- Try `mcp__flashquery__search` first
 - Fall back to file system search if the vault doesn't have it
 
 Once identified, load the full document and its outline in parallel:
 - `mcp__flashquery__get_document` — full body
-- `mcp__flashquery__get_doc_outline` — frontmatter and structure
+- `mcp__flashquery__get_document` — frontmatter and structure
 
 If the feature doc references an archived research document as its
 specification source (common pattern: the feature doc has a Specification
@@ -75,7 +75,7 @@ the `.md` extension).
 `Roadmap/Features/Native-LLM-Access/`.
 
 If the folder doesn't exist:
-1. Call `mcp__flashquery__create_directory` to create it
+1. Call `mcp__flashquery__manage_directory` with `action: "create"` and `paths` to create it
 2. Call `mcp__flashquery__move_document` to move the feature requirements
    document into the new folder
 
@@ -84,7 +84,7 @@ The development plan document goes in this same folder, named:
 
 **Example:** `Roadmap/Features/Native-LLM-Access/Native-LLM-Access Dev Plan.md`
 
-Create the development plan document using `mcp__flashquery__create_document`
+Create the development plan document using `mcp__flashquery__write_document` with `mode: "create"`
 so it's tracked in the vault. Use the template's frontmatter structure, filling
 in the `feature` and `requirements_doc` fields.
 
@@ -342,8 +342,7 @@ Tell the user:
 
 If there are no blocking open questions, update the feature document's pipeline
 status to `ready-for-dev`:
-- Call `mcp__flashquery__update_doc_header` on the feature requirements document
-  with `{ "status": "ready-for-dev" }`
+- Call `mcp__flashquery__write_document` with `mode: "update"`, the feature document identifier, and `frontmatter: { "status": "ready-for-dev" }`
 - Call `mcp__flashquery__apply_tags` to swap pipeline tags:
   `add_tags: ["#pipeline/ready-for-dev"]`,
   `remove_tags: ["#pipeline/spec-complete"]` (or whatever the current pipeline

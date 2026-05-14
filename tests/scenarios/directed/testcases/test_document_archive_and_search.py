@@ -33,9 +33,22 @@ Exit codes:
 from __future__ import annotations
 
 
-COVERAGE = ["D-12", "D-13", "S-04", "S-05", "X-09"]
+COVERAGE = [
+    "D-12",
+    "D-13",
+    "D-arch-1",
+    "D-arch-2",
+    "D-arch-3",
+    "D-arch-4",
+    "D-arch-5",
+    "D-arch-7",
+    "S-04",
+    "S-05",
+    "X-09",
+]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -62,6 +75,13 @@ def _extract_field(text: str, field: str) -> str:
     """Extract a 'Field: value' line from FQC key-value response text."""
     m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
+
+
+def _parse_json_object(text: str) -> dict:
+    parsed = json.loads(text)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"Expected JSON object, got {type(parsed).__name__}")
+    return parsed
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +214,71 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         if not archive_result.ok:
             return run
+
+        try:
+            archive_payload = _parse_json_object(archive_result.text)
+        except Exception:
+            archive_payload = {}
+        archive_shape_ok = (
+            archive_payload.get("identifier") == identifier
+            and archive_payload.get("path") == (created_path or test_path)
+            and archive_payload.get("fq_id") == created_fqc_id
+            and archive_payload.get("status") == "archived"
+            and isinstance(archive_payload.get("archived_at"), str)
+            and isinstance(archive_payload.get("size"), dict)
+        )
+        run.step(
+            label="D-arch-1/D-arch-2: archive_document returns JSON identification with archived_at",
+            passed=archive_shape_ok,
+            detail="" if archive_shape_ok else f"Unexpected archive payload: {archive_result.text[:300]}",
+            timing_ms=archive_result.timing_ms,
+        )
+
+        rearchive_result = ctx.client.call_tool(
+            "archive_document",
+            identifiers=identifier,
+        )
+        try:
+            rearchive_payload = _parse_json_object(rearchive_result.text)
+        except Exception:
+            rearchive_payload = {}
+        rearchive_ok = (
+            rearchive_result.ok
+            and rearchive_payload.get("archived_at") == archive_payload.get("archived_at")
+        )
+        run.step(
+            label="D-arch-5: re-archive returns existing archived_at timestamp",
+            passed=rearchive_ok,
+            detail="" if rearchive_ok else f"Unexpected re-archive payload: {rearchive_result.text[:300]}",
+            timing_ms=rearchive_result.timing_ms,
+            tool_result=rearchive_result,
+        )
+
+        batch_result = ctx.client.call_tool(
+            "archive_document",
+            identifiers=[identifier, f"_test/missing_archive_{run.run_id}.md"],
+        )
+        try:
+            batch_payload = json.loads(batch_result.text)
+        except Exception:
+            batch_payload = None
+        batch_ok = (
+            batch_result.ok
+            and isinstance(batch_payload, list)
+            and len(batch_payload) == 2
+            and isinstance(batch_payload[0], dict)
+            and batch_payload[0].get("fq_id") == created_fqc_id
+            and isinstance(batch_payload[1], dict)
+            and batch_payload[1].get("error") == "not_found"
+            and batch_payload[1].get("identifier") == f"_test/missing_archive_{run.run_id}.md"
+        )
+        run.step(
+            label="D-arch-3/D-arch-4/D-arch-7: archive batch preserves order with per-element error envelope",
+            passed=batch_ok,
+            detail="" if batch_ok else f"Unexpected batch archive payload: {batch_result.text[:300]}",
+            timing_ms=batch_result.timing_ms,
+            tool_result=batch_result,
+        )
 
         # ── Step 5: Verify disk frontmatter shows status=archived (D-12) ─
         t0 = time.monotonic()

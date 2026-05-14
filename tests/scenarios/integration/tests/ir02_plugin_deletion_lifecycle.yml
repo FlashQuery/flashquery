@@ -53,7 +53,9 @@ steps:
         plugin_id: ir02
         plugin_instance: ir02test
         table: contacts
-      expect_contains: "Auto-tracked"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 1
 
   - label: "Bob Smith appears in the contacts table"
     assert:
@@ -62,6 +64,7 @@ steps:
         plugin_id: ir02
         plugin_instance: ir02test
         table: contacts
+        include: [data]
       expect_contains: "Bob Smith"
 
   # ── Step 2: Archive the document (simulates file deletion) ────────────────────
@@ -83,7 +86,9 @@ steps:
         plugin_id: ir02
         plugin_instance: ir02test
         table: contacts
-      expect_contains: "Archived"
+      expect_json_equals:
+        path: reconciliation.archived
+        value: 1
 
   - label: "Bob Smith no longer appears as an active contact"
     assert:
@@ -92,4 +97,5 @@ steps:
         plugin_id: ir02
         plugin_instance: ir02test
         table: contacts
+        include: [data]
       expect_not_contains: "Bob Smith"

@@ -28,7 +28,7 @@ steps:
 
   - label: "search_all returns both document and memory in same result (IS-03)"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Andromeda Galaxy"
       expect_path: "cosmos/andromeda.md"
@@ -36,9 +36,10 @@ steps:
 
   - label: "search_all with shared tag returns both document and memory (IX-01)"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Andromeda Galaxy"
         tags: [cde-tag]
+        entity_types: [documents, memories]
       expect_path: "cosmos/andromeda.md"
       expect_contains: "Andromeda Galaxy is on a collision course"

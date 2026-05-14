@@ -33,7 +33,7 @@ steps:
 
   - label: "Before archive: all three documents are discoverable"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Arctic Glacier Retreat"
         entity_types: [documents]
@@ -46,7 +46,7 @@ steps:
 
   - label: "After archive: archived document is gone from search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Arctic Glacier Retreat 2021"
         entity_types: [documents]
@@ -54,7 +54,7 @@ steps:
 
   - label: "After archive: remaining documents are still discoverable"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Arctic Glacier Retreat"
         entity_types: [documents]
@@ -62,14 +62,14 @@ steps:
 
   - label: "After archive: first document (glacier_a) still individually findable"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Arctic Glacier Retreat 2020"
       expect_path: "climate/glacier-retreat-a.md"
 
   - label: "After archive: third document (glacier_c) still individually findable"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Arctic Glacier Retreat 2022"
       expect_path: "climate/glacier-retreat-c.md"

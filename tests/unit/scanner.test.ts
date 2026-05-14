@@ -1,5 +1,5 @@
 /**
- * Tests for scanner service (src/services/scanner.ts) and force_file_scan MCP tool.
+ * Tests for scanner service (src/services/scanner.ts) and maintain_vault MCP tool.
  *
  * Coverage:
  * - titleFromFilename transformation
@@ -8,7 +8,7 @@
  * - Deletion tracking with status='missing' (SCAN-04)
  * - Extension filtering (SCAN-06)
  * - Hash mismatch detection (DISC-01)
- * - force_file_scan MCP tool sync/async modes
+ * - maintain_vault MCP tool sync/background modes
  * - Startup banner verification (SCAN-08)
  */
 
@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import matter from 'gray-matter';
-import { titleFromFilename, runScanOnce, scanMutex } from '../../src/services/scanner.js';
+import { titleFromFilename, runScanOnce, scanMutex, repairFrontmatter } from '../../src/services/scanner.js';
 import { registerScanTools } from '../../src/mcp/tools/scan.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
@@ -46,6 +46,7 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('node:crypto', () => ({
+  randomUUID: vi.fn(() => '00000000-0000-4000-8000-000000000001'),
   createHash: vi.fn(() => ({
     update: vi.fn().mockReturnThis(),
     digest: vi.fn(() => 'mock-sha256-hash-abc123'),
@@ -702,28 +703,28 @@ describe('runScanOnce — regression', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tests: force_file_scan MCP tool
+// Tests: maintain_vault MCP tool
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('force_file_scan MCP tool', () => {
+describe('maintain_vault MCP tool', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('registers force_file_scan tool', () => {
+  it('registers maintain_vault tool', () => {
     const config = makeConfig();
     const { server } = createMockServer();
 
     registerScanTools(server, config);
 
     expect(server.registerTool).toHaveBeenCalledWith(
-      'force_file_scan',
+      'maintain_vault',
       expect.any(Object),
       expect.any(Function)
     );
   });
 
-  it('sync mode returns result counts as JSON', async () => {
+  it('sync action returns result counts as JSON', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
 
@@ -731,33 +732,35 @@ describe('force_file_scan MCP tool', () => {
     vi.mocked(fsPromises.readdir).mockResolvedValue([] as any);
 
     registerScanTools(server, config);
-    const handler = getHandler('force_file_scan');
+    const handler = getHandler('maintain_vault');
 
-    const result = await handler({ background: false }) as any;
+    const result = await handler({ action: 'sync', background: false }) as any;
 
     expect(result.content).toBeDefined();
     expect(result.content[0].type).toBe('text');
     const json = JSON.parse(result.content[0].text);
-    expect(json.status).toBe('complete');
-    expect(json.new_files).toBeDefined();
-    expect(json.updated_files).toBeDefined();
-    expect(json.moved_files).toBeDefined();
-    expect(json.deleted_files).toBeDefined();
+    expect(json.actions[0].action).toBe('sync');
+    expect(json.actions[0].counts.added).toBeDefined();
+    expect(json.actions[0].counts.updated).toBeDefined();
+    expect(json.actions[0].counts.archived).toBeDefined();
+    expect(JSON.stringify(json)).not.toContain('embedding_status');
+    expect(JSON.stringify(json)).not.toContain('embeds_awaited');
   });
 
-  it('background mode returns immediately with status=started', async () => {
+  it('background sync returns immediately with accepted job metadata', async () => {
     const config = makeConfig();
     const { server, getHandler } = createMockServer();
 
     registerScanTools(server, config);
-    const handler = getHandler('force_file_scan');
+    const handler = getHandler('maintain_vault');
 
-    const result = await handler({ background: true }) as any;
+    const result = await handler({ action: 'sync', background: true }) as any;
 
     expect(result.content).toBeDefined();
     const json = JSON.parse(result.content[0].text);
-    expect(json.status).toBe('started');
-    expect(json.message).toContain('background');
+    expect(json.accepted).toBe(true);
+    expect(json.job_id).toEqual(expect.any(String));
+    expect(json.started_at).toEqual(expect.any(String));
   });
 
   it('returns isError on scan failure', async () => {
@@ -770,10 +773,10 @@ describe('force_file_scan MCP tool', () => {
     // by checking that isError field exists in error responses
 
     registerScanTools(server, config);
-    const handler = getHandler('force_file_scan');
+    const handler = getHandler('maintain_vault');
 
     // Even on normal operation, we can verify the structure supports isError: true
-    const result = await handler({ background: false }) as any;
+    const result = await handler({ action: 'sync', background: false }) as any;
 
     // Verify the tool returns proper structure
     expect(result.content).toBeDefined();
@@ -1212,6 +1215,109 @@ describe('runScanOnce — IDC-01: restore missing→active in hash-found path', 
     // The scanner correctly implements the feature, but the test mocking strategy needs refinement
     // TODO: Refactor to properly mock the DB state initialization that scanner uses
     expect(true).toBe(true);
+  });
+});
+
+describe('repairFrontmatter', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('marks a repair row missing instead of recreating a deleted vault file', async () => {
+    const updatePayloads: Array<Record<string, unknown>> = [];
+    const finalEq = vi.fn().mockResolvedValue({ data: null, error: null });
+    const update = vi.fn((payload: Record<string, unknown>) => {
+      updatePayloads.push(payload);
+      return {
+        eq: vi.fn().mockReturnValue({
+          eq: finalEq,
+        }),
+      };
+    });
+    const repairQuery = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 'missing-repair-id',
+          path: 'Gone/Missing.md',
+          content_hash: 'old-hash',
+          created_at: '2026-05-12T00:00:00.000Z',
+          status: 'active',
+        },
+      ],
+      error: null,
+    });
+    const select = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: repairQuery,
+      }),
+    });
+    const mockSupabase = {
+      from: vi.fn(() => ({ select, update })),
+    };
+    vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabase as any);
+    vi.mocked(fsPromises.readFile).mockRejectedValueOnce(Object.assign(new Error('missing'), { code: 'ENOENT' }));
+
+    try {
+      const result = await repairFrontmatter(makeConfig());
+
+      expect(result).toMatchObject({ scanned: 1, repaired: 0, updated: 0 });
+      expect(vaultManager.writeMarkdown).not.toHaveBeenCalled();
+      expect(updatePayloads[0]).toMatchObject({
+        status: 'missing',
+        needs_frontmatter_repair: false,
+      });
+      expect(finalEq).toHaveBeenCalledWith('instance_id', 'test-instance-id');
+    } finally {
+      vi.mocked(supabaseManager.getClient).mockImplementation(() => ({
+        from: vi.fn(() => ({
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          neq: vi.fn().mockResolvedValue({ data: [], error: null }),
+          in: vi.fn().mockResolvedValue({ data: [], error: null }),
+          update: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+          insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+          upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
+        })),
+      }) as any);
+    }
+  });
+
+  it('throws when the repair row query fails', async () => {
+    const repairQuery = vi.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'database unavailable' },
+    });
+    const select = vi.fn().mockReturnValue({
+      eq: vi.fn().mockReturnValue({
+        eq: repairQuery,
+      }),
+    });
+    const mockSupabase = {
+      from: vi.fn(() => ({ select })),
+    };
+    vi.mocked(supabaseManager.getClient).mockReturnValue(mockSupabase as any);
+
+    try {
+      await expect(repairFrontmatter(makeConfig())).rejects.toThrow(
+        'frontmatter repair query failed: database unavailable'
+      );
+    } finally {
+      vi.mocked(supabaseManager.getClient).mockImplementation(() => ({
+        from: vi.fn(() => ({
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          neq: vi.fn().mockResolvedValue({ data: [], error: null }),
+          in: vi.fn().mockResolvedValue({ data: [], error: null }),
+          update: vi.fn().mockReturnValue({
+            eq: vi.fn().mockResolvedValue({ data: null, error: null }),
+          }),
+          insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+          upsert: vi.fn().mockResolvedValue({ data: null, error: null }),
+        })),
+      }) as any);
+    }
   });
 });
 

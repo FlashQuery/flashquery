@@ -24,39 +24,65 @@ import { registerLlmUsageTools } from '../../src/mcp/tools/llm-usage.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 const READ_ONLY_TOOLS = [
-  'search_documents',
   'get_document',
-  'search_memory',
-  'get_memory',
-  'list_memories',
-  'search_records',
-  'get_record',
-  'search_all',
+  'list_vault',
   'get_briefing',
+  'search',
+  'get_memory',
+  'get_record',
+  'search_records',
 ];
 
 const READ_WRITE_EXTRA_TOOLS = [
-  'create_document',
-  'update_document',
-  'append_to_doc',
+  'copy_document',
   'move_document',
-  'save_memory',
-  'update_memory',
-  'create_record',
-  'update_record',
-  'apply_tags',
   'archive_document',
+  'remove_document',
+  'insert_in_doc',
+  'replace_doc_section',
+  'apply_tags',
+  'insert_doc_link',
+  'write_document',
   'archive_memory',
+  'write_memory',
+  'write_record',
   'archive_record',
-  'create_directory',
-  'remove_directory',
+  'manage_directory',
+];
+
+const READ_WRITE_TOOLS = [
+  'get_document',
+  'list_vault',
+  'copy_document',
+  'move_document',
+  'archive_document',
+  'remove_document',
+  'insert_in_doc',
+  'replace_doc_section',
+  'apply_tags',
+  'get_briefing',
+  'insert_doc_link',
+  'write_document',
+  'search',
+  'get_memory',
+  'archive_memory',
+  'write_memory',
+  'write_record',
+  'get_record',
+  'archive_record',
+  'search_records',
+  'manage_directory',
 ];
 
 const HARD_EXCLUDED_TOOLS = [
-  'call_model',
   'register_plugin',
   'unregister_plugin',
   'get_plugin_info',
+  'clear_pending_reviews',
+  'call_model',
+  'force_file_scan',
+  'reconcile_documents',
+  'maintain_vault',
 ];
 
 const ALL_CATALOG_TOOL_NAMES = [
@@ -169,13 +195,13 @@ describe('TOOL_TIERS', () => {
     expect(catalog).toHaveLength(1);
     expect(catalog[0]).toMatchObject({
       name: 'get_document',
-      description: 'Get document',
+      description: expect.stringContaining('Summary: Read one or more vault documents'),
       inputSchema,
     });
     expect(catalog[0].handler).toEqual(expect.any(Function));
     expect(originalRegisterTool).toHaveBeenCalledWith(
       'get_document',
-      { description: 'Get document', inputSchema },
+      { description: expect.stringContaining('Summary: Read one or more vault documents'), inputSchema },
       handler
     );
 
@@ -202,10 +228,34 @@ describe('TOOL_TIERS', () => {
 
   it('defines the exact tier:read-only native tool allowlist', () => {
     expect(TOOL_TIERS['tier:read-only']).toEqual(READ_ONLY_TOOLS);
+    expect(TOOL_TIERS['tier:read-only']).toContain('list_vault');
+    expect(TOOL_TIERS['tier:read-only']).not.toEqual(expect.arrayContaining([
+      'get_llm_usage',
+      'call_model',
+      'maintain_vault',
+      'create_document',
+      'save_memory',
+      'list_projects',
+      'get_project_info',
+    ]));
   });
 
   it('defines tier:read-write as read-only plus write-capable native tools', () => {
-    expect(TOOL_TIERS['tier:read-write']).toEqual([...READ_ONLY_TOOLS, ...READ_WRITE_EXTRA_TOOLS]);
+    expect(TOOL_TIERS['tier:read-write']).toEqual(READ_WRITE_TOOLS);
+    expect(TOOL_TIERS['tier:read-write']).toEqual(expect.arrayContaining([
+      'copy_document',
+      'insert_in_doc',
+      'replace_doc_section',
+    ]));
+    expect(TOOL_TIERS['tier:read-write']).not.toEqual(expect.arrayContaining([
+      'get_llm_usage',
+      'call_model',
+      'maintain_vault',
+      'create_document',
+      'save_memory',
+      'list_projects',
+      'get_project_info',
+    ]));
   });
 
   it('contains only currently registered native MCP tools', () => {
@@ -224,6 +274,57 @@ describe('TOOL_TIERS', () => {
 });
 
 describe('assembleNativeToolRegistry', () => {
+  it('treats host-disabled explicit tools as unavailable during delegated assembly', () => {
+    const hostFilteredCatalog = CATALOG.filter((tool) => ['get_document', 'call_model'].includes(tool.name));
+    const result = assembleNativeToolRegistry(
+      makeConfig(['tier:read-write', 'save_memory']),
+      'research',
+      hostFilteredCatalog
+    );
+
+    expect(result.nativeToolNames).toEqual(['get_document']);
+    expect(result.nativeToolNames).not.toContain('save_memory');
+    expect(result.diagnostics.unknown).toEqual(expect.arrayContaining(['save_memory']));
+  });
+
+  it('reports removed and dead requested tools as diagnostics without provider exposure', () => {
+    const result = assembleNativeToolRegistry(
+      makeConfig(['append_to_doc', 'create_document', 'list_projects', 'get_project_info']),
+      'research',
+      CATALOG
+    );
+
+    expect(result.nativeToolNames).toEqual([]);
+    expect(result.providerTools).toBeUndefined();
+    expect(result.diagnostics.unknown).toEqual([
+      'append_to_doc',
+      'create_document',
+      'list_projects',
+      'get_project_info',
+    ]);
+    expect(result.diagnostics.explicitTools).toEqual([]);
+  });
+
+  it('keeps call_model hard-excluded even when host-enabled and explicitly requested', () => {
+    const hostFilteredCatalog = CATALOG.filter((tool) => ['call_model'].includes(tool.name));
+    const result = assembleNativeToolRegistry(makeConfig(['call_model']), 'research', hostFilteredCatalog);
+
+    expect(result.nativeToolNames).toEqual([]);
+    expect(result.diagnostics.hardExcluded).toEqual([
+      { tool: 'call_model', reason: 'Tool can recursively call models and is not safe for delegated native access.' },
+    ]);
+  });
+
+  it('does not regain memory tools from tier selectors when the host catalog is doc-read only', () => {
+    const hostFilteredCatalog = CATALOG.filter((tool) => ['get_document', 'list_vault', 'search'].includes(tool.name));
+    const result = assembleNativeToolRegistry(makeConfig(['tier:read-only']), 'research', hostFilteredCatalog);
+
+    expect(result.nativeToolNames).toEqual(['get_document', 'list_vault', 'search']);
+    expect(result.nativeToolNames).not.toContain('search_memory');
+    expect(result.nativeToolNames).not.toContain('get_memory');
+    expect(result.nativeToolNames).not.toContain('list_memories');
+  });
+
   it('returns stable empty native diagnostics when a purpose declares no native tools', () => {
     const result = assembleNativeToolRegistry(makeConfig(), 'research', CATALOG);
 
@@ -255,9 +356,9 @@ describe('assembleNativeToolRegistry', () => {
   it('expands tier:read-write to read-only and write-capable native tools', () => {
     const result = assembleNativeToolRegistry(makeConfig(['tier:read-write']), 'research', CATALOG);
 
-    expect(result.nativeToolNames).toEqual([...READ_ONLY_TOOLS, ...READ_WRITE_EXTRA_TOOLS]);
+    expect(result.nativeToolNames).toEqual(READ_WRITE_TOOLS);
     expect(result.diagnostics.expandedTiers).toEqual([
-      { tier: 'tier:read-write', tools: [...READ_ONLY_TOOLS, ...READ_WRITE_EXTRA_TOOLS] },
+      { tier: 'tier:read-write', tools: READ_WRITE_TOOLS },
     ]);
   });
 
@@ -280,20 +381,28 @@ describe('assembleNativeToolRegistry', () => {
     );
 
     expect(result.nativeToolNames).toEqual([
-      'search_documents',
       'get_document',
-      'search_memory',
-      'list_memories',
-      'search_records',
-      'get_record',
+      'list_vault',
       'get_briefing',
+      'search',
+      'get_record',
+      'search_records',
     ]);
-    expect(result.diagnostics.excluded).toEqual(['get_memory', 'search_all', 'custom_native_tool']);
+    expect(result.diagnostics.excluded).toEqual(['get_memory', 'custom_native_tool']);
   });
 
   it('removes hard-excluded native tools and reports exact diagnostics', () => {
     const result = assembleNativeToolRegistry(
-      makeConfig(['tier:read-only', 'call_model', 'register_plugin', 'unregister_plugin', 'get_plugin_info']),
+      makeConfig([
+        'tier:read-only',
+        'call_model',
+        'register_plugin',
+        'unregister_plugin',
+        'get_plugin_info',
+        'clear_pending_reviews',
+        'force_file_scan',
+        'reconcile_documents',
+      ]),
       'research',
       CATALOG
     );
@@ -304,17 +413,23 @@ describe('assembleNativeToolRegistry', () => {
     expect(result.nativeToolNames).not.toContain('register_plugin');
     expect(result.nativeToolNames).not.toContain('unregister_plugin');
     expect(result.nativeToolNames).not.toContain('get_plugin_info');
+    expect(result.nativeToolNames).not.toContain('clear_pending_reviews');
+    expect(result.nativeToolNames).not.toContain('force_file_scan');
+    expect(result.nativeToolNames).not.toContain('reconcile_documents');
     expect(result.diagnostics.hardExcluded).toEqual([
-      { tool: 'call_model', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'register_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'unregister_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'get_plugin_info', reason: 'Tool is not safe for delegated model-visible native access.' },
+      { tool: 'call_model', reason: 'Tool can recursively call models and is not safe for delegated native access.' },
+      { tool: 'register_plugin', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'unregister_plugin', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'get_plugin_info', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'clear_pending_reviews', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
+      { tool: 'force_file_scan', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
+      { tool: 'reconcile_documents', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
     ]);
   });
 
   it('returns an exact empty result when all requested tools are excluded', () => {
     const result = assembleNativeToolRegistry(
-      makeConfig(['search_documents', 'get_document'], ['search_documents', 'get_document']),
+      makeConfig(['get_document'], ['get_document']),
       'research',
       CATALOG
     );
@@ -324,8 +439,8 @@ describe('assembleNativeToolRegistry', () => {
       providerTools: undefined,
       diagnostics: {
         expandedTiers: [],
-        explicitTools: ['search_documents', 'get_document'],
-        excluded: ['search_documents', 'get_document'],
+        explicitTools: ['get_document'],
+        excluded: ['get_document'],
         hardExcluded: [],
         unknown: [],
       },
@@ -334,7 +449,15 @@ describe('assembleNativeToolRegistry', () => {
 
   it('omits providerTools when hard-excluded catalog entries are requested', () => {
     const result = assembleNativeToolRegistry(
-      makeConfig(['call_model', 'register_plugin', 'unregister_plugin', 'get_plugin_info']),
+      makeConfig([
+        'call_model',
+        'register_plugin',
+        'unregister_plugin',
+        'get_plugin_info',
+        'clear_pending_reviews',
+        'force_file_scan',
+        'reconcile_documents',
+      ]),
       'research',
       CATALOG,
       { strictTools: true }
@@ -343,10 +466,13 @@ describe('assembleNativeToolRegistry', () => {
     expect(result.nativeToolNames).toEqual([]);
     expect(result.providerTools).toBeUndefined();
     expect(result.diagnostics.hardExcluded).toEqual([
-      { tool: 'call_model', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'register_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'unregister_plugin', reason: 'Tool is not safe for delegated model-visible native access.' },
-      { tool: 'get_plugin_info', reason: 'Tool is not safe for delegated model-visible native access.' },
+      { tool: 'call_model', reason: 'Tool can recursively call models and is not safe for delegated native access.' },
+      { tool: 'register_plugin', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'unregister_plugin', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'get_plugin_info', reason: 'Tool mutates or exposes plugin administration and is not safe for delegated native access.' },
+      { tool: 'clear_pending_reviews', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
+      { tool: 'force_file_scan', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
+      { tool: 'reconcile_documents', reason: 'Tool performs administrative maintenance and is not safe for delegated native access.' },
     ]);
   });
 
@@ -383,9 +509,14 @@ describe('assembleNativeToolRegistry', () => {
             properties: {
               query: { type: 'string', description: 'Search query' },
               tags: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Optional tags',
+                anyOf: [
+                  {
+                    type: 'array',
+                    items: { type: 'string' },
+                    description: 'Optional tags',
+                  },
+                  { type: 'null' },
+                ],
               },
               mode: { type: 'string', enum: ['fast', 'deep'] },
               nested: {
@@ -497,8 +628,24 @@ describe('toOpenAiToolDefinition', () => {
       required: ['query', 'filters'],
       properties: {
         filters: {
-          additionalProperties: false,
-          required: ['tags'],
+          anyOf: [
+            {
+              additionalProperties: false,
+              required: ['tags'],
+              properties: {
+                tags: {
+                  anyOf: [
+                    {
+                      type: 'array',
+                      items: { type: 'string' },
+                    },
+                    { type: 'null' },
+                  ],
+                },
+              },
+            },
+            { type: 'null' },
+          ],
         },
       },
     });
@@ -558,7 +705,7 @@ describe('validateAndCacheNativeToolSchemas', () => {
 });
 
 describe('normalizeToolJsonSchema', () => {
-  it('requires every root property in strict mode', () => {
+  it('requires every root property in strict mode and makes originally optional fields nullable', () => {
     const normalized = normalizeToolJsonSchema(
       {
         type: 'object',
@@ -575,7 +722,7 @@ describe('normalizeToolJsonSchema', () => {
       type: 'object',
       properties: {
         query: { type: 'string' },
-        tags: { type: 'array', items: { type: 'string' } },
+        tags: { anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }] },
       },
       required: ['query', 'tags'],
       additionalProperties: false,

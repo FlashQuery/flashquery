@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { registerMemoryTools } from '../../src/mcp/tools/memory.js';
@@ -7,8 +7,17 @@ import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
 import { registerRecordTools } from '../../src/mcp/tools/records.js';
 import { registerCompoundTools } from '../../src/mcp/tools/compound.js';
 import { registerScanTools } from '../../src/mcp/tools/scan.js';
+import { registerPendingReviewTools } from '../../src/mcp/tools/pending-review.js';
+import { registerFileTools } from '../../src/mcp/tools/files.js';
+import { registerLlmTools } from '../../src/mcp/tools/llm.js';
+import { registerLlmUsageTools } from '../../src/mcp/tools/llm-usage.js';
+import { getNativeToolCatalog, wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
+import {
+  assertRegisteredToolsHaveMetadata,
+  requireToolMetadata,
+} from '../../src/mcp/tool-metadata.js';
+import { resolveHostToolExposure } from '../../src/mcp/tool-exposure.js';
 
-// Minimal config for testing
 const mockConfig: FlashQueryConfig = {
   instance: { id: 'test', vault: { path: '/tmp/vault' } },
   supabase: { url: 'http://localhost:54321', serviceRoleKey: 'test-key', databaseUrl: 'postgresql://localhost' },
@@ -18,197 +27,92 @@ const mockConfig: FlashQueryConfig = {
   locking: { enabled: false },
 };
 
-describe('MCP Tool Descriptions (SPEC-17)', () => {
-  let server: McpServer;
+function makeCatalogServer(): McpServer {
+  return wrapServerWithToolCatalog(new McpServer({ name: 'test', version: '0.1.0' }));
+}
 
-  it('Should register all tools successfully', () => {
-    // Create a fresh server for each test
-    server = new McpServer({ name: 'test', version: '0.1.0' });
+function registerAllCurrentTools(server: McpServer): void {
+  registerMemoryTools(server, mockConfig);
+  registerDocumentTools(server, mockConfig);
+  registerPluginTools(server, mockConfig);
+  registerRecordTools(server, mockConfig);
+  registerCompoundTools(server, mockConfig);
+  registerScanTools(server, mockConfig);
+  registerPendingReviewTools(server, mockConfig);
+  registerFileTools(server, mockConfig);
+  registerLlmTools(server, mockConfig);
+  registerLlmUsageTools(server, mockConfig);
+}
 
-    // Register all tool groups
-    registerMemoryTools(server, mockConfig);
-    registerDocumentTools(server, mockConfig);
-    registerPluginTools(server, mockConfig);
-    registerRecordTools(server, mockConfig);
-    registerCompoundTools(server, mockConfig);
-    registerScanTools(server, mockConfig);
+describe('MCP tool registration metadata', () => {
+  it('skips host-disabled tools before native catalog capture and SDK registration', () => {
+    const originalRegisterTool = vi.fn();
+    const server = wrapServerWithToolCatalog({
+      registerTool: originalRegisterTool,
+    } as unknown as McpServer, { hostEnabledToolNames: new Set(['get_document']) });
 
-    // The server should have tools registered
-    expect(server).toBeDefined();
+    server.registerTool('get_document', { description: 'Get document', inputSchema: {} }, vi.fn() as never);
+    server.registerTool('write_memory', { description: 'Write memory', inputSchema: {} }, vi.fn() as never);
+
+    expect(getNativeToolCatalog(server).map((tool) => tool.name)).toEqual(['get_document']);
+    expect(originalRegisterTool).toHaveBeenCalledTimes(1);
+    expect(originalRegisterTool).toHaveBeenCalledWith('get_document', expect.any(Object), expect.any(Function));
   });
 
-  it('Should register 34 tools across all tool modules (36 minus 2 deprecated)', () => {
-    server = new McpServer({ name: 'test', version: '0.1.0' });
+  it('registers all modules against a host-filtered doc-read catalog', () => {
+    const server = wrapServerWithToolCatalog(
+      new McpServer({ name: 'test', version: '0.1.0' }),
+      { hostEnabledToolNames: new Set(resolveHostToolExposure({ tools: ['category:doc-read'] }).hostEnabledToolNames) }
+    );
 
-    // Register all tool groups - if any fail or have registration issues, this will throw
-    expect(() => {
-      registerMemoryTools(server, mockConfig);
-      registerDocumentTools(server, mockConfig);
-      registerPluginTools(server, mockConfig);
-      registerRecordTools(server, mockConfig);
-      registerCompoundTools(server, mockConfig);
-      registerScanTools(server, mockConfig);
-    }).not.toThrow();
+    registerAllCurrentTools(server);
+
+    const names = getNativeToolCatalog(server).map((tool) => tool.name);
+    expect(names).toEqual(expect.arrayContaining(['get_document', 'list_vault']));
+    expect(names).not.toContain('save_memory');
+    expect(names).not.toContain('create_document');
+    expect(names).not.toContain('call_model');
   });
 
-  it('Deprecated tools module (projects.ts) should not be imported in server.ts', () => {
-    // This test verifies that the server.ts file does not import or register registerProjectTools
-    // We do this by checking that the build succeeds without projectTools registration
-    expect(server).toBeDefined();
+  it('registers current tool modules into the native catalog', () => {
+    const server = makeCatalogServer();
+
+    expect(() => registerAllCurrentTools(server)).not.toThrow();
+
+    const catalog = getNativeToolCatalog(server);
+    const registeredNames = catalog.map((tool) => tool.name);
+
+    expect(registeredNames).toContain('get_document');
+    expect(registeredNames).toContain('call_model');
+    expect(registeredNames).toContain('list_vault');
+    expect(registeredNames).not.toContain('get_doc_outline');
+    expect(registeredNames).not.toContain('list_projects');
+    expect(registeredNames).not.toContain('get_project_info');
   });
 
-  it('Document tools should have distinct descriptions', () => {
-    // Document tools: create_document, get_document, update_document, archive_document,
-    // search_documents, reconcile_documents, copy_document, move_document
-    // Note: get_doc_outline was removed in Phase 107
+  it('has central metadata for every currently registered native tool', () => {
+    const server = makeCatalogServer();
+    registerAllCurrentTools(server);
+    const catalog = getNativeToolCatalog(server);
 
-    const descriptions = [
-      'Create a new markdown document',
-      'Read a document and return a structured JSON envelope',
-      'Overwrite an existing document\'s',
-      'Archive one or more documents',
-      'Search vault documents by',
-      'Scan the database for documents',
-      'Copy a vault document',
-      'Move or rename a document',
-    ];
-
-    // All descriptions should be unique (no two tools have the same intent)
-    const unique = new Set(descriptions);
-    expect(unique.size).toBe(descriptions.length);
+    expect(() => assertRegisteredToolsHaveMetadata(catalog)).not.toThrow();
   });
 
-  it('Memory tools should have distinct descriptions', () => {
-    // Memory tools: save_memory, search_memory, update_memory, list_memories, get_memory, archive_memory
+  it('uses metadata descriptions for the registered native catalog', () => {
+    const server = makeCatalogServer();
+    registerAllCurrentTools(server);
+    const catalog = getNativeToolCatalog(server);
 
-    const descriptions = [
-      'Store a persistent fact',
-      'Search memories by semantic',
-      'Update an existing memory\'s content',
-      'List memories filtered by tags',
-      'Retrieve one or more memories',
-      'Archive a memory by marking',
-    ];
+    for (const tool of catalog) {
+      const metadata = requireToolMetadata(tool.name);
 
-    // All descriptions should be unique
-    const unique = new Set(descriptions);
-    expect(unique.size).toBe(descriptions.length);
-  });
-
-  it('Record tools should have distinct descriptions', () => {
-    // Record tools: create_record, get_record, update_record, archive_record, search_records
-
-    const descriptions = [
-      'Create a new record in a plugin',
-      'Retrieve a single record by',
-      'Update specific fields on',
-      'Soft-delete a record by',
-      'Search records in a plugin table',
-    ];
-
-    // All descriptions should be unique
-    const unique = new Set(descriptions);
-    expect(unique.size).toBe(descriptions.length);
-  });
-
-  it('Plugin tools should have distinct descriptions', () => {
-    // Plugin tools: register_plugin, get_plugin_info, unregister_plugin
-
-    const descriptions = [
-      'Register or update a plugin',
-      'Get the schema definition',
-      'Unregister a plugin and tear',
-    ];
-
-    // All descriptions should be unique
-    const unique = new Set(descriptions);
-    expect(unique.size).toBe(descriptions.length);
-  });
-
-  it('Sibling document tools should clearly distinguish', () => {
-    // Verify that sibling tools have different key keywords in descriptions
-    // Note: get_doc_outline was removed in Phase 107; use get_document include param instead
-    const toolKeywords: Record<string, string[]> = {
-      get_document: ['structured JSON envelope', 'include'],
-      search_documents: ['search', 'tags', 'ranked results'],
-      get_briefing: ['summary', 'grouped by type'],
-      search_all: ['both documents and memories', 'unified'],
-    };
-
-    for (const [tool, keywords] of Object.entries(toolKeywords)) {
-      // Verify keywords are all strings
-      expect(Array.isArray(keywords)).toBe(true);
-      expect(keywords.length).toBeGreaterThan(0);
-      keywords.forEach((kw) => {
-        expect(typeof kw).toBe('string');
-      });
-    }
-  });
-
-  it('All descriptions should mention data entities', () => {
-    // Data entity keywords by tool category
-    const entityChecks: Record<string, string> = {
-      document: 'document|vault|markdown|fqc_id',
-      memory: 'memory|fact|observation',
-      record: 'record|plugin|table|field',
-      plugin: 'plugin|schema|register',
-      file: 'file|folder|scan',
-    };
-
-    // Verify entity keywords are present
-    for (const [entity, keywords] of Object.entries(entityChecks)) {
-      expect(keywords.length).toBeGreaterThan(0);
-      // Each should have pipe-separated keywords
-      const parts = keywords.split('|');
-      expect(parts.length).toBeGreaterThanOrEqual(1);
-    }
-  });
-
-  it('Tool description character limits should be respected', () => {
-    // Product doc specifies descriptions should be under 300 characters
-    // This is a documentation test to track character limits
-    // Note: get_doc_outline was removed in Phase 107
-
-    const descriptions = [
-      'Create a new markdown document in the vault. Provide a title (required), optional tags for categorization, optional body content, and an optional vault-relative path to control where it\'s saved (e.g. "clients/acme/notes.md"). Defaults to vault root if no path is given. Returns the new document\'s fqc_id, path, and metadata. Use this when the user wants to start a new document, note, record, or page.',
-      'Read a document and return a structured JSON envelope. The envelope always contains identifier, title, path, fq_id, modified, and size.chars. Use the include parameter to also receive body, frontmatter, or headings.',
-    ];
-
-    for (const desc of descriptions) {
-      expect(desc.length).toBeLessThan(500); // Allow some buffer in tests
-    }
-  });
-
-  it('Compound tools should distinguish between similar operations', () => {
-    // append_to_doc vs insert_in_doc vs replace_doc_section should be distinct
-    const expectations = [
-      { tool: 'append_to_doc', hasKeyword: 'end' },
-      { tool: 'insert_in_doc', hasKeyword: 'specific position' },
-      { tool: 'replace_doc_section', hasKeyword: 'Replace' },
-    ];
-
-    for (const { tool, hasKeyword } of expectations) {
-      expect(hasKeyword.length).toBeGreaterThan(0);
-      expect(typeof tool).toBe('string');
-    }
-  });
-
-  it('Memory tools should guide AI on long-term vs short-term usage', () => {
-    // save_memory should emphasize persistence and long-term storage
-    const expectedKeywords = ['persistent', 'future conversations', 'long-term'];
-
-    for (const keyword of expectedKeywords) {
-      expect(keyword.length).toBeGreaterThan(0);
-    }
-  });
-
-  it('Tool descriptions should not reference deprecated tools', () => {
-    // Scan through expected descriptions to ensure no references to deprecated tools
-    const deprecatedToolReferences = ['list_projects', 'get_project_info'];
-
-    // This is a smoke test — in real implementation, you would scan actual tool descriptions
-    for (const deprecatedRef of deprecatedToolReferences) {
-      expect(deprecatedRef.length).toBeGreaterThan(0);
+      expect(tool.description.trim(), `${tool.name} registered description`).not.toBe('');
+      expect(tool.description, `${tool.name} registered description`).toBe(metadata.description);
+      expect(metadata.hostEligible, `${tool.name} should be host eligible while registered`).toBe(true);
+      expect(tool.description, `${tool.name} registered description`).toContain('Summary:');
+      expect(tool.description, `${tool.name} registered description`).toContain('Use when:');
+      expect(tool.description, `${tool.name} registered description`).toContain('Do not use when:');
+      expect(tool.description, `${tool.name} registered description`).toContain('Example:');
     }
   });
 });

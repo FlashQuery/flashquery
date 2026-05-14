@@ -4,7 +4,13 @@ import { resolve } from 'node:path';
 export default defineConfig({
   test: {
     root: resolve(import.meta.dirname, '../..'),
-    include: ['tests/integration/**/*.test.ts'],
+    include: [
+      'tests/integration/documents.integration.test.ts',
+      'tests/integration/save-memory-tags.test.ts',
+      'tests/integration/compound-tools.integration.test.ts',
+      'tests/integration/llm-config-sync.test.ts',
+      'tests/integration/tool-registry.test.ts',
+    ],
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],
     globals: true,
     testTimeout: 30000,

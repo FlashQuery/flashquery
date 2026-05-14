@@ -37,8 +37,9 @@ steps:
   # ── Scaffold plugin directories ─────────────────────────────────────────────
 
   - label: "Scaffold plugin directories with create_directory using root_path"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       root_path: "_integration/if13"
       paths: ["contacts", "companies"]
 
@@ -48,7 +49,7 @@ steps:
       args:
         path: "_integration/if13"
         show: "directories"
-      expect_contains: "contacts/"
+      expect_contains: '"path":"_integration/if13/contacts"'
 
   - label: "list_vault confirms companies/ directory exists (IF-13)"
     assert:
@@ -56,7 +57,7 @@ steps:
       args:
         path: "_integration/if13"
         show: "directories"
-      expect_contains: "companies/"
+      expect_contains: '"path":"_integration/if13/companies"'
 
   # ── Write contact document and assert tracking ──────────────────────────────
 
@@ -75,4 +76,5 @@ steps:
         plugin_id: if13
         plugin_instance: if13test
         table: contacts
+        include: [data]
       expect_contains: "Alice"

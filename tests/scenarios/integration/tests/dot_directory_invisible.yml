@@ -7,8 +7,9 @@ coverage: [IF-08]
 
 steps:
   - label: "Create a dot-prefixed directory for IF-08"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if08/.hidden-dir"
 
   - label: "list_vault with default options does not show dot-prefixed directory (IF-08)"

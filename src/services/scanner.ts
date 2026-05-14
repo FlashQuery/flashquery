@@ -1,4 +1,4 @@
-import { basename, dirname, extname } from 'node:path';
+import { basename, dirname, extname, join } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { existsSync, lstatSync } from 'node:fs';
 import { v4 as uuidv4 } from 'uuid';
@@ -35,6 +35,24 @@ export interface ScanResult {
   embedsAwaited: number; // Number of embed promises awaited during drain
 }
 
+export interface FrontmatterRepairOptions {
+  dryRun?: boolean;
+}
+
+export interface FrontmatterRepairResult {
+  scanned: number;
+  added: number;
+  updated: number;
+  repaired: number;
+  archived: number;
+}
+
+export interface DocumentReconciliationResult {
+  scanned: number;
+  updated: number;
+  archived: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // titleFromFilename — derives title from filename (D-03: not from H1 heading)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -46,6 +64,90 @@ export function titleFromFilename(relativePath: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export async function reconcileTrackedDocuments(
+  config: FlashQueryConfig,
+  options: FrontmatterRepairOptions = {}
+): Promise<DocumentReconciliationResult> {
+  const { supabaseManager } = await import('../storage/supabase.js');
+  const supabase = supabaseManager.getClient();
+  const vaultRoot = config.instance.vault.path;
+  const instanceId = config.instance.id;
+  const release = await scanMutex.acquire();
+
+  try {
+    const { data: rows, error: fetchError } = await supabase
+      .from('fqc_documents')
+      .select('id, path, title, status')
+      .eq('instance_id', instanceId)
+      .neq('status', 'archived');
+
+    if (fetchError) {
+      throw new Error(`document reconciliation query failed: ${fetchError.message}`);
+    }
+
+    const activeRows = (rows ?? []) as Array<{ id: string; path: string; title: string | null; status: string | null }>;
+    const missingRows = activeRows.filter((row) => !existsSync(join(vaultRoot, row.path)));
+    const counts: DocumentReconciliationResult = {
+      scanned: activeRows.length,
+      updated: 0,
+      archived: 0,
+    };
+
+    if (missingRows.length === 0) {
+      return counts;
+    }
+
+    const allFiles = await listMarkdownFiles(vaultRoot, config.instance.vault.markdownExtensions);
+    const fqcIdIndex = new Map<string, string>();
+    for (const file of allFiles) {
+      try {
+        const raw = await readFile(join(vaultRoot, file), 'utf-8');
+        const { data: fm } = matter(raw);
+        const fqcId: unknown = fm[FM.ID];
+        if (typeof fqcId === 'string' && fqcId.length > 0) {
+          fqcIdIndex.set(fqcId, file);
+        }
+      } catch {
+        // Skip unreadable files during reconciliation; the missing-row archive path remains authoritative.
+      }
+    }
+
+    for (const row of missingRows) {
+      const newPath = fqcIdIndex.get(row.id);
+      if (newPath) {
+        counts.updated++;
+        if (!options.dryRun) {
+          const { error: updateError } = await supabase
+            .from('fqc_documents')
+            .update({ path: newPath, updated_at: new Date().toISOString() })
+            .eq('id', row.id)
+            .eq('instance_id', instanceId);
+          if (updateError) {
+            throw new Error(`document reconciliation path update failed for ${row.id}: ${updateError.message}`);
+          }
+        }
+        continue;
+      }
+
+      counts.archived++;
+      if (!options.dryRun) {
+        const { error: archiveError } = await supabase
+          .from('fqc_documents')
+          .update({ status: 'archived', updated_at: new Date().toISOString() })
+          .eq('id', row.id)
+          .eq('instance_id', instanceId);
+        if (archiveError) {
+          throw new Error(`document reconciliation archive failed for ${row.id}: ${archiveError.message}`);
+        }
+      }
+    }
+
+    return counts;
+  } finally {
+    release();
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1121,25 +1223,48 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
 // CRITICAL: This runs AFTER runScanOnce, outside the mutex lock.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function repairFrontmatter(config: FlashQueryConfig): Promise<void> {
+export async function repairFrontmatter(
+  config: FlashQueryConfig,
+  options: FrontmatterRepairOptions = {}
+): Promise<FrontmatterRepairResult> {
   const { supabaseManager } = await import('../storage/supabase.js');
   const supabase = supabaseManager.getClient();
   const vaultRoot = config.instance.vault.path;
   const instanceId = config.instance.id;
+  const counts: FrontmatterRepairResult = {
+    scanned: 0,
+    added: 0,
+    updated: 0,
+    repaired: 0,
+    archived: 0,
+  };
 
   try {
-    const { data: repairFiles } = await supabase
+    const { data: repairFiles, error: repairQueryError } = await supabase
       .from('fqc_documents')
       .select('id, path, content_hash, created_at, status')
       .eq('instance_id', instanceId)
       .eq('needs_frontmatter_repair', true);
 
+    if (repairQueryError) {
+      throw new Error(`frontmatter repair query failed: ${repairQueryError.message}`);
+    }
+
     if (repairFiles && repairFiles.length > 0) {
+      counts.scanned = repairFiles.length;
       for (const row of repairFiles) {
         const filePath = row.path as string;
         const fqcId = row.id as string;
         const createdAt = (row.created_at as string) || new Date().toISOString();
         const status = (row.status as string) || 'active';
+        if (status === 'archived') {
+          counts.archived++;
+        }
+
+        if (options.dryRun) {
+          counts.repaired++;
+          continue;
+        }
 
         try {
           // Read file to extract existing content and frontmatter
@@ -1150,9 +1275,21 @@ export async function repairFrontmatter(config: FlashQueryConfig): Promise<void>
             const parsed = matter(raw);
             fileContent = parsed.content;
             existingFrontmatter = parsed.data;
-          } catch {
-            // If file is unreadable, write empty body with frontmatter
-            fileContent = '';
+          } catch (readErr) {
+            if ((readErr as NodeJS.ErrnoException).code === 'ENOENT') {
+              await supabase
+                .from('fqc_documents')
+                .update({
+                  status: 'missing',
+                  needs_frontmatter_repair: false,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('id', fqcId)
+                .eq('instance_id', instanceId);
+              logger.warn(`[TSA-02] frontmatter repair skipped missing file: "${filePath}" (fqc_id=${fqcId})`);
+              continue;
+            }
+            throw readErr;
           }
 
           // Merge FQC identity fields into existing frontmatter — user-defined fields survive
@@ -1180,6 +1317,8 @@ export async function repairFrontmatter(config: FlashQueryConfig): Promise<void>
               updated_at: new Date().toISOString(),
             })
             .eq('id', fqcId);
+          counts.updated++;
+          counts.repaired++;
 
           logger.debug(`[TSA-02] frontmatter repaired: "${filePath}" (fqc_id=${fqcId}) — hash updated to ${updatedHash}`);
         } catch (writeErr: unknown) {
@@ -1207,5 +1346,7 @@ export async function repairFrontmatter(config: FlashQueryConfig): Promise<void>
     logger.warn(
       `[TSA-02] frontmatter repair phase failed: ${err instanceof Error ? err.message : String(err)}`
     );
+    throw err;
   }
+  return counts;
 }

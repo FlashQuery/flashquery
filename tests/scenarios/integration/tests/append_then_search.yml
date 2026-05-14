@@ -1,7 +1,7 @@
 name: append_then_search
 description: >
   A document created via vault.write is then extended with new content via
-  append_to_doc. Verifies that the appended content is durably stored and
+  insert_in_doc. Verifies that the appended content is durably stored and
   readable via get_document, and that the document remains discoverable
   through search_all after the append. Covers IC-01: append content to a
   document and confirm the appended content appears in search.
@@ -18,15 +18,16 @@ steps:
 
   - label: "Document is findable by title before append"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Coastal Survey Field Notes"
       expect_path: "fieldwork/coastal-survey.md"
 
   - label: "Append new content to the document"
-    action: append_to_doc
+    action: insert_in_doc
     args:
       identifier: "${fieldnotes_doc.fq_id}"
+      position: bottom
       content: "## Afternoon Follow-Up\n\nSecondary readings confirmed unusual bioluminescence patterns near the tidal pools."
 
   - label: "Scan vault to ensure index reflects the appended content"
@@ -41,7 +42,7 @@ steps:
 
   - label: "Document is still discoverable by title after append"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Coastal Survey Field Notes"
       expect_path: "fieldwork/coastal-survey.md"
@@ -55,7 +56,7 @@ steps:
 
   - label: "search_documents finds document by title after append (exercises search_documents API)"
     assert:
-      op: search_documents
+      op: search
       args:
         query: "Coastal Survey Field Notes"
       expect_contains: "Coastal Survey Field Notes"

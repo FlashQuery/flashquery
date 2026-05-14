@@ -68,46 +68,70 @@ steps:
         plugin_id: ir10
         plugin_instance: ir10test
         table: tasks
-      expect_contains: "3 pending review item"
+      expect_json_equals:
+        path: reconciliation.pending_reviews_created
+        value: 3
 
-  - label: "Query mode shows 3 pending review items in the backlog"
+  - label: "List action shows 3 pending review items in the backlog"
+    action: clear_pending_reviews
+    name: initial_pending
+    args:
+      action: list
+      plugin_id: ir10
+      plugin_instance: ir10test
+
+  - label: "Pending-review backlog starts with 3 items"
     assert:
       op: clear_pending_reviews
       args:
+        action: list
         plugin_id: ir10
         plugin_instance: ir10test
-        fqc_ids: []
-      expect_contains: "3 item"
+      expect_json_equals:
+        path: pending
+        value: 3
 
   # ── Clear only the first item ─────────────────────────────────────────────────
 
   - label: "Clear pending review for Task One only (partial clear)"
     action: clear_pending_reviews
     args:
+      action: clear
       plugin_id: ir10
       plugin_instance: ir10test
-      fqc_ids:
-        - "${task_one.fq_id}"
+      ids:
+        - "${initial_pending.items[0].id}"
 
   - label: "After partial clear, 2 items remain in the backlog (IR-10)"
     assert:
       op: clear_pending_reviews
       args:
+        action: list
         plugin_id: ir10
         plugin_instance: ir10test
-        fqc_ids: []
-      expect_contains: "2 item"
+      expect_json_equals:
+        path: pending
+        value: 2
+
+  - label: "Capture remaining pending reviews"
+    action: clear_pending_reviews
+    name: remaining_pending
+    args:
+      action: list
+      plugin_id: ir10
+      plugin_instance: ir10test
 
   # ── Clear the remaining two items ─────────────────────────────────────────────
 
   - label: "Clear pending reviews for Task Two and Task Three"
     action: clear_pending_reviews
     args:
+      action: clear
       plugin_id: ir10
       plugin_instance: ir10test
-      fqc_ids:
-        - "${task_two.fq_id}"
-        - "${task_three.fq_id}"
+      ids:
+        - "${remaining_pending.items[0].id}"
+        - "${remaining_pending.items[1].id}"
 
   - label: "Scan vault to reset staleness cache"
     action: scan_vault
@@ -119,13 +143,15 @@ steps:
         plugin_id: ir10
         plugin_instance: ir10test
         table: tasks
-      expect_not_contains: "pending review item"
+      expect_not_contains: '"pending_review"'
 
   - label: "Query mode confirms no pending items remain"
     assert:
       op: clear_pending_reviews
       args:
+        action: list
         plugin_id: ir10
         plugin_instance: ir10test
-        fqc_ids: []
-      expect_contains: "No pending reviews"
+      expect_json_equals:
+        path: pending
+        value: 0

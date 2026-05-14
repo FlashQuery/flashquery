@@ -109,31 +109,26 @@ def _build_schema_yaml(folder: str) -> str:
 
 
 def _extract_first_record(text: str) -> dict:
-    """Parse the first record from a search_records response (JSON array)."""
-    start = text.find("[")
-    if start == -1:
-        return {}
-    depth = 0
-    end = start
-    for i, ch in enumerate(text[start:], start):
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            depth -= 1
-            if depth == 0:
-                end = i
-                break
+    """Parse the first record's data from a search_records JSON response."""
     try:
-        records = _json.loads(text[start: end + 1])
-        return records[0] if isinstance(records, list) and records else {}
-    except _json.JSONDecodeError:
+        payload = _json.loads(text)
+        results = payload.get("results", [])
+        if not results:
+            return {}
+        row = results[0]
+        data = row.get("data") or {}
+        data["id"] = row.get("id")
+        return data
+    except Exception:
         return {}
 
 
-def _extract_recon_summary(text: str) -> str:
-    """Extract the reconciliation summary from a tool response."""
-    m = re.search(r"Reconciliation:.*", text, re.DOTALL)
-    return m.group(0).strip() if m else ""
+def _get_recon(text: str) -> dict:
+    """Extract the reconciliation dict from a search_records JSON response."""
+    try:
+        return _json.loads(text).get("reconciliation", {})
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -169,8 +164,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
+        register_result.expect_json_equals("status", "registered")
+        register_result.expect_json_equals("plugin_instance", instance_name)
 
         run.step(
             label="register_plugin (auto-track schema with field_map and template)",
@@ -228,7 +223,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        first_search.expect_contains("Auto-tracked")
+        first_search.expect_json_path("reconciliation.auto_tracked", lambda v: v >= 1)
 
         run.step(
             label="search_records — first reconciliation fires, auto-tracks doc",
@@ -364,15 +359,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        second_recon = _extract_recon_summary(second_search.text)
-        # Deleted docs should be archived — look for "Archived" in summary
-        archived_in_deletion = "Archived" in second_recon or "archived" in second_recon.lower()
+        second_recon_data = _json.loads(second_search.text).get("reconciliation", {}) if second_search.ok else {}
+        archived_in_deletion = second_recon_data.get("archived", 0) > 0
 
         run.step(
             label="search_records — second reconciliation classifies doc as deleted, archives row",
             passed=(second_search.ok and archived_in_deletion),
             detail=(
-                f"recon_summary={second_recon!r} | "
+                f"archived_count={second_recon_data.get('archived', 0)} | "
                 f"archived_detected={archived_in_deletion}"
             ),
             timing_ms=second_search.timing_ms,
@@ -463,19 +457,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        third_recon = _extract_recon_summary(third_search.text)
-        # Resurrection should be reported in the summary
-        resurrection_detected = (
-            "resurrected" in third_recon.lower()
-            or "resurrection" in third_recon.lower()
-            or "Resurrected" in third_recon
-        )
+        third_recon_data = _json.loads(third_search.text).get("reconciliation", {}) if third_search.ok else {}
+        resurrection_detected = third_recon_data.get("resurrected", 0) > 0
 
         run.step(
             label="search_records — third reconciliation classifies doc as resurrected",
             passed=(third_search.ok and resurrection_detected),
             detail=(
-                f"recon_summary={third_recon!r} | "
+                f"resurrected_count={third_recon_data.get('resurrected', 0)} | "
                 f"resurrection_detected={resurrection_detected}"
             ),
             timing_ms=third_search.timing_ms,
@@ -621,14 +610,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
             "clear_pending_reviews",
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
-            fqc_ids=[],
+            action="list",
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # RO-22c: the template text is not surfaced — no "template" review_type should exist.
         # A "resurrected" review type is permitted (lifecycle notification), but not a template review.
-        pending_text = pending_result.text
-        has_template_review = '"review_type": "template"' in pending_text or "'review_type': 'template'" in pending_text
+        try:
+            pending_data = _json.loads(pending_result.text)
+            items = pending_data.get("items", [])
+            has_template_review = any(
+                item.get("review_type") == "template" for item in items
+            )
+        except Exception:
+            has_template_review = False
         no_template_review = not has_template_review
 
         ro22c_ok = pending_result.ok and no_template_review

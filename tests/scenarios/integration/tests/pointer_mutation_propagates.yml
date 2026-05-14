@@ -1,6 +1,6 @@
 name: pointer_mutation_propagates
 description: >
-  Pointer mutation propagates to subsequent dereferences. After update_doc_header
+  Pointer mutation propagates to subsequent dereferences. After write_document
   re-points a frontmatter pointer from target A to target B, the next
   call_model {{ref:source->pointer}} injects B's body, not A's. Verifies
   both top-level pointer keys (e.g. fq_target_ref) and nested pointer keys
@@ -51,11 +51,12 @@ steps:
             content: "{{ref:_integration/Test/ix13/source-top.md->fq_target_ref}} What marker token appears in the document? Reply with just the token."
       expect_contains: "MARK-A-13"
 
-  - label: "Top-level: re-point fq_target_ref to target B via update_doc_header"
-    action: update_doc_header
+  - label: "Top-level: re-point fq_target_ref to target B via write_document"
+    action: write_document
     args:
+      mode: update
       identifier: "${source_top.fq_id}"
-      updates:
+      frontmatter:
         fq_target_ref: "_integration/Test/ix13/target-b.md"
 
   - label: "Top-level: next call_model dereference now injects target B body (MARK-B-13)"
@@ -105,13 +106,14 @@ steps:
       expect_contains: "MARK-A-13"
 
   - label: "Nested: re-point projections.summary to target B (whole projections object replaced)"
-    # update_doc_header is a top-level field editor — to mutate a nested key
+    # write_document is a top-level field editor — to mutate a nested key
     # we replace the whole projections object. This is the canonical pattern
     # for nested pointer mutation under the catch-all frontmatter editor.
-    action: update_doc_header
+    action: write_document
     args:
+      mode: update
       identifier: "${source_nested.fq_id}"
-      updates:
+      frontmatter:
         projections:
           summary: "_integration/Test/ix13/target-b.md"
 

@@ -1,0 +1,85 @@
+name: unified_search_memory_lifecycle
+description: >
+  Final write_memory, get_memory, archive_memory, and search compose across
+  create, update, read-back, archive, and archived visibility checks.
+coverage: [INT-search-2, INT-search-3, INT-wmem-1, INT-wmem-2, INT-wmem-3, INT-wmem-4]
+
+steps:
+  - label: "Write a memory through final write_memory create mode"
+    action: write_memory
+    name: original_mem
+    args:
+      mode: create
+      content: "Phase 125 YAML original memory beacon."
+      tags: [phase125, unified-search-memory]
+      include: [content, tags_full]
+
+  - label: "Search lists the created memory via final unified search"
+    assert:
+      op: search
+      args:
+        query: ""
+        entity_types: [memories]
+        tags: [unified-search-memory]
+        entity_types: [documents, memories]
+      expect_json_equals:
+        path: "mode"
+        value: "list"
+      expect_contains: "Phase 125 YAML original memory beacon"
+
+  - label: "Update the memory through final write_memory update mode"
+    action: write_memory
+    name: updated_mem
+    args:
+      mode: update
+      memory_id: "${original_mem.memory_id}"
+      content: "Phase 125 YAML updated memory beacon."
+      include: [content, tags_full]
+
+  - label: "Read the updated memory through final get_memory"
+    assert:
+      op: get_memory
+      args:
+        memory_ids: "${updated_mem.memory_id}"
+        include: [content, tags_full]
+      expect_json_equals:
+        path: "memory_id"
+        value: "${updated_mem.memory_id}"
+      expect_contains: "Phase 125 YAML updated memory beacon"
+
+  - label: "Mixed search applies one global limit after write_memory"
+    assert:
+      op: search
+      args:
+        query: "Phase 125 YAML"
+        mode: mixed
+        entity_types: [memories]
+        limit: 1
+      expect_json_equals:
+        path: "total"
+        value: 1
+
+  - label: "Archive the updated memory through final archive_memory"
+    action: archive_memory
+    args:
+      memory_ids: ["${updated_mem.memory_id}"]
+
+  - label: "Archived memory is excluded from default final search"
+    assert:
+      op: search
+      args:
+        query: "Phase 125 YAML updated memory beacon"
+        mode: filesystem
+        entity_types: [memories]
+      expect_count_eq: 0
+
+  - label: "Archived memory appears when include_archived is enabled"
+    assert:
+      op: search
+      args:
+        query: "Phase 125 YAML updated memory beacon"
+        mode: filesystem
+        entity_types: [memories]
+        include_archived: true
+      expect_contains: "Phase 125 YAML updated memory beacon"
+

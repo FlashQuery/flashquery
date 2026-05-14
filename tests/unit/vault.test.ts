@@ -14,10 +14,14 @@ import {
 } from '../../src/storage/vault.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
+const gitMocks = vi.hoisted(() => ({
+  commitVaultChanges: vi.fn(),
+  commitVaultRemoval: vi.fn(),
+}));
+
 // Mock git manager so vault tests run without a real GitManager
-// gitManager is undefined → optional chaining in writeMarkdown = no-op
 vi.mock('../../src/git/manager.js', () => ({
-  gitManager: undefined,
+  gitManager: gitMocks,
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -48,6 +52,8 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
 let testDir: string;
 
 beforeEach(() => {
+  gitMocks.commitVaultChanges.mockResolvedValue(undefined);
+  gitMocks.commitVaultRemoval.mockResolvedValue(undefined);
   testDir = join(
     tmpdir(),
     `fqc-vault-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -386,6 +392,66 @@ describe('writeMarkdown / readMarkdown', () => {
     );
     const { data } = await vaultManager.readMarkdown('no-git-options.md');
     expect(data.title).toBe('No Git');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// removeMarkdown / moveMarkdownToTrash
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('removeMarkdown / moveMarkdownToTrash', () => {
+  beforeEach(async () => {
+    const config = makeConfig(testDir);
+    await initVault(config);
+    gitMocks.commitVaultRemoval.mockResolvedValue(undefined);
+  });
+
+  it('hard delete removes the file and records git policy metadata', async () => {
+    await vaultManager.writeMarkdown('remove/hard-delete.md', { fq_title: 'Hard Delete' }, 'body');
+
+    await vaultManager.removeMarkdown('remove/hard-delete.md', {
+      gitTitle: 'Hard Delete',
+    });
+
+    expect(existsSync(join(testDir, 'remove/hard-delete.md'))).toBe(false);
+    expect(gitMocks.commitVaultRemoval).toHaveBeenCalledWith('remove', 'Hard Delete', [
+      'remove/hard-delete.md',
+    ]);
+  });
+
+  it('in-vault trash move keeps the trash file and stages source plus destination', async () => {
+    await vaultManager.writeMarkdown('remove/source.md', { fq_title: 'Source' }, 'body');
+    const trashAbsPath = join(testDir, '.flashquery', 'removed', 'source.md');
+
+    await vaultManager.moveMarkdownToTrash('remove/source.md', trashAbsPath, {
+      gitTitle: 'Source',
+    });
+
+    expect(existsSync(join(testDir, 'remove/source.md'))).toBe(false);
+    expect(existsSync(trashAbsPath)).toBe(true);
+    expect(gitMocks.commitVaultRemoval).toHaveBeenCalledWith('trash', 'Source', [
+      'remove/source.md',
+      '.flashquery/removed/source.md',
+    ]);
+  });
+
+  it('external trash move records only the source deletion for git', async () => {
+    await vaultManager.writeMarkdown('remove/external.md', { fq_title: 'External trash' }, 'body');
+    const externalDir = join(testDir, '..', `external-trash-${Date.now()}`);
+    mkdirSync(externalDir, { recursive: true });
+    const trashAbsPath = join(externalDir, 'external.md');
+
+    await vaultManager.moveMarkdownToTrash('remove/external.md', trashAbsPath, {
+      gitTitle: 'External trash',
+    });
+
+    expect(existsSync(join(testDir, 'remove/external.md'))).toBe(false);
+    expect(existsSync(trashAbsPath)).toBe(true);
+    expect(gitMocks.commitVaultRemoval).toHaveBeenCalledWith('trash', 'External trash', [
+      'remove/external.md',
+    ]);
+
+    rmSync(externalDir, { recursive: true, force: true });
   });
 });
 

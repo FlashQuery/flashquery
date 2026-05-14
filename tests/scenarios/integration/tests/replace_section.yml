@@ -2,7 +2,7 @@ name: replace_section
 description: >
   A document can be updated to replace its content section entirely. After replacement,
   the new content is discoverable via search while the old content is absent from results.
-  Verifies that content mutation via update_document is reflected in search results,
+  Verifies that content mutation via write_document is reflected in search results,
   including the absence of replaced text.
 coverage: [IC-03]
 
@@ -17,14 +17,15 @@ steps:
 
   - label: "Original title is findable by search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Project Proposal"
       expect_path: "drafts/proposal.md"
 
   - label: "Replace the document content with new text"
-    action: update_document
+    action: write_document
     args:
+      mode: update
       identifier: "${draft_doc.fq_id}"
       content: "This proposal outlines the new approach using cloud-native architecture with microservices."
 
@@ -33,7 +34,7 @@ steps:
 
   - label: "Document title still findable after update"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Project Proposal"
       expect_path: "drafts/proposal.md"
@@ -47,11 +48,13 @@ steps:
 
   - label: "Old content is no longer in search results"
     assert:
-      op: search_all
+      op: search
       args:
         query: "old approach"
         entity_types: [documents]
-      expect_not_contains: "old approach"
+      expect_json_equals:
+        path: total
+        value: 0
 
   - label: "Old content is not returned by get_document"
     assert:

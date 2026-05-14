@@ -218,8 +218,7 @@ Before writing any code, establish exactly which coverage points this test will 
 
 **Record the final list of target coverage IDs.** You will check against these at the end.
 
-If any target ID involves semantic or mixed-mode search (e.g., `search_documents` with
-`mode='semantic'` or `mode='mixed'`, or `search_all` relying on vector similarity), note
+If any target ID involves semantic or mixed-mode search (e.g., `search` with `entity_types=["documents"]` and `mode='semantic'` or `mode='mixed'`, or cross-domain `search` relying on vector similarity), note
 that the test will need `require_embedding=True` in TestContext. Flag this to the user now
 so they know an embedding provider must be configured in `.env.test` before the test can run.
 
@@ -534,7 +533,7 @@ call-tool, assert-new-commits:
 
 ```python
 before = ctx.git.head_sha()
-result = ctx.client.call_tool("create_document", ...)
+result = ctx.client.call_tool("write_document", mode="create", ...)
 new_commits = ctx.git.commits_since(before)
 checks = {
     "exactly one commit": len(new_commits) == 1,
@@ -586,7 +585,7 @@ if created_fqc_id:
 
 **Cleanup tracking for MCP-created memories:**
 ```python
-created_memory_id = ...  # extract from save_memory response with regex \(id: ([^)]+)\)
+created_memory_id = ...  # extract from write_memory response with regex \(id: ([^)]+)\)
 if created_memory_id:
     ctx.cleanup.track_mcp_memory(created_memory_id)
 ```
@@ -610,7 +609,7 @@ path = ctx.create_file(
     tags=["fqc-test", run.run_id],
 )
 
-# ctx.scan_vault() is a shorthand for force_file_scan(background=False).
+# ctx.scan_vault() is a shorthand for maintain_vault(action="sync", background=False).
 scan_result = ctx.scan_vault()
 ```
 
@@ -626,54 +625,46 @@ if not result.ok:
 
 Common tools and their key parameters:
 
-- **create_document**: `title` (str), `content` (str), `path` (str, optional), `tags` (list, optional), `frontmatter` (dict, optional)
+- **write_document**: `mode` ("create"|"update"), `path` (create), `identifier` (update), `title` (str, optional), `content` (str, optional), `tags` (list, optional), `frontmatter` (dict, optional)
 - **get_document**: `identifier` (str — path, fqc_id, or filename), `sections` (list, optional), `include_subheadings` (bool, optional), `occurrence` (int, optional)
-- **update_document**: `identifier` (str), `content` (str, optional), `title` (str, optional), `tags` (list, optional), `frontmatter` (dict, optional)
 - **archive_document**: `identifiers` (str or list)
-- **search_documents**: `query` (str, optional), `tags` (list, optional), `tag_match` ('any'|'all', optional), `limit` (int, optional), `mode` ('filesystem'|'semantic'|'mixed', optional)
+- **search**: `query` (str, optional), `entity_types` (["documents"]|["memories"]|both, optional), `tags` (list, optional), `tag_match` ("any"|"all", optional), `limit` (int, optional), `mode` ("filesystem"|"semantic"|"mixed", optional)
 - **move_document**: `identifier` (str), `destination` (str)
 - **copy_document**: `identifier` (str), `destination` (str, optional)
-- **force_file_scan**: `background` (bool, optional)
-- **append_to_doc**: `identifier` (str), `content` (str)
+- **maintain_vault**: `action` ("sync"|"repair"|"status" or ["repair","sync"]), `background` (bool, optional), `dry_run` (bool, optional)
+- **insert_in_doc**: `identifier` (str), `position` ("top"|"bottom"|"after_heading"|"before_heading"|"end_of_section"), `heading` (str, optional), `content` (str)
 - **insert_in_doc**: `identifier` (str), `heading` (str, optional), `position` ('top'|'bottom'|'after_heading'|'before_heading'|'end_of_section'), `content` (str), `occurrence` (int, optional)
 - **replace_doc_section**: `identifier` (str), `heading` (str), `content` (str), `include_subheadings` (bool, optional), `occurrence` (int, optional)
-- **update_doc_header**: `identifier` (str), `updates` (dict)
-- **insert_doc_link**: `identifier` (str), `target` (str), `property` (str, optional)
-- **get_doc_outline**: `identifiers` (str or list), `max_depth` (int, optional), `exclude_headings` (bool, optional)
+- **insert_doc_link**: transitional macro-dependent legacy helper; removal gate is `call_macro` parity. Args: `identifier` (str), `target` (str), `property` (str, optional)
+- **get_document** with `include=["headings","frontmatter"]`: current outline and metadata read shape
 - **apply_tags**: `identifiers` (str or list, optional), `memory_id` (str, optional), `add_tags` (list, optional), `remove_tags` (list, optional)
-- **save_memory**: `content` (str), `tags` (list, optional), `plugin_scope` (str, optional)
-- **search_memory**: `query` (str), `tags` (list, optional), `tag_match` ('any'|'all', optional), `threshold` (float, optional), `limit` (int, optional)
-- **update_memory**: `memory_id` (str), `content` (str), `tags` (list, optional)
+- **write_memory**: `mode` ("create"|"update"), `content` (str, optional), `memory_id` (str, optional), `tags` (list, optional), `plugin_scope` (str, optional)
 - **get_memory**: `memory_ids` (str or list)
-- **list_memories**: `tags` (list, optional), `tag_match` ('any'|'all', optional), `limit` (int, optional)
 - **archive_memory**: `memory_id` (str)
-- **list_files**: `path` (str), `recursive` (bool, optional), `extension` (str, optional), `date_from` (str, optional), `date_to` (str, optional)
-- **remove_directory**: `path` (str)
+- **list_vault**: `path` (str, optional), `recursive` (bool, optional), `extensions` (list, optional), `include` (list, optional)
+- **manage_directory**: `action` ("create"|"remove"), `paths` (list)
 - **register_plugin**: `schema_path` (str, optional), `schema_yaml` (str, optional), `plugin_instance` (str, optional)
 - **get_plugin_info**: `plugin_id` (str), `plugin_instance` (str, optional)
-- **create_record**: `plugin_id` (str), `table` (str), `fields` (dict), `plugin_instance` (str, optional)
+- **write_record**: `mode` ("create"|"update"), `plugin_id` (str), `table` (str), `data` (dict), `id` (str, update only), `plugin_instance` (str, optional)
 - **get_record**: `plugin_id` (str), `table` (str), `id` (str), `plugin_instance` (str, optional)
-- **update_record**: `plugin_id` (str), `table` (str), `id` (str), `fields` (dict), `plugin_instance` (str, optional)
 - **archive_record**: `plugin_id` (str), `table` (str), `id` (str), `plugin_instance` (str, optional)
 - **search_records**: `plugin_id` (str), `table` (str), `filters` (dict, optional), `query` (str, optional), `limit` (int, optional), `plugin_instance` (str, optional)
 - **unregister_plugin**: `plugin_id` (str), `plugin_instance` (str, optional), `confirm_destroy` (bool, optional)
-- **search_all**: `query` (str), `tags` (list, optional), `tag_match` ('any'|'all', optional), `limit` (int, optional), `entity_types` (list, optional)
-- **get_briefing**: `tags` (list), `tag_match` ('any'|'all', optional), `limit` (int, optional), `plugin_id` (str, optional)
-- **reconcile_documents**: `dry_run` (bool, optional)
+- **get_briefing**: transitional macro-dependent legacy helper; removal gate is `call_macro` parity. Args: `tags` (list), `tag_match` ("any"|"all", optional), `limit` (int, optional), `plugin_id` (str, optional)
 - **discover_document**: `mode` ('flagged'|'paths'), `paths` (list, optional)
 
 ### Important Behavioral Notes
 
 - **FlashQuery response format for documents:** Key-value entries: `Title: ...\nFlashQuery ID: ...\nPath: ...\nTags: [...]\nStatus: active`. Multiple results separated by `---`. Empty results: `"No documents found."`
 - **Memory response formats differ by tool:**
-  - `save_memory` → `Memory saved (id: {uuid}). Tags: ...` — extract ID with regex `\(id: ([^)]+)\)`, not `_extract_field`
-  - `update_memory` → `Memory updated. New version id: {uuid}. Previous version id: {uuid}. Version: N.` — use `_extract_field(text, "New version id")`
-  - `search_memory`, `list_memories` → key-value format — use `_extract_field(text, "Memory ID")`
+  - `write_memory` → `Memory saved (id: {uuid}). Tags: ...` — extract ID with regex `\(id: ([^)]+)\)`, not `_extract_field`
+  - `write_memory` update mode → `Memory updated. New version id: {uuid}. Previous version id: {uuid}. Version: N.` — use `_extract_field(text, "New version id")`
+  - `search` memory results → key-value format — use `_extract_field(text, "Memory ID")`
 - **Identifier resolution:** Most document tools accept fqc_id (UUID), vault-relative path, or filename.
 - **Tags are normalized:** Lowercased, trimmed, deduplicated by FlashQuery.
 - **Archived entities are excluded from search** but can still be retrieved by direct ID.
 - **Plugin tests need a schema:** Write a YAML schema string and pass it to register_plugin via `schema_yaml`.
-- **Fire-and-forget writes require a sleep before the next query.** Some operations write to the database asynchronously — the tool returns success immediately but the row commits in the background. When you write a test that seeds data through one of these operations and then queries it, you **must** add `time.sleep(3)` between the seed and the query, or the test will pass against local Supabase (sub-millisecond writes) and fail against cloud Supabase (network latency exposes the race). Operations that are fire-and-forget: `call_model` (writes `fqc_llm_usage` rows after the LLM response returns), `save_memory` embedding path (the memory row is written synchronously but the vector is committed asynchronously). When in doubt, add the sleep — 3 seconds is conservative and costs little. Also use `>= N` rather than `== N` when asserting on counts of seeded rows, since the period filter may include rows from other tests in the same run.
+- **Fire-and-forget writes require a sleep before the next query.** Some operations write to the database asynchronously — the tool returns success immediately but the row commits in the background. When you write a test that seeds data through one of these operations and then queries it, you **must** add `time.sleep(3)` between the seed and the query, or the test will pass against local Supabase (sub-millisecond writes) and fail against cloud Supabase (network latency exposes the race). Operations that are fire-and-forget: `call_model` (writes `fqc_llm_usage` rows after the LLM response returns), `write_memory` create embedding path (the memory row is written synchronously but the vector is committed asynchronously). When in doubt, add the sleep — 3 seconds is conservative and costs little. Also use `>= N` rather than `== N` when asserting on counts of seeded rows, since the period filter may include rows from other tests in the same run.
 
 ## Phase 4: Validate Before Running
 
@@ -774,7 +765,7 @@ Before touching anything, ask: is this failure caused by (a) a mistake in the te
 (b) FlashQuery behaving differently than the test correctly expects?
 
 **Fixable in the loop (test or fixture issues):**
-- Missing `force_file_scan` / timing gaps
+- Missing `maintain_vault(action="sync")` or timing gaps
 - Wrong `vault_path` passthrough
 - Incorrect `expect_contains` string that doesn't match the actual FlashQuery response format
 - Missing cleanup registration causing state leakage between steps
@@ -801,7 +792,7 @@ When the failure looks like FlashQuery is the problem, stop the debug loop immed
 
 Common fixable failure patterns:
 
-- **"No documents found"** after MCP create: Add `force_file_scan(background=False)` or `time.sleep(0.5)`.
+- **"No documents found"** after MCP create: Add `maintain_vault(action="sync", background=False)` or `time.sleep(0.5)`.
 - **Query returns fewer rows than seeded (e.g. `calls=1` when 2 were seeded, or `found=False` right after a save):** Fire-and-forget race — the DB write hasn't committed yet. Add `time.sleep(3)` between the last seed call and the first query that depends on it. This failure typically appears on cloud Supabase and is invisible on local Docker Supabase. See "Important Behavioral Notes" above for the full list of fire-and-forget operations.
 - **"Not found in vault"** on disk verification: Ensure `vault_path=getattr(args, "vault_path", None)` is passed to TestContext.
 - **Expected text not found**: Read the actual FlashQuery response in the report first — if the format genuinely differs from what the test expects, adjust the assertion. If FlashQuery is returning wrong content, that's a defect.

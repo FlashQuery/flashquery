@@ -167,7 +167,8 @@ Action steps perform operations against the live FlashQuery server. The `action:
 | `memory.write` | `save_memory` | — |
 | `archive_document` | `archive_document` | — |
 | `update_document` | `update_document` | — |
-| `scan_vault` | `force_file_scan` | `background` is always forced to `false` |
+| `maintain_vault` | `maintain_vault` | Final Phase 127 maintenance surface for sync, repair, and status |
+| `scan_vault` | `maintain_vault` | Legacy shortcut that runs `action: sync` with `background: false` |
 | any other string | called as-is | Direct MCP tool name |
 
 **Path auto-prefixing.** `vault.write` paths are automatically prefixed with `_integration/` if they don't already start with it. This scopes all integration test files under a dedicated subdirectory and keeps them out of real vault content. The prefixed path (not the original) is what ends up in the response and in any bound variables.
@@ -191,7 +192,16 @@ Action steps perform operations against the live FlashQuery server. The `action:
   tags: [wts-tag]
 ```
 
-**`scan_vault`.** No arguments needed — the runner forces `background: false` automatically:
+**`maintain_vault`.** Use this for final Phase 127 vault maintenance scenarios:
+
+```yaml
+- label: "Synchronize external vault changes"
+  action: maintain_vault
+  args:
+    action: sync
+```
+
+**`scan_vault`.** Legacy shortcut for older scenarios. No arguments needed — the runner calls `maintain_vault` with `action: sync` and `background: false`:
 
 ```yaml
 - label: "Scan the vault"
@@ -246,10 +256,18 @@ Note the structure: `args:` is nested inside the `assert:` block, not at the ste
 | `expect_count_eq` | integer | Result count must equal N |
 | `expect_count_gte` | integer | Result count must be ≥ N |
 | `expect_count_lte` | integer | Result count must be ≤ N |
+| `expect_json_path` | string or string[] | Parsed JSON response must contain value(s) at dotted paths with `[index]` support |
+| `expect_json_equals` | `{path, value}` | Parsed JSON value at `path` must equal `value` |
+| `expect_json_contains` | `{path, value}` | Parsed JSON string/list/object at `path` must contain `value` |
+| `expect_json_array_length` | `{path, equals}` | Parsed JSON array at `path` must have the exact length |
 
 `expect_path` and `expect_path_contains` are purely label-cosmetic aliases for `expect_contains` — they both do a plain substring match against the full response text and don't do any path parsing. The only difference is the label shown in the report: `"path 'x' in results"` vs `"path containing 'x' in results"`.
 
-**How result counting works.** The `expect_count_*` and `expect_empty` checks count `Title:` lines in the response text. FlashQuery document results each include a `Title:` line; memory results do not. This means count checks reliably count documents, but will always count 0 memories regardless of how many are returned. Use `expect_contains` / `expect_not_contains` to assert on memory content.
+JSON assertions parse the MCP `content[0].text` payload. Paths support dotted
+object keys and zero-based array indexes, for example `identifier`,
+`results[0].error`, or `[1].message`.
+
+**How result counting works.** The `expect_count_*` and `expect_empty` checks prefer structured JSON response envelopes (`total`, then `results`/`entries`/`items`/`groups` length). For legacy prose responses, they fall back to counting `Title:` lines.
 
 **Common assert `op:` values:**
 
@@ -495,7 +513,7 @@ steps:
 | `memory.write` | `save_memory` | `memory_id`, `content` |
 | `archive_document` | `archive_document` | — |
 | `update_document` | `update_document` | — |
-| `scan_vault` | `force_file_scan` | — |
+| `scan_vault` | `maintain_vault` | — |
 | *(any MCP tool name)* | called directly | — |
 
 ### Assertion keys

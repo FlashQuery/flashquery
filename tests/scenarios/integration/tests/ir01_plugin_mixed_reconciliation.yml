@@ -59,7 +59,9 @@ steps:
         plugin_id: ir01
         plugin_instance: ir01test
         table: notes
-      expect_contains: "Auto-tracked 2"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 2
 
   - label: "Both notes are tracked after first pass"
     assert:
@@ -68,6 +70,7 @@ steps:
         plugin_id: ir01
         plugin_instance: ir01test
         table: notes
+        include: [data]
       expect_contains: "Note To Archive"
 
   # ── Modify state: archive one doc, move another, add a new one ────────────────
@@ -102,7 +105,9 @@ steps:
         plugin_id: ir01
         plugin_instance: ir01test
         table: notes
-      expect_contains: "Auto-tracked 1"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 1
 
   - label: "Archived doc's record is cleaned up (deleted classification)"
     assert:
@@ -111,6 +116,7 @@ steps:
         plugin_id: ir01
         plugin_instance: ir01test
         table: notes
+        include: [data]
       expect_not_contains: "Note To Archive"
 
   - label: "Moved doc's record path is updated (moved classification)"
@@ -120,7 +126,11 @@ steps:
         plugin_id: ir01
         plugin_instance: ir01test
         table: notes
-      expect_contains: "note_moved_dest"
+        filters:
+          path: "_integration/ir01_outbox/note_moved_dest.md"
+      expect_json_equals:
+        path: total
+        value: 1
 
   - label: "New note is now tracked"
     assert:
@@ -129,4 +139,5 @@ steps:
         plugin_id: ir01
         plugin_instance: ir01test
         table: notes
+        include: [data]
       expect_contains: "New Note"

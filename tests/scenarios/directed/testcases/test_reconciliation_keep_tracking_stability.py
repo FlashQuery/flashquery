@@ -52,6 +52,7 @@ from __future__ import annotations
 COVERAGE = ["RO-65"]
 
 import argparse
+import json as _json
 import re
 import shutil
 import sys
@@ -147,7 +148,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg.expect_contains("registered successfully")
+        reg.expect_json_equals("status", "registered")
         run.step(
             label="register_plugin (on_moved: keep-tracking) — RO-65",
             passed=(reg.ok and reg.status == "pass"),
@@ -205,7 +206,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime.expect_contains("Auto-tracked")
+        prime.expect_json_equals("reconciliation.auto_tracked", 1)
         run.step(
             label="search_records (prime) — auto-tracks doc; seeds staleness cache",
             passed=(prime.ok and prime.status == "pass"),
@@ -227,7 +228,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
             checks = {
                 "doc has fqc_id (auto-track assigned one)": bool(fqc_id),
                 "doc has fqc_owner": bool(doc_disk.frontmatter.get(FM.OWNER)),
-                "doc fqc_id in search results": bool(fqc_id) and fqc_id in prime.text,
             }
             all_ok = all(checks.values())
             detail = ""
@@ -347,17 +347,25 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not recon2.ok:
             return run
 
-        recon_summary2 = _extract_recon_summary(recon2.text)
+        try:
+            recon2_payload = _json.loads(recon2.text)
+            recon2_reconciliation = recon2_payload.get("reconciliation", {})
+            paths_updated2 = recon2_reconciliation.get("paths_updated", 0)
+            archived2 = recon2_reconciliation.get("archived", 0)
+        except Exception:
+            recon2_reconciliation = {}
+            paths_updated2 = 0
+            archived2 = 0
 
         # ── Step 10: Verify first-move reconcile: path updated, row still active ─
         t0 = time.monotonic()
 
-        path_updated = bool(re.search(r"Updated paths? for \d+ moved document", recon_summary2))
+        path_updated = paths_updated2 >= 1
         fqc_id_in_results2 = bool(fqc_id) and fqc_id in recon2.text
-        archived_in_2 = bool(re.search(r"Archived \d+ record", recon_summary2))
+        archived_in_2 = archived2 >= 1
 
         checks_first_move: dict[str, bool] = {
-            "first-move reconcile: path updated in summary (keep-tracking applied)": path_updated,
+            "first-move reconcile: path updated (keep-tracking applied)": path_updated,
             "first-move reconcile: fqc_id still in results (plugin row active)": fqc_id_in_results2,
             "first-move reconcile: no archival (keep-tracking preserves row)": not archived_in_2,
         }
@@ -367,8 +375,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_first_move.items() if not v]
             detail_parts.append(f"Failed: {', '.join(failed)}")
         detail_parts.append(
-            f"path_updated={path_updated} | fqc_id_in_results={fqc_id_in_results2} | "
-            f"archived={archived_in_2} | recon_summary={recon_summary2!r}"
+            f"paths_updated={paths_updated2} | fqc_id_in_results={fqc_id_in_results2} | "
+            f"archived={archived_in_2} | reconciliation={recon2_reconciliation!r}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)
@@ -426,7 +434,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not recon3.ok:
             return run
 
-        recon_summary3 = _extract_recon_summary(recon3.text)
+        try:
+            recon3_payload = _json.loads(recon3.text)
+            recon3_reconciliation = recon3_payload.get("reconciliation", {})
+            paths_updated3 = recon3_reconciliation.get("paths_updated", 0)
+            archived3 = recon3_reconciliation.get("archived", 0)
+        except Exception:
+            recon3_reconciliation = {}
+            paths_updated3 = 0
+            archived3 = 0
 
         # ── Step 13: RO-65 — verify second-pass reconcile is unchanged ─────────
         # The doc should NOT appear as 'moved' again. The reconciler should recognize
@@ -434,9 +450,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # unchanged. If it re-flags as 'moved', PIR-09 is present.
         t0 = time.monotonic()
 
-        re_moved = bool(re.search(r"Updated paths? for \d+ moved document", recon_summary3))
+        re_moved = paths_updated3 >= 1
         fqc_id_in_results3 = bool(fqc_id) and fqc_id in recon3.text
-        archived_in_3 = bool(re.search(r"Archived \d+ record", recon_summary3))
+        archived_in_3 = archived3 >= 1
 
         checks_ro65: dict[str, bool] = {
             "RO-65: second-pass reconcile does NOT re-flag doc as 'moved' (no path update)": not re_moved,
@@ -459,7 +475,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 )
         detail_65_parts.append(
             f"re_moved={re_moved} | fqc_id_in_results={fqc_id_in_results3} | "
-            f"archived={archived_in_3} | recon_summary={recon_summary3!r}"
+            f"archived={archived_in_3} | reconciliation={recon3_reconciliation!r}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)

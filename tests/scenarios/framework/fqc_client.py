@@ -318,12 +318,27 @@ class ToolResult:
     def _count_results(self) -> int:
         """Count the number of result entries in the response text.
 
-        FQC formats tool responses as key-value entries separated by '---'.
-        Each entry starts with 'Title: ...'. We count entries by counting
-        'Title:' lines. If the response is the empty-results message
-        ('No documents found.' etc.), this returns 0.
+        Prefer structured JSON envelopes from the consolidated MCP surface. Older
+        FQC responses used key-value entries separated by '---', with each
+        document entry starting with 'Title: ...', so retain that fallback for
+        legacy/transitional tools.
         """
         import re
+        try:
+            payload = json.loads(self.text)
+            if isinstance(payload, dict):
+                total = payload.get("total")
+                if isinstance(total, int):
+                    return total
+                for key in ("results", "entries", "items", "groups"):
+                    value = payload.get(key)
+                    if isinstance(value, list):
+                        return len(value)
+            if isinstance(payload, list):
+                return len(payload)
+        except json.JSONDecodeError:
+            pass
+
         # Each result entry begins with a 'Title: ...' line
         return len(re.findall(r"^Title: ", self.text, re.MULTILINE))
 
@@ -350,6 +365,61 @@ class ToolResult:
             "actual": actual,
             "passed": passed,
             "label": label or f"result count == {n}",
+        })
+        return passed
+
+    def expect_json_path(self, path: str, label: str | None = None) -> bool:
+        """Check that response JSON contains a value at the given dotted path."""
+        try:
+            payload = parse_mcp_json(self)
+            actual = get_json_path(payload, path)
+            passed = actual is not None
+        except Exception as exc:
+            actual = f"{type(exc).__name__}: {exc}"
+            passed = False
+        self.expectations.append({
+            "check": "json_path",
+            "path": path,
+            "actual": actual,
+            "passed": passed,
+            "label": label or f"json path exists: {path}",
+        })
+        return passed
+
+    def expect_json_equals(self, path: str, expected: Any, label: str | None = None) -> bool:
+        """Check that response JSON has an exact value at the given dotted path."""
+        try:
+            payload = parse_mcp_json(self)
+            actual = get_json_path(payload, path)
+            passed = actual == expected
+        except Exception as exc:
+            actual = f"{type(exc).__name__}: {exc}"
+            passed = False
+        self.expectations.append({
+            "check": "json_equals",
+            "path": path,
+            "expected": expected,
+            "actual": actual,
+            "passed": passed,
+            "label": label or f"json path {path} equals {expected!r}",
+        })
+        return passed
+
+    def expect_json_no_path(self, path: str, label: str | None = None) -> bool:
+        """Check that response JSON does not contain a value at the given dotted path."""
+        try:
+            payload = parse_mcp_json(self)
+            actual = get_json_path(payload, path)
+            passed = actual is None
+        except Exception as exc:
+            actual = f"{type(exc).__name__}: {exc}"
+            passed = False
+        self.expectations.append({
+            "check": "json_no_path",
+            "path": path,
+            "actual": actual,
+            "passed": passed,
+            "label": label or f"json path absent: {path}",
         })
         return passed
 
@@ -394,6 +464,62 @@ class ToolResult:
         if self.error:
             line += f" — {self.error}"
         return line
+
+
+_JSON_PATH_TOKEN_RE = re.compile(r"([^\.\[\]]+)|\[(\d+)\]")
+
+
+def parse_mcp_json(tool_result: ToolResult | dict[str, Any]) -> Any:
+    """Parse MCP response content text as JSON.
+
+    Accepts either a ToolResult instance or a serialized ToolResult dict from
+    reports. The MCP payload remains encoded in content[0].text on the server;
+    this helper parses the client-side response text.
+    """
+    if isinstance(tool_result, ToolResult):
+        text = tool_result.text
+    else:
+        text = str((tool_result.get("response") or {}).get("text") or "")
+
+    if not text:
+        raise ValueError("tool result has no response text to parse")
+    return json.loads(text)
+
+
+def get_json_path(payload: Any, path: str) -> Any:
+    """Return a value from JSON using dotted keys and [index] path syntax.
+
+    Examples:
+        identifier
+        results[0].error
+        [1].message
+    """
+    if path == "":
+        return payload
+
+    current = payload
+    for part in path.split("."):
+        if not part:
+            raise ValueError(f"invalid empty JSON path segment in {path!r}")
+        pos = 0
+        while pos < len(part):
+            match = _JSON_PATH_TOKEN_RE.match(part, pos)
+            if match is None:
+                raise ValueError(f"invalid JSON path segment {part!r} in {path!r}")
+            key, index = match.groups()
+            if key is not None:
+                if not isinstance(current, dict) or key not in current:
+                    return None
+                current = current[key]
+            else:
+                if not isinstance(current, list):
+                    return None
+                idx = int(index)
+                if idx >= len(current):
+                    return None
+                current = current[idx]
+            pos = match.end()
+    return current
 
 
 # ---------------------------------------------------------------------------

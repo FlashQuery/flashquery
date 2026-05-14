@@ -1,14 +1,16 @@
 name: list_vault_extension_filter_with_directories
 description: >
   list_vault with show="all" and extensions=[".md"] returns directories (unfiltered by
-  extension) alongside only .md files. Verifies that extension filtering applies to files
-  only and does not suppress directories from the listing. Covers IF-12.
+  extension) alongside only .md files in structured JSON entries. Verifies that extension
+  filtering applies to files only and does not suppress directories from the listing.
+  Covers IF-12.
 coverage: [IF-12]
 
 steps:
   - label: "Create a directory for IF-12"
-    action: create_directory
+    action: manage_directory
     args:
+      action: create
       paths: "_integration/if12/docs"
 
   - label: "Write a markdown document for IF-12"
@@ -26,7 +28,9 @@ steps:
         path: "_integration/if12"
         show: "all"
         extensions: [".md"]
-      expect_contains: "docs/"
+      expect_json_equals:
+        path: "entries[0].path"
+        value: "_integration/if12/docs"
 
   - label: "list_vault(show: all, extensions: [.md]) shows .md file (IF-12)"
     assert:
@@ -35,4 +39,17 @@ steps:
         path: "_integration/if12"
         show: "all"
         extensions: [".md"]
-      expect_contains: "readme.md"
+      expect_json_equals:
+        path: "entries[1].path"
+        value: "_integration/if12/readme.md"
+
+  - label: "list_vault(show: all, extensions: [.md]) returns two JSON entries (IF-12)"
+    assert:
+      op: list_vault
+      args:
+        path: "_integration/if12"
+        show: "all"
+        extensions: [".md"]
+      expect_json_array_length:
+        path: "entries"
+        equals: 2

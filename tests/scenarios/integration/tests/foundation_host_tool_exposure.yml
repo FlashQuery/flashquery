@@ -1,0 +1,68 @@
+name: foundation_host_tool_exposure
+description: >
+  Phase 122 workflow proving host_mcp_tools filters public tools/list discovery
+  and records the delegated/catalog parity contract in managed YAML integration coverage.
+coverage:
+  - INT-foundation-tools-2
+  - INT-foundation-tools-3
+  - INT-foundation-tools-4
+  - INT-foundation-tools-5
+server_modes: [managed]
+
+extra_config:
+  host_mcp_tools:
+    tools:
+      - category:doc-read
+      - category:llm
+    excluded_tools:
+      - get_briefing
+
+steps:
+  - label: "Host-filtered listTools exposes selected doc-read and LLM tools"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"get_document\""
+      expect_not_contains: "\"save_memory\""
+
+  - label: "Host-filtered listTools excludes write, system, and explicit deny names"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"call_model\""
+      expect_not_contains: "\"create_document\""
+
+  - label: "Host-filtered listTools keeps search helpers but excludes briefing"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"search\""
+      expect_not_contains: "\"get_briefing\""
+
+  - label: "Warning-only suspicious categories still allow startup"
+    startup_success:
+      extra_config:
+        host_mcp_tools:
+          tools:
+            - category:llm
+      expect_tools_contains:
+        - call_model
+
+  - label: "Final purpose tool names remain valid after legacy removal"
+    startup_success:
+      extra_config:
+        llm:
+          providers:
+            - name: openai
+              type: openai-compatible
+              endpoint: https://api.openai.com
+          models:
+            - name: gpt-4o
+              provider_name: openai
+              model: gpt-4o
+              type: language
+              cost_per_million:
+                input: 1
+                output: 1
+          purposes:
+            - name: final_search
+              description: Final tool config
+              models: [gpt-4o]
+              tools: [search]

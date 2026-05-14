@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   resolveTitle,
   buildMetadataEnvelope,
@@ -151,6 +152,21 @@ describe('buildMetadataEnvelope (GDOC-02, GDOC-07)', () => {
     };
     const envelope = buildMetadataEnvelope('Docs/test.md', resolved, {}, 'body content');
     expect(envelope.fq_id).toBe(customId);
+  });
+});
+
+describe('get_document numeric parameter validation contract', () => {
+  it('documents occurrence and max_depth validation as canonical invalid_input handler checks', () => {
+    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
+    const getSection = source.slice(
+      source.indexOf("'get_document'"),
+      source.indexOf('// ─── Tool 3: update_document')
+    );
+
+    expect(getSection).toContain("message: 'occurrence must be a positive integer.'");
+    expect(getSection).toContain("details: { field: 'occurrence', value: occurrence }");
+    expect(getSection).toContain("message: 'max_depth must be an integer between 1 and 6.'");
+    expect(getSection).toContain("details: { field: 'max_depth', value: effectiveMaxDepth, min: 1, max: 6 }");
   });
 });
 
@@ -329,7 +345,7 @@ describe('validateParameterCombinations (Error 9)', () => {
       sections: ['X'],
     });
     expect(result).not.toBeNull();
-    expect(result).toHaveProperty('error', 'invalid_parameter_combination');
+    expect(result).toHaveProperty('error', 'invalid_input');
     expect((result as Record<string, unknown>)['details']).toMatchObject({
       conflict: 'sections_without_body',
     });
@@ -342,7 +358,7 @@ describe('validateParameterCombinations (Error 9)', () => {
       occurrence: 2,
     });
     expect(result).not.toBeNull();
-    expect(result).toHaveProperty('error', 'invalid_parameter_combination');
+    expect(result).toHaveProperty('error', 'invalid_input');
     const details = (result as Record<string, unknown>)['details'] as Record<string, unknown>;
     expect(details['conflict']).toBe('occurrence_with_multi_section');
     expect(details['sections_count']).toBe(2);

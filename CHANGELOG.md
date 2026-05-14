@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-05-14
+
+This release consolidates FlashQuery's MCP surface into a smaller, structured, metadata-backed tool set. It replaces legacy one-off tools with final primitives for documents, memories, search, records, directories, and vault maintenance, while standardizing JSON response contracts across the public MCP API.
+
+### Added
+- Add centralized MCP tool metadata for host exposure, delegated model exposure, categories, tiers, legacy-name suggestions, and hard-exclusion rules.
+- Add shared JSON response helpers for success envelopes, canonical error envelopes, warnings, batch responses, and entity identification blocks.
+- Add `host_mcp_tools` configuration for filtering the host-visible MCP surface by exact tool name, tier, category, and final exclusions.
+- Add `write_document` as the final document create/update primitive, including reserved frontmatter protection and structured document identification output.
+- Add `write_memory` as the final memory create/update primitive, including versioned memory updates and structured memory identification output.
+- Add unified `search` across documents and memories, with explicit filesystem, semantic, and mixed modes plus list-mode support.
+- Add `write_record` as the final plugin record create/update primitive with schema-aware validation and structured record identification output.
+- Add `remove_document` for archive-before-trash/delete document removal with ordered batch results and git-aware filesystem handling.
+- Add `manage_directory` for create/remove directory operations with ordered per-path JSON results, idempotent creation, empty-directory-only removal, and traversal protection.
+- Add `maintain_vault` for vault `sync`, `repair`, and `status` operations with structured action results, dry-run repair support, background sync jobs, and conflict handling.
+- Add delegated tier derivation from canonical tool metadata so `tier:read-only` and `tier:read-write` stay aligned with the final data-tool surface.
+
+### Changed
+- Standardize migrated MCP tool responses around parseable JSON envelopes instead of prose/table-oriented output.
+- Change expected validation, not-found, permission, conflict, unsupported, and partial-batch failures to return canonical JSON envelopes instead of runtime errors.
+- Change `get_document`, `archive_document`, `copy_document`, `move_document`, and `list_vault` to return structured JSON while preserving their core behavior.
+- Change `insert_in_doc` and `replace_doc_section` to expose explicit nested-section semantics and structured mutation metadata.
+- Change `apply_tags` to accept explicit cross-domain targets for documents and memories.
+- Change plugin registration, plugin info, record read/search/archive, and pending-review tools to return structured plugin, record, and review envelopes.
+- Change delegated model tool tiers to include corrected data tools such as `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`, while keeping admin, LLM, host-ineligible, and hard-excluded tools out of broad tier expansion.
+- Update MCP tool documentation, LLM delegated-tool guidance, architecture docs, and example configuration to describe the final consolidated surface.
+
+### Removed
+- **BREAKING:** Remove legacy document tools `create_document`, `update_document`, `update_doc_header`, `append_to_doc`, and `search_documents`; use `write_document`, `insert_in_doc`, and `search` instead.
+- **BREAKING:** Remove legacy memory tools `save_memory`, `update_memory`, `search_memory`, and `list_memories`; use `write_memory`, `get_memory`, `archive_memory`, and `search` instead.
+- **BREAKING:** Remove legacy search tool `search_all`; use `search` with `entity_types` instead.
+- **BREAKING:** Remove legacy directory and maintenance tools `create_directory`, `remove_directory`, `force_file_scan`, and `reconcile_documents`; use `manage_directory` and `maintain_vault` instead.
+- **BREAKING:** Remove legacy record tools `create_record` and `update_record`; use `write_record` instead.
+- **BREAKING:** Keep dead project tools `list_projects` and `get_project_info` absent from the MCP surface.
+- Remove stale source, tests, scenario references, and docs guidance for removed legacy tools except explicit migration-reference tables.
+
+### Fixed
+- Preserve canonical expected-error envelopes for `get_document` and other migrated tools without incorrectly marking expected failures as runtime errors.
+- Preserve document identity and reference durability across copy, move, archive, remove, and section-edit workflows.
+- Harden document write validation around path conflicts, reserved frontmatter, tag operations, and section replacement/deletion.
+- Harden search and memory consolidation behavior for archived filtering, disabled-category degradation, list mode, global limits, and versioned memory updates.
+- Harden record and plugin consolidation around generated-field rejection, unknown-field validation, include-gated data, taggable record search, and pending-review actions.
+- Harden vault maintenance and directory behavior around concurrent maintenance conflicts, background job status, non-empty directory conflicts, traversal rejection, trash collision handling, and timestamped trash overwrites.
+- Fix delegated LLM tool exposure so the final `search` tool and corrected tier-derived data tools are available where configured.
+
 ## [2.0.0] - 2026-05-07
 
 This release turns `call_model` into a bounded agentic delegation surface.
@@ -304,7 +349,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/FlashQuery/flashquery/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/FlashQuery/flashquery/compare/v1.3.0...v2.0.0
 [1.3.0]: https://github.com/FlashQuery/flashquery/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/FlashQuery/flashquery/compare/v1.1.1...v1.2.0

@@ -32,62 +32,70 @@ steps:
 
   - label: "Filter by [mtf-alpha] returns doc_ab"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [mtf-alpha]
+        entity_types: [documents, memories]
       expect_contains: "Document With Both Tags"
       expect_not_contains: "Document With Beta and Gamma"
 
   - label: "Filter by [mtf-alpha] also returns doc_ag"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [mtf-alpha]
+        entity_types: [documents, memories]
       expect_contains: "Document With Alpha and Gamma"
 
   - label: "Filter by [mtf-beta] returns doc_ab"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [mtf-beta]
+        entity_types: [documents, memories]
       expect_contains: "Document With Both Tags"
       expect_not_contains: "Document With Alpha and Gamma"
 
   - label: "Filter by [mtf-beta] also returns doc_bg"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [mtf-beta]
+        entity_types: [documents, memories]
       expect_contains: "Document With Beta and Gamma"
 
   - label: "Filter by [mtf-gamma] returns doc_ag"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [mtf-gamma]
+        entity_types: [documents, memories]
       expect_contains: "Document With Alpha and Gamma"
 
   - label: "Filter by [mtf-gamma] also returns doc_bg"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [mtf-gamma]
+        entity_types: [documents, memories]
       expect_contains: "Document With Beta and Gamma"
       expect_count_gte: 2
 
   - label: "Multi-tag filter [mtf-alpha, mtf-beta] with tag_match=all returns doc_ab (IS-08)"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [mtf-alpha, mtf-beta]
+        entity_types: [documents, memories]
         tag_match: all
       expect_contains: "Document With Both Tags"
       expect_not_contains: "Document With Alpha and Gamma"
 
   - label: "Multi-tag filter [mtf-alpha, mtf-beta] with tag_match=all excludes doc_bg (IS-08)"
     assert:
-      op: search_documents
+      op: search
       args:
         tags: [mtf-alpha, mtf-beta]
+        entity_types: [documents, memories]
         tag_match: all
       expect_not_contains: "Document With Beta and Gamma"

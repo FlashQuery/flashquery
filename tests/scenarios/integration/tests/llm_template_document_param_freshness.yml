@@ -45,8 +45,9 @@ steps:
       expect_contains: "ATL-INT-02-ALPHA"
 
   - label: "ATL-INT-02 update: replace parameter target with BETA marker"
-    action: update_document
+    action: write_document
     args:
+      mode: update
       identifier: "${param_doc.fq_id}"
       content: "ATL-INT-02-BETA"
 

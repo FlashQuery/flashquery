@@ -9,7 +9,7 @@ description: >
 
   Companion to IL-37 (template *body* freshness for {{ref:...}} injection):
   IL-42 covers the *metadata* surface for list_purposes discovery. Composes
-  update_doc_header (frontmatter mutation) with list_purposes (discovery read).
+  write_document (frontmatter mutation) with list_purposes (discovery read).
 
   Requires deps: [llm] because list_purposes (unlike help) is gated on the
   unconfigured-LLM guard at src/mcp/tools/llm.ts:355 — only resolver=help
@@ -59,13 +59,14 @@ steps:
         resolver: list_purposes
       expect_contains: "IL-42-DESC-MARKER-A"
 
-  - label: "IL-42 action: update_doc_header replaces fq_desc with IL-42-DESC-MARKER-B"
+  - label: "IL-42 action: write_document replaces fq_desc with IL-42-DESC-MARKER-B"
     # Updates frontmatter without touching the body — the right tool for
-    # this composition (update_document replaces body, not frontmatter).
-    action: update_doc_header
+    # this composition (write_document replaces body, not frontmatter).
+    action: write_document
     args:
+      mode: update
       identifier: "${freshness_tmpl.fq_id}"
-      updates:
+      frontmatter:
         fq_desc: "IL-42-DESC-MARKER-B"
 
   - label: "IL-42 step 3: list_purposes now surfaces updated fq_desc value MARKER-B"

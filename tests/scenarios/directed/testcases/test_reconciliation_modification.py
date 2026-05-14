@@ -127,26 +127,14 @@ def _build_schema_yaml_b(folder: str) -> str:
 
 
 def _extract_first_record(text: str) -> dict:
-    """Parse the first record from a search_records response (JSON array)."""
-    # Response format: "Found N record(s):\n[...json array...]..."
-    # Bracket-count to handle nested objects without splitting on nested brackets.
-    start = text.find("[")
-    if start == -1:
-        return {}
-    depth = 0
-    end = start
-    for i, ch in enumerate(text[start:], start):
-        if ch == "[":
-            depth += 1
-        elif ch == "]":
-            depth -= 1
-            if depth == 0:
-                end = i
-                break
+    """Parse the first record's data from a search_records JSON response."""
     try:
-        records = _json.loads(text[start : end + 1])
-        return records[0] if isinstance(records, list) and records else {}
-    except _json.JSONDecodeError:
+        payload = _json.loads(text)
+        results = payload.get("results", [])
+        if results:
+            return results[0].get("data") or {}
+        return {}
+    except Exception:
         return {}
 
 
@@ -214,9 +202,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg_a.expect_contains("registered successfully")
+        reg_a.expect_json_equals("status", "registered")
         reg_a.expect_contains(instance_a)
-        reg_a.expect_contains("notes")
+        reg_a.expect_json_equals("table_count", 1)
 
         run.step(
             label="register Plugin A (on_modified: sync-fields, field_map: author+priority)",
@@ -240,9 +228,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg_b.expect_contains("registered successfully")
+        reg_b.expect_json_equals("status", "registered")
         reg_b.expect_contains(instance_b)
-        reg_b.expect_contains("items")
+        reg_b.expect_json_equals("table_count", 1)
 
         run.step(
             label="register Plugin B (on_modified: ignore, field_map: label)",
@@ -322,7 +310,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime_a.expect_contains("Auto-tracked")
+        prime_a.expect_json_equals("reconciliation.auto_tracked", 1)
 
         run.step(
             label="search_records Plugin A — auto-tracks doc A; seeds staleness cache",
@@ -372,7 +360,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime_b.expect_contains("Auto-tracked")
+        prime_b.expect_json_equals("reconciliation.auto_tracked", 1)
 
         run.step(
             label="search_records Plugin B — auto-tracks doc B; seeds staleness cache",
@@ -778,31 +766,25 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 25: RO-30 — Verify second reconcile shows 'unchanged' ───────
         # If last_seen_updated_at was NOT updated during the first ignore pass,
-        # the doc would be re-classified as 'modified' and the summary would show a
-        # "Modified" or "Synced" count. We verify the summary does NOT indicate
-        # modification activity on the second pass.
+        # the doc would be re-classified as 'modified' and fields_synced would be > 0.
+        # We verify fields_synced == 0 on the second pass.
         t0 = time.monotonic()
-        recon_summary_b2 = _extract_recon_summary(recon_b2.text)
+        try:
+            recon_b2_payload = _json.loads(recon_b2.text)
+            recon_b2_reconciliation = recon_b2_payload.get("reconciliation", {})
+            fields_synced_b2 = recon_b2_reconciliation.get("fields_synced", 0)
+        except Exception:
+            recon_b2_reconciliation = {}
+            fields_synced_b2 = 0
 
-        # The key invariant: if last_seen_updated_at was updated, there should be
-        # no "Modified" classification on the second pass.
-        # A clean second pass has summary with 0 modifications or shows 'Unchanged'.
         # We also verify the label is STILL original-value (doubly ensuring no sync).
         record_b2 = _extract_first_record(recon_b2.text)
-
-        # "Modified" in the summary would indicate the doc was re-evaluated as modified.
-        # An empty or "unchanged" summary is the pass condition for RO-30.
-        # The summary may also say "1 unchanged" or have no Modified count.
-        summary_has_modified = bool(re.search(r"\bModified\b", recon_summary_b2, re.IGNORECASE))
-        summary_has_synced = bool(re.search(r"\bSynced\b", recon_summary_b2, re.IGNORECASE))
-
-        # Also accept: summary is empty (no stale docs found → all docs are current)
-        # or summary explicitly shows 0 modified / unchanged.
         label_still_original = record_b2.get("label") == "original-value"
 
+        summary_has_synced = fields_synced_b2 > 0
+
         checks_ro30 = {
-            "RO-30: no 'Modified' in reconciliation summary (doc treated as unchanged)": not summary_has_modified,
-            "RO-30: no 'Synced' in reconciliation summary (on_modified:ignore not re-triggered)": not summary_has_synced,
+            "RO-30: fields_synced=0 (on_modified:ignore not re-triggered)": not summary_has_synced,
             "RO-30: label still original-value (no sync happened on second pass)": label_still_original,
         }
         all_ok_ro30 = all(checks_ro30.values())
@@ -811,11 +793,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_ro30.items() if not v]
             detail_parts.append(f"Failed: {', '.join(failed)}")
         detail_parts.append(
-            f"summary_has_modified={summary_has_modified}, "
-            f"summary_has_synced={summary_has_synced}, "
+            f"fields_synced={fields_synced_b2}, "
             f"label={record_b2.get('label')!r}"
         )
-        detail_parts.append(f"recon_summary={recon_summary_b2!r}")
+        detail_parts.append(f"reconciliation={recon_b2_reconciliation!r}")
 
         run.step(
             label="RO-30: second reconcile shows no modification activity (last_seen_updated_at was set)",

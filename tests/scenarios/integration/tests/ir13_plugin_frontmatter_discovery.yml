@@ -54,7 +54,9 @@ steps:
         plugin_id: ir13
         plugin_instance: ir13test
         table: items
-      expect_contains: "Auto-tracked"
+      expect_json_equals:
+        path: reconciliation.auto_tracked
+        value: 1
 
   - label: "Tracked Item appears in the items table"
     assert:
@@ -63,6 +65,7 @@ steps:
         plugin_id: ir13
         plugin_instance: ir13test
         table: items
+        include: [data]
       expect_contains: "Tracked Item"
 
   # ── Step 2: Move doc OUTSIDE the watched folder ───────────────────────────────
@@ -87,7 +90,9 @@ steps:
         plugin_id: ir13
         plugin_instance: ir13test
         table: items
-      expect_contains: "Updated paths for 1"
+      expect_json_equals:
+        path: reconciliation.paths_updated
+        value: 1
 
   - label: "Tracked Item record is still active after out-of-folder move (IR-13)"
     assert:
@@ -96,6 +101,7 @@ steps:
         plugin_id: ir13
         plugin_instance: ir13test
         table: items
+        include: [data]
       expect_contains: "Tracked Item"
 
   - label: "Plugin row reflects the new outside-folder path"
@@ -105,4 +111,8 @@ steps:
         plugin_id: ir13
         plugin_instance: ir13test
         table: items
-      expect_contains: "ir13/outside"
+        filters:
+          path: "_integration/ir13/outside/tracked_item.md"
+      expect_json_equals:
+        path: total
+        value: 1

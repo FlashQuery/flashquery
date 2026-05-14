@@ -165,9 +165,17 @@ llm:
     - name: agentic
       description: Agent loop test purpose
       models: [agent-model, fallback-agent-model]
-      tools: [get_document, search_documents]
+      tools: [get_document, search]
       defaults:
         max_iterations: 4
+        timeout_ms: 10000
+        max_tokens: 64
+    - name: delegated_tier_round_trip
+      description: Delegated tier metadata round-trip purpose
+      models: [agent-model]
+      tools: [tier:read-write]
+      defaults:
+        max_iterations: 2
         timeout_ms: 10000
         max_tokens: 64
     - name: structured_fail
@@ -277,7 +285,11 @@ describe('call_model agent-loop public E2E contracts', () => {
 
   it('ATL-E2E-02 runs a native tool loop and returns final_response calls_log metadata', async () => {
     const provider = new ScriptedOpenAiProvider([
-      toolCallResponse([{ id: 'call_search_1', name: 'search_documents', args: { query: 'ATL-E2E-02' } }]),
+      toolCallResponse([{
+        id: 'call_search_1',
+        name: 'search',
+        args: { query: 'ATL-E2E-02', entity_types: ['documents'], mode: 'filesystem' },
+      }]),
       finalTextResponse('native loop complete', 21, 8),
     ]);
     await provider.start();
@@ -285,7 +297,7 @@ describe('call_model agent-loop public E2E contracts', () => {
       const envelope = await withManagedMcp(provider, (client) => callModel(client, {
         resolver: 'purpose',
         name: 'agentic',
-        messages: [{ role: 'user', content: 'ATL-E2E-02 use search_documents then answer.' }],
+        messages: [{ role: 'user', content: 'ATL-E2E-02 use search then answer.' }],
         return_messages: true,
       }));
       expect(envelope).toMatchObject({
@@ -309,6 +321,49 @@ describe('call_model agent-loop public E2E contracts', () => {
           expect.objectContaining({ role: 'tool', tool_call_id: 'call_search_1' }),
         ]),
       });
+    } finally {
+      await provider.stop();
+    }
+  }, 60000);
+
+  it('I-tier MCP-equivalent exposes corrected delegated tier:read-write metadata', async () => {
+    const provider = new ScriptedOpenAiProvider([
+      finalTextResponse('delegated tier metadata visible', 17, 5),
+    ]);
+    await provider.start();
+    try {
+      const envelope = await withManagedMcp(provider, (client) => callModel(client, {
+        resolver: 'purpose',
+        name: 'delegated_tier_round_trip',
+        messages: [{ role: 'user', content: 'Verify delegated tier native tool metadata.' }],
+      }));
+      const metadata = envelope.metadata as {
+        tools?: {
+          native_tool_names?: string[];
+        };
+      };
+
+      expect(metadata.tools?.native_tool_names).toEqual(expect.arrayContaining([
+        'list_vault',
+        'copy_document',
+        'insert_in_doc',
+        'replace_doc_section',
+      ]));
+      expect(metadata.tools?.native_tool_names).not.toEqual(expect.arrayContaining([
+        'get_llm_usage',
+        'call_model',
+      ]));
+      expect(provider.requests[0]).toMatchObject({
+        tools: expect.arrayContaining([
+          expect.objectContaining({ function: expect.objectContaining({ name: 'list_vault' }) }),
+          expect.objectContaining({ function: expect.objectContaining({ name: 'copy_document' }) }),
+          expect.objectContaining({ function: expect.objectContaining({ name: 'insert_in_doc' }) }),
+          expect.objectContaining({ function: expect.objectContaining({ name: 'replace_doc_section' }) }),
+        ]),
+      });
+      const providerToolNames = ((provider.requests[0].tools ?? []) as Array<{ function?: { name?: string } }>)
+        .map((tool) => tool.function?.name);
+      expect(providerToolNames).not.toEqual(expect.arrayContaining(['get_llm_usage', 'call_model']));
     } finally {
       await provider.stop();
     }
@@ -447,7 +502,11 @@ describe('call_model agent-loop public E2E contracts', () => {
 
   it('ATL-E2E-07 preserves message history across fallback and computes aggregate fallback cost with per-model rates', async () => {
     const provider = new ScriptedOpenAiProvider([
-      toolCallResponse([{ id: 'call_first_model', name: 'search_documents', args: { query: 'fallback' } }], 10, 4),
+      toolCallResponse([{
+        id: 'call_first_model',
+        name: 'search',
+        args: { query: 'fallback', entity_types: ['documents'], mode: 'filesystem' },
+      }], 10, 4),
       { status: 500, body: { error: { message: 'provider error for fallback exercise' } } },
       finalTextResponse('fallback final', 20, 5),
     ]);

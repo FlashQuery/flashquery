@@ -11,6 +11,37 @@ This document defines every behavioral coverage point we want to verify through 
 
 ---
 
+## Phase 128 Legacy Surface Final Audit
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| legacy_surface | Phase 128 removed/dead MCP tool names are absent from host listTools while final replacements and transitional tools remain present. | test_phase128_legacy_surface | 2026-05-13 | 2026-05-13 |
+| legacy_surface_migration_decisions | Phase 128 directed migration decisions: removed document/memory/directory/record/search/project names are ported to final tools or retained only as historical/removed migration evidence; get_briefing and insert_doc_link are transitional. | test_phase128_legacy_surface; historical directed ledgers | 2026-05-13 |  |
+
+## Phase 129 Metadata and Tool Registry
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| MT-01 | POST-01 / §3.11.1.1: delegated `tier:read-write` provider-visible metadata includes corrected data tools `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
+| MT-02 | POST-01 / §3.11.1.1: a delegated `tier:read-write` purpose can dispatch at least one corrected edit/list tool through `call_model`. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
+| MT-03 | POST-01 / §3.11.1.1: broad delegated tier metadata excludes non-data and hard-excluded tools such as `get_llm_usage` and `call_model`. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
+| MT-04 | POST-01 / §3.11.1.1: delegated edit dispatch is externally observable by reading back the mutated document. | test_delegated_tier_eligibility | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-1 | §3.11.1.1 U-tier-1: `tier:read-only` derives from canonical metadata and includes `list_vault` while excluding non-data tools. | tests/unit/tool-metadata.test.ts (`U-tier-1`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-2 | §3.11.1.1 U-tier-2: `tier:read-write` derives from canonical metadata and includes the corrected document tools. | tests/unit/tool-metadata.test.ts (`U-tier-2`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-3 | §3.11.1.1 U-tier-3: read-only tier output remains a subset of read-write tier output. | tests/unit/tool-metadata.test.ts (`U-tier-3`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-4 | §3.11.1.1 U-tier-4: tools with `delegatedHardExcludedReason` appear in neither broad delegated tier. | tests/unit/tool-metadata.test.ts (`U-tier-4`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-5 | §3.11.1.1 U-tier-5: admin-tier tools are kept out of broad delegated tier expansion. | tests/unit/tool-metadata.test.ts (`U-tier-5`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-6 | §3.11.1.1 U-tier-6: removed tools remain absent from delegated tier expansion. | tests/unit/tool-metadata.test.ts (`U-tier-6`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-7 | §3.11.1.1 U-tier-7: non-data-category read-only tools such as `get_llm_usage` are excluded from broad delegated tiers. | tests/unit/tool-metadata.test.ts (`U-tier-7`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-8 | §3.11.1.1 U-tier-8: synthetic `delegatedExclusionReason` excludes a fixture from tier derivation and preserves the diagnostic reason. | tests/unit/tool-metadata.test.ts (`U-tier-8`) | 2026-05-13 | 2026-05-13 |
+| MT-U-tier-9 | §3.11.1.1 U-tier-9: the pre-refactor to post-refactor diff is exactly the four corrected additions with no removals. | tests/unit/tool-metadata.test.ts (`U-tier-9`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-1 | §3.11.1.1 I-tier-1: delegated `tools:["tier:read-only"]` includes corrected read tools and excludes admin/LLM tools. | tests/integration/tool-registry.test.ts (`I-tier-1`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-2 | §3.11.1.1 I-tier-2: delegated `tools:["tier:read-write"]` includes corrected write tools and excludes admin/LLM tools. | tests/integration/tool-registry.test.ts (`I-tier-2`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-3 | §3.11.1.1 I-tier-3: per-purpose `excludedTools` compose after read-write tier expansion. | tests/integration/tool-registry.test.ts (`I-tier-3`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-4 | §3.11.1.1 I-tier-4: hard-excluded tools such as `call_model` remain unavailable even when explicitly requested. | tests/integration/tool-registry.test.ts (`I-tier-4`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-5a | §3.11.1.1 I-tier-5 hard-exclusion branch: explicit `maintain_vault` is rejected because it is admin-tier and hard-excluded. | tests/integration/tool-registry.test.ts (`I-tier-5`) | 2026-05-13 | 2026-05-13 |
+| MT-I-tier-5b | §3.11.1.1 I-tier-5 reachability branch: explicit admin-style fixtures without hard exclusion remain reachable. | tests/integration/tool-registry.test.ts (`I-tier-5b`) | 2026-05-13 | 2026-05-13 |
+
 ## 1. Document Lifecycle
 
 Core CRUD operations on vault documents via MCP.
@@ -29,7 +60,7 @@ Core CRUD operations on vault documents via MCP.
 | D-10 | Update document tags only (body and title preserved) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
 | D-11 | Update document custom frontmatter (reserved fields protected) (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
 | D-12 | Archive document sets status=archived (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-05-07 |
-| D-13 | Archived document excluded from search_documents (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-05-07 |
+| D-13 | Archived document excluded from search_documents (VALIDATED) | test_document_archive_and_search | 2026-04-13 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | D-14 | Copy document creates new fqc_id, preserves content (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
 | D-15 | Copy document leaves original unchanged (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
 | D-16 | Move document updates path in database (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
@@ -40,9 +71,39 @@ Core CRUD operations on vault documents via MCP.
 | D-21 | Reserved frontmatter fields cannot be overridden via create (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
 | D-22 | Reserved frontmatter fields cannot be overridden via update (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
 | D-23 | get_document returns clear error when file manually deleted from vault (DB row present, no scan run) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-05-07 |
-| D-24 | search_documents does not surface stale hits for manually-deleted files before reconcile (or marks them clearly) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-05-07 |
-| D-25 | User-defined custom frontmatter fields survive update_document (updating title, body, or tags leaves unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| D-24 | search_documents does not surface stale hits for manually-deleted files before reconcile (or marks them clearly) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| D-25 | User-defined custom frontmatter fields survive update_document (updating title, body, or tags leaves unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | D-26 | User-defined custom frontmatter fields survive archive_document (archiving only changes status; all other fields preserved) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| D-wdoc-1 | `write_document(mode:"create")` creates a document and returns JSON document identification (`fq_id`, `path`, `title`). | test_content_append_and_insert; test_content_replace_section; test_content_frontmatter_ops; test_frontmatter_preservation; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
+| D-wdoc-2 | `write_document(mode:"update")` updates body, title, and custom frontmatter while preserving omitted fields. | test_content_frontmatter_ops; test_frontmatter_preservation; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
+| D-wdoc-3 | `write_document(mode:"create")` rejects/respects final reserved-field and title/frontmatter ownership boundaries through JSON response contracts. | tests/unit/write-document.test.ts; test_content_frontmatter_ops | 2026-05-12 | 2026-05-12 |
+| D-wdoc-4 | `write_document(mode:"create")` responses are parseable by directed scenarios without legacy prose parsing. | test_content_append_and_insert; test_content_replace_section; test_content_frontmatter_ops; test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
+| D-wdoc-5 | `write_document(mode:"update")` can remove custom frontmatter fields by setting them to `null`. | test_content_frontmatter_ops | 2026-05-12 | 2026-05-12 |
+| D-wdoc-6 | `write_document(mode:"update")` updates FQ title through the top-level `title` parameter rather than reserved `fq_title` frontmatter. | test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
+| D-arch-1 | archive_document single returns a JSON document identification block instead of prose. | test_document_archive_and_search | 2026-05-12 |  |
+| D-arch-2 | archive_document response includes `archived_at` in ISO-8601 form. | test_document_archive_and_search | 2026-05-12 |  |
+| D-arch-3 | archive_document batch returns a JSON array with one envelope per input identifier. | test_document_archive_and_search | 2026-05-12 |  |
+| D-arch-4 | archive_document batch response order exactly matches input identifier order. | test_document_archive_and_search | 2026-05-12 |  |
+| D-arch-5 | Re-archiving an already archived document returns the existing `archived_at` timestamp. | test_document_archive_and_search | 2026-05-12 |  |
+| D-arch-6 | archive_document preserves user-defined custom frontmatter fields while adding archive lifecycle fields. | test_frontmatter_preservation; documents.integration.test.ts archive_document JSON output and archived_at lifecycle | 2026-05-12 |  |
+| D-arch-7 | archive_document batch not_found results return canonical error envelopes at the corresponding element position with outer `isError:false`. | test_document_archive_and_search | 2026-05-12 |  |
+| D-copy-1 | copy_document success returns a JSON document identification block for the new copy. | test_document_copy_and_move | 2026-05-12 |  |
+| D-copy-2 | copy_document creates a fresh fq_id for the copy and leaves the source document retrievable with its original fq_id. | test_document_copy_and_move | 2026-05-12 |  |
+| D-copy-3 | copy_document destination conflict returns canonical `conflict` with `details.reason="path_exists"` and `isError:false`. | test_document_copy_and_move | 2026-05-12 |  |
+| D-copy-4 | copy_document remains single-target and rejects array-like source identifiers as `invalid_input`. | tests/unit/copy-document.test.ts | 2026-05-12 |  |
+| D-move-1 | move_document success returns a JSON document identification block for the moved document. | test_document_copy_and_move | 2026-05-12 |  |
+| D-move-2 | move_document preserves fq_id while returning the normalized destination path after an extensionless destination. | test_document_copy_and_move | 2026-05-12 |  |
+| D-move-3 | move_document destination conflict returns canonical `conflict` with `details.reason="path_exists"` and `isError:false`. | test_document_copy_and_move | 2026-05-12 |  |
+| D-move-4 | move_document plugin ownership notice is represented as `warnings:["plugin_ownership_path_expectation"]` rather than appended prose. | tests/unit/move-document.test.ts | 2026-05-12 |  |
+| D-move-5 | move_document reference durability preserves fq_id-based retrieval after the path move. | test_document_copy_and_move; existing IX-19/IX-22 workflows | 2026-05-12 |  |
+| D-rdoc-1 | `remove_document` hard-deletes when trash is disabled and returns `status:"archived"`. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-rdoc-2 | `remove_document` trash-folder moves use basename-only destinations. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
+| D-rdoc-3 | `remove_document` external trash moves leave the source absent and external file present. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
+| D-rdoc-4 | `remove_document` collision strategy preserves all removed files. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
+| D-rdoc-5 | `remove_document` archives lifecycle state before filesystem removal and never emits a `removed` lifecycle status. | test_removal_directory_maintenance; tests/integration/remove-document.integration.test.ts | 2026-05-12 | 2026-05-13 |
+| D-rdoc-6 | `remove_document` batch partial failure preserves input order. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-rdoc-7 | `remove_document` bulk removal emits a warning for more than five identifiers. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-rdoc-8 | `remove_document` trash-folder moves write manual recovery metadata. | tests/integration/remove-document.integration.test.ts | 2026-05-12 |  |
 | D-27 | get_document default response returns JSON envelope with body field (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-28 | get_document include=["frontmatter"] returns frontmatter projection in envelope (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-29 | get_document include=["headings"] returns headings array with level, text, chars (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
@@ -65,30 +126,32 @@ Core CRUD operations on vault documents via MCP.
 | D-47 | get_document title fallback when fq_title missing — uses file basename (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-48 | get_document title coercion when fq_title is a number — returns string representation (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
 | D-49 | get_document title trim when fq_title has leading/trailing whitespace — returns trimmed string (VALIDATED) | test_consolidated_get_document | 2026-05-05 | 2026-05-07 |
-| D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
+| D-50 | get_document title when frontmatter completely absent — returns file basename (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 | D-51 | get_document with array identifiers returns array output; each element succeeds independently (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
 | D-52 | get_document batch partial failure — one identifier not found returns error object at position; other succeeds; MCP response is not isError (VALIDATED) | test_batch_get_document | 2026-05-02 | 2026-05-07 |
-| D-53 | get_document with follow_ref returns source envelope + followed_ref nested object with resolved target content (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-54 | get_document follow_ref + include: ["headings"] returns headings in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-55 | get_document follow_ref + include: ["frontmatter","headings"] returns both in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-56 | get_document follow_ref + sections extracts sections from target document, returned in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-57 | get_document follow_ref pre-resolution error: follow_ref_path_not_found when frontmatter path does not exist (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-58 | get_document follow_ref pre-resolution error: follow_ref_invalid_type when frontmatter value is not a string (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-59 | get_document follow_ref pre-resolution error: follow_ref_target_not_found when resolved path does not exist in vault (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-60 | get_document batch + follow_ref: per-element partial failure semantics apply (one element missing pointer returns per-element error; other succeeds) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-07 |
-| D-61 | get_document follow_ref via UUID-typed pointer (Example 11) — projections.summary is a UUID string; resolves via fq_id branch (Phase 2 Gap 1) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-62 | get_document follow_ref_target_not_found with bare-filename pointer asserts resolution_method == 'filename' (Phase 2 Gap 2) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-63 | get_document follow_ref_target_not_found with UUID pointer asserts resolution_method == 'fq_id' (Phase 2 Gap 3) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-64 | get_document batch + follow_ref with 3-element success/failure/success interleaving — positional correspondence holds across all positions (Phase 2 Gap 4) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-65 | get_document follow_ref + multi-section section_not_found nested under followed_ref (Phase 2 Gap 5) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-66 | get_document follow_ref + multi-section partial-failure aggregation per OQ #12 — exactly 2 entries (no_match + insufficient_occurrences with requested_count/found_count) (Phase 2 Gap 6) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-67 | get_document batch + follow_ref pre-resolution error variants (follow_ref_invalid_type + follow_ref_target_not_found per element) (Phase 2 Gap 7) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-07 |
-| D-39a | get_document follow_ref + sections without "body" in include -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
-| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | 2026-05-03 |
-| D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-02 |
+| D-gdoc-error-1 | get_document missing single identifier returns canonical JSON `not_found` envelope with `isError:false` instead of runtime failure. | test_consolidated_get_document_errors | 2026-05-12 |  |
+| D-gdoc-error-2 | get_document invalid section/include combination returns canonical JSON `invalid_input` envelope with `details.conflict` preserved. | test_consolidated_get_document_errors | 2026-05-12 |  |
+| D-53 | get_document with follow_ref returns source envelope + followed_ref nested object with resolved target content (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-54 | get_document follow_ref + include: ["headings"] returns headings in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-55 | get_document follow_ref + include: ["frontmatter","headings"] returns both in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-56 | get_document follow_ref + sections extracts sections from target document, returned in followed_ref (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-57 | get_document follow_ref pre-resolution error: follow_ref_path_not_found when frontmatter path does not exist (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-58 | get_document follow_ref pre-resolution error: follow_ref_invalid_type when frontmatter value is not a string (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-59 | get_document follow_ref pre-resolution error: follow_ref_target_not_found when resolved path does not exist in vault (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-60 | get_document batch + follow_ref: per-element partial failure semantics apply (one element missing pointer returns per-element error; other succeeds) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-61 | get_document follow_ref via UUID-typed pointer (Example 11) — projections.summary is a UUID string; resolves via fq_id branch (Phase 2 Gap 1) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-62 | get_document follow_ref_target_not_found with bare-filename pointer asserts resolution_method == 'filename' (Phase 2 Gap 2) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-63 | get_document follow_ref_target_not_found with UUID pointer asserts resolution_method == 'fq_id' (Phase 2 Gap 3) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-64 | get_document batch + follow_ref with 3-element success/failure/success interleaving — positional correspondence holds across all positions (Phase 2 Gap 4) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-65 | get_document follow_ref + multi-section section_not_found nested under followed_ref (Phase 2 Gap 5) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-66 | get_document follow_ref + multi-section partial-failure aggregation per OQ #12 — exactly 2 entries (no_match + insufficient_occurrences with requested_count/found_count) (Phase 2 Gap 6) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-67 | get_document batch + follow_ref pre-resolution error variants (follow_ref_invalid_type + follow_ref_target_not_found per element) (Phase 2 Gap 7) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-39a | get_document follow_ref + sections without "body" in include -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-39d | get_document follow_ref + sections: section_not_found on target returns error with followed_ref nested (post-resolution nesting) (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
+| D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
+| D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 
 ## 2. Document Content Operations
 
@@ -96,26 +159,34 @@ Surgical editing tools for modifying document content at specific locations.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| C-01 | Append content to end of document (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-02 | Insert content at top of document body (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-03 | Insert content after a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-04 | Insert content before a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-05 | Insert content at end of a section (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-07 |
-| C-06 | Replace section content (preserves heading line) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
-| C-07 | Replace section with include_subheadings=true (replaces nested) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
-| C-08 | Replace section with include_subheadings=false (preserves nested) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
-| C-09 | Insert at heading with occurrence > 1 (duplicate headings) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-07 |
-| C-10 | Update frontmatter header only (body untouched) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-11 | Update frontmatter with null value removes field (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-12 | Insert doc link (wiki-style) into frontmatter links array (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-13 | Insert doc link deduplicates (same link twice = one entry) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-14 | Insert doc link with custom property name (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-07 |
-| C-15 | Get document with sections filter returns only requested sections (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-07 |
+| C-01 | Append content to end of document (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-02 | Insert content at top of document body (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-03 | Insert content after a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-04 | Insert content before a specific heading (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-05 | Insert content at end of a section (VALIDATED) | test_content_append_and_insert | 2026-04-14 | 2026-05-13 |
+| C-06 | Replace section content (preserves heading line) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-13 |
+| C-07 | Replace section with include_nested=true (replaces nested) (VALIDATED) | test_content_replace_section | 2026-05-12 | 2026-05-13 |
+| C-08 | Replace section with include_nested=false (preserves nested) (VALIDATED) | test_content_replace_section | 2026-05-12 | 2026-05-13 |
+| C-09 | Insert at heading with occurrence > 1 (duplicate headings) (VALIDATED) | test_content_replace_section | 2026-04-14 | 2026-05-13 |
+| C-10 | Update frontmatter header only (body untouched) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-11 | Update frontmatter with null value removes field (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-12 | Insert doc link (wiki-style) into frontmatter links array (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-13 | Insert doc link deduplicates (same link twice = one entry) (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-14 | Insert doc link with custom property name (VALIDATED) | test_content_frontmatter_ops | 2026-04-14 | 2026-05-13 |
+| C-15 | Get document with sections filter returns only requested sections (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-13 |
 | C-16 | Get document sections with include_subheadings=true (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-07 |
 | C-17 | Get document sections with include_subheadings=false (VALIDATED) | test_content_section_extraction | 2026-04-14 | 2026-05-07 |
 | C-18 | User-defined custom frontmatter fields survive content-editing operations (append_to_doc, insert_in_doc, replace_doc_section leave unmentioned custom fields intact) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
-| C-19 | update_doc_header can explicitly modify user-defined frontmatter fields when named in the update map (MCP-directed override is permitted) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
-| C-20 | update_doc_header targeting only FQC-managed fields (e.g. title) does not modify user-defined custom frontmatter fields (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| C-19 | update_doc_header can explicitly modify user-defined frontmatter fields when named in the update map (MCP-directed override is permitted) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| C-20 | update_doc_header targeting only FQC-managed fields (e.g. title) does not modify user-defined custom frontmatter fields (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| D-insert-1 | `insert_in_doc(position:"bottom")` appends content at the end of a document body. | test_content_append_and_insert; test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
+| D-insert-2 | `insert_in_doc` supports top, before_heading, after_heading, and end_of_section positions with occurrence targeting. | test_content_append_and_insert; test_content_replace_section | 2026-05-12 | 2026-05-12 |
+| D-insert-3 | `insert_in_doc` uses `include_nested`, `heading_match`, `heading_level`, and ambiguity semantics for section-boundary insertion. | test_content_append_and_insert; tests/unit/insert-in-doc.test.ts; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
+| D-replace-1 | `replace_doc_section` preserves the matched heading when replacement content is non-empty. | test_content_replace_section; test_frontmatter_preservation | 2026-05-12 | 2026-05-12 |
+| D-replace-2 | `replace_doc_section` uses `include_nested`, `heading_match`, `heading_level`, ambiguity, and canonical error-envelope semantics. | test_content_replace_section; tests/unit/replace-doc-section.test.ts; tests/integration/write-document.integration.test.ts; tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
+| D-replace-3 | `replace_doc_section` with `content:""` deletes the matched heading and returns `heading_removed:true`. | test_content_replace_section | 2026-05-12 | 2026-05-12 |
+| D-tags-1 | `apply_tags` accepts `targets: [{entity_type, identifier}]` and returns ordered per-target JSON results. | tests/unit/apply-tags.test.ts; tests/integration/apply-tags.test.ts; tests/integration/write-document.integration.test.ts | 2026-05-12 | 2026-05-12 |
+| D-tags-2 | `apply_tags` does not leak disabled memory-domain targets when memory tools are unavailable. | tests/unit/apply-tags.test.ts; tests/integration/write-document.integration.test.ts | 2026-05-12 | 2026-05-12 |
 
 ## 3. Document Outline and Structure
 
@@ -151,17 +222,25 @@ All modes and filtering combinations for document search.
 | S-08 | Mixed mode search combines filesystem and semantic results (VALIDATED) | test_search_modes | 2026-04-14 | 2026-05-07 |
 | S-09 | Search graceful degradation when embeddings disabled (VALIDATED) | test_search_modes | 2026-04-14 | 2026-05-07 |
 
-## 5. Search — Cross-type (search_all)
+## 5. Search — Cross-type (search_all) Phase 128 legacy migration evidence.
 
 Unified search across documents and memories.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| SA-01 | search_all finds documents by query (VALIDATED) | test_search_all_cross_type | 2026-04-16 | 2026-05-07 |
-| SA-02 | search_all finds memories by query (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
-| SA-03 | search_all with entity_types filter restricts results (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
-| SA-04 | search_all with tag filtering (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
-| SA-05 | search_all falls back to filesystem when embeddings disabled (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 |
+| SA-01 | search_all finds documents by query (VALIDATED) | test_search_all_cross_type | 2026-04-16 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| SA-02 | search_all finds memories by query (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| SA-03 | search_all with entity_types filter restricts results (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| SA-04 | search_all with tag filtering (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| SA-05 | search_all falls back to filesystem when embeddings disabled (VALIDATED) | test_search_all_cross_type | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| D-search-1 | `search` returns a JSON envelope for document filesystem results with `query`, `entity_types`, `mode`, `total`, and typed result items. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-2 | `search` returns memory results through the final unified surface without using `search_memory` or `search_all`. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-3 | `search(mode:"filesystem")` honors explicit mode selection for document search. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-4 | `search` enters list mode for empty filtered memory searches when `entity_types:["memories"]` is explicit. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-5 | `search` applies one global limit to mixed document and memory result sets. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-6 | `search` result items carry entity type, identifier, and match-source metadata usable by MCP clients. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-7 | `search` excludes archived memories by default and surfaces them only when `include_archived:true`. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-search-8 | `search` reports disabled/unsupported memory category requests through JSON envelope semantics; accepted substitute coverage because this is host-config behavior, not a managed directed scenario. | tests/unit/search.test.ts; tests/integration/search.integration.test.ts | 2026-05-12 | 2026-05-12 |
 
 ## 6. Memory Lifecycle
 
@@ -171,19 +250,26 @@ Core CRUD operations on memories.
 |----|----------|------------|--------------|--------------|
 | M-01 | Save memory with content and tags (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-02 | Search memory by query returns saved memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
-| M-03 | Search memory by tags (any) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
-| M-04 | Search memory by tags (all) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
-| M-05 | Search memory with threshold parameter filters low-similarity (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-03 | Search memory by tags (any) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
+| M-04 | Search memory by tags (all) (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
+| M-05 | Search memory with threshold parameter filters low-similarity (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
 | M-06 | Update memory creates new version (preserves history) (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-07 | Update memory without tags preserves existing tags (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-08 | Get memory by single ID returns full content (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
-| M-09 | Get memory batch (multiple IDs) returns all (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-09 | Get memory batch (multiple IDs) returns all (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
 | M-10 | List memories by tags returns recent, truncated to 200 chars (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
-| M-11 | List memories respects limit parameter (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-07 |
+| M-11 | List memories respects limit parameter (VALIDATED) | test_memory_search_and_list | 2026-04-14 | 2026-05-13 |
 | M-12 | Archive memory sets status=archived (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
-| M-13 | Archived memory excluded from search_memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
+| M-13 | Archived memory excluded from search_memory (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | M-14 | Archive memory manages status tags automatically (VALIDATED) | test_memory_lifecycle | 2026-04-13 | 2026-05-07 |
 | M-15 | Save memory with plugin_scope (fuzzy matched) (VALIDATED) | test_memory_plugin_scope | 2026-04-14 | 2026-05-07 |
+| D-wmem-1 | `write_memory(mode:"create")` creates a memory and returns parseable JSON identification with `memory_id`, `content_preview`, tags, and lifecycle fields. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-2 | `write_memory(mode:"create")` supports include projections for full content and full tags. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-3 | `write_memory(mode:"update")` creates a new latest version linked to the previous memory. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-4 | `write_memory(mode:"update")` preserves existing tags when tags are omitted. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-5 | `get_memory` returns ordered JSON arrays for batch input with per-element content projection. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-6 | `archive_memory` accepts `memory_ids` batch input and returns ordered JSON archive envelopes. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
+| D-wmem-7 | `archive_memory` preserves expected-error semantics for missing batch elements without turning the outer MCP response into a runtime error. | test_unified_search_memory_final | 2026-05-12 | 2026-05-13 |
 
 ## 7. Plugin Lifecycle
 
@@ -208,6 +294,14 @@ Registration, record CRUD, and teardown of plugin schemas.
 | P-15 | Plugin instance isolation (same plugin, different instances) (VALIDATED) | test_plugin_registration | 2026-04-14 | 2026-05-07 |
 | P-16 | Plugin with both document-backed tables (`track_as`) and non-document-backed tables registers without DDL errors (no duplicate or conflicting implicit columns) (VALIDATED) | test_plugin_mixed_tables | 2026-04-22 | 2026-05-07 |
 | P-17 | Plugin schema that explicitly declares `fqc_id` on a document-backed table (per §8.4.7 — the CRM plugin pattern) registers without a DDL error — the DDL builder de-duplicates the plugin-defined and implicit `fqc_id` columns rather than producing a duplicate column definition (PIR-03 regression guard; test schema MUST include `fqc_id` explicitly in the document-backed table columns — P-16 deliberately omits it, masking this defect) (VALIDATED) | test_plugin_explicit_fqc_id | 2026-04-22 | 2026-05-07 |
+| P-18 | `register_plugin` returns structured registered envelope with `was_new` for new/existing registration (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-19 | `unregister_plugin` conflicts on live records and `force:true` unregisters with orphan warning (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-20 | `get_plugin_info` include variants gate schema, tables, and status detail (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-21 | `write_record` create/update validates required, generated, unknown fields and include-gated data (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-22 | `get_record` supports default data, `include: []`, schema metadata, and expected not_found envelope (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-23 | `archive_record` ordered batch returns per-target results and `archived_at_unavailable` warnings (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-24 | `search_records` returns structured envelopes with include-gated data, archived filtering, scores, and taggable warnings (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
+| P-25 | `clear_pending_reviews` action list/clear/no-match uses pending-review row IDs (VALIDATED) | test_plugin_record_consolidation | 2026-05-12 | 2026-05-13 |
 
 ## 8. Tag Operations
 
@@ -231,45 +325,45 @@ Vault scanning, file listing, and directory management.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| F-01 | force_file_scan (sync) indexes new files (VALIDATED) | test_search_after_create | 2026-04-13 | 2026-05-07 |
-| F-02 | force_file_scan (background) returns immediately (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-05-07 |
-| F-03 | force_file_scan detects updated files (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-05-07 |
-| F-04 | force_file_scan detects deleted files (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-05-07 |
-| F-05 | reconcile_documents dry run reports without changes (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-05-07 |
-| F-06 | reconcile_documents detects moved files via fqc_id (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-05-07 |
-| F-07 | reconcile_documents archives permanently gone files (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-05-07 |
+| F-01 | force_file_scan (sync) indexes new files (VALIDATED) | test_search_after_create | 2026-04-13 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-02 | force_file_scan (background) returns immediately (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-03 | force_file_scan detects updated files (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-04 | force_file_scan detects deleted files (VALIDATED) | test_file_scan_lifecycle | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-05 | reconcile_documents dry run reports without changes (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-06 | reconcile_documents detects moved files via fqc_id (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-07 | reconcile_documents archives permanently gone files (VALIDATED) | test_reconcile_documents | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | F-08 | list_vault returns file entries for a directory (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
 | F-09 | list_vault recursive mode returns files from subdirectories (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
 | F-10 | list_vault with extension filter (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
 | F-11 | list_vault with date range filter (renamed from list_files) (VALIDATED) | test_list_vault | 2026-04-25 | 2026-05-07 |
-| F-12 | remove_directory succeeds on empty directory (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 |
-| F-13 | remove_directory fails on non-empty directory (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 |
-| F-14 | remove_directory prevents vault root removal (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 |
+| F-12 | remove_directory succeeds on empty directory (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-13 | remove_directory fails on non-empty directory (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-14 | remove_directory prevents vault root removal (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | F-15 | Path traversal protection (escape attempt blocked) (VALIDATED) | test_directory_operations | 2026-04-14 | 2026-05-07 |
 | ~~F-16~~ | ~~discover_document in flagged mode~~ (VALIDATED) | ~~test_discover_document~~ | 2026-04-21 | 2026-04-16 |
 | ~~F-17~~ | ~~discover_document in paths mode~~ (VALIDATED) | ~~test_discover_document~~ | 2026-04-21 | 2026-04-16 |
-| F-18 | force_file_scan preserves user-defined frontmatter fields in newly discovered documents (scan merges FQC identity fields into existing frontmatter rather than replacing it) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 |
+| F-18 | force_file_scan preserves user-defined frontmatter fields in newly discovered documents (scan merges FQC identity fields into existing frontmatter rather than replacing it) (VALIDATED) | test_frontmatter_preservation | 2026-04-18 | 2026-05-07 (Phase 128 legacy migration evidence) |
 
-### 9.2 Directory Creation (`create_directory`)
+### 9.2 Directory Creation (`create_directory`) Phase 128 legacy migration evidence.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| F-19 | `create_directory` creates a single directory at the vault root and it exists on the filesystem (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
-| F-20 | `create_directory` creates a deep hierarchy (`a/b/c/d`) — all intermediate directories exist (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
-| F-21 | `create_directory` reports `(already exists)` for a pre-existing directory; `isError` is `false`; count is 0 (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
-| F-22 | `create_directory` with partial overlap — existing segments reported as `(already exists)`, new segments as `(created)` (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
-| F-23 | `create_directory` batch creation (array of paths) — all new directories created in one call (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 |
-| F-24 | `create_directory` batch with mixed results — valid paths created, invalid paths listed in `Failed` section, overall `isError` is `false` (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 |
-| F-25 | `create_directory` batch where all paths fail — overall `isError` is `true` (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 |
-| F-26 | `create_directory` with `root_path` — directories created relative to root; root itself created if absent (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-05-07 |
-| F-27 | `create_directory` with `root_path` that already exists — root shown as `(already exists)`, subfolders created (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-05-07 |
-| F-28 | `create_directory` with deep `root_path` (`Plugins/CRM/v2`) — entire root hierarchy created (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-05-07 |
-| F-29 | `create_directory` is idempotent — repeated identical calls all succeed with `(already exists)` (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 |
+| F-19 | `create_directory` creates a single directory at the vault root and it exists on the filesystem (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-20 | `create_directory` creates a deep hierarchy (`a/b/c/d`) — all intermediate directories exist (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-21 | `create_directory` reports `(already exists)` for a pre-existing directory; `isError` is `false`; count is 0 (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-22 | `create_directory` with partial overlap — existing segments reported as `(already exists)`, new segments as `(created)` (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-23 | `create_directory` batch creation (array of paths) — all new directories created in one call (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-24 | `create_directory` batch with mixed results — valid paths created, invalid paths listed in `Failed` section, overall `isError` is `false` (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-25 | `create_directory` batch where all paths fail — overall `isError` is `true` (VALIDATED) | test_create_directory_batch | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-26 | `create_directory` with `root_path` — directories created relative to root; root itself created if absent (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-27 | `create_directory` with `root_path` that already exists — root shown as `(already exists)`, subfolders created (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-28 | `create_directory` with deep `root_path` (`Plugins/CRM/v2`) — entire root hierarchy created (VALIDATED) | test_create_directory_root_path | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| F-29 | `create_directory` is idempotent — repeated identical calls all succeed with `(already exists)` (VALIDATED) | test_create_directory | 2026-04-25 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | F-30 | Leading `/` stripped — `"/inbox"` creates `inbox/` (VALIDATED) | test_create_directory_normalization | 2026-04-25 | 2026-05-07 |
 | F-31 | Trailing `/` stripped — `"inbox/"` creates `inbox/` (VALIDATED) | test_create_directory_normalization | 2026-04-25 | 2026-05-07 |
 | F-32 | Consecutive slashes collapsed — `"CRM//Contacts///Active"` creates `CRM/Contacts/Active/` (VALIDATED) | test_create_directory_normalization | 2026-04-25 | 2026-05-07 |
 
-### 9.3 Directory Creation (`create_directory`) — Sanitization and Rejection
+### 9.3 Directory Creation (`create_directory`) — Sanitization and Rejection Phase 128 legacy migration evidence.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
@@ -293,6 +387,12 @@ Vault scanning, file listing, and directory management.
 | F-50 | Dot-prefixed directory (`.staging/temp`) created successfully (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-05-07 |
 | F-51 | Dot-prefixed directory is invisible to `list_vault` (scanner ignore patterns) (VALIDATED) | test_create_directory_special | 2026-04-25 | 2026-05-07 |
 | F-52 | Shutdown check — call during shutdown returns `isError: true` with shutdown message (DEFERRED — cannot inject in-process shutdown state from subprocess; unit-tested in files-tools.test.ts) | test_create_directory_special | 2026-04-29 | 2026-04-29 |
+| D-mdir-1 | `manage_directory(action:"create")` creates directories through the final surface. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-2 | `manage_directory(action:"create")` returns `status:"unchanged"` for idempotent re-create. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-3 | `manage_directory(action:"remove")` removes empty directories through the final surface. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-4 | `manage_directory(action:"remove")` rejects non-empty directories with `details.reason:"directory_not_empty"`. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-5 | `manage_directory` batch order and per-element errors are stable. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mdir-6 | `manage_directory` rejects traversal paths as ordered per-element errors. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
 
 ### 9.4 Vault Listing (`list_vault`)
 
@@ -344,6 +444,26 @@ Vault scanning, file listing, and directory management.
 | F-96 | `list_vault` skips inaccessible subdirectory (permission denied) without `isError` — returns results for accessible entries | test_list_vault_fs_resilience | 2026-04-29 | 2026-05-07 |
 | F-97 | `list_vault` skips unreadable file (stat error) without `isError` — returns results for readable files | test_list_vault_fs_resilience | 2026-04-29 | 2026-05-07 |
 
+### 9.5 Vault Listing Structured Output Migration (`list_vault`)
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| D-list-vault-1 | `list_vault` returns parseable JSON `{ path, total, displayed, truncated, entries }` instead of table/prose output | tests/unit/list-vault.test.ts, tests/e2e/protocol.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-2 | `list_vault` default entries include `name`, `path`, `type`, `modified`, and structured `size` fields | tests/unit/list-vault.test.ts, tests/integration/list-vault.integration.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-3 | `include:["metadata"]` adds directory `children` and `created` fields without changing default filtering behavior | tests/unit/list-vault.test.ts, list_vault_format_modes | 2026-05-12 | 2026-05-12 |
+| D-list-vault-4 | `include:["tracking"]` adds tracked file `title`, `tags`, `status`, and `fq_id` while omitting those fields for untracked files | tests/unit/list-vault.test.ts, tests/integration/list-vault.integration.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-5 | Invalid include values return canonical `{ error:"invalid_input" }` JSON with `isError:false` | tests/unit/list-vault.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-6 | Dot-prefixed entries remain hidden from default structured listings | tests/integration/list-vault.integration.test.ts | 2026-05-12 | 2026-05-12 |
+| D-list-vault-7 | Extension filtering preserves directories and filters files in the structured `entries` array | tests/integration/list-vault.integration.test.ts, list_vault_extension_filter_with_directories | 2026-05-12 | 2026-05-12 |
+| D-mvault-1 | `maintain_vault(action:"sync")` indexes external filesystem changes. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-2 | `maintain_vault(action:"repair")` reports structured repair action results. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-3 | `maintain_vault(["sync","repair"])` returns repair before sync. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-4 | `maintain_vault` accepts `dry_run` only for repair. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-5 | `maintain_vault` rejects background execution outside sync. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-6 | `maintain_vault(action:"status")` returns `not_found` for an unknown job id. | test_removal_directory_maintenance | 2026-05-12 | 2026-05-13 |
+| D-mvault-7 | `maintain_vault` concurrent maintenance conflicts are covered at unit/integration level. | tests/unit/maintain-vault.test.ts; tests/integration/maintain-vault.integration.test.ts | 2026-05-12 |  |
+| D-mvault-8 | `maintain_vault(action:"status")` output excludes scanner internals. | tests/unit/maintain-vault.test.ts; tests/integration/maintain-vault.integration.test.ts | 2026-05-12 |  |
+
 ## 10. Briefing and Aggregation
 
 Cross-entity summary tools.
@@ -353,6 +473,8 @@ Cross-entity summary tools.
 | B-01 | get_briefing returns documents and memories grouped by type (VALIDATED) | test_briefing | 2026-04-14 | 2026-05-07 |
 | B-02 | get_briefing with tag filtering (VALIDATED) | test_briefing | 2026-04-14 | 2026-05-07 |
 | B-03 | get_briefing with plugin_id includes plugin record counts (VALIDATED) | test_briefing | 2026-04-14 | 2026-05-07 |
+| D-briefing-degrade-1 | get_briefing with memory disabled and mixed documents/memories request returns documents plus memory_category_disabled warning. | test_briefing | 2026-05-13 |  |
+| D-briefing-degrade-2 | get_briefing with memory disabled and memories-only request returns canonical unsupported envelope with isError:false. | test_briefing | 2026-05-13 |  |
 
 ## 11. Scale and Correctness
 
@@ -416,10 +538,10 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-02 | Reconciliation classifies every document into exactly one of six categories (added/resurrected/deleted/disassociated/moved/modified) plus an unchanged count (VALIDATED) | test_reconciliation_six_categories | 2026-04-29 | 2026-05-07 |
 | RO-03 | Reconciliation is idempotent (re-run with no changes produces all unchanged, zero in other categories) (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-05-07 |
 | RO-04 | New file in watched folder with no plugin row (active or archived) is classified as `added` (VALIDATED) | test_reconciliation_core | 2026-04-21 | 2026-05-07 |
-| RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-07 |
-| RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-07 |
-| RO-70 | After background `force_file_scan` completes asynchronously, the next record tool call performs a full reconciliation diff and sees the updated `fqc_documents` state — staleness cache is not prematurely consumed by a pre-scan reconciliation (VALIDATED) | test_reconciliation_background_scan_cache | 2026-04-22 | 2026-05-07 |
-| RO-76 | A record tool call made BEFORE a background `force_file_scan` completes does not consume the staleness cache — after the scan finishes a subsequent record tool call still performs a full diff and sees the scan results (PIR-05 race guard; test MUST include an immediate intermediate record tool call between scan trigger and scan completion — pre-populating 100+ files in the vault ensures the scan takes ≥2s so the intermediate call reliably lands in the race window) (VALIDATED) | test_reconciliation_background_scan_race | 2026-04-22 | 2026-05-07 |
+| RO-05 | Staleness check skips reconciliation diff when run within 30s threshold; pending review query still runs (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-13 |
+| RO-61 | `force_file_scan` invalidates the reconciliation staleness cache, ensuring the next record tool call performs a full diff (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-13 |
+| RO-70 | After background `force_file_scan` completes asynchronously, the next record tool call performs a full reconciliation diff and sees the updated `fqc_documents` state — staleness cache is not prematurely consumed by a pre-scan reconciliation (VALIDATED) | test_reconciliation_background_scan_cache | 2026-04-22 | 2026-05-07 (Phase 128 legacy migration evidence) |
+| RO-76 | A record tool call made BEFORE a background `force_file_scan` completes does not consume the staleness cache — after the scan finishes a subsequent record tool call still performs a full diff and sees the scan results (PIR-05 race guard; test MUST include an immediate intermediate record tool call between scan trigger and scan completion — pre-populating 100+ files in the vault ensures the scan takes ≥2s so the intermediate call reliably lands in the race window) (VALIDATED) | test_reconciliation_background_scan_race | 2026-04-22 | 2026-05-07 (Phase 128 legacy migration evidence) |
 
 ### 14.2 Auto-Track
 
@@ -427,13 +549,13 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 |----|----------|------------|--------------|--------------|
 | RO-06 | `on_added: auto-track` creates a plugin table row with columns populated from `field_map` (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
 | RO-07 | `on_added: auto-track` writes `fqc_owner` and `fqc_type` into the document's frontmatter on disk (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
-| RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-07 |
+| RO-08 | `on_added: auto-track` with a declared `template` inserts a `fqc_pending_plugin_review` row (VALIDATED) | test_reconciliation_staleness | 2026-04-21 | 2026-05-13 |
 | RO-09 | `on_added: auto-track` does NOT modify the document's body content (only frontmatter is changed) (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
 | RO-10 | `on_added: auto-track` without a `template` does NOT create a pending review row (VALIDATED) | test_reconciliation_auto_track | 2026-04-21 | 2026-05-07 |
 | RO-67 | After auto-track writes `fqc_owner`/`fqc_type` frontmatter to disk, `fqc_documents.content_hash` is updated to reflect the post-write file content (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-29 | 2026-05-07 |
 | RO-68 | After auto-track completes, `last_seen_updated_at` on the new plugin row equals `fqc_documents.updated_at` as of the post-frontmatter-write state — no stale timestamp mismatch (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-29 | 2026-05-07 |
 | RO-69 | Scanner's first pass after auto-track does not re-detect the frontmatter write as a file modification — `fqc_documents.updated_at` is not bumped again because `content_hash` already matches the post-write file (VALIDATED) | test_reconciliation_content_hash_cascade | 2026-04-22 | 2026-05-07 |
-| RO-74 | Auto-tracked document with `on_modified: sync-fields` policy is NOT spuriously classified as `modified` on the next reconciliation pass (past staleness window, after an intervening `force_file_scan`) — "Synced fields on N modified" does not appear in the summary (PIR-02 regression guard; test MUST use `sync-fields` — `ignore` masks this defect because no observable signal is emitted for a silent modified pass) (VALIDATED) | test_reconciliation_spurious_sync_fields | 2026-04-22 | 2026-05-07 |
+| RO-74 | Auto-tracked document with `on_modified: sync-fields` policy is NOT spuriously classified as `modified` on the next reconciliation pass (past staleness window, after an intervening `force_file_scan`) — "Synced fields on N modified" does not appear in the summary (PIR-02 regression guard; test MUST use `sync-fields` — `ignore` masks this defect because no observable signal is emitted for a silent modified pass) (VALIDATED) | test_reconciliation_spurious_sync_fields | 2026-04-22 | 2026-05-13 |
 
 ### 14.3 Ignore Policy
 
@@ -462,11 +584,12 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-07 |
-| RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-07 |
-| RO-22 | Template is NOT surfaced on resurrection; `field_map` IS re-applied from current frontmatter (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-07 |
-| RO-71 | Resurrected document outside the plugin's watched folders with `on_moved: untrack` — resurrection succeeds unconditionally, then `on_moved` follow-up re-archives the row; net result: plugin row is archived (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-07 |
-| RO-72 | Resurrected document outside the plugin's watched folders with `on_moved: keep-tracking` — resurrection succeeds and `on_moved` follow-up keeps the row active at the new out-of-folder path (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-07 |
+| RO-19 | Missing-then-reappearing document un-archives the existing plugin row (`resurrected`), does not create a new row (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-13 |
+| RO-20 | Resurrection is determined solely by `fqc_id` match — document's current path and folder are irrelevant (VALIDATED) | test_reconciliation_resurrection | 2026-04-21 | 2026-05-13 |
+| RO-22a | Template is NOT surfaced on resurrection — template body content absent from plugin row after resurrection (VALIDATED) | test_reconciliation_resurrection | 2026-05-13 | 2026-05-13 |
+| RO-22b | `field_map` IS re-applied from current frontmatter on resurrection — tracked field values updated from resurrected doc | test_reconciliation_resurrection* | 2026-05-13 | FAIL (2026-05-13) |
+| RO-71 | Resurrected document outside the plugin's watched folders with `on_moved: untrack` — resurrection succeeds unconditionally, then `on_moved` follow-up re-archives the row; net result: plugin row is archived (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-13 |
+| RO-72 | Resurrected document outside the plugin's watched folders with `on_moved: keep-tracking` — resurrection succeeds and `on_moved` follow-up keeps the row active at the new out-of-folder path (VALIDATED) | test_reconciliation_resurrection_with_on_moved | 2026-04-22 | 2026-05-13 |
 
 ### 14.7 Movement
 
@@ -476,7 +599,7 @@ Behaviors verifying the reconcile-on-read engine: how record tool calls trigger 
 | RO-25 | `on_moved: untrack` archives the plugin row; vault file frontmatter (`fqc_owner`/`fqc_type`) is preserved (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
 | RO-26 | `on_moved` defaults to `keep-tracking` when not declared (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
 | RO-27 | After `keep-tracking` path update, subsequent reconciliation reports the document as `unchanged` (VALIDATED) | test_reconciliation_movement | 2026-04-21 | 2026-05-07 |
-| RO-64 | `on_moved: untrack` (spec vocabulary) is accepted at plugin registration and at reconciliation time archives the plugin row with frontmatter preserved — NOT silently treated as a no-op (VALIDATED) | test_reconciliation_untrack_policy | 2026-04-22 | 2026-05-07 |
+| RO-64 | `on_moved: untrack` (spec vocabulary) is accepted at plugin registration and at reconciliation time archives the plugin row with frontmatter preserved — NOT silently treated as a no-op (VALIDATED) | test_reconciliation_untrack_policy | 2026-04-22 | 2026-05-13 |
 | RO-65 | A `keep-tracking` document moved outside watched folders is re-discovered via Path 2 (frontmatter `fqc_type`) on subsequent reconciliations and classified as `unchanged` — NOT re-classified as `moved` (VALIDATED) | test_reconciliation_keep_tracking_stability | 2026-04-22 | 2026-05-07 |
 
 ### 14.8 Modification and Field Sync
@@ -690,7 +813,7 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-91 | ATL-DS-07: `list_purposes` exposes fresh template-tool discovery diagnostics, including generated `flashquery_*` names, canonical `template_path`, descriptions, parameters, empty conflicts, and dangling template paths when applicable | test_call_model_template_discovery | 2026-05-06 | 2026-05-07 |
 | L-92 | ATL-DS-08: Template tool-name collisions surface `template_tool_conflicts` diagnostics and block `call_model` with `tool_registry_collision` before provider invocation | test_call_model_template_tool_conflicts | 2026-05-06 | 2026-05-07 |
 | L-93 | ATL-DS-10: Public template-tool Mode 2 loop dispatches `flashquery_skill_research_skill`, hydrates string and document parameters into a tool result, appends tool history, and lets the delegated model return a final response | test_call_model_agent_loop_template_tool | 2026-05-06 | 2026-05-07 |
-| L-94 | ATL-DS-11: Public mixed native/template Mode 2 loop exposes `search_documents` and `flashquery_skill_research_skill` together, dispatches both in one assistant turn, and records `kind: native` plus `kind: template` calls-log entries | test_call_model_agent_loop_mixed_tools | 2026-05-06 | 2026-05-07 |
+| L-94 | ATL-DS-11: Public mixed native/template Mode 2 loop exposes `search_documents` and `flashquery_skill_research_skill` together, dispatches both in one assistant turn, and records `kind: native` plus `kind: template` calls-log entries | test_call_model_agent_loop_mixed_tools | 2026-05-06 | 2026-05-07 (Phase 128 legacy migration evidence) |
 | L-95 | VAL-118: Phase 118 final validation passes deterministic unit, integration, E2E, directed scenario, lint, and build gates for fresh discovery, generated names, collision diagnostics, reverse-map dispatch, template invocation, typed template-tool errors, and mixed native/template loops | tests/unit/llm-template-tools.test.ts; tests/integration/template-tools.integration.test.ts; tests/e2e/call-model-template-tools.e2e.test.ts; test_call_model_template_discovery; test_call_model_template_tool_conflicts; test_call_model_agent_loop_template_tool; test_call_model_agent_loop_mixed_tools | 2026-05-06 | 2026-05-07 |
 | L-96 | DISC-01: Public `list_purposes` discovery exposes native tool names, native tool diagnostics, template tools, template warnings, template conflicts, and dangling template paths through MCP JSON only | test_discovery_resolvers | 2026-05-07 | 2026-05-07 |
 | L-97 | DISC-02: Public `list_models` discovery exposes structured capability diagnostics with `supported`, `unknown_declaration`, and `declared_unsupported` states plus remediation guidance | test_discovery_resolvers | 2026-05-07 | 2026-05-07 |
@@ -840,11 +963,11 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 **Behaviors affected**
 - M-10: List memories by tags returns recent, truncated to 200 chars
 
-**Description**: The test calls `list_memories` with a tag filter and asserts that the known memory ID and tag appear in the response. It does not assert that the content preview is truncated to approximately 200 characters. A server that returns full content without truncation would pass this test.
+**Description**: The test calls `list_memories` with a tag filter and asserts that the known memory ID and tag appear in the response. It does not assert that the content preview is truncated to approximately 200 characters. A server that returns full content without truncation would pass this test. Phase 128 legacy migration evidence.
 
-**How to Remedy**: In the `list_memories` step, assert that the full `original_content` string does NOT appear verbatim in the response (i.e., `expect_not_contains(original_content)` where `original_content` is longer than 200 chars), or assert that the content preview length is bounded (e.g., check that the response does not contain text beyond the 200-char mark of the stored content). Alternatively, create a memory with content longer than 200 characters and verify the listed preview is truncated (ends with `...` or is shorter than the full content).
+**How to Remedy**: In the `list_memories` step, assert that the full `original_content` string does NOT appear verbatim in the response (i.e., `expect_not_contains(original_content)` where `original_content` is longer than 200 chars), or assert that the content preview length is bounded (e.g., check that the response does not contain text beyond the 200-char mark of the stored content). Alternatively, create a memory with content longer than 200 characters and verify the listed preview is truncated (ends with `...` or is shorter than the full content). Phase 128 legacy migration evidence.
 
-**Resolution (2026-04-29)**: Extended `original_content` with a padding sentence so the prefix reliably exceeds 200 chars, then appended a unique `list_truncation_sentinel` (`TRUNCATED_TAIL_<run_id>`) beyond the 200-char boundary. In Step 3 (list_memories), added `expect_not_contains(list_truncation_sentinel)` — if truncation is absent the sentinel would appear and fail the test. Also added `expect_contains(list_truncation_sentinel)` to Step 2 (get_memory) to assert full-content round-trip as a contrast. Test passes 9/9 steps.
+**Resolution (2026-04-29)**: Extended `original_content` with a padding sentence so the prefix reliably exceeds 200 chars, then appended a unique `list_truncation_sentinel` (`TRUNCATED_TAIL_<run_id>`) beyond the 200-char boundary. In Step 3 (list_memories), added `expect_not_contains(list_truncation_sentinel)` — if truncation is absent the sentinel would appear and fail the test. Also added `expect_contains(list_truncation_sentinel)` to Step 2 (get_memory) to assert full-content round-trip as a contrast. Test passes 9/9 steps. Phase 128 legacy migration evidence.
 
 ---
 
@@ -853,11 +976,11 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 **Behaviors affected**
 - M-15: Save memory with plugin_scope (fuzzy matched)
 
-**Description**: The test calls `save_memory` with `plugin_scope` set to the exact plugin ID (a degenerate exact match). The behavior specifies "fuzzy matched" — the test does not exercise the fuzzy-matching aspect (e.g., a prefix, partial string, or near-match that should resolve to the plugin). The test comment acknowledges this limitation. Additionally, the test does not assert that the `plugin_id` appears in the `save_memory` response confirming scope resolution — it relies on a subsequent `get_memory` call to verify the scope.
+**Description**: The test calls `save_memory` with `plugin_scope` set to the exact plugin ID (a degenerate exact match). The behavior specifies "fuzzy matched" — the test does not exercise the fuzzy-matching aspect (e.g., a prefix, partial string, or near-match that should resolve to the plugin). The test comment acknowledges this limitation. Additionally, the test does not assert that the `plugin_id` appears in the `save_memory` response confirming scope resolution — it relies on a subsequent `get_memory` call to verify the scope. Phase 128 legacy migration evidence.
 
-**How to Remedy**: Add a second `save_memory` call using a partial/fuzzy `plugin_scope` value (e.g., just the first portion of the plugin ID or a fuzzy alias) and assert that it resolves to the correct plugin — either by checking the `save_memory` response for the resolved plugin name/ID, or by verifying with `search_memory` that the memory is scoped correctly. The save_memory response should mention the resolved plugin scope.
+**How to Remedy**: Add a second `save_memory` call using a partial/fuzzy `plugin_scope` value (e.g., just the first portion of the plugin ID or a fuzzy alias) and assert that it resolves to the correct plugin — either by checking the `save_memory` response for the resolved plugin name/ID, or by verifying with `search_memory` that the memory is scoped correctly. The save_memory response should mention the resolved plugin scope. Phase 128 legacy migration evidence.
 
-**Resolution (2026-04-29)**: Added `fuzzy_scope = plugin_id + "z"` as Step 2b. Appending one character gives trigram similarity ~0.82 (above the 0.8 threshold), reliably triggering the `find_plugin_scope` auto-correction path. The new step asserts `expect_contains("auto-corrected")` and `expect_contains(plugin_id)` on the `save_memory` response — both fields only appear when fuzzy resolution fires, not on an exact match. `fuzzy_memory_id` is tracked for cleanup. Test passes 6/6 steps.
+**Resolution (2026-04-29)**: Added `fuzzy_scope = plugin_id + "z"` as Step 2b. Appending one character gives trigram similarity ~0.82 (above the 0.8 threshold), reliably triggering the `find_plugin_scope` auto-correction path. The new step asserts `expect_contains("auto-corrected")` and `expect_contains(plugin_id)` on the `save_memory` response — both fields only appear when fuzzy resolution fires, not on an exact match. `fuzzy_memory_id` is tracked for cleanup. Test passes 6/6 steps. Phase 128 legacy migration evidence.
 
 ---
 
@@ -1105,7 +1228,7 @@ The existing date-validation and path-not-found tests should either be moved to 
 - SC-02: Large vault search correctness (search indexes remain consistent through constant create/update/archive operations with 300+ files)
 
 **Description**:
-- SC-01: The test exercises interleaved operations but final count assertions use loose tolerances (`>= expected - 1`) or only check `result.ok` without comparing actual count to expected. Critically, no `get_document` call is made after `update_document` to confirm updated content is actually reflected — updates may fail silently.
+- SC-01: The test exercises interleaved operations but final count assertions use loose tolerances (`>= expected - 1`) or only check `result.ok` without comparing actual count to expected. Critically, no `get_document` call is made after `update_document` to confirm updated content is actually reflected — updates may fail silently. (Phase 128 legacy migration evidence)
 - SC-02: The search step asserts `found_created > 0` (at least one result) and the archive-exclusion check only verifies `result.ok` without asserting that archived docs are absent. A server returning all documents including archived ones would still pass.
 
 **How to Remedy**:
@@ -1129,7 +1252,7 @@ The existing date-validation and path-not-found tests should either be moved to 
 **How to Remedy**:
 1. Increase the default `--memory-count` to at least 1000 (or add a `--scale` flag that enables the 1000+ scenario, and mark the test as requiring it in the coverage notes).
 2. After updating a memory, save the old version ID and call `get_memory(memory_ids=old_version_id)` — assert the old version's content is still retrievable.
-3. After archiving, call `search_memory` or `list_memories` and assert that archived memory IDs do NOT appear in the results.
+3. After archiving, call `search_memory` or `list_memories` and assert that archived memory IDs do NOT appear in the results. Phase 128 legacy migration evidence.
 
 **Resolution (2026-04-29)**: Three fixes applied. (1) Default `--memory-count` raised from 100 to 1000; docstring notes that `--memory-count 100` should be used for quick logic checks on remote servers. (2) New Step 5b: calls `get_memory(memory_ids=created_memory_ids[0])` (the original pre-update ID) and asserts `original_marker_present=True` and `updated_absent=True` — proves FlashQuery preserves old versions, not just the latest. (3) Archive loop restructured to target `created_memory_ids[num_updates:]` (non-updated memories), ensuring archive-exclusion IDs have no version ambiguity; Step 7 now asserts `sample_archived_id not in list_result.text` rather than `expect_contains("Memory ID")`. Verified PASS (17/17 steps) with `--memory-count 100`.
 
@@ -1150,7 +1273,7 @@ The existing date-validation and path-not-found tests should either be moved to 
 - RO-67: After auto-track writes `fqc_owner`/`fqc_type` frontmatter to disk, `fqc_documents.content_hash` is updated to reflect the post-write file content
 - RO-68: After auto-track completes, `last_seen_updated_at` on the new plugin row equals `fqc_documents.updated_at` as of the post-frontmatter-write state — no stale timestamp mismatch
 
-✓ RESOLVED 2026-04-29: Split the combined "RO-67+RO-68+RO-69" assertion into two independent steps. RO-67 is now verified via the scanner debug log: after force_file_scan #2, `scanner.ts` emits `scan: file unchanged: <path>` (line 496) when `hashToRow.get(H)` resolves — i.e., the post-write hash is already in the DB. RO-68+RO-69 are verified by the second reconciliation pass producing no 'Synced fields on N modified'. 11/11 steps pass.
+✓ RESOLVED 2026-04-29: Split the combined "RO-67+RO-68+RO-69" assertion into two independent steps. RO-67 is now verified via the scanner debug log: after force_file_scan #2, `scanner.ts` emits `scan: file unchanged: <path>` (line 496) when `hashToRow.get(H)` resolves — i.e., the post-write hash is already in the DB. RO-68+RO-69 are verified by the second reconciliation pass producing no 'Synced fields on N modified'. 11/11 steps pass. Phase 128 legacy migration evidence.
 
 --- 
 ## Existing Test → Coverage Mapping
@@ -1285,7 +1408,7 @@ Covers: RO-13, RO-14, RO-15
 Covers: RO-16, RO-17, RO-18
 
 ### test_reconciliation_resurrection
-Covers: RO-19, RO-20, RO-22
+Covers: RO-19, RO-20, RO-22a, RO-22b* (FAIL — field_map not re-applied on resurrection)
 
 ### test_reconciliation_movement
 Covers: RO-24, RO-25, RO-26, RO-27
@@ -1308,7 +1431,7 @@ Covers: RO-52, RO-54, RO-56 (doc-backed multi-table single-pass), RO-58
 ### test_reconciliation_non_doc_table_isolation
 Covers: RO-56 (non-document-backed table not scanned by reconciliation)
 Status: PASS (2026-04-22) — 11/11 steps
-Registers a plugin with one document-backed table and one plain relational table. Verifies that after two reconciliation passes the plain table records are untouched (count and status unchanged), and the reconciliation summary never mentions the plain table. One debug iteration to fix UUID extraction regex (create_record returns "Created record <uuid>" not "ID: <uuid>").
+Registers a plugin with one document-backed table and one plain relational table. Verifies that after two reconciliation passes the plain table records are untouched (count and status unchanged), and the reconciliation summary never mentions the plain table. One debug iteration to fix UUID extraction regex (create_record returns "Created record <uuid>" not "ID: <uuid>"). Phase 128 legacy migration evidence.
 
 ### test_reconciliation_untrack_policy
 Covers: RO-64
@@ -1323,7 +1446,7 @@ Previously FAIL_DEFECT: keep-tracking documents moved outside watched folders we
 ### test_reconciliation_content_hash_cascade
 Covers: RO-67, RO-68, RO-69
 Status: PASS (2026-04-22)
-All three hash cascade behaviors verified: content_hash is updated to post-write file content after auto-track frontmatter write (RO-67); last_seen_updated_at on the plugin row matches updated_at after the hash update (RO-68); explicit force_file_scan after auto-track produces no spurious modified classification on the subsequent reconciliation (RO-69). Zero debug iterations.
+All three hash cascade behaviors verified: content_hash is updated to post-write file content after auto-track frontmatter write (RO-67); last_seen_updated_at on the plugin row matches updated_at after the hash update (RO-68); explicit force_file_scan after auto-track produces no spurious modified classification on the subsequent reconciliation (RO-69). Zero debug iterations. Phase 128 legacy migration evidence.
 
 ### test_plugin_mixed_tables
 Covers: P-16
@@ -1333,7 +1456,7 @@ Registers a plugin with one document-backed table (`track_as`, watched folder) a
 ### test_reconciliation_background_scan_cache
 Covers: RO-70
 Status: PASS (2026-04-22)
-Verifies that a background `force_file_scan` does not prematurely consume the staleness cache before the scan completes. Flow: establish staleness cache via initial record tool call → drop a new file into the watched folder via raw vault write → trigger background scan → sleep 5s → call `search_records` → assert the reconciliation response includes "Auto-tracked" for the new file, proving a full diff ran against the post-scan fqc_documents state. Zero debug iterations.
+Verifies that a background `force_file_scan` does not prematurely consume the staleness cache before the scan completes. Flow: establish staleness cache via initial record tool call → drop a new file into the watched folder via raw vault write → trigger background scan → sleep 5s → call `search_records` → assert the reconciliation response includes "Auto-tracked" for the new file, proving a full diff ran against the post-scan fqc_documents state. Zero debug iterations. Phase 128 legacy migration evidence.
 
 ### test_reconciliation_resurrection_with_on_moved
 Covers: RO-71, RO-72
@@ -1484,6 +1607,32 @@ Covers: L-39f, L-39g, L-39h, L-39h_purposes, L-96, L-97, L-98, VAL-119
 
 ### test_call_model_help_resolver
 Covers: L-99, ATL-DS-15, VAL-119
+
+---
+
+## 14. Foundation Harness
+
+Phase 121 foundation behaviors for MCP tool consolidation metadata, response helpers, frontmatter constants, and scenario assertion scaffolding.
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| D-foundation-json-1 | Directed scenario helpers parse MCP `content[0].text` JSON and assert dotted/array JSON paths against helper-backed tool responses. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+| D-foundation-json-2 | Expected JSON error envelopes can be asserted without treating `isError:false` responses as transport/runtime failures. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+| D-foundation-tools-1 | Foundation metadata registry coverage ties registered tool behavior to central tool metadata and descriptions. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+| D-foundation-tools-2 | Omitted `host_mcp_tools` preserves the default host MCP tool surface. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-13 |
+| D-foundation-tools-3 | Host selector expansion accepts category, tier, and explicit tool names. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-13 |
+| D-foundation-tools-4 | `excluded_tools` is applied as the final host tool deny layer. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-13 |
+| D-foundation-tools-5 | `category:doc-write` implies read tools while `category:doc-read` remains read-only. | test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-13 |
+| D-foundation-tools-6 | Delegated native tool assembly cannot regain host-disabled tools. | Unit: llm-tool-registry.test.ts (`does not regain memory tools from tier selectors when the host catalog is doc-read only`); directed host boundary in test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
+| D-foundation-tools-7 | Removed-status purpose tool names remain valid while their legacy tools are still registered; hard-fail suggestions are deferred until actual removal. | test_foundation_host_tool_exposure; llm-config.test.ts | 2026-05-11 | 2026-05-13 |
+| D-foundation-frontmatter-1 | Foundation frontmatter constant guardrails prevent new unmanaged raw `fq_*` field literals outside explicit legacy/fixture allowlists. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+| D-foundation-description-1 | MCP `tools/list` exposes registered tool descriptions that include the XC-8 four-block template. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+
+### test_foundation_host_tool_exposure
+Covers: D-foundation-tools-2, D-foundation-tools-3, D-foundation-tools-4, D-foundation-tools-5, D-foundation-tools-7
+
+### test_foundation_json_response
+Covers: D-foundation-json-1, D-foundation-json-2, D-foundation-tools-1, D-foundation-frontmatter-1, D-foundation-description-1
 
 ---
 

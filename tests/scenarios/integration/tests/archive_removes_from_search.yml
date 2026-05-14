@@ -22,21 +22,22 @@ steps:
 
   - label: "Before archive: document is findable in search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Watching the Sunset"
       expect_path: "journal/sunsets.md"
 
   - label: "Before archive: memory is listable by tag"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [arc-tag]
+        entity_types: [documents, memories]
       expect_contains: "Sunsets over the ocean"
 
   - label: "Before archive: document appears in search_all document section"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Watching the Sunset"
         entity_types: [documents]
@@ -49,14 +50,14 @@ steps:
 
   - label: "After archive: document is gone from search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Watching the Sunset"
       expect_not_contains: "journal/sunsets.md"
 
   - label: "After archive: document absent from entity-filtered search_all"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Watching the Sunset"
         entity_types: [documents]
@@ -64,14 +65,15 @@ steps:
 
   - label: "After archive: memory is still listable by tag"
     assert:
-      op: list_memories
+      op: search
       args:
         tags: [arc-tag]
+        entity_types: [documents, memories]
       expect_contains: "Sunsets over the ocean"
 
   - label: "After archive: memory content does not appear as a document"
     assert:
-      op: search_all
+      op: search
       args:
         query: "Watching the Sunset"
         entity_types: [documents]

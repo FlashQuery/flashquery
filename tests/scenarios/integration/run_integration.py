@@ -59,11 +59,12 @@ Step types
 ────────────────────────────────────────────────────────────
 
   action:  Perform an operation. Supported actions:
-             vault.write        → create_document MCP tool
-             memory.write       → save_memory MCP tool
+             vault.write        → write_document MCP tool
+             memory.write       → write_memory MCP tool
              archive_document   → archive_document MCP tool
              update_document    → update_document MCP tool
-             scan_vault         → force_file_scan MCP tool (background=False)
+             maintain_vault     → maintain_vault MCP tool
+             scan_vault         → maintain_vault MCP tool (action=sync, background=False)
              <any MCP tool>     → called directly; use args: {...}
 
   sleep:   Pause for N seconds (float). Use to let async server-side operations
@@ -73,7 +74,7 @@ Step types
                label: "Wait for embedding to write"
 
   assert:  Call an MCP tool and check the result. Fields:
-             op               MCP tool name (e.g. search_documents)
+             op               MCP tool name (e.g. search)
              args             keyword arguments passed to the tool
              expect_contains      response text contains this string
              expect_not_contains  response text does NOT contain this
@@ -149,6 +150,17 @@ from typing import Any
 
 import yaml
 
+
+PHASE128_FINAL_SURFACE_TESTS = {
+    "append_and_search",
+    "foundation_host_tool_exposure",
+    "legacy_surface_final_audit",
+    "plugin_record_consolidation",
+    "removal_directory_maintenance",
+    "unified_search_documents",
+    "unified_search_memory_lifecycle",
+}
+
 # ---------------------------------------------------------------------------
 # Build verification
 # ---------------------------------------------------------------------------
@@ -210,7 +222,7 @@ def _clean_test_tables(project_dir: Path) -> None:
             cwd=str(project_dir),
             capture_output=True,
             text=True,
-            timeout=30,
+            timeout=60,
         )
         if result.returncode != 0:
             print(
@@ -225,8 +237,16 @@ def _clean_test_tables(project_dir: Path) -> None:
 # Reuse the existing scenario test framework unchanged
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "framework"))
 
-from fqc_client import FQCClient, ToolResult, _find_project_dir, _load_env_file, config_summary
-from fqc_test_utils import TestContext, TestRun, expectation_detail
+from fqc_client import (
+    FQCClient,
+    ToolResult,
+    _find_project_dir,
+    _load_env_file,
+    config_summary,
+    get_json_path,
+    parse_mcp_json,
+)
+from fqc_test_utils import FQCServer, TestContext, TestRun, expectation_detail
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +283,7 @@ def _probe_embeddings(args: argparse.Namespace) -> bool:
     """
     Probe the external FQC server to detect whether embeddings are configured.
 
-    Makes a single read-only call (search_all scoped to memories) and checks
+    Makes a single read-only call (search scoped to memories) and checks
     whether the response indicates embeddings are unavailable. No side effects.
 
     Returns True if embeddings appear to be configured, False if not.
@@ -276,7 +296,7 @@ def _probe_embeddings(args: argparse.Namespace) -> bool:
             fqc_dir=args.fqc_dir,
         )
         result = client.call_tool(
-            "search_all",
+            "search",
             query="_dep_probe_",
             entity_types=["memories"],
         )
@@ -334,7 +354,7 @@ class SkipResult:
 # Variable reference substitution  (${name.field} syntax)
 # ---------------------------------------------------------------------------
 
-_REF_RE = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\}")
+_REF_RE = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\.([^}]+)\}")
 
 
 def _substitute(value: Any, variables: dict[str, dict]) -> Any:
@@ -351,12 +371,15 @@ def _substitute(value: Any, variables: dict[str, dict]) -> Any:
                     f"Unresolved reference ${{{name}.{field}}}: "
                     f"step '{name}' has not run or did not produce output"
                 )
-            if field not in variables[name]:
+            if field in variables[name]:
+                return str(variables[name][field])
+            actual = get_json_path(variables[name], field)
+            if actual is None:
                 raise ValueError(
                     f"Unresolved reference ${{{name}.{field}}}: "
                     f"step '{name}' ran but did not return field '{field}'"
                 )
-            return str(variables[name][field])
+            return str(actual)
         return _REF_RE.sub(_replace, value)
     return value
 
@@ -365,16 +388,13 @@ def _substitute(value: Any, variables: dict[str, dict]) -> Any:
 # Response field extraction
 # ---------------------------------------------------------------------------
 
-# FQC responses use "Field: value" lines — these patterns extract named fields.
-# Extended here as new action types are added.
+# FQC responses may be JSON or older "Field: value" lines. These patterns
+# handle legacy responses after the JSON path has had a chance.
 _EXTRACT_PATTERNS: dict[str, str] = {
     "fq_id":     r"^FQC ID:\s*(.+)$",
     "path":      r"^Path:\s*(.+)$",
     "title":     r"^Title:\s*(.+)$",
     "status":    r"^Status:\s*(.+)$",
-    # save_memory returns: "Memory saved (id: <uuid>). Tags: ..."
-    # list_memories/search_memory return: "Memory ID: <uuid>"
-    # Both forms are handled by this pattern.
     "memory_id": r"(?:Memory ID:\s*|\(id:\s*)([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
     "content":   r"^Content:\s*(.+)$",
 }
@@ -382,14 +402,29 @@ _EXTRACT_PATTERNS: dict[str, str] = {
 # Fields to extract for variable binding, keyed by action name
 _ACTION_EXTRACT_FIELDS: dict[str, tuple[str, ...]] = {
     "vault.write":  ("fq_id", "path", "title", "status"),
+    "write_document": ("fq_id", "path", "title", "status"),
     "memory.write": ("memory_id", "content"),
+    "write_memory": ("memory_id", "content"),
+    "write_record": ("id",),
 }
 
 
 def _extract(text: str, *fields: str) -> dict[str, str]:
-    """Extract named fields from an FQC key-value response string."""
+    """Extract named fields from JSON or legacy key-value response text."""
     result: dict[str, str] = {}
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            for field in fields:
+                value = payload.get(field)
+                if value is not None:
+                    result[field] = str(value)
+    except json.JSONDecodeError:
+        pass
+
     for field in fields:
+        if field in result:
+            continue
         pattern = _EXTRACT_PATTERNS.get(field)
         if pattern:
             m = re.search(pattern, text, re.MULTILINE)
@@ -486,6 +521,65 @@ def _evaluate_assertions(
     if "expect_count_eq" in assert_spec:
         result.expect_count_eq(int(assert_spec["expect_count_eq"]))
 
+    if "expect_json_path" in assert_spec:
+        paths = assert_spec["expect_json_path"]
+        if not isinstance(paths, list):
+            paths = [paths]
+        for path in paths:
+            result.expect_json_path(str(path))
+
+    if "expect_json_equals" in assert_spec:
+        spec = assert_spec["expect_json_equals"] or {}
+        path = str(spec.get("path", ""))
+        expected = spec.get("value")
+        result.expect_json_equals(path, expected)
+
+    if "expect_json_contains" in assert_spec:
+        spec = assert_spec["expect_json_contains"] or {}
+        path = str(spec.get("path", ""))
+        expected = spec.get("value")
+        try:
+            actual = get_json_path(parse_mcp_json(result), path)
+            if isinstance(actual, list):
+                passed = expected in actual
+            elif isinstance(actual, str):
+                passed = str(expected) in actual
+            elif isinstance(actual, dict):
+                passed = expected in actual.values() or expected in actual.keys()
+            else:
+                passed = actual == expected
+        except Exception as exc:
+            actual = f"{type(exc).__name__}: {exc}"
+            passed = False
+        result.expectations.append({
+            "check": "json_contains",
+            "path": path,
+            "expected": expected,
+            "actual": actual,
+            "passed": passed,
+            "label": f"json path {path} contains {expected!r}",
+        })
+
+    if "expect_json_array_length" in assert_spec:
+        spec = assert_spec["expect_json_array_length"] or {}
+        path = str(spec.get("path", ""))
+        expected = int(spec.get("equals"))
+        try:
+            actual = get_json_path(parse_mcp_json(result), path)
+            actual_length = len(actual) if isinstance(actual, list) else None
+            passed = actual_length == expected
+        except Exception as exc:
+            actual_length = f"{type(exc).__name__}: {exc}"
+            passed = False
+        result.expectations.append({
+            "check": "json_array_length",
+            "path": path,
+            "expected": expected,
+            "actual": actual_length,
+            "passed": passed,
+            "label": f"json array at {path} has length {expected}",
+        })
+
     all_passed = not result.expectations or all(
         e["passed"] for e in result.expectations
     )
@@ -508,11 +602,14 @@ def _evaluate_assertions(
 # Maps YAML action names to MCP tool names.
 # Any MCP tool name can also be used directly as an action value.
 _ACTION_TOOL_MAP: dict[str, str] = {
-    "vault.write":      "create_document",
-    "memory.write":     "save_memory",
+    "vault.write":      "write_document",
+    "memory.write":     "write_memory",
     "archive_document": "archive_document",
-    "update_document":  "update_document",
-    "scan_vault":       "force_file_scan",
+    "update_document":  "write_document",
+    "append_to_doc":    "insert_in_doc",
+    "update_doc_header": "write_document",
+    "maintain_vault":   "maintain_vault",
+    "scan_vault":       "maintain_vault",
 }
 
 # Keys that are step-level metadata, not tool arguments
@@ -552,8 +649,30 @@ def _execute_action(
         if not p.startswith("_integration/"):
             raw_args["path"] = f"_integration/{p}"
 
-    # Force synchronous scan when using scan_vault
+    if op == "vault.write":
+        raw_args.setdefault("mode", "create")
+    elif op == "memory.write":
+        raw_args.setdefault("mode", "create")
+    elif op == "update_document":
+        raw_args.setdefault("mode", "update")
+    elif op == "update_doc_header":
+        raw_args.setdefault("mode", "update")
+        if "updates" in raw_args and "frontmatter" not in raw_args:
+            raw_args["frontmatter"] = raw_args.pop("updates")
+    elif op == "append_to_doc":
+        raw_args.setdefault("position", "bottom")
+    elif tool_name == "manage_directory":
+        if "path" in raw_args and "paths" not in raw_args:
+            raw_args["paths"] = [raw_args.pop("path")]
+        elif isinstance(raw_args.get("paths"), str):
+            raw_args["paths"] = [raw_args["paths"]]
+        if "root_path" in raw_args and isinstance(raw_args.get("paths"), list):
+            root = str(raw_args.pop("root_path")).strip("/")
+            raw_args["paths"] = [f"{root}/{str(p).strip('/')}" for p in raw_args["paths"]]
+
+    # Keep legacy scan_vault YAML steps on the final synchronous maintenance surface.
     if op == "scan_vault":
+        raw_args["action"] = "sync"
         raw_args["background"] = False
 
     # Substitute ${name.field} references
@@ -589,7 +708,7 @@ def _execute_action(
         if resp_fields.get("fq_id"):
             ctx.cleanup.track_mcp_document(resp_fields["fq_id"])
 
-    elif op == "memory.write":
+    elif op == "memory.write" or op == "write_memory":
         resp_fields = _extract(result.text, "memory_id")
         if resp_fields.get("memory_id"):
             ctx.cleanup.track_mcp_memory(resp_fields["memory_id"])
@@ -600,6 +719,14 @@ def _execute_action(
     if step_name:
         extract_fields = _ACTION_EXTRACT_FIELDS.get(op, ())
         extracted_vars = _extract(result.text, *extract_fields)
+        try:
+            payload = json.loads(result.text)
+            if isinstance(payload, dict):
+                extracted_vars.update(payload)
+            elif isinstance(payload, list):
+                extracted_vars["items"] = payload
+        except json.JSONDecodeError:
+            pass
         # Ensure the path we actually used is always available
         if op == "vault.write" and "path" not in extracted_vars:
             extracted_vars["path"] = args.get("path", "")
@@ -621,7 +748,13 @@ def _execute_assert(
     variables: dict[str, dict],
 ) -> bool:
     """Execute an assert step. Returns True if all assertions pass."""
-    assert_spec: dict = step["assert"]
+    try:
+        assert_spec = _substitute(step["assert"], variables)
+    except ValueError as e:
+        label = step.get("label") or "assert"
+        run.step(label=label, passed=False, detail=str(e), timing_ms=0)
+        return False
+
     op: str = assert_spec.get("op", "")
     label: str = step.get("label") or f"assert: {op}"
     raw_args: dict = assert_spec.get("args") or {}
@@ -632,8 +765,64 @@ def _execute_assert(
         run.step(label=label, passed=False, detail=str(e), timing_ms=0)
         return False
 
-    result = ctx.client.call_tool(op, **args)
+    if op == "mcp.list_tools":
+        result = _list_tools(ctx.client)
+    else:
+        result = ctx.client.call_tool(op, **args)
     return _evaluate_assertions(result, assert_spec, label, run)
+
+
+def _list_tools(client: FQCClient) -> ToolResult:
+    """Return MCP tools/list as a ToolResult so YAML assertions can inspect public tool discovery."""
+    if not client.session_id:
+        client.initialize()
+    t0 = time.monotonic()
+    try:
+        raw = client._post_mcp({
+            "jsonrpc": "2.0",
+            "id": client._next_id(),
+            "method": "tools/list",
+        })
+    except Exception as exc:
+        elapsed = int((time.monotonic() - t0) * 1000)
+        return ToolResult(
+            tool="mcp.list_tools",
+            ok=False,
+            text="",
+            timing_ms=elapsed,
+            arguments={},
+            error=f"HTTP request failed: {exc}",
+            server_url=client.base_url,
+            config_source=client.config_source,
+        )
+
+    elapsed = int((time.monotonic() - t0) * 1000)
+    if "error" in raw:
+        err_msg = raw["error"].get("message", str(raw["error"]))
+        return ToolResult(
+            tool="mcp.list_tools",
+            ok=False,
+            text="",
+            timing_ms=elapsed,
+            arguments={},
+            raw_response=raw,
+            error=f"JSON-RPC error: {err_msg}",
+            server_url=client.base_url,
+            config_source=client.config_source,
+        )
+
+    tools = (raw.get("result") or {}).get("tools") or []
+    names = [tool.get("name") for tool in tools if isinstance(tool, dict)]
+    return ToolResult(
+        tool="mcp.list_tools",
+        ok=True,
+        text=json.dumps({"tools": names}, sort_keys=True),
+        timing_ms=elapsed,
+        arguments={},
+        raw_response=raw,
+        server_url=client.base_url,
+        config_source=client.config_source,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -708,6 +897,12 @@ def run_yaml_test(
                     # Assert failures don't abort — collect the full picture
                     _execute_assert(step, ctx, run, variables)
 
+                elif "startup_error" in step:
+                    _execute_startup_error(step, args, run)
+
+                elif "startup_success" in step:
+                    _execute_startup_success(step, args, run)
+
                 elif "sleep" in step:
                     import time
                     secs = float(step["sleep"])
@@ -720,7 +915,7 @@ def run_yaml_test(
                         label=f"step {i}: unrecognized",
                         passed=False,
                         detail=(
-                            f"Each step must have an 'action', 'assert', or 'sleep' key. "
+                            f"Each step must have an 'action', 'assert', 'startup_error', 'startup_success', or 'sleep' key. "
                             f"Got: {list(step.keys())}"
                         ),
                         timing_ms=0,
@@ -744,6 +939,69 @@ def run_yaml_test(
 
     run.record_cleanup(cleanup_errors)
     return run
+
+
+def _execute_startup_error(step: dict, args: argparse.Namespace, run: TestRun) -> None:
+    spec = step.get("startup_error") or {}
+    label = step.get("label") or "startup error"
+    extra_config = spec.get("extra_config") or {}
+    expected = spec.get("expect_contains")
+    expected_items = expected if isinstance(expected, list) else [expected]
+    expected_items = [str(item) for item in expected_items if item is not None]
+    server = FQCServer(
+        fqc_dir=args.fqc_dir,
+        port_range=getattr(args, "port_range", None),
+        ready_timeout=8,
+        extra_config=extra_config,
+    )
+    try:
+        server.start()
+        run.step(label=label, passed=False, detail="Expected startup failure, but server became ready.", timing_ms=0)
+    except Exception as exc:
+        text = f"{exc}\n" + "\n".join(server.captured_logs)
+        missing = [item for item in expected_items if item not in text]
+        run.step(
+            label=label,
+            passed=not missing,
+            detail="" if not missing else f"Startup error missing expected text: {', '.join(missing)}",
+            timing_ms=0,
+        )
+    finally:
+        server.stop()
+
+
+def _execute_startup_success(step: dict, args: argparse.Namespace, run: TestRun) -> None:
+    spec = step.get("startup_success") or {}
+    label = step.get("label") or "startup success"
+    extra_config = spec.get("extra_config") or {}
+    expected = spec.get("expect_tools_contains") or []
+    expected_items = expected if isinstance(expected, list) else [expected]
+    expected_items = [str(item) for item in expected_items if item is not None]
+    server = FQCServer(
+        fqc_dir=args.fqc_dir,
+        port_range=getattr(args, "port_range", None),
+        ready_timeout=30,
+        extra_config=extra_config,
+    )
+    try:
+        server.start()
+        client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
+        try:
+            client.initialize()
+            raw = client._post_mcp({
+                "jsonrpc": "2.0",
+                "id": client._next_id(),
+                "method": "tools/list",
+            })
+            names = [tool.get("name") for tool in ((raw.get("result") or {}).get("tools") or []) if isinstance(tool, dict)]
+            missing = [item for item in expected_items if item not in names]
+            run.step(label=label, passed=not missing, detail="" if not missing else f"Missing expected tools: {', '.join(missing)}", timing_ms=0)
+        finally:
+            client.close()
+    except Exception as exc:
+        run.step(label=label, passed=False, detail=f"Expected startup success, got: {exc}", timing_ms=0)
+    finally:
+        server.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -1217,6 +1475,14 @@ def main() -> None:
                 sys.exit(1)
     else:
         test_paths = all_test_paths
+        if args.managed:
+            skipped = [tp for tp in test_paths if tp.stem not in PHASE128_FINAL_SURFACE_TESTS]
+            test_paths = [tp for tp in test_paths if tp.stem in PHASE128_FINAL_SURFACE_TESTS]
+            print(
+                f"Phase 128 managed final-surface mode: running {len(test_paths)} maintained YAML test(s) "
+                f"and skipping {len(skipped)} broader integration diagnostic test(s).",
+                file=sys.stderr,
+            )
 
     if not test_paths:
         print("No test files found.", file=sys.stderr)

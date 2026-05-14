@@ -210,6 +210,8 @@ def discover_db_config(fqc_dir: str | Path | None = None) -> DbConfig:
 def connect(db: DbConfig):
     """Open a psycopg connection. Caller is responsible for closing."""
     _require_driver()
+    if _DRIVER == "psycopg3":
+        return _psycopg.connect(db.database_url, prepare_threshold=None)
     return _psycopg.connect(db.database_url)
 
 

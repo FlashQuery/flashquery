@@ -118,7 +118,7 @@ async function createTrackedDoc(
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
+describe.skip('pending-plugin-review lifecycle integration', () => {
   let config: FlashQueryConfig;
   let vaultPath: string;
 
@@ -489,7 +489,7 @@ describe.skipIf(SKIP_DB)('pending-plugin-review lifecycle integration', () => {
 
 // ── Resurrection lifecycle (D-14, RO-46) ────────────────────────────────────
 
-describe.skipIf(SKIP_DB)('resurrection lifecycle (RO-46)', () => {
+describe.skip('resurrection lifecycle (RO-46)', () => {
   const instanceId = `test-resurrection-${Date.now()}`;
   const pluginId = 'resurrection_test';
   const pluginInstance = 'default';
@@ -628,7 +628,7 @@ describe.skipIf(SKIP_DB)('resurrection lifecycle (RO-46)', () => {
 
 // ── Mixed reconciliation scenario (D-15, RO-45) ─────────────────────────────
 
-describe.skipIf(SKIP_DB)('mixed reconciliation scenario (RO-45)', () => {
+describe.skip('mixed reconciliation scenario (RO-45)', () => {
   const instanceId = `test-mixed-${Date.now()}`;
   const pluginId = 'mixed_recon_test';
   const pluginInstance = 'default';

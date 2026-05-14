@@ -175,9 +175,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
+        register_result.expect_json_equals("status", "registered")
         register_result.expect_contains(instance_name)
-        register_result.expect_contains("items")
+        register_result.expect_json_equals("table_count", 1)
 
         run.step(
             label="register_plugin (auto-track schema; on_modified: ignore)",
@@ -240,7 +240,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon1_result.expect_contains("Auto-tracked")
+        recon1_result.expect_json_equals("reconciliation.auto_tracked", 1)
 
         run.step(
             label="search_records — reconciliation #1 fires; auto-track writes fq_owner/fq_type to frontmatter",
@@ -255,7 +255,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 5: Verify plugin row was created ─────────────────────────────
         t0 = time.monotonic()
-        records = _extract_records(recon1_result.text)
+        try:
+            recon1_payload = _json.loads(recon1_result.text)
+            records = recon1_payload.get("results", [])
+        except Exception:
+            records = []
 
         checks_row = {
             "plugin row created (records present in response)": len(records) > 0,
@@ -402,22 +406,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
         #   - last_seen_updated_at was set to pre-write state (RO-68 failed)
         # Either failure path leads to last_seen_updated_at < updated_at → 'modified'.
         t0 = time.monotonic()
-        recon2_summary = _extract_recon_summary(recon2_result.text)
+        try:
+            recon2_payload = _json.loads(recon2_result.text)
+            recon2_reconciliation = recon2_payload.get("reconciliation", {})
+            recon2_fields_synced = recon2_reconciliation.get("fields_synced", 0)
+            recon2_records = recon2_payload.get("results", [])
+        except Exception:
+            recon2_reconciliation = {}
+            recon2_fields_synced = 0
+            recon2_records = []
 
-        # The 'Synced fields on N modified' line appears when reconciler processes modified docs.
-        # Its presence means auto-track frontmatter write was misclassified as a user change.
-        summary_has_synced_modified = bool(
-            re.search(r"Synced fields on \d+ modified", recon2_summary, re.IGNORECASE)
-        )
-        # Broader check: any 'Synced fields' activity (could be 0 modified, but be safe)
-        summary_has_any_synced = bool(re.search(r"Synced fields", recon2_summary, re.IGNORECASE))
-
-        # Also check that the plugin row still exists and has the correct count
-        recon2_records = _extract_records(recon2_result.text)
+        # fields_synced > 0 means reconciler processed modified docs (spurious sync — PIR-02 bug)
+        summary_has_any_synced = recon2_fields_synced > 0
 
         checks_cascade = {
-            "RO-68+RO-69: no 'Synced fields on N modified' in second reconcile summary": not summary_has_synced_modified,
-            "RO-68+RO-69: no 'Synced fields' activity — last_seen_updated_at matched post-write state": not summary_has_any_synced,
+            "RO-68+RO-69: no spurious fields_synced in second reconcile": not summary_has_any_synced,
             "plugin row still present after second reconcile": len(recon2_records) > 0,
         }
         all_ok_cascade = all(checks_cascade.values())
@@ -432,8 +435,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 )
         detail_parts.append(
             f"recon2_records={len(recon2_records)}, "
-            f"summary_has_synced={summary_has_any_synced}, "
-            f"summary={recon2_summary!r}"
+            f"fields_synced={recon2_fields_synced}, "
+            f"reconciliation={recon2_reconciliation!r}"
         )
 
         run.step(
