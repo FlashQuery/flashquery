@@ -144,6 +144,189 @@ describe('macro standard library async utility builtins', () => {
   });
 });
 
+describe('macro standard library channel and task builtins', () => {
+  it('T-U-120 echo appends a log trace step with stringified args', async () => {
+    const { payload } = await run('echo "a" 1 null\nexit null');
+    expect(payload['trace']).toEqual([
+      { kind: 'log', message: 'a 1 null', at: expect.any(String) },
+      { kind: 'exit', result: null, at: expect.any(String) },
+    ]);
+    expect(payload['log']).toEqual(['a 1 null']);
+  });
+
+  it('T-U-121 status appends progress trace and calls the progress sink', async () => {
+    const emitted: unknown[] = [];
+    const { payload } = await run('status --progress 5 --total 10 "msg"\nexit null', {
+      progressSink: async (entry) => emitted.push(entry),
+    });
+
+    expect(payload['trace']).toEqual([
+      {
+        kind: 'progress',
+        message: 'msg',
+        result: { progress: 5, total: 10 },
+        at: expect.any(String),
+      },
+      { kind: 'exit', result: null, at: expect.any(String) },
+    ]);
+    expect(payload['progress']).toEqual([{ message: 'msg', progress: 5, total: 10 }]);
+    expect(emitted).toEqual([{ message: 'msg', progress: 5, total: 10 }]);
+  });
+
+  it('T-U-122 keeps echo and status channels separate', async () => {
+    const emitted: unknown[] = [];
+    const { payload } = await run('status "working"\necho "log-only"\nexit null', {
+      progressSink: async (entry) => emitted.push(entry),
+    });
+
+    expect(payload['log']).toEqual(['log-only']);
+    expect(payload['progress']).toEqual([{ message: 'working' }]);
+    expect(emitted).toEqual([{ message: 'working' }]);
+    expect(payload['trace']).toMatchObject([
+      { kind: 'progress', message: 'working' },
+      { kind: 'log', message: 'log-only' },
+      { kind: 'exit' },
+    ]);
+  });
+
+  it('T-U-123 status works without a progress sink or progress token', async () => {
+    const { payload } = await run('status "just-message"\nexit null');
+    expect(payload['progress']).toEqual([{ message: 'just-message' }]);
+    expect(payload['trace']).toMatchObject([
+      { kind: 'progress', message: 'just-message', result: {} },
+      { kind: 'exit' },
+    ]);
+  });
+
+  it('T-U-124 task_id returns the invocation task id exactly', async () => {
+    const { payload } = await run('exit task_id', { taskId: 'task-123' });
+    expect(resultOf(payload)).toBe('task-123');
+  });
+
+  it('T-U-125 list_tasks returns injected session records or the current invocation fallback', async () => {
+    const injected = await run('exit list_tasks', {
+      taskId: 'task-abc',
+      listTasks: async () => [{ task_id: 'session-task', status: 'working' }],
+    });
+    const fallback = await run('status --progress 1 --total 2 "half"\nexit list_tasks', {
+      taskId: 'task-fallback',
+    });
+
+    expect(resultOf(injected.payload)).toEqual([{ task_id: 'session-task', status: 'working' }]);
+    expect(resultOf(fallback.payload)).toEqual([
+      { task_id: 'task-fallback', status: 'working', progress: { message: 'half', progress: 1, total: 2 } },
+    ]);
+  });
+});
+
+describe('macro POC builtin fragments', () => {
+  it('POC 01-hello executes the full production-compatible builtin example', async () => {
+    const { payload } = await run(`
+      name = "FlashQuery"
+      version = 1
+      echo "hello from $name v$version"
+      items = ["alpha", "beta", "gamma"]
+      total = count $items
+      echo "items:" $items
+      echo "count:" $total
+      exit $total
+    `);
+
+    expect(resultOf(payload)).toBe(3);
+    expect(payload['log']).toEqual([
+      'hello from FlashQuery v1',
+      'items: ["alpha","beta","gamma"]',
+      'count: 3',
+    ]);
+  });
+
+  it('POC 05-counter executes the math/echo fragment excluding deferred fq.search dispatch', async () => {
+    const { payload } = await run(`
+      i = 0
+      total_lines = 0
+      drafts = [{ fq_id: "a" }, { fq_id: "b" }]
+      for d in $drafts do
+        i = add $i 1
+        doc_lines = 10
+        total_lines = add $total_lines $doc_lines
+        echo "iteration $i: processing $d.fq_id"
+      done
+      sum = add 2 3 5
+      diff = sub 10 3
+      product = mul 4 5
+      quot = div 17 5
+      rem = mod 17 5
+      exit { i: $i, total_lines: $total_lines, sum: $sum, diff: $diff, product: $product, quot: $quot, rem: $rem }
+    `);
+
+    expect(resultOf(payload)).toEqual({
+      i: 2,
+      total_lines: 20,
+      sum: 10,
+      diff: 7,
+      product: 20,
+      quot: 3,
+      rem: 2,
+    });
+  });
+
+  it('POC 06-status-and-tasks executes the status/task fragment excluding deferred fq.* tools', async () => {
+    const { payload } = await run(`
+      status "Starting draft review workflow"
+      status --progress 0 --total 3 "Found drafts; beginning review"
+      my_task = task_id
+      tasks = list_tasks
+      exit { task: $my_task, tasks: $tasks }
+    `, { taskId: 'poc-task' });
+
+    expect(resultOf(payload)).toEqual({
+      task: 'poc-task',
+      tasks: [{ task_id: 'poc-task', status: 'working', progress: { message: 'Found drafts; beginning review', progress: 0, total: 3 } }],
+    });
+  });
+
+  it('POC 13-input-vars executes the input/default fragment excluding deferred search/write tools', async () => {
+    const { payload } = await run(`
+      search_phrases = input_var "search_phrases"
+      output_path = input_var "output_path" --default "Research/web-output.md"
+      hits_per_topic = input_var "hits_per_topic" --default 2
+      reviewer_email = input_var "reviewer_email" --default null
+      total_queries = count $search_phrases
+      if $reviewer_email then
+        echo "will notify reviewer: $reviewer_email"
+      else
+        echo "no reviewer email supplied - skipping notification"
+      fi
+      exit { count: $total_queries, path: $output_path, hits: $hits_per_topic, reviewer_email: $reviewer_email }
+    `, { inputVars: { search_phrases: ['AI safety', 'model alignment'] } });
+
+    expect(resultOf(payload)).toEqual({
+      count: 2,
+      path: 'Research/web-output.md',
+      hits: 2,
+      reviewer_email: null,
+    });
+  });
+
+  it('POC 17-input-var-missing fails before its deferred fq.write_document call', async () => {
+    const { result, payload } = await run(`
+      topic = input_var "topic"
+      output_path = input_var "output_path"
+      notes_prefix = input_var "notes_prefix" --default "Auto-generated notes about"
+      echo "topic: $topic"
+      saved = fq.write_document({ path: $output_path })
+      exit $saved
+    `, { inputVars: { topic: 'AI' } });
+
+    expect(result.isError).toBe(false);
+    expect(payload).toMatchObject({
+      error: 'invalid_input',
+      details: { missing_inputs: ['output_path'] },
+    });
+    expect(payload['trace']).toBeUndefined();
+  });
+});
+
 describe('macro standard builtin registry source contract', () => {
   it('does not register deferred shell verbs in Phase 133', () => {
     const source = readFileSync('src/macro/builtins.ts', 'utf8');
