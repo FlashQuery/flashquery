@@ -10,6 +10,7 @@ export default defineConfig({
       'tests/integration/compound-tools.integration.test.ts',
       'tests/integration/llm-config-sync.test.ts',
       'tests/integration/tool-registry.test.ts',
+      'tests/integration/archive-document-lock.test.ts',
     ],
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],
     globals: true,
