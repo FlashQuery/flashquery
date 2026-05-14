@@ -42,6 +42,12 @@
 
 **Requirements:** MACRO-RESP-01, MACRO-RESP-02, MACRO-RESP-03, MACRO-RESP-04, MACRO-OBS-01, MACRO-INT-03, MACRO-INT-05, MACRO-INT-06
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 130-01-PLAN.md — Add macro response contracts, call_macro metadata/scaffold, and NullMcpBroker.
+- [ ] 130-02-PLAN.md — Add archive_document write locking and focused lock coverage.
+
 **Success criteria:**
 1. `response-formats.ts` exports macro result/type helpers without changing existing helpers.
 2. `call_macro` appears in tool metadata and the MCP server registrar with safe stub behavior.
