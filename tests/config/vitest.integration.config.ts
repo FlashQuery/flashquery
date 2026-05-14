@@ -14,6 +14,7 @@ export default defineConfig({
       'tests/integration/macro-parse-error.test.ts',
       'tests/integration/macro-shell-verbs.integration.test.ts',
       'tests/integration/macro-tool-dispatch.test.ts',
+      'tests/integration/macro-concurrency.test.ts',
     ],
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],
     globals: true,
