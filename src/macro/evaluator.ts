@@ -9,6 +9,8 @@ import type {
   Program,
   Statement,
   ToolCall,
+  ToolRegistry,
+  MacroCallerContext,
 } from './types.js';
 import {
   jsonExpectedError,
@@ -24,6 +26,8 @@ import { preScanForbiddenShellFlags } from './forbidden-flag-scan.js';
 import { buildRange, standardBuiltins } from './builtins.js';
 import { shellBuiltins } from './shell-verbs.js';
 import { resolveNamespaceIntrospection } from './introspection.js';
+import { preScanToolReferences } from './permission-prescan.js';
+import { dispatchMacroTool } from './dispatcher.js';
 
 const ESCAPED_DOLLAR_SENTINEL = '\uE000';
 
@@ -80,6 +84,11 @@ export interface MacroInvocationContext {
   vaultRoot?: string;
   stdin?: MacroValue;
   broker: McpBroker;
+  toolRegistry?: ToolRegistry;
+  allowedToolNames?: Set<string>;
+  templateToolNames?: Set<string>;
+  hardExcludedReasons?: Map<string, string>;
+  callerContext?: MacroCallerContext;
   dispatchTool?: (
     server: string,
     tool: string,
@@ -111,6 +120,12 @@ export interface EvaluateProgramOptions {
   progress?: MacroProgressEntry[];
   cancelled?: boolean | MacroCancellationState;
   broker?: McpBroker;
+  toolRegistry?: ToolRegistry;
+  allowedToolNames?: Iterable<string>;
+  allowlist?: Iterable<string>;
+  templateToolNames?: Iterable<string>;
+  hardExcludedReasons?: Map<string, string>;
+  callerContext?: MacroCallerContext;
   dispatchTool?: MacroInvocationContext['dispatchTool'];
   progressSink?: MacroInvocationContext['progressSink'];
   listTasks?: MacroInvocationContext['listTasks'];
@@ -227,6 +242,15 @@ export function createInvocationContext(
     vaultRoot: options.vaultRoot,
     stdin: options.stdin,
     broker: options.broker ?? new NullMcpBroker(),
+    toolRegistry: options.toolRegistry,
+    allowedToolNames: options.allowedToolNames === undefined && options.allowlist === undefined
+      ? undefined
+      : new Set(options.allowedToolNames ?? options.allowlist),
+    templateToolNames: options.templateToolNames === undefined
+      ? undefined
+      : new Set(options.templateToolNames),
+    hardExcludedReasons: options.hardExcludedReasons,
+    callerContext: options.callerContext,
     dispatchTool: options.dispatchTool,
     progressSink: options.progressSink,
     listTasks: options.listTasks,
@@ -256,6 +280,19 @@ export async function evaluateProgram(
     preflightProgram(program);
     const inputVarContract = collectInputVarContract(program);
     validateInputVars(inputVarContract, context.inputVars);
+    if (context.toolRegistry && context.allowedToolNames) {
+      const permissionError = preScanToolReferences({
+        program,
+        registry: context.toolRegistry,
+        allowlist: context.allowedToolNames,
+        ...(context.templateToolNames === undefined ? {} : { templateToolNames: context.templateToolNames }),
+        ...(context.hardExcludedReasons === undefined ? {} : { hardExcludedReasons: context.hardExcludedReasons }),
+        ...(context.callerContext === undefined ? {} : { callerContext: context.callerContext }),
+      });
+      if (permissionError) {
+        throwExpectedToolResult(permissionError);
+      }
+    }
     await execBlock(program.statements, env, context);
     return macroResult(buildSuccessPayload(context, null));
   } catch (error) {
@@ -728,6 +765,28 @@ async function evalToolCall(
   }
 
   const arg = await evalToolArg(call, env, context);
+  if (context.toolRegistry && context.allowedToolNames) {
+    const dispatched = await dispatchMacroTool({
+      registry: context.toolRegistry,
+      allowlist: context.allowedToolNames,
+      server: call.server,
+      tool: call.tool,
+      arg,
+      context,
+    });
+    if (isToolResult(dispatched)) {
+      throwExpectedToolResult(dispatched);
+    }
+    context.budget.external_tool_calls += 1;
+    pushTrace(context, {
+      kind: 'tool_call',
+      name: `${call.server}.${call.tool}`,
+      args: arg,
+      result: dispatched,
+    });
+    return dispatched;
+  }
+
   let result: ToolResult;
   try {
     result = await context.dispatchTool(call.server, call.tool, arg, context);
@@ -848,6 +907,29 @@ function parseToolResultPayload(result: ToolResult): unknown {
   }
 }
 
+function isToolResult(value: unknown): value is ToolResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Array.isArray((value as { content?: unknown }).content)
+  );
+}
+
+function throwExpectedToolResult(result: ToolResult): never {
+  const parsed = parseToolResultPayload(result);
+  if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+    const envelope = parsed as Record<string, unknown>;
+    throw new MacroExpectedError(
+      typeof envelope.error === 'string' ? envelope.error : 'invalid_input',
+      typeof envelope.message === 'string' ? envelope.message : 'Macro preflight failed.',
+      isRecord(envelope.details) ? envelope.details : undefined
+    );
+  }
+  throw new MacroExpectedError('invalid_input', 'Macro preflight failed.', {
+    response: parsed,
+  });
+}
+
 function coerceMacroValue(value: unknown): MacroValue {
   if (
     value === null ||
@@ -871,6 +953,10 @@ function coerceMacroValue(value: unknown): MacroValue {
     reason: 'unsupported_value_type',
     value_type: typeof value,
   });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function cloneMacroObject(input: Record<string, MacroValue>): Record<string, MacroValue> {
