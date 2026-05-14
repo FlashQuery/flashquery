@@ -20,9 +20,9 @@ export function parseToolPayload(result: ToolResult): Record<string, unknown> {
 
 export function basicBuiltins(extra: Record<string, MacroBuiltin> = {}): Record<string, MacroBuiltin> {
   const builtins: Record<string, MacroBuiltin> = {
-    add: (args) => Number(args[0] ?? 0) + Number(args[1] ?? 0),
-    echo: (args) => args[0] ?? null,
-    exit: (args) => args[0] ?? null,
+    add: (positional) => Number(positional[0] ?? 0) + Number(positional[1] ?? 0),
+    echo: (positional) => positional[0] ?? null,
+    exit: (positional) => positional[0] ?? null,
     ...extra,
   };
   return builtins;
