@@ -48,7 +48,8 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
       key,
     });
   },
-  count: (positional) => {
+  count: (positional, named) => {
+    requireNamedArgs('count', named, []);
     requireArgCount('count', positional, 1, 1, 'count_argument_count');
     const value = positional[0];
     if (Array.isArray(value) || typeof value === 'string') return value.length;

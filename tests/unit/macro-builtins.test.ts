@@ -51,8 +51,11 @@ describe('macro standard library data builtins', () => {
     expect(payload).toMatchObject({ details: { reason: 'count_type_mismatch' } });
 
     const extra = await run('exit count [1] "unexpected"');
+    const named = await run('exit count --unexpected 2 [1]');
     expect(extra.result.isError).toBe(true);
     expect(extra.payload).toMatchObject({ details: { reason: 'count_argument_count' } });
+    expect(named.result.isError).toBe(true);
+    expect(named.payload).toMatchObject({ details: { reason: 'count_named_argument' } });
   });
 
   it('T-U-111 unique preserves first occurrence order for primitive values', async () => {

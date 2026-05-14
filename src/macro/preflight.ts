@@ -111,7 +111,32 @@ export function collectInputVarContract(program: Program): InputVarContract {
       return;
     }
 
-    const keyArg = call.args.find((arg) => arg.kind === 'PositionalArg');
+    const positionalArgs = call.args.filter((arg) => arg.kind === 'PositionalArg');
+    if (positionalArgs.length !== 1) {
+      throw new MacroPreflightError(
+        'invalid_input',
+        'input_var expects exactly one positional argument.',
+        { reason: 'input_var_argument_count', line: call.line }
+      );
+    }
+
+    const unsupportedNamedArgs = call.args.filter(
+      (arg): arg is Extract<Arg, { kind: 'NamedArg' }> =>
+        arg.kind === 'NamedArg' && arg.name !== 'default'
+    );
+    if (unsupportedNamedArgs.length > 0) {
+      throw new MacroPreflightError(
+        'invalid_input',
+        'input_var received unsupported named arguments.',
+        {
+          reason: 'input_var_named_argument',
+          named_args: unsupportedNamedArgs.map((arg) => arg.name),
+          line: call.line,
+        }
+      );
+    }
+
+    const keyArg = positionalArgs[0];
     if (keyArg?.kind !== 'PositionalArg' || keyArg.value.kind !== 'StringLit') {
       throw new MacroPreflightError(
         'invalid_input',

@@ -542,6 +542,20 @@ async function evalCall(
   }
 
   if (call.name === 'input_var') {
+    if (positional.length !== 1) {
+      throw new MacroExpectedError('invalid_input', 'input_var expects exactly one positional argument.', {
+        reason: 'input_var_argument_count',
+        line: call.line,
+      });
+    }
+    const unsupportedNamedArgs = Object.keys(named).filter((key) => key !== 'default');
+    if (unsupportedNamedArgs.length > 0) {
+      throw new MacroExpectedError('invalid_input', 'input_var received unsupported named arguments.', {
+        reason: 'input_var_named_argument',
+        named_args: unsupportedNamedArgs,
+        line: call.line,
+      });
+    }
     const key = positional[0];
     if (typeof key !== 'string') {
       throw new MacroRuntimeError('input_var key must be a string.', call.line, {

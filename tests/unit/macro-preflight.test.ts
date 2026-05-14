@@ -65,6 +65,26 @@ describe('macro input_var preflight', () => {
     });
   });
 
+  it('rejects invalid input_var arity and named args during preflight', async () => {
+    const extra = await evaluateProgram(parseProgram('x = input_var "x" "extra"\nexit $x'), {
+      inputVars: { x: 1 },
+    });
+    const named = await evaluateProgram(parseProgram('x = input_var "x" --unexpected 1\nexit $x'), {
+      inputVars: { x: 1 },
+    });
+
+    expect(extra.isError).toBe(false);
+    expect(parseToolPayload(extra)).toMatchObject({
+      error: 'invalid_input',
+      details: { reason: 'input_var_argument_count' },
+    });
+    expect(named.isError).toBe(false);
+    expect(parseToolPayload(named)).toMatchObject({
+      error: 'invalid_input',
+      details: { reason: 'input_var_named_argument', named_args: ['unexpected'] },
+    });
+  });
+
   it('T-U-103 rejects boolean-shaped input_var defaults before execution', async () => {
     const result = await evaluateProgram(parseProgram('x = input_var "x" --default true\nexit $x'), {
       inputVars: {},
