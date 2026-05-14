@@ -42,10 +42,10 @@
 
 **Requirements:** MACRO-RESP-01, MACRO-RESP-02, MACRO-RESP-03, MACRO-RESP-04, MACRO-OBS-01, MACRO-INT-03, MACRO-INT-05, MACRO-INT-06
 
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 130-01-PLAN.md — Add macro response contracts, call_macro metadata/scaffold, and NullMcpBroker.
+- [x] 130-01-PLAN.md — Add macro response contracts, call_macro metadata/scaffold, and NullMcpBroker.
 - [x] 130-02-PLAN.md — Add archive_document write locking and focused lock coverage.
 
 **Cross-cutting constraints:**

@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: executing
+status: verifying
 stopped_at: Completed 130-02-PLAN.md
-last_updated: "2026-05-14T04:17:20.520Z"
+last_updated: "2026-05-14T04:20:48.380Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 1
-  percent: 50
+  completed_plans: 2
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 Phase: 130 (foundation-metadata-broker-shim-archive-lock) — EXECUTING
 Plan: 2 of 2
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-14
 
 ## Performance Metrics
@@ -100,6 +100,7 @@ Last activity: 2026-05-14
 | Phase 127 P06 | 12m20s | 3 tasks | 3 files |
 | Phase 129 P03 | 24m26s | 3 tasks | 9 files |
 | Phase 130 P02 | 4m32s | 2 tasks | 4 files |
+| Phase 130 P01 | 8m04s | 3 tasks | 9 files |
 
 ## Decisions
 
@@ -171,6 +172,10 @@ Last activity: 2026-05-14
 - [Phase 129]: 129-03 kept the YAML workflow deterministic by asserting delegated tier metadata via call_model, then exercising insert_in_doc directly; delegated dispatch is covered by the directed mock-provider scenario.
 - [Phase 130]: 130-02 used a held-lock proxy for T-I-011 instead of direct concurrent timing to deterministically prove archive_document and remove_document share the documents lock.
 - [Phase 130]: 130-02 completed Task 2 as test coverage over already-green archive lock behavior after Task 1; no artificial failing test was introduced.
+- [Phase 130]: 130-01: macroResult returns the existing JSON ToolResult envelope directly by delegating to jsonToolResult.
+- [Phase 130]: 130-01: call_macro is final admin llm metadata and delegated-hard-excluded with RECURSIVE_MODEL_REASON.
+- [Phase 130]: 130-01: Phase 130 call_macro registration is a non-executing unsupported scaffold; parser, source_ref, dry-run, progress, budgets, and execution remain deferred.
+- [Phase 130]: 130-01: NullMcpBroker reuses NativeToolHandler for future dispatch compatibility while exposing no brokered connectivity in v0.
 
 ## Accumulated Context
 
@@ -284,7 +289,7 @@ Last activity: 2026-05-14
 
 ## Session Continuity
 
-Last session: 2026-05-14T04:17:20.498Z
+Last session: 2026-05-14T04:20:09.330Z
 Stopped at: Completed 130-02-PLAN.md
 Resume: None
 

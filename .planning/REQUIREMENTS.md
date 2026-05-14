@@ -73,7 +73,7 @@
 
 ### Trace, Progress, Tasks, And Cancellation
 
-- [ ] **MACRO-OBS-01**: Trace steps are emitted as a flat ordered list with the specified kind/value shape.
+- [x] **MACRO-OBS-01**: Trace steps are emitted as a flat ordered list with the specified kind/value shape.
 - [ ] **MACRO-OBS-02**: Trace verbosity modes and per-value truncation are enforced.
 - [ ] **MACRO-OBS-03**: Progress verbosity modes are enforced and degrade cleanly without a progress token.
 - [ ] **MACRO-OBS-04**: The in-process task registry transitions `working` to terminal states and removes terminal records immediately.
@@ -82,10 +82,10 @@
 
 ### Response Envelopes
 
-- [ ] **MACRO-RESP-01**: Real-run success returns the canonical `MacroExecutionResult` payload.
-- [ ] **MACRO-RESP-02**: Dry-run returns `MacroDryRunResult` and never executes side-effecting tools.
-- [ ] **MACRO-RESP-03**: Macro error codes are exported and stable.
-- [ ] **MACRO-RESP-04**: Macro response helpers are additive exports in `response-formats.ts`.
+- [x] **MACRO-RESP-01**: Real-run success returns the canonical `MacroExecutionResult` payload.
+- [x] **MACRO-RESP-02**: Dry-run returns `MacroDryRunResult` and never executes side-effecting tools.
+- [x] **MACRO-RESP-03**: Macro error codes are exported and stable.
+- [x] **MACRO-RESP-04**: Macro response helpers are additive exports in `response-formats.ts`.
 - [ ] **MACRO-RESP-05**: `warnings[]` follows the shared XC-16 response convention.
 
 ### Concurrency, Budgets, And Integration
@@ -94,8 +94,8 @@
 - [ ] **MACRO-INT-02**: Macro-executed writes inherit FlashQuery's existing write-lock table behavior.
 - [x] **MACRO-INT-03**: `archive_document` acquires the standard document write lock.
 - [ ] **MACRO-INT-04**: Budget enforcement covers total tokens, model calls, external tool calls, and timeout.
-- [ ] **MACRO-INT-05**: `call_macro` is registered in the MCP server and canonical tool metadata.
-- [ ] **MACRO-INT-06**: A `NullMcpBroker` integration shim ships for v0 broker readiness.
+- [x] **MACRO-INT-05**: `call_macro` is registered in the MCP server and canonical tool metadata.
+- [x] **MACRO-INT-06**: A `NullMcpBroker` integration shim ships for v0 broker readiness.
 - [ ] **MACRO-INT-07**: `_meta.progressToken` is captured and used for progress emission.
 
 ## Future Requirements
@@ -130,7 +130,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MACRO-RESP-01, MACRO-RESP-02, MACRO-RESP-03, MACRO-RESP-04, MACRO-OBS-01, MACRO-INT-03, MACRO-INT-05, MACRO-INT-06 | Phase 130 | Pending |
+| MACRO-RESP-01, MACRO-RESP-02, MACRO-RESP-03, MACRO-RESP-04, MACRO-OBS-01, MACRO-INT-03, MACRO-INT-05, MACRO-INT-06 | Phase 130 | Complete |
 | MACRO-SRC-05, MACRO-SRC-06, MACRO-PARSE-01, MACRO-PARSE-02, MACRO-PARSE-03, MACRO-PARSE-04, MACRO-PARSE-05, MACRO-PARSE-06, MACRO-PARSE-07, MACRO-PARSE-08, MACRO-PARSE-09, MACRO-PARSE-10 | Phase 131 | Pending |
 | MACRO-EVAL-01, MACRO-EVAL-02, MACRO-EVAL-03, MACRO-EVAL-04, MACRO-EVAL-05, MACRO-EVAL-06, MACRO-EVAL-07, MACRO-EVAL-08 | Phase 132 | Pending |
 | MACRO-SRC-07, MACRO-SRC-08, MACRO-BI-01, MACRO-BI-02, MACRO-BI-03, MACRO-BI-04, MACRO-BI-05, MACRO-BI-06, MACRO-BI-07 | Phase 133 | Pending |
