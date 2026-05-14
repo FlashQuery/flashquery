@@ -5,7 +5,7 @@ export type MacroFenceExtractionResult =
   | { ok: true; blocks: MacroSourceBlock[] }
   | { ok: false; error: MacroParseErrorEnvelope };
 
-const FENCE_OPEN_RE = /^(`{3,})(.*)$/;
+const FENCE_OPEN_RE = /^ {0,3}(`{3,})(.*)$/;
 const BLOCK_NAME_RE = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 
 export function extractMacroFences(
@@ -24,7 +24,7 @@ export function extractMacroFences(
 
     const fence = open[1] ?? '```';
     const infoString = (open[2] ?? '').trim();
-    if (!infoString.startsWith('fqm')) {
+    if (!isMacroFence(infoString)) {
       index = skipFence(lines, index + 1, fence);
       continue;
     }
@@ -61,6 +61,10 @@ export function extractMacroFences(
   return { ok: true, blocks };
 }
 
+function isMacroFence(infoString: string): boolean {
+  return infoString === 'fqm' || /^fqm\s+/.test(infoString);
+}
+
 function parseFenceInfo(infoString: string): { ok: true; name: string | null } | { ok: false } {
   if (infoString === 'fqm') {
     return { ok: true, name: null };
@@ -77,7 +81,14 @@ function parseFenceInfo(infoString: string): { ok: true; name: string | null } |
     return { ok: false };
   }
 
-  const [key, value = ''] = parts[0]?.split('=') ?? [];
+  const attr = parts[0] ?? '';
+  const equalsIndex = attr.indexOf('=');
+  if (equalsIndex === -1 || attr.indexOf('=', equalsIndex + 1) !== -1) {
+    return { ok: false };
+  }
+
+  const key = attr.slice(0, equalsIndex);
+  const value = attr.slice(equalsIndex + 1);
   if (key !== 'name' || value.length === 0 || value.includes('"') || value.includes("'")) {
     return { ok: false };
   }
@@ -95,9 +106,11 @@ function skipFence(lines: string[], startIndex: number, fence: string): number {
 }
 
 function findClosingFence(lines: string[], startIndex: number, fence: string): number {
+  const minLength = fence.length;
   for (let index = startIndex; index < lines.length; index++) {
     const line = lines[index] ?? '';
-    if (line.startsWith(fence)) {
+    const match = /^ {0,3}(`{3,})[ \t]*$/.exec(line);
+    if (match && (match[1]?.length ?? 0) >= minLength) {
       return index;
     }
   }

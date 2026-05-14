@@ -403,13 +403,12 @@ class TokenStreamParser {
     const server = this.consume(Identifier, 'Expected server name.');
     this.consume(Dot, 'Expected "." after server name.');
     const tool = this.consume(Identifier, 'Expected tool name.');
-    if (this.matches(Dot)) {
-      this.advance();
-      const method = this.consume(Identifier, 'Expected namespace method.');
-      if (method.image !== '_exists') {
+
+    if (tool.image.startsWith('_')) {
+      if (tool.image !== '_exists') {
         this.fail(
           'unexpected_token',
-          method,
+          tool,
           'Only _exists() namespace introspection is supported.'
         );
       }
@@ -418,9 +417,12 @@ class TokenStreamParser {
       return {
         kind: 'ToolExistsCall',
         server: server.image,
-        tool: tool.image,
         line: server.startLine ?? 1,
       };
+    }
+
+    if (this.matches(Dot)) {
+      this.fail('unexpected_token', this.peek(), 'Dotted server names are not supported.');
     }
 
     this.consume(LParen, 'Expected "(" after tool name.');

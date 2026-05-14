@@ -9,6 +9,7 @@ import type {
   IfStmt,
   Pipeline,
   ToolCall,
+  ToolExistsCall,
 } from '../../src/macro/types.js';
 
 function parse(source: string) {
@@ -24,6 +25,26 @@ function parseError(source: string) {
   if (result.ok) throw new Error('Expected parse error');
   expect(result.error.error).toBe('parse_error');
   return result.error;
+}
+
+function collectToolExistsCalls(value: unknown): ToolExistsCall[] {
+  if (!value || typeof value !== 'object') {
+    return [];
+  }
+
+  if ((value as { kind?: unknown }).kind === 'ToolExistsCall') {
+    return [value as ToolExistsCall];
+  }
+
+  const calls: ToolExistsCall[] = [];
+  for (const child of Object.values(value)) {
+    if (Array.isArray(child)) {
+      calls.push(...child.flatMap((item) => collectToolExistsCalls(item)));
+    } else {
+      calls.push(...collectToolExistsCalls(child));
+    }
+  }
+  return calls;
 }
 
 describe('macro parser', () => {
@@ -119,18 +140,24 @@ describe('macro parser', () => {
   });
 
   it('T-U-061 parses _exists namespace introspection in conditions', () => {
-    const [statement] = parse('if fq.x._exists() then\necho "ok"\nfi').statements as IfStmt[];
+    const [statement] = parse('if fq._exists() then\necho "ok"\nfi').statements as IfStmt[];
     expect(statement.condition).toEqual({
       kind: 'ToolExistsCall',
       server: 'fq',
-      tool: 'x',
+      line: 1,
+    });
+
+    const [brokered] = parse('if brave_search._exists() then\necho "ok"\nfi').statements as IfStmt[];
+    expect(brokered.condition).toEqual({
+      kind: 'ToolExistsCall',
+      server: 'brave_search',
       line: 1,
     });
   });
 
   it('T-U-062 rejects dotted server names and unsupported namespace methods', () => {
     expect(parseError('a.b.tool({})').details.reason).toBe('unexpected_token');
-    expect(parseError('fq.x._missing()').details.reason).toBe('unexpected_token');
+    expect(parseError('fq._missing()').details.reason).toBe('unexpected_token');
   });
 
   it('T-U-063 returns structured parse_error envelopes', () => {
@@ -190,6 +217,26 @@ describe('macro parser', () => {
       const source = readFileSync(join(fixtureDir, file), 'utf8');
       const result = parseMacroSource(source, file);
       expect(result.ok, `${file}: ${JSON.stringify(result)}`).toBe(true);
+    }
+  });
+
+  it('parses migrated POC _exists fixtures as ToolExistsCall nodes', () => {
+    const fixtureDir = join(process.cwd(), 'tests/fixtures/macro/examples');
+    const expectedServersByFile = new Map([
+      ['09-research-pattern.fqm', ['brave_search', 'web_fetch']],
+      ['10-adaptive-research.fqm', ['brave_search']],
+      ['11-fail-missing-server.fqm', ['pretend_search']],
+    ]);
+
+    for (const [file, expectedServers] of expectedServersByFile) {
+      const source = readFileSync(join(fixtureDir, file), 'utf8');
+      const result = parseMacroSource(source, file);
+      expect(result.ok, `${file}: ${JSON.stringify(result)}`).toBe(true);
+      if (!result.ok) continue;
+
+      expect(collectToolExistsCalls(result.program).map((call) => call.server)).toEqual(
+        expectedServers
+      );
     }
   });
 });

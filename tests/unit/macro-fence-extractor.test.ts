@@ -35,11 +35,23 @@ describe('macro fence extraction', () => {
     expect(blocks).toEqual([{ name: 'archive-drafts', source: 'echo "hi"', openingLine: 1 }]);
   });
 
+  it('extracts valid Markdown macro fences indented up to three spaces', () => {
+    const blocks = expectBlocks(['   ```fqm name=indented', 'echo "hi"', '```'].join('\n'));
+
+    expect(blocks).toEqual([{ name: 'indented', source: 'echo "hi"', openingLine: 1 }]);
+  });
+
   it('T-U-003 extracts multiple named blocks and ignores non-fqm fences', () => {
     const blocks = expectBlocks(
       [
         '```ts',
         'const nope = true;',
+        '```',
+        '```fqml',
+        'not a macro',
+        '```',
+        '```fqm-template',
+        'also not a macro',
         '```',
         '```fqm name=add',
         'echo "add"',
@@ -51,7 +63,7 @@ describe('macro fence extraction', () => {
     );
 
     expect(blocks.map((block) => block.name)).toEqual(['add', 'remove']);
-    expect(blocks.map((block) => block.openingLine)).toEqual([4, 7]);
+    expect(blocks.map((block) => block.openingLine)).toEqual([10, 13]);
   });
 
   it('T-U-004 rejects invalid block names including leading underscore', () => {
@@ -70,6 +82,10 @@ describe('macro fence extraction', () => {
     expectMalformed(['```fqm name=', 'echo "x"', '```'].join('\n'), 'fqm name=');
   });
 
+  it('rejects name attributes with multiple equals signs', () => {
+    expectMalformed(['```fqm name=foo=bar', 'echo "x"', '```'].join('\n'), 'fqm name=foo=bar');
+  });
+
   it('T-U-007 rejects duplicate name attributes', () => {
     expectMalformed(
       ['```fqm name=foo name=bar', 'echo "x"', '```'].join('\n'),
@@ -85,5 +101,34 @@ describe('macro fence extraction', () => {
     const blocks = expectBlocks(['```fqm', '# Macro: foo', 'echo "x"', '```'].join('\n'));
 
     expect(blocks).toEqual([{ name: null, source: '# Macro: foo\necho "x"', openingLine: 1 }]);
+  });
+
+  it('keeps body lines that begin with the fence marker and non-whitespace text', () => {
+    const blocks = expectBlocks(
+      ['```fqm', 'echo "before"', '```not a close', 'echo "after"', '```'].join('\n')
+    );
+
+    expect(blocks).toEqual([
+      { name: null, source: 'echo "before"\n```not a close\necho "after"', openingLine: 1 },
+    ]);
+  });
+
+  it('recognizes indented and longer valid Markdown closing fences', () => {
+    const blocks = expectBlocks(
+      [
+        '```fqm name=short',
+        'echo "short"',
+        '````',
+        'middle text',
+        '````fqm name=long',
+        'echo "long"',
+        '   ````',
+      ].join('\n')
+    );
+
+    expect(blocks).toEqual([
+      { name: 'short', source: 'echo "short"', openingLine: 1 },
+      { name: 'long', source: 'echo "long"', openingLine: 5 },
+    ]);
   });
 });

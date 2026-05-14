@@ -82,7 +82,6 @@ export interface ToolCall {
 export interface ToolExistsCall {
   kind: 'ToolExistsCall';
   server: string;
-  tool: string;
   line: number;
 }
 
