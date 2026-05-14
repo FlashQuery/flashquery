@@ -466,6 +466,7 @@ async function execBlock(
 ): Promise<void> {
   for (const stmt of statements) {
     await context.checkCancelled('between statements');
+    await context.checkCancelled('before statement');
     await execStatement(stmt, env, context);
   }
 }
