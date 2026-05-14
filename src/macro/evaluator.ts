@@ -88,6 +88,7 @@ export interface MacroInvocationContext {
   allowedToolNames?: Set<string>;
   templateToolNames?: Set<string>;
   hardExcludedReasons?: Map<string, string>;
+  knownToolNames?: Set<string>;
   callerContext?: MacroCallerContext;
   dispatchTool?: (
     server: string,
@@ -125,6 +126,7 @@ export interface EvaluateProgramOptions {
   allowlist?: Iterable<string>;
   templateToolNames?: Iterable<string>;
   hardExcludedReasons?: Map<string, string>;
+  knownToolNames?: Iterable<string>;
   callerContext?: MacroCallerContext;
   dispatchTool?: MacroInvocationContext['dispatchTool'];
   progressSink?: MacroInvocationContext['progressSink'];
@@ -250,6 +252,9 @@ export function createInvocationContext(
       ? undefined
       : new Set(options.templateToolNames),
     hardExcludedReasons: options.hardExcludedReasons,
+    knownToolNames: options.knownToolNames === undefined
+      ? undefined
+      : new Set(options.knownToolNames),
     callerContext: options.callerContext,
     dispatchTool: options.dispatchTool,
     progressSink: options.progressSink,
@@ -287,6 +292,7 @@ export async function evaluateProgram(
         allowlist: context.allowedToolNames,
         ...(context.templateToolNames === undefined ? {} : { templateToolNames: context.templateToolNames }),
         ...(context.hardExcludedReasons === undefined ? {} : { hardExcludedReasons: context.hardExcludedReasons }),
+        ...(context.knownToolNames === undefined ? {} : { knownToolNames: context.knownToolNames }),
         ...(context.callerContext === undefined ? {} : { callerContext: context.callerContext }),
       });
       if (permissionError) {

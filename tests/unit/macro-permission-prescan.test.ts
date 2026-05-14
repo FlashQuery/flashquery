@@ -186,6 +186,30 @@ describe('preScanToolReferences', () => {
     });
   });
 
+  it('classifies known but unavailable FlashQuery tools as forbidden when registry metadata says they exist', () => {
+    const result = preScanToolReferences({
+      program: parseProgram('exit fq.archive_document({ identifier: "draft.md" })'),
+      registry: {
+        fq: {
+          label: 'FlashQuery',
+          tools: {
+            search: vi.fn(async () => ({ ok: true })),
+          },
+        },
+      },
+      allowlist: new Set(['fq.search']),
+      knownToolNames: new Set(['fq.search', 'fq.archive_document']),
+    });
+
+    expect(parseEnvelope(result)).toMatchObject({
+      error: 'forbidden_tools',
+      details: {
+        forbidden: ['fq.archive_document'],
+        allowed: ['fq.search'],
+      },
+    });
+  });
+
   it('classifies unknown_server before unknown_tool and returns available tools for known servers', () => {
     const unknownServer = preScanToolReferences({
       program: parseProgram('exit unknown_server.search({ query: "x" })'),

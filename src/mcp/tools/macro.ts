@@ -86,6 +86,7 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
     allowedToolNames: toolRegistry.allowedToolNames,
     templateToolNames: toolRegistry.templateToolNames,
     hardExcludedReasons: toolRegistry.hardExcludedReasons,
+    knownToolNames: toolRegistry.knownToolNames,
     callerContext,
   });
 
