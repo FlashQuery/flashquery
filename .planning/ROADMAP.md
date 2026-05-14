@@ -110,8 +110,13 @@ Plans:
 **Plans:** 3 plans
 
 Plans:
+**Wave 1**
 - [ ] 133-01-PLAN.md — Add input_var preflight, named builtin args, and evaluator dispatch contract.
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 133-02-PLAN.md — Add pure data, arithmetic, range, input_var, sleep, and slow_op builtin registry behavior.
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 133-03-PLAN.md — Add termination compatibility, echo/status channels, task introspection, and phase validation.
 
 **Success criteria:**

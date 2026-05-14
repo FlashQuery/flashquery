@@ -360,22 +360,19 @@ context.trace.push({
 | A1 | `unique` should treat differently ordered object keys as structurally equal. | Common Pitfalls | Planner may need an explicit user/spec confirmation or a narrower equality test if v0 means insertion-order JSON equality. |
 | A2 | Default current-invocation task record is acceptable for `list_tasks` until Phase 136 provides session registry. | Architecture Patterns / Phase Requirements | Planner may need to require an injectable provider only and avoid a default record if user expects an empty list without registry. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should boolean `input_var --default true/false` be rejected in parser or preflight?**
    - What we know: Requirements say boolean defaults fail at parse time; the test plan says parse/preflight for non-literal key and parse error for boolean default. [CITED: Macro Requirements §6.1.7; CITED: Macro Test Plan §4.4.1]
-   - What's unclear: Current parser treats bare identifiers as calls, so `true`/`false` may parse as zero-arg calls unless parser is refined. [VERIFIED: src/macro/parser.ts]
-   - Recommendation: Plan a small parser/preflight refinement and assert the final public envelope matches the test plan; stop if parser-wide `true`/`false` rejection conflicts with earlier parse requirements. [VERIFIED: parser inspection]
+   - RESOLVED: Phase 133 should reject boolean defaults at the preflight/input-contract layer with the public `invalid_input` envelope and stable `details.reason: "input_var_default_must_be_literal"` unless the parser already rejects the source earlier. The implementation plan must not introduce boolean literals in v0. This preserves the test-plan intent without widening parser grammar. [VERIFIED: src/macro/parser.ts; CITED: Macro Requirements §3.3 and §6.1.7]
 
 2. **What should `list_tasks` return before Phase 136 registry exists?**
    - What we know: Requirement says current-session tasks only; context says adapt to the current evaluator surface without full lifecycle. [CITED: Macro Requirements §6.5.7; VERIFIED: 133-CONTEXT.md]
-   - What's unclear: There is no production session/task registry yet in Phase 133. [VERIFIED: src/macro/evaluator.ts; VERIFIED: ROADMAP.md]
-   - Recommendation: Add an injectable `listTasks(context)` hook and default to current invocation only or empty list, then document that Phase 136 replaces it. [ASSUMED]
+   - RESOLVED: Phase 133 should add an injectable `listTasks(context)` hook on invocation context. When no hook is provided, `list_tasks` returns a one-element current-invocation record with `task_id: context.taskId`, `status: "working"`, and latest progress if present. No singleton registry or cross-session state is allowed; Phase 136 may replace the provider with the real session registry. [VERIFIED: src/macro/evaluator.ts; VERIFIED: ROADMAP.md]
 
 3. **Should `sleep` and `slow_op` be implemented in Phase 133 despite not being in MACRO-BI IDs?**
    - What we know: Roadmap success criteria list sleep and slow-op builtins as registered; phase requirement IDs only list MACRO-BI-01 through MACRO-BI-07. [VERIFIED: ROADMAP.md; VERIFIED: .planning/REQUIREMENTS.md]
-   - What's unclear: Test Plan §4.4 does not list dedicated T-U IDs for sleep/slow_op in Phase 133. [VERIFIED: Macro Test Plan §4.4]
-   - Recommendation: Include lightweight registrations if easy, but keep cancellation/lifecycle behavior deferred to Phase 136 and avoid making them central proof points. [VERIFIED: 133-CONTEXT.md]
+   - RESOLVED: Phase 133 should implement lightweight `sleep` and `slow_op` registrations because the roadmap success criteria explicitly require them. Plans must add focused unit assertions for valid behavior and invalid argument validation, while leaving comprehensive cancellation/lifecycle behavior to Phase 136. [VERIFIED: Macro Test Plan §4.4; VERIFIED: 133-CONTEXT.md]
 
 ## Environment Availability
 
