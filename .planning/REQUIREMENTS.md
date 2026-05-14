@@ -90,7 +90,7 @@
 
 ### Concurrency, Budgets, And Integration
 
-- [ ] **MACRO-INT-01**: Concurrent macro invocations across sessions do not leak state.
+- [x] **MACRO-INT-01**: Concurrent macro invocations across sessions do not leak state.
 - [ ] **MACRO-INT-02**: Macro-executed writes inherit FlashQuery's existing write-lock table behavior.
 - [x] **MACRO-INT-03**: `archive_document` acquires the standard document write lock.
 - [ ] **MACRO-INT-04**: Budget enforcement covers total tokens, model calls, external tool calls, and timeout.

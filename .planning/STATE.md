@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: executing
-stopped_at: Completed 136-03-PLAN.md
-last_updated: "2026-05-14T22:23:53.432Z"
+status: verifying
+stopped_at: Completed 136-04-PLAN.md
+last_updated: "2026-05-14T22:42:47.836Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 27
-  completed_plans: 26
-  percent: 96
+  completed_plans: 27
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 Phase: 136 (task-lifecycle-and-cancellation) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-14
 
 ## Performance Metrics
@@ -118,6 +118,7 @@ Last activity: 2026-05-14
 | Phase 136 P01 | 4m | 3 tasks | 4 files |
 | Phase 136 P02 | 4m10s | 2 tasks | 3 files |
 | Phase 136 P03 | 3m13s | 2 tasks | 4 files |
+| Phase 136 P04 | 14m37s | 3 tasks | 9 files |
 
 ## Decisions
 
@@ -210,6 +211,8 @@ Last activity: 2026-05-14
 - [Phase 136]: 136-02 lazily imports template metadata dependencies in src/mcp/tools/macro.ts so importing runMacroSource for registry tests does not load storage modules.
 - [Phase 136]: 136-03: MacroCancellationError carries taskId and atSafePoint and maps to the canonical cancellation expected-error envelope.
 - [Phase 136]: 136-03: The evaluator keeps between-statements probes and adds before-statement probes immediately before execution.
+- [Phase 136]: 136-04 directed cancellation scenarios drive MacroTaskRegistry.cancel through a test-only in-process helper, without adding a public MCP cancellation surface.
+- [Phase 136]: 136-04 uses MLC-01/MLC-02 for macro lifecycle directed cancellation coverage because M-01/M-02 already belong to memory lifecycle.
 
 ## Accumulated Context
 
@@ -323,8 +326,8 @@ Last activity: 2026-05-14
 
 ## Session Continuity
 
-Last session: 2026-05-14T22:23:53.405Z
-Stopped at: Completed 136-03-PLAN.md
+Last session: 2026-05-14T22:42:47.813Z
+Stopped at: Completed 136-04-PLAN.md
 Resume: None
 
 ## Deferred Items
