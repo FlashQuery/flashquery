@@ -4,14 +4,14 @@ milestone: v3.4
 milestone_name: macro-support
 status: executing
 stopped_at: Completed 133-03-PLAN.md
-last_updated: "2026-05-14T18:23:39.845Z"
+last_updated: "2026-05-14T18:29:34.988Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 23
-  completed_plans: 20
-  percent: 87
+  completed_plans: 21
+  percent: 91
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 135 (tool-registry-dispatch-permissions) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-05-14
 
@@ -111,6 +111,7 @@ Last activity: 2026-05-14
 | Phase 131 P04 | 16 min | 1 tasks | 19 files |
 | Phase 131 P05 | 10 min | 1 tasks | 3 files |
 | Phase 135 P01 | 7m19s | 3 tasks | 7 files |
+| Phase 135 P02 | 3m15s | 2 tasks | 3 files |
 
 ## Decisions
 
@@ -190,6 +191,8 @@ Last activity: 2026-05-14
 - [Phase 132]: Escaped dollars in interpolated parser strings are preserved with an evaluator-only sentinel so \$name remains literal while normal $name interpolates.
 - [Phase 135]: 135-01: Wave 0 tests intentionally remain RED until Phase 135 production modules and call_macro dispatch wiring land.
 - [Phase 135]: 135-01: Integration dispatch coverage uses createMcpServer with InMemoryTransport and existing .env.test/Supabase helpers rather than a mock dispatcher.
+- [Phase 135]: 135-02: Macro registry construction derives host permissions from resolveHostToolExposure and delegated permissions from assembleNativeToolRegistry.
+- [Phase 135]: 135-02: ToolFn is the common MacroValue-returning dispatch unit for native and brokered macro tools.
 
 ## Accumulated Context
 
@@ -303,8 +306,8 @@ Last activity: 2026-05-14
 
 ## Session Continuity
 
-Last session: 2026-05-14T18:22:56.551Z
-Stopped at: Completed 133-03-PLAN.md
+Last session: 2026-05-14T18:29:34.966Z
+Stopped at: Completed 135-02-PLAN.md
 Resume: None
 
 ## Deferred Items

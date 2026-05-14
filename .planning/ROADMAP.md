@@ -161,14 +161,14 @@ Plans:
 
 **Requirements:** MACRO-DISP-01 through MACRO-DISP-07
 
-**Plans:** 1/4 plans executed
+**Plans:** 2/4 plans executed
 
 Plans:
 **Wave 1**
 - [x] 135-01-PLAN.md — Create Wave 0 dispatch, permission, hard-exclusion, caller-identity, and integration tests.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 135-02-PLAN.md — Implement `ToolRegistry`, `buildToolRegistry`, and `dispatchMacroTool`.
+- [x] 135-02-PLAN.md — Implement `ToolRegistry`, `buildToolRegistry`, and `dispatchMacroTool`.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 135-03-PLAN.md — Implement static permission pre-scan, evaluator preflight wiring, and hard exclusions.
