@@ -107,14 +107,14 @@ Plans:
 
 **Requirements:** MACRO-SRC-07, MACRO-SRC-08, MACRO-BI-01 through MACRO-BI-07
 
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 
 Plans:
 **Wave 1**
 - [x] 133-01-PLAN.md — Add input_var preflight, named builtin args, and evaluator dispatch contract.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 133-02-PLAN.md — Add pure data, arithmetic, range, input_var, sleep, and slow_op builtin registry behavior.
+- [x] 133-02-PLAN.md — Add pure data, arithmetic, range, input_var, sleep, and slow_op builtin registry behavior.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 133-03-PLAN.md — Add termination compatibility, echo/status channels, task introspection, and phase validation.
