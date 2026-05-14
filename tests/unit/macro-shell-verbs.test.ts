@@ -1,6 +1,6 @@
-import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { evaluateProgram } from '../../src/macro/evaluator.js';
 import { shellBuiltins } from '../../src/macro/shell-verbs.js';
@@ -171,6 +171,55 @@ describe('macro shell verb builtins', () => {
     const empty = await run('exit cat "/*.missing"', vaultRoot);
     expect(empty.result.isError).toBe(true);
     expect(empty.payload).toMatchObject({ details: { reason: 'glob_no_matches' } });
+  });
+
+  it('rejects missing cat, grep, and ls -d paths with stable errors', async () => {
+    const vaultRoot = await makeVault();
+
+    for (const source of [
+      'exit cat "/missing.md"',
+      'exit grep "TODO" "/missing.md"',
+      'exit ls -d "/missing.md"',
+    ]) {
+      const missing = await run(source, vaultRoot);
+      expect(missing.result.isError).toBe(true);
+      expect(missing.payload).toMatchObject({ details: { reason: 'path_not_found' } });
+    }
+  });
+
+  it('rejects symlink escapes before shell reads expose host files', async () => {
+    const vaultRoot = await makeVault();
+    const outsideRoot = await mkdtemp(join(tmpdir(), 'fq-macro-shell-outside-'));
+    await writeFile(join(outsideRoot, 'secret.md'), 'outside-secret\n');
+    await symlink(join(outsideRoot, 'secret.md'), join(vaultRoot, 'secret-link.md'));
+
+    const escaped = await run('exit cat "/secret-link.md"', vaultRoot);
+
+    expect(escaped.result.isError).toBe(false);
+    expect(escaped.payload).toMatchObject({
+      error: 'forbidden_path',
+      details: { reason: 'resolves_outside_vault' },
+    });
+  });
+
+  it('does not follow directory symlinks during recursive list or find', async () => {
+    const vaultRoot = await makeVault();
+    const outsideRoot = await mkdtemp(join(tmpdir(), 'fq-macro-shell-outside-'));
+    await import('node:fs/promises').then(({ mkdir }) =>
+      mkdir(join(outsideRoot, 'nested'), { recursive: true })
+    );
+    await writeFile(join(outsideRoot, 'nested', 'secret.md'), 'outside-secret\n');
+    await symlink(
+      dirname(join(outsideRoot, 'nested', 'secret.md')),
+      join(vaultRoot, 'outside-dir')
+    );
+
+    expect(resultOf((await run('exit ls -R "/"', vaultRoot)).payload)).not.toContain(
+      '/outside-dir/secret.md'
+    );
+    expect(resultOf((await run('exit find "/" --name "secret.md"', vaultRoot)).payload)).toEqual(
+      []
+    );
   });
 
   it('T-U-143 production macro source does not mutate process cwd', async () => {

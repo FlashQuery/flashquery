@@ -220,6 +220,21 @@ Test Files  16 passed (16)
   Duration  7.31s
 ```
 
+Review fix re-run:
+
+```bash
+npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-*.test.ts
+```
+
+**Exit status after review fixes:** 0
+**Final result after review fixes:** PASS
+
+```text
+Test Files  16 passed (16)
+     Tests  200 passed (200)
+  Duration  5.10s
+```
+
 #### Production Build
 
 ```bash
@@ -276,6 +291,37 @@ Test Files  109 passed (109)
      Tests  1661 passed (1661)
   Duration  23.51s
 ```
+
+Review fix re-run:
+
+```bash
+npm test
+```
+
+**Exit status after review fixes:** 0
+**Final result after review fixes:** PASS
+
+```text
+Test Files  109 passed (109)
+     Tests  1665 passed (1665)
+  Duration  18.50s
+```
+
+#### Code Review Fix Gate
+
+The advisory code review found two shell path boundary blockers. Both were fixed before phase verification:
+
+- Symlink escape prevention: direct shell path access now checks realpath containment, and recursive glob/list traversal does not follow symlinks.
+- Missing path behavior: `cat`, `grep`, and `ls -d` missing paths now return stable `path_not_found` errors instead of empty or fabricated successes.
+
+Focused verification:
+
+```bash
+npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-path-wrapper.test.ts tests/unit/macro-shell-verbs.test.ts
+npm run build
+```
+
+**Result:** PASS, 2 focused files / 25 tests and production build green.
 
 #### Phase 135 Scope Claim Check
 

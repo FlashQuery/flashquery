@@ -27,6 +27,7 @@ key-files:
 key-decisions:
   - "Classified macro parser T-U-061 and T-U-062 failures as Phase 134-related parser expectation drift from the Plan 04 runtime introspection change."
   - "Aligned parser tests with the Phase 134 introspection contract: ToolExistsCall includes method, and unsupported underscore methods parse for runtime rejection."
+  - "Resolved code-review blockers by adding realpath containment for shell reads and stable missing-path errors."
 
 patterns-established:
   - "Validation closeout summaries must distinguish focused green gates from broader failing regression gates."
@@ -39,15 +40,15 @@ completed: 2026-05-14
 
 # Phase 134 Plan 05: Validation Closeout Summary
 
-**Focused shell/vault/flag/introspection validation passed, and broader macro/build/unit gates are green after parser expectation alignment**
+**Focused shell/vault/flag/introspection validation passed, code-review blockers were fixed, and broader macro/build/unit gates are green**
 
 ## Performance
 
-- **Duration:** 3m14s plus parser expectation repair
+- **Duration:** 3m14s plus parser expectation and review-blocker repairs
 - **Started:** 2026-05-14T16:47:15Z
 - **Completed:** 2026-05-14T16:50:29Z
 - **Tasks:** 2
-- **Files modified:** 3
+- **Files modified:** 7
 
 ## Accomplishments
 
@@ -56,6 +57,7 @@ completed: 2026-05-14
 - Recorded the static cwd-retirement gate with no production matches for `sh.cd(`, `shelljs.cd(`, or `process.chdir(`.
 - Recorded macro regression, production build, and full unit suite results.
 - Updated parser tests T-U-061 and T-U-062 to match Phase 134's runtime introspection AST contract.
+- Fixed code-review blockers for symlink vault-jail bypass and missing shell paths.
 
 ## Task Commits
 
@@ -66,10 +68,16 @@ completed: 2026-05-14
 
 - `.planning/phases/134-shell-verbs-vault-jail-introspection/134-VALIDATION.md` - Final validation evidence for focused tests, ID presence, cwd scan, macro regression, build, and full unit suite.
 - `.planning/phases/134-shell-verbs-vault-jail-introspection/134-05-SUMMARY.md` - Plan closeout and validation outcome summary.
+- `.planning/phases/134-shell-verbs-vault-jail-introspection/134-REVIEW.md` - Advisory review with resolved blocker findings.
+- `src/macro/path-wrapper.ts` - Added realpath containment helper.
+- `src/macro/shell-verbs.ts` - Added shell path existence checks, realpath guards, and no-follow traversal.
+- `tests/unit/macro-path-wrapper.test.ts` - Added symlink escape coverage.
+- `tests/unit/macro-shell-verbs.test.ts` - Added missing-path and symlink traversal coverage.
 
 ## Decisions Made
 
 - Treated the two macro parser failures as Phase 134-related expectation drift and fixed them before verification.
+- Treated the two code-review blockers as phase-blocking security bugs and fixed them before verification.
 - Did not claim MACRO-DISP-01 through MACRO-DISP-07 or Phase 135 dispatch behavior.
 
 ## Verification
@@ -77,13 +85,14 @@ completed: 2026-05-14
 - `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-path-wrapper.test.ts tests/unit/macro-shell-verbs.test.ts tests/unit/macro-forbidden-flags.test.ts tests/unit/macro-introspection.test.ts` - PASS, 4 files / 33 tests.
 - T-U-126 through T-U-155 `rg` presence loop - PASS.
 - `! (rg -n "sh\.cd\(|shelljs\.cd\(|process\.chdir\(" src/macro | grep -v '^#')` - PASS, no output.
-- `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-*.test.ts` - PASS, 16 files / 196 tests after parser expectation repair.
+- `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-path-wrapper.test.ts tests/unit/macro-shell-verbs.test.ts` - PASS, 2 files / 25 tests after review fixes.
+- `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-*.test.ts` - PASS, 16 files / 200 tests after parser and review repairs.
 - `npm run build` - PASS.
-- `npm test` - PASS, 109 files / 1661 tests.
+- `npm test` - PASS, 109 files / 1665 tests.
 
 ## Deviations from Plan
 
-One deviation: the validation plan surfaced Phase 134-related parser expectation drift, so `tests/unit/macro-parser.test.ts` was updated before phase verification.
+Two deviations: the validation plan surfaced Phase 134-related parser expectation drift, and the advisory code review surfaced shell path boundary blockers. Both were fixed before phase verification.
 
 ## Issues Encountered
 
@@ -93,6 +102,11 @@ Resolved two related parser-test failures:
 - `tests/unit/macro-parser.test.ts > macro parser > T-U-062 rejects dotted server names and unsupported namespace methods`
 
 Both failures were related to Phase 134 Plan 04: parser expectations still reflected the old `_exists()` AST/runtime boundary, while Plan 04 added `method: "_exists"` and moved unsupported leading-underscore method handling to runtime.
+
+Resolved two code-review blockers:
+
+- Symlink vault-jail bypass through shell reads and recursive traversal.
+- Missing shell paths succeeding silently for `cat`, `grep`, and `ls -d`.
 
 ## User Setup Required
 
@@ -108,7 +122,7 @@ None - no new network endpoints, auth paths, file access paths, or schema trust 
 
 ## Next Phase Readiness
 
-Focused Phase 134 behavior is validated, macro regression is green, production build is green, and the full unit suite is green.
+Focused Phase 134 behavior is validated, review blockers are fixed, macro regression is green, production build is green, and the full unit suite is green.
 
 ## Self-Check: PASSED
 

@@ -4,6 +4,7 @@ import {
   resolve as pathResolve,
   sep,
 } from 'node:path';
+import { realpathSync } from 'node:fs';
 import { MacroExpectedError } from './evaluator.js';
 
 function normalizedVaultRoot(vaultRoot: string): string {
@@ -32,6 +33,14 @@ export function resolveMacroPath(macroPath: string, vaultRoot: string): string {
   const hostPath = pathResolve(normalizedRoot, pathInVault);
 
   return assertInsideVault(hostPath, normalizedRoot, macroPath);
+}
+
+export function assertRealPathInsideVault(
+  hostPath: string,
+  vaultRoot: string,
+  originalPath: string
+): string {
+  return assertInsideVault(realpathSync(hostPath), realpathSync(vaultRoot), originalPath);
 }
 
 export function toMacroPath(hostPath: string, vaultRoot: string): string {

@@ -1,5 +1,5 @@
 import { basename } from 'node:path';
-import { statSync } from 'node:fs';
+import { existsSync, lstatSync } from 'node:fs';
 import fastGlob from 'fast-glob';
 import shelljs from 'shelljs';
 import {
@@ -9,7 +9,7 @@ import {
   type MacroNamedArgs,
   type MacroValue,
 } from './evaluator.js';
-import { resolveMacroPath, toMacroPath } from './path-wrapper.js';
+import { assertRealPathInsideVault, resolveMacroPath, toMacroPath } from './path-wrapper.js';
 
 const sh = shelljs;
 sh.config.silent = true;
@@ -56,8 +56,11 @@ function findBuiltin(
 ): MacroValue {
   requireArgCount('find', positional, 1, 1);
   const vaultRoot = requireVaultRoot(context);
-  const root = resolveMacroPath(requireString(positional[0], 'find_path_type'), vaultRoot);
-  let results = sh.find(root).map((path) => String(path));
+  const macroRoot = requireString(positional[0], 'find_path_type');
+  const root = resolveMacroPath(macroRoot, vaultRoot);
+  requireExistingPath(root, macroRoot, 'find');
+  assertRealPathInsideVault(root, vaultRoot, macroRoot);
+  let results = [root, ...listHostPaths(root, true, true)];
   const namePattern = optionalString(named['name'], 'find_name_type');
   const type = optionalString(named['type'], 'find_type_type');
 
@@ -71,7 +74,10 @@ function findBuiltin(
         reason: 'find_type_value',
       });
     }
-    results = results.filter((path) => sh.test(type === 'f' ? '-f' : '-d', path));
+    results = results.filter((path) => {
+      const info = lstatSync(path);
+      return type === 'f' ? info.isFile() : info.isDirectory();
+    });
   }
 
   return results.map((path) => toMacroPath(path, vaultRoot)).sort();
@@ -144,6 +150,8 @@ function lsBuiltin(
   const vaultRoot = requireVaultRoot(context);
   const macroPath = requireString(positional[0], 'ls_path_type');
   const hostPath = resolveMacroPath(macroPath, vaultRoot);
+  requireExistingPath(hostPath, macroPath, 'ls');
+  assertRealPathInsideVault(hostPath, vaultRoot, macroPath);
 
   if (hasFlag(named, 'd')) {
     return [toMacroPath(hostPath, vaultRoot)];
@@ -154,7 +162,7 @@ function lsBuiltin(
   if (hasFlag(named, 'l')) {
     const paths = listHostPaths(hostPath, includeDot, recursive);
     return paths.map((entry) => {
-      const info = statSync(entry);
+      const info = lstatSync(entry);
       return {
         name: recursive ? toMacroPath(entry, vaultRoot) : basename(entry),
         size: info.size,
@@ -216,7 +224,9 @@ function expandPaths(
     const macroPath = requireString(pathValue, 'path_argument_type');
     if (hasGlob(macroPath)) {
       const hostPattern = resolveMacroPath(macroPath, vaultRoot);
-      const matches = fastGlob.sync(hostPattern, { dot: false, onlyFiles: true }).sort();
+      const matches = fastGlob
+        .sync(hostPattern, { dot: false, followSymbolicLinks: false, onlyFiles: true })
+        .sort();
       if (matches.length === 0) {
         throw new MacroRuntimeError('Shell glob matched no files.', undefined, {
           reason: 'glob_no_matches',
@@ -224,10 +234,14 @@ function expandPaths(
         });
       }
       for (const hostPath of matches) {
+        requireExistingPath(hostPath, macroPath, 'read');
+        assertRealPathInsideVault(hostPath, vaultRoot, macroPath);
         output.push({ hostPath, macroPath: toMacroPath(hostPath, vaultRoot) });
       }
     } else {
       const hostPath = resolveMacroPath(macroPath, vaultRoot);
+      requireExistingPath(hostPath, macroPath, 'read');
+      assertRealPathInsideVault(hostPath, vaultRoot, macroPath);
       output.push({ hostPath, macroPath: toMacroPath(hostPath, vaultRoot) });
     }
   }
@@ -235,10 +249,17 @@ function expandPaths(
 }
 
 function listHostPaths(hostPath: string, includeDot: boolean, recursive: boolean): string[] {
-  const globPattern = recursive
-    ? `${hostPath.replace(/\/$/, '')}/**/*`
-    : `${hostPath.replace(/\/$/, '')}/*`;
-  return fastGlob.sync(globPattern, { dot: includeDot, onlyFiles: false }).sort();
+  const globPattern = recursive ? '**/*' : '*';
+  return fastGlob
+    .sync(globPattern, {
+      absolute: true,
+      cwd: hostPath,
+      dot: includeDot,
+      followSymbolicLinks: false,
+      onlyFiles: false,
+    })
+    .map(String)
+    .sort();
 }
 
 function valueToLines(value: MacroValue): SourceLine[] {
@@ -323,6 +344,16 @@ function requireVaultRoot(context: MacroInvocationContext): string {
     });
   }
   return context.vaultRoot;
+}
+
+function requireExistingPath(hostPath: string, macroPath: string, builtin: string): void {
+  if (!existsSync(hostPath)) {
+    throw new MacroRuntimeError('Shell path does not exist.', undefined, {
+      reason: 'path_not_found',
+      path: macroPath,
+      builtin,
+    });
+  }
 }
 
 function requireArgCount(

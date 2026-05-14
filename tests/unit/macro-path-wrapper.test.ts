@@ -1,9 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve as pathResolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { MacroExpectedError } from '../../src/macro/evaluator.js';
-import { resolveMacroPath, toMacroPath } from '../../src/macro/path-wrapper.js';
+import {
+  assertRealPathInsideVault,
+  resolveMacroPath,
+  toMacroPath,
+} from '../../src/macro/path-wrapper.js';
 
 let testDir: string;
 let vaultRoot: string;
@@ -55,6 +59,18 @@ describe('resolveMacroPath', () => {
 
   it('T-U-139 rejects paths that normalize outside the vault root', () => {
     expectForbiddenPath(() => resolveMacroPath('../etc/passwd', vaultRoot), '../etc/passwd');
+  });
+
+  it('rejects symlink realpath escapes before shell filesystem access', () => {
+    mkdirSync(join(testDir, 'outside'), { recursive: true });
+    writeFileSync(join(testDir, 'outside', 'secret.md'), 'secret\n');
+    symlinkSync(join(testDir, 'outside', 'secret.md'), join(vaultRoot, 'Specs', 'secret-link.md'));
+    const hostPath = resolveMacroPath('/Specs/secret-link.md', vaultRoot);
+
+    expectForbiddenPath(
+      () => assertRealPathInsideVault(hostPath, vaultRoot, '/Specs/secret-link.md'),
+      '/Specs/secret-link.md'
+    );
   });
 
   it('rejects sibling-prefix escapes instead of trusting string prefixes', () => {
