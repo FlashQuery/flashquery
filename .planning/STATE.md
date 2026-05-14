@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
 status: executing
-stopped_at: Completed 133-03-PLAN.md
-last_updated: "2026-05-14T18:29:34.988Z"
+stopped_at: Completed 135-03-PLAN.md
+last_updated: "2026-05-14T18:38:07.840Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 23
-  completed_plans: 21
-  percent: 91
+  completed_plans: 22
+  percent: 96
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 135 (tool-registry-dispatch-permissions) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-14
 
@@ -112,6 +112,7 @@ Last activity: 2026-05-14
 | Phase 131 P05 | 10 min | 1 tasks | 3 files |
 | Phase 135 P01 | 7m19s | 3 tasks | 7 files |
 | Phase 135 P02 | 3m15s | 2 tasks | 3 files |
+| Phase 135 P03 | 4m29s | 2 tasks | 3 files |
 
 ## Decisions
 
@@ -193,6 +194,8 @@ Last activity: 2026-05-14
 - [Phase 135]: 135-01: Integration dispatch coverage uses createMcpServer with InMemoryTransport and existing .env.test/Supabase helpers rather than a mock dispatcher.
 - [Phase 135]: 135-02: Macro registry construction derives host permissions from resolveHostToolExposure and delegated permissions from assembleNativeToolRegistry.
 - [Phase 135]: 135-02: ToolFn is the common MacroValue-returning dispatch unit for native and brokered macro tools.
+- [Phase 135]: 135-03: Registry-backed expected errors halt macro execution through MacroExpectedError, while explicitly injected dispatchTool results retain existing branchable expected-envelope behavior.
+- [Phase 135]: 135-03: ToolExistsCall remains introspection-only and is excluded from collected dispatch references.
 
 ## Accumulated Context
 
@@ -306,8 +309,8 @@ Last activity: 2026-05-14
 
 ## Session Continuity
 
-Last session: 2026-05-14T18:29:34.966Z
-Stopped at: Completed 135-02-PLAN.md
+Last session: 2026-05-14T18:38:07.803Z
+Stopped at: Completed 135-03-PLAN.md
 Resume: None
 
 ## Deferred Items

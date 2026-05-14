@@ -161,7 +161,7 @@ Plans:
 
 **Requirements:** MACRO-DISP-01 through MACRO-DISP-07
 
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 **Wave 1**
@@ -171,7 +171,7 @@ Plans:
 - [x] 135-02-PLAN.md — Implement `ToolRegistry`, `buildToolRegistry`, and `dispatchMacroTool`.
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 135-03-PLAN.md — Implement static permission pre-scan, evaluator preflight wiring, and hard exclusions.
+- [x] 135-03-PLAN.md — Implement static permission pre-scan, evaluator preflight wiring, and hard exclusions.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 135-04-PLAN.md — Wire public `call_macro` caller context/native catalog dispatch and close validation.
