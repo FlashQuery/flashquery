@@ -48,16 +48,16 @@ describe('preScanToolReferences', () => {
   it('T-U-161 reports multiple forbidden references at once across nested if, for, while, expression and statement ToolCall nodes', () => {
     const result = preScanToolReferences({
       program: parseProgram(`
-        if true {
+        if true then
           found = fq.search({ query: "allowed" })
-          for item in [1, 2] {
+          for item in [1, 2] do
             fq.write_document({ path: "nested.md", content: "mutation" })
-          }
-        } else {
-          while false {
+          done
+        else
+          while false do
             archived = fq.archive_document({ identifier: "old.md" })
-          }
-        }
+          done
+        fi
       `),
       registry: makeRegistry(),
       allowlist: new Set(['fq.search']),
