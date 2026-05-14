@@ -132,7 +132,7 @@ Plans:
 
 **Requirements:** MACRO-SHELL-01 through MACRO-SHELL-05
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -146,7 +146,7 @@ Plans:
 - [x] 134-04-PLAN.md - Add `_exists()` namespace introspection through native and broker layers.
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 134-05-PLAN.md - Run and record full Phase 134 validation gates.
+- [x] 134-05-PLAN.md - Run and record full Phase 134 validation gates. (completed 2026-05-14)
 
 **Success criteria:**
 1. `grep`, `find`, `sed`, `cat`, `wc`, `head`, `tail`, and `ls` run against a hermetic vault root.
