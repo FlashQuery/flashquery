@@ -147,9 +147,9 @@ export interface UnaryExpr {
 }
 
 export interface MacroSourceBlock {
-  name?: string;
+  name: string | null;
   source: string;
-  startLine: number;
+  openingLine: number;
 }
 
 export type MacroParseResult = { ok: true; program: Program } | { ok: false; error: MacroParseErrorEnvelope };
