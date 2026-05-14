@@ -54,6 +54,15 @@ export function computeCost(
 // ─────────────────────────────────────────────────────────────────────────────
 
 const _pendingWrites = new Set<Promise<void>>();
+const _traceUsage = new Map<string, LlmUsageRecord[]>();
+
+function traceUsageKey(instanceId: string, traceId: string): string {
+  return `${instanceId}\u0000${traceId}`;
+}
+
+export function getRecordedTraceUsageSnapshot(instanceId: string, traceId: string): LlmUsageRecord[] {
+  return [...(_traceUsage.get(traceUsageKey(instanceId, traceId)) ?? [])];
+}
 
 /**
  * Fire-and-forget Supabase insert into the LLM usage tracking table.
@@ -65,6 +74,13 @@ const _pendingWrites = new Set<Promise<void>>();
  * All errors are caught internally (D-08) — this function NEVER throws.
  */
 export function recordLlmUsage(record: LlmUsageRecord): void {
+  if (record.traceId) {
+    const key = traceUsageKey(record.instanceId, record.traceId);
+    const records = _traceUsage.get(key) ?? [];
+    records.push(record);
+    _traceUsage.set(key, records.slice(-100));
+  }
+
   const p = (async () => {
     const supabase = supabaseManager.getClient();
     const { error } = await supabase.from('fqc_llm_usage').insert({

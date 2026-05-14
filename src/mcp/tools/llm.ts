@@ -26,7 +26,7 @@ import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmCompletionResult } from '../../llm/client.js';
 import { LlmFallbackError } from '../../llm/resolver.js';
-import { computeCost } from '../../llm/cost-tracker.js';
+import { computeCost, getRecordedTraceUsageSnapshot } from '../../llm/cost-tracker.js';
 import { executeAgentLoop } from '../../llm/agent-loop.js';
 import { assertResponseFormatAllowedWithTools, modelCapabilitiesWithDefaults } from '../../llm/capabilities.js';
 import { buildListModelsContent, buildListPurposesContent, buildSearchContent } from '../../llm/discovery-content.js';
@@ -638,11 +638,18 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       type TraceRow = { input_tokens: number | null; output_tokens: number | null; cost_usd: number | null; latency_ms: number | null };
       let tracePreSnapshot: TraceRow[] | null = null;
       if (params.trace_id) {
+        const inMemoryTraceRows = getRecordedTraceUsageSnapshot(config.instance.id, params.trace_id).map((record) => ({
+          input_tokens: record.inputTokens,
+          output_tokens: record.outputTokens,
+          cost_usd: record.costUsd,
+          latency_ms: record.latencyMs,
+        }));
         let supabase: ReturnType<typeof supabaseManager.getClient> | null = null;
         try {
           supabase = supabaseManager.getClient();
         } catch {
-          logger.warn('trace pre-snapshot skipped: Supabase not configured; trace_cumulative will be omitted');
+          tracePreSnapshot = inMemoryTraceRows;
+          logger.warn('trace pre-snapshot skipped: Supabase not configured; using in-memory trace snapshot');
         }
         if (supabase) {
           try {
@@ -651,10 +658,12 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
               .select('input_tokens, output_tokens, cost_usd, latency_ms')
               .eq('instance_id', config.instance.id)
               .eq('trace_id', params.trace_id);
-            tracePreSnapshot = data ?? [];
+            const dbRows = data ?? [];
+            tracePreSnapshot = dbRows.length >= inMemoryTraceRows.length ? dbRows : inMemoryTraceRows;
           } catch (err: unknown) {
+            tracePreSnapshot = inMemoryTraceRows;
             logger.warn(
-              `trace pre-snapshot query failed; trace_cumulative will be omitted: ${err instanceof Error ? err.message : String(err)}`
+              `trace pre-snapshot query failed; using in-memory trace snapshot: ${err instanceof Error ? err.message : String(err)}`
             );
           }
         }
