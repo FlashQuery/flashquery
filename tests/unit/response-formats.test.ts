@@ -136,7 +136,7 @@ describe('macro response helpers', () => {
     expect(code).toBe('forbidden_tools');
   });
 
-  it('supports flat trace steps without children', () => {
+  it('supports the flat trace step shape', () => {
     const step: TraceStep = {
       kind: 'tool_call',
       name: 'fq.search',
@@ -154,7 +154,7 @@ describe('macro response helpers', () => {
       at: '2026-05-14T00:00:00.000Z',
       elapsed_ms: 12,
     });
-    expect(Object.hasOwn(step, 'children')).toBe(false);
+    expect(Object.keys(step)).toEqual(['kind', 'name', 'args', 'result', 'at', 'elapsed_ms']);
   });
 
   it('wraps MacroExecutionResult payloads in a JSON ToolResult envelope', () => {

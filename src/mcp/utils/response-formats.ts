@@ -23,7 +23,23 @@ export const CANONICAL_ERROR_CODES = [
   'not_supported_in_mode',
 ] as const;
 
+export const MACRO_ERROR_CODES = [
+  'macro_aborted',
+  'forbidden_tools',
+  'unknown_server',
+  'unknown_tool',
+  'forbidden_path',
+  'forbidden_shell_flag',
+  'template_masquerade_tools_not_callable_from_macro',
+  'budget_exceeded',
+  'timeout',
+  'tool_call_failed',
+  'cancelled',
+  'parse_error',
+] as const;
+
 export type CanonicalErrorCode = (typeof CANONICAL_ERROR_CODES)[number];
+export type MacroErrorCode = (typeof MACRO_ERROR_CODES)[number];
 export type WarningCode = string;
 
 export interface ErrorEnvelope {
@@ -108,8 +124,43 @@ export interface LlmCallIdentificationInput {
   provider_name: string;
 }
 
+export interface TraceStep {
+  kind: 'tool_call' | 'model_call' | 'log' | 'progress' | 'fail' | 'exit';
+  name?: string;
+  args?: unknown;
+  result?: unknown;
+  message?: string;
+  at: string;
+  elapsed_ms?: number;
+}
+
+export interface MacroExecutionResult {
+  task_id: string;
+  result: unknown;
+  trace?: TraceStep[];
+  token_total?: number;
+  model_calls?: number;
+  external_tool_calls?: number;
+  warnings?: WarningCode[];
+}
+
+export interface MacroDryRunResult {
+  task_id: string;
+  parsed_ok: true;
+  input_var_contract: { required: string[]; optional: { key: string; default: unknown }[] };
+  tool_references: string[];
+  server_references: string[];
+  warnings?: WarningCode[];
+}
+
+export type MacroSuccessPayload = MacroExecutionResult | MacroDryRunResult;
+
 export function jsonToolResult(payload: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(payload) }] };
+}
+
+export function macroResult(payload: MacroSuccessPayload): ToolResult {
+  return jsonToolResult(payload);
 }
 
 export function jsonExpectedError(error: ErrorEnvelope): ToolResult {
