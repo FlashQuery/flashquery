@@ -1,0 +1,39 @@
+# insert_doc_link parity macro — the canonical case driving v0's `unique`
+# builtin, object literals, and frontmatter-array semantics.
+#
+# Per the MCP Tool Consolidation doc (§4.17), `insert_doc_link` is a
+# transitional legacy tool flagged for removal once `call_macro` ships with
+# parity. That parity case is exactly this macro: take a source doc, take a
+# target doc reference, append the target to the source's `related_to`
+# frontmatter array (de-duplicated), and write it back.
+#
+# Demonstrates:
+#   - reading frontmatter via `include`
+#   - appending to a list, then de-duplicating with `unique`
+#   - constructing a frontmatter object literal with a $var reference
+#   - writing the result back via `fq.write_document` in update mode
+
+source_id = "doc_a"
+target_id = "doc_c"
+
+# Read the source document's frontmatter to get the current `related_to` list.
+source_doc = fq.get_document({ identifiers: $source_id, include: ["frontmatter"] })
+
+# Get the target document so we have its fq_id to link to.
+target = fq.get_document({ identifiers: $target_id })
+
+# Append the new link and de-dup. (`append` returns a new list; `unique`
+# de-duplicates by stringified value, preserving first-occurrence order.)
+existing = $source_doc.frontmatter.related_to
+with_new = append $existing $target.fq_id
+links = unique $with_new
+
+# Write the modified frontmatter back. The frontmatter object is passed as
+# a JSON-shaped argument to `fq.write_document` in update mode.
+fq.write_document({
+  mode: "update",
+  identifier: $source_id,
+  frontmatter: { related_to: $links }
+})
+
+echo "linked $source_id -> $target_id; related_to is now:" $links

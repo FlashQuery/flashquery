@@ -199,9 +199,16 @@ class TokenStreamParser {
     return {
       kind: 'Binding',
       name: name.image,
-      value: this.parseExpression(),
+      value: this.parseRhsExpression(),
       line: name.startLine ?? 1,
     };
+  }
+
+  private parseRhsExpression(): Expr {
+    if (this.matches(Identifier) && !this.looksLikeToolCall()) {
+      return this.parseCallOrPipeline();
+    }
+    return this.parseExpression();
   }
 
   private parseForLoop(): ForLoop {
@@ -343,6 +350,19 @@ class TokenStreamParser {
 
   private parsePipeline(): Pipeline {
     const first = this.parseCall();
+    const stages = [first];
+    while (this.matches(Pipe)) {
+      this.advance();
+      stages.push(this.parseCall());
+    }
+    return { kind: 'Pipeline', stages, line: first.line };
+  }
+
+  private parseCallOrPipeline(): Call | Pipeline {
+    const first = this.parseCall();
+    if (!this.matches(Pipe)) {
+      return first;
+    }
     const stages = [first];
     while (this.matches(Pipe)) {
       this.advance();
@@ -505,7 +525,7 @@ class TokenStreamParser {
     ) {
       return false;
     }
-    return this.canStartExpression();
+    return this.canStartExpression() || this.matches(LongFlag) || this.matches(ShortFlag);
   }
 
   private canStartExpression(): boolean {

@@ -1,0 +1,71 @@
+# Research pattern — the canonical motivating use case for call_macro.
+#
+# Scenario: a delegated "researcher" model has been given a task by the host
+# ("research the FlashQuery macro language and summarize"). The researcher's
+# purpose grants it access to brokered web tools (brave_search, web_fetch)
+# alongside FlashQuery tools.
+#
+# Inside its agentic loop, the researcher recognizes "I need to grab N
+# search results and fetch the top hits." Rather than making each operation
+# a separate MCP round-trip back to the orchestrator, it emits THIS macro
+# to do the batch-fetch phase in one shot. The macro returns the collected
+# pages as a structured list; the researcher then synthesizes from that
+# data in its next agentic-loop turn.
+#
+# Demonstrates:
+#   - Namespaced tool calls into brokered MCP servers (brave_search.*, web_fetch.*)
+#     alongside FlashQuery tools (fq.*) — uniform dispatch shape
+#   - The batch-fetch pattern: search, fan out fetches across hits, collect
+#     results — exactly what saves round-trips vs. the one-tool-per-call
+#     baseline
+#   - Object literals with $var references to construct structured records
+#   - status/progress emissions for live observability of the fetch phase
+#
+# Important constraint reflected here: this macro is the *batch fetcher*, not
+# the *synthesizer*. Per the §3 R9 hard exclusion, delegated-model-emitted
+# macros cannot include `fq.call_model` — synthesis happens at the
+# agentic-loop level after this macro returns, not inside the macro. That
+# separation is a feature, not a limitation.
+
+status "researcher: starting batch fetch phase"
+
+# Guard: bail with a clear error if the brokered server isn't connected.
+# `server._exists()` is an engine-resolved introspection method — it answers
+# whether the broker entry is registered and (in production) reachable.
+# `!` negates the result; `fail` aborts the macro with a canonical error.
+if ! brave_search._exists() then
+  fail "Brave Search broker is not connected — cannot perform research."
+fi
+if ! web_fetch._exists() then
+  fail "Web fetch broker is not connected — cannot retrieve page content."
+fi
+
+hits = brave_search.web_search({ query: "FlashQuery macro language", count: 3 })
+
+i = 0
+pages = []
+for h in $hits do
+  i = add $i 1
+  status --progress $i --total 3 "fetching $h.url"
+
+  page = web_fetch.fetch({ url: $h.url })
+  pages = append $pages {
+    url: $h.url,
+    title: $h.title,
+    description: $h.description,
+    content: $page.content
+  }
+done
+
+status --progress 3 --total 3 "batch fetch complete; returning collected pages"
+
+# In the production engine, the last expression's value is the macro's
+# return value (the structured list of pages). The delegated researcher
+# would receive this in its agentic loop and synthesize a summary.
+#
+# The prototype doesn't yet plumb return values out of the runner, so we
+# echo a summary for now to confirm end-to-end execution.
+echo "collected $i pages:"
+for p in $pages do
+  echo "  - $p.title ($p.url)"
+done

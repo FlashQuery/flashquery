@@ -1,3 +1,5 @@
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseMacroSource } from '../../src/macro/parser.js';
 import type {
@@ -175,5 +177,19 @@ describe('macro parser', () => {
     const [pipeline] = parse('echo "x" | count').statements as Pipeline[];
     expect(pipeline.kind).toBe('Pipeline');
     expect(pipeline.stages).toHaveLength(2);
+  });
+
+  it('parses all 17 migrated POC examples from tests/fixtures/macro/examples', () => {
+    const fixtureDir = join(process.cwd(), 'tests/fixtures/macro/examples');
+    const files = readdirSync(fixtureDir)
+      .filter((file) => file.endsWith('.fqm'))
+      .sort();
+
+    expect(files).toHaveLength(17);
+    for (const file of files) {
+      const source = readFileSync(join(fixtureDir, file), 'utf8');
+      const result = parseMacroSource(source, file);
+      expect(result.ok, `${file}: ${JSON.stringify(result)}`).toBe(true);
+    }
   });
 });

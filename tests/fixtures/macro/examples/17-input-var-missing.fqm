@@ -1,0 +1,52 @@
+# Negative test: pre-flight check rejects a call with missing required inputs.
+#
+# Per OQ #23 (resolved 2026-05-12), the macro engine pre-flight-validates
+# `input_vars` against the macro's declared input contract BEFORE any
+# statement executes. If one or more required inputs are missing, the
+# engine fails with the canonical `invalid_input` envelope listing ALL
+# missing keys at once — not just the first.
+#
+# How to see the rejection:
+#   Run with no inputs (every required key missing):
+#     npm run script -- examples/17-input-var-missing.fqm
+#
+#   Run with partial inputs (one required key missing):
+#     npm run script -- examples/17-input-var-missing.fqm \
+#       --input-vars '{"topic":"AI"}'
+#
+#   Run with all inputs supplied (success path):
+#     npm run script -- examples/17-input-var-missing.fqm \
+#       --input-vars '{"topic":"AI","output_path":"Notes/ai.md"}'
+#
+# Demonstrates:
+#   - Required `input_var` declarations (the contract)
+#   - Optional `input_var` with a `--default` (does NOT count toward
+#     missing-input failures, even if absent)
+#   - The pre-flight envelope shape: required_inputs, optional_inputs,
+#     provided_inputs, missing_inputs
+#   - The macro body NEVER RUNS when pre-flight fails — there are no
+#     side effects from a half-executed macro.
+
+# --- Required inputs (both must be supplied) ---
+topic = input_var "topic"
+output_path = input_var "output_path"
+
+# --- Optional input (does not affect pre-flight result) ---
+notes_prefix = input_var "notes_prefix" --default "Auto-generated notes about"
+
+# --- Body (only runs if pre-flight passed) ---
+
+echo "topic: $topic"
+echo "output_path: $output_path"
+
+saved = fq.write_document({
+  mode: "create",
+  path: $output_path,
+  title: $topic,
+  content: "$notes_prefix $topic"
+})
+
+exit {
+  summary: "saved notes for '$topic'",
+  file: $saved
+}
