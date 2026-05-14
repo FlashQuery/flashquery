@@ -86,6 +86,14 @@ Plans:
 
 **Requirements:** MACRO-EVAL-01 through MACRO-EVAL-08
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 132-01-PLAN.md - Add evaluator contracts, invocation context, walk-up scope, and iterator-local loop coverage.
+- [ ] 132-02-PLAN.md - Implement expression semantics for truthiness, interpolation, field access, and RHS evaluation order.
+- [ ] 132-03-PLAN.md - Implement termination contracts and ToolResult envelope mapping.
+- [ ] 132-04-PLAN.md - Prove per-invocation isolation and cancellation safe-point hooks.
+
 **Success criteria:**
 1. Walk-up assignment and loop-local iterator scoping match the POC and spec.
 2. Truthiness, comparisons, boolean short-circuiting, interpolation, and field access are deterministic.
