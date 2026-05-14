@@ -1,0 +1,49 @@
+name: macro_permission_failure_zero_side_effects
+description: >
+  Phase 135 macro permission prescan scenario: call_macro must reject a known
+  but host-disallowed mutating tool before dispatching any macro tool call, and
+  the blocked create target must remain absent.
+coverage:
+  - IS-12
+
+extra_config:
+  host_mcp_tools:
+    tools:
+      - call_macro
+      - search
+      - get_document
+
+steps:
+  - label: "call_macro rejects forbidden write before any dispatch"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          found = fq.search({
+            query: "Macro Permission Prescan ${run.id}",
+            mode: "filesystem",
+            entity_types: ["documents"],
+            limit: 5
+          })
+          fq.write_document({
+            mode: "create",
+            path: "macro/permission-prescan-blocked-${run.id}.md",
+            title: "Blocked Permission Prescan ${run.id}",
+            content: "This document should never be written."
+          })
+          exit { found: $found }
+      expect_json_equals:
+        path: error
+        value: forbidden_tools
+      expect_json_contains:
+        path: details.forbidden
+        value: fq.write_document
+
+  - label: "Blocked write target remains absent after forbidden macro"
+    assert:
+      op: get_document
+      args:
+        identifiers: "macro/permission-prescan-blocked-${run.id}.md"
+      expect_json_equals:
+        path: error
+        value: not_found
