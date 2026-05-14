@@ -465,22 +465,22 @@ This satisfies Phase 130 while preserving future dispatch compatibility. [VERIFI
 | A2 | Later dispatch would need adapters if broker handler types drift from `NativeToolHandler`. | Common Pitfalls | Broker shim might require rework in Phase 135. |
 | A3 | Vitest may omit a new integration file unless included explicitly. | Common Pitfalls | Integration coverage could silently not run. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Scaffold input schema breadth**
+1. **RESOLVED: Scaffold input schema breadth**
    - What we know: Phase 130 context says full request schema validation is deferred to Phase 138. [VERIFIED: .planning/phases/130-foundation-metadata-broker-shim-archive-lock/130-CONTEXT.md]
    - What's unclear: The canonical requirements Phase 1 text proposes registering the canonical request schema in the foundation phase. [CITED: FlashQuery Macro Language Requirements.md §8 Phase 1]
-   - Recommendation: Plan a permissive safe scaffold schema such as `z.object({}).passthrough()` unless the user explicitly revises Phase 130 scope. [ASSUMED]
+   - Resolution: Phase 130 plans use a Zod-backed scaffold shape that accepts the future top-level fields but returns `unsupported` without source validation or execution. Full source validation remains Phase 138 scope. [RESOLVED: 130-01-PLAN.md]
 
-2. **Scaffold error code**
+2. **RESOLVED: Scaffold error code**
    - What we know: `unsupported` is canonical; `not_implemented` is not currently listed. [VERIFIED: src/mcp/utils/response-formats.ts; CITED: FlashQuery Macro Language Requirements.md §6.8.3]
    - What's unclear: The Phase 130 context allows unsupported or not-implemented semantics. [VERIFIED: .planning/phases/130-foundation-metadata-broker-shim-archive-lock/130-CONTEXT.md]
-   - Recommendation: Use `jsonExpectedError({ error: "unsupported", details: { reason: "macro_engine_not_implemented" } })`. [ASSUMED]
+   - Resolution: Phase 130 plans require `jsonExpectedError({ error: "unsupported", details: { reason: "phase_130_scaffold" } })`. [RESOLVED: 130-01-PLAN.md]
 
-3. **Integration serialization feasibility**
+3. **RESOLVED: Integration serialization feasibility**
    - What we know: `.env.test` exists and integration config is sequential. [VERIFIED: shell probe, tests/config/vitest.integration.config.ts]
    - What's unclear: A deterministic concurrent `archive_document` + `remove_document` test may be hard without controlling lock timing. [ASSUMED]
-   - Recommendation: Plan unit tests for lock calls and timeout, plus either a real integration serialization test or a documented simpler lock-table assertion if timing proves brittle. [ASSUMED]
+   - Resolution: Phase 130 plans require deterministic lock serialization coverage through a held-lock proxy for the `archive_document` + `remove_document` threat; if direct timing is infeasible, the implementation summary must document the proxy rationale. [RESOLVED: 130-02-PLAN.md]
 
 ## Environment Availability
 

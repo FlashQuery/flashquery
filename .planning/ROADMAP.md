@@ -48,6 +48,9 @@ Plans:
 - [ ] 130-01-PLAN.md — Add macro response contracts, call_macro metadata/scaffold, and NullMcpBroker.
 - [ ] 130-02-PLAN.md — Add archive_document write locking and focused lock coverage.
 
+**Cross-cutting constraints:**
+- Implementation agents read the canonical Macro Language requirements and test plan before editing Phase 130 files per D-01.
+
 **Success criteria:**
 1. `response-formats.ts` exports macro result/type helpers without changing existing helpers.
 2. `call_macro` appears in tool metadata and the MCP server registrar with safe stub behavior.
