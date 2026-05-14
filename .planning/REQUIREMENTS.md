@@ -14,22 +14,22 @@
 - [ ] **MACRO-SRC-02**: `call_macro` validates exactly one non-empty macro source and returns canonical `invalid_input` details for invalid combinations.
 - [ ] **MACRO-SRC-03**: `source_ref` resolves through the same document resolver used by FlashQuery document reads.
 - [ ] **MACRO-SRC-04**: Archived macro-library documents resolve as `not_found` for `source_ref`.
-- [ ] **MACRO-SRC-05**: Macro library docs support `fqm name=<identifier>` fenced blocks with structured parse failures for malformed attributes.
-- [ ] **MACRO-SRC-06**: `source_ref::name` selects named macro blocks and returns the full named-block error matrix.
+- [x] **MACRO-SRC-05**: Macro library docs support `fqm name=<identifier>` fenced blocks with structured parse failures for malformed attributes.
+- [x] **MACRO-SRC-06**: `source_ref::name` selects named macro blocks and returns the full named-block error matrix.
 - [ ] **MACRO-SRC-07**: `input_var` declarations are collected before execution and missing required inputs are reported together.
 - [ ] **MACRO-SRC-08**: `input_vars` support the v0 value domain, including `null` and default-literal semantics.
 
 ### Lexer And Parser
 
 - [x] **MACRO-PARSE-01**: The lexer reserves the v0 keyword set and avoids prefix-token misclassification.
-- [ ] **MACRO-PARSE-02**: Assignments to builtin names are rejected before execution.
+- [x] **MACRO-PARSE-02**: Assignments to builtin names are rejected before execution.
 - [x] **MACRO-PARSE-03**: Numeric, string, list, object, `null`, and comment grammar matches the v0 spec.
-- [ ] **MACRO-PARSE-04**: Comparison operators parse and evaluate according to v0 semantics.
-- [ ] **MACRO-PARSE-05**: Boolean combinators parse with short-circuit semantics.
-- [ ] **MACRO-PARSE-06**: The `..` range operator and `range` builtin are parsed and represented correctly.
-- [ ] **MACRO-PARSE-07**: `while $cond do ... done` parses and executes.
-- [ ] **MACRO-PARSE-08**: `for X in $list do ... done` requires `do`.
-- [ ] **MACRO-PARSE-09**: Namespaced JSON-arg tool calls parse as statement and expression forms.
+- [x] **MACRO-PARSE-04**: Comparison operators parse and evaluate according to v0 semantics.
+- [x] **MACRO-PARSE-05**: Boolean combinators parse with short-circuit semantics.
+- [x] **MACRO-PARSE-06**: The `..` range operator and `range` builtin are parsed and represented correctly.
+- [x] **MACRO-PARSE-07**: `while $cond do ... done` parses and executes.
+- [x] **MACRO-PARSE-08**: `for X in $list do ... done` requires `do`.
+- [x] **MACRO-PARSE-09**: Namespaced JSON-arg tool calls parse as statement and expression forms.
 - [x] **MACRO-PARSE-10**: Parse failures return structured `parse_error` envelopes with stable reasons, line numbers, and near tokens.
 
 ### Evaluator Semantics

@@ -64,12 +64,12 @@ Plans:
 
 **Requirements:** MACRO-SRC-05, MACRO-SRC-06, MACRO-PARSE-01 through MACRO-PARSE-10
 
-**Plans:** 1/5 plans executed
+**Plans:** 3/5 plans executed
 
 Plans:
 - [x] 131-01-PLAN.md — Add Chevrotain, parser contracts, errors, and v0 lexer coverage.
-- [ ] 131-02-PLAN.md — Implement fqm fence extraction and source_ref named-block selection.
-- [ ] 131-03-PLAN.md — Implement parser grammar, AST conversion, and parse-error classification.
+- [x] 131-02-PLAN.md — Implement fqm fence extraction and source_ref named-block selection.
+- [x] 131-03-PLAN.md — Implement parser grammar, AST conversion, and parse-error classification.
 - [ ] 131-04-PLAN.md — Parse all migrated POC examples as final-v0 fixtures.
 - [ ] 131-05-PLAN.md — Expose inline parse_error at the call_macro boundary with integration coverage.
 

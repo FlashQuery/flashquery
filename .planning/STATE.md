@@ -4,14 +4,14 @@ milestone: v3.4
 milestone_name: macro-support
 status: executing
 stopped_at: Completed 130-02-PLAN.md
-last_updated: "2026-05-14T11:26:36.421Z"
+last_updated: "2026-05-14T11:36:12.014Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 7
-  completed_plans: 3
-  percent: 43
+  completed_plans: 5
+  percent: 71
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 131 (lexer-parser-fence-extraction) — EXECUTING
-Plan: 2 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-05-14
 
@@ -103,6 +103,8 @@ Last activity: 2026-05-14
 | Phase 130 P02 | 4m32s | 2 tasks | 4 files |
 | Phase 130 P01 | 8m04s | 3 tasks | 9 files |
 | Phase 131 P01 | 20 min | 2 tasks | 6 files |
+| Phase 131 P02 | 18 min | 2 tasks | 5 files |
+| Phase 131 P03 | 24 min | 3 tasks | 3 files |
 
 ## Decisions
 
