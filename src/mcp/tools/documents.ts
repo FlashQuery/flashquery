@@ -843,6 +843,22 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         };
       }
 
+      if (config.locking.enabled) {
+        const locked = await acquireLock(
+          supabaseManager.getClient(),
+          config.instance.id,
+          'documents',
+          { ttlSeconds: config.locking.ttlSeconds }
+        );
+        if (!locked) {
+          return jsonExpectedError({
+            error: 'conflict',
+            message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
+            details: { reason: 'lock_contention' },
+          });
+        }
+      }
+
       try {
         const supabase = supabaseManager.getClient();
         const isBatch = Array.isArray(identifiers);
@@ -995,6 +1011,10 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`archive_document failed - ${msg}`);
         return jsonRuntimeError(msg);
+      } finally {
+        if (config.locking.enabled) {
+          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
+        }
       }
     }
   );
