@@ -920,45 +920,59 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
             // Write archived status to vault (VAULT-FIRST)
             const archivedTitle = archivedFm[FM.TITLE];
-            await vaultManager.writeMarkdown(
-              relativePath,
-              archivedFm,
-              parsed.content,
-              { gitAction: 'update', gitTitle: typeof archivedTitle === 'string' ? archivedTitle : relativePath }
-            );
-
-            // Step 3: Update Supabase fqc_documents
             const fqcId = resolved.fqcId ?? preScan.capturedFrontmatter.fqcId;
             const updatedAt = new Date().toISOString();
-            if (fqcId) {
-              const { data, error } = await supabase
-                .from('fqc_documents')
-                .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
-                .eq('id', fqcId)
-                .eq('instance_id', config.instance.id)
-                .select('id')
-                .maybeSingle();
-              if (error) {
-                throw new Error(`Supabase archive update failed for ${relativePath}: ${error.message}`);
+            let archivedFileWritten = false;
+            try {
+              await vaultManager.writeMarkdown(
+                relativePath,
+                archivedFm,
+                parsed.content,
+                { gitAction: 'update', gitTitle: typeof archivedTitle === 'string' ? archivedTitle : relativePath }
+              );
+              archivedFileWritten = true;
+
+              // Step 3: Update Supabase fqc_documents
+              if (fqcId) {
+                const { data, error } = await supabase
+                  .from('fqc_documents')
+                  .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
+                  .eq('id', fqcId)
+                  .eq('instance_id', config.instance.id)
+                  .select('id')
+                  .maybeSingle();
+                if (error) {
+                  throw new Error(`Supabase archive update failed for ${relativePath}: ${error.message}`);
+                }
+                if (!data) {
+                  throw new Error(`Supabase archive update affected no document row for ${relativePath}`);
+                }
+              } else {
+                // Fallback: update by path if no fqcId available
+                const { data, error } = await supabase
+                  .from('fqc_documents')
+                  .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
+                  .eq('path', relativePath)
+                  .eq('instance_id', config.instance.id)
+                  .select('id')
+                  .maybeSingle();
+                if (error) {
+                  throw new Error(`Supabase archive update failed for ${relativePath}: ${error.message}`);
+                }
+                if (!data) {
+                  throw new Error(`Supabase archive update affected no document row for ${relativePath}`);
+                }
               }
-              if (!data) {
-                throw new Error(`Supabase archive update affected no document row for ${relativePath}`);
+            } catch (archiveErr) {
+              if (archivedFileWritten) {
+                try {
+                  await vaultManager.writeMarkdown(relativePath, parsed.data, parsed.content);
+                } catch (rollbackErr) {
+                  const rollbackMsg = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+                  logger.error(`archive_document rollback failed for ${relativePath}: ${rollbackMsg}`);
+                }
               }
-            } else {
-              // Fallback: update by path if no fqcId available
-              const { data, error } = await supabase
-                .from('fqc_documents')
-                .update({ status: 'archived', archived_at: archivedAt, updated_at: updatedAt })
-                .eq('path', relativePath)
-                .eq('instance_id', config.instance.id)
-                .select('id')
-                .maybeSingle();
-              if (error) {
-                throw new Error(`Supabase archive update failed for ${relativePath}: ${error.message}`);
-              }
-              if (!data) {
-                throw new Error(`Supabase archive update affected no document row for ${relativePath}`);
-              }
+              throw archiveErr;
             }
 
             const archivedStats = await stat(join(config.instance.vault.path, relativePath));
@@ -1006,7 +1020,13 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           }
         }
 
-        return jsonToolResult(isBatch ? results : results[0]);
+        if (isBatch) {
+          return jsonToolResult(results);
+        }
+        if (results[0] && typeof results[0].error === 'string') {
+          return jsonExpectedError(results[0] as ErrorEnvelope);
+        }
+        return jsonToolResult(results[0]);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`archive_document failed - ${msg}`);

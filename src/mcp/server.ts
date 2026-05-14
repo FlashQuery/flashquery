@@ -122,33 +122,51 @@ export function createGlobalErrorHandler() {
 }
 
 /**
- * Wraps a McpServer's .tool() method so every registered tool handler runs inside
+ * Wraps a McpServer's .tool() and .registerTool() methods so every registered
+ * tool handler runs inside
  * an AsyncLocalStorage context with a unique correlation ID. This enables all log
  * messages from a single MCP request — including fire-and-forget operations — to
  * share the same REQ:uuid identifier for grep-based troubleshooting.
  *
- * Approach: monkey-patch server.tool() before any tool registrations occur.
+ * Approach: monkey-patch registration methods before any tool registrations occur.
  * This is more portable than wrapping individual handlers in each tool file.
  */
 function wrapServerWithCorrelationIds(server: McpServer): McpServer {
+  type ToolHandler = (...handlerArgs: unknown[]) => unknown;
+  const wrapHandler = (originalHandler: unknown): unknown => {
+    if (typeof originalHandler !== 'function') {
+      return originalHandler;
+    }
+
+    const handler = originalHandler as ToolHandler;
+    return async (...handlerArgs: unknown[]): Promise<unknown> => {
+      const correlationId = generateCorrelationId();
+      return await initializeContext(correlationId, async () =>
+        await Promise.resolve(handler(...handlerArgs))
+      );
+    };
+  };
+
   const originalTool = server.tool.bind(server);
   // Override tool() to wrap the last argument (the handler) with initializeContext
   // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
   (server as any).tool = (...args: any[]) => {
     const lastIdx = args.length - 1;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const originalHandler = args[lastIdx];
-    if (typeof originalHandler === 'function') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      args[lastIdx] = async (params: any) => {
-        const correlationId = generateCorrelationId();
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return
-        return await initializeContext(correlationId, () => originalHandler(params));
-      };
-    }
+    args[lastIdx] = wrapHandler(args[lastIdx]);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     return (originalTool as (...a: unknown[]) => unknown)(...args);
   };
+
+  const originalRegisterTool = server.registerTool.bind(server);
+  // registerTool() is the SDK path used by the current tool modules.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+  (server as any).registerTool = (...args: any[]) => {
+    const lastIdx = args.length - 1;
+    args[lastIdx] = wrapHandler(args[lastIdx]);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    return (originalRegisterTool as (...a: unknown[]) => unknown)(...args);
+  };
+
   return server;
 }
 
