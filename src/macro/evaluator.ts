@@ -518,7 +518,7 @@ async function evalCall(
   const { positional, named } = await evalCallArgs(call.args, env, context);
 
   if (call.name === 'exit') {
-    if (positional.length > 1) {
+    if (Object.keys(named).length > 0 || positional.length > 1) {
       throw new MacroExpectedError('invalid_input', 'exit accepts at most one argument.', {
         reason: 'exit_argument_count',
         line: call.line,
@@ -528,7 +528,11 @@ async function evalCall(
   }
 
   if (call.name === 'fail') {
-    if (positional.length > 1 || (positional.length === 1 && typeof positional[0] !== 'string')) {
+    if (
+      Object.keys(named).length > 0 ||
+      positional.length > 1 ||
+      (positional.length === 1 && typeof positional[0] !== 'string')
+    ) {
       throw new MacroExpectedError('invalid_input', 'fail accepts zero or one string argument.', {
         reason: 'fail_argument_shape',
         line: call.line,

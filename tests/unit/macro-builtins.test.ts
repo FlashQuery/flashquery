@@ -131,8 +131,10 @@ describe('macro standard library async utility builtins', () => {
   it('L-133-SLEEP-002 sleep rejects invalid duration values', async () => {
     const negative = await run('exit sleep -1');
     const wrongType = await run('exit sleep "x"');
+    const extra = await run('exit sleep 0 1');
     expect(negative.payload).toMatchObject({ details: { reason: 'sleep_duration_negative' } });
     expect(wrongType.payload).toMatchObject({ details: { reason: 'sleep_argument_type' } });
+    expect(extra.payload).toMatchObject({ details: { reason: 'sleep_argument_count' } });
   });
 
   it('L-133-SLOWOP-001 slow_op 0 "label" returns completion metadata', async () => {
@@ -143,8 +145,10 @@ describe('macro standard library async utility builtins', () => {
   it('L-133-SLOWOP-002 slow_op rejects invalid duration and label values', async () => {
     const invalidDuration = await run('exit slow_op "x" "label"');
     const invalidLabel = await run('exit slow_op 0 1');
+    const extra = await run('exit slow_op 0 "label" "extra"');
     expect(invalidDuration.payload).toMatchObject({ details: { reason: 'slow_op_argument_type' } });
     expect(invalidLabel.payload).toMatchObject({ details: { reason: 'slow_op_label_type' } });
+    expect(extra.payload).toMatchObject({ details: { reason: 'slow_op_argument_count' } });
   });
 });
 

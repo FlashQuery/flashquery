@@ -10,7 +10,8 @@ import {
 const CHUNK_MS = 100;
 
 export const standardBuiltins: Record<string, MacroBuiltin> = {
-  fail: (positional) => {
+  fail: (positional, named) => {
+    requireNamedArgs('fail', named, []);
     if (positional.length > 1 || (positional.length === 1 && typeof positional[0] !== 'string')) {
       throw new MacroExpectedError('invalid_input', 'fail accepts zero or one string argument.', {
         reason: 'fail_argument_shape',
@@ -18,7 +19,8 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     }
     throw new MacroFailError(positional[0] ?? 'macro aborted');
   },
-  exit: (positional) => {
+  exit: (positional, named) => {
+    requireNamedArgs('exit', named, []);
     if (positional.length > 1) {
       throw new MacroRuntimeError('exit accepts at most one argument.', undefined, {
         reason: 'exit_argument_count',
@@ -27,6 +29,8 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     throw new MacroExitError(positional[0] ?? null);
   },
   input_var: (positional, named, context) => {
+    requireArgCount('input_var', positional, 1, 1, 'input_var_argument_count');
+    requireNamedArgs('input_var', named, ['default']);
     const key = positional[0];
     if (typeof key !== 'string') {
       throw new MacroRuntimeError('input_var key must be a string.', undefined, {
@@ -45,11 +49,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     });
   },
   count: (positional) => {
-    if (positional.length !== 1) {
-      throw new MacroRuntimeError('count expects exactly one argument.', undefined, {
-        reason: 'count_argument_count',
-      });
-    }
+    requireArgCount('count', positional, 1, 1, 'count_argument_count');
     const value = positional[0];
     if (Array.isArray(value) || typeof value === 'string') return value.length;
     if (value === null) return 0;
@@ -57,9 +57,11 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
       reason: 'count_type_mismatch',
     });
   },
-  unique: (positional) => {
+  unique: (positional, named) => {
+    requireNamedArgs('unique', named, []);
+    requireArgCount('unique', positional, 1, 1, 'unique_argument_count');
     const list = positional[0];
-    if (positional.length !== 1 || !Array.isArray(list)) {
+    if (!Array.isArray(list)) {
       throw new MacroRuntimeError('unique expects exactly one list argument.', undefined, {
         reason: 'unique_argument_type',
       });
@@ -72,7 +74,9 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     }
     return output;
   },
-  append: (positional) => {
+  append: (positional, named) => {
+    requireNamedArgs('append', named, []);
+    requireArgCount('append', positional, 2, Number.POSITIVE_INFINITY, 'append_argument_count');
     const list = positional[0];
     if (!Array.isArray(list)) {
       throw new MacroRuntimeError('append first argument must be a list.', undefined, {
@@ -81,7 +85,8 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     }
     return [...list, ...positional.slice(1)];
   },
-  concat: (positional) => {
+  concat: (positional, named) => {
+    requireNamedArgs('concat', named, []);
     if (positional.length === 0) return '';
     if (positional.every((value) => typeof value === 'string')) {
       return positional.join('');
@@ -93,15 +98,23 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
       reason: 'concat_type_mismatch',
     });
   },
-  add: (positional) => positional.reduce((total, value) => total + requireNumber(value, 'add'), 0),
-  sub: (positional) => {
+  add: (positional, named) => {
+    requireNamedArgs('add', named, []);
+    return positional.reduce((total, value) => total + requireNumber(value, 'add'), 0);
+  },
+  sub: (positional, named) => {
+    requireNamedArgs('sub', named, []);
+    requireArgCount('sub', positional, 1, Number.POSITIVE_INFINITY, 'arithmetic_argument_count');
     const numbers = positional.map((value) => requireNumber(value, 'sub'));
-    if (numbers.length === 0) return 0;
     if (numbers.length === 1) return -numbers[0];
     return numbers.slice(1).reduce((total, value) => total - value, numbers[0]);
   },
-  mul: (positional) => positional.reduce((total, value) => total * requireNumber(value, 'mul'), 1),
-  div: (positional) => {
+  mul: (positional, named) => {
+    requireNamedArgs('mul', named, []);
+    return positional.reduce((total, value) => total * requireNumber(value, 'mul'), 1);
+  },
+  div: (positional, named) => {
+    requireNamedArgs('div', named, []);
     const numbers = positional.map((value) => requireNumber(value, 'div'));
     if (numbers.length < 2) {
       throw new MacroRuntimeError('div expects at least two numeric arguments.', undefined, {
@@ -115,12 +128,9 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
       return Math.trunc(total / value);
     }, numbers[0]);
   },
-  mod: (positional) => {
-    if (positional.length !== 2) {
-      throw new MacroRuntimeError('mod expects exactly two numeric arguments.', undefined, {
-        reason: 'mod_argument_count',
-      });
-    }
+  mod: (positional, named) => {
+    requireNamedArgs('mod', named, []);
+    requireArgCount('mod', positional, 2, 2, 'mod_argument_count');
     const left = requireNumber(positional[0], 'mod');
     const right = requireNumber(positional[1], 'mod');
     if (right === 0) {
@@ -128,24 +138,23 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     }
     return ((left % right) + right) % right;
   },
-  range: (positional) => {
-    if (positional.length < 1 || positional.length > 3) {
-      throw new MacroRuntimeError('range expects one, two, or three arguments.', undefined, {
-        reason: 'range_argument_count',
-      });
-    }
+  range: (positional, named) => {
+    requireNamedArgs('range', named, []);
+    requireArgCount('range', positional, 1, 3, 'range_argument_count');
     const numbers = positional.map((value) => requireInteger(value, 'range'));
     if (numbers.length === 1) return buildRange(0, numbers[0], 1);
     if (numbers.length === 2) return buildRange(numbers[0], numbers[1], 1);
     return buildRange(numbers[0], numbers[1], numbers[2]);
   },
-  echo: (positional, _named, context) => {
+  echo: (positional, named, context) => {
+    requireNamedArgs('echo', named, []);
     const message = positional.map(stringifyMacroValue).join(' ');
     context.log.push(message);
     context.trace.push({ kind: 'log', message, at: new Date().toISOString() });
     return null;
   },
   status: async (positional, named, context) => {
+    requireNamedArgs('status', named, ['progress', 'total']);
     const message =
       positional.length > 0 ? positional.map(stringifyMacroValue).join(' ') : undefined;
     const progress = optionalNumber(named['progress'], 'status_progress_type');
@@ -169,8 +178,14 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     await context.progressSink?.(entry, context);
     return null;
   },
-  task_id: (_positional, _named, context) => context.taskId,
-  list_tasks: async (_positional, _named, context) => {
+  task_id: (positional, named, context) => {
+    requireNamedArgs('task_id', named, []);
+    requireArgCount('task_id', positional, 0, 0, 'task_id_argument_count');
+    return context.taskId;
+  },
+  list_tasks: async (positional, named, context) => {
+    requireNamedArgs('list_tasks', named, []);
+    requireArgCount('list_tasks', positional, 0, 0, 'list_tasks_argument_count');
     if (context.listTasks) {
       return context.listTasks(context);
     }
@@ -182,12 +197,16 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
       },
     ];
   },
-  sleep: async (positional, _named, context) => {
+  sleep: async (positional, named, context) => {
+    requireNamedArgs('sleep', named, []);
+    requireArgCount('sleep', positional, 1, 1, 'sleep_argument_count');
     const duration = requireDuration(positional[0] ?? 0, 'sleep');
     await sleepWithCancellation(duration, context.checkCancelled);
     return null;
   },
-  slow_op: async (positional, _named, context) => {
+  slow_op: async (positional, named, context) => {
+    requireNamedArgs('slow_op', named, []);
+    requireArgCount('slow_op', positional, 1, 2, 'slow_op_argument_count');
     const duration = requireDuration(positional[0] ?? 1000, 'slow_op');
     const label = positional[1] ?? 'slow_op';
     if (typeof label !== 'string') {
@@ -230,6 +249,34 @@ function requireNumber(value: MacroValue, builtin: string): number {
     });
   }
   return value;
+}
+
+function requireArgCount(
+  builtin: string,
+  positional: MacroValue[],
+  min: number,
+  max: number,
+  reason: string
+): void {
+  if (positional.length < min || positional.length > max) {
+    throw new MacroRuntimeError(`${builtin} received the wrong number of arguments.`, undefined, {
+      reason,
+    });
+  }
+}
+
+function requireNamedArgs(
+  builtin: string,
+  named: Record<string, MacroValue>,
+  allowed: string[]
+): void {
+  const unexpected = Object.keys(named).filter((key) => !allowed.includes(key));
+  if (unexpected.length > 0) {
+    throw new MacroRuntimeError(`${builtin} received unsupported named arguments.`, undefined, {
+      reason: `${builtin}_named_argument`,
+      named_args: unexpected,
+    });
+  }
 }
 
 function requireInteger(value: MacroValue, builtin: string): number {
