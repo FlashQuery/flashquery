@@ -1,3 +1,6 @@
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
@@ -141,6 +144,81 @@ describe('MCP tool registration metadata', () => {
       error: 'invalid_input',
       details: { reason: 'exactly_one_required' },
     });
+  });
+
+  it('T-U-166 wires production template metadata into call_macro hard-exclusion prescan', async () => {
+    const vaultRoot = await mkdtemp(join(tmpdir(), 'fq-macro-template-'));
+    await mkdir(join(vaultRoot, 'Templates'), { recursive: true });
+    await writeFile(
+      join(vaultRoot, 'Templates', 'Research Skill.md'),
+      [
+        '---',
+        'fq_template: true',
+        'fq_expose_as_tool: true',
+        'fq_namespace: skill',
+        'fq_desc: Research skill',
+        'fq_params:',
+        '  topic:',
+        '    type: string',
+        '    required: true',
+        '---',
+        '',
+        'Research {{topic}}',
+      ].join('\n'),
+      'utf8'
+    );
+    const server = makeCatalogServer();
+    const config = {
+      ...mockConfig,
+      instance: {
+        id: 'macro-template-hard-exclusion-test',
+        name: 'Macro Template Hard Exclusion Test',
+        vault: { path: vaultRoot, markdownExtensions: ['.md'] },
+      },
+      templates: { defaultAccess: 'permissive' },
+      hostMcpTools: { tools: ['call_macro'] },
+    } as FlashQueryConfig;
+    registerMacroTools(server, config);
+
+    const callMacro = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro');
+    const result = await callMacro?.handler({
+      source: 'exit fq.flashquery_skill_research_skill({ topic: "dispatch" })',
+    }, { signal: new AbortController().signal, instanceId: config.instance.id } as never);
+
+    expect(result?.isError).toBeFalsy();
+    expect(JSON.parse(result?.content[0]?.text ?? '')).toMatchObject({
+      error: 'template_masquerade_tools_not_callable_from_macro',
+      details: {
+        server: 'fq',
+        tool: 'flashquery_skill_research_skill',
+      },
+    });
+  });
+
+  it('threads the MCP request signal into native macro tool dispatch context', async () => {
+    const server = makeCatalogServer();
+    const requestController = new AbortController();
+    let capturedSignal: AbortSignal | undefined;
+
+    server.registerTool('search', { description: 'Search', inputSchema: {} }, vi.fn(async (_args, context) => {
+      capturedSignal = context.signal;
+      return { content: [{ type: 'text' as const, text: JSON.stringify({ ok: true }) }] };
+    }) as never);
+    registerMacroTools(server, {
+      ...mockConfig,
+      hostMcpTools: { tools: ['search', 'call_macro'] },
+    } as FlashQueryConfig);
+
+    const callMacro = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro');
+    const result = await callMacro?.handler(
+      { source: 'exit fq.search({})' },
+      { signal: requestController.signal, instanceId: 'macro-signal-test' } as never
+    );
+
+    expect(JSON.parse(result?.content[0]?.text ?? '')).toMatchObject({ result: { ok: true } });
+    expect(capturedSignal).toBe(requestController.signal);
+    requestController.abort();
+    expect(capturedSignal?.aborted).toBe(true);
   });
 
   it('uses metadata descriptions for the registered native catalog', () => {

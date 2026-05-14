@@ -76,6 +76,12 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | IS-09 | REQ-041 / REQ-044: `call_macro` can compose multiple read-only shell verbs against a vault-jailed fixture in one workflow. | macro_shell_pipeline_and_exists | 2026-05-14   | 2026-05-14   |
 | IX-23 | REQ-045: the same macro workflow combines native `fq._exists()` and brokered `<server>._exists()` with shell pipeline output. | macro_shell_pipeline_and_exists | 2026-05-14   | 2026-05-14   |
 
+## Macro Language Phase 135
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| IS-11 | REQ-027: `call_macro` composes multiple native FlashQuery handlers through registry-backed dispatch in one workflow. | macro_dispatch_get_then_write | 2026-05-14   | 2026-05-14   |
+
 ---
 
 ## IS — Search Coherence

@@ -106,6 +106,40 @@ describe('macro hard exclusions', () => {
     });
   });
 
+  it('T-U-165 reports delegated fq.call_macro as unknown_tool, not forbidden_tools', async () => {
+    const built = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'delegated', purposeName: 'research' },
+      broker: new NullMcpBroker(),
+      catalog: [
+        ...catalog,
+        {
+          name: 'call_macro',
+          description: 'macro',
+          inputSchema: z.object({}),
+          handler: vi.fn(),
+        },
+      ],
+      nativeDispatchContext: nativeDispatchContext(),
+    });
+
+    const result = preScanToolReferences({
+      program: parseProgram('exit fq.call_macro({ source: "exit 1" })'),
+      registry: built.registry,
+      allowlist: new Set(built.allowedToolNames),
+      callerContext: { origin: 'delegated', purposeName: 'research' },
+      hardExcludedReasons: built.hardExcludedReasons,
+    });
+
+    expect(parseEnvelope(result)).toMatchObject({
+      error: 'unknown_tool',
+      details: {
+        server: 'fq',
+        tool: 'call_macro',
+      },
+    });
+  });
+
   it('T-U-166 reports template masquerade references with template_masquerade_tools_not_callable_from_macro', () => {
     const result = preScanToolReferences({
       program: parseProgram('exit templates.flashquery_template_brief({ topic: "dispatch" })'),

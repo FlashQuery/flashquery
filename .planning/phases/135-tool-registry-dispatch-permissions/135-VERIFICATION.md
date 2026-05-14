@@ -20,9 +20,9 @@ overrides_applied: 0
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
 | 1 | `fq.*` references dispatch through the same native catalog/registry path used by agentic tools. | VERIFIED | `src/mcp/tools/macro.ts:143-152` gets `getNativeToolCatalog(server)`, builds the registry, and passes it to evaluation; `src/macro/registry.ts:192-210` builds `fq` handlers from catalog entries. |
-| 2 | Permission pre-scan reports unknown/forbidden references before any mutation. | VERIFIED | `src/macro/evaluator.ts:278-296` runs `preScanToolReferences` before `execBlock`; `src/macro/permission-prescan.ts:34-108` classifies template, unknown server, hard-excluded, unknown tool, and forbidden references. T-U-160..162 cover forbidden aggregation and zero side effects. |
+| 2 | Permission pre-scan reports unknown/forbidden references before any mutation. | VERIFIED | `src/macro/evaluator.ts:278-296` runs `preScanToolReferences` before `execBlock`; `src/macro/permission-prescan.ts:34-108` classifies template, unknown server, hard-excluded, unknown tool, and forbidden references. T-U-160..164 cover forbidden aggregation, zero side effects, and delegated allowlist derivation through `buildToolRegistry` / `assembleNativeToolRegistry`. |
 | 3 | Dispatch refuses forbidden references even if pre-scan is bypassed. | VERIFIED | `src/macro/dispatcher.ts:37-47` checks allowlist immediately before handler invocation; T-U-163 proves `fq.archive_document` handler is not called. |
-| 4 | `fq.call_macro`, template-masqueraded tools, and delegated `fq.call_model` are blocked as specified. | VERIFIED | `src/macro/registry.ts:174-180` records delegated hard-exclusion reason; `src/macro/permission-prescan.ts:34-72` prioritizes template and hard exclusions; T-U-165..168 cover required error codes/reason. |
+| 4 | `fq.call_macro`, template-masqueraded tools, and delegated `fq.call_model` are blocked as specified. | VERIFIED | `src/macro/registry.ts:174-181` records delegated hard-exclusion reasons while leaving `call_macro` opaque as `unknown_tool`; `src/mcp/tools/macro.ts` now wires template metadata from `assembleTemplateToolRegistry`; T-U-165..168 cover required error codes/reason. |
 | 5 | Tool-dispatch integration tests execute representative POC workflows against real handlers. | VERIFIED | `tests/integration/macro-tool-dispatch.test.ts:81-117` verifies `fq.write_document` persistence; `:119-155` verifies `fq.search` result shape through public `call_macro`. |
 | 6 | MACRO-DISP-01: Namespaced macro tool calls dispatch through a `(server, tool)` registry. | VERIFIED | `ToolRegistry`/`ServerEntry`/`ToolFn` are in `src/macro/types.ts`; `dispatchMacroTool` resolves by server then tool in `src/macro/dispatcher.ts:14-35`. |
 | 7 | MACRO-DISP-02: Static permission pre-scan rejects denied or unknown tool references before side effects. | VERIFIED | Recursive AST collector covers statement/expression variants in `src/macro/permission-prescan.ts:111-190`; evaluator invokes it before execution. |
@@ -46,6 +46,8 @@ overrides_applied: 0
 | `src/mcp/tools/macro.ts` | Public `call_macro` schema and registry wiring | VERIFIED | Schema omits caller identity; public handler builds native catalog registry and dispatch context. |
 | `tests/unit/macro-*.test.ts` | T-U-156..T-U-171 coverage | VERIFIED | All required unit test IDs are present. |
 | `tests/integration/macro-tool-dispatch.test.ts` | T-I-003/T-I-004 real handler coverage | VERIFIED | Integration suite passes locally. |
+| `tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py` | Phase 135 directed hard-exclusion coverage | VERIFIED | Covers `ML-11` and `ML-12` for nested `fq.call_macro` and real template-masqueraded tool rejection. |
+| `tests/scenarios/integration/tests/macro_dispatch_get_then_write.yml` | Phase 135 YAML macro-to-handler workflow | VERIFIED | Covers `IS-11` with one macro composing `get_document`, `write_document`, and `get_document`. |
 | `tests/config/vitest.integration.config.ts` | Explicit include entry | VERIFIED | Include entry exists exactly once at line 16. |
 
 ### Key Link Verification
@@ -64,6 +66,8 @@ overrides_applied: 0
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |---|---|---|---|---|
 | `src/mcp/tools/macro.ts` | `result` | `runMacroSource` parses source, builds registry, calls `evaluateProgram` | Yes | FLOWING |
+| `src/mcp/tools/macro.ts` | `templateReverseMap` / `templateToolNames` | `assembleTemplateToolRegistry` over the vault template surface | Yes | FLOWING |
+| `src/mcp/tools/macro.ts` | `NativeToolDispatchContext.signal` | inbound MCP request `extra.signal` | Yes | FLOWING |
 | `src/macro/registry.ts` | `fqTools` / `allowedToolNames` | Native catalog + host/delegated allowlist source | Yes | FLOWING |
 | `src/macro/evaluator.ts` | tool-call result | `dispatchMacroTool` result from registry `ToolFn` | Yes | FLOWING |
 | `tests/integration/macro-tool-dispatch.test.ts` | document/search assertions | Public MCP `call_macro` -> native handlers -> Supabase/search | Yes | FLOWING |
@@ -74,6 +78,8 @@ overrides_applied: 0
 |---|---|---|---|
 | Focused registry, pre-scan, dispatcher unit behavior | `npm test -- --reporter=verbose macro-registry macro-permission-prescan macro-dispatcher` | 3 files, 15 tests passed locally | PASS |
 | Real native dispatch integration | `npm run test:integration -- --reporter=verbose macro-tool-dispatch` | 1 file, 2 tests passed locally | PASS |
+| Public directed hard-exclusion coverage | `python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed` | Passed: 2/2 steps | PASS |
+| YAML multi-handler macro dispatch coverage | `python3 tests/scenarios/integration/run_integration.py --managed macro_dispatch_get_then_write` | Passed: 1/1 tests, 2/2 steps | PASS |
 | Integration include registered exactly once | `rg -n "tests/integration/macro-tool-dispatch\\.test\\.ts" tests/config/vitest.integration.config.ts \| wc -l` | `1` | PASS |
 | No public `callerKind` in production schema/options | `rg -n "callerKind" src/mcp/tools/macro.ts src/macro src/llm tests/unit/macro-caller-identity.test.ts` | Matches only schema absence test | PASS |
 | No direct macro imports from `src/mcp/tools/*` | `rg -n "from ['\\\"].*(mcp/tools)\|src/mcp/tools\|\\.\\./mcp/tools\|\\.\\./\\.\\./mcp/tools" src/macro src/mcp/tools/macro.ts` | No matches | PASS |

@@ -1,0 +1,37 @@
+name: macro_dispatch_get_then_write
+description: >
+  Phase 135 macro dispatch scenario: call_macro composes multiple native
+  FlashQuery handlers in one macro by reading a tracked document, updating it,
+  and reading it back through the same registry-backed dispatch path.
+coverage:
+  - IS-11
+
+steps:
+  - label: "Create macro dispatch fixture"
+    action: vault.write
+    name: macro_dispatch_doc
+    path: "macro/dispatch-${run.id}.md"
+    title: "Macro Dispatch ${run.id}"
+    content: "Original macro dispatch body ${run.id}."
+    tags: [macro-dispatch]
+
+  - label: "call_macro composes get_document, write_document, and get_document"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          before = fq.get_document({ identifiers: "${macro_dispatch_doc.path}" })
+          fq.write_document({
+            mode: "update",
+            identifier: "${macro_dispatch_doc.path}",
+            title: "Macro Dispatch Updated ${run.id}",
+            content: "Updated by macro dispatch ${run.id}."
+          })
+          after = fq.get_document({ identifiers: "${macro_dispatch_doc.path}" })
+          exit { before_path: $before.path, after_title: $after.title, after_body: $after.body }
+      expect_json_equals:
+        path: result.after_title
+        value: "Macro Dispatch Updated ${run.id}"
+      expect_json_contains:
+        path: result.after_body
+        value: "Updated by macro dispatch ${run.id}"

@@ -15,7 +15,6 @@ export interface PreScanToolReferencesOptions {
   program: Program;
   registry: ToolRegistry;
   allowlist: ReadonlySet<string>;
-  allowlistSource?: string;
   callerContext?: MacroCallerContext;
   templateToolNames?: ReadonlySet<string> | readonly string[];
   hardExcludedReasons?: ReadonlyMap<string, string>;

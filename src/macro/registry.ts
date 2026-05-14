@@ -172,6 +172,7 @@ function deriveNativeToolNames(options: BuildToolRegistryOptions): {
     options.catalog
   );
   for (const excluded of assembly.diagnostics.hardExcluded) {
+    if (excluded.tool === 'call_macro') continue;
     hardExcludedReasons.set(
       `${FQ_SERVER}.${excluded.tool}`,
       excluded.tool === 'call_model'

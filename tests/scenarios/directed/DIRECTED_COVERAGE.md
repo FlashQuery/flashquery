@@ -49,6 +49,13 @@ This document defines every behavioral coverage point we want to verify through 
 | ML-09 | REQ-042 / T-S-009: `call_macro` rejects shell path arguments that escape the vault jail with a `forbidden_path` expected-error envelope. | test_macro_vault_jail_escape | 2026-05-14 | 2026-05-14 |
 | ML-10 | REQ-043 / T-S-010: `call_macro` rejects forbidden mutation flags such as `sed -i` before execution with a `forbidden_shell_flag` expected-error envelope. | test_macro_forbidden_shell_flag | 2026-05-14 | 2026-05-14 |
 
+## Phase 135 Macro Dispatch and Permissions
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| ML-11 | REQ-030 / T-U-165: `call_macro` universally hides nested `fq.call_macro` references from macro authors as `unknown_tool`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
+| ML-12 | REQ-031 / T-U-166: `call_macro` rejects real template-masqueraded tool names with `template_masquerade_tools_not_callable_from_macro`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
+
 ## 1. Document Lifecycle
 
 Core CRUD operations on vault documents via MCP.

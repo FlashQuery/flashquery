@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { preScanToolReferences } from '../../src/macro/permission-prescan.js';
+import { buildToolRegistry } from '../../src/macro/registry.js';
+import type { FlashQueryConfig } from '../../src/config/loader.js';
+import type { NativeToolDefinition, NativeToolDispatchContext } from '../../src/llm/tool-registry.js';
 import type { ToolFn, ToolRegistry } from '../../src/macro/types.js';
+import { NullMcpBroker } from '../../src/services/mcp-broker.js';
 import { parseProgram } from './macro-test-helpers.js';
 
 function parseEnvelope(result: { content: Array<{ text: string }> }): Record<string, unknown> {
@@ -25,6 +29,54 @@ function makeRegistry(): ToolRegistry {
         web_search: noop,
       },
     },
+  };
+}
+
+function makeConfig(): FlashQueryConfig {
+  return {
+    instance: {
+      name: 'Macro Permission Prescan Test',
+      id: 'macro-permission-prescan-test',
+      vault: { path: '/tmp/macro-permission-prescan-test', markdownExtensions: ['.md'] },
+    },
+    server: { host: 'localhost', port: 3100 },
+    supabase: {
+      url: 'https://test.supabase.co',
+      serviceRoleKey: 'test-key',
+      databaseUrl: 'postgresql://postgres:test@localhost:5432/postgres',
+      skipDdl: true,
+    },
+    git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
+    mcp: { transport: 'stdio', tokenLifetime: 24 },
+    locking: { enabled: false, ttlSeconds: 30 },
+    trashFolder: { enabled: false, path: '.flashquery/removed', collisionStrategy: 'suffix' },
+    hostMcpTools: { tools: ['search', 'write_document'] },
+    llm: {
+      providers: [],
+      models: [],
+      purposes: [
+        {
+          name: 'research',
+          description: 'Research purpose',
+          models: [],
+          tools: ['search'],
+        },
+      ],
+    },
+    embedding: { provider: 'none', model: '', dimensions: 1536 },
+    logging: { level: 'info', output: 'stdout' },
+  } as FlashQueryConfig;
+}
+
+const catalog: NativeToolDefinition[] = [
+  { name: 'search', description: 'search', inputSchema: {}, handler: vi.fn() },
+  { name: 'write_document', description: 'write', inputSchema: {}, handler: vi.fn() },
+];
+
+function nativeDispatchContext(): NativeToolDispatchContext {
+  return {
+    signal: new AbortController().signal,
+    instanceId: 'macro-permission-prescan-test',
   };
 }
 
@@ -91,7 +143,7 @@ describe('preScanToolReferences', () => {
     expect(registry.fq.tools.write_document).not.toHaveBeenCalled();
   });
 
-  it('T-U-164 consults assembleNativeToolRegistry-derived allowlist input and does not treat fq._exists() as dispatch', () => {
+  it('does not treat fq._exists() as dispatch during permission pre-scan', () => {
     const result = preScanToolReferences({
       program: parseProgram(`
         exists = fq._exists()
@@ -99,10 +151,39 @@ describe('preScanToolReferences', () => {
       `),
       registry: makeRegistry(),
       allowlist: new Set(['fq.search']),
-      allowlistSource: 'assembleNativeToolRegistry',
     });
 
     expect(result).toBeUndefined();
+  });
+
+  it('T-U-164 uses assembleNativeToolRegistry nativeToolNames as delegated pre-scan allowlist', async () => {
+    const built = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'delegated', purposeName: 'research' },
+      broker: new NullMcpBroker(),
+      catalog,
+      nativeDispatchContext: nativeDispatchContext(),
+    });
+
+    expect(built.allowedToolNames).toEqual(['fq.search']);
+
+    const result = preScanToolReferences({
+      program: parseProgram(`
+        ok = fq.search({ query: "allowed" })
+        exit fq.write_document({ path: "blocked.md", content: "blocked" })
+      `),
+      registry: built.registry,
+      allowlist: new Set(built.allowedToolNames),
+    });
+
+    expect(parseEnvelope(result)).toMatchObject({
+      error: 'unknown_tool',
+      details: {
+        server: 'fq',
+        tool: 'write_document',
+        available: ['search'],
+      },
+    });
   });
 
   it('classifies unknown_server before unknown_tool and returns available tools for known servers', () => {
