@@ -1,18 +1,22 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
-import { evaluateProgram, type MacroValue } from '../../macro/evaluator.js';
+import { evaluateProgram, MacroRuntimeError, type MacroValue } from '../../macro/evaluator.js';
 import { parseMacroSource } from '../../macro/parser.js';
 import { buildToolRegistry, type BrokerToolServerConfig, type BuildToolRegistryResult } from '../../macro/registry.js';
 import type { MacroCallerContext } from '../../macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../llm/tool-registry.js';
-import { getNativeToolCatalog } from '../tool-catalog.js';
 import type { McpBroker } from '../../services/mcp-broker.js';
 import { NullMcpBroker } from '../../services/mcp-broker.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError } from '../utils/response-formats.js';
-import { assembleTemplateToolRegistry, type TemplateToolReverseMap } from '../../llm/template-tools.js';
-import { loadPurposeTemplateRuntimeBindings } from '../../llm/purpose-template-bindings.js';
+import type { TemplateToolReverseMap } from '../../llm/template-tools.js';
+import {
+  MacroTaskRegistry,
+  type MacroTaskRecord,
+  type MacroTaskTransitionListener,
+} from '../../macro/task-registry.js';
 
 export const callMacroInputSchema = z.object({
   source: z.string().optional(),
@@ -36,11 +40,18 @@ export interface RunMacroSourceOptions {
   brokerTools?: BrokerToolServerConfig[];
   templateReverseMap?: TemplateToolReverseMap;
   templateToolNames?: string[];
+  taskId?: string;
+  sessionId?: string;
+  taskRegistry?: MacroTaskRegistry;
+  onTaskTransition?: MacroTaskTransitionListener;
 }
 
 export interface RegisterMacroToolsOptions {
   broker?: McpBroker;
   brokerTools?: BrokerToolServerConfig[];
+  taskRegistry?: MacroTaskRegistry;
+  sessionId?: string;
+  sessionIdProvider?: (extra: unknown) => string | undefined;
 }
 
 export interface RunMacroSourceResult {
@@ -78,8 +89,18 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
     };
   }
 
+  const taskRegistry = options.taskRegistry ?? new MacroTaskRegistry();
+  const task = taskRegistry.create({
+    taskId: options.taskId,
+    sessionId: options.sessionId,
+    source: options.source,
+  });
+  options.onTaskTransition?.(task);
+
   const result = await evaluateProgram(parseResult.program, {
     inputVars: options.inputVars ?? options.input_vars,
+    taskId: task.task_id,
+    sessionId: options.sessionId,
     vaultRoot: options.config.instance.vault.path,
     broker: options.broker,
     toolRegistry: toolRegistry.registry,
@@ -87,7 +108,17 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
     templateToolNames: toolRegistry.templateToolNames,
     hardExcludedReasons: toolRegistry.hardExcludedReasons,
     callerContext,
+    listTasks: (context) => taskRegistry.list(context.sessionId),
+    checkCancelled: (where) => {
+      if (taskRegistry.isCancellationRequested(task.task_id)) {
+        throw new MacroRuntimeError(`Macro cancelled at ${where}`, undefined, {
+          reason: 'cancelled',
+          where,
+        });
+      }
+    },
   });
+  transitionTaskFromResult(taskRegistry, task, result, options.onTaskTransition);
 
   return {
     result,
@@ -108,8 +139,9 @@ function createNativeDispatchContext(config: FlashQueryConfig, signal?: AbortSig
   };
 }
 
-async function loadRuntimeTemplateBindings(config: FlashQueryConfig): Promise<Awaited<ReturnType<typeof loadPurposeTemplateRuntimeBindings>>> {
+async function loadRuntimeTemplateBindings(config: FlashQueryConfig) {
   if (config.llm === undefined) return [];
+  const { loadPurposeTemplateRuntimeBindings } = await import('../../llm/purpose-template-bindings.js');
   return await loadPurposeTemplateRuntimeBindings(config.instance.id);
 }
 
@@ -118,6 +150,7 @@ async function assembleMacroTemplateMetadata(input: {
   callerContext: MacroCallerContext;
   catalog: NativeToolDefinition[];
 }): Promise<{ templateReverseMap: TemplateToolReverseMap; templateToolNames: string[] }> {
+  const { assembleTemplateToolRegistry } = await import('../../llm/template-tools.js');
   const purposeName = input.callerContext.origin === 'delegated'
     ? input.callerContext.purposeName
     : '';
@@ -140,6 +173,8 @@ export function registerMacroTools(
   options: RegisterMacroToolsOptions = {}
 ): void {
   const broker = options.broker ?? new NullMcpBroker();
+  const taskRegistry = options.taskRegistry ?? new MacroTaskRegistry();
+  const registrationSessionId = options.sessionId ?? randomUUID();
 
   server.registerTool(
     'call_macro',
@@ -174,6 +209,7 @@ export function registerMacroTools(
 
       if (hasSource) {
         const callerContext: MacroCallerContext = { origin: 'host' };
+        const { getNativeToolCatalog } = await import('../tool-catalog.js');
         const catalog = getNativeToolCatalog(server);
         const templateMetadata = await assembleMacroTemplateMetadata({
           config,
@@ -187,6 +223,8 @@ export function registerMacroTools(
           config,
           catalog,
           broker,
+          taskRegistry,
+          sessionId: options.sessionIdProvider?.(extra) ?? registrationSessionId,
           nativeDispatchContext: createNativeDispatchContext(config, extra?.signal),
           brokerTools: options.brokerTools,
           templateReverseMap: templateMetadata.templateReverseMap,
@@ -196,4 +234,46 @@ export function registerMacroTools(
       }
     }
   );
+}
+
+function transitionTaskFromResult(
+  taskRegistry: MacroTaskRegistry,
+  task: MacroTaskRecord,
+  result: Awaited<ReturnType<typeof evaluateProgram>>,
+  onTransition: MacroTaskTransitionListener | undefined
+): void {
+  const payload = parseResultPayload(result);
+  if (isCancelledPayload(payload)) {
+    taskRegistry.cancel(task.task_id, task.session_id, onTransition);
+    return;
+  }
+  if (result.isError === true || isExpectedFailurePayload(payload)) {
+    taskRegistry.fail(task.task_id, onTransition);
+    return;
+  }
+  taskRegistry.complete(task.task_id, onTransition);
+}
+
+function parseResultPayload(result: Awaited<ReturnType<typeof evaluateProgram>>): unknown {
+  const text = result.content[0]?.type === 'text' ? result.content[0].text : '';
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function isCancelledPayload(payload: unknown): boolean {
+  if (!isRecord(payload)) return false;
+  if (payload['error'] === 'cancelled') return true;
+  const details = payload['details'];
+  return isRecord(details) && details['reason'] === 'cancelled';
+}
+
+function isExpectedFailurePayload(payload: unknown): boolean {
+  return isRecord(payload) && payload['error'] === 'macro_aborted';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
