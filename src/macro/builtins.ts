@@ -1,0 +1,244 @@
+import {
+  MacroExitError,
+  MacroFailError,
+  MacroRuntimeError,
+  type MacroBuiltin,
+  type MacroValue,
+} from './evaluator.js';
+
+const CHUNK_MS = 100;
+
+export const standardBuiltins: Record<string, MacroBuiltin> = {
+  fail: (positional) => {
+    const message = positional.length > 0 ? positional.map(stringifyMacroValue).join(' ') : 'macro aborted';
+    throw new MacroFailError(message);
+  },
+  exit: (positional) => {
+    if (positional.length > 1) {
+      throw new MacroRuntimeError('exit accepts at most one argument.', undefined, {
+        reason: 'exit_argument_count',
+      });
+    }
+    throw new MacroExitError(positional[0] ?? null);
+  },
+  input_var: (positional, named, context) => {
+    const key = positional[0];
+    if (typeof key !== 'string') {
+      throw new MacroRuntimeError('input_var key must be a string.', undefined, {
+        reason: 'input_var_key_type',
+      });
+    }
+    if (Object.prototype.hasOwnProperty.call(context.inputVars, key)) {
+      return context.inputVars[key];
+    }
+    if (Object.prototype.hasOwnProperty.call(named, 'default')) {
+      return named['default'] ?? null;
+    }
+    throw new MacroRuntimeError(`Missing required input_var "${key}".`, undefined, {
+      reason: 'input_var_missing',
+      key,
+    });
+  },
+  count: (positional) => {
+    const value = positional[0] ?? null;
+    if (Array.isArray(value) || typeof value === 'string') return value.length;
+    if (value === null) return 0;
+    throw new MacroRuntimeError('count expects a list, string, or null.', undefined, {
+      reason: 'count_type_mismatch',
+    });
+  },
+  unique: (positional) => {
+    const list = positional[0];
+    if (positional.length !== 1 || !Array.isArray(list)) {
+      throw new MacroRuntimeError('unique expects exactly one list argument.', undefined, {
+        reason: 'unique_argument_type',
+      });
+    }
+    const output: MacroValue[] = [];
+    for (const item of list) {
+      if (!output.some((existing) => deepEqual(existing, item))) {
+        output.push(item);
+      }
+    }
+    return output;
+  },
+  append: (positional) => {
+    const list = positional[0];
+    if (!Array.isArray(list)) {
+      throw new MacroRuntimeError('append first argument must be a list.', undefined, {
+        reason: 'append_argument_type',
+      });
+    }
+    return [...list, ...positional.slice(1)];
+  },
+  concat: (positional) => {
+    if (positional.length === 0) return '';
+    if (positional.every((value) => typeof value === 'string')) {
+      return positional.join('');
+    }
+    if (positional.every((value) => Array.isArray(value))) {
+      return positional.flatMap((value) => value as MacroValue[]);
+    }
+    throw new MacroRuntimeError('concat expects all strings or all lists.', undefined, {
+      reason: 'concat_type_mismatch',
+    });
+  },
+  add: (positional) => positional.reduce((total, value) => total + requireNumber(value, 'add'), 0),
+  sub: (positional) => {
+    const numbers = positional.map((value) => requireNumber(value, 'sub'));
+    if (numbers.length === 0) return 0;
+    if (numbers.length === 1) return -numbers[0];
+    return numbers.slice(1).reduce((total, value) => total - value, numbers[0]);
+  },
+  mul: (positional) => positional.reduce((total, value) => total * requireNumber(value, 'mul'), 1),
+  div: (positional) => {
+    const numbers = positional.map((value) => requireNumber(value, 'div'));
+    if (numbers.length < 2) {
+      throw new MacroRuntimeError('div expects at least two numeric arguments.', undefined, {
+        reason: 'arithmetic_operand_type',
+      });
+    }
+    return numbers.slice(1).reduce((total, value) => {
+      if (value === 0) {
+        throw new MacroRuntimeError('Division by zero.', undefined, { reason: 'div_by_zero' });
+      }
+      return Math.trunc(total / value);
+    }, numbers[0]);
+  },
+  mod: (positional) => {
+    if (positional.length !== 2) {
+      throw new MacroRuntimeError('mod expects exactly two numeric arguments.', undefined, {
+        reason: 'mod_argument_count',
+      });
+    }
+    const left = requireNumber(positional[0], 'mod');
+    const right = requireNumber(positional[1], 'mod');
+    if (right === 0) {
+      throw new MacroRuntimeError('Modulo by zero.', undefined, { reason: 'mod_by_zero' });
+    }
+    return ((left % right) + right) % right;
+  },
+  range: (positional) => {
+    if (positional.length < 1 || positional.length > 3) {
+      throw new MacroRuntimeError('range expects one, two, or three arguments.', undefined, {
+        reason: 'range_argument_count',
+      });
+    }
+    const numbers = positional.map((value) => requireInteger(value, 'range'));
+    if (numbers.length === 1) return buildRange(0, numbers[0], 1);
+    if (numbers.length === 2) return buildRange(numbers[0], numbers[1], 1);
+    return buildRange(numbers[0], numbers[1], numbers[2]);
+  },
+  sleep: async (positional, _named, context) => {
+    const duration = requireDuration(positional[0] ?? 0, 'sleep');
+    await sleepWithCancellation(duration, context.checkCancelled);
+    return null;
+  },
+  slow_op: async (positional, _named, context) => {
+    const duration = requireDuration(positional[0] ?? 1000, 'slow_op');
+    const label = positional[1] ?? 'slow_op';
+    if (typeof label !== 'string') {
+      throw new MacroRuntimeError('slow_op label must be a string.', undefined, {
+        reason: 'slow_op_label_type',
+      });
+    }
+    await sleepWithCancellation(duration, context.checkCancelled);
+    return { ok: true, label, elapsed_ms: duration };
+  },
+};
+
+export function buildRange(start: number, end: number, step: number): MacroValue[] {
+  for (const value of [start, end, step]) {
+    if (!Number.isInteger(value)) {
+      throw new MacroRuntimeError('Range operands must be integers.', undefined, {
+        reason: 'range_operand_type_mismatch',
+      });
+    }
+  }
+  if (step === 0) {
+    throw new MacroRuntimeError('Range step cannot be zero.', undefined, {
+      reason: 'range_step_zero',
+    });
+  }
+
+  const output: MacroValue[] = [];
+  if (step > 0) {
+    for (let value = start; value < end; value += step) output.push(value);
+  } else {
+    for (let value = start; value > end; value += step) output.push(value);
+  }
+  return output;
+}
+
+function requireNumber(value: MacroValue, builtin: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new MacroRuntimeError(`${builtin} expects numeric arguments.`, undefined, {
+      reason: 'arithmetic_operand_type',
+    });
+  }
+  return value;
+}
+
+function requireInteger(value: MacroValue, builtin: string): number {
+  const number = requireNumber(value, builtin);
+  if (!Number.isInteger(number)) {
+    throw new MacroRuntimeError(`${builtin} expects integer arguments.`, undefined, {
+      reason: 'range_operand_type_mismatch',
+    });
+  }
+  return number;
+}
+
+function requireDuration(value: MacroValue, builtin: 'sleep' | 'slow_op'): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new MacroRuntimeError(`${builtin} duration must be a finite number.`, undefined, {
+      reason: builtin === 'sleep' ? 'sleep_argument_type' : 'slow_op_argument_type',
+    });
+  }
+  if (value < 0) {
+    throw new MacroRuntimeError(`${builtin} duration must be non-negative.`, undefined, {
+      reason: builtin === 'sleep' ? 'sleep_duration_negative' : 'slow_op_argument_type',
+    });
+  }
+  return value;
+}
+
+async function sleepWithCancellation(
+  durationMs: number,
+  checkCancelled: (where: string) => void | Promise<void>
+): Promise<void> {
+  let remaining = durationMs;
+  while (remaining > 0) {
+    const chunk = Math.min(remaining, CHUNK_MS);
+    await new Promise<void>((resolve) => setTimeout(resolve, chunk));
+    remaining -= chunk;
+    await checkCancelled('inside sleep');
+  }
+}
+
+function stringifyMacroValue(value: MacroValue): string {
+  if (typeof value === 'string') return value;
+  if (value === null) return 'null';
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
+}
+
+function deepEqual(left: MacroValue, right: MacroValue): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.length === right.length && left.every((value, index) => deepEqual(value, right[index]));
+  }
+  if (isRecord(left) && isRecord(right)) {
+    const leftKeys = Object.keys(left).sort();
+    const rightKeys = Object.keys(right).sort();
+    return (
+      leftKeys.length === rightKeys.length &&
+      leftKeys.every((key, index) => key === rightKeys[index] && deepEqual(left[key], right[key]))
+    );
+  }
+  return false;
+}
+
+function isRecord(value: MacroValue): value is Record<string, MacroValue> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}

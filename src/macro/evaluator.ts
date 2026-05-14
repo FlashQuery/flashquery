@@ -22,6 +22,7 @@ import {
   collectInputVarContract,
   validateInputVars,
 } from './preflight.js';
+import { buildRange, standardBuiltins } from './builtins.js';
 
 const ESCAPED_DOLLAR_SENTINEL = '\uE000';
 
@@ -189,7 +190,7 @@ export function createInvocationContext(options: EvaluateProgramOptions = {}): M
     taskId: options.taskId ?? randomUUID(),
     progress: [...(options.progress ?? [])],
     cancelled,
-    builtins: { ...(options.builtins ?? {}) },
+    builtins: { ...standardBuiltins, ...(options.builtins ?? {}) },
     dispatchTool: options.dispatchTool,
     toolExists: options.toolExists,
     checkCancelled: async (where: string) => {
@@ -632,12 +633,7 @@ async function evalRange(
       reason: 'range_operand_type_mismatch',
     });
   }
-  const values: MacroValue[] = [];
-  const step = start <= end ? 1 : -1;
-  for (let value = start; step > 0 ? value < end : value > end; value += step) {
-    values.push(value);
-  }
-  return values;
+  return buildRange(start, end, start <= end ? 1 : -1);
 }
 
 async function evalBinaryExpr(
