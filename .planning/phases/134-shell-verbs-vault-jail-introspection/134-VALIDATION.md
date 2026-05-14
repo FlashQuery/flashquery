@@ -21,16 +21,16 @@ created: 2026-05-14
 | **Config file** | `tests/config/vitest.unit.config.ts` |
 | **Quick run command** | `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-path-wrapper.test.ts tests/unit/macro-shell-verbs.test.ts tests/unit/macro-forbidden-flags.test.ts tests/unit/macro-introspection.test.ts` |
 | **Full suite command** | `npm test` |
-| **Estimated runtime** | ~45 seconds for focused macro unit files; full suite varies by machine |
+| **Estimated runtime** | ~15-30 seconds for per-file task feedback; combined focused macro files may take ~45 seconds; full suite varies by machine |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** Run the focused Vitest file for the changed module.
+- **After every task commit:** Run only the focused Vitest file for the changed module, e.g. `tests/unit/macro-path-wrapper.test.ts`, `tests/unit/macro-forbidden-flags.test.ts`, `tests/unit/macro-shell-verbs.test.ts`, or `tests/unit/macro-introspection.test.ts`.
 - **After every plan wave:** Run `npx vitest run --config tests/config/vitest.unit.config.ts tests/unit/macro-path-wrapper.test.ts tests/unit/macro-shell-verbs.test.ts tests/unit/macro-forbidden-flags.test.ts tests/unit/macro-introspection.test.ts`.
 - **Before `$gsd-verify-work`:** `npm test` must be green, and static cwd-mutation checks must pass.
-- **Max feedback latency:** 60 seconds for focused macro unit feedback.
+- **Max feedback latency:** 30 seconds target for per-file task feedback; combined focused suite and `npm test` are wave/phase gates, not per-task feedback.
 
 ---
 

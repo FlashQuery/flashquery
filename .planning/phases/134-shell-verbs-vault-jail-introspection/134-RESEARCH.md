@@ -348,17 +348,17 @@ return broker.isConnected(server);
 | A1 | Unknown leading-underscore methods should be represented in the AST and rejected at runtime, not parse time. | Common Pitfalls / Component Responsibilities | If wrong, T-U-154 and REQ-045 wording need clarification before planning. |
 | A2 | `@types/shelljs` should be installed for strict TS rather than a fully hand-written local ShellJS type adapter. | Standard Stack | If wrong, planner should replace dependency task with a typed adapter task. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should unknown leading-underscore methods require a parser change in Phase 134?**
    - What we know: Test Plan T-U-154 says `fq._unknown_method()` should raise a runtime error. [CITED: Test Plan T-U-154]
    - What's unclear: Current parser rejects unknown underscore methods before evaluation. [VERIFIED: src/macro/parser.ts]
-   - Recommendation: Treat the parser/type change as in-scope for Phase 134 because otherwise REQ-045 cannot be tested as specified. [ASSUMED]
+   - RESOLVED: Treat the parser/type change as in-scope for Phase 134. `fq._unknown_method()` must parse and fail at runtime because Test Plan T-U-154 requires runtime error behavior.
 
 2. **What exact `vaultRoot` option name should evaluator expose?**
    - What we know: Requirements say vault root is configured at engine init from FlashQuery config, and current `EvaluateProgramOptions` has no `vaultRoot`. [CITED: Macro Language Requirements §6.6.2] [VERIFIED: src/macro/evaluator.ts]
    - What's unclear: Final `call_macro` handler wiring is later, so Phase 134 unit tests can supply `vaultRoot` directly. [VERIFIED: 134-CONTEXT.md]
-   - Recommendation: Add `vaultRoot?: string` to `EvaluateProgramOptions` and `MacroInvocationContext`. [ASSUMED]
+   - RESOLVED: Add `vaultRoot?: string` to `EvaluateProgramOptions` and `MacroInvocationContext`. Use the exact option name `vaultRoot` because the POC, research, and plan acceptance criteria use that name.
 
 ## Environment Availability
 
