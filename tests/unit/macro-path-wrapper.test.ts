@@ -11,7 +11,7 @@ let vaultRoot: string;
 beforeEach(() => {
   testDir = join(
     tmpdir(),
-    `fqc-macro-path-wrapper-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    `fqc-macro-path-wrapper-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
   vaultRoot = join(testDir, 'vault');
   mkdirSync(join(vaultRoot, 'Specs'), { recursive: true });
@@ -31,7 +31,7 @@ function expectForbiddenPath(fn: () => unknown, path: string): void {
     expect(error).toBeInstanceOf(MacroExpectedError);
     expect((error as MacroExpectedError).error).toBe('forbidden_path');
     expect((error as MacroExpectedError).message).toBe(
-      'Macro shell path resolves outside the vault root.',
+      'Macro shell path resolves outside the vault root.'
     );
     expect((error as MacroExpectedError).details).toMatchObject({
       path,
@@ -43,13 +43,13 @@ function expectForbiddenPath(fn: () => unknown, path: string): void {
 describe('resolveMacroPath', () => {
   it('T-U-137 resolves a vault-rooted macro path inside the vault root', () => {
     expect(resolveMacroPath('/Specs/foo.md', vaultRoot)).toBe(
-      pathResolve(vaultRoot, 'Specs/foo.md'),
+      pathResolve(vaultRoot, 'Specs/foo.md')
     );
   });
 
   it('T-U-138 resolves a relative macro path inside the vault root', () => {
     expect(resolveMacroPath('Specs/foo.md', vaultRoot)).toBe(
-      pathResolve(vaultRoot, 'Specs/foo.md'),
+      pathResolve(vaultRoot, 'Specs/foo.md')
     );
   });
 
@@ -61,13 +61,15 @@ describe('resolveMacroPath', () => {
     const macroPath = '/../vault-other/file.md';
     mkdirSync(join(testDir, 'vault-other'), { recursive: true });
 
-    expect(pathResolve(vaultRoot, macroPath.slice(1))).toBe(pathResolve(testDir, 'vault-other/file.md'));
+    expect(pathResolve(vaultRoot, macroPath.slice(1))).toBe(
+      pathResolve(testDir, 'vault-other/file.md')
+    );
     expectForbiddenPath(() => resolveMacroPath(macroPath, vaultRoot), macroPath);
   });
 
   it('T-U-140 allows paths that normalize back inside the vault root', () => {
     expect(resolveMacroPath('/Specs/../Specs/foo.md', vaultRoot)).toBe(
-      pathResolve(vaultRoot, 'Specs/foo.md'),
+      pathResolve(vaultRoot, 'Specs/foo.md')
     );
   });
 
