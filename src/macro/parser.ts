@@ -408,18 +408,12 @@ class TokenStreamParser {
     const tool = this.consume(Identifier, 'Expected tool name.');
 
     if (tool.image.startsWith('_')) {
-      if (tool.image !== '_exists') {
-        this.fail(
-          'unexpected_token',
-          tool,
-          'Only _exists() namespace introspection is supported.'
-        );
-      }
-      this.consume(LParen, 'Expected "(" after _exists.');
-      this.consume(RParen, 'Expected ")" after _exists.');
+      this.consume(LParen, `Expected "(" after ${tool.image}.`);
+      this.consume(RParen, `Expected ")" after ${tool.image}.`);
       return {
         kind: 'ToolExistsCall',
         server: server.image,
+        method: tool.image,
         line: server.startLine ?? 1,
       };
     }

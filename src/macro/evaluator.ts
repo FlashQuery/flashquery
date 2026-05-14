@@ -17,10 +17,13 @@ import {
   type ToolResult,
   type TraceStep,
 } from '../mcp/utils/response-formats.js';
+import type { McpBroker } from '../services/mcp-broker.js';
+import { NullMcpBroker } from '../services/mcp-broker.js';
 import { MacroPreflightError, collectInputVarContract, validateInputVars } from './preflight.js';
 import { preScanForbiddenShellFlags } from './forbidden-flag-scan.js';
 import { buildRange, standardBuiltins } from './builtins.js';
 import { shellBuiltins } from './shell-verbs.js';
+import { resolveNamespaceIntrospection } from './introspection.js';
 
 const ESCAPED_DOLLAR_SENTINEL = '\uE000';
 
@@ -76,13 +79,13 @@ export interface MacroInvocationContext {
   builtins: Record<string, MacroBuiltin>;
   vaultRoot?: string;
   stdin?: MacroValue;
+  broker: McpBroker;
   dispatchTool?: (
     server: string,
     tool: string,
     arg: Record<string, MacroValue>,
     context: MacroInvocationContext
   ) => ToolResult | Promise<ToolResult>;
-  toolExists?: (server: string, context: MacroInvocationContext) => boolean | Promise<boolean>;
   progressSink?: (
     entry: MacroProgressEntry,
     context: MacroInvocationContext
@@ -107,8 +110,8 @@ export interface EvaluateProgramOptions {
   budget?: Partial<MacroBudget>;
   progress?: MacroProgressEntry[];
   cancelled?: boolean | MacroCancellationState;
+  broker?: McpBroker;
   dispatchTool?: MacroInvocationContext['dispatchTool'];
-  toolExists?: MacroInvocationContext['toolExists'];
   progressSink?: MacroInvocationContext['progressSink'];
   listTasks?: MacroInvocationContext['listTasks'];
   vaultRoot?: string;
@@ -223,8 +226,8 @@ export function createInvocationContext(
     builtins: { ...standardBuiltins, ...shellBuiltins, ...(options.builtins ?? {}) },
     vaultRoot: options.vaultRoot,
     stdin: options.stdin,
+    broker: options.broker ?? new NullMcpBroker(),
     dispatchTool: options.dispatchTool,
-    toolExists: options.toolExists,
     progressSink: options.progressSink,
     listTasks: options.listTasks,
     checkCancelled: async (where: string) => {
@@ -781,7 +784,9 @@ async function evalToolExists(
   expr: Extract<Expr | Statement, { kind: 'ToolExistsCall' }>,
   context: MacroInvocationContext
 ): Promise<MacroValue> {
-  return (await context.toolExists?.(expr.server, context)) ?? false;
+  return resolveNamespaceIntrospection(expr.server, expr.method, context.broker, {
+    line: expr.line,
+  });
 }
 
 function interpolate(raw: string, env: Env): string {
