@@ -263,7 +263,7 @@ return await dispatchMacroTool(...);
 ### Pitfall 4: Directed Coverage ID Collision
 
 **What goes wrong:** Macro Test Plan proposes `M-01`/`M-02` for cancellation, but the current directed matrix already uses those IDs for memory lifecycle. [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md] [CITED: Macro Test Plan §7]  
-**How to avoid:** Plan a matrix reconciliation step: either update macro cancellation IDs to a free prefix/range or document a user-approved override before writing scenario tests. [ASSUMED]
+**How to avoid:** Use non-colliding macro lifecycle IDs `MLC-01`/`MLC-02` in the local directed coverage matrix and map them back to Test Plan T-S-001/T-S-002 in row text and scenario comments. Do not overwrite existing memory `M-01`/`M-02` rows. [ASSUMED]
 
 ### Pitfall 5: Forgetting Integration Config Include
 
@@ -323,19 +323,19 @@ npm test -- --reporter=verbose macro-task-registry macro-cancellation macro-sess
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
 | A1 | `cancel(taskId)` should mark cancellation for evaluator observation and deletion should happen when the invocation handles cancellation, not at cancel-request time. | Common Pitfalls | If wrong, registry may either delete too early or retain cancelled records contrary to REQ-049. |
-| A2 | Directed macro cancellation IDs should be reconciled to a free range rather than overwriting current memory `M-01`/`M-02`. | Common Pitfalls | If wrong, coverage matrix updates may collide with existing validated memory lifecycle rows. |
+| A2 | Directed macro cancellation IDs should use local non-colliding `MLC-01`/`MLC-02` rows while preserving the Test Plan T-S-001/T-S-002 mapping. | Common Pitfalls | If wrong, coverage matrix updates may collide with existing validated memory lifecycle rows. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **What exact session ID source should production use for stdio and in-memory tests?**
+1. **What exact session ID source should production use for stdio and in-memory tests? RESOLVED.**
    - What we know: public `call_macro` currently defaults to host caller context and does not expose caller identity. [VERIFIED: src/mcp/tools/macro.ts]
-   - What's unclear: no existing macro code derives an MCP transport session ID for stdio/InMemoryTransport calls. [VERIFIED: rg sessionId]
-   - Recommendation: use an explicit `sessionId` option for `runMacroSource` and default to a stable process/session token when no transport ID is available; tests can pass two simulated session IDs. [ASSUMED]
+   - Resolution: production must not derive session identity from `host:${config.instance.id}` because that collapses all callers for the same FlashQuery instance. The implementation should use a trusted per-session source in this order: an MCP SDK/transport session identifier from the handler `extra` context if exposed by the installed SDK; otherwise a registration-scoped token generated inside `registerMacroTools`. This fallback is safe because `createMcpServer` is called once per HTTP client session and once for the stdio client process, so the fallback is per registration/client rather than config-instance global. [VERIFIED: src/mcp/server.ts] [ASSUMED]
+   - Test strategy: trusted internal tests may pass explicit `sessionId` values to `runMacroSource` to simulate `session-a` and `session-b`; production public calls must use the per-session/per-registration provider above, never a request-schema caller parameter and never `config.instance.id` as the session identity. [CITED: Macro Requirements §6.7.6] [VERIFIED: 136-CONTEXT.md]
 
-2. **How should the directed coverage ID collision be resolved?**
+2. **How should the directed coverage ID collision be resolved? RESOLVED.**
    - What we know: Test Plan says macro cancellation uses `M-01` and `M-02`; current directed matrix already uses `M-01` and `M-02` for memory lifecycle. [CITED: Macro Test Plan §7] [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md]
-   - What's unclear: whether the macro test plan should be amended or the current matrix should gain a macro-specific prefix. [ASSUMED]
-   - Recommendation: planner should include a user-confirmation or coverage-covgen task before directed scenario implementation. [ASSUMED]
+   - Resolution: preserve existing memory lifecycle `M-01`/`M-02` rows. Add Phase 136 macro lifecycle rows as `MLC-01` and `MLC-02`, and explicitly mention their mapping to Test Plan T-S-001/T-S-002 and the source Test Plan's proposed `M-01`/`M-02` labels. [ASSUMED]
+   - Test strategy: the directed scenario files must use `COVERAGE = ["MLC-01"]` and `COVERAGE = ["MLC-02"]`; grep gates must prove no new macro scenario claims `M-01` or `M-02`. [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md]
 
 ## Environment Availability
 
