@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { standardBuiltins } from '../../src/macro/builtins.js';
+import { MacroTaskRegistry } from '../../src/macro/task-registry.js';
 import {
   evaluateProgram,
   MacroExpectedError,
@@ -278,6 +279,26 @@ describe('macro standard library channel and task builtins', () => {
     expect(resultOf(payload)).toEqual([
       { task_id: 'task-current', status: 'working' },
     ]);
+  });
+
+  it('T-U-125c list_tasks can use MacroTaskRegistry.list(sessionId) as its provider', async () => {
+    const taskRegistry = new MacroTaskRegistry();
+    const sessionATask = taskRegistry.create({ sessionId: 'session-a', source: 'exit list_tasks' });
+    const sessionBTask = taskRegistry.create({ sessionId: 'session-b', source: 'sleep 1000' });
+
+    const { payload } = await run('exit list_tasks', {
+      taskId: sessionATask.task_id,
+      sessionId: 'session-a',
+      listTasks: () => taskRegistry.list('session-a'),
+    });
+
+    const visibleTasks = resultOf(payload);
+    expect(visibleTasks).toEqual([
+      expect.objectContaining({ task_id: sessionATask.task_id, status: 'working' }),
+    ]);
+    expect(JSON.stringify(visibleTasks)).not.toContain(sessionBTask.task_id);
+    expect(JSON.stringify(visibleTasks)).not.toContain('session-a');
+    expect(JSON.stringify(visibleTasks)).not.toContain('session-b');
   });
 });
 
