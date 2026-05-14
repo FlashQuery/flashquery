@@ -125,6 +125,24 @@ describe('MCP tool registration metadata', () => {
     });
   });
 
+  it('rejects call_macro requests that provide both source and source_ref as invalid input', async () => {
+    const server = makeCatalogServer();
+    registerAllCurrentTools(server);
+
+    const callMacro = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro');
+    expect(callMacro).toBeDefined();
+
+    const result = await callMacro?.handler({
+      source: 'exit "hello"',
+      source_ref: '@doc#macro',
+    }, {} as never);
+    expect(result?.isError).toBeFalsy();
+    expect(JSON.parse(result?.content[0]?.text ?? '')).toMatchObject({
+      error: 'invalid_input',
+      details: { reason: 'exactly_one_required' },
+    });
+  });
+
   it('uses metadata descriptions for the registered native catalog', () => {
     const server = makeCatalogServer();
     registerAllCurrentTools(server);

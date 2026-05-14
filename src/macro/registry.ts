@@ -53,7 +53,7 @@ function toZodObjectSchema(inputSchema: unknown): z.ZodObject<z.ZodRawShape> {
 }
 
 function parseNativeToolResponse(response: NativeToolResponse | MacroValue): MacroValue {
-  if (!isRecord(response) || !Array.isArray(response.content)) {
+  if (!isNativeToolResponse(response)) {
     return toMacroValue(response);
   }
 
@@ -79,7 +79,22 @@ function toMacroValue(value: unknown): MacroValue {
   if (isRecord(value)) {
     return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, toMacroValue(entry)]));
   }
-  return String(value);
+  if (value === undefined) return null;
+  if (typeof value === 'bigint') return value.toString();
+  if (typeof value === 'symbol') return value.description ?? '';
+  if (typeof value === 'function') return value.name === '' ? '[function]' : value.name;
+  return null;
+}
+
+function isNativeToolResponse(value: NativeToolResponse | MacroValue): value is NativeToolResponse {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.content) &&
+    value.content.every(
+      (item): item is { type: 'text'; text: string } =>
+        isRecord(item) && item.type === 'text' && typeof item.text === 'string'
+    )
+  );
 }
 
 function wrapNativeTool(tool: NativeToolDefinition, dispatchContext: NativeToolDispatchContext): ToolFn {

@@ -98,7 +98,7 @@ The existing codebase already has the main seams: macro AST nodes distinguish `T
 | Macro AST permission pre-scan | API / Backend | — | Macro execution is in-process inside the MCP server, and the pre-scan must run before tool handler side effects. [CITED: Macro Requirements §6.4.2] |
 | Native `fq.*` tool registry construction | API / Backend | MCP server registration layer | The native catalog is populated while registering MCP tools on `McpServer`, then consumed by backend macro execution. [VERIFIED: src/mcp/tool-catalog.ts, src/mcp/server.ts] |
 | Brokered tool registry entries | API / Backend | External MCP broker boundary | The v0 `NullMcpBroker` exposes the broker seam; real broker transport is out of scope. [CITED: Macro Requirements §3.2] [VERIFIED: src/services/mcp-broker.ts] |
-| Caller identity and purpose allowlist | API / Backend | Agent loop | Host calls and delegated/purpose-originated calls must derive identity from existing call context and `assembleNativeToolRegistry`, not from user request fields. [CITED: Macro Requirements §6.4.7] [VERIFIED: src/llm/tool-registry.ts] |
+| Caller identity and allowlists | API / Backend | MCP host exposure + Agent loop | Host calls derive allowlist from existing host MCP exposure via `resolveHostToolExposure(config.hostMcpTools)`; delegated/purpose-originated calls derive allowlist from `assembleNativeToolRegistry(config, purposeName, catalog)`. Neither path uses request fields. [CITED: Macro Requirements §6.4.7] [VERIFIED: src/mcp/tool-exposure.ts] [VERIFIED: src/llm/tool-registry.ts] |
 | Public `call_macro` schema | API / Backend | MCP transport | The request schema is registered as an MCP tool and must not accept `callerKind`. [CITED: Macro Requirements §6.4.7] [VERIFIED: src/mcp/tools/macro.ts] |
 
 ## Standard Stack
@@ -253,12 +253,13 @@ return await registry[server].tools[tool](arg, ctx);
 - **Treating template-masqueraded tools as missing native tools:** Requirements mandate a distinct error code. [CITED: Macro Requirements §6.4.5]
 - **Adding `callerKind` to the MCP schema:** Caller identity must come from existing context, not user input. [CITED: Macro Requirements §6.4.7] [VERIFIED: src/mcp/tools/macro.ts]
 - **Letting `_exists()` route through dispatcher handlers:** Existing introspection tests prove `_exists()` is engine-resolved and does not call handlers. [VERIFIED: tests/unit/macro-introspection.test.ts] [VERIFIED: src/macro/introspection.ts]
+- **Misreading the Phase 134 gap-fix test label collision:** The current codebase includes a Phase 134 broker `_exists()` timeout test labelled `T-U-156`, while the canonical Macro Language Test Plan assigns Phase 135 dispatch coverage to `T-U-156` through `T-U-171`. Keep Phase 135 tests aligned to the product Test Plan and treat the predecessor label as local historical coverage, not as a reason to renumber or skip dispatch cases. [VERIFIED: tests/unit/macro-introspection.test.ts] [CITED: Macro Test Plan §4.6]
 
 ## Don't Hand-Roll
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
-| Native tool allowlist | A new macro-specific permission table | `assembleNativeToolRegistry` | It already expands tiers, exclusions, host catalog filtering, and hard-excluded native tools. [VERIFIED: src/llm/tool-registry.ts] |
+| Native tool allowlist | A new macro-specific permission table | `resolveHostToolExposure` for host calls; `assembleNativeToolRegistry` for delegated calls | These are the existing sources of truth for host MCP exposure and delegated model-visible native access. [VERIFIED: src/mcp/tool-exposure.ts] [VERIFIED: src/llm/tool-registry.ts] |
 | Native handler discovery | Direct source imports or SDK internals | `wrapServerWithToolCatalog` / `getNativeToolCatalog` | The project already records handlers during MCP registration. [VERIFIED: src/mcp/tool-catalog.ts, src/mcp/server.ts] |
 | Native argument validation | Custom JSON shape checks | Existing `NativeToolDefinition.inputSchema` and Zod parse path | The agentic dispatcher already validates raw Zod-shape args before handler invocation. [VERIFIED: src/llm/tool-dispatcher.ts] |
 | Template masquerade detection | Filename heuristics alone | Existing `templateReverseMap` / generated template tool metadata | Template tools are already assembled into a reverse map for dispatch. [VERIFIED: src/llm/template-tools.ts, src/llm/tool-dispatcher.ts] |
@@ -274,7 +275,7 @@ return await registry[server].tools[tool](arg, ctx);
 
 **Why it happens:** The existing function was built for delegated model-visible tools, not a host macro invocation. [VERIFIED: src/llm/tool-registry.ts] [VERIFIED: src/mcp/server.ts]
 
-**How to avoid:** Plan an explicit host allowlist helper or host-caller branch that still uses the same metadata/catalog machinery and does not add request fields. [CITED: Macro Requirements §6.4.7]
+**How to avoid:** Plan an explicit host-caller branch that uses `resolveHostToolExposure(config.hostMcpTools).hostEnabledToolNames`, intersects that with the native catalog, and does not add request fields. Delegated calls continue to use `assembleNativeToolRegistry(config, purposeName, catalog)`. [CITED: Macro Requirements §6.4.7] [VERIFIED: src/mcp/tool-exposure.ts]
 
 **Warning signs:** Tests need to pass `callerKind`, or host tests construct a fake purpose just to get basic tools. [CITED: Macro Test Plan §4.6.4]
 
@@ -284,7 +285,7 @@ return await registry[server].tools[tool](arg, ctx);
 
 **Why it happens:** Existing hard exclusions were designed for delegated model-visible native access. [VERIFIED: .planning/STATE.md]
 
-**How to avoid:** Plan separate host vs delegated assembly semantics while reusing the same metadata source; delegated must retain `RECURSIVE_MODEL_REASON`, while host can include `call_model` when its host allowlist permits it. [CITED: Macro Requirements §6.4.6, §6.4.7]
+**How to avoid:** Plan separate host vs delegated assembly semantics while reusing existing sources: host uses `resolveHostToolExposure`, delegated uses `assembleNativeToolRegistry` and must retain `RECURSIVE_MODEL_REASON`; host can include `call_model` when host exposure permits it. [CITED: Macro Requirements §6.4.6, §6.4.7] [VERIFIED: src/mcp/tool-exposure.ts]
 
 **Warning signs:** T-U-167 cannot be written without weakening T-U-168. [CITED: Macro Test Plan §4.6.3]
 
@@ -338,8 +339,8 @@ export async function dispatchMacroTool(input: {
   if (!handler) return unknownTool(input.server, input.tool, Object.keys(entry.tools));
   const fqName = `${input.server}.${input.tool}`;
   if (!input.allowlist.has(fqName)) return forbiddenTools([fqName], [...input.allowlist]);
-  const value = await handler(input.arg, input.context);
-  return macroResult(value);
+  const value = await handler(input.arg, input.context); // ToolFn returns MacroValue.
+  return macroResult(value); // Dispatcher/evaluator adapts success to ToolResult envelope.
 }
 ```
 
@@ -349,7 +350,8 @@ export async function dispatchMacroTool(input: {
 // Source: src/llm/tool-dispatcher.ts and src/mcp/tool-catalog.ts
 function wrapNativeTool(tool: NativeToolDefinition, nativeContext: NativeToolDispatchContext): ToolFn {
   return async (arg) => {
-    return await tool.handler(arg, nativeContext);
+    const response = await tool.handler(arg, nativeContext);
+    return parseToolResultPayload(response); // returns MacroValue, not ToolResult.
   };
 }
 ```
@@ -393,22 +395,22 @@ function collectFromStatement(statement: Statement, refs: ToolReference[]): void
 |---|-------|---------|---------------|
 | A1 | Throwing during AST traversal is a likely implementation temptation. | Common Pitfalls | Low; only affects explanatory rationale, not the required behavior. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **How exactly should host allowlist assembly be represented in code?**
    - What we know: Requirements say inbound MCP calls use host allowlist and no `callerKind` request field. [CITED: Macro Requirements §6.4.7]
-   - What's unclear: Existing `assembleNativeToolRegistry` currently accepts a required `purposeName: string`, so a host path may need a new helper or optional-purpose overload. [VERIFIED: src/llm/tool-registry.ts]
-   - Recommendation: Planner should create an early task to define `MacroCallerContext` or equivalent internal options and extend/reuse registry assembly without changing the public schema. [CITED: Macro Requirements §6.4.7]
+   - Resolution: Do not overload `assembleNativeToolRegistry` for host calls. Host MCP exposure already has a source of truth: `resolveHostToolExposure(config.hostMcpTools)` in `src/mcp/tool-exposure.ts`, and the server already uses it to filter registration before `wrapServerWithToolCatalog(server, { hostEnabledToolNames })` in `src/mcp/server.ts`. Phase 135 should define an internal `MacroCallerContext` discriminated union such as `{ origin: 'host' } | { origin: 'delegated'; purposeName: string }`. For `origin: 'host'`, derive `allowedToolNames` from `resolveHostToolExposure(config.hostMcpTools).hostEnabledToolNames` intersected with the current native catalog. For `origin: 'delegated'`, derive `allowedToolNames` from `assembleNativeToolRegistry(config, purposeName, catalog).nativeToolNames`. [VERIFIED: src/mcp/tool-exposure.ts] [VERIFIED: src/mcp/server.ts] [VERIFIED: src/llm/tool-registry.ts]
+   - Planning impact: Plan 02 must implement this internal host/delegated split in `src/macro/registry.ts`; Plan 04 must pass `{ origin: 'host' }` from inbound `registerMacroTools` without adding public request fields. [CITED: Macro Requirements §6.4.7]
 
 2. **Where will production `NativeToolDispatchContext` come from for macro native dispatch?**
    - What we know: `dispatchNativeToolCall` requires signal, instanceId, and optional logging context. [VERIFIED: src/llm/tool-dispatcher.ts]
-   - What's unclear: `evaluateProgram` currently has no native dispatch context field. [VERIFIED: src/macro/evaluator.ts]
-   - Recommendation: Planner should add a typed native dispatch context to macro execution options, with tests using deterministic mock contexts. [VERIFIED: src/llm/tool-dispatcher.ts]
+   - Resolution: Thread a `nativeDispatchContext?: NativeToolDispatchContext` or equivalent typed field through `EvaluateProgramOptions` / `MacroInvocationContext` only if `buildToolRegistry` needs to wrap native handlers at evaluate-time. For inbound `call_macro`, construct it in `src/mcp/tools/macro.ts` from existing request/server context values: `signal` should be an `AbortController().signal` or available MCP/request signal when exposed by the SDK, `instanceId` must be `config.instance.id`, and `logger`/`logContext` may reuse the existing logger pattern. Unit tests can inject deterministic mock contexts. [VERIFIED: src/llm/tool-dispatcher.ts] [VERIFIED: src/mcp/tools/macro.ts]
+   - Planning impact: Plan 04 must include the native dispatch context wiring; Plan 02 may keep handler wrapping generic and accept the context as an input. [CITED: Macro Requirements §6.4.1]
 
 3. **Should macro dispatcher call `dispatchNativeToolCall` or wrap `NativeToolDefinition.handler` directly?**
    - What we know: Requirements say route to the same handlers made available to the agent loop, and the existing dispatcher validates args with Zod before handler invocation. [CITED: Macro Requirements §6.4.1] [VERIFIED: src/llm/tool-dispatcher.ts]
-   - What's unclear: `dispatchNativeToolCall` returns an agent-loop tool message/log shape, not a macro `ToolResult`/`Value` shape. [VERIFIED: src/llm/tool-dispatcher.ts]
-   - Recommendation: Use the same catalog and handler path; reuse or extract argument validation if needed, but do not force macro results through LLM tool-message envelopes. [CITED: Macro Requirements §7.4]
+   - Resolution: Build macro `ToolFn`s from `NativeToolDefinition.handler` so each `ToolFn` returns a `MacroValue`/spec `Value`, not a `ToolResult`. Copy or extract the Zod argument-validation logic from `dispatchNativeToolCall` (`toZodObjectSchema(...).parse(args)`) before invoking the handler. Then parse/adapt successful `NativeToolResponse` text into the macro value channel. Do not force macro dispatch through `NativeToolDispatchResult.message` because that is an agent-loop envelope, not the macro language value channel. [VERIFIED: src/llm/tool-dispatcher.ts] [CITED: Macro Requirements §7.4]
+   - Planning impact: Plan 02 should implement native handler wrapping in `src/macro/registry.ts` or `src/macro/dispatcher.ts`, preserving validation and passing through canonical MCP tool responses as macro values according to the evaluator contract. [CITED: Macro Requirements §6.4.1]
 
 ## Environment Availability
 
@@ -473,7 +475,7 @@ function collectFromStatement(statement: Statement, refs: ToolReference[]): void
 |---------------|---------|------------------|
 | V2 Authentication | no | Phase 135 does not change MCP authentication; it runs inside existing handler context. [VERIFIED: src/mcp/tools/macro.ts] |
 | V3 Session Management | partial | Do not add server-side session state; caller identity is internal context only. [VERIFIED: AGENTS.md] [CITED: Macro Requirements §6.4.7] |
-| V4 Access Control | yes | `assembleNativeToolRegistry` allowlist, static pre-scan, and dispatch backstop. [CITED: Macro Requirements §7.3] [VERIFIED: src/llm/tool-registry.ts] |
+| V4 Access Control | yes | `resolveHostToolExposure` host allowlist, `assembleNativeToolRegistry` delegated allowlist, static pre-scan, and dispatch backstop. [CITED: Macro Requirements §7.3] [VERIFIED: src/mcp/tool-exposure.ts] [VERIFIED: src/llm/tool-registry.ts] |
 | V5 Input Validation | yes | Zod schemas for MCP/native tool args; macro pre-scan before side effects. [VERIFIED: src/mcp/tools/macro.ts, src/llm/tool-dispatcher.ts] [CITED: Macro Requirements §6.4.2] |
 | V6 Cryptography | no | Phase 135 does not introduce cryptography. [CITED: Macro Requirements §8.8] |
 

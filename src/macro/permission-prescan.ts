@@ -15,7 +15,7 @@ export interface PreScanToolReferencesOptions {
   program: Program;
   registry: ToolRegistry;
   allowlist: ReadonlySet<string>;
-  allowlistSource?: 'resolveHostToolExposure' | 'assembleNativeToolRegistry' | string;
+  allowlistSource?: string;
   callerContext?: MacroCallerContext;
   templateToolNames?: ReadonlySet<string> | readonly string[];
   hardExcludedReasons?: ReadonlyMap<string, string>;
@@ -35,7 +35,7 @@ export function preScanToolReferences(options: PreScanToolReferencesOptions): To
   const references = collectToolReferences(options.program);
   const templateToolNames = toStringSet(options.templateToolNames);
   const templateReference = references.find((reference) =>
-    templateToolNames.has(formatToolReference(reference))
+    isTemplateReference(reference, templateToolNames)
   );
   if (templateReference) {
     return jsonExpectedError({
@@ -64,6 +64,14 @@ export function preScanToolReferences(options: PreScanToolReferencesOptions): To
     });
   }
 
+  const hardExcluded = uniqueByReference(
+    references.filter((reference) => options.hardExcludedReasons?.has(formatToolReference(reference)))
+  );
+  if (hardExcluded.length > 0) {
+    const reason = options.hardExcludedReasons?.get(formatToolReference(hardExcluded[0]));
+    return forbiddenToolsResult(hardExcluded, options.allowlist, reason);
+  }
+
   const unknownTools = uniqueUnknownTools(
     references
       .map((reference): UnknownToolReference | undefined => {
@@ -88,14 +96,6 @@ export function preScanToolReferences(options: PreScanToolReferencesOptions): To
         unknown: unknownTools.map(formatToolReference),
       },
     });
-  }
-
-  const hardExcluded = uniqueByReference(
-    references.filter((reference) => options.hardExcludedReasons?.has(formatToolReference(reference)))
-  );
-  if (hardExcluded.length > 0) {
-    const reason = options.hardExcludedReasons?.get(formatToolReference(hardExcluded[0]));
-    return forbiddenToolsResult(hardExcluded, options.allowlist, reason);
   }
 
   const forbidden = uniqueByReference(
@@ -214,7 +214,12 @@ function forbiddenToolsResult(
 
 function toStringSet(values: ReadonlySet<string> | readonly string[] | undefined): Set<string> {
   if (values === undefined) return new Set();
-  return values instanceof Set ? new Set(values) : new Set(values);
+  if (values instanceof Set) return new Set<string>([...values]);
+  return new Set<string>(values);
+}
+
+function isTemplateReference(reference: ToolReference, templateToolNames: ReadonlySet<string>): boolean {
+  return templateToolNames.has(reference.tool) || templateToolNames.has(formatToolReference(reference));
 }
 
 function uniqueByReference<T extends ToolReference>(references: T[]): T[] {

@@ -268,7 +268,7 @@ function valueToLines(value: MacroValue): SourceLine[] {
   }
   if (Array.isArray(value)) {
     return value.map((item, index) => ({
-      text: typeof item === 'string' ? item : String(item),
+      text: macroValueToText(item),
       lineNumber: index + 1,
       source: null,
     }));
@@ -354,6 +354,13 @@ function requireExistingPath(hostPath: string, macroPath: string, builtin: strin
       builtin,
     });
   }
+}
+
+function macroValueToText(value: MacroValue): string {
+  if (typeof value === 'string') return value;
+  if (value === null) return 'null';
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return JSON.stringify(value);
 }
 
 function requireArgCount(

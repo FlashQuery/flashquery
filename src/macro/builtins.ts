@@ -103,7 +103,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
       return positional.join('');
     }
     if (positional.every((value) => Array.isArray(value))) {
-      return positional.flatMap((value) => value as MacroValue[]);
+      return positional.flatMap((value) => value);
     }
     throw new MacroRuntimeError('concat expects all strings or all lists.', undefined, {
       reason: 'concat_type_mismatch',
@@ -111,7 +111,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
   },
   add: (positional, named) => {
     requireNamedArgs('add', named, []);
-    return positional.reduce((total, value) => total + requireNumber(value, 'add'), 0);
+    return positional.reduce<number>((total, value) => total + requireNumber(value, 'add'), 0);
   },
   sub: (positional, named) => {
     requireNamedArgs('sub', named, []);
@@ -209,7 +209,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     requireNamedArgs('sleep', named, []);
     requireArgCount('sleep', positional, 1, 1, 'sleep_argument_count');
     const duration = requireDuration(positional[0] ?? 0, 'sleep');
-    await sleepWithCancellation(duration, context.checkCancelled);
+    await sleepWithCancellation(duration, (where) => context.checkCancelled(where));
     return null;
   },
   slow_op: async (positional, named, context) => {
@@ -222,7 +222,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
         reason: 'slow_op_label_type',
       });
     }
-    await sleepWithCancellation(duration, context.checkCancelled);
+    await sleepWithCancellation(duration, (where) => context.checkCancelled(where));
     return { ok: true, label, elapsed_ms: duration };
   },
 };

@@ -3,6 +3,7 @@ import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { callMacroInputSchema, runMacroSource } from '../../src/mcp/tools/macro.js';
 import type { MacroCallerContext } from '../../src/macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../src/llm/tool-registry.js';
+import type { McpBroker } from '../../src/services/mcp-broker.js';
 import { NullMcpBroker } from '../../src/services/mcp-broker.js';
 
 function makeConfig(): FlashQueryConfig {
@@ -95,5 +96,34 @@ describe('macro caller identity', () => {
       source: 'exit 1',
       callerKind: 'delegated',
     }).data).not.toHaveProperty('callerKind');
+  });
+
+  it('threads brokerTools through runMacroSource so brokered dispatch is reachable from the runner', async () => {
+    const brokerHandler = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: JSON.stringify({ results: ['FlashQuery'] }) }],
+    });
+    const broker = {
+      isConnected: vi.fn(async (serverId: string) => serverId === 'brave_search'),
+      getToolHandler: vi.fn((serverId: string, toolName: string) =>
+        serverId === 'brave_search' && toolName === 'web_search' ? brokerHandler : null
+      ),
+    } satisfies McpBroker;
+
+    const result = await runMacroSource({
+      source: 'exit brave_search.web_search({ query: "FlashQuery" })',
+      config: makeConfig(),
+      catalog,
+      broker,
+      nativeDispatchContext: nativeDispatchContext(),
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    const payload = JSON.parse(result.result.content[0]?.text ?? '{}') as Record<string, unknown>;
+    expect(payload.result).toEqual({ results: ['FlashQuery'] });
+    expect(result.registryBuild.allowedToolNames).toContain('brave_search.web_search');
+    expect(brokerHandler).toHaveBeenCalledWith(
+      { query: 'FlashQuery' },
+      expect.objectContaining({ server: 'brave_search', tool: 'web_search' })
+    );
   });
 });
