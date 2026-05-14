@@ -313,10 +313,12 @@ npm test -- --reporter=verbose macro-task-registry macro-cancellation macro-sess
 | POC singleton `taskRegistry` with retained terminal records | Production instance-scoped registry with immediate terminal deletion | Phase 136 scope, 2026-05-14 | Planner must not copy POC registry verbatim. [VERIFIED: 136-CONTEXT.md] [VERIFIED: macro-prototype/src/taskregistry.ts] |
 | Unit-only concurrent smoke in Phase 132 | Integration `T-I-002` through meaningful public/session boundary | Phase 136 | Planner must create `tests/integration/macro-concurrency.test.ts`. [VERIFIED: .planning/phases/132-evaluator-core/132-04-SUMMARY.md] [CITED: Macro Test Plan §4.3.6] |
 | Phase 135 injected dispatch/test seam | Public `call_macro` builds real native registry, template metadata, hard-exclusion reasons, and dispatch context | Phase 135 complete plus gap-fix commit `1288366` | Cancellation must respect in-flight native handler behavior and must not drop `templateReverseMap`, `templateToolNames`, or `hardExcludedReasons` plumbing. [VERIFIED: .planning/phases/135-tool-registry-dispatch-permissions/135-VERIFICATION.md] [VERIFIED: src/mcp/tools/macro.ts] |
+| Phase 135 Gap 6 allowlist separation | `registry.fq.tools` keeps full native catalog breadth while `allowedToolNames` remains the narrowed invocation allowlist; host-disabled but catalog-known tools are forbidden, true typos are `unknown_tool` | Gap-fix commit `331d80b` | Phase 136 task/session wiring must not rebuild the registry from `allowedToolNames`, must not prune `registry.fq.tools` to the allowlist, and must not reintroduce the removed `knownToolNames` option. [VERIFIED: src/macro/registry.ts] [VERIFIED: src/macro/permission-prescan.ts] [VERIFIED: tests/unit/macro-registry.test.ts] |
 
 **Deprecated/outdated:**
 - POC terminal retention is outdated for production and must not be planned. [CITED: Macro Requirements §5.4] [VERIFIED: macro-prototype/src/taskregistry.ts]
 - Public caller identity parameters are not allowed; public `call_macro` derives host identity internally. [VERIFIED: .planning/phases/135-tool-registry-dispatch-permissions/135-VERIFICATION.md] [VERIFIED: src/mcp/tools/macro.ts]
+- `knownToolNames` is removed from registry/evaluator/prescan after Gap 6; do not add it back. The registry itself carries known native catalog tools, and `allowedToolNames` is only the permission allowlist. [VERIFIED: commit `331d80b`]
 
 ## Assumptions Log
 

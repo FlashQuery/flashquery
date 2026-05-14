@@ -351,6 +351,8 @@ Keep `CHUNK_MS = 100`; update label if tests assert `at_safe_point`.
 
 **Phase 135 gap-fix preservation rule:** current `runMacroSource` accepts and forwards `templateReverseMap`, `templateToolNames`, and registry-derived `hardExcludedReasons`. Phase 136 edits must add `taskRegistry`/`sessionId` without removing this metadata flow, because Phase 135 verification now relies on template-masquerade and delegated `fq.call_model` hard-exclusion behavior.
 
+**Phase 135 Gap 6 preservation rule:** `buildToolRegistry` now keeps `registry.fq.tools` at full native catalog breadth while `allowedToolNames` remains the narrowed invocation allowlist. This distinction lets `preScanToolReferences` classify catalog-known but disallowed tools as `forbidden_tools` while true typos remain `unknown_tool`. Do not rebuild `registry.fq.tools` from `allowedToolNames`, do not add back `knownToolNames`, and do not remove host-disabled native handlers from the macro registry while adding task lifecycle/session wiring.
+
 **Imports pattern** (lines 1-13):
 ```typescript
 import { z } from 'zod';
@@ -408,6 +410,8 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
 ```
 
 Create the registry record after successful parse/preflight decision for real runs, pass `taskId`, `sessionId`, `listTasks`, and `checkCancelled` into `evaluateProgram`, then transition `complete`/`fail`/`cancel` in `try/catch/finally`.
+
+**Gap 6 guardrail tests to preserve:** `tests/unit/macro-registry.test.ts` asserts `keeps fq.tools at full native catalog breadth while host allowlist stays narrowed`; `tests/unit/macro-permission-prescan.test.ts` asserts catalog tools outside the allowlist are `forbidden_tools` and true typos are `unknown_tool`.
 
 **Registration pattern** (lines 105-153):
 ```typescript
