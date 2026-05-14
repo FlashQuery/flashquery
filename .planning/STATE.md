@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: ready_to_plan
+status: executing
 stopped_at: Completed 133-03-PLAN.md
-last_updated: "2026-05-14T16:24:11.868Z"
-last_activity: 2026-05-14 -- Phase 134 execution started
+last_updated: "2026-05-14T18:23:39.845Z"
+last_activity: 2026-05-14
 progress:
   total_phases: 9
   completed_phases: 5
-  total_plans: 19
-  completed_plans: 14
-  percent: 56
+  total_plans: 23
+  completed_plans: 20
+  percent: 87
 ---
 
 # FlashQuery Core — State
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 134 — shell-verbs-vault-jail-introspection
+**Current focus:** Phase 135 — tool-registry-dispatch-permissions
 
 ## Current Position
 
-Phase: 135
-Plan: Not started
-Status: Ready to plan
+Phase: 135 (tool-registry-dispatch-permissions) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-05-14
 
 ## Performance Metrics
@@ -110,6 +110,7 @@ Last activity: 2026-05-14
 | Phase 131 P03 | 24 min | 3 tasks | 3 files |
 | Phase 131 P04 | 16 min | 1 tasks | 19 files |
 | Phase 131 P05 | 10 min | 1 tasks | 3 files |
+| Phase 135 P01 | 7m19s | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -187,6 +188,8 @@ Last activity: 2026-05-14
 - [Phase 130]: 130-01: NullMcpBroker reuses NativeToolHandler for future dispatch compatibility while exposing no brokered connectivity in v0.
 - [Phase 132]: Evaluator core returns canonical ToolResult envelopes directly from evaluateProgram, with later MCP handler phases calling the same surface.
 - [Phase 132]: Escaped dollars in interpolated parser strings are preserved with an evaluator-only sentinel so \$name remains literal while normal $name interpolates.
+- [Phase 135]: 135-01: Wave 0 tests intentionally remain RED until Phase 135 production modules and call_macro dispatch wiring land.
+- [Phase 135]: 135-01: Integration dispatch coverage uses createMcpServer with InMemoryTransport and existing .env.test/Supabase helpers rather than a mock dispatcher.
 
 ## Accumulated Context
 
@@ -300,7 +303,7 @@ Last activity: 2026-05-14
 
 ## Session Continuity
 
-Last session: 2026-05-14T14:49:47.250Z
+Last session: 2026-05-14T18:22:56.551Z
 Stopped at: Completed 133-03-PLAN.md
 Resume: None
 
