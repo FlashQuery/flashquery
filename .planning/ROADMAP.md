@@ -107,6 +107,13 @@ Plans:
 
 **Requirements:** MACRO-SRC-07, MACRO-SRC-08, MACRO-BI-01 through MACRO-BI-07
 
+**Plans:** 3 plans
+
+Plans:
+- [ ] 133-01-PLAN.md — Add input_var preflight, named builtin args, and evaluator dispatch contract.
+- [ ] 133-02-PLAN.md — Add pure data, arithmetic, range, input_var, sleep, and slow_op builtin registry behavior.
+- [ ] 133-03-PLAN.md — Add termination compatibility, echo/status channels, task introspection, and phase validation.
+
 **Success criteria:**
 1. `input_var` contract collection runs before execution and reports all missing inputs at once.
 2. Data, arithmetic, range, termination, echo, status, task, sleep, and slow-op builtins are registered.
@@ -151,7 +158,7 @@ Plans:
 2. Terminal records are removed immediately after terminal-state transition.
 3. Cancellation is observed between statements, before tool calls, between loop iterations, between pipeline stages, and inside long-running builtins.
 4. Task visibility and cancellation are scoped to the current session.
-5. Concurrent invocations prove state isolation under stress.
+5. Concurrent invocations prove state isolation under stress, including T-I-002 variable/trace/task/budget isolation across simulated sessions.
 
 ### Phase 137: Trace, Progress, Dry-Run, Budgets
 
