@@ -132,12 +132,12 @@ Plans:
 
 **Requirements:** MACRO-SHELL-01 through MACRO-SHELL-05
 
-**Plans:** 5 plans
+**Plans:** 2/5 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 134-01-PLAN.md - Add vault-jailed shell path wrapper and path-wrapper tests.
-- [ ] 134-02-PLAN.md - Add forbidden shell flag pre-scan and evaluator pre-exec wiring.
+- [x] 134-01-PLAN.md - Add vault-jailed shell path wrapper and path-wrapper tests.
+- [x] 134-02-PLAN.md - Add forbidden shell flag pre-scan and evaluator pre-exec wiring.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 134-03-PLAN.md - Add read-only shell verb registry, pipeline stdin, and cwd-retirement coverage.
