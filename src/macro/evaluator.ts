@@ -136,7 +136,7 @@ export class MacroFailError extends Error {
   }
 }
 
-class MacroExpectedError extends Error {
+export class MacroExpectedError extends Error {
   constructor(
     public readonly error: string,
     message: string,
@@ -528,9 +528,13 @@ async function evalCall(
   }
 
   if (call.name === 'fail') {
-    const message =
-      positional.length > 0 ? positional.map((value) => stringifyMacroValue(value)).join(' ') : 'macro aborted';
-    throw new MacroFailError(message, call.line);
+    if (positional.length > 1 || (positional.length === 1 && typeof positional[0] !== 'string')) {
+      throw new MacroExpectedError('invalid_input', 'fail accepts zero or one string argument.', {
+        reason: 'fail_argument_shape',
+        line: call.line,
+      });
+    }
+    throw new MacroFailError(positional[0] ?? 'macro aborted', call.line);
   }
 
   if (call.name === 'input_var') {

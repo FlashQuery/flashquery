@@ -1,5 +1,6 @@
 import {
   MacroExitError,
+  MacroExpectedError,
   MacroFailError,
   MacroRuntimeError,
   type MacroBuiltin,
@@ -10,8 +11,12 @@ const CHUNK_MS = 100;
 
 export const standardBuiltins: Record<string, MacroBuiltin> = {
   fail: (positional) => {
-    const message = positional.length > 0 ? positional.map(stringifyMacroValue).join(' ') : 'macro aborted';
-    throw new MacroFailError(message);
+    if (positional.length > 1 || (positional.length === 1 && typeof positional[0] !== 'string')) {
+      throw new MacroExpectedError('invalid_input', 'fail accepts zero or one string argument.', {
+        reason: 'fail_argument_shape',
+      });
+    }
+    throw new MacroFailError(positional[0] ?? 'macro aborted');
   },
   exit: (positional) => {
     if (positional.length > 1) {
@@ -40,7 +45,12 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     });
   },
   count: (positional) => {
-    const value = positional[0] ?? null;
+    if (positional.length !== 1) {
+      throw new MacroRuntimeError('count expects exactly one argument.', undefined, {
+        reason: 'count_argument_count',
+      });
+    }
+    const value = positional[0];
     if (Array.isArray(value) || typeof value === 'string') return value.length;
     if (value === null) return 0;
     throw new MacroRuntimeError('count expects a list, string, or null.', undefined, {

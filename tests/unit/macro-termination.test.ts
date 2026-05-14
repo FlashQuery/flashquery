@@ -37,6 +37,17 @@ describe('macro evaluator termination envelopes', () => {
     });
   });
 
+  it('rejects invalid fail argument shapes as invalid_input', async () => {
+    for (const source of ['fail 1', 'fail "a" "b"']) {
+      const result = await evaluateProgram(parseProgram(source));
+      expect(result.isError).toBe(false);
+      expect(parseToolPayload(result)).toMatchObject({
+        error: 'invalid_input',
+        details: { reason: 'fail_argument_shape' },
+      });
+    }
+  });
+
   it('T-U-088 treats expected tool envelopes with isError: false as branchable values', async () => {
     const result = await evaluateProgram(
       parseProgram(`
