@@ -1,4 +1,25 @@
 import type { MacroParseErrorEnvelope } from './errors.js';
+import type { MacroInvocationContext, MacroValue } from './evaluator.js';
+
+export type ToolFn = (arg: Record<string, MacroValue>, ctx: MacroInvocationContext) => MacroValue | Promise<MacroValue>;
+
+export interface ServerEntry {
+  label: string;
+  tools: Record<string, ToolFn>;
+}
+
+export type ToolRegistry = Record<string, ServerEntry>;
+
+export interface ToolReference {
+  server: string;
+  tool: string;
+  line?: number;
+}
+
+export interface MacroCallerContext {
+  origin: 'host' | 'delegated';
+  purposeName?: string;
+}
 
 export interface Program {
   kind: 'Program';
