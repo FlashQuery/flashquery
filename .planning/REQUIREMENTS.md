@@ -57,11 +57,11 @@
 
 - [x] **MACRO-BI-01**: Data builtins `count`, `unique`, `append`, and `concat` match the spec and POC semantics.
 - [x] **MACRO-BI-02**: Arithmetic builtins `add`, `sub`, `mul`, `div`, and `mod` validate numeric inputs and return deterministic results.
-- [ ] **MACRO-BI-03**: `fail` and `exit` halt execution with canonical envelopes.
+- [x] **MACRO-BI-03**: `fail` and `exit` halt execution with canonical envelopes.
 - [x] **MACRO-BI-04**: The runtime `input_var` builtin reads caller bindings and defaults consistently with pre-flight.
 - [x] **MACRO-BI-05**: `range` supports one-, two-, and three-argument forms including negative steps.
-- [ ] **MACRO-BI-06**: `echo` and `status` write to distinct trace/progress channels.
-- [ ] **MACRO-BI-07**: `task_id` and `list_tasks` expose only the current invocation/session scope.
+- [x] **MACRO-BI-06**: `echo` and `status` write to distinct trace/progress channels.
+- [x] **MACRO-BI-07**: `task_id` and `list_tasks` expose only the current invocation/session scope.
 
 ### Shell, Vault Jail, And Introspection
 

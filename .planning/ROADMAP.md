@@ -107,7 +107,7 @@ Plans:
 
 **Requirements:** MACRO-SRC-07, MACRO-SRC-08, MACRO-BI-01 through MACRO-BI-07
 
-**Plans:** 2/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 **Wave 1**
@@ -117,7 +117,7 @@ Plans:
 - [x] 133-02-PLAN.md — Add pure data, arithmetic, range, input_var, sleep, and slow_op builtin registry behavior.
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 133-03-PLAN.md — Add termination compatibility, echo/status channels, task introspection, and phase validation.
+- [x] 133-03-PLAN.md — Add termination compatibility, echo/status channels, task introspection, and phase validation.
 
 **Success criteria:**
 1. `input_var` contract collection runs before execution and reports all missing inputs at once.
