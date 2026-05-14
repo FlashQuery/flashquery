@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: verifying
+status: ready_to_plan
 stopped_at: Completed 135-04-PLAN.md
 last_updated: "2026-05-14T18:48:20.083Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 23
   completed_plans: 23
-  percent: 100
+  percent: 78
 ---
 
 # FlashQuery Core — State
@@ -25,16 +25,16 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 ## Current Position
 
-Phase: 135 (tool-registry-dispatch-permissions) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
+Phase: 136
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-14
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 53 (this milestone)
+- Total plans completed: 57 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -55,6 +55,7 @@ Last activity: 2026-05-14
 | 131 | 5 | - | - |
 | 133 | 3 | - | - |
 | 134 | 5 | - | - |
+| 135 | 4 | - | - |
 
 *Updated after each plan completion*
 | Phase 107 P04 | 15m | 2 tasks | 9 files |
