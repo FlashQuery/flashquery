@@ -92,7 +92,7 @@
 
 - [ ] **MACRO-INT-01**: Concurrent macro invocations across sessions do not leak state.
 - [ ] **MACRO-INT-02**: Macro-executed writes inherit FlashQuery's existing write-lock table behavior.
-- [ ] **MACRO-INT-03**: `archive_document` acquires the standard document write lock.
+- [x] **MACRO-INT-03**: `archive_document` acquires the standard document write lock.
 - [ ] **MACRO-INT-04**: Budget enforcement covers total tokens, model calls, external tool calls, and timeout.
 - [ ] **MACRO-INT-05**: `call_macro` is registered in the MCP server and canonical tool metadata.
 - [ ] **MACRO-INT-06**: A `NullMcpBroker` integration shim ships for v0 broker readiness.
