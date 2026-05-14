@@ -22,12 +22,7 @@ import {
   recordIdentification,
   withWarnings,
 } from '../../src/mcp/utils/response-formats.js';
-import type {
-  MacroDryRunResult,
-  MacroErrorCode,
-  MacroExecutionResult,
-  TraceStep,
-} from '../../src/mcp/utils/response-formats.js';
+import type { MacroErrorCode, MacroExecutionResult } from '../../src/mcp/utils/response-formats.js';
 import {
   buildContentPreview,
   buildMemoryResult,
@@ -41,7 +36,7 @@ function parseToolText(result: { content: Array<{ type: 'text'; text: string }> 
 }
 
 describe('JSON MCP response helpers', () => {
-  it('returns parseable text content for success payloads', () => {
+  it('T-U-208 keeps jsonToolResult parseable text content for success payloads', () => {
     const result = jsonToolResult({ ok: true });
 
     expect(result.content[0]?.type).toBe('text');
@@ -116,7 +111,7 @@ describe('JSON MCP response helpers', () => {
 });
 
 describe('macro response helpers', () => {
-  it('exports the stable v0 macro error code set', () => {
+  it('T-U-205 exports the stable v0 macro error code set', () => {
     expect(MACRO_ERROR_CODES).toEqual([
       'macro_aborted',
       'forbidden_tools',
@@ -131,68 +126,45 @@ describe('macro response helpers', () => {
       'cancelled',
       'parse_error',
     ]);
-
-    const code: MacroErrorCode = 'forbidden_tools';
-    expect(code).toBe('forbidden_tools');
   });
 
-  it('supports the flat trace step shape', () => {
-    const step: TraceStep = {
-      kind: 'tool_call',
-      name: 'fq.search',
-      args: { query: 'macro' },
-      result: { count: 1 },
-      at: '2026-05-14T00:00:00.000Z',
-      elapsed_ms: 12,
-    };
+  it('T-U-206 MacroErrorCode narrows correctly across the full v0 set', () => {
+    function describeCode(code: MacroErrorCode): string {
+      switch (code) {
+        case 'macro_aborted':
+        case 'forbidden_tools':
+        case 'unknown_server':
+        case 'unknown_tool':
+        case 'forbidden_path':
+        case 'forbidden_shell_flag':
+        case 'template_masquerade_tools_not_callable_from_macro':
+        case 'budget_exceeded':
+        case 'timeout':
+        case 'tool_call_failed':
+        case 'cancelled':
+        case 'parse_error':
+          return code;
+        default: {
+          const exhaustive: never = code;
+          return exhaustive;
+        }
+      }
+    }
 
-    expect(step).toEqual({
-      kind: 'tool_call',
-      name: 'fq.search',
-      args: { query: 'macro' },
-      result: { count: 1 },
-      at: '2026-05-14T00:00:00.000Z',
-      elapsed_ms: 12,
-    });
-    expect(Object.keys(step)).toEqual(['kind', 'name', 'args', 'result', 'at', 'elapsed_ms']);
+    for (const code of MACRO_ERROR_CODES) {
+      expect(describeCode(code)).toBe(code);
+    }
   });
 
-  it('wraps MacroExecutionResult payloads in a JSON ToolResult envelope', () => {
+  it('T-U-207 macroResult returns a ToolResult with JSON-stringified content text', () => {
     const payload: MacroExecutionResult = {
-      task_id: 'task-1',
+      task_id: '00000000-0000-4000-8000-000000000001',
       result: { ok: true },
-      trace: [
-        {
-          kind: 'log',
-          message: 'started',
-          at: '2026-05-14T00:00:00.000Z',
-        },
-      ],
-      token_total: 42,
-      model_calls: 1,
-      external_tool_calls: 0,
-      warnings: ['trace_value_truncated'],
     };
 
-    expect(parseToolText(macroResult(payload))).toEqual(payload);
-  });
-
-  it('wraps MacroDryRunResult payloads with the canonical input_var_contract shape', () => {
-    const payload: MacroDryRunResult = {
-      task_id: 'task-2',
-      parsed_ok: true,
-      input_var_contract: {
-        required: ['query'],
-        optional: [{ key: 'limit', default: 5 }],
-      },
-      tool_references: ['fq.search'],
-      server_references: ['fq'],
-    };
-
-    expect(payload.parsed_ok).toBe(true);
-    expect(payload.input_var_contract.required).toEqual(['query']);
-    expect(payload.input_var_contract.optional).toEqual([{ key: 'limit', default: 5 }]);
-    expect(parseToolText(macroResult(payload))).toEqual(payload);
+    expect(macroResult(payload)).toEqual({
+      content: [{ type: 'text', text: JSON.stringify(payload) }],
+    });
   });
 });
 

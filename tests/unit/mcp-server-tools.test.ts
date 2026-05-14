@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { createMcpServer } from '../../src/mcp/server.js';
 import { registerMemoryTools } from '../../src/mcp/tools/memory.js';
 import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
 import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
@@ -91,6 +92,15 @@ describe('MCP tool registration metadata', () => {
     expect(registeredNames).not.toContain('get_doc_outline');
     expect(registeredNames).not.toContain('list_projects');
     expect(registeredNames).not.toContain('get_project_info');
+  });
+
+  it('T-U-230 invokes registerMacroTools from createMcpServer before schema validation', () => {
+    const server = createMcpServer(mockConfig, '0.1.0');
+    const names = getNativeToolCatalog(server).map((tool) => tool.name);
+
+    expect(names).toContain('get_llm_usage');
+    expect(names).toContain('call_macro');
+    expect(names.indexOf('call_macro')).toBeGreaterThan(names.indexOf('get_llm_usage'));
   });
 
   it('has central metadata for every currently registered native tool', () => {

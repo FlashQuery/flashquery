@@ -434,7 +434,7 @@ describe('tool metadata registry', () => {
     ]));
   });
 
-  it('registers call_macro as final admin LLM metadata with recursive delegated exclusion', () => {
+  it('T-U-228 registers call_macro as final admin LLM metadata with recursive delegated exclusion', () => {
     expect(requireToolMetadata('call_macro')).toMatchObject({
       status: 'final',
       categories: ['llm'],
@@ -448,7 +448,7 @@ describe('tool metadata registry', () => {
     expect(getToolNamesByTier('tier:read-write')).not.toContain('call_macro');
   });
 
-  it('keeps transitional briefing and doc-link descriptions pointing at call_macro', () => {
+  it('T-U-229 keeps transitional briefing and doc-link descriptions pointing at call_macro', () => {
     expect(requireToolMetadata('get_briefing').description).toContain('call_macro');
     expect(requireToolMetadata('insert_doc_link').description).toContain('call_macro');
   });

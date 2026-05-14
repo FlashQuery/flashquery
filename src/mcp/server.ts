@@ -461,7 +461,7 @@ export function createAuthorizeHandler(config: FlashQueryConfig) {
  * Wraps the server with correlation ID context before tool registration so all handlers
  * automatically propagate REQ:uuid through their async call stacks.
  */
-function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
+export function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
   const server = new McpServer({ name: 'flashquery', version });
   // Apply correlation ID wrapping BEFORE tool registration so all 26 tools
   // automatically inherit context without modifying individual tool files.
