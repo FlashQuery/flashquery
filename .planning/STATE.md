@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: executing
-stopped_at: Completed 135-03-PLAN.md
-last_updated: "2026-05-14T18:38:07.840Z"
+status: verifying
+stopped_at: Completed 135-04-PLAN.md
+last_updated: "2026-05-14T18:48:20.083Z"
 last_activity: 2026-05-14
 progress:
   total_phases: 9
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 23
-  completed_plans: 22
-  percent: 96
+  completed_plans: 23
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 Phase: 135 (tool-registry-dispatch-permissions) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-14
 
 ## Performance Metrics
@@ -113,6 +113,7 @@ Last activity: 2026-05-14
 | Phase 135 P01 | 7m19s | 3 tasks | 7 files |
 | Phase 135 P02 | 3m15s | 2 tasks | 3 files |
 | Phase 135 P03 | 4m29s | 2 tasks | 3 files |
+| Phase 135 P04 | 6m14s | 3 tasks | 4 files |
 
 ## Decisions
 
@@ -196,6 +197,8 @@ Last activity: 2026-05-14
 - [Phase 135]: 135-02: ToolFn is the common MacroValue-returning dispatch unit for native and brokered macro tools.
 - [Phase 135]: 135-03: Registry-backed expected errors halt macro execution through MacroExpectedError, while explicitly injected dispatchTool results retain existing branchable expected-envelope behavior.
 - [Phase 135]: 135-03: ToolExistsCall remains introspection-only and is excluded from collected dispatch references.
+- [Phase 135]: 135-04 macro dispatch integration follows current fqc_documents status and unified search total contracts.
+- [Phase 135]: 135-04 inbound MCP call_macro always uses host caller context; delegated macro execution uses internal runMacroSource with purposeName.
 
 ## Accumulated Context
 
@@ -309,8 +312,8 @@ Last activity: 2026-05-14
 
 ## Session Continuity
 
-Last session: 2026-05-14T18:38:07.803Z
-Stopped at: Completed 135-03-PLAN.md
+Last session: 2026-05-14T18:48:20.060Z
+Stopped at: Completed 135-04-PLAN.md
 Resume: None
 
 ## Deferred Items

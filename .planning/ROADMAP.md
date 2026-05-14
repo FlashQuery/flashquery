@@ -161,7 +161,7 @@ Plans:
 
 **Requirements:** MACRO-DISP-01 through MACRO-DISP-07
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
@@ -174,7 +174,7 @@ Plans:
 - [x] 135-03-PLAN.md — Implement static permission pre-scan, evaluator preflight wiring, and hard exclusions.
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 135-04-PLAN.md — Wire public `call_macro` caller context/native catalog dispatch and close validation.
+- [x] 135-04-PLAN.md — Wire public `call_macro` caller context/native catalog dispatch and close validation.
 
 **Success criteria:**
 1. `fq.*` references dispatch through the same native catalog/registry path used by agentic tools.
