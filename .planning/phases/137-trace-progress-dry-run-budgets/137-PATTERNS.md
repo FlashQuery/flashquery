@@ -170,9 +170,11 @@ server.registerTool('call_macro', { description, inputSchema: callMacroInputSche
   const { result } = await runMacroSource({ source: params.source as string, input_vars: params.input_vars as Record<string, MacroValue> | undefined, sessionId: resolveSessionId(extra) });
   return result;
 });
+
+return { registrationSessionId };
 ```
 
-**Apply to Phase 137:** Extend `RunMacroSourceOptions` and handler params with typed `budget`, `dry_run`, `trace`, `progress`, and `progressToken`. Extract `_meta.progressToken` from `extra` here, default modes here, and branch dry-run before `taskRegistry.create`.
+**Apply to Phase 137:** Extend `RunMacroSourceOptions` and handler params with typed `budget`, `dry_run`, `trace`, `progress`, and `progressToken`. Extract `_meta.progressToken` from `extra` here, default modes here, and branch dry-run before `taskRegistry.create`. Preserve the Phase 136 gap-fix return contract: `registerMacroTools` returns `RegisterMacroToolsResult` with a generated per-registration UUID `registrationSessionId`; do not remove this return value while refactoring the handler.
 
 ---
 
@@ -500,6 +502,17 @@ expect(observed).toEqual(['working', 'completed']);
 expect(registry.list('session-a')).toEqual([]);
 ```
 
+**Natural session fallback integration pattern:** `tests/integration/macro-call-macro-session.test.ts`
+```typescript
+const registration = registerMacroTools(server, testConfig(), {
+  broker: new NullMcpBroker(),
+  taskRegistry,
+});
+expect(registration.registrationSessionId).toMatch(UUID_V4_PATTERN);
+```
+
+Phase 137 handler tests may stub the notification callback, but production handler edits must preserve registration-scoped fallback sessions and the existing integration coverage.
+
 ## Shared Patterns
 
 ### Response Envelopes
@@ -524,6 +537,12 @@ export function jsonExpectedError(error: ErrorEnvelope): ToolResult {
 **Apply to:** trace, progress, budget, dry-run, warnings
 
 All mutable phase state must be allocated in `createInvocationContext` or local dry-run scope. Do not store mode, warning, throttle, or budget state in module-level variables.
+
+### Registration-Scoped Session Fallback
+**Source:** `src/mcp/tools/macro.ts` and `tests/integration/macro-call-macro-session.test.ts`  
+**Apply to:** progress-token capture, dry-run handler branch, budget option parsing
+
+The Phase 136 follow-up change made `registerMacroTools` return `{ registrationSessionId }` so tests and callers can observe the UUID fallback used when SDK `extra` has no session ID. Phase 137 work in `src/mcp/tools/macro.ts` must keep that return path intact and must not use `config.instance.id`, progress tokens, or request metadata as a replacement fallback session ID.
 
 ### Named Safe Points
 **Source:** `src/macro/safe-points.ts` and `src/macro/evaluator.ts` cancellation probes  
