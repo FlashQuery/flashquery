@@ -67,8 +67,21 @@ describe('macro envelope response contracts', () => {
     expect(payload).toMatchObject({
       token_total: 7,
       model_calls: 1,
-      external_tool_calls: 0,
     });
+    expect(payload).not.toHaveProperty('external_tool_calls');
+    expect(payload).not.toHaveProperty('log');
+    expect(payload).not.toHaveProperty('progress');
+  });
+
+  it('T-U-199c evaluateProgram returns external_tool_calls only after brokered tool calls', async () => {
+    const result = await evaluateProgram(parseProgram('brave.web({})'), {
+      dispatchTool: async () => ({ content: [{ type: 'text', text: '{}' }] }),
+    });
+
+    const payload = parseToolText(result);
+    expect(payload).toMatchObject({ external_tool_calls: 1 });
+    expect(payload).not.toHaveProperty('token_total');
+    expect(payload).not.toHaveProperty('model_calls');
   });
 
   it('T-U-200 MacroDryRunResult shape uses a UUID task_id and canonical input_var_contract', () => {
@@ -122,6 +135,33 @@ describe('macro envelope response contracts', () => {
     expect(parseToolText(result.result)).toMatchObject({
       error: 'invalid_input',
       details: { missing_inputs: ['query'] },
+    });
+  });
+
+  it('T-U-202a dry-run and real-run share AST preflight validation', async () => {
+    const dryRun = await runMacroSource({
+      source: 'exit "a" "b"',
+      dry_run: true,
+      config: config(),
+      catalog: [],
+      broker: new NullMcpBroker(),
+      nativeDispatchContext: { signal: new AbortController().signal, instanceId: 'macro-envelope-test', logContext: {} },
+    });
+    const realRun = await runMacroSource({
+      source: 'exit "a" "b"',
+      config: config(),
+      catalog: [],
+      broker: new NullMcpBroker(),
+      nativeDispatchContext: { signal: new AbortController().signal, instanceId: 'macro-envelope-test', logContext: {} },
+    });
+
+    expect(parseToolText(dryRun.result)).toMatchObject({
+      error: 'invalid_input',
+      details: { reason: 'exit_argument_count' },
+    });
+    expect(parseToolText(realRun.result)).toMatchObject({
+      error: 'invalid_input',
+      details: { reason: 'exit_argument_count' },
     });
   });
 

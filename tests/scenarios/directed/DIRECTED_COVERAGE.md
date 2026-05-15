@@ -70,11 +70,13 @@ This document defines every behavioral coverage point we want to verify through 
 
 ## Phase 137 Macro Trace Progress Dry Run Budgets
 
+Note: Test Plan §4.10.6 originally reserved `M-16`/`M-17`/`M-18` for these scenarios; the live matrix uses `ML-18`/`ML-19`/`ML-20` to avoid collisions with existing non-macro coverage history.
+
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| ML-18 | REQ-047 / T-S-016 trace modes full/summary/none: public `call_macro` includes full trace values, omits args/results in summary, and omits `trace` entirely for none. | test_macro_trace_full_summary_none | 2026-05-15 |  |
-| ML-19 | REQ-048 / T-S-017 progress milestones: public `call_macro` emits progress notifications with the request `progressToken` and excludes per-iteration progress chatter. | test_macro_progress_milestones | 2026-05-15 |  |
-| ML-20 | REQ-060 / T-S-018 budget timeout: public `call_macro` returns the canonical `timeout` envelope and does not continue post-timeout side effects. | test_macro_budget_timeout | 2026-05-15 |  |
+| ML-18 | REQ-047 / T-S-016 trace modes full/summary/none: public `call_macro` includes full trace values, omits args/results in summary, and omits `trace` entirely for none. | test_macro_trace_full_summary_none | 2026-05-15 | 2026-05-15 |
+| ML-19 | REQ-048 / T-S-017 progress milestones: public `call_macro` emits progress notifications with the request `progressToken` and excludes per-iteration progress chatter. | test_macro_progress_milestones | 2026-05-15 | 2026-05-15 |
+| ML-20 | REQ-060 / T-S-018 budget timeout: public `call_macro` returns the canonical `timeout` envelope and does not continue post-timeout side effects. | test_macro_budget_timeout | 2026-05-15 | 2026-05-15 |
 
 ## 1. Document Lifecycle
 

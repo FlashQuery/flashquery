@@ -29,7 +29,9 @@ describe('macro handler progress token threading', () => {
       taskRegistry: new MacroTaskRegistry(),
     });
 
-    expect(parseToolPayload(result.result)).toHaveProperty('progress');
+    expect(parseToolPayload(result.result)['trace']).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'progress', message: 'working' })])
+    );
     expect(notifications).toEqual([
       expect.objectContaining({ progressToken: 'progress-token-1', message: 'working' }),
     ]);

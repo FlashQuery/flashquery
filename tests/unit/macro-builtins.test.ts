@@ -199,7 +199,7 @@ describe('macro standard library channel and task builtins', () => {
       { kind: 'log', message: 'a 1 null', at: expect.any(String) },
       { kind: 'exit', result: null, at: expect.any(String) },
     ]);
-    expect(payload['log']).toEqual(['a 1 null']);
+    expect(payload).not.toHaveProperty('log');
   });
 
   it('T-U-121 status appends progress trace and calls the progress sink', async () => {
@@ -217,7 +217,7 @@ describe('macro standard library channel and task builtins', () => {
       },
       { kind: 'exit', result: null, at: expect.any(String) },
     ]);
-    expect(payload['progress']).toEqual([{ message: 'msg', progress: 5, total: 10 }]);
+    expect(payload).not.toHaveProperty('progress');
     expect(emitted).toEqual([{ message: 'msg', progress: 5, total: 10 }]);
   });
 
@@ -227,8 +227,8 @@ describe('macro standard library channel and task builtins', () => {
       progressSink: async (entry) => emitted.push(entry),
     });
 
-    expect(payload['log']).toEqual(['log-only']);
-    expect(payload['progress']).toEqual([{ message: 'working' }]);
+    expect(payload).not.toHaveProperty('log');
+    expect(payload).not.toHaveProperty('progress');
     expect(emitted).toEqual([{ message: 'working' }]);
     expect(payload['trace']).toMatchObject([
       { kind: 'progress', message: 'working' },
@@ -239,9 +239,9 @@ describe('macro standard library channel and task builtins', () => {
 
   it('T-U-123 status works without a progress sink or progress token', async () => {
     const { payload } = await run('status "just-message"\nexit null');
-    expect(payload['progress']).toEqual([{ message: 'just-message' }]);
+    expect(payload).not.toHaveProperty('progress');
     expect(payload['trace']).toMatchObject([
-      { kind: 'progress', message: 'just-message', result: {} },
+      { kind: 'progress', message: 'just-message' },
       { kind: 'exit' },
     ]);
   });
@@ -316,7 +316,10 @@ describe('macro POC builtin fragments', () => {
     `);
 
     expect(resultOf(payload)).toBe(3);
-    expect(payload['log']).toEqual([
+    const logMessages = (payload['trace'] as Array<Record<string, unknown>>)
+      .filter((step) => step['kind'] === 'log')
+      .map((step) => step['message']);
+    expect(logMessages).toEqual([
       'hello from FlashQuery v1',
       'items: ["alpha","beta","gamma"]',
       'count: 3',

@@ -24,6 +24,7 @@ import {
 import type { McpBroker } from '../services/mcp-broker.js';
 import { NullMcpBroker } from '../services/mcp-broker.js';
 import { MacroPreflightError, collectInputVarContract, validateInputVars } from './preflight.js';
+import { preflightProgram } from './preflight.js';
 import { preScanForbiddenShellFlags } from './forbidden-flag-scan.js';
 import { buildRange, standardBuiltins } from './builtins.js';
 import { shellBuiltins } from './shell-verbs.js';
@@ -263,7 +264,8 @@ export function createInvocationContext(
   const budgetTracker = new BudgetTracker(options.budgetLimits ?? {}, budget);
   const inputVars = cloneMacroObject(options.inputVars ?? options.input_vars ?? {});
 
-  const context: MacroInvocationContext = {
+  let context!: MacroInvocationContext;
+  context = {
     inputVars,
     trace,
     traceMode,
@@ -281,7 +283,9 @@ export function createInvocationContext(
       options.progressToken,
       options.progressNotificationSink,
       warnings,
-      progress
+      progress,
+      undefined,
+      (step) => context.traceBuilder.add(step)
     ),
     cancelled,
     builtins: { ...standardBuiltins, ...shellBuiltins, ...(options.builtins ?? {}) },
@@ -392,98 +396,6 @@ export async function evaluateProgram(
       error: 'tool_call_failed',
       message,
       details: { underlying_error: serializeError(error) },
-    });
-  }
-}
-
-function preflightProgram(program: Program): void {
-  for (const statement of program.statements) {
-    preflightStatement(statement);
-  }
-}
-
-function preflightStatement(statement: Statement): void {
-  switch (statement.kind) {
-    case 'Binding':
-      preflightExpr(statement.value);
-      return;
-    case 'Pipeline':
-      preflightPipeline(statement);
-      return;
-    case 'ToolCall':
-    case 'ToolExistsCall':
-      return;
-    case 'ForLoop':
-      preflightExpr(statement.iterable);
-      statement.body.forEach(preflightStatement);
-      return;
-    case 'WhileLoop':
-      preflightExpr(statement.condition);
-      statement.body.forEach(preflightStatement);
-      return;
-    case 'IfStmt':
-      preflightExpr(statement.condition);
-      statement.thenBody.forEach(preflightStatement);
-      statement.elseBody?.forEach(preflightStatement);
-      return;
-  }
-}
-
-function preflightExpr(expr: Expr): void {
-  switch (expr.kind) {
-    case 'StringLit':
-    case 'NumLit':
-    case 'NullLit':
-    case 'VarRef':
-    case 'ToolExistsCall':
-      return;
-    case 'ListLit':
-      expr.items.forEach(preflightExpr);
-      return;
-    case 'ObjectLit':
-      expr.entries.forEach((entry) => preflightExpr(entry.value));
-      return;
-    case 'FieldAccess':
-      preflightExpr(expr.target);
-      return;
-    case 'RangeExpr':
-      preflightExpr(expr.start);
-      preflightExpr(expr.end);
-      return;
-    case 'BinaryExpr':
-      preflightExpr(expr.left);
-      preflightExpr(expr.right);
-      return;
-    case 'UnaryExpr':
-      preflightExpr(expr.expr);
-      return;
-    case 'Call':
-      preflightCall(expr);
-      return;
-    case 'Pipeline':
-      preflightPipeline(expr);
-      return;
-    case 'ToolCall':
-      if (expr.arg) {
-        preflightExpr(expr.arg);
-      }
-      return;
-  }
-}
-
-function preflightPipeline(pipeline: Pipeline): void {
-  pipeline.stages.forEach(preflightCall);
-}
-
-function preflightCall(call: Call): void {
-  call.args.forEach((arg) => {
-    preflightExpr(arg.value);
-  });
-
-  if (call.name === 'exit' && call.args.filter((arg) => arg.kind === 'PositionalArg').length > 1) {
-    throw new MacroExpectedError('invalid_input', 'exit accepts at most one argument.', {
-      reason: 'exit_argument_count',
-      line: call.line,
     });
   }
 }
@@ -852,6 +764,7 @@ async function evalToolCall(
       context.budgetTracker.afterModelCall(extractTokenUsage(dispatched));
       await context.progressEmitter.emitModelCallFinish(toolName);
     }
+    context.budgetTracker.checkTimeout();
     pushTrace(context, {
       kind: isModelCall ? 'model_call' : 'tool_call',
       name: toolName,
@@ -887,6 +800,7 @@ async function evalToolCall(
     context.budgetTracker.afterModelCall(extractTokenUsage(parsed));
     await context.progressEmitter.emitModelCallFinish(toolName);
   }
+  context.budgetTracker.checkTimeout();
   pushTrace(context, {
     kind: isModelCall ? 'model_call' : 'tool_call',
     name: toolName,
@@ -963,16 +877,20 @@ function stringifyMacroValue(value: MacroValue): string {
 }
 
 function buildSuccessPayload(context: MacroInvocationContext, result: MacroValue) {
-  const payload = {
+  const payload: Record<string, unknown> = {
     task_id: context.taskId,
     result,
-    ...(context.traceMode === 'none' || context.trace.length === 0 ? {} : { trace: context.trace }),
-    ...(context.log.length === 0 ? {} : { log: context.log }),
-    ...(context.progress.length === 0 ? {} : { progress: context.progress }),
-    token_total: context.budget.token_total,
-    model_calls: context.budget.model_calls,
-    external_tool_calls: context.budget.external_tool_calls,
   };
+  if (context.traceMode !== 'none' && context.trace.length > 0) {
+    payload.trace = context.trace;
+  }
+  if (context.budget.model_calls > 0) {
+    payload.token_total = context.budget.token_total;
+    payload.model_calls = context.budget.model_calls;
+  }
+  if (context.budget.external_tool_calls > 0) {
+    payload.external_tool_calls = context.budget.external_tool_calls;
+  }
   return withWarnings(payload, context.warnings);
 }
 

@@ -13,10 +13,10 @@ describe('macro trace response contracts', () => {
     });
 
     const payload = parseToolPayload(result);
-    expect(payload['trace']).toEqual([
+    expect(payload['trace']).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'model_call', name: 'fq.call_model', args: { prompt: 'hi' }, result: { ok: 'fq.call_model' } }),
       expect.objectContaining({ kind: 'tool_call', name: 'brave.web', args: { q: 'x' }, result: { ok: 'brave.web' } }),
-    ]);
+    ]));
   });
 
   it('T-U-188 trace summary omits only args and result from retained steps', async () => {
@@ -25,7 +25,9 @@ describe('macro trace response contracts', () => {
       dispatchTool: async () => ({ content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }),
     });
 
-    const step = (parseToolPayload(result)['trace'] as Record<string, unknown>[])[0];
+    const step = (parseToolPayload(result)['trace'] as Record<string, unknown>[])
+      .find((item) => item['kind'] === 'model_call');
+    expect(step).toBeDefined();
     expect(step).toMatchObject({ kind: 'model_call', name: 'fq.call_model', at: expect.any(String) });
     expect(step).not.toHaveProperty('args');
     expect(step).not.toHaveProperty('result');

@@ -28,6 +28,96 @@ export class MacroPreflightError extends Error {
   }
 }
 
+export function preflightProgram(program: Program): void {
+  for (const statement of program.statements) {
+    preflightStatement(statement);
+  }
+}
+
+function preflightStatement(statement: Statement): void {
+  switch (statement.kind) {
+    case 'Binding':
+      preflightExpr(statement.value);
+      return;
+    case 'Pipeline':
+      preflightPipeline(statement);
+      return;
+    case 'ToolCall':
+      if (statement.arg) preflightExpr(statement.arg);
+      return;
+    case 'ToolExistsCall':
+      return;
+    case 'ForLoop':
+      preflightExpr(statement.iterable);
+      statement.body.forEach(preflightStatement);
+      return;
+    case 'WhileLoop':
+      preflightExpr(statement.condition);
+      statement.body.forEach(preflightStatement);
+      return;
+    case 'IfStmt':
+      preflightExpr(statement.condition);
+      statement.thenBody.forEach(preflightStatement);
+      statement.elseBody?.forEach(preflightStatement);
+      return;
+  }
+}
+
+function preflightExpr(expr: Expr): void {
+  switch (expr.kind) {
+    case 'StringLit':
+    case 'NumLit':
+    case 'NullLit':
+    case 'VarRef':
+    case 'ToolExistsCall':
+      return;
+    case 'ListLit':
+      expr.items.forEach(preflightExpr);
+      return;
+    case 'ObjectLit':
+      expr.entries.forEach((entry) => preflightExpr(entry.value));
+      return;
+    case 'FieldAccess':
+      preflightExpr(expr.target);
+      return;
+    case 'RangeExpr':
+      preflightExpr(expr.start);
+      preflightExpr(expr.end);
+      return;
+    case 'BinaryExpr':
+      preflightExpr(expr.left);
+      preflightExpr(expr.right);
+      return;
+    case 'UnaryExpr':
+      preflightExpr(expr.expr);
+      return;
+    case 'Call':
+      preflightCall(expr);
+      return;
+    case 'Pipeline':
+      preflightPipeline(expr);
+      return;
+    case 'ToolCall':
+      if (expr.arg) preflightExpr(expr.arg);
+      return;
+  }
+}
+
+function preflightPipeline(pipeline: Pipeline): void {
+  pipeline.stages.forEach(preflightCall);
+}
+
+function preflightCall(call: Call): void {
+  call.args.forEach((arg) => preflightExpr(arg.value));
+
+  if (call.name === 'exit' && call.args.filter((arg) => arg.kind === 'PositionalArg').length > 1) {
+    throw new MacroPreflightError('invalid_input', 'exit accepts at most one argument.', {
+      reason: 'exit_argument_count',
+      line: call.line,
+    });
+  }
+}
+
 export function collectInputVarContract(program: Program): InputVarContract {
   const required = new Set<string>();
   const optional = new Map<string, InputVarDefault>();

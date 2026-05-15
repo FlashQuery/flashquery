@@ -1,4 +1,5 @@
 import type { WarningCode } from '../mcp/utils/response-formats.js';
+import type { TraceStep } from '../mcp/utils/response-formats.js';
 import type { MacroProgressEntry } from './evaluator.js';
 
 export type ProgressMode = 'full' | 'milestones' | 'silent';
@@ -11,6 +12,7 @@ export interface ProgressNotification {
 }
 
 export type ProgressNotificationSink = (notification: ProgressNotification) => void | Promise<void>;
+export type ProgressTraceSink = (step: Omit<TraceStep, 'at'>) => void;
 
 type ProgressCategory = 'explicit' | 'for_loop' | 'model_start' | 'model_finish' | 'tool_start';
 
@@ -24,7 +26,8 @@ export class ProgressEmitter {
     private readonly sink: ProgressNotificationSink | undefined,
     private readonly warnings: WarningCode[],
     private readonly progressEntries: MacroProgressEntry[],
-    private readonly clock: () => number = () => Date.now()
+    private readonly clock: () => number = () => Date.now(),
+    private readonly traceSink?: ProgressTraceSink
   ) {}
 
   async emitExplicitStatus(entry: MacroProgressEntry): Promise<void> {
@@ -50,6 +53,18 @@ export class ProgressEmitter {
   private async emit(category: ProgressCategory, entry: MacroProgressEntry): Promise<void> {
     if (!this.shouldEmit(category)) return;
     this.progressEntries.push(entry);
+    this.traceSink?.({
+      kind: 'progress',
+      ...(entry.message === undefined ? {} : { message: entry.message }),
+      ...(
+        entry.progress === undefined && entry.total === undefined
+          ? {}
+          : { result: {
+              ...(entry.progress === undefined ? {} : { progress: entry.progress }),
+              ...(entry.total === undefined ? {} : { total: entry.total }),
+            } }
+      ),
+    });
     if (this.progressToken === undefined || !this.sink) return;
 
     const now = this.clock();

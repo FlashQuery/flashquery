@@ -14,6 +14,26 @@ describe('macro runtime budgets', () => {
     expect(parseToolPayload(result)).toMatchObject({ error: 'timeout', details: { timeout_ms: 1 } });
   });
 
+  it('T-U-211a in-flight tool call completes before timeout envelope surfaces at next safe point', async () => {
+    let handlerCompleted = false;
+    const startedAt = Date.now();
+    const result = await evaluateProgram(parseProgram('brave.web({})\necho "after"'), {
+      budgetLimits: { timeout_ms: 5 },
+      dispatchTool: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        handlerCompleted = true;
+        return { content: [{ type: 'text', text: '{}' }] };
+      },
+    });
+
+    const payload = parseToolPayload(result);
+    expect(handlerCompleted).toBe(true);
+    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(20);
+    expect(payload).toMatchObject({ error: 'timeout', details: { timeout_ms: 5 } });
+    expect((payload['details'] as Record<string, unknown>)['elapsed_ms']).toEqual(expect.any(Number));
+    expect(JSON.stringify(payload)).not.toContain('after');
+  });
+
   it('T-U-212 max_total_tokens halts after the offending model call returns', async () => {
     const result = await evaluateProgram(parseProgram('fq.call_model({})'), {
       budgetLimits: { max_total_tokens: 3 },

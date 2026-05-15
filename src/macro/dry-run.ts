@@ -1,7 +1,7 @@
 import { macroResult, withWarnings, type ToolResult, type WarningCode } from '../mcp/utils/response-formats.js';
 import { preScanForbiddenShellFlags } from './forbidden-flag-scan.js';
 import { collectToolReferences, preScanToolReferences } from './permission-prescan.js';
-import { collectInputVarContract, validateInputVars } from './preflight.js';
+import { collectInputVarContract, preflightProgram, validateInputVars } from './preflight.js';
 import type { MacroValue } from './evaluator.js';
 import type { Program, ToolRegistry, MacroCallerContext } from './types.js';
 
@@ -19,6 +19,7 @@ export interface RunDryRunOptions {
 
 export function runDryRun(options: RunDryRunOptions): ToolResult {
   preScanForbiddenShellFlags(options.program);
+  preflightProgram(options.program);
   const contract = collectInputVarContract(options.program);
   validateInputVars(contract, options.inputVars);
   const permissionError = preScanToolReferences({

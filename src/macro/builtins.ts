@@ -172,16 +172,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
       ...(progress === undefined ? {} : { progress }),
       ...(total === undefined ? {} : { total }),
     };
-    const result = {
-      ...(progress === undefined ? {} : { progress }),
-      ...(total === undefined ? {} : { total }),
-    };
     await context.progressEmitter.emitExplicitStatus(entry);
-    context.traceBuilder.add({
-      kind: 'progress',
-      ...(message === undefined ? {} : { message }),
-      result,
-    });
     await context.progressSink?.(entry, context);
     return null;
   },
