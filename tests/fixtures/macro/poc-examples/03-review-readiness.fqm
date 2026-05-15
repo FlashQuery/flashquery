@@ -1,0 +1,33 @@
+# Ask a model whether each draft is ready for review.
+# Uses fq.call_model with response_format to get structured output; canned
+# responses make doc_b "not ready" and the others "ready".
+#
+# Demonstrates: namespaced fq.* tool calls (including fq.call_model — model
+# calls are full tool calls, not flag-style builtins as in earlier drafts),
+# structured model output via response_format, .field access, if/else
+# branching on a model verdict.
+#
+# Per the OQ #11 resolution (2026-05-12), `ask` / `ask_json` builtins were
+# dropped. Model calls inside macros use `fq.call_model({...})` directly —
+# same calling convention as every other namespaced tool call.
+
+drafts = fq.search({ query: "tag:#draft" })
+
+for d in $drafts do
+  verdict = fq.call_model({
+    resolver: "purpose",
+    name: "draft-reviewer",
+    messages: [{ role: "user", content: "Is this draft ready for review? $d.fq_id" }],
+    parameters: {
+      response_format: { type: "json_schema", schema: { "ready": "boolean", "reason": "string" } }
+    }
+  })
+
+  if $verdict.ready then
+    fq.move_document({ identifier: $d.fq_id, destination_path: "Review/" })
+    echo "$d.fq_id moved to Review/ ($verdict.reason)"
+  else
+    fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], tags: ["#needs-work"] })
+    echo "$d.fq_id kept in drafts ($verdict.reason)"
+  fi
+done

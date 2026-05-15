@@ -1,0 +1,48 @@
+# Status updates and task introspection.
+#
+# Demonstrates:
+#   - The `status` builtin (the macro-side surface for MCP's
+#     notifications/progress). Writes to stderr as [STATUS] in this
+#     standalone prototype.
+#   - Auto-emitted [PROGRESS] events from for-loops and model calls.
+#   - `task_id` and `list_tasks` builtins for introspecting the
+#     in-memory task registry.
+#
+# Note on output streams:
+#   - stdout = normal trace channel (echo, [fq] tool calls, list_tasks rendering)
+#   - stderr = liveness channel ([STATUS] from explicit calls,
+#             [PROGRESS] auto-emitted by the runtime)
+
+status "Starting draft review workflow"
+
+drafts = fq.search({ query: "tag:#draft" })
+status --progress 0 --total 3 "Found drafts; beginning review"
+
+i = 0
+for d in $drafts do
+  i = add $i 1
+  status --progress $i --total 3 "Reviewing $d.fq_id"
+
+  verdict = fq.call_model({
+    resolver: "purpose",
+    name: "draft-reviewer",
+    messages: [{ role: "user", content: "is this draft ready? $d.fq_id" }],
+    parameters: { response_format: { type: "json_schema", schema: { "ready": "boolean", "reason": "string" } } }
+  })
+
+  if $verdict.ready then
+    fq.move_document({ identifier: $d.fq_id, destination_path: "Review/" })
+    echo "  moved $d.fq_id to Review/ ($verdict.reason)"
+  else
+    fq.apply_tags({ targets: [{ entity_type: "document", identifier: $d.fq_id }], tags: ["#needs-work"] })
+    echo "  kept $d.fq_id in drafts ($verdict.reason)"
+  fi
+done
+
+status --progress 3 --total 3 "Workflow complete"
+
+# Inspect: print the current task ID and the task list summary.
+echo ""
+my_task = task_id
+echo "Current task ID: $my_task"
+ignored = list_tasks

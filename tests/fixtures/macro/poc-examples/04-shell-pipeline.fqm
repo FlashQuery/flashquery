@@ -1,0 +1,43 @@
+# Shell-style pipeline against a real directory of files.
+#
+# Demonstrates: glob expansion, find, grep, sed, wc, and the | pipe operator.
+#
+# Run from the macro-prototype/ directory:
+#   npm run script -- examples/04-shell-pipeline.fqm
+
+# 1. Count TODO lines across every spec file using a glob + pipeline.
+todo_count = cat "/Specs/*.md" | grep "TODO" | wc -l
+echo "--- TODO count across all specs ---"
+echo "TODOs found: $todo_count"
+echo ""
+
+# 2. List the TODO lines themselves (case-insensitive grep over the glob).
+echo "--- TODO lines (case-insensitive) ---"
+todos = cat "/Specs/*.md" | grep -i "todo"
+i = 0
+for t in $todos do
+  i = add $i 1
+  echo "Here's item $i: $t"
+done
+echo ""
+
+# 3. Use find with a --name filter, then count results.
+echo "--- file count via find ---"
+files = find "/Specs" --name "*.md"
+total_files = count $files
+echo "files: $total_files"
+echo ""
+
+# 4. Use sed in stdin mode to rewrite TODO -> [REDACTED] across all matches.
+echo "--- redacted TODOs ---"
+redacted = cat "/Specs/*.md" | grep "TODO" | sed "s/TODO/[REDACTED]/g"
+echo $redacted
+echo ""
+
+# 5. Boolean short-flag bundling: -iv (case-insensitive AND invert match).
+#    Returns lines that DO NOT match "todo" (case-insensitively) — i.e. real content.
+echo "--- non-TODO lines in feature-a.md ---"
+non_todos = cat "/Specs/feature-a.md" | grep -iv "todo"
+for line in $non_todos do
+  echo "  $line"
+done

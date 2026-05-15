@@ -1,0 +1,39 @@
+# Adaptive research — same task as 09, but the macro adapts to the
+# deployment configuration. If the brave_search broker is connected, use
+# web search; otherwise fall back to local vault search via fq.search.
+#
+# A skill author can write ONE macro that works whether or not the broker
+# is wired up, by branching on `server._exists()`. The macro engine
+# resolves _exists() without dispatching to the broker handler, so there's
+# no wasted call.
+#
+# Demonstrates:
+#   - server._exists() introspection method
+#   - if/else branching on a tool-call expression (not just $var)
+#   - graceful fallback as a first-class pattern, not error handling
+
+status "adaptive research: checking available tools"
+
+topic = "FlashQuery macro language"
+
+# Declare vars in the outer scope so the if branches can mutate them via
+# walk-up scope (the prototype's Bash-style assignment semantics).
+hits = []
+source = "(unknown)"
+
+if brave_search._exists() then
+  echo "brave_search broker is connected — using web search"
+  hits = brave_search.web_search({ query: $topic, count: 2 })
+  source = "web"
+else
+  echo "brave_search broker is NOT connected — falling back to local vault search"
+  hits = fq.search({ query: $topic })
+  source = "vault"
+fi
+
+echo ""
+echo "Source: $source"
+echo "Results:"
+for h in $hits do
+  echo "  -" $h.title
+done

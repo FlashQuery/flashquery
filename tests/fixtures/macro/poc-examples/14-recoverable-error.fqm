@@ -1,0 +1,51 @@
+# Recoverable error handling via canonical envelope inspection.
+#
+# Demonstrates the OQ #4 resolution: expected tool-call errors are returned
+# to the macro as VALUES (the canonical error envelope), NOT as engine halts.
+# The macro author inspects the `.error` field to branch — this is the v0
+# "try/catch equivalent." No special syntax needed.
+#
+# Per the consolidation doc's XC-5: tools return error envelopes with
+# `isError: false` for expected errors (not_found, ambiguous_identifier,
+# invalid_input, conflict, etc.). The macro engine passes those through as
+# normal call return values; the macro branches on `.error`.
+#
+# Only *unexpected* runtime errors (isError: true) and direct tool throws
+# halt the macro automatically.
+#
+# Demonstrates:
+#   - Inspecting an error envelope on a tool return
+#   - Branching with `if $result.error then ... else ... fi`
+#   - Recovery action (create-if-not-found) inside the branch
+#   - exit returns the structured value regardless of which branch ran
+
+# Try to read a document that may or may not exist.
+doc = fq.get_document({ identifiers: "doc_does_not_exist" })
+
+# Default branch label; mutated by the branches below via walk-up scope.
+branch_taken = "unknown"
+
+if $doc.error then
+  echo "doc not found — creating it"
+  doc = fq.write_document({
+    mode: "create",
+    path: "Notes/recoverable-demo.md",
+    title: "Recoverable demo",
+    content: "Created by 14-recoverable-error.fqm"
+  })
+  branch_taken = "created"
+else
+  echo "doc already exists: $doc.title"
+  branch_taken = "found_existing"
+fi
+
+# At this point $doc is guaranteed to be a valid document handle —
+# either the original (if found) or the newly created one.
+echo "final doc fq_id: $doc.fq_id"
+echo "final doc path: $doc.path"
+echo "branch taken: $branch_taken"
+
+exit {
+  doc: $doc,
+  branch_taken: $branch_taken
+}

@@ -13,6 +13,11 @@ const FIXTURE_DIR = join(process.cwd(), 'tests/fixtures/macro/poc-examples');
 const EXPECTED_FIXTURE_COUNT = 17;
 
 const FIXTURE_INPUTS: Record<string, Record<string, unknown>> = {
+  '13-input-vars.fqm': {
+    search_phrases: ['FlashQuery macro language', 'MCP local-first memory'],
+    output_path: 'Research/web-output.md',
+    hits_per_topic: 2,
+  },
   '17-input-var-missing.fqm': {},
 };
 
@@ -80,13 +85,23 @@ function makeCatalog(): NativeToolDefinition[] {
       { fq_id: 'doc_a', title: 'Doc A', path: 'Drafts/doc-a.md', url: 'vault://Drafts/doc-a.md' },
       { fq_id: 'doc_b', title: 'Doc B', path: 'Drafts/doc-b.md', url: 'vault://Drafts/doc-b.md' },
     ]),
-    makeTool('get_document', {
-      fq_id: 'doc_a',
-      title: 'Doc A',
-      path: 'Drafts/doc-a.md',
-      frontmatter: { related_to: ['doc_b'] },
-      body: 'Fixture document body',
-    }),
+    {
+      name: 'get_document',
+      description: 'get_document fixture stub',
+      inputSchema: z.object({}).passthrough(),
+      handler: vi.fn(async (args) => {
+        if (args['identifiers'] === 'doc_does_not_exist') {
+          return jsonResponse({ error: 'not_found', message: 'Document not found' });
+        }
+        return jsonResponse({
+          fq_id: args['identifiers'] === 'doc_c' ? 'doc_c' : 'doc_a',
+          title: args['identifiers'] === 'doc_c' ? 'Doc C' : 'Doc A',
+          path: args['identifiers'] === 'doc_c' ? 'Drafts/doc-c.md' : 'Drafts/doc-a.md',
+          frontmatter: { related_to: ['doc_b'] },
+          body: 'Fixture document body',
+        });
+      }),
+    },
     makeTool('write_document', { fq_id: 'written_doc', path: 'Notes/written.md' }),
     makeTool('archive_document', { archived: true, fq_id: 'doc_a' }),
     makeTool('manage_directory', { created: true, path: 'Research/AI' }),
@@ -111,10 +126,26 @@ function makeBroker(): McpBroker {
     isConnected: vi.fn(async (serverId: string) => ['brave_search', 'web_fetch'].includes(serverId)),
     getToolHandler: vi.fn((serverId: string, toolName: string) => {
       if (serverId === 'brave_search' && toolName === 'web_search') {
-        return vi.fn(async () => jsonResponse({ results: [{ title: 'FlashQuery', url: 'https://example.test' }] }));
+        return vi.fn(async () =>
+          jsonResponse([
+            {
+              title: 'FlashQuery',
+              url: 'https://example.test',
+              description: 'Fixture search result',
+            },
+          ])
+        );
       }
       if (serverId === 'web_fetch' && toolName === 'fetch') {
-        return vi.fn(async () => jsonResponse({ markdown: '# Fixture page\nFlashQuery fixture content.' }));
+        return vi.fn(async () =>
+          jsonResponse({
+            content: '# Fixture page\nFlashQuery fixture content.',
+            markdown: '# Fixture page\nFlashQuery fixture content.',
+          })
+        );
+      }
+      if (serverId === 'pretend_search' && toolName === 'web_search') {
+        return vi.fn(async () => jsonResponse([]));
       }
       return null;
     }),
@@ -141,9 +172,10 @@ describe('migrated macro POC fixtures', () => {
         catalog: makeCatalog(),
         broker: makeBroker(),
         brokerTools: [
-          { server: 'brave_search', label: 'Brave Search', tools: ['web_search'] },
-          { server: 'web_fetch', label: 'Web Fetch', tools: ['fetch'] },
-        ],
+        { server: 'brave_search', label: 'Brave Search', tools: ['web_search'] },
+        { server: 'web_fetch', label: 'Web Fetch', tools: ['fetch'] },
+        { server: 'pretend_search', label: 'Pretend Search', tools: ['web_search'] },
+      ],
         nativeDispatchContext: nativeDispatchContext(),
         input_vars: FIXTURE_INPUTS[fixture] ?? { topic: 'FlashQuery', name: 'Ada', limit: 2 },
       });

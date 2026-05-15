@@ -1,0 +1,24 @@
+# Demonstrates the `fail` builtin halting a macro when a required broker
+# is not connected. References a server name that's NOT in the registry
+# (`pretend_search`), so `_exists()` returns false and the guard trips.
+#
+# Expected outcome: macro aborts with the message from `fail`. The runner
+# prints "MACRO ABORTED (fail): ..." and exits with status 1. The work
+# below the fail() does NOT execute.
+#
+# Demonstrates:
+#   - server._exists() returning false for an unregistered server
+#   - `!` negation
+#   - `fail "message"` aborting the macro immediately
+#   - statements below `fail` are skipped (no [fq] trace lines below)
+
+echo "About to check whether 'pretend_search' is connected…"
+
+if ! pretend_search._exists() then
+  fail "pretend_search broker is not connected. This macro requires it. Aborting."
+fi
+
+# Anything below this point will NOT run, because `fail` threw above.
+echo "This line should never appear in the output."
+results = pretend_search.web_search({ query: "anything", count: 3 })
+echo "Got $count $results results"
