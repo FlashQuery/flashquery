@@ -7,6 +7,7 @@ import {
   insertAtPosition,
   buildSectionResponse,
 } from '../../../../src/mcp/utils/markdown-sections.js';
+import { extractHeadings } from '../../../../src/mcp/utils/markdown-utils.js';
 
 const SAMPLE_DOC = `# Title
 
@@ -32,6 +33,62 @@ Example 1: Basic usage
 Section at end`;
 
 describe('markdown-sections utilities', () => {
+  describe('extractHeadings', () => {
+    it('ignores hash-prefixed lines inside fenced code blocks', () => {
+      const content = [
+        '# Real Title',
+        '',
+        '```python',
+        '# Python comment',
+        '## Not a Markdown Heading',
+        '```',
+        '',
+        '## Real Section',
+      ].join('\n');
+
+      expect(extractHeadings(content)).toEqual([
+        { level: 1, text: 'Real Title', line: 1 },
+        { level: 2, text: 'Real Section', line: 8 },
+      ]);
+    });
+
+    it('honors tilde fences and longer matching closing fences', () => {
+      const content = [
+        '# Real Title',
+        '~~~~',
+        '## Not a Markdown Heading',
+        '~~~~~',
+        '## Real Section',
+      ].join('\n');
+
+      expect(extractHeadings(content)).toEqual([
+        { level: 1, text: 'Real Title', line: 1 },
+        { level: 2, text: 'Real Section', line: 5 },
+      ]);
+    });
+
+    it('ignores ATX-looking hash lines until the matching fence closes', () => {
+      const content = [
+        '# Real Title',
+        '',
+        '````markdown',
+        '# Not level one',
+        '## Not level two',
+        '### Not level three',
+        '```',
+        '#### Still not closed',
+        '````',
+        '',
+        '## Real Section',
+      ].join('\n');
+
+      expect(extractHeadings(content)).toEqual([
+        { level: 1, text: 'Real Title', line: 1 },
+        { level: 2, text: 'Real Section', line: 11 },
+      ]);
+    });
+  });
+
   describe('extractSection', () => {
     it('extracts a section by heading name', () => {
       const result = extractSection(SAMPLE_DOC, 'Configuration');
@@ -184,6 +241,29 @@ describe('markdown-sections utilities', () => {
 
     it('throws error for missing heading', () => {
       expect(() => getSectionBoundaries(SAMPLE_DOC, 'NonExistent')).toThrow();
+    });
+
+    it('does not end include_nested sections at headings inside fenced code blocks', () => {
+      const content = [
+        '## Parent',
+        '',
+        'Before code.',
+        '',
+        '```markdown',
+        '## Not a real sibling',
+        '```',
+        '',
+        'After code.',
+        '',
+        '## Next',
+        '',
+        'Next body.',
+      ].join('\n');
+
+      const boundaries = getSectionBoundaries(content, 'Parent', true);
+      expect(boundaries.content).toContain('## Not a real sibling');
+      expect(boundaries.content).toContain('After code.');
+      expect(boundaries.content).not.toContain('## Next');
     });
   });
 

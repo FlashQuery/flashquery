@@ -86,9 +86,31 @@ export function extractHeadings(content: string): Array<{ level: number; text: s
   const lines = content.split('\n');
 
   const HEADING_REGEX = /^(#{1,6})\s+(.+)$/;
+  const FENCE_OPEN_REGEX = /^( {0,3})(`{3,}|~{3,})(.*)$/;
+  let activeFence: { marker: '`' | '~'; length: number } | null = null;
 
   for (let lineNum = 0; lineNum < lines.length; lineNum++) {
     const line = lines[lineNum];
+
+    if (activeFence) {
+      const closeRegex = new RegExp(`^ {0,3}\\${activeFence.marker}{${activeFence.length},}[ \\t]*$`);
+      if (closeRegex.test(line)) {
+        activeFence = null;
+      }
+      continue;
+    }
+
+    const fenceMatch = FENCE_OPEN_REGEX.exec(line);
+    if (fenceMatch) {
+      const fence = fenceMatch[2];
+      const marker = fence[0] as '`' | '~';
+      const info = fenceMatch[3] ?? '';
+      if (marker === '~' || !info.includes('`')) {
+        activeFence = { marker, length: fence.length };
+        continue;
+      }
+    }
+
     const match = HEADING_REGEX.exec(line);
 
     if (match) {

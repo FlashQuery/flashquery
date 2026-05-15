@@ -32,6 +32,7 @@ import {
   getSectionBoundaries,
   resolveHeadingTarget,
 } from '../utils/markdown-sections.js';
+import { extractHeadings } from '../utils/markdown-utils.js';
 import { getToolMetadata } from '../tool-metadata.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 import {
@@ -127,31 +128,6 @@ function headingErrorMatches(matches: Array<{ text: string; level: number; line:
     line: match.line,
     occurrence: match.occurrence,
   }));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: heading extraction for replace_doc_section (local copy; markdown-utils.ts
-// has an identical export but compound.ts retains its own to avoid an import cycle)
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface HeadingEntry {
-  level: number;
-  text: string;
-  line: number;
-}
-
-function extractHeadings(bodyContent: string): HeadingEntry[] {
-  const headings: HeadingEntry[] = [];
-  const lines = bodyContent.split('\n');
-  const HEADING_REGEX_LINE = /^(#{1,6})\s+(.+)$/;
-
-  for (let lineNum = 0; lineNum < lines.length; lineNum++) {
-    const match = HEADING_REGEX_LINE.exec(lines[lineNum]);
-    if (match) {
-      headings.push({ level: match[1].length, text: match[2].trim(), line: lineNum + 1 });
-    }
-  }
-  return headings;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
