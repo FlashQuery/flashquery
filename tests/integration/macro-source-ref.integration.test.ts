@@ -104,8 +104,11 @@ describe.skipIf(!HAS_SUPABASE)('call_macro source_ref integration', () => {
   });
 
   it.skip('T-I-006 permission_denied is inherited from the document resolver when local ACL support exists', () => {
-    // Current local resolver behavior has no per-caller read ACL to deny a vault file.
-    // This row stays skipped rather than adding macro-specific permission logic.
+    // Current local resolver behavior has no per-caller read ACL that can produce
+    // permission_denied for an otherwise resolvable vault document. Simulating
+    // this with OS permissions would be platform- and user-dependent filesystem
+    // error coverage, not the inherited app-level resolver contract this row
+    // is meant to prove. Keep skipped until resolver ACL support exists.
   });
 
   it('T-I-007 returns not_found for an archived macro-library doc', async () => {

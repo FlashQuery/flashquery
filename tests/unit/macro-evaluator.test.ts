@@ -95,6 +95,64 @@ describe('macro evaluator expression semantics', () => {
     });
   });
 
+  it('T-U-058 iterates equivalently over range builtin, range operator, list literal, and list variable', async () => {
+    const cases = [
+      {
+        label: 'range builtin',
+        source: `
+          for item in range 3 do
+            observe $item
+          done
+          exit "done"
+        `,
+      },
+      {
+        label: 'range operator',
+        source: `
+          for item in 0..3 do
+            observe $item
+          done
+          exit "done"
+        `,
+      },
+      {
+        label: 'list literal',
+        source: `
+          for item in [0,1,2] do
+            observe $item
+          done
+          exit "done"
+        `,
+      },
+      {
+        label: 'list variable',
+        source: `
+          items = [0,1,2]
+          for item in $items do
+            observe $item
+          done
+          exit "done"
+        `,
+      },
+    ];
+
+    for (const { label, source } of cases) {
+      const observed: unknown[] = [];
+      const result = await evaluateProgram(parseProgram(source), {
+        builtins: basicBuiltins({
+          observe: (args) => {
+            observed.push(args[0]);
+            return null;
+          },
+          range: (args) => Array.from({ length: Number(args[0] ?? 0) }, (_, index) => index),
+        }),
+      });
+
+      expect(resultOf(parseToolPayload(result)), label).toBe('done');
+      expect(observed, label).toEqual([0, 1, 2]);
+    }
+  });
+
   it('T-U-073 treats null, 0, 0.0, "", [], and {} as falsy in if', async () => {
     for (const falsy of ['null', '0', '0.0', '""', '[]', '{}']) {
       const result = await evaluateProgram(
