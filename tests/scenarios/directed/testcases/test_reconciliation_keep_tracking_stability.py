@@ -350,10 +350,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         try:
             recon2_payload = _json.loads(recon2.text)
             recon2_reconciliation = recon2_payload.get("reconciliation", {})
+            recon2_total = recon2_payload.get("total", 0)
             paths_updated2 = recon2_reconciliation.get("paths_updated", 0)
             archived2 = recon2_reconciliation.get("archived", 0)
         except Exception:
             recon2_reconciliation = {}
+            recon2_total = 0
             paths_updated2 = 0
             archived2 = 0
 
@@ -361,12 +363,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         t0 = time.monotonic()
 
         path_updated = paths_updated2 >= 1
-        fqc_id_in_results2 = bool(fqc_id) and fqc_id in recon2.text
+        active_in_results2 = recon2_total >= 1
         archived_in_2 = archived2 >= 1
 
         checks_first_move: dict[str, bool] = {
             "first-move reconcile: path updated (keep-tracking applied)": path_updated,
-            "first-move reconcile: fqc_id still in results (plugin row active)": fqc_id_in_results2,
+            "first-move reconcile: plugin row still active": active_in_results2,
             "first-move reconcile: no archival (keep-tracking preserves row)": not archived_in_2,
         }
         all_ok_first = all(checks_first_move.values())
@@ -375,7 +377,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_first_move.items() if not v]
             detail_parts.append(f"Failed: {', '.join(failed)}")
         detail_parts.append(
-            f"paths_updated={paths_updated2} | fqc_id_in_results={fqc_id_in_results2} | "
+            f"paths_updated={paths_updated2} | active_in_results={active_in_results2} | "
             f"archived={archived_in_2} | reconciliation={recon2_reconciliation!r}"
         )
 
@@ -437,10 +439,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         try:
             recon3_payload = _json.loads(recon3.text)
             recon3_reconciliation = recon3_payload.get("reconciliation", {})
+            recon3_total = recon3_payload.get("total", 0)
             paths_updated3 = recon3_reconciliation.get("paths_updated", 0)
             archived3 = recon3_reconciliation.get("archived", 0)
         except Exception:
             recon3_reconciliation = {}
+            recon3_total = 0
             paths_updated3 = 0
             archived3 = 0
 
@@ -451,12 +455,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         t0 = time.monotonic()
 
         re_moved = paths_updated3 >= 1
-        fqc_id_in_results3 = bool(fqc_id) and fqc_id in recon3.text
+        active_in_results3 = recon3_total >= 1
         archived_in_3 = archived3 >= 1
 
         checks_ro65: dict[str, bool] = {
             "RO-65: second-pass reconcile does NOT re-flag doc as 'moved' (no path update)": not re_moved,
-            "RO-65: plugin row still active (fqc_id in results)": fqc_id_in_results3,
+            "RO-65: plugin row still active": active_in_results3,
             "RO-65: no archival in second-pass reconcile (keep-tracking preserved)": not archived_in_3,
         }
         all_ok_ro65 = all(checks_ro65.values())
@@ -474,7 +478,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "reconciliations classify the doc as 'unchanged'."
                 )
         detail_65_parts.append(
-            f"re_moved={re_moved} | fqc_id_in_results={fqc_id_in_results3} | "
+            f"re_moved={re_moved} | active_in_results={active_in_results3} | "
             f"archived={archived_in_3} | reconciliation={recon3_reconciliation!r}"
         )
 

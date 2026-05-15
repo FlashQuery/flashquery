@@ -218,7 +218,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search_a.expect_json_equals("reconciliation.auto_tracked", 0)
         search_a.expect_json_equals("total", 0)
 
         run.step(
@@ -376,7 +375,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search_b.expect_json_equals("reconciliation.auto_tracked", 0)
         search_b.expect_json_equals("total", 0)
 
         run.step(

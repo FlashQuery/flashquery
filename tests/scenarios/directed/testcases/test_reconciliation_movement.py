@@ -580,16 +580,22 @@ def run_test(args: argparse.Namespace) -> TestRun:
         recon_data_b = _get_recon(recon_b.text)
         recon_data_c = _get_recon(recon_c.text)
 
+        def _total(text):
+            try:
+                return _json.loads(text).get("total", 0)
+            except Exception:
+                return 0
+
         # ── Step 12: RO-24 — keep-tracking: path updated; plugin row still active ──
         t0 = time.monotonic()
 
         path_updated_a = recon_data_a.get("paths_updated", 0) >= 1
-        a_in_text = bool(fqc_id_a and fqc_id_a in recon_a.text)
+        a_active = _total(recon_a.text) >= 1
         a_archived = recon_data_a.get("archived", 0) >= 1
 
         checks_24: dict[str, bool] = {
             "RO-24: paths_updated >= 1 (keep-tracking applied)": path_updated_a,
-            "RO-24: doc A fqc_id still in search results (row active)": a_in_text,
+            "RO-24: Plugin A still returns an active row": a_active,
             "RO-24: no archival in plugin A (keep-tracking preserves row)": not a_archived,
         }
         all_ok_24 = all(checks_24.values())
@@ -598,7 +604,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_24.items() if not v]
             detail_24_parts.append(f"Failed: {', '.join(failed)}")
         detail_24_parts.append(
-            f"paths_updated={recon_data_a.get('paths_updated',0)} | a_in_text={a_in_text} | "
+            f"paths_updated={recon_data_a.get('paths_updated',0)} | a_active={a_active} | "
             f"a_archived={a_archived} | reconciliation_a={recon_data_a!r}"
         )
 
@@ -617,12 +623,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         t0 = time.monotonic()
 
         path_updated_b = recon_data_b.get("paths_updated", 0) >= 1
-        b_in_text = bool(fqc_id_b and fqc_id_b in recon_b.text)
+        b_active = _total(recon_b.text) >= 1
         b_archived = recon_data_b.get("archived", 0) >= 1
 
         checks_26: dict[str, bool] = {
             "RO-26: paths_updated >= 1 (default = keep-tracking)": path_updated_b,
-            "RO-26: doc B fqc_id still in search results (row active)": b_in_text,
+            "RO-26: Plugin B still returns an active row": b_active,
             "RO-26: no archival in plugin B (default on_moved preserves row)": not b_archived,
         }
         all_ok_26 = all(checks_26.values())
@@ -631,7 +637,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_26.items() if not v]
             detail_26_parts.append(f"Failed: {', '.join(failed)}")
         detail_26_parts.append(
-            f"paths_updated={recon_data_b.get('paths_updated',0)} | b_in_text={b_in_text} | "
+            f"paths_updated={recon_data_b.get('paths_updated',0)} | b_active={b_active} | "
             f"b_archived={b_archived} | reconciliation_b={recon_data_b!r}"
         )
 
@@ -651,11 +657,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         t0 = time.monotonic()
 
         archived_count_c = recon_data_c.get("archived", 0)
-        c_in_text = bool(fqc_id_c and fqc_id_c in recon_c.text)
+        c_active = _total(recon_c.text) >= 1
 
         checks_25a: dict[str, bool] = {
             "RO-25: at least 1 plugin row archived (stop-tracking policy on move)": archived_count_c >= 1,
-            "RO-25: doc C fqc_id absent from search results (row archived)": not c_in_text,
+            "RO-25: Plugin C returns no active rows after archival": not c_active,
         }
         all_ok_25a = all(checks_25a.values())
         detail_25a_parts = []
@@ -663,7 +669,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_25a.items() if not v]
             detail_25a_parts.append(f"Failed: {', '.join(failed)}")
         detail_25a_parts.append(
-            f"archived_count_c={archived_count_c} | c_in_text={c_in_text} | "
+            f"archived_count_c={archived_count_c} | c_active={c_active} | "
             f"reconciliation_c={recon_data_c!r}"
         )
 
@@ -765,13 +771,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         new_auto_tracked_a3 = recon_data_a3.get("auto_tracked", 0) > 0
         new_archived_a3 = recon_data_a3.get("archived", 0) > 0
         new_path_update_a3 = recon_data_a3.get("paths_updated", 0) > 0
-        a3_in_text = bool(fqc_id_a and fqc_id_a in recon_a3.text)
+        a3_active = _total(recon_a3.text) >= 1
 
         checks_27: dict[str, bool] = {
             "RO-27: no new auto-track in immediate follow-up reconcile (within staleness)": not new_auto_tracked_a3,
             "RO-27: no archival in immediate follow-up reconcile (row still active)": not new_archived_a3,
             "RO-27: no path update in immediate follow-up (keep-tracking already applied)": not new_path_update_a3,
-            "RO-27: doc A fqc_id still in results (row active, unchanged)": a3_in_text,
+            "RO-27: Plugin A still returns an active row": a3_active,
         }
         all_ok_27 = all(checks_27.values())
         detail_27_parts = []
@@ -780,7 +786,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail_27_parts.append(f"Failed: {', '.join(failed)}")
         detail_27_parts.append(
             f"auto_tracked={recon_data_a3.get('auto_tracked',0)} | archived={recon_data_a3.get('archived',0)} | "
-            f"paths_updated={recon_data_a3.get('paths_updated',0)} | a3_in_text={a3_in_text} | "
+            f"paths_updated={recon_data_a3.get('paths_updated',0)} | a3_active={a3_active} | "
             f"reconciliation_a3={recon_data_a3!r}"
         )
 

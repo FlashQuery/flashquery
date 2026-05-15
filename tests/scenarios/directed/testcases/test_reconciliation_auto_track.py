@@ -217,6 +217,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="notes",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

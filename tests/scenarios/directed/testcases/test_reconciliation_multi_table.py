@@ -259,7 +259,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search_alpha.expect_json_equals("reconciliation.auto_tracked", ALPHA_FILE_COUNT)
+        search_alpha.expect_json_equals("reconciliation.auto_tracked", ALPHA_FILE_COUNT + BETA_FILE_COUNT)
 
         run.step(
             label="search_records(type_alpha) — reconciliation fires; should auto-track alpha AND beta folders",
@@ -274,7 +274,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 6a: RO-52 — Verify reconciliation summary uses count format ──
         # New JSON format: reconciliation.auto_tracked is a numeric count.
-        # Total tracked = ALPHA_FILE_COUNT (type_alpha query; beta is tracked separately).
+        # Total tracked = all document-backed folders for the plugin in one pass.
         t0 = time.monotonic()
         try:
             search_alpha_payload = _json.loads(search_alpha.text)

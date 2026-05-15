@@ -220,6 +220,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="items",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -454,6 +455,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="items",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -633,7 +635,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             passed=ro22c_ok,
             detail=(
                 f"no_template_review={no_template_review} | "
-                f"pending_text_preview={pending_text[:300]!r}"
+                f"pending_text_preview={pending_result.text[:300]!r}"
             ),
             timing_ms=pending_result.timing_ms,
             tool_result=pending_result,

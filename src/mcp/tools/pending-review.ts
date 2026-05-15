@@ -12,16 +12,18 @@ interface PendingReviewRow {
   plugin_id: string;
   table_name: string;
   review_type: string;
-  context?: { path?: string } | null;
+  context?: Record<string, unknown> | null;
 }
 
 function publicItem(row: PendingReviewRow): Record<string, unknown> {
   return {
     id: row.id,
+    fqc_id: row.fqc_id ?? null,
     type: row.review_type,
     plugin_id: row.plugin_id,
     table: row.table_name,
-    path: row.context?.path ?? null,
+    path: typeof row.context?.path === 'string' ? row.context.path : null,
+    context: row.context ?? {},
   };
 }
 

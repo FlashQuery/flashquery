@@ -6,13 +6,13 @@ Scenario:
     1. Register a plugin with on_added: auto-track, template declared, field_map (register_plugin)
     2. Create 2 vault files in the watched folder (ctx.create_file + ctx.scan_vault)
     3. Trigger reconciliation — auto-tracks both files, creates 2 pending review rows (search_records)
-    4. RO-38a: clear_pending_reviews (empty fqc_ids) — query mode; returns both pending rows, deletes none
-    5. RO-38b: clear_pending_reviews (one fqc_id) — clears that item, returns remainder (the other item)
-    6. RO-39: clear_pending_reviews (same fqc_id again) — idempotent no-op; returns same remainder
+    4. RO-38a: clear_pending_reviews list mode — returns both pending rows, deletes none
+    5. RO-38b: clear_pending_reviews (one pending review row ID) — clears that item, returns remainder
+    6. RO-39: clear_pending_reviews (same pending review row ID again) — idempotent no-op; returns same remainder
     7. RO-40: archive the second doc's underlying document row (archive_document + scan_vault),
              then clear_pending_reviews (query mode) — verify that row is no longer in the list
     8. RO-41: Register a second plugin instance, create a third doc, trigger auto-track,
-             then unregister_plugin(confirm_destroy=True) — verify no pending reviews remain for that plugin
+             then unregister_plugin(force=True) — verify no pending reviews remain for that plugin
     Cleanup is automatic (filesystem + database) even if the test fails.
 
 Coverage points: RO-38, RO-39, RO-40, RO-41
@@ -95,18 +95,17 @@ def _build_schema_yaml(plugin_id: str, plugin_name: str, doc_type_id: str, folde
     )
 
 
-def _extract_pending_fqc_ids(text: str) -> list[str]:
+def _extract_pending_ids(text: str) -> list[str]:
     """
-    Extract fqc_ids from a clear_pending_reviews JSON response.
-    New format: {"pending": N, "items": [{"fqc_id": "<uuid>", ...}, ...]}
+    Extract pending review row IDs from a clear_pending_reviews JSON response.
+    Current format: {"pending": N, "items": [{"id": "<uuid>", ...}, ...]}
     """
     try:
         payload = _json.loads(text)
         items = payload.get("items", [])
-        return [item["fqc_id"] for item in items if isinstance(item, dict) and "fqc_id" in item]
+        return [item["id"] for item in items if isinstance(item, dict) and "id" in item]
     except Exception:
-        # Fallback: match quoted UUID values after "fqc_id"
-        return re.findall(r'"fqc_id"\s*:\s*"([a-f0-9-]{36})"', text)
+        return re.findall(r'"id"\s*:\s*"([a-f0-9-]{36})"', text)
 
 
 def _extract_pending_count(text: str) -> int:
@@ -255,7 +254,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         pending_query.expect_json_equals("pending", 2)
 
         run.step(
-            label="RO-38a: clear_pending_reviews (query mode, empty fqc_ids) — returns 2 pending rows",
+            label="RO-38a: clear_pending_reviews (list mode) — returns 2 pending rows",
             passed=(pending_query.ok and pending_query.status == "pass"),
             detail=expectation_detail(pending_query) or pending_query.error or "",
             timing_ms=pending_query.timing_ms,
@@ -265,21 +264,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not pending_query.ok:
             return run
 
-        # Extract fqc_ids from the pending list — we need them for subsequent steps
-        pending_ids = _extract_pending_fqc_ids(pending_query.text)
+        # Extract pending review row IDs from the pending list — clear uses these IDs.
+        pending_ids = _extract_pending_ids(pending_query.text)
 
         t0 = time.monotonic()
         checks = {
-            "2 pending fqc_ids returned": len(pending_ids) == 2,
+            "2 pending review row IDs returned": len(pending_ids) == 2,
         }
         all_ok = all(checks.values())
         detail = (
             f"pending_ids={pending_ids!r}"
             if all_ok
-            else f"Failed: expected 2 fqc_ids, got {len(pending_ids)}. text_preview={pending_query.text[:300]!r}"
+            else f"Failed: expected 2 pending review row IDs, got {len(pending_ids)}. text_preview={pending_query.text[:300]!r}"
         )
         run.step(
-            label="parse 2 fqc_ids from pending review list",
+            label="parse 2 pending review row IDs from pending review list",
             passed=all_ok,
             detail=detail,
             timing_ms=int((time.monotonic() - t0) * 1000),
@@ -287,25 +286,25 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not all_ok:
             return run
 
-        fqc_id_1 = pending_ids[0]
-        fqc_id_2 = pending_ids[1]
+        pending_id_1 = pending_ids[0]
+        pending_id_2 = pending_ids[1]
 
-        # ── Step 5: RO-38b — clear one fqc_id; then list remainder ──────────
-        # action="clear" with ids=[fqc_id_1]: clears that item.
+        # ── Step 5: RO-38b — clear one pending row ID; then list remainder ──
+        # action="clear" with ids=[pending_id_1]: clears that item.
         log_mark = ctx.server.log_position if ctx.server else 0
         clear_one = ctx.client.call_tool(
             "clear_pending_reviews",
             action="clear",
             plugin_id=PLUGIN_ID,
-            ids=[fqc_id_1],
+            ids=[pending_id_1],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # After clearing fqc_id_1, cleared=1
+        # After clearing pending_id_1, cleared=1
         clear_one.expect_json_equals("cleared", 1)
 
         run.step(
-            label="RO-38b: clear_pending_reviews (fqc_id_1) — clears that item, 1 remains",
+            label="RO-38b: clear_pending_reviews (pending_id_1) — clears that item, 1 remains",
             passed=(clear_one.ok and clear_one.status == "pass"),
             detail=expectation_detail(clear_one) or clear_one.error or "",
             timing_ms=clear_one.timing_ms,
@@ -315,21 +314,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not clear_one.ok:
             return run
 
-        # Verify fqc_id_2 is still in the list after clearing fqc_id_1
+        # Verify pending_id_2 is still in the list after clearing pending_id_1
         t0 = time.monotonic()
         list_after_clear = ctx.client.call_tool(
             "clear_pending_reviews",
             action="list",
             plugin_id=PLUGIN_ID,
         )
-        remaining_ids = _extract_pending_fqc_ids(list_after_clear.text)
+        remaining_ids = _extract_pending_ids(list_after_clear.text)
         checks = {
-            "fqc_id_1 no longer in list": fqc_id_1 not in remaining_ids,
-            "fqc_id_2 still in list": fqc_id_2 in remaining_ids,
+            "pending_id_1 no longer in list": pending_id_1 not in remaining_ids,
+            "pending_id_2 still in list": pending_id_2 in remaining_ids,
         }
         all_ok = all(checks.values())
         detail = (
-            f"remaining_ids={remaining_ids!r}, fqc_id_1={fqc_id_1!r}, fqc_id_2={fqc_id_2!r}"
+            f"remaining_ids={remaining_ids!r}, pending_id_1={pending_id_1!r}, pending_id_2={pending_id_2!r}"
             if all_ok
             else (
                 f"Failed: {[k for k, v in checks.items() if not v]}. "
@@ -337,7 +336,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
         )
         run.step(
-            label="RO-38b verify: fqc_id_1 cleared from list; fqc_id_2 remains",
+            label="RO-38b verify: pending_id_1 cleared from list; pending_id_2 remains",
             passed=all_ok,
             detail=detail,
             timing_ms=int((time.monotonic() - t0) * 1000),
@@ -345,15 +344,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not all_ok:
             return run
 
-        # ── Step 6: RO-39 — idempotent: clearing already-cleared fqc_id is no-op
-        # Call clear_pending_reviews again with the same fqc_id_1 (already cleared).
-        # cleared=0 because fqc_id_1 was already gone.
+        # ── Step 6: RO-39 — idempotent: clearing already-cleared row ID is no-op
+        # Call clear_pending_reviews again with the same pending_id_1 (already cleared).
+        # cleared=0 because pending_id_1 was already gone.
         log_mark = ctx.server.log_position if ctx.server else 0
         clear_again = ctx.client.call_tool(
             "clear_pending_reviews",
             action="clear",
             plugin_id=PLUGIN_ID,
-            ids=[fqc_id_1],
+            ids=[pending_id_1],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -361,7 +360,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         clear_again.expect_json_equals("cleared", 0)
 
         run.step(
-            label="RO-39: clear_pending_reviews (same fqc_id_1 again) — idempotent, cleared=0",
+            label="RO-39: clear_pending_reviews (same pending_id_1 again) — idempotent, cleared=0",
             passed=(clear_again.ok and clear_again.status == "pass"),
             detail=expectation_detail(clear_again) or clear_again.error or "",
             timing_ms=clear_again.timing_ms,
@@ -377,10 +376,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
             action="list",
             plugin_id=PLUGIN_ID,
         )
-        idempotent_ids = _extract_pending_fqc_ids(list_after_idempotent.text)
+        idempotent_ids = _extract_pending_ids(list_after_idempotent.text)
         checks = {
-            "RO-39 idempotent: fqc_id_2 still present": fqc_id_2 in idempotent_ids,
-            "RO-39 idempotent: fqc_id_1 still absent": fqc_id_1 not in idempotent_ids,
+            "RO-39 idempotent: pending_id_2 still present": pending_id_2 in idempotent_ids,
+            "RO-39 idempotent: pending_id_1 still absent": pending_id_1 not in idempotent_ids,
             "RO-39 idempotent: still exactly 1 item": len(idempotent_ids) == 1,
         }
         all_ok = all(checks.values())
@@ -393,7 +392,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
         )
         run.step(
-            label="RO-39 verify: list unchanged after re-clearing already-cleared fqc_id",
+            label="RO-39 verify: list unchanged after re-clearing already-cleared pending row ID",
             passed=all_ok,
             detail=detail,
             timing_ms=int((time.monotonic() - t0) * 1000),
@@ -408,7 +407,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # review rows for that document. We must wait past the 30s staleness window and then
         # trigger a fresh reconciliation pass.
         #
-        # Step 7a: Archive the underlying document for file2 (fqc_id_2's backing document).
+        # Step 7a: Archive the underlying document for file2 (pending_id_2's backing document).
         log_mark = ctx.server.log_position if ctx.server else 0
         archive_result = ctx.client.call_tool(
             "archive_document",
@@ -419,7 +418,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         archive_result.expect_contains("archived")
 
         run.step(
-            label="RO-40 setup: archive_document for file2 (the doc behind fqc_id_2 pending row)",
+            label="RO-40 setup: archive_document for file2 (the doc behind pending_id_2 pending row)",
             passed=(archive_result.ok and archive_result.status == "pass"),
             detail=expectation_detail(archive_result) or archive_result.error or "",
             timing_ms=archive_result.timing_ms,
@@ -457,7 +456,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             return run
 
         # Step 7d: Trigger reconciliation — it classifies file2's doc as 'deleted' (active plugin
-        # row + archived/missing document) and deletes fqc_id_2's pending review row.
+        # row + archived/missing document) and deletes pending_id_2's pending review row.
         log_mark = ctx.server.log_position if ctx.server else 0
         recon_result = ctx.client.call_tool(
             "search_records",
@@ -478,7 +477,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not recon_result.ok:
             return run
 
-        # Step 7e: Query pending reviews — fqc_id_2's row must be gone (deleted by reconciliation).
+        # Step 7e: Query pending reviews — pending_id_2's row must be gone (deleted by reconciliation).
         log_mark = ctx.server.log_position if ctx.server else 0
         pending_after_archive = ctx.client.call_tool(
             "clear_pending_reviews",
@@ -498,20 +497,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not pending_after_archive.ok:
             return run
 
-        # Verify fqc_id_2 is gone from the pending list (deleted by reconciliation engine)
+        # Verify pending_id_2 is gone from the pending list (deleted by reconciliation engine)
         t0 = time.monotonic()
-        post_archive_ids = _extract_pending_fqc_ids(pending_after_archive.text)
-        fqc_id_2_absent = fqc_id_2 not in post_archive_ids
+        post_archive_ids = _extract_pending_ids(pending_after_archive.text)
+        pending_id_2_absent = pending_id_2 not in post_archive_ids
         checks = {
-            "RO-40: fqc_id_2 absent after reconciliation deleted its pending row": fqc_id_2_absent,
+            "RO-40: pending_id_2 absent after reconciliation deleted its pending row": pending_id_2_absent,
         }
         all_ok = all(checks.values())
         detail = (
-            f"post_archive_ids={post_archive_ids!r}, fqc_id_2={fqc_id_2!r}, "
+            f"post_archive_ids={post_archive_ids!r}, pending_id_2={pending_id_2!r}, "
             f"response_preview={pending_after_archive.text[:300]!r}"
         )
         run.step(
-            label="RO-40 verify: fqc_id_2 pending row deleted when reconciliation sees doc as deleted",
+            label="RO-40 verify: pending_id_2 row deleted when reconciliation sees doc as deleted",
             passed=all_ok,
             detail=detail,
             timing_ms=int((time.monotonic() - t0) * 1000),
@@ -616,20 +615,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not pending_before_unregister.ok:
             return run
 
-        # Unregister plugin 2 — this should cascade-delete all its pending review rows
+        # Unregister plugin 2 — force is required because auto-track created a live row.
+        # This should still cascade-delete all pending review rows for the plugin.
         log_mark = ctx.server.log_position if ctx.server else 0
         unregister2 = ctx.client.call_tool(
             "unregister_plugin",
             plugin_id=PLUGIN_ID_2,
             plugin_instance=instance_name_2,
-            confirm_destroy=True,
+            force=True,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         unregister2.expect_json_equals("status", "unregistered")
 
         run.step(
-            label="RO-41: unregister_plugin (plugin 2, confirm_destroy=True)",
+            label="RO-41: unregister_plugin (plugin 2, force=True)",
             passed=(unregister2.ok and unregister2.status == "pass"),
             detail=expectation_detail(unregister2) or unregister2.error or "",
             timing_ms=unregister2.timing_ms,

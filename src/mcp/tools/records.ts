@@ -105,7 +105,7 @@ async function queryPendingReview(
   const supabase = supabaseManager.getClient();
   const { data } = await supabase
     .from('fqc_pending_plugin_review')
-    .select('id, plugin_id, table_name, review_type, context')
+    .select('id, fqc_id, plugin_id, table_name, review_type, context')
     .eq('plugin_id', pluginId)
     .eq('instance_id', fqcInstanceId);
   return data ?? [];

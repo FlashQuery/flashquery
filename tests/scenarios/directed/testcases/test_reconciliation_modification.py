@@ -307,6 +307,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_A_ID,
             plugin_instance=instance_a,
             table="notes",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -357,6 +358,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_B_ID,
             plugin_instance=instance_b,
             table="items",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -505,6 +507,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_A_ID,
             plugin_instance=instance_a,
             table="notes",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -555,6 +558,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_B_ID,
             plugin_instance=instance_b,
             table="items",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -676,6 +680,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_A_ID,
             plugin_instance=instance_a,
             table="notes",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -750,6 +755,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_B_ID,
             plugin_instance=instance_b,
             table="items",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

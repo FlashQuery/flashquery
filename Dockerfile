@@ -3,7 +3,7 @@
 # ─────────────────────────────────────────────
 # Build stage: compile TypeScript → ESM dist/
 # ─────────────────────────────────────────────
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 
 WORKDIR /build
 
@@ -23,7 +23,7 @@ RUN npm run build
 # ─────────────────────────────────────────────
 # Production stage: lean runtime image
 # ─────────────────────────────────────────────
-FROM node:20-alpine AS production
+FROM node:22-alpine AS production
 
 # Create non-root user (no login shell) with explicit UID 10001
 # UID 10001 is a standard application user UID above the system range (0-10000)

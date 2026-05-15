@@ -34,10 +34,11 @@ export type RecordResult = RecordIdentificationInput & {
 
 export interface PendingReviewPublicRow {
   id: string;
+  fqc_id?: string | null;
   plugin_id: string;
   table_name: string;
   review_type: string;
-  context?: { path?: string } | null;
+  context?: Record<string, unknown> | null;
 }
 
 export function parseRecordInclude(
@@ -93,10 +94,12 @@ export function buildPendingReviewPayload(
     count: pendingItems.length,
     items: pendingItems.map((item) => ({
       id: item.id,
+      fqc_id: item.fqc_id ?? null,
       type: item.review_type,
       plugin_id: item.plugin_id,
       table: item.table_name,
-      path: item.context?.path ?? null,
+      path: typeof item.context?.path === 'string' ? item.context.path : null,
+      context: item.context ?? {},
     })),
   };
 }
