@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { MacroTaskRegistry } from '../../src/macro/task-registry.js';
 import { NullMcpBroker } from '../../src/services/mcp-broker.js';
-import { callMacroInputSchema, runMacroSource } from '../../src/mcp/tools/macro.js';
+import { getNativeToolCatalog, wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
+import { callMacroInputSchema, registerMacroTools, runMacroSource } from '../../src/mcp/tools/macro.js';
 import { parseToolPayload } from './macro-test-helpers.js';
 
 function config(): FlashQueryConfig {
@@ -12,6 +14,14 @@ function config(): FlashQueryConfig {
     server: {},
     macro: { defaultTimeoutMs: 60000 },
   } as FlashQueryConfig;
+}
+
+function registeredCallMacroHandler() {
+  const server = wrapServerWithToolCatalog(new McpServer({ name: 'macro-handler-unit', version: '1.0.0' }));
+  registerMacroTools(server, config());
+  const handler = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro')?.handler;
+  expect(handler).toBeDefined();
+  return handler!;
 }
 
 describe('macro handler request schema', () => {
@@ -93,6 +103,56 @@ describe('macro handler request schema', () => {
     expect(parseToolPayload(timedOut.result)).toMatchObject({
       error: 'timeout',
       details: { timeout_ms: 1 },
+    });
+  });
+});
+
+describe('macro handler source selector validation', () => {
+  const cases: Array<{
+    id: string;
+    params: Record<string, unknown>;
+    reason: string;
+  }> = [
+    {
+      id: 'T-U-218',
+      params: { source: 'if', source_ref: 'Macros/lib.md::foo' },
+      reason: 'exactly_one_required',
+    },
+    {
+      id: 'T-U-219',
+      params: {},
+      reason: 'exactly_one_required',
+    },
+    {
+      id: 'T-U-220',
+      params: { source: '' },
+      reason: 'empty_source',
+    },
+    {
+      id: 'T-U-221',
+      params: { source_ref: '' },
+      reason: 'empty_source_ref',
+    },
+    {
+      id: 'T-U-222',
+      params: { source_ref: '::foo' },
+      reason: 'invalid_source_ref_format',
+    },
+    {
+      id: 'T-U-223',
+      params: { source_ref: 'Macros/lib.md::bad name' },
+      reason: 'invalid_block_name_format',
+    },
+  ];
+
+  it.each(cases)('$id returns invalid_input / $reason before parse or execution', async ({ params, reason }) => {
+    const handler = registeredCallMacroHandler();
+    const result = await handler(params, {} as never);
+
+    expect(result.isError).toBeFalsy();
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'invalid_input',
+      details: { reason },
     });
   });
 });

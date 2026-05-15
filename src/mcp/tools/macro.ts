@@ -13,6 +13,7 @@ import {
 import { parseMacroSource } from '../../macro/parser.js';
 import { runDryRun } from '../../macro/dry-run.js';
 import { buildToolRegistry, type BrokerToolServerConfig, type BuildToolRegistryResult } from '../../macro/registry.js';
+import { splitMacroSourceRef } from '../../macro/source-ref.js';
 import type { MacroCallerContext } from '../../macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../llm/tool-registry.js';
 import type { McpBroker } from '../../services/mcp-broker.js';
@@ -263,8 +264,27 @@ export function registerMacroTools(
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed.');
       }
 
-      const hasSource = typeof params.source === 'string' && params.source.length > 0;
-      const hasSourceRef = typeof params.source_ref === 'string' && params.source_ref.trim().length > 0;
+      const source = typeof params.source === 'string' ? params.source : undefined;
+      const sourceRef = typeof params.source_ref === 'string' ? params.source_ref : undefined;
+
+      if (source !== undefined && source.length === 0) {
+        return jsonExpectedError({
+          error: 'invalid_input',
+          message: 'Macro source cannot be empty.',
+          details: { reason: 'empty_source' },
+        });
+      }
+
+      if (sourceRef !== undefined && sourceRef.length === 0) {
+        return jsonExpectedError({
+          error: 'invalid_input',
+          message: 'Macro source_ref cannot be empty.',
+          details: { reason: 'empty_source_ref' },
+        });
+      }
+
+      const hasSource = source !== undefined;
+      const hasSourceRef = sourceRef !== undefined;
 
       if (hasSource === hasSourceRef) {
         return jsonExpectedError({
@@ -275,6 +295,10 @@ export function registerMacroTools(
       }
 
       if (hasSourceRef) {
+        const split = splitMacroSourceRef(sourceRef);
+        if (!split.valid) {
+          return jsonExpectedError(split.error);
+        }
         return jsonExpectedError({
           error: 'unsupported',
           message: 'call_macro source_ref execution is not implemented yet.',
@@ -292,7 +316,7 @@ export function registerMacroTools(
           catalog,
         });
         const { result } = await runMacroSource({
-          source: params.source as string,
+          source,
           input_vars: params.input_vars as Record<string, MacroValue> | undefined,
           callerContext,
           config,
