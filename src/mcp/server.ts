@@ -263,7 +263,7 @@ export function createTokenHandler(config: FlashQueryConfig) {
 
         // Issue new tokens (same path as HTTP Basic Auth)
         const accessTokenLifetime = config.mcp.tokenLifetime ?? 24; // hours
-        const accessToken = generateToken(config.instance.id, authSecret);
+        const accessToken = generateToken(config.instance.id, authSecret, accessTokenLifetime);
         const refreshToken = generateRefreshToken(
           config.instance.id,
           authSecret,
@@ -312,7 +312,7 @@ export function createTokenHandler(config: FlashQueryConfig) {
 
       // Generate tokens
       const accessTokenLifetime = config.mcp.tokenLifetime ?? 24; // hours
-      const accessToken = generateToken(config.instance.id, config.mcp.authSecret);
+      const accessToken = generateToken(config.instance.id, config.mcp.authSecret, accessTokenLifetime);
       const refreshToken = generateRefreshToken(
         config.instance.id,
         config.mcp.authSecret,
@@ -557,7 +557,7 @@ export async function initMCP(
     // Bearer token authentication (SEC-01, D-15, D-16)
     // Registered AFTER /mcp/info so all other /mcp routes require a valid Bearer token.
     if (config.mcp.authSecret) {
-      const token = generateToken(config.instance.id, config.mcp.authSecret);
+      const token = generateToken(config.instance.id, config.mcp.authSecret, config.mcp.tokenLifetime ?? 24);
       app.use('/mcp', createAuthMiddleware(config.mcp.authSecret));
       logger.info(`MCP auth: Bearer token required for HTTP transport`);
       logger.info(`MCP auth: Generated JWT token for clients:`);

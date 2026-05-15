@@ -3,6 +3,8 @@ import { logger } from '../logging/logger.js';
 import { redactToken } from './redaction.js';
 import type { Request, Response, NextFunction } from 'express';
 
+const TOKEN_CLOCK_SKEW_SECONDS = 30;
+
 // ── Base64url helpers ──
 
 function base64UrlEncode(input: string): string {
@@ -14,13 +16,16 @@ function base64UrlEncode(input: string): string {
 /**
  * Generate an access token (short-lived JWT).
  * Used for authenticating requests to MCP endpoints.
- * Per D-07: token format is HMAC-SHA256 JWT with instance_id and issued_at claims.
+ * Per D-07: token format is HMAC-SHA256 JWT with instance_id, issued_at, nbf, and exp claims.
  */
-export function generateToken(instanceId: string, secret: string): string {
+export function generateToken(instanceId: string, secret: string, lifetimeHours: number = 24): string {
   const header = { alg: 'HS256', typ: 'JWT' };
+  const issuedAt = Math.floor(Date.now() / 1000);
   const payload = {
     instance_id: instanceId,
-    issued_at: Math.floor(Date.now() / 1000),
+    issued_at: issuedAt,
+    nbf: issuedAt,
+    exp: issuedAt + lifetimeHours * 3600,
     version: 1,
   };
 
@@ -47,9 +52,12 @@ export function generateRefreshToken(
   const refreshLifetimeHours = Math.min(accessTokenLifetimeHours * 7, 8760); // cap at 1 year
 
   const header = { alg: 'HS256', typ: 'JWT' };
+  const issuedAt = Math.floor(Date.now() / 1000);
   const payload = {
     instance_id: instanceId,
-    issued_at: Math.floor(Date.now() / 1000),
+    issued_at: issuedAt,
+    nbf: issuedAt,
+    exp: issuedAt + refreshLifetimeHours * 3600,
     version: 1,
     token_type: 'refresh', // Distinguish from access tokens (for future validation)
     lifetime_hours: refreshLifetimeHours,
@@ -170,7 +178,18 @@ export function validateAuthCode(
 export function verifyToken(
   token: string,
   secret: string
-): { valid: boolean; payload?: { instance_id: string; issued_at: number; version: number } } {
+): {
+  valid: boolean;
+  payload?: {
+    instance_id: string;
+    issued_at: number;
+    nbf?: number;
+    exp?: number;
+    version: number;
+    token_type?: string;
+    lifetime_hours?: number;
+  };
+} {
   const parts = token.split('.');
 
   // If token contains 2 dots, treat as JWT. Otherwise treat as raw secret.
@@ -192,8 +211,25 @@ export function verifyToken(
       const payload = JSON.parse(Buffer.from(payloadEncoded, 'base64url').toString()) as {
         instance_id: string;
         issued_at: number;
+        nbf?: number;
+        exp?: number;
         version: number;
+        token_type?: string;
+        lifetime_hours?: number;
       };
+
+      const currentTime = Math.floor(Date.now() / 1000);
+      if (payload.exp !== undefined) {
+        if (typeof payload.exp !== 'number' || currentTime > payload.exp + TOKEN_CLOCK_SKEW_SECONDS) {
+          return { valid: false };
+        }
+      }
+      if (payload.nbf !== undefined) {
+        if (typeof payload.nbf !== 'number' || currentTime < payload.nbf - TOKEN_CLOCK_SKEW_SECONDS) {
+          return { valid: false };
+        }
+      }
+
       return { valid: true, payload };
     } catch {
       return { valid: false };

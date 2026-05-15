@@ -46,7 +46,7 @@ On success it prints confirmation and tells you to restart Claude Code to load t
 
 ## Token lifetime
 
-FlashQuery bearer tokens are signed with `MCP_AUTH_SECRET`. The `/token` response includes an `expires_in` value based on `mcp.token_lifetime`, and the raw secret remains accepted as a legacy bearer token for compatibility. In practice, re-run `./setup/setup-claude-mcp.sh` when a client token stops working or whenever you rotate `MCP_AUTH_SECRET` (for example after re-running `setup/setup.sh` or manually rotating the secret).
+FlashQuery bearer tokens are signed with `MCP_AUTH_SECRET`. The `/token` response includes an `expires_in` value based on `mcp.token_lifetime`, and newly issued JWTs include enforced `nbf` and `exp` claims. The raw secret remains accepted as a legacy bearer token for compatibility. In practice, re-run `./setup/setup-claude-mcp.sh` when a client token expires, stops working, or whenever you rotate `MCP_AUTH_SECRET` (for example after re-running `setup/setup.sh` or manually rotating the secret).
 
 ---
 

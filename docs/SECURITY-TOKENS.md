@@ -36,7 +36,7 @@ mcp:
   token_lifetime: 24
 ```
 
-FlashQuery's config loader expands `${MCP_AUTH_SECRET}` from your environment at startup. This aligns with SEC-02: the signing secret is stored in `.env` as an environment variable, not hardcoded in config. The `auth_secret` field supports `${ENV_VAR}` syntax for all environment-based secret management scenarios. `token_lifetime` controls the `expires_in` value returned by `POST /token` (default `24`, minimum `1`, maximum `8760` hours).
+FlashQuery's config loader expands `${MCP_AUTH_SECRET}` from your environment at startup. This aligns with SEC-02: the signing secret is stored in `.env` as an environment variable, not hardcoded in config. The `auth_secret` field supports `${ENV_VAR}` syntax for all environment-based secret management scenarios. `token_lifetime` controls the access token expiry and the `expires_in` value returned by `POST /token` (default `24`, minimum `1`, maximum `8760` hours).
 
 ## Token Generation
 
@@ -62,6 +62,8 @@ The response includes an access token and refresh token:
   "scope": ""
 }
 ```
+
+Access tokens include `nbf` and `exp` JWT claims and are rejected after expiry, with a 30-second clock-skew tolerance. Refresh tokens use the same expiry mechanism with a lifetime of 7x the access token lifetime, capped at 1 year. Legacy signed JWTs that do not contain `exp` remain accepted for compatibility, and the raw `MCP_AUTH_SECRET` remains accepted as a legacy bearer token.
 
 On startup, FlashQuery also logs redacted auth guidance:
 
@@ -119,9 +121,10 @@ This is a security risk. Configure `auth_secret` for any non-local deployment.
 
 - **Algorithm:** HMAC-SHA256 (HS256)
 - **Token format:** JWT (header.payload.signature, base64url encoded)
-- **Token payload:** `{ instance_id, issued_at, version: 1 }` — no expiry claim
+- **Access token payload:** `{ instance_id, issued_at, nbf, exp, version: 1 }`
+- **Refresh token payload:** `{ instance_id, issued_at, nbf, exp, version: 1, token_type: "refresh", lifetime_hours }`
 - **Token endpoint:** `POST /token` supports HTTP Basic Auth and an authorization-code grant used by compatible clients
-- **Legacy compatibility:** raw `MCP_AUTH_SECRET` is still accepted as `Authorization: Bearer <secret>`
-- **Validation:** Constant-time signature comparison via `crypto.timingSafeEqual`
+- **Legacy compatibility:** raw `MCP_AUTH_SECRET` and signed JWTs without `exp` are still accepted
+- **Validation:** Constant-time signature comparison via `crypto.timingSafeEqual`, plus `nbf`/`exp` checks when present
 - **No external dependencies:** Uses Node.js built-in `node:crypto` module
 - **Config expansion:** `auth_secret` supports `${ENV_VAR}` syntax for environment-based secret management

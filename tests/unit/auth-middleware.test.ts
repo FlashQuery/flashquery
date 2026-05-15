@@ -1,4 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createHmac } from 'node:crypto';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { generateToken, verifyToken, createAuthMiddleware } from '../../src/mcp/auth.js';
 import type { Request, Response, NextFunction } from 'express';
 
@@ -11,6 +12,23 @@ vi.mock('../../src/logging/logger.js', () => ({
     debug: vi.fn(),
   },
 }));
+
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  return JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString()) as Record<string, unknown>;
+}
+
+function createSignedJwt(payload: Record<string, unknown>, secret: string): string {
+  const header = { alg: 'HS256', typ: 'JWT' };
+  const headerEncoded = Buffer.from(JSON.stringify(header)).toString('base64url');
+  const payloadEncoded = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const message = `${headerEncoded}.${payloadEncoded}`;
+  const signature = createHmac('sha256', secret).update(message).digest('base64url');
+  return `${message}.${signature}`;
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // generateToken
@@ -41,6 +59,18 @@ describe('generateToken', () => {
     const result = verifyToken(token, secret);
     expect(result.valid).toBe(true);
     expect(result.payload?.instance_id).toBe('my-instance');
+  });
+
+  it('includes exp and nbf claims based on the requested lifetime', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:00Z'));
+
+    const token = generateToken('my-instance', 'my-secret-key', 2);
+    const payload = decodeJwtPayload(token);
+
+    expect(payload['issued_at']).toBe(1778846400);
+    expect(payload['nbf']).toBe(1778846400);
+    expect(payload['exp']).toBe(1778853600);
   });
 });
 
@@ -97,6 +127,38 @@ describe('verifyToken', () => {
     const tamperedToken = `${parts[0]}.${parts[1]}.tampered-signature`;
     const result = verifyToken(tamperedToken, SECRET);
     expect(result.valid).toBe(false);
+  });
+
+  it('rejects an expired JWT', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:00Z'));
+    const token = generateToken(INSTANCE_ID, SECRET, 1);
+
+    vi.setSystemTime(new Date('2026-05-15T13:00:31Z'));
+
+    expect(verifyToken(token, SECRET).valid).toBe(false);
+  });
+
+  it('accepts a JWT within the expiration clock-skew tolerance', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:00Z'));
+    const token = generateToken(INSTANCE_ID, SECRET, 1);
+
+    vi.setSystemTime(new Date('2026-05-15T13:00:15Z'));
+
+    expect(verifyToken(token, SECRET).valid).toBe(true);
+  });
+
+  it('accepts legacy signed JWTs without exp for compatibility', () => {
+    const legacyToken = createSignedJwt(
+      { instance_id: INSTANCE_ID, issued_at: 1713123456, version: 1 },
+      SECRET
+    );
+
+    const result = verifyToken(legacyToken, SECRET);
+
+    expect(result.valid).toBe(true);
+    expect(result.payload?.instance_id).toBe(INSTANCE_ID);
   });
 });
 

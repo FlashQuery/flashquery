@@ -23,6 +23,10 @@ function encodeBasicAuth(username: string, password: string): string {
   return 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64');
 }
 
+function decodeJwtPayload(token: string): Record<string, unknown> {
+  return JSON.parse(Buffer.from(token.split('.')[1]!, 'base64url').toString()) as Record<string, unknown>;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Mock Express objects
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +147,24 @@ describe('Token Endpoint Tests', () => {
     expect(tokenResponse['expires_in']).toBe(24 * 3600); // 24 hours in seconds
   });
 
+  it('POST /token access token exp matches expires_in', () => {
+    config = makeMockConfig({ mcp: { ...config.mcp, tokenLifetime: 2 } });
+    handler = createTokenHandler(config);
+    const req = makeMockReq(encodeBasicAuth('client', 'test-secret'));
+    const res = makeMockRes();
+    const next = vi.fn();
+
+    handler(req, res, next);
+
+    const calls = (res as unknown as Record<string, unknown>)['_calls'] as Record<string, unknown>;
+    const tokenResponse = calls.json as Record<string, unknown>;
+    const payload = decodeJwtPayload(tokenResponse['access_token'] as string);
+
+    expect(tokenResponse['expires_in']).toBe(2 * 3600);
+    expect(payload['exp']).toBe((payload['issued_at'] as number) + tokenResponse['expires_in']);
+    expect(payload['nbf']).toBe(payload['issued_at']);
+  });
+
   // ─ Test 5: Response includes scope: ""
   it('POST /token response includes scope: ""', () => {
     const req = makeMockReq(encodeBasicAuth('client', 'test-secret'));
@@ -242,6 +264,16 @@ describe('Token Endpoint Tests', () => {
     const result = verifyToken(refreshToken, 'test-secret');
     expect(result.valid).toBe(true);
     expect(result.payload?.instance_id).toBe('test-instance');
+  });
+
+  it('generateRefreshToken includes exp based on the bounded refresh lifetime', () => {
+    const refreshToken = generateRefreshToken('test-instance', 'test-secret', 24);
+    const payload = decodeJwtPayload(refreshToken);
+
+    expect(payload['token_type']).toBe('refresh');
+    expect(payload['lifetime_hours']).toBe(24 * 7);
+    expect(payload['exp']).toBe((payload['issued_at'] as number) + 24 * 7 * 3600);
+    expect(payload['nbf']).toBe(payload['issued_at']);
   });
 
   // ─ Test 12: Token endpoint error response includes error and error_description fields
