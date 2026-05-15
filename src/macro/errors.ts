@@ -29,6 +29,7 @@ export type MacroInvalidInputReason =
   | 'empty_source_ref'
   | 'invalid_source_ref_format'
   | 'invalid_block_name_format'
+  | 'ambiguous_source_ref'
   | 'no_macro_blocks'
   | 'ambiguous_macro_block'
   | 'block_not_found'

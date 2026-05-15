@@ -1,8 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
+import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import {
   evaluateProgram,
@@ -13,14 +16,23 @@ import {
 import { parseMacroSource } from '../../macro/parser.js';
 import { runDryRun } from '../../macro/dry-run.js';
 import { buildToolRegistry, type BrokerToolServerConfig, type BuildToolRegistryResult } from '../../macro/registry.js';
-import { splitMacroSourceRef } from '../../macro/source-ref.js';
+import { extractMacroFences } from '../../macro/fence-extractor.js';
+import { selectMacroSourceBlock, splitMacroSourceRef } from '../../macro/source-ref.js';
 import type { MacroCallerContext } from '../../macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../llm/tool-registry.js';
 import type { McpBroker } from '../../services/mcp-broker.js';
 import { NullMcpBroker } from '../../services/mcp-broker.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, type ToolResult } from '../utils/response-formats.js';
+import {
+  AmbiguousDocumentIdentifierError,
+  DocumentNotFoundError,
+  DocumentReadError,
+  resolveDocumentIdentifier,
+} from '../utils/resolve-document.js';
 import type { TemplateToolReverseMap } from '../../llm/template-tools.js';
+import { logger } from '../../logging/logger.js';
+import { supabaseManager } from '../../storage/supabase.js';
 import {
   MacroTaskRegistry,
   type MacroTaskRecord,
@@ -44,6 +56,7 @@ export const callMacroInputSchema = z.object({
 
 export interface RunMacroSourceOptions {
   source: string;
+  sourceIdentifier?: string;
   inputVars?: Record<string, MacroValue>;
   input_vars?: Record<string, MacroValue>;
   callerContext?: MacroCallerContext;
@@ -98,6 +111,167 @@ export interface RunMacroSourceResult {
   };
 }
 
+export type ResolveMacroSourceForRequestResult =
+  | { ok: true; source: string; identifier: string }
+  | { ok: false; result: ToolResult };
+
+export interface ResolveMacroSourceForRequestOptions {
+  source?: string;
+  source_ref?: string;
+  config: FlashQueryConfig;
+  supabase?: SupabaseClient;
+  getSupabase?: () => SupabaseClient;
+  log?: typeof logger;
+  readDocument?: (absPath: string) => Promise<string>;
+}
+
+export async function resolveMacroSourceForRequest(
+  options: ResolveMacroSourceForRequestOptions
+): Promise<ResolveMacroSourceForRequestResult> {
+  const source = options.source;
+  const sourceRef = options.source_ref;
+  const hasSource = source !== undefined;
+  const hasSourceRef = sourceRef !== undefined;
+
+  if (hasSource === hasSourceRef) {
+    return {
+      ok: false,
+      result: jsonExpectedError({
+        error: 'invalid_input',
+        message: 'Exactly one of source or source_ref is required.',
+        details: { reason: 'exactly_one_required' },
+      }),
+    };
+  }
+
+  if (source === '') {
+    return {
+      ok: false,
+      result: jsonExpectedError({
+        error: 'invalid_input',
+        message: 'Macro source cannot be empty.',
+        details: { reason: 'empty_source' },
+      }),
+    };
+  }
+
+  if (sourceRef === '') {
+    return {
+      ok: false,
+      result: jsonExpectedError({
+        error: 'invalid_input',
+        message: 'Macro source_ref cannot be empty.',
+        details: { reason: 'empty_source_ref' },
+      }),
+    };
+  }
+
+  if (source !== undefined) {
+    return { ok: true, source, identifier: 'inline' };
+  }
+
+  const sourceRefValue = sourceRef as string;
+  const split = splitMacroSourceRef(sourceRefValue);
+  if (!split.valid) {
+    return { ok: false, result: jsonExpectedError(split.error) };
+  }
+
+  try {
+    const supabase = options.supabase ?? options.getSupabase?.();
+    if (supabase === undefined) {
+      return {
+        ok: false,
+        result: jsonRuntimeError({
+          error: 'runtime_error',
+          message: 'Supabase client is required to resolve source_ref.',
+          identifier: sourceRefValue,
+        }),
+      };
+    }
+    const resolved = await resolveDocumentIdentifier(
+      options.config,
+      supabase,
+      split.docRef,
+      options.log ?? logger
+    );
+    const raw = await (options.readDocument ?? ((absPath) => readFile(absPath, 'utf-8')))(resolved.absPath);
+    const parsed = matter(raw);
+    if (parsed.data['status'] === 'archived' || parsed.data['fq_status'] === 'archived') {
+      return {
+        ok: false,
+        result: jsonExpectedError({
+          error: 'not_found',
+          message: `No document found for source_ref: ${sourceRefValue}`,
+          identifier: sourceRefValue,
+        }),
+      };
+    }
+
+    const extracted = extractMacroFences(raw, sourceRefValue);
+    if (!extracted.ok) {
+      return { ok: false, result: jsonExpectedError(extracted.error) };
+    }
+
+    const selected = selectMacroSourceBlock(extracted.blocks, split.blockName, sourceRefValue);
+    if (!selected.ok) {
+      return { ok: false, result: jsonExpectedError(selected.error) };
+    }
+
+    return {
+      ok: true,
+      source: selected.block.source,
+      identifier: sourceRefValue,
+    };
+  } catch (error) {
+    if (error instanceof DocumentNotFoundError) {
+      return {
+        ok: false,
+        result: jsonExpectedError({
+          error: 'not_found',
+          message: `No document found for source_ref: ${sourceRefValue}`,
+          identifier: sourceRefValue,
+        }),
+      };
+    }
+
+    if (error instanceof AmbiguousDocumentIdentifierError) {
+      return {
+        ok: false,
+        result: jsonExpectedError({
+          error: 'invalid_input',
+          message: error.message,
+          identifier: sourceRefValue,
+          details: {
+            reason: 'ambiguous_source_ref',
+            matches: error.matches,
+          },
+        }),
+      };
+    }
+
+    if (error instanceof DocumentReadError) {
+      return {
+        ok: false,
+        result: jsonRuntimeError({
+          error: 'runtime_error',
+          message: error.message,
+          identifier: sourceRefValue,
+        }),
+      };
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      result: jsonRuntimeError({
+        error: 'runtime_error',
+        message: `Error resolving source_ref: ${message}`,
+        identifier: sourceRefValue,
+      }),
+    };
+  }
+}
+
 export async function runMacroSource(options: RunMacroSourceOptions): Promise<RunMacroSourceResult> {
   const callerContext = options.callerContext ?? { origin: 'host' as const };
   const toolRegistry = buildToolRegistry({
@@ -110,7 +284,7 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
     templateReverseMap: options.templateReverseMap,
     templateToolNames: options.templateToolNames,
   });
-  const parseResult = parseMacroSource(options.source, 'inline');
+  const parseResult = parseMacroSource(options.source, options.sourceIdentifier ?? 'inline');
   if (!parseResult.ok) {
     return {
       result: jsonExpectedError(parseResult.error),
@@ -164,7 +338,7 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
   const task = taskRegistry.create({
     taskId,
     sessionId: options.sessionId,
-    source: options.source,
+    source: options.sourceIdentifier ?? options.source,
   });
   options.onTaskTransition?.(task);
 
@@ -264,49 +438,19 @@ export function registerMacroTools(
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed.');
       }
 
-      const source = typeof params.source === 'string' ? params.source : undefined;
-      const sourceRef = typeof params.source_ref === 'string' ? params.source_ref : undefined;
-
-      if (source !== undefined && source.length === 0) {
-        return jsonExpectedError({
-          error: 'invalid_input',
-          message: 'Macro source cannot be empty.',
-          details: { reason: 'empty_source' },
-        });
+      const requestSource = typeof params.source === 'string' ? params.source : undefined;
+      const requestSourceRef = typeof params.source_ref === 'string' ? params.source_ref : undefined;
+      const resolvedSource = await resolveMacroSourceForRequest({
+        source: requestSource,
+        source_ref: requestSourceRef,
+        config,
+        getSupabase: () => supabaseManager.getClient(),
+      });
+      if (!resolvedSource.ok) {
+        return resolvedSource.result;
       }
 
-      if (sourceRef !== undefined && sourceRef.length === 0) {
-        return jsonExpectedError({
-          error: 'invalid_input',
-          message: 'Macro source_ref cannot be empty.',
-          details: { reason: 'empty_source_ref' },
-        });
-      }
-
-      const hasSource = source !== undefined;
-      const hasSourceRef = sourceRef !== undefined;
-
-      if (hasSource === hasSourceRef) {
-        return jsonExpectedError({
-          error: 'invalid_input',
-          message: 'Exactly one of source or source_ref is required.',
-          details: { reason: 'exactly_one_required' },
-        });
-      }
-
-      if (hasSourceRef) {
-        const split = splitMacroSourceRef(sourceRef);
-        if (!split.valid) {
-          return jsonExpectedError(split.error);
-        }
-        return jsonExpectedError({
-          error: 'unsupported',
-          message: 'call_macro source_ref execution is not implemented yet.',
-          details: { reason: 'source_ref_not_implemented' },
-        });
-      }
-
-      if (hasSource) {
+      {
         const callerContext: MacroCallerContext = { origin: 'host' };
         const { getNativeToolCatalog } = await import('../tool-catalog.js');
         const catalog = getNativeToolCatalog(server);
@@ -316,7 +460,8 @@ export function registerMacroTools(
           catalog,
         });
         const { result } = await runMacroSource({
-          source,
+          source: resolvedSource.source,
+          sourceIdentifier: resolvedSource.identifier,
           input_vars: params.input_vars as Record<string, MacroValue> | undefined,
           callerContext,
           config,
