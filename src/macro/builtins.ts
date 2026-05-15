@@ -6,6 +6,7 @@ import {
   type MacroBuiltin,
   type MacroValue,
 } from './evaluator.js';
+import { MACRO_SAFE_POINTS } from './safe-points.js';
 
 const CHUNK_MS = 100;
 
@@ -209,7 +210,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     requireNamedArgs('sleep', named, []);
     requireArgCount('sleep', positional, 1, 1, 'sleep_argument_count');
     const duration = requireDuration(positional[0] ?? 0, 'sleep');
-    await sleepWithCancellation(duration, (where) => context.checkCancelled(where));
+    await sleepWithCancellation(duration, MACRO_SAFE_POINTS.insideSleep, (where) => context.checkCancelled(where));
     return null;
   },
   slow_op: async (positional, named, context) => {
@@ -222,7 +223,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
         reason: 'slow_op_label_type',
       });
     }
-    await sleepWithCancellation(duration, (where) => context.checkCancelled(where));
+    await sleepWithCancellation(duration, MACRO_SAFE_POINTS.insideSlowOp, (where) => context.checkCancelled(where));
     return { ok: true, label, elapsed_ms: duration };
   },
 };
@@ -340,6 +341,7 @@ function optionalNumber(value: MacroValue | undefined, reason: string): number |
 
 async function sleepWithCancellation(
   durationMs: number,
+  safePoint: string,
   checkCancelled: (where: string) => void | Promise<void>
 ): Promise<void> {
   let remaining = durationMs;
@@ -347,7 +349,7 @@ async function sleepWithCancellation(
     const chunk = Math.min(remaining, CHUNK_MS);
     await new Promise<void>((resolve) => setTimeout(resolve, chunk));
     remaining -= chunk;
-    await checkCancelled('inside sleep');
+    await checkCancelled(safePoint);
   }
 }
 

@@ -28,6 +28,7 @@ import { shellBuiltins } from './shell-verbs.js';
 import { resolveNamespaceIntrospection } from './introspection.js';
 import { preScanToolReferences } from './permission-prescan.js';
 import { dispatchMacroTool } from './dispatcher.js';
+import { MACRO_SAFE_POINTS, type MacroSafePoint } from './safe-points.js';
 
 const ESCAPED_DOLLAR_SENTINEL = '\uE000';
 
@@ -148,7 +149,7 @@ export class MacroRuntimeError extends Error {
 export class MacroCancellationError extends Error {
   constructor(
     public readonly taskId: string,
-    public readonly atSafePoint: string
+    public readonly atSafePoint: MacroSafePoint | string
   ) {
     super('Macro cancelled');
     this.name = 'MacroCancellationError';
@@ -464,9 +465,12 @@ async function execBlock(
   env: Env,
   context: MacroInvocationContext
 ): Promise<void> {
-  for (const stmt of statements) {
-    await context.checkCancelled('between statements');
-    await context.checkCancelled('before statement');
+  for (let index = 0; index < statements.length; index += 1) {
+    if (index > 0) {
+      await context.checkCancelled(MACRO_SAFE_POINTS.betweenStatements);
+    }
+    await context.checkCancelled(MACRO_SAFE_POINTS.beforeStatement);
+    const stmt = statements[index];
     await execStatement(stmt, env, context);
   }
 }
@@ -499,7 +503,7 @@ async function execStatement(
         });
       }
       for (const itemValue of iterable) {
-        await context.checkCancelled('for-loop iteration');
+        await context.checkCancelled(MACRO_SAFE_POINTS.forLoopIteration);
         const child = new Env(env);
         child.setLocal(stmt.varName, itemValue);
         await execBlock(stmt.body, child, context);
@@ -509,7 +513,7 @@ async function execStatement(
     case 'WhileLoop': {
       const child = new Env(env);
       while (isTruthy(await evalExpr(stmt.condition, child, context))) {
-        await context.checkCancelled('while-loop iteration');
+        await context.checkCancelled(MACRO_SAFE_POINTS.whileLoopIteration);
         await execBlock(stmt.body, child, context);
       }
       return;
@@ -577,7 +581,7 @@ async function evalPipeline(
   let value: MacroValue = null;
   for (let index = 0; index < pipeline.stages.length; index += 1) {
     if (index > 0) {
-      await context.checkCancelled('between pipeline stages');
+      await context.checkCancelled(MACRO_SAFE_POINTS.betweenPipelineStages);
     }
     const previousStdin = context.stdin;
     context.stdin = index === 0 ? previousStdin : value;
@@ -595,7 +599,7 @@ async function evalCall(
   env: Env,
   context: MacroInvocationContext
 ): Promise<MacroValue> {
-  await context.checkCancelled(`before call ${call.name}`);
+  await context.checkCancelled(MACRO_SAFE_POINTS.beforeCall(call.name));
   const { positional, named } = await evalCallArgs(call.args, env, context);
 
   if (call.name === 'exit') {
@@ -770,7 +774,7 @@ async function evalToolCall(
   context: MacroInvocationContext
 ): Promise<MacroValue> {
   const arg = await evalToolArg(call, env, context);
-  await context.checkCancelled(`before tool call ${call.server}.${call.tool}`);
+  await context.checkCancelled(MACRO_SAFE_POINTS.beforeToolCall(call.server, call.tool));
   if (!context.toolRegistry && !context.dispatchTool) {
     throw new MacroRuntimeError(
       `No tool dispatcher configured for ${call.server}.${call.tool}.`,

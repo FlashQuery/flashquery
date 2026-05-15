@@ -37,9 +37,9 @@ describe('macro cooperative cancellation safe points', () => {
       taskId: 'task-cancel-statements',
       builtins: cancellationBuiltins(markers),
       checkCancelled: (where) => {
-        if (where === 'between statements') {
+        if (where === 'between_statements') {
           statementsSeen += 1;
-          if (statementsSeen === 2) {
+          if (statementsSeen === 1) {
             cancellationAt('task-cancel-statements', where);
           }
         }
@@ -52,7 +52,7 @@ describe('macro cooperative cancellation safe points', () => {
       message: 'Macro cancelled',
       details: {
         task_id: 'task-cancel-statements',
-        at_safe_point: expect.stringContaining('between statements'),
+        at_safe_point: 'between_statements',
       },
     });
     expect(markers).toEqual(['first']);
@@ -65,7 +65,7 @@ describe('macro cooperative cancellation safe points', () => {
       taskId: 'task-cancel-before-statement',
       builtins: cancellationBuiltins(markers),
       checkCancelled: (where) => {
-        if (where === 'before statement') {
+        if (where === 'before_statement') {
           cancellationAt('task-cancel-before-statement', where);
         }
       },
@@ -77,7 +77,7 @@ describe('macro cooperative cancellation safe points', () => {
       message: 'Macro cancelled',
       details: {
         task_id: 'task-cancel-before-statement',
-        at_safe_point: 'before statement',
+        at_safe_point: 'before_statement',
       },
     });
     expect(markers).toEqual([]);
@@ -95,7 +95,7 @@ describe('macro cooperative cancellation safe points', () => {
         return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
       },
       checkCancelled: (where) => {
-        if (where.includes('before tool call')) {
+        if (where === 'before_tool_call:fq.write') {
           cancellationAt('task-cancel-tool', where);
         }
       },
@@ -106,7 +106,7 @@ describe('macro cooperative cancellation safe points', () => {
       error: 'cancelled',
       details: {
         task_id: 'task-cancel-tool',
-        at_safe_point: expect.stringContaining('before tool call'),
+        at_safe_point: 'before_tool_call:fq.write',
       },
     });
     expect(markers).toEqual(['arg:arg-side-effect']);
@@ -127,7 +127,7 @@ describe('macro cooperative cancellation safe points', () => {
         taskId: 'task-cancel-loop',
         builtins: cancellationBuiltins(markers),
         checkCancelled: (where) => {
-          if (where === 'for-loop iteration') {
+          if (where === 'for_loop_iteration') {
             iterationsSeen += 1;
             if (iterationsSeen === 2) {
               cancellationAt('task-cancel-loop', where);
@@ -140,7 +140,7 @@ describe('macro cooperative cancellation safe points', () => {
     expect(result.isError).toBe(false);
     expect(parseToolPayload(result)).toMatchObject({
       error: 'cancelled',
-      details: { at_safe_point: expect.stringContaining('for-loop iteration') },
+      details: { at_safe_point: 'for_loop_iteration' },
     });
     expect(markers).toEqual(['first']);
   });
@@ -152,7 +152,7 @@ describe('macro cooperative cancellation safe points', () => {
       taskId: 'task-cancel-pipeline',
       builtins: cancellationBuiltins(markers),
       checkCancelled: (where) => {
-        if (where === 'between pipeline stages') {
+        if (where === 'between_pipeline_stages') {
           cancellationAt('task-cancel-pipeline', where);
         }
       },
@@ -161,19 +161,19 @@ describe('macro cooperative cancellation safe points', () => {
     expect(result.isError).toBe(false);
     expect(parseToolPayload(result)).toMatchObject({
       error: 'cancelled',
-      details: { at_safe_point: expect.stringContaining('between pipeline stages') },
+      details: { at_safe_point: 'between_pipeline_stages' },
     });
     expect(markers).toEqual(['first']);
   });
 
-  it('T-U-182 observes cancellation inside sleep after a 100 ms async chunk', async () => {
+  it('T-U-182a observes cancellation inside sleep after a 100 ms async chunk', async () => {
     vi.useFakeTimers();
     const source = parseProgram('sleep 250\nmark "late"');
     const run = evaluateProgram(source, {
       taskId: 'task-cancel-sleep',
       builtins: cancellationBuiltins([]),
       checkCancelled: (where) => {
-        if (where === 'inside sleep') {
+        if (where === 'inside_sleep') {
           cancellationAt('task-cancel-sleep', where);
         }
       },
@@ -186,7 +186,31 @@ describe('macro cooperative cancellation safe points', () => {
     expect(result.isError).toBe(false);
     expect(parseToolPayload(result)).toMatchObject({
       error: 'cancelled',
-      details: { at_safe_point: expect.stringContaining('inside sleep') },
+      details: { at_safe_point: 'inside_sleep' },
+    });
+  });
+
+  it('T-U-182b observes cancellation inside slow_op after a 100 ms async chunk', async () => {
+    vi.useFakeTimers();
+    const source = parseProgram('slow_op 250 "cancelable"\nmark "late"');
+    const run = evaluateProgram(source, {
+      taskId: 'task-cancel-slow-op',
+      builtins: cancellationBuiltins([]),
+      checkCancelled: (where) => {
+        if (where === 'inside_slow_op') {
+          cancellationAt('task-cancel-slow-op', where);
+        }
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    const result = await run;
+    vi.useRealTimers();
+
+    expect(result.isError).toBe(false);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'cancelled',
+      details: { at_safe_point: 'inside_slow_op' },
     });
   });
 
@@ -203,7 +227,7 @@ describe('macro cooperative cancellation safe points', () => {
       message: 'Macro cancelled',
       details: {
         task_id: 'task-cancel-envelope',
-        at_safe_point: 'between statements',
+        at_safe_point: 'before_statement',
       },
     });
   });
@@ -223,7 +247,7 @@ describe('macro cooperative cancellation safe points', () => {
         return { content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] };
       },
       checkCancelled: (where) => {
-        if (cancelAfterTool && where === 'between statements') {
+        if (cancelAfterTool && where === 'between_statements') {
           cancellationAt('task-cancel-inflight-tool', where);
         }
       },
@@ -237,7 +261,7 @@ describe('macro cooperative cancellation safe points', () => {
       message: 'Macro cancelled',
       details: {
         task_id: 'task-cancel-inflight-tool',
-        at_safe_point: expect.stringContaining('between statements'),
+        at_safe_point: 'between_statements',
       },
     });
   });

@@ -234,7 +234,7 @@ describe('macro concurrency integration', () => {
       message: 'Macro cancelled',
       details: {
         task_id: sessionATask?.task_id,
-        at_safe_point: expect.stringContaining('between statements'),
+        at_safe_point: 'between_statements',
       },
     });
     expect(secondPayload).toMatchObject({

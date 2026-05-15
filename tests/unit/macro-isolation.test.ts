@@ -74,15 +74,15 @@ describe('macro evaluator invocation isolation', () => {
       }
     );
 
-    expect(seen).toContain('between statements');
-    expect(seen).toContain('before call add');
-    expect(seen).toContain('before tool call fq.ping');
-    expect(seen).toContain('for-loop iteration');
-    expect(seen).toContain('while-loop iteration');
-    expect(seen).toContain('between pipeline stages');
+    expect(seen).toContain('between_statements');
+    expect(seen).toContain('before_call:add');
+    expect(seen).toContain('before_tool_call:fq.ping');
+    expect(seen).toContain('for_loop_iteration');
+    expect(seen).toContain('while_loop_iteration');
+    expect(seen).toContain('between_pipeline_stages');
   });
 
-  it('T-U-094 concurrent smoke keeps unit invocations isolated; T-I-002 owner: Phase 136', async () => {
+  it('T-U-094 concurrent smoke keeps unit invocations isolated; T-I-002 covered by tests/integration/macro-concurrency.test.ts and T-I-002b by macro-call-macro-session.test.ts', async () => {
     const builtins = basicBuiltins({
       capture: async (_args, context) => {
         context.budget.external_tool_calls += 1;
