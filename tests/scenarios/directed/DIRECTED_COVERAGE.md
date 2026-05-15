@@ -78,6 +78,17 @@ Note: Test Plan §4.10.6 originally reserved `M-16`/`M-17`/`M-18` for these scen
 | ML-19 | REQ-048 / T-S-017 progress milestones: public `call_macro` emits progress notifications with the request `progressToken` and excludes per-iteration progress chatter. | test_macro_progress_milestones | 2026-05-15 | 2026-05-15 |
 | ML-20 | REQ-060 / T-S-018 budget timeout: public `call_macro` returns the canonical `timeout` envelope and does not continue post-timeout side effects. | test_macro_budget_timeout | 2026-05-15 | 2026-05-15 |
 
+## Phase 138 Macro Source Resolution And Scenario Closure
+
+Note: Test Plan §4.10.5 originally reserved `M-04`, `M-05`, `M-19`, and `M-20`; the live matrix uses `ML-21` through `ML-24` to avoid collisions with existing memory lifecycle rows and prior macro-language coverage.
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| ML-21 | REQ-006 / T-S-004: `call_macro` resolves `source_ref: "path::name"` and executes the selected named `fqm` block rather than other blocks in the same macro-library document. | test_macro_source_ref_named_block | 2026-05-15 |  |
+| ML-22 | REQ-002 / REQ-006 / T-S-005: `call_macro` returns stable `invalid_input` reasons for the source_ref named-block lookup and format error matrix. | test_macro_source_ref_error_matrix | 2026-05-15 |  |
+| ML-23 | REQ-004 / T-S-019: `call_macro` treats archived macro-library documents referenced by `source_ref` as `not_found` and does not execute their blocks. | test_macro_archived_source_ref | 2026-05-15 |  |
+| ML-24 | REQ-058 / REQ-059 / T-S-020: macro-dispatched `archive_document` calls serialize through the existing document write-lock layer. | test_macro_archive_write_lock | 2026-05-15 |  |
+
 ## 1. Document Lifecycle
 
 Core CRUD operations on vault documents via MCP.
