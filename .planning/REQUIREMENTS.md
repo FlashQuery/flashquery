@@ -34,14 +34,14 @@
 
 ### Evaluator Semantics
 
-- [ ] **MACRO-EVAL-01**: Variable assignment uses walk-up scope mutation.
-- [ ] **MACRO-EVAL-02**: For-loop iterator variables remain local to each iteration.
-- [ ] **MACRO-EVAL-03**: Truthiness rules are deterministic for strings, numbers, lists, objects, and `null`.
-- [ ] **MACRO-EVAL-04**: Double-quoted string interpolation supports variable and chained field references.
-- [ ] **MACRO-EVAL-05**: Chained field access traverses structured values and reports missing fields predictably.
-- [ ] **MACRO-EVAL-06**: The four termination paths are implemented: fall-off success, `exit`, `fail`, and runtime error.
-- [ ] **MACRO-EVAL-07**: Every invocation has isolated scope, trace, budget, task, and progress state.
-- [ ] **MACRO-EVAL-08**: Assignment RHS evaluation completes before the target binding is mutated.
+- [x] **MACRO-EVAL-01**: Variable assignment uses walk-up scope mutation.
+- [x] **MACRO-EVAL-02**: For-loop iterator variables remain local to each iteration.
+- [x] **MACRO-EVAL-03**: Truthiness rules are deterministic for strings, numbers, lists, objects, and `null`.
+- [x] **MACRO-EVAL-04**: Double-quoted string interpolation supports variable and chained field references.
+- [x] **MACRO-EVAL-05**: Chained field access traverses structured values and reports missing fields predictably.
+- [x] **MACRO-EVAL-06**: The four termination paths are implemented: fall-off success, `exit`, `fail`, and runtime error.
+- [x] **MACRO-EVAL-07**: Every invocation has isolated scope, trace, budget, task, and progress state.
+- [x] **MACRO-EVAL-08**: Assignment RHS evaluation completes before the target binding is mutated.
 
 ### Dispatch And Permissions
 
@@ -66,9 +66,9 @@
 ### Shell, Vault Jail, And Introspection
 
 - [x] **MACRO-SHELL-01**: The v0 read-only shell whitelist includes `grep`, `find`, `sed`, `cat`, `wc`, `head`, `tail`, and `ls`.
-- [ ] **MACRO-SHELL-02**: Shell path arguments are vault-jailed and escaping paths fail with `forbidden_path`.
-- [ ] **MACRO-SHELL-03**: `sed -i`, `find -exec`, and `find -delete` are rejected before execution.
-- [ ] **MACRO-SHELL-04**: Production shell execution does not mutate process-global cwd.
+- [x] **MACRO-SHELL-02**: Shell path arguments are vault-jailed and escaping paths fail with `forbidden_path`.
+- [x] **MACRO-SHELL-03**: `sed -i`, `find -exec`, and `find -delete` are rejected before execution.
+- [x] **MACRO-SHELL-04**: Production shell execution does not mutate process-global cwd.
 - [x] **MACRO-SHELL-05**: `_exists()` returns native `fq` availability and brokered-server connectivity through the broker interface.
 
 ### Trace, Progress, Tasks, And Cancellation
@@ -132,13 +132,13 @@
 |-------------|-------|--------|
 | MACRO-RESP-01, MACRO-RESP-02, MACRO-RESP-03, MACRO-RESP-04, MACRO-OBS-01, MACRO-INT-03, MACRO-INT-05, MACRO-INT-06 | Phase 130 | Complete |
 | MACRO-SRC-05, MACRO-SRC-06, MACRO-PARSE-01, MACRO-PARSE-02, MACRO-PARSE-03, MACRO-PARSE-04, MACRO-PARSE-05, MACRO-PARSE-06, MACRO-PARSE-07, MACRO-PARSE-08, MACRO-PARSE-09, MACRO-PARSE-10 | Phase 131 | Complete |
-| MACRO-EVAL-01, MACRO-EVAL-02, MACRO-EVAL-03, MACRO-EVAL-04, MACRO-EVAL-05, MACRO-EVAL-06, MACRO-EVAL-07, MACRO-EVAL-08 | Phase 132 | Pending |
+| MACRO-EVAL-01, MACRO-EVAL-02, MACRO-EVAL-03, MACRO-EVAL-04, MACRO-EVAL-05, MACRO-EVAL-06, MACRO-EVAL-07, MACRO-EVAL-08 | Phase 132 | Complete |
 | MACRO-SRC-07, MACRO-SRC-08, MACRO-BI-01, MACRO-BI-02, MACRO-BI-03, MACRO-BI-04, MACRO-BI-05, MACRO-BI-06, MACRO-BI-07 | Phase 133 | Complete |
-| MACRO-SHELL-01, MACRO-SHELL-02, MACRO-SHELL-03, MACRO-SHELL-04, MACRO-SHELL-05 | Phase 134 | Pending |
+| MACRO-SHELL-01, MACRO-SHELL-02, MACRO-SHELL-03, MACRO-SHELL-04, MACRO-SHELL-05 | Phase 134 | Complete |
 | MACRO-DISP-01, MACRO-DISP-02, MACRO-DISP-03, MACRO-DISP-04, MACRO-DISP-05, MACRO-DISP-06, MACRO-DISP-07 | Phase 135 | Complete |
-| MACRO-OBS-04, MACRO-OBS-05, MACRO-OBS-06, MACRO-INT-01 | Phase 136 | Pending |
-| MACRO-OBS-02, MACRO-OBS-03, MACRO-RESP-05, MACRO-INT-04, MACRO-INT-07 | Phase 137 | Pending |
-| MACRO-SRC-01, MACRO-SRC-02, MACRO-SRC-03, MACRO-SRC-04, MACRO-INT-02 | Phase 138 | In Progress |
+| MACRO-OBS-04, MACRO-OBS-05, MACRO-OBS-06, MACRO-INT-01 | Phase 136 | Complete |
+| MACRO-OBS-02, MACRO-OBS-03, MACRO-RESP-05, MACRO-INT-04, MACRO-INT-07 | Phase 137 | Complete |
+| MACRO-SRC-01, MACRO-SRC-02, MACRO-SRC-03, MACRO-SRC-04, MACRO-INT-02 | Phase 138 | Complete |
 
 **Coverage:**
 - v3.4 requirements: 63 total
@@ -147,4 +147,4 @@
 
 ---
 *Requirements defined: 2026-05-14*  
-*Last updated: 2026-05-14 after starting v3.4 macro-support milestone*
+*Last updated: 2026-05-15 after Phase 132 and Phase 137 verification artifact closure*

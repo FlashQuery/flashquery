@@ -10,7 +10,7 @@ Scenario:
        the response does not echo callerKind.
 
 Coverage points: ML-17
-Requirements: REQ-027
+Requirements: MACRO-DISP-07
 """
 from __future__ import annotations
 

@@ -4,7 +4,7 @@ description: >
   both document writes complete through the existing write-lock layer. Parallel
   contention is covered by macro-write-lock.integration.test.ts.
 coverage:
-  - IA-09
+  - IA-10
 deps: [locking]
 server_modes: [managed]
 

@@ -46,27 +46,27 @@ This document defines every behavioral coverage point we want to verify through 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| ML-09 | REQ-042 / T-S-009: `call_macro` rejects shell path arguments that escape the vault jail with a `forbidden_path` expected-error envelope. | test_macro_vault_jail_escape | 2026-05-14 | 2026-05-14 |
-| ML-10 | REQ-043 / T-S-010: `call_macro` rejects forbidden mutation flags such as `sed -i` before execution with a `forbidden_shell_flag` expected-error envelope. | test_macro_forbidden_shell_flag | 2026-05-14 | 2026-05-14 |
+| ML-09 | MACRO-SHELL-02 / T-S-009: `call_macro` rejects shell path arguments that escape the vault jail with a `forbidden_path` expected-error envelope. | test_macro_vault_jail_escape | 2026-05-14 | 2026-05-14 |
+| ML-10 | MACRO-SHELL-03 / T-S-010: `call_macro` rejects forbidden mutation flags such as `sed -i` before execution with a `forbidden_shell_flag` expected-error envelope. | test_macro_forbidden_shell_flag | 2026-05-14 | 2026-05-14 |
 
 ## Phase 135 Macro Dispatch and Permissions
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| ML-11 | REQ-030 / T-U-165: `call_macro` universally hides nested `fq.call_macro` references from macro authors as `unknown_tool`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
-| ML-12 | REQ-031 / T-U-166: `call_macro` rejects real template-masqueraded tool names with `template_masquerade_tools_not_callable_from_macro`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
-| ML-13 | REQ-028 / T-U-160: public `call_macro` reports a known but host-disallowed FlashQuery tool as `forbidden_tools`, including forbidden and allowed lists, before dispatch. | test_macro_permission_prescan | 2026-05-14 | 2026-05-14 |
-| ML-14 | REQ-028 / T-U-161 / T-U-162: public `call_macro` reports multiple forbidden tool references across nested control-flow bodies before any nested result or side effect can occur. | test_macro_permission_prescan | 2026-05-14 | 2026-05-14 |
-| ML-15 | REQ-032 / T-U-167 / T-U-168: delegated-origin `runMacroSource` hard-excludes `fq.call_model` with `recursive_model_excluded_from_delegated_macros`. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
-| ML-16 | REQ-027 / REQ-032: host-origin `runMacroSource` can invoke host-exposed `fq.call_model` through the native registry while delegated callers remain blocked. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
-| ML-17 | REQ-033 / T-U-171: public `call_macro` omits `callerKind` from tools/list schema, ignores supplied caller identity fields, and does not echo them. | test_macro_caller_identity | 2026-05-14 | 2026-05-14 |
+| ML-11 | MACRO-DISP-04 / T-U-165: `call_macro` universally hides nested `fq.call_macro` references from macro authors as `unknown_tool`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
+| ML-12 | MACRO-DISP-05 / T-U-166: `call_macro` rejects real template-masqueraded tool names with `template_masquerade_tools_not_callable_from_macro`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
+| ML-13 | MACRO-DISP-02 / T-U-160: public `call_macro` reports a known but host-disallowed FlashQuery tool as `forbidden_tools`, including forbidden and allowed lists, before dispatch. | test_macro_permission_prescan | 2026-05-14 | 2026-05-14 |
+| ML-14 | MACRO-DISP-02 / T-U-161 / T-U-162: public `call_macro` reports multiple forbidden tool references across nested control-flow bodies before any nested result or side effect can occur. | test_macro_permission_prescan | 2026-05-14 | 2026-05-14 |
+| ML-15 | MACRO-DISP-06 / T-U-167 / T-U-168: delegated-origin `runMacroSource` hard-excludes `fq.call_model` with `recursive_model_excluded_from_delegated_macros`. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
+| ML-16 | MACRO-DISP-01 / MACRO-DISP-06: host-origin `runMacroSource` can invoke host-exposed `fq.call_model` through the native registry while delegated callers remain blocked. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
+| ML-17 | MACRO-DISP-07 / T-U-171: public `call_macro` omits `callerKind` from tools/list schema, ignores supplied caller identity fields, and does not echo them. | test_macro_caller_identity | 2026-05-14 | 2026-05-14 |
 
 ## Phase 136 Macro Task Lifecycle And Cancellation
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| MLC-01 | REQ-050 / T-S-001: in-process macro cancellation is observed at a safe point and returns the canonical `cancelled` envelope. | test_macro_cancellation | 2026-05-14 | 2026-05-14 |
-| MLC-02 | REQ-050 / T-S-002: cancellation during loop execution prevents document mutation after the safe point. | test_macro_no_partial_side_effects_after_cancel | 2026-05-14 | 2026-05-14 |
+| MLC-01 | MACRO-OBS-05 / T-S-001: in-process macro cancellation is observed at a safe point and returns the canonical `cancelled` envelope. | test_macro_cancellation | 2026-05-14 | 2026-05-14 |
+| MLC-02 | MACRO-OBS-05 / T-S-002: cancellation during loop execution prevents document mutation after the safe point. | test_macro_no_partial_side_effects_after_cancel | 2026-05-14 | 2026-05-14 |
 
 ## Phase 137 Macro Trace Progress Dry Run Budgets
 
@@ -74,9 +74,9 @@ Note: Test Plan §4.10.6 originally reserved `M-16`/`M-17`/`M-18` for these scen
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| ML-18 | REQ-047 / T-S-016 trace modes full/summary/none: public `call_macro` includes full trace values, omits args/results in summary, and omits `trace` entirely for none. | test_macro_trace_full_summary_none | 2026-05-15 | 2026-05-15 |
-| ML-19 | REQ-048 / T-S-017 progress milestones: public `call_macro` emits progress notifications with the request `progressToken` and excludes per-iteration progress chatter. | test_macro_progress_milestones | 2026-05-15 | 2026-05-15 |
-| ML-20 | REQ-060 / T-S-018 budget timeout: public `call_macro` returns the canonical `timeout` envelope and does not continue post-timeout side effects. | test_macro_budget_timeout | 2026-05-15 | 2026-05-15 |
+| ML-18 | MACRO-OBS-02 / T-S-016 trace modes full/summary/none: public `call_macro` includes full trace values, omits args/results in summary, and omits `trace` entirely for none. | test_macro_trace_full_summary_none | 2026-05-15 | 2026-05-15 |
+| ML-19 | MACRO-OBS-03 / T-S-017 progress milestones: public `call_macro` emits progress notifications with the request `progressToken` and excludes per-iteration progress chatter. | test_macro_progress_milestones | 2026-05-15 | 2026-05-15 |
+| ML-20 | MACRO-INT-04 / T-S-018 budget timeout: public `call_macro` returns the canonical `timeout` envelope and does not continue post-timeout side effects. | test_macro_budget_timeout | 2026-05-15 | 2026-05-15 |
 
 ## Phase 138 Macro Source Resolution And Scenario Closure
 
@@ -84,18 +84,18 @@ Note: Test Plan §4.10.5 originally reserved `M-03` through `M-20`; the live mat
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| ML-21 | REQ-006 / T-S-004: `call_macro` resolves `source_ref: "path::name"` and executes the selected named `fqm` block rather than other blocks in the same macro-library document. | test_macro_source_ref_named_block | 2026-05-15 |  |
-| ML-22 | REQ-002 / REQ-006 / T-S-005: `call_macro` returns stable `invalid_input` reasons for the source_ref named-block lookup and format error matrix. | test_macro_source_ref_error_matrix | 2026-05-15 |  |
-| ML-23 | REQ-004 / T-S-019: `call_macro` treats archived macro-library documents referenced by `source_ref` as `not_found` and does not execute their blocks. | test_macro_archived_source_ref | 2026-05-15 |  |
-| ML-24 | REQ-058 / REQ-059 / T-S-020: macro-dispatched `archive_document` calls serialize through the existing document write-lock layer. | test_macro_archive_write_lock | 2026-05-15 |  |
-| ML-25 | REQ-001 / REQ-052 / T-S-003: inline `call_macro` creates a document, applies tags, and returns the document ID/path through the canonical success envelope. | test_macro_inline_create_doc | 2026-05-15 | 2026-05-15 |
-| ML-26 | REQ-007 / REQ-008 / REQ-037 / T-S-006: public `call_macro` returns the full four-array `input_var` missing-input envelope and applies optional defaults. | test_macro_input_var_contract | 2026-05-15 | 2026-05-15 |
-| ML-27 | REQ-053 / T-S-008: `dry_run: true` returns `MacroDryRunResult` with tool references and does not create the target vault file. | test_macro_dry_run_no_side_effects | 2026-05-15 | 2026-05-15 |
-| ML-28 | REQ-024 / T-S-011: a macro branches on a recoverable `fq.get_document` `not_found` envelope and creates a fallback document. | test_macro_recoverable_tool_error | 2026-05-15 | 2026-05-15 |
-| ML-29 | REQ-024 / REQ-052 / T-S-012: `exit { ... }` preserves the structured object value under `result`. | test_macro_structured_exit | 2026-05-15 | 2026-05-15 |
-| ML-30 | REQ-024 / T-S-013: a macro that falls off the end returns `{ result: null }`. | test_macro_falloff_null | 2026-05-15 | 2026-05-15 |
-| ML-31 | REQ-024 / REQ-036 / T-S-014: `fail "msg"` returns `macro_aborted` and statements after `fail` do not execute. | test_macro_fail_halts | 2026-05-15 | 2026-05-15 |
-| ML-32 | REQ-025 / T-S-015: running the same macro source twice through public `call_macro` gets isolated scope and distinct task IDs. | test_macro_repeated_invocation_isolation | 2026-05-15 | 2026-05-15 |
+| ML-21 | MACRO-SRC-06 / T-S-004: `call_macro` resolves `source_ref: "path::name"` and executes the selected named `fqm` block rather than other blocks in the same macro-library document. | test_macro_source_ref_named_block | 2026-05-15 | 2026-05-15 |
+| ML-22 | MACRO-SRC-02 / MACRO-SRC-06 / T-S-005: `call_macro` returns stable `invalid_input` reasons for the source_ref named-block lookup and format error matrix. | test_macro_source_ref_error_matrix | 2026-05-15 | 2026-05-15 |
+| ML-23 | MACRO-SRC-04 / T-S-019: `call_macro` treats archived macro-library documents referenced by `source_ref` as `not_found` and does not execute their blocks. | test_macro_archived_source_ref | 2026-05-15 | 2026-05-15 |
+| ML-24 | MACRO-INT-02 / MACRO-INT-03 / T-S-020: macro-dispatched `archive_document` calls serialize through the existing document write-lock layer. | test_macro_archive_write_lock | 2026-05-15 | 2026-05-15 |
+| ML-25 | MACRO-SRC-01 / MACRO-RESP-01 / T-S-003: inline `call_macro` creates a document, applies tags, and returns the document ID/path through the canonical success envelope. | test_macro_inline_create_doc | 2026-05-15 | 2026-05-15 |
+| ML-26 | MACRO-SRC-07 / MACRO-SRC-08 / MACRO-BI-04 / T-S-006: public `call_macro` returns the full four-array `input_var` missing-input envelope and applies optional defaults. | test_macro_input_var_contract | 2026-05-15 | 2026-05-15 |
+| ML-27 | MACRO-RESP-02 / T-S-008: `dry_run: true` returns `MacroDryRunResult` with tool references and does not create the target vault file. | test_macro_dry_run_no_side_effects | 2026-05-15 | 2026-05-15 |
+| ML-28 | MACRO-EVAL-06 / T-S-011: a macro branches on a recoverable `fq.get_document` `not_found` envelope and creates a fallback document. | test_macro_recoverable_tool_error | 2026-05-15 | 2026-05-15 |
+| ML-29 | MACRO-EVAL-06 / MACRO-RESP-01 / T-S-012: `exit { ... }` preserves the structured object value under `result`. | test_macro_structured_exit | 2026-05-15 | 2026-05-15 |
+| ML-30 | MACRO-EVAL-06 / T-S-013: a macro that falls off the end returns `{ result: null }`. | test_macro_falloff_null | 2026-05-15 | 2026-05-15 |
+| ML-31 | MACRO-EVAL-06 / MACRO-BI-03 / T-S-014: `fail "msg"` returns `macro_aborted` and statements after `fail` do not execute. | test_macro_fail_halts | 2026-05-15 | 2026-05-15 |
+| ML-32 | MACRO-EVAL-07 / T-S-015: running the same macro source twice through public `call_macro` gets isolated scope and distinct task IDs. | test_macro_repeated_invocation_isolation | 2026-05-15 | 2026-05-15 |
 
 ## 1. Document Lifecycle
 

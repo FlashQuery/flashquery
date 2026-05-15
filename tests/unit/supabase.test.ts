@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { maskConnectionUrl, buildSchemaDDL } from '../../src/storage/supabase.js';
+import {
+  maskConnectionUrl,
+  buildDropDescriptionColumnDDL,
+  buildSchemaDDL,
+} from '../../src/storage/supabase.js';
 
 describe('maskConnectionUrl', () => {
   it('masks user and password in postgresql:// URLs', () => {
@@ -96,6 +100,14 @@ describe('buildSchemaDDL', () => {
     const matchDocEnd = ddl.indexOf('$$;', matchDocStart) + 3;
     const matchDocBlock = ddl.slice(matchDocStart, matchDocEnd);
     expect(matchDocBlock).not.toContain('filter_project');
+  });
+});
+
+describe('buildDropDescriptionColumnDDL', () => {
+  it('uses an idempotent no-op-safe migration for the removed fqc_documents description column', () => {
+    expect(buildDropDescriptionColumnDDL()).toBe(
+      'ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS description;'
+    );
   });
 });
 

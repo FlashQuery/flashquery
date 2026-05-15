@@ -1,10 +1,11 @@
 ---
 phase: 138
 slug: handler-source-resolution-scenario-closure
-status: draft
+status: complete
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-05-15
+updated: 2026-05-15
 ---
 
 # Phase 138 — Validation Strategy
@@ -32,13 +33,13 @@ created: 2026-05-15
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 138-01-01 | 01 | 0 | MACRO-SRC-01 | T-138-01-01 | Handler schema rejects unsupported source/task shape | unit | `npm test -- --reporter=verbose macro-handler macro-source-ref` | ✅ | ⬜ pending |
-| 138-01-02 | 01 | 0 | MACRO-SRC-02 | T-138-01-02 | Invalid source combinations return expected envelopes without execution | unit | `npm test -- --reporter=verbose macro-handler macro-source-ref` | ✅ | ⬜ pending |
-| 138-02-01 | 02 | 1 | MACRO-SRC-03 | T-138-02-01 | Source references use document resolver and vault-local reads | unit/integration | `npm run test:integration -- --reporter=verbose macro-source-ref` | ✅ | ⬜ pending |
-| 138-02-02 | 02 | 1 | MACRO-SRC-04 | T-138-02-02 | Archived macro docs are hidden as `not_found` | integration | `npm run test:integration -- --reporter=verbose macro-source-ref` | ✅ | ⬜ pending |
-| 138-03-01 | 03 | 2 | MACRO-INT-02 | T-138-03-01 | Macro writes inherit existing write locks; macro engine adds no lock bypass | integration/scenario | `npm run test:integration -- --reporter=verbose macro-write-lock` | ❌ W2 | ⬜ pending |
-| 138-03-02 | 03 | 2 | MACRO-SRC-01..04 | T-138-03-02 | Real MCP transport returns canonical success/dry-run/error/progress behavior | e2e | `npx vitest run tests/e2e/macro-call-macro.test.ts` | ❌ W2 | ⬜ pending |
-| 138-04-01 | 04 | 3 | MACRO-SRC-01..04, MACRO-INT-02 | T-138-04-01 | Scenario matrices and 17 POC fixtures prove public workflows | scenario | scenario runner commands in Plan 04 | ❌ W3 | ⬜ pending |
+| 138-01-01 | 01 | 0 | MACRO-SRC-01 | T-138-01-01 | Handler schema rejects unsupported source/task shape | unit | `npm test -- --reporter=verbose macro-handler macro-source-ref` | ✅ | ✅ green |
+| 138-01-02 | 01 | 0 | MACRO-SRC-02 | T-138-01-02 | Invalid source combinations return expected envelopes without execution | unit | `npm test -- --reporter=verbose macro-handler macro-source-ref` | ✅ | ✅ green |
+| 138-02-01 | 02 | 1 | MACRO-SRC-03 | T-138-02-01 | Source references use document resolver and vault-local reads | unit/integration | `npm run test:integration -- --reporter=verbose macro-source-ref` | ✅ | ✅ green |
+| 138-02-02 | 02 | 1 | MACRO-SRC-04 | T-138-02-02 | Archived macro docs are hidden as `not_found` | integration | `npm run test:integration -- --reporter=verbose macro-source-ref` | ✅ | ✅ green |
+| 138-03-01 | 03 | 2 | MACRO-INT-02 | T-138-03-01 | Macro writes inherit existing write locks; macro engine adds no lock bypass | integration/scenario | `npm run test:integration -- --reporter=verbose macro-write-lock` | ✅ | ✅ green |
+| 138-03-02 | 03 | 2 | MACRO-SRC-01..04 | T-138-03-02 | Real MCP transport returns canonical success/dry-run/error/progress behavior | e2e | `npx vitest run tests/e2e/macro-call-macro.test.ts` | ✅ | ✅ green |
+| 138-04-01 | 04 | 3 | MACRO-SRC-01..04, MACRO-INT-02 | T-138-04-01 | Scenario matrices and 17 POC fixtures prove public workflows | scenario | scenario runner commands in Plan 04 | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -61,4 +62,17 @@ Existing infrastructure covers all phase requirements. Plan 01 adds missing hand
 - [x] Feedback latency < 5 minutes for focused checks
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-05-15 validation audit
+
+## Validation Audit 2026-05-15
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Rerun evidence:
+- `npm test -- --run tests/unit/macro-handler.test.ts tests/unit/macro-source-ref.test.ts tests/unit/macro-fence-extractor.test.ts tests/unit/macro-poc-fixtures.test.ts ...`: included in macro validation slice, 21 files passed / 244 tests passed.
+- `npm run test:integration -- --run tests/integration/macro-source-ref.integration.test.ts tests/integration/macro-write-lock.integration.test.ts ...`: included in macro integration slice, 4 files passed / 11 tests passed / 1 expected ACL skip.
+- `npm run test:e2e -- --run tests/e2e/macro-call-macro.test.ts`: 1 file passed / 4 tests passed.

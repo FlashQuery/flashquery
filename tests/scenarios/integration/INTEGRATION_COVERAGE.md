@@ -73,27 +73,27 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| IS-09 | REQ-041 / REQ-044: `call_macro` can compose multiple read-only shell verbs against a vault-jailed fixture in one workflow. | macro_shell_pipeline_and_exists | 2026-05-15   | 2026-05-15   |
-| IX-23 | REQ-045: the same macro workflow combines native `fq._exists()` and brokered `<server>._exists()` with shell pipeline output. | macro_shell_pipeline_and_exists | 2026-05-15   | 2026-05-15   |
+| IS-09 | MACRO-SHELL-01 / MACRO-SHELL-04: `call_macro` can compose multiple read-only shell verbs against a vault-jailed fixture in one workflow. | macro_shell_pipeline_and_exists | 2026-05-15   | 2026-05-15   |
+| IX-23 | MACRO-SHELL-05: the same macro workflow combines native `fq._exists()` and brokered `<server>._exists()` with shell pipeline output. | macro_shell_pipeline_and_exists | 2026-05-15   | 2026-05-15   |
 
 ## Macro Language Phase 135
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| IS-11 | REQ-027: `call_macro` composes multiple native FlashQuery handlers through registry-backed dispatch in one workflow. | macro_dispatch_get_then_write | 2026-05-15   | 2026-05-15   |
-| IS-12 | REQ-028 / REQ-029: `call_macro` rejects a forbidden native write reference before dispatch and the blocked target remains absent. | macro_permission_failure_zero_side_effects | 2026-05-15   | 2026-05-15   |
+| IS-11 | MACRO-DISP-01: `call_macro` composes multiple native FlashQuery handlers through registry-backed dispatch in one workflow. | macro_dispatch_get_then_write | 2026-05-15   | 2026-05-15   |
+| IS-12 | MACRO-DISP-02 / MACRO-DISP-03: `call_macro` rejects a forbidden native write reference before dispatch and the blocked target remains absent. | macro_permission_failure_zero_side_effects | 2026-05-15   | 2026-05-15   |
 
 ## Macro Language Phase 138
 
-Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the live matrix already used `IS-09`, `IS-11`, and `IS-12`, so T-Y-001 and T-Y-003 use `IS-13` and `IS-14` while T-Y-002 keeps the available `IS-10`.
+Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the live matrix already used `IS-09`, `IS-11`, and `IS-12`, so T-Y-001 and T-Y-003 use `IS-13` and `IS-14` while T-Y-002 keeps the available `IS-10`. Sequential write-lock coverage uses `IA-10` to avoid overloading the concurrent `IA-09` row.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| IS-13 | REQ-003 / T-Y-001: `call_macro` composes search results with archive_document so a matched document is archived and absent from active search. | macro_search_archive_workflow | 2026-05-15   | 2026-05-15   |
-| IS-10 | REQ-027 / T-Y-002: `call_macro` can invoke `fq.call_model` with response_format, branch on the structured verdict, and mutate a document. | macro_call_model_branch_mutate | 2026-05-15   | 2026-05-15   |
-| IS-14 | REQ-007 / REQ-008 / T-Y-003: `call_macro` iterates list-typed input_vars over zero-to-N values and returns deterministic counts. | macro_input_vars_iteration   | 2026-05-15   | 2026-05-15   |
-| IA-09 | REQ-058 / T-Y-004: concurrent public `call_macro` write workflows for different documents both complete through the existing write-lock layer. | macro_concurrent_write_lock  | 2026-05-15   | 2026-05-15   |
-| IA-09s | REQ-058 sibling: sequential macro-dispatched document writes complete with the existing write-lock layer enabled. | macro_sequential_write_lock  | 2026-05-15   | 2026-05-15   |
+| IS-13 | MACRO-DISP-01 / MACRO-INT-03 / T-Y-001: `call_macro` composes search results with archive_document so a matched document is archived and absent from active search. | macro_search_archive_workflow | 2026-05-15   | 2026-05-15   |
+| IS-10 | MACRO-DISP-01 / T-Y-002: `call_macro` can invoke `fq.call_model` with response_format, branch on the structured verdict, and mutate a document. | macro_call_model_branch_mutate | 2026-05-15   | 2026-05-15   |
+| IS-14 | MACRO-SRC-07 / MACRO-SRC-08 / T-Y-003: `call_macro` iterates list-typed input_vars over zero-to-N values and returns deterministic counts. | macro_input_vars_iteration   | 2026-05-15   | 2026-05-15   |
+| IA-09 | MACRO-INT-02 / T-Y-004: concurrent public `call_macro` write workflows for different documents both complete through the existing write-lock layer. | macro_concurrent_write_lock  | 2026-05-15   | 2026-05-15   |
+| IA-10 | MACRO-INT-02: sequential macro-dispatched document writes complete with the existing write-lock layer enabled. | macro_sequential_write_lock  | 2026-05-15   | 2026-05-15   |
 
 ---
 

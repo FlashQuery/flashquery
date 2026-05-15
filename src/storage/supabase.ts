@@ -912,11 +912,14 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO service_role
 // Database migration utilities
 // ─────────────────────────────────────────────────────────────────────────────
 
+export function buildDropDescriptionColumnDDL(): string {
+  return 'ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS description;';
+}
+
 /**
  * Drops the unused `description` column from the `fqc_documents` table.
- * This is a one-time migration function — it does not use DROP IF EXISTS
- * (not available for columns in PostgreSQL < 14), so it assumes one execution
- * during deployment.
+ * This migration is intentionally idempotent and silent for the common no-op
+ * path where the column has already been removed.
  *
  * @param supabaseUrl - Supabase instance URL
  * @param serviceRoleKey - Service role API key for authentication
@@ -928,16 +931,7 @@ export async function dropDescriptionColumn(
   serviceRoleKey: string,
   databaseUrl?: string
 ): Promise<void> {
-  const sql = 'ALTER TABLE fqc_documents DROP COLUMN description;';
-  logger.info('Dropping description column from fqc_documents...');
-  try {
-    await ddlQuery(supabaseUrl, serviceRoleKey, sql, databaseUrl);
-    logger.info('Dropped description column from fqc_documents');
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.error(`Failed to drop description column: ${msg}`);
-    throw err;
-  }
+  await ddlQuery(supabaseUrl, serviceRoleKey, buildDropDescriptionColumnDDL(), databaseUrl);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1090,11 +1084,10 @@ class SupabaseManagerImpl implements SupabaseManager {
       // This migration removes the column added in Phase 32 which is no longer used
       try {
         await dropDescriptionColumn(supabaseUrl, serviceRoleKey, databaseUrl);
-        logger.info('Dropped description column from fqc_documents');
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes('does not exist')) {
-          logger.info('description column already dropped or never existed — no action needed');
+          // Already removed in this schema; no user-facing log needed.
         } else {
           logger.warn(`Failed to drop description column: ${msg}`);
           // Don't throw — migration is non-critical

@@ -1,10 +1,11 @@
 ---
 phase: 135
 slug: tool-registry-dispatch-permissions
-status: draft
+status: complete
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-05-14
+updated: 2026-05-15
 ---
 
 # Phase 135 — Validation Strategy
@@ -38,22 +39,22 @@ created: 2026-05-14
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 135-01-01 | 01 | 1 | MACRO-DISP-01, MACRO-DISP-03 | T-135-01 / T-135-03 | Registry and dispatcher tests exist before implementation; forbidden backstop blocks handler calls | unit | `npm test -- --reporter=verbose macro-registry macro-dispatcher` | ❌ W0 | ⬜ pending |
-| 135-01-02 | 01 | 1 | MACRO-DISP-02 through MACRO-DISP-07 | T-135-02 / T-135-04 / T-135-05 / T-135-06 | Pre-scan, hard exclusions, and caller identity tests encode the security contract | unit | `npm test -- --reporter=verbose macro-permission-prescan macro-hard-exclusions macro-caller-identity` | ❌ W0 | ⬜ pending |
-| 135-01-03 | 01 | 1 | MACRO-DISP-01 | T-135-07 | Integration dispatch coverage is registered in the explicit Vitest include list | integration | `npm run test:integration -- --reporter=verbose macro-tool-dispatch` | ❌ W0 | ⬜ pending |
-| 135-02-01 | 02 | 2 | MACRO-DISP-01, MACRO-DISP-03, MACRO-DISP-04 | T-135-01 / T-135-03 / T-135-06 | `buildToolRegistry` uses host/delegated allowlist sources, validates native args, and omits `call_macro` | unit | `npm test -- --reporter=verbose macro-registry` | ❌ W0 | ⬜ pending |
-| 135-02-02 | 02 | 2 | MACRO-DISP-01, MACRO-DISP-03 | T-135-03 | `dispatchMacroTool` returns lookup/backstop envelopes before handler invocation | unit | `npm test -- --reporter=verbose macro-dispatcher` | ❌ W0 | ⬜ pending |
-| 135-03-01 | 03 | 3 | MACRO-DISP-02 through MACRO-DISP-06 | T-135-02 / T-135-04 / T-135-05 | AST pre-scan runs before execution and reports all forbidden/unknown/hard-excluded refs | unit | `npm test -- --reporter=verbose macro-permission-prescan macro-hard-exclusions` | ❌ W0 | ⬜ pending |
-| 135-03-02 | 03 | 3 | MACRO-DISP-02, MACRO-DISP-03 | T-135-02 / T-135-03 | Evaluator invokes pre-scan and dispatcher with zero side effects on rejection | unit | `npm test -- --reporter=verbose macro-permission-prescan macro-dispatcher` | ❌ W0 | ⬜ pending |
-| 135-04-01 | 04 | 4 | MACRO-DISP-01, MACRO-DISP-07 | T-135-06 | Public `call_macro` constructs host caller context and native dispatch context internally | unit | `npm test -- --reporter=verbose macro-caller-identity macro-registry macro-dispatcher` | ❌ W0 | ⬜ pending |
-| 135-04-02 | 04 | 4 | MACRO-DISP-01 through MACRO-DISP-07 | T-I-003 / T-I-004 | Real `fq.write_document` and `fq.search` macro dispatch works through registered native handlers | integration | `npm run test:integration -- --reporter=verbose macro-tool-dispatch` | ❌ W0 | ⬜ pending |
-| 135-04-03 | 04 | 4 | MACRO-DISP-04, MACRO-DISP-05 | ML-11 / ML-12 | Public directed scenario coverage verifies nested `fq.call_macro` and template-masquerade hard exclusions. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed` | ✅ | ⬜ pending |
-| 135-04-04 | 04 | 4 | MACRO-DISP-01 | IS-11 | YAML integration scenario composes multiple native handlers through one macro. | YAML integration | `python3 tests/scenarios/integration/run_integration.py --managed macro_dispatch_get_then_write` | ✅ | ⬜ pending |
-| 135-04-05 | 04 | 4 | MACRO-DISP-02, MACRO-DISP-03 | ML-13 / ML-14 | Public directed scenario coverage verifies permission pre-scan forbidden lists, nested forbidden aggregation, and no nested execution result. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_permission_prescan.py --managed` | ✅ | ⬜ pending |
-| 135-04-06 | 04 | 4 | MACRO-DISP-06 | ML-15 / ML-16 | Directed helper drives `runMacroSource` for delegated and host caller identities, proving delegated `fq.call_model` hard exclusion and host reachability. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py --managed` | ✅ | ⬜ pending |
-| 135-04-07 | 04 | 4 | MACRO-DISP-07 | ML-17 | Public directed scenario coverage verifies no public `callerKind` schema, ignored caller identity input, and no echo. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_caller_identity.py --managed` | ✅ | ⬜ pending |
-| 135-04-08 | 04 | 4 | MACRO-DISP-02, MACRO-DISP-03 | IS-12 | YAML integration scenario verifies forbidden macro writes fail before dispatch and the blocked target remains absent. | YAML integration | `python3 tests/scenarios/integration/run_integration.py --managed macro_permission_failure_zero_side_effects` | ✅ | ⬜ pending |
-| 135-04-09 | 04 | 4 | MACRO-DISP-01 through MACRO-DISP-07 | Phase gate | Required unit, integration, directed, YAML, build, and source-grep verification gates pass | unit + integration + scenarios + build | `npm test -- --reporter=verbose macro-registry macro-permission-prescan macro-dispatcher macro-hard-exclusions mcp-server-tools && npm run test:integration -- --reporter=verbose macro-tool-dispatch && python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed && python3 tests/scenarios/directed/testcases/test_macro_permission_prescan.py --managed && python3 tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py --managed && python3 tests/scenarios/directed/testcases/test_macro_caller_identity.py --managed && python3 tests/scenarios/integration/run_integration.py --managed macro_dispatch_get_then_write && python3 tests/scenarios/integration/run_integration.py --managed macro_permission_failure_zero_side_effects && npm run build` | ❌ W0 | ⬜ pending |
+| 135-01-01 | 01 | 1 | MACRO-DISP-01, MACRO-DISP-03 | T-135-01 / T-135-03 | Registry and dispatcher tests exist before implementation; forbidden backstop blocks handler calls | unit | `npm test -- --reporter=verbose macro-registry macro-dispatcher` | ✅ | ✅ green |
+| 135-01-02 | 01 | 1 | MACRO-DISP-02 through MACRO-DISP-07 | T-135-02 / T-135-04 / T-135-05 / T-135-06 | Pre-scan, hard exclusions, and caller identity tests encode the security contract | unit | `npm test -- --reporter=verbose macro-permission-prescan macro-hard-exclusions macro-caller-identity` | ✅ | ✅ green |
+| 135-01-03 | 01 | 1 | MACRO-DISP-01 | T-135-07 | Integration dispatch coverage is registered in the explicit Vitest include list | integration | `npm run test:integration -- --reporter=verbose macro-tool-dispatch` | ✅ | ✅ green |
+| 135-02-01 | 02 | 2 | MACRO-DISP-01, MACRO-DISP-03, MACRO-DISP-04 | T-135-01 / T-135-03 / T-135-06 | `buildToolRegistry` uses host/delegated allowlist sources, validates native args, and omits `call_macro` | unit | `npm test -- --reporter=verbose macro-registry` | ✅ | ✅ green |
+| 135-02-02 | 02 | 2 | MACRO-DISP-01, MACRO-DISP-03 | T-135-03 | `dispatchMacroTool` returns lookup/backstop envelopes before handler invocation | unit | `npm test -- --reporter=verbose macro-dispatcher` | ✅ | ✅ green |
+| 135-03-01 | 03 | 3 | MACRO-DISP-02 through MACRO-DISP-06 | T-135-02 / T-135-04 / T-135-05 | AST pre-scan runs before execution and reports all forbidden/unknown/hard-excluded refs | unit | `npm test -- --reporter=verbose macro-permission-prescan macro-hard-exclusions` | ✅ | ✅ green |
+| 135-03-02 | 03 | 3 | MACRO-DISP-02, MACRO-DISP-03 | T-135-02 / T-135-03 | Evaluator invokes pre-scan and dispatcher with zero side effects on rejection | unit | `npm test -- --reporter=verbose macro-permission-prescan macro-dispatcher` | ✅ | ✅ green |
+| 135-04-01 | 04 | 4 | MACRO-DISP-01, MACRO-DISP-07 | T-135-06 | Public `call_macro` constructs host caller context and native dispatch context internally | unit | `npm test -- --reporter=verbose macro-caller-identity macro-registry macro-dispatcher` | ✅ | ✅ green |
+| 135-04-02 | 04 | 4 | MACRO-DISP-01 through MACRO-DISP-07 | T-I-003 / T-I-004 | Real `fq.write_document` and `fq.search` macro dispatch works through registered native handlers | integration | `npm run test:integration -- --reporter=verbose macro-tool-dispatch` | ✅ | ✅ green |
+| 135-04-03 | 04 | 4 | MACRO-DISP-04, MACRO-DISP-05 | ML-11 / ML-12 | Public directed scenario coverage verifies nested `fq.call_macro` and template-masquerade hard exclusions. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed` | ✅ | ✅ green |
+| 135-04-04 | 04 | 4 | MACRO-DISP-01 | IS-11 | YAML integration scenario composes multiple native handlers through one macro. | YAML integration | `python3 tests/scenarios/integration/run_integration.py --managed macro_dispatch_get_then_write` | ✅ | ✅ green |
+| 135-04-05 | 04 | 4 | MACRO-DISP-02, MACRO-DISP-03 | ML-13 / ML-14 | Public directed scenario coverage verifies permission pre-scan forbidden lists, nested forbidden aggregation, and no nested execution result. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_permission_prescan.py --managed` | ✅ | ✅ green |
+| 135-04-06 | 04 | 4 | MACRO-DISP-06 | ML-15 / ML-16 | Directed helper drives `runMacroSource` for delegated and host caller identities, proving delegated `fq.call_model` hard exclusion and host reachability. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py --managed` | ✅ | ✅ green |
+| 135-04-07 | 04 | 4 | MACRO-DISP-07 | ML-17 | Public directed scenario coverage verifies no public `callerKind` schema, ignored caller identity input, and no echo. | directed scenario | `python3 tests/scenarios/directed/testcases/test_macro_caller_identity.py --managed` | ✅ | ✅ green |
+| 135-04-08 | 04 | 4 | MACRO-DISP-02, MACRO-DISP-03 | IS-12 | YAML integration scenario verifies forbidden macro writes fail before dispatch and the blocked target remains absent. | YAML integration | `python3 tests/scenarios/integration/run_integration.py --managed macro_permission_failure_zero_side_effects` | ✅ | ✅ green |
+| 135-04-09 | 04 | 4 | MACRO-DISP-01 through MACRO-DISP-07 | Phase gate | Required unit, integration, directed, YAML, build, and source-grep verification gates pass | unit + integration + scenarios + build | `npm test -- --reporter=verbose macro-registry macro-permission-prescan macro-dispatcher macro-hard-exclusions mcp-server-tools && npm run test:integration -- --reporter=verbose macro-tool-dispatch && python3 tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py --managed && python3 tests/scenarios/directed/testcases/test_macro_permission_prescan.py --managed && python3 tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py --managed && python3 tests/scenarios/directed/testcases/test_macro_caller_identity.py --managed && python3 tests/scenarios/integration/run_integration.py --managed macro_dispatch_get_then_write && python3 tests/scenarios/integration/run_integration.py --managed macro_permission_failure_zero_side_effects && npm run build` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -61,18 +62,18 @@ created: 2026-05-14
 
 ## Wave 0 Requirements
 
-- [ ] `tests/unit/macro-dispatcher.test.ts` — stubs and red tests for T-U-156 through T-U-159.
-- [ ] `tests/unit/macro-permission-prescan.test.ts` — stubs and red tests for T-U-160 through T-U-164.
-- [ ] `tests/unit/macro-hard-exclusions.test.ts` — stubs and red tests for T-U-165 through T-U-168.
-- [ ] `tests/unit/macro-caller-identity.test.ts` — stubs and red tests for T-U-169 through T-U-171.
-- [ ] `tests/integration/macro-tool-dispatch.test.ts` — integration tests for T-I-003 and T-I-004.
-- [ ] `tests/config/vitest.integration.config.ts` — include `tests/integration/macro-tool-dispatch.test.ts` in the explicit integration include list.
-- [ ] `tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py` — directed hard-exclusion coverage for ML-11 and ML-12.
-- [ ] `tests/scenarios/directed/testcases/test_macro_permission_prescan.py` — directed permission pre-scan coverage for ML-13 and ML-14.
-- [ ] `tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py` — directed delegated/host hard-exclusion coverage for ML-15 and ML-16.
-- [ ] `tests/scenarios/directed/testcases/test_macro_caller_identity.py` — directed public caller identity boundary coverage for ML-17.
-- [ ] `tests/scenarios/integration/tests/macro_dispatch_get_then_write.yml` — YAML multi-native-handler macro workflow coverage for IS-11.
-- [ ] `tests/scenarios/integration/tests/macro_permission_failure_zero_side_effects.yml` — YAML permission failure zero-side-effect coverage for IS-12.
+- [x] `tests/unit/macro-dispatcher.test.ts` — stubs and red tests for T-U-156 through T-U-159.
+- [x] `tests/unit/macro-permission-prescan.test.ts` — stubs and red tests for T-U-160 through T-U-164.
+- [x] `tests/unit/macro-hard-exclusions.test.ts` — stubs and red tests for T-U-165 through T-U-168.
+- [x] `tests/unit/macro-caller-identity.test.ts` — stubs and red tests for T-U-169 through T-U-171.
+- [x] `tests/integration/macro-tool-dispatch.test.ts` — integration tests for T-I-003 and T-I-004.
+- [x] `tests/config/vitest.integration.config.ts` — include `tests/integration/macro-tool-dispatch.test.ts` in the explicit integration include list.
+- [x] `tests/scenarios/directed/testcases/test_macro_dispatch_permissions.py` — directed hard-exclusion coverage for ML-11 and ML-12.
+- [x] `tests/scenarios/directed/testcases/test_macro_permission_prescan.py` — directed permission pre-scan coverage for ML-13 and ML-14.
+- [x] `tests/scenarios/directed/testcases/test_macro_delegated_hard_exclusions.py` — directed delegated/host hard-exclusion coverage for ML-15 and ML-16.
+- [x] `tests/scenarios/directed/testcases/test_macro_caller_identity.py` — directed public caller identity boundary coverage for ML-17.
+- [x] `tests/scenarios/integration/tests/macro_dispatch_get_then_write.yml` — YAML multi-native-handler macro workflow coverage for IS-11.
+- [x] `tests/scenarios/integration/tests/macro_permission_failure_zero_side_effects.yml` — YAML permission failure zero-side-effect coverage for IS-12.
 
 ---
 
@@ -94,7 +95,19 @@ All phase behaviors have automated verification. Manual review is limited to con
 - [x] Feedback latency < 180s
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** approved 2026-05-14
+**Approval:** approved 2026-05-15 validation audit
+
+## Validation Audit 2026-05-15
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+Rerun evidence:
+- `npm test -- --run tests/unit/macro-registry.test.ts tests/unit/macro-permission-prescan.test.ts tests/unit/macro-dispatcher.test.ts tests/unit/macro-hard-exclusions.test.ts tests/unit/macro-caller-identity.test.ts ...`: included in macro validation slice, 21 files passed / 244 tests passed.
+- `npm run test:integration -- --run tests/integration/macro-tool-dispatch.test.ts ...`: included in macro integration slice, 4 files passed / 11 tests passed / 1 expected ACL skip.
 
 ## Execution Results
 

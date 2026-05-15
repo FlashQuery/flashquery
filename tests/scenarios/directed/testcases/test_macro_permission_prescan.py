@@ -10,7 +10,7 @@ Scenario:
        before any nested result or side effect can occur.
 
 Coverage points: ML-13, ML-14
-Requirements: REQ-028, REQ-029
+Requirements: MACRO-DISP-02, MACRO-DISP-03
 """
 from __future__ import annotations
 

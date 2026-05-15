@@ -10,7 +10,7 @@ Scenario:
        allowed by host exposure and reaches the fake native handler.
 
 Coverage points: ML-15, ML-16
-Requirements: REQ-027, REQ-032
+Requirements: MACRO-DISP-01, MACRO-DISP-06
 """
 from __future__ import annotations
 
