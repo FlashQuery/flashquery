@@ -4,14 +4,14 @@ milestone: v3.4
 milestone_name: macro-support
 status: executing
 stopped_at: Completed 137-05-PLAN.md
-last_updated: "2026-05-15T03:12:24.847Z"
-last_activity: 2026-05-15 -- Phase 138 planning complete
+last_updated: "2026-05-15T03:48:04.398Z"
+last_activity: 2026-05-15
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 36
-  completed_plans: 32
-  percent: 89
+  completed_plans: 33
+  percent: 92
 ---
 
 # FlashQuery Core — State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-14)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 137 — trace-progress-dry-run-budgets
+**Current focus:** Phase 138 — handler-source-resolution-scenario-closure
 
 ## Current Position
 
-Phase: 137 (trace-progress-dry-run-budgets) — COMPLETE
-Plan: 5 of 5
+Phase: 138 (handler-source-resolution-scenario-closure) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-05-15 -- Phase 138 planning complete
+Last activity: 2026-05-15
 
 ## Performance Metrics
 
@@ -120,6 +120,7 @@ Last activity: 2026-05-15 -- Phase 138 planning complete
 | Phase 136 P02 | 4m10s | 2 tasks | 3 files |
 | Phase 136 P03 | 3m13s | 2 tasks | 4 files |
 | Phase 136 P04 | 14m37s | 3 tasks | 9 files |
+| Phase 138 P01 | 5min | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -214,6 +215,8 @@ Last activity: 2026-05-15 -- Phase 138 planning complete
 - [Phase 136]: 136-03: The evaluator keeps between-statements probes and adds before-statement probes immediately before execution.
 - [Phase 136]: 136-04 directed cancellation scenarios drive MacroTaskRegistry.cancel through a test-only in-process helper, without adding a public MCP cancellation surface.
 - [Phase 136]: 136-04 uses MLC-01/MLC-02 for macro lifecycle directed cancellation coverage because M-01/M-02 already belong to memory lifecycle.
+- [Phase 138]: 138-01 kept Zod's default stripping behavior for deferred call_macro task-spec fields and asserted stripped parsed output.
+- [Phase 138]: 138-01 validates invalid source/source_ref combinations before macro parse/evaluation while leaving valid source_ref document resolution to Plan 02.
 
 ## Accumulated Context
 
@@ -327,7 +330,7 @@ Last activity: 2026-05-15 -- Phase 138 planning complete
 
 ## Session Continuity
 
-Last session: 2026-05-15T02:43:19.837Z
+Last session: 2026-05-15T03:47:18.875Z
 Stopped at: Completed 137-05-PLAN.md
 Resume: None
 
