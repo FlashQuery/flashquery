@@ -12,8 +12,8 @@
 
 - [x] **MACRO-SRC-01**: `call_macro` accepts the production request schema with `source`, `source_ref`, `input_vars`, `budget`, `dry_run`, `trace`, and `progress`.
 - [x] **MACRO-SRC-02**: `call_macro` validates exactly one non-empty macro source and returns canonical `invalid_input` details for invalid combinations.
-- [ ] **MACRO-SRC-03**: `source_ref` resolves through the same document resolver used by FlashQuery document reads.
-- [ ] **MACRO-SRC-04**: Archived macro-library documents resolve as `not_found` for `source_ref`.
+- [x] **MACRO-SRC-03**: `source_ref` resolves through the same document resolver used by FlashQuery document reads.
+- [x] **MACRO-SRC-04**: Archived macro-library documents resolve as `not_found` for `source_ref`.
 - [x] **MACRO-SRC-05**: Macro library docs support `fqm name=<identifier>` fenced blocks with structured parse failures for malformed attributes.
 - [x] **MACRO-SRC-06**: `source_ref::name` selects named macro blocks and returns the full named-block error matrix.
 - [x] **MACRO-SRC-07**: `input_var` declarations are collected before execution and missing required inputs are reported together.

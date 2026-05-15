@@ -4,14 +4,14 @@ milestone: v3.4
 milestone_name: macro-support
 status: executing
 stopped_at: Completed 137-05-PLAN.md
-last_updated: "2026-05-15T03:48:04.398Z"
+last_updated: "2026-05-15T03:59:50.328Z"
 last_activity: 2026-05-15
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 36
-  completed_plans: 33
-  percent: 92
+  completed_plans: 34
+  percent: 94
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 138 (handler-source-resolution-scenario-closure) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-05-15
 
@@ -121,6 +121,7 @@ Last activity: 2026-05-15
 | Phase 136 P03 | 3m13s | 2 tasks | 4 files |
 | Phase 136 P04 | 14m37s | 3 tasks | 9 files |
 | Phase 138 P01 | 5min | 3 tasks | 3 files |
+| Phase 138 P02 | 8min | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -217,6 +218,8 @@ Last activity: 2026-05-15
 - [Phase 136]: 136-04 uses MLC-01/MLC-02 for macro lifecycle directed cancellation coverage because M-01/M-02 already belong to memory lifecycle.
 - [Phase 138]: 138-01 kept Zod's default stripping behavior for deferred call_macro task-spec fields and asserted stripped parsed output.
 - [Phase 138]: 138-01 validates invalid source/source_ref combinations before macro parse/evaluation while leaving valid source_ref document resolution to Plan 02.
+- [Phase 138]: 138-02 resolved source_ref through resolveDocumentIdentifier with lazy Supabase client acquisition to preserve inline handler independence.
+- [Phase 138]: 138-02 skipped T-I-006 because the inherited local document resolver has no per-caller ACL path for permission_denied.
 
 ## Accumulated Context
 
@@ -330,7 +333,7 @@ Last activity: 2026-05-15
 
 ## Session Continuity
 
-Last session: 2026-05-15T03:47:18.875Z
+Last session: 2026-05-15T03:59:18.279Z
 Stopped at: Completed 137-05-PLAN.md
 Resume: None
 
