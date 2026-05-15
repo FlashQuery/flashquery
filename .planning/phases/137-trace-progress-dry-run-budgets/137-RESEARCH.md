@@ -397,27 +397,35 @@ return {
 |---|-------|---------|---------------|
 | — | All implementation-shaping claims in this research were verified from local code, canonical docs, npm registry, or Context7. | — | — |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **What is the default `timeout_ms` when the request omits it?** [CITED: FlashQuery Macro Language Requirements.md §6.9.4]
    - What we know: REQ-060 says `timeout_ms` defaults from server config, but current config grep did not find a macro-specific timeout key. [CITED: FlashQuery Macro Language Requirements.md §6.9.4][VERIFIED: `rg "macro|defaultTimeout|timeout_ms" src/config`]
-   - What's unclear: Whether Phase 137 should add `macro.defaultTimeoutMs`, reuse a broader config default, or require explicit timeout for now. [VERIFIED: codebase grep]
-   - Recommendation: Add a plan task to choose and document the config key before implementing the timeout default. [CITED: FlashQuery Macro Language Requirements.md §9 open item]
+   - Resolution: Add `macro.default_timeout_ms` to the YAML/config schema and expose it as `config.macro.defaultTimeoutMs` in `FlashQueryConfig`, defaulting to `60000` ms. This matches the spec placeholder spelling while preserving the local camelCase runtime convention. [VERIFIED: src/config/loader.ts strict schema][CITED: FlashQuery Macro Language Requirements.md §6.9.4]
+   - Planning implication: Plan 04 must include config loader/schema work plus unit coverage for omitted `budget.timeout_ms` using `config.macro.defaultTimeoutMs`.
 
 2. **How exactly should macro token totals be extracted from `fq.call_model` responses?** [CITED: FlashQuery Macro Language Requirements.md §6.9.4]
    - What we know: Existing `call_model` envelopes expose token metadata under `metadata.tokens` in tests. [VERIFIED: tests/unit/llm-tool.test.ts]
-   - What's unclear: Whether macro budget should accept only `metadata.tokens.input + output`, or also `metadata.trace_cumulative.total_tokens` for agent loops. [VERIFIED: codebase grep]
-   - Recommendation: Pin one extractor in `budget.ts` unit tests before wiring it into evaluator. [CITED: FlashQuery Macro Language Test Plan.md §4.8.5]
+   - Resolution: For a single `fq.call_model` dispatch result, read current-call usage from `metadata.tokens.input + metadata.tokens.output`. Use `metadata.trace_cumulative.total_tokens` only as a fallback when `metadata.tokens` is absent, summing its `input + output` values. [VERIFIED: src/mcp/tools/llm.ts][VERIFIED: tests/unit/llm-agent-loop.test.ts][CITED: FlashQuery Macro Language Requirements.md §6.9.4]
+   - Planning implication: `budget.ts` tests must pin both primary extraction and fallback extraction before evaluator wiring.
 
 3. **Which warning codes are final for v0?** [CITED: FlashQuery Macro Language Requirements.md §6.8.5]
    - What we know: The spec reserves `trace_value_truncated`, `progress_throttled`, and `broker_unavailable`, while the Test Plan explicitly names T-U-209 and T-U-210. [CITED: FlashQuery Macro Language Requirements.md §6.8.5][CITED: FlashQuery Macro Language Test Plan.md §4.8.4]
-   - What's unclear: Whether `progress_throttled` must be unit-tested in Phase 137 despite the Test Plan rows only naming truncation and broker warning. [CITED: FlashQuery Macro Language Test Plan.md §4.8.4]
-   - Recommendation: Include `progress_throttled` in implementation and a focused unit test because the Phase 137 context lists throttle warnings. [VERIFIED: 137-CONTEXT.md]
+   - Resolution: Implement all three v0 warning codes: `trace_value_truncated`, `progress_throttled`, and `broker_unavailable`. The first two are directly owned by Phase 137 trace/progress behavior; `broker_unavailable` is already in the Test Plan as T-U-210. [VERIFIED: 137-CONTEXT.md][CITED: FlashQuery Macro Language Requirements.md §6.8.5]
+   - Planning implication: Plan 01/02/03 must include `progress_throttled` coverage in addition to Test Plan rows T-U-209 and T-U-210.
 
 4. **What directed coverage IDs should replace Test Plan `M-16`..`M-18`?** [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md]
    - What we know: Current macro directed rows use `ML-*`, and `ML-16`/`ML-17` are already occupied. [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md]
-   - What's unclear: Whether the planner wants to insert a new Phase 137 table with `ML-18`..`ML-20` or another prefix. [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md]
-   - Recommendation: Use `ML-18`, `ML-19`, and `ML-20` unless the planner finds a newer matrix convention. [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md]
+   - Resolution: Use `ML-18`, `ML-19`, and `ML-20` for Phase 137 directed rows, while preserving the Test Plan labels `T-S-016`, `T-S-017`, and `T-S-018` in test descriptions/docstrings. [VERIFIED: tests/scenarios/directed/DIRECTED_COVERAGE.md][VERIFIED: .planning/phases/136-task-lifecycle-and-cancellation/136-04-SUMMARY.md]
+   - Planning implication: Plan 05 must explicitly name `ML-18`, `ML-19`, and `ML-20`.
+
+5. **What exact MCP SDK fields carry progress tokens and emit progress notifications?** [CITED: FlashQuery Macro Language Requirements.md §6.9.7]
+   - Resolution: Tool handlers receive `extra: RequestHandlerExtra<ServerRequest, ServerNotification>`. The progress token is at `extra._meta?.progressToken`. Progress notifications should be emitted with `extra.sendNotification({ method: "notifications/progress", params: { progressToken, progress, total?, message? } })`. [VERIFIED: node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.d.ts][VERIFIED: node_modules/@modelcontextprotocol/sdk/dist/esm/spec.types.d.ts]
+   - Planning implication: Plan 03 must type the macro handler `extra` as `RequestHandlerExtra<ServerRequest, ServerNotification>` or an equivalent local narrowed type that includes `_meta`, `signal`, `sessionId`, and `sendNotification`.
+
+6. **How should directed scenarios capture `notifications/progress`?** [CITED: FlashQuery Macro Language Test Plan.md §4.10.5]
+   - Resolution: The current Python directed client only implements request/response `call_tool` and does not capture out-of-band notifications. Plan 05 must add a helper, likely `FQCClient.call_tool_with_progress(...)`, that sends a `tools/call` request with `params._meta.progressToken`, reads the streamable HTTP response/event stream, collects `notifications/progress` messages tied to that token, and returns both the `ToolResult` and captured notifications. [VERIFIED: tests/scenarios/framework/fqc_client.py]
+   - Planning implication: Directed progress scenario work is not executable until that helper exists or the scenario uses an equivalent explicit helper.
 
 ## Environment Availability
 
