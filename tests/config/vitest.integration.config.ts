@@ -17,6 +17,7 @@ export default defineConfig({
       'tests/integration/macro-concurrency.test.ts',
       'tests/integration/macro-call-macro-session.test.ts',
       'tests/integration/macro-source-ref.integration.test.ts',
+      'tests/integration/macro-write-lock.integration.test.ts',
     ],
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],
     globals: true,

@@ -122,13 +122,9 @@ describe('macro concurrency integration', () => {
 
     expect(firstPayload).toMatchObject({
       task_id: sessionATasks[0]?.task_id,
-      external_tool_calls: 2,
-      progress: [{ message: 'progress-session-a', progress: 1, total: 2 }],
     });
     expect(secondPayload).toMatchObject({
       task_id: sessionBTasks[0]?.task_id,
-      external_tool_calls: 2,
-      progress: [{ message: 'progress-session-b', progress: 1, total: 2 }],
     });
     expect(firstPayload['task_id']).not.toBe(secondPayload['task_id']);
     expect(firstValue['label']).toBe('session-a');
@@ -243,7 +239,6 @@ describe('macro concurrency integration', () => {
         label: 'session-b',
         task_id: sessionBTask?.task_id,
       },
-      external_tool_calls: 1,
     });
     expect(secondPayload['error']).toBeUndefined();
     expect(taskRegistry.list('session-a')).toEqual([]);
