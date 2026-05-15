@@ -55,8 +55,8 @@ This document defines every behavioral coverage point we want to verify through 
 |----|----------|------------|--------------|--------------|
 | ML-11 | MACRO-DISP-04 / T-U-165: `call_macro` universally hides nested `fq.call_macro` references from macro authors as `unknown_tool`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
 | ML-12 | MACRO-DISP-05 / T-U-166: `call_macro` rejects real template-masqueraded tool names with `template_masquerade_tools_not_callable_from_macro`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
-| ML-13 | MACRO-DISP-02 / T-U-160: public `call_macro` reports a known but host-disallowed FlashQuery tool as `forbidden_tools`, including forbidden and allowed lists, before dispatch. | test_macro_permission_prescan | 2026-05-14 | 2026-05-14 |
-| ML-14 | MACRO-DISP-02 / T-U-161 / T-U-162: public `call_macro` reports multiple forbidden tool references across nested control-flow bodies before any nested result or side effect can occur. | test_macro_permission_prescan | 2026-05-14 | 2026-05-14 |
+| ML-13 | MACRO-DISP-02 / T-S-007 / T-U-160: public `call_macro` reports a known but host-disallowed FlashQuery tool as `forbidden_tools`, including forbidden and allowed lists, before dispatch. | test_macro_permission_prescan | 2026-05-15 | 2026-05-14 |
+| ML-14 | MACRO-DISP-02 / T-S-007 / T-U-161 / T-U-162: public `call_macro` reports multiple forbidden tool references across nested control-flow bodies before any nested result or side effect can occur. | test_macro_permission_prescan | 2026-05-15 | 2026-05-14 |
 | ML-15 | MACRO-DISP-06 / T-U-167 / T-U-168: delegated-origin `runMacroSource` hard-excludes `fq.call_model` with `recursive_model_excluded_from_delegated_macros`. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
 | ML-16 | MACRO-DISP-01 / MACRO-DISP-06: host-origin `runMacroSource` can invoke host-exposed `fq.call_model` through the native registry while delegated callers remain blocked. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
 | ML-17 | MACRO-DISP-07 / T-U-171: public `call_macro` omits `callerKind` from tools/list schema, ignores supplied caller identity fields, and does not echo them. | test_macro_caller_identity | 2026-05-14 | 2026-05-14 |
@@ -96,6 +96,33 @@ Note: Test Plan §4.10.5 originally reserved `M-03` through `M-20`; the live mat
 | ML-30 | MACRO-EVAL-06 / T-S-013: a macro that falls off the end returns `{ result: null }`. | test_macro_falloff_null | 2026-05-15 | 2026-05-15 |
 | ML-31 | MACRO-EVAL-06 / MACRO-BI-03 / T-S-014: `fail "msg"` returns `macro_aborted` and statements after `fail` do not execute. | test_macro_fail_halts | 2026-05-15 | 2026-05-15 |
 | ML-32 | MACRO-EVAL-07 / T-S-015: running the same macro source twice through public `call_macro` gets isolated scope and distinct task IDs. | test_macro_repeated_invocation_isolation | 2026-05-15 | 2026-05-15 |
+
+### Macro Language Directed Plan Crosswalk
+
+The Macro Language Test Plan originally proposed `M-NN` directed IDs for `T-S-003` through `T-S-020`. The live matrix keeps the test plan's stable `T-S-*` identifiers, but uses non-colliding `ML-*` and `MLC-*` coverage IDs because `M-*` is already the memory lifecycle namespace.
+
+| Test Plan ID | Planned behavior | Live coverage ID(s) | Live directed test |
+|--------------|------------------|---------------------|--------------------|
+| T-S-001 | Cancellation safe-point returns canonical `cancelled` envelope. | MLC-01 | test_macro_cancellation |
+| T-S-002 | Cancellation prevents post-safe-point document mutations. | MLC-02 | test_macro_no_partial_side_effects_after_cancel |
+| T-S-003 | Inline macro creates a document, applies tags, and returns ID/path. | ML-25 | test_macro_inline_create_doc |
+| T-S-004 | `source_ref: "path::name"` selects the requested named block. | ML-21 | test_macro_source_ref_named_block |
+| T-S-005 | Source-ref lookup and format errors return stable `invalid_input` reasons. | ML-22 | test_macro_source_ref_error_matrix |
+| T-S-006 | `input_var` required/missing/default contract is exposed through public `call_macro`. | ML-26 | test_macro_input_var_contract |
+| T-S-007 | Permission pre-scan rejects forbidden tool references before dispatch. | ML-13, ML-14 | test_macro_permission_prescan |
+| T-S-008 | `dry_run: true` returns `MacroDryRunResult` and has no vault side effects. | ML-27 | test_macro_dry_run_no_side_effects |
+| T-S-009 | Vault jail rejects escaping shell path arguments. | ML-09 | test_macro_vault_jail_escape |
+| T-S-010 | Forbidden shell mutation flags are rejected before execution. | ML-10 | test_macro_forbidden_shell_flag |
+| T-S-011 | Recoverable `fq.get_document` error can be branched on by a macro. | ML-28 | test_macro_recoverable_tool_error |
+| T-S-012 | Structured `exit { ... }` value is preserved under `result`. | ML-29 | test_macro_structured_exit |
+| T-S-013 | Macro fall-off-end returns `{ result: null }`. | ML-30 | test_macro_falloff_null |
+| T-S-014 | `fail "msg"` returns `macro_aborted` and halts following statements. | ML-31 | test_macro_fail_halts |
+| T-S-015 | Repeated public invocations have isolated scope and distinct task IDs. | ML-32 | test_macro_repeated_invocation_isolation |
+| T-S-016 | `trace` modes `full`, `summary`, and `none` produce the documented shapes. | ML-18 | test_macro_trace_full_summary_none |
+| T-S-017 | `progress: "milestones"` emits requested-token progress without per-iteration chatter. | ML-19 | test_macro_progress_milestones |
+| T-S-018 | `timeout_ms` returns canonical `timeout` envelope and stops later side effects. | ML-20 | test_macro_budget_timeout |
+| T-S-019 | Archived macro-library documents referenced by `source_ref` are hidden as `not_found`. | ML-23 | test_macro_archived_source_ref |
+| T-S-020 | Macro-dispatched `archive_document` calls serialize through write locking. | ML-24 | test_macro_archive_write_lock |
 
 ## 1. Document Lifecycle
 
@@ -897,7 +924,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
 | LLM Tools | 109 | 108 | 1 |
-| **Total** | **393** | **388** | **5** |
+| Macro Language | 26 | 26 | 0 |
+| **Total** | **419** | **414** | **5** |
 
 ---
 
@@ -1662,6 +1690,75 @@ Covers: L-39f, L-39g, L-39h, L-39h_purposes, L-96, L-97, L-98, VAL-119
 
 ### test_call_model_help_resolver
 Covers: L-99, ATL-DS-15, VAL-119
+
+### test_macro_vault_jail_escape
+Covers: ML-09
+
+### test_macro_forbidden_shell_flag
+Covers: ML-10
+
+### test_macro_dispatch_permissions
+Covers: ML-11, ML-12
+
+### test_macro_permission_prescan
+Covers: ML-13, ML-14
+
+### test_macro_delegated_hard_exclusions
+Covers: ML-15, ML-16
+
+### test_macro_caller_identity
+Covers: ML-17
+
+### test_macro_cancellation
+Covers: MLC-01
+
+### test_macro_no_partial_side_effects_after_cancel
+Covers: MLC-02
+
+### test_macro_trace_full_summary_none
+Covers: ML-18
+
+### test_macro_progress_milestones
+Covers: ML-19
+
+### test_macro_budget_timeout
+Covers: ML-20
+
+### test_macro_source_ref_named_block
+Covers: ML-21
+
+### test_macro_source_ref_error_matrix
+Covers: ML-22
+
+### test_macro_archived_source_ref
+Covers: ML-23
+
+### test_macro_archive_write_lock
+Covers: ML-24
+
+### test_macro_inline_create_doc
+Covers: ML-25
+
+### test_macro_input_var_contract
+Covers: ML-26
+
+### test_macro_dry_run_no_side_effects
+Covers: ML-27
+
+### test_macro_recoverable_tool_error
+Covers: ML-28
+
+### test_macro_structured_exit
+Covers: ML-29
+
+### test_macro_falloff_null
+Covers: ML-30
+
+### test_macro_fail_halts
+Covers: ML-31
+
+### test_macro_repeated_invocation_isolation
+Covers: ML-32
 
 ---
 

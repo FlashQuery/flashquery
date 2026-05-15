@@ -21,15 +21,24 @@ COVERAGE = ["ML-19"]
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     token = "phase-137-progress-token"
-    source = 'status "milestone"\nfor item in [1,2] do\necho $item\ndone\nexit "ok"'
+    source = '''
+      for item in [1,2] do
+        echo $item
+      done
+      exit fq.call_model({ resolver: "list_models" })
+    '''
     port_range = tuple(args.port_range) if args.port_range else None
     with TestContext(
         fqc_dir=args.fqc_dir,
         url=args.url,
         secret=args.secret,
-        vault_path=args.vault_path,
+        vault_path=getattr(args, "vault_path", None),
         managed=args.managed,
         port_range=port_range,
+        extra_config={
+            "host_mcp_tools": {"tools": ["call_macro", "call_model"]},
+            "llm": {"providers": [], "models": [], "purposes": []},
+        },
     ) as ctx:
         client: FQCClient = ctx.client
         result, notifications = client.call_tool_with_progress(
@@ -41,12 +50,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
         messages = [item.get("params", {}).get("message", "") for item in notifications]
         run.step(
             label="ML-19 / T-S-017 captured notifications/progress entries carry requested progressToken",
-            passed=bool(notifications) and all(item.get("params", {}).get("progressToken") == token for item in notifications),
+            passed=result.ok and bool(notifications) and all(item.get("params", {}).get("progressToken") == token for item in notifications),
             detail=json.dumps(notifications, sort_keys=True)[:1000],
+            timing_ms=result.timing_ms,
+            tool_result=result,
         )
         run.step(
-            label="ML-19 / T-S-017 milestones includes explicit status and excludes per-iteration progress",
-            passed=any("milestone" in msg for msg in messages) and not any("for " in msg for msg in messages),
+            label="ML-19 / T-S-017 milestones includes model-call boundary and excludes per-iteration progress",
+            passed=(
+                any(msg.startswith("model_call:") and msg.endswith("fq.call_model") for msg in messages)
+                and not any(msg.startswith("for ") for msg in messages)
+            ),
             detail=json.dumps({"messages": messages, "payload": payload}, sort_keys=True)[:1000],
         )
     return run

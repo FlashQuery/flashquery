@@ -115,6 +115,23 @@ def run_test(args: argparse.Namespace) -> TestRun:
             observed[label] = payload
             checks[label] = result.ok and payload.get("error") == "invalid_input" and _reason(payload) == expected_reason
 
+        no_blocks_details = observed["no_macro_blocks"].get("details") or {}
+        ambiguous_details = observed["ambiguous_macro_block"].get("details") or {}
+        not_found_details = observed["block_not_found"].get("details") or {}
+        duplicate_details = observed["duplicate_block_name"].get("details") or {}
+        format_details = observed["invalid_block_name_format"].get("details") or {}
+        ref_format_details = observed["invalid_source_ref_format"].get("details") or {}
+        checks.update({
+            "no_macro_blocks includes requested source_ref": no_blocks_details.get("source_ref") == no_blocks_path,
+            "ambiguous lists available names": sorted(ambiguous_details.get("available_names") or []) == ["alpha", "beta"],
+            "block_not_found lists available names": sorted(not_found_details.get("available_names") or []) == ["alpha", "beta"],
+            "block_not_found includes requested name": not_found_details.get("requested") == "gamma",
+            "duplicate includes match count": duplicate_details.get("match_count") == 2,
+            "duplicate includes requested name": duplicate_details.get("name") == "dupe",
+            "invalid block name includes requested name": format_details.get("block_name") == "bad-name!",
+            "invalid source_ref includes submitted value": ref_format_details.get("source_ref") == "::missing-path",
+        })
+
         run.step(
             label="ML-22 / T-S-005 source_ref error matrix returns stable invalid_input reasons",
             passed=all(checks.values()),

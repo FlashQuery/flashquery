@@ -65,6 +65,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tool_result=provided,
         )
 
+        override = client.call_tool(
+            "call_macro",
+            source=source,
+            input_vars={"required": "Ada", "optional": "provided"},
+        )
+        override_payload = json.loads(override.text) if override.text else {"error": override.error}
+        run.step(
+            label="ML-26 / T-S-006 provided optional input overrides default",
+            passed=override_payload.get("result") == {"required": "Ada", "optional": "provided"},
+            detail=json.dumps(override_payload, sort_keys=True)[:1000],
+            timing_ms=override.timing_ms,
+            tool_result=override,
+        )
+
     return run
 
 

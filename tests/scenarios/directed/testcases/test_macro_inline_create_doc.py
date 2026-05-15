@@ -72,6 +72,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             passed=doc_exists,
             detail=f"path={path}",
         )
+        doc = ctx.vault.read_file(path) if doc_exists else None
+        expected_tags = {"macro-inline-create", run.run_id}
+        actual_tags = set(doc.tags if doc else [])
+        run.step(
+            label="ML-25 / T-S-003 created document has macro-applied tags",
+            passed=expected_tags.issubset(actual_tags),
+            detail=json.dumps({"expected": sorted(expected_tags), "actual": sorted(actual_tags)}, sort_keys=True),
+        )
 
     return run
 
