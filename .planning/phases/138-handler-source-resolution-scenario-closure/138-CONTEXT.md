@@ -83,7 +83,7 @@ This phase owns `.planning/REQUIREMENTS.md` rows:
 - Handler/tool metadata rows: `T-U-228` through `T-U-234` must remain green.
 - Integration rows: `T-I-003` through `T-I-011`.
 - E2E rows: `T-E-001` through `T-E-004`.
-- Directed scenarios: `T-S-003` through `T-S-020`, with special attention to `T-S-004`, `T-S-005`, `T-S-019`, and `T-S-020` for source_ref/archive/write-lock closure.
+- Directed scenarios: `T-S-003` through `T-S-020`, with special attention to `T-S-004`, `T-S-005`, `T-S-019`, and `T-S-020` for source_ref/archive/write-lock closure. The live directed coverage matrix uses `ML-*` for macro-language rows; Phase 137 gap fixes consumed `ML-18`, `ML-19`, and `ML-20`, so Phase 138 should start at `ML-21` unless the matrix has advanced.
 - YAML scenarios: `T-Y-001` through `T-Y-004`.
 - The 17 POC examples from the Macro Language product docs are canonical fixture seeds; production validation may use copied/migrated fixtures in this repo rather than running from the product repo directly.
 

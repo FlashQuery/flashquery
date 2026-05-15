@@ -90,6 +90,7 @@ Use existing project-local scenario authoring conventions:
 - Module-level `COVERAGE = [...]`.
 - YAML scenarios under `tests/scenarios/integration/tests/*.yml`.
 - Update `DIRECTED_COVERAGE.md` and `INTEGRATION_COVERAGE.md` after adding tests.
+- Continue the live directed macro-language coverage sequence. Phase 137 gap fixes use `ML-18`, `ML-19`, and `ML-20`, so Phase 138 source_ref/archive/write-lock directed rows should use `ML-21+` unless the matrix has advanced.
 
 ### POC Fixtures
 

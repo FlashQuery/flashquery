@@ -69,7 +69,7 @@ Existing macro unit and integration test files already include many prior phase 
 
 `tests/config/vitest.integration.config.ts` uses an explicit include list. New integration files must be added there.
 
-Existing scenario files cover cancellation, permissions, shell, trace, progress, and budgets, but Phase 138 still needs source_ref/named-block, archived source_ref, macro write-lock inheritance, E2E public transport paths, and POC fixture closure.
+Existing scenario files cover cancellation, permissions, shell, trace, progress, and budgets, but Phase 138 still needs source_ref/named-block, archived source_ref, macro write-lock inheritance, E2E public transport paths, and POC fixture closure. The Phase 137 gap-fix commit established `ML-18`, `ML-19`, and `ML-20` as the live directed IDs for `T-S-016`, `T-S-017`, and `T-S-018`; Phase 138 directed rows should continue with non-colliding `ML-*` IDs rather than the product Test Plan's older `M-*` placeholders.
 
 ## Planning Implications
 
@@ -97,7 +97,7 @@ Use the existing test stack:
 - `source_ref` can accidentally bypass existing document resolver behavior if implemented as raw file reads from the handler. Mitigation: read `resolveDocumentIdentifier` first and use it for doc-level lookup.
 - Archived documents can be misclassified as active because the resolver returns file paths regardless of frontmatter status. Mitigation: parse frontmatter after resolution and explicitly map archived status to `not_found`.
 - Inline and source_ref paths can diverge on dry-run/budget/trace/progress/session behavior. Mitigation: resolve source_ref into the same `runMacroSource` path used by inline source.
-- Scenario coverage IDs can collide with existing matrices. Mitigation: check `DIRECTED_COVERAGE.md` and `INTEGRATION_COVERAGE.md` before registering rows and use existing macro ID conventions from the Test Plan.
+- Scenario coverage IDs can collide with existing matrices. Mitigation: check `DIRECTED_COVERAGE.md` and `INTEGRATION_COVERAGE.md` before registering rows and continue the live macro-language `ML-*` sequence; as of the Phase 137 gap fix, `ML-18..ML-20` are occupied.
 
 ## Open Questions
 
