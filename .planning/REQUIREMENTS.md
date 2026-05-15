@@ -74,8 +74,8 @@
 ### Trace, Progress, Tasks, And Cancellation
 
 - [x] **MACRO-OBS-01**: Trace steps are emitted as a flat ordered list with the specified kind/value shape.
-- [ ] **MACRO-OBS-02**: Trace verbosity modes and per-value truncation are enforced.
-- [ ] **MACRO-OBS-03**: Progress verbosity modes are enforced and degrade cleanly without a progress token, including REQ-039 ac3 auto-emitted progress at for-loop iteration and model-call boundaries routed through the same mode-aware emission path.
+- [x] **MACRO-OBS-02**: Trace verbosity modes and per-value truncation are enforced.
+- [x] **MACRO-OBS-03**: Progress verbosity modes are enforced and degrade cleanly without a progress token, including REQ-039 ac3 auto-emitted progress at for-loop iteration and model-call boundaries routed through the same mode-aware emission path.
 - [x] **MACRO-OBS-04**: The in-process task registry transitions `working` to terminal states and removes terminal records immediately.
 - [x] **MACRO-OBS-05**: Cooperative cancellation checks every required safe point.
 - [x] **MACRO-OBS-06**: Task visibility and cancellation are scoped to the active session.
@@ -86,17 +86,17 @@
 - [x] **MACRO-RESP-02**: Dry-run returns `MacroDryRunResult` and never executes side-effecting tools.
 - [x] **MACRO-RESP-03**: Macro error codes are exported and stable.
 - [x] **MACRO-RESP-04**: Macro response helpers are additive exports in `response-formats.ts`.
-- [ ] **MACRO-RESP-05**: `warnings[]` follows the shared XC-16 response convention.
+- [x] **MACRO-RESP-05**: `warnings[]` follows the shared XC-16 response convention.
 
 ### Concurrency, Budgets, And Integration
 
 - [x] **MACRO-INT-01**: Concurrent macro invocations across sessions do not leak state.
 - [ ] **MACRO-INT-02**: Macro-executed writes inherit FlashQuery's existing write-lock table behavior.
 - [x] **MACRO-INT-03**: `archive_document` acquires the standard document write lock.
-- [ ] **MACRO-INT-04**: Budget enforcement covers total tokens, model calls, external tool calls, and timeout.
+- [x] **MACRO-INT-04**: Budget enforcement covers total tokens, model calls, external tool calls, and timeout.
 - [x] **MACRO-INT-05**: `call_macro` is registered in the MCP server and canonical tool metadata.
 - [x] **MACRO-INT-06**: A `NullMcpBroker` integration shim ships for v0 broker readiness.
-- [ ] **MACRO-INT-07**: `_meta.progressToken` is captured and used for progress emission.
+- [x] **MACRO-INT-07**: `_meta.progressToken` is captured and used for progress emission.
 
 ## Future Requirements
 

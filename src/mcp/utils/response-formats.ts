@@ -38,9 +38,15 @@ export const MACRO_ERROR_CODES = [
   'parse_error',
 ] as const;
 
+export const WARNING_CODES = [
+  'trace_value_truncated',
+  'progress_throttled',
+  'broker_unavailable',
+] as const;
+
 export type CanonicalErrorCode = (typeof CANONICAL_ERROR_CODES)[number];
 export type MacroErrorCode = (typeof MACRO_ERROR_CODES)[number];
-export type WarningCode = string;
+export type WarningCode = (typeof WARNING_CODES)[number] | string;
 
 export interface ErrorEnvelope {
   error: string;

@@ -1,16 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/protocol.js';
+import type { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
-import { evaluateProgram, MacroCancellationError, type MacroValue } from '../../macro/evaluator.js';
+import {
+  evaluateProgram,
+  MacroCancellationError,
+  MacroExpectedError,
+  type MacroValue,
+} from '../../macro/evaluator.js';
 import { parseMacroSource } from '../../macro/parser.js';
+import { runDryRun } from '../../macro/dry-run.js';
 import { buildToolRegistry, type BrokerToolServerConfig, type BuildToolRegistryResult } from '../../macro/registry.js';
 import type { MacroCallerContext } from '../../macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../llm/tool-registry.js';
 import type { McpBroker } from '../../services/mcp-broker.js';
 import { NullMcpBroker } from '../../services/mcp-broker.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
-import { jsonExpectedError, jsonRuntimeError } from '../utils/response-formats.js';
+import { jsonExpectedError, jsonRuntimeError, type ToolResult } from '../utils/response-formats.js';
 import type { TemplateToolReverseMap } from '../../llm/template-tools.js';
 import {
   MacroTaskRegistry,
@@ -22,10 +30,15 @@ export const callMacroInputSchema = z.object({
   source: z.string().optional(),
   source_ref: z.string().optional(),
   input_vars: z.record(z.string(), z.unknown()).optional(),
-  budget: z.record(z.string(), z.unknown()).optional(), // inputSchema only; runtime budgets are later-phase work.
-  dry_run: z.boolean().optional(), // inputSchema only; dry-run execution is later-phase work.
+  budget: z.object({
+    max_total_tokens: z.number().optional(),
+    max_model_calls: z.number().optional(),
+    max_external_tool_calls: z.number().optional(),
+    timeout_ms: z.number().optional(),
+  }).optional(),
+  dry_run: z.boolean().optional(),
   trace: z.enum(['full', 'summary', 'none']).optional(),
-  progress: z.enum(['full', 'milestones', 'silent']).optional(), // inputSchema only.
+  progress: z.enum(['full', 'milestones', 'silent']).optional(),
 });
 
 export interface RunMacroSourceOptions {
@@ -44,6 +57,22 @@ export interface RunMacroSourceOptions {
   sessionId?: string;
   taskRegistry?: MacroTaskRegistry;
   onTaskTransition?: MacroTaskTransitionListener;
+  budget?: {
+    max_total_tokens?: number;
+    max_model_calls?: number;
+    max_external_tool_calls?: number;
+    timeout_ms?: number;
+  };
+  dry_run?: boolean;
+  trace?: 'full' | 'summary' | 'none';
+  progress?: 'full' | 'milestones' | 'silent';
+  progressToken?: string | number;
+  progressNotificationSink?: (notification: {
+    progressToken: string | number;
+    progress: number;
+    total?: number;
+    message?: string;
+  }) => void | Promise<void>;
 }
 
 export interface RegisterMacroToolsOptions {
@@ -93,16 +122,53 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
     };
   }
 
+  const inputVars = options.inputVars ?? options.input_vars ?? {};
+  const warnings: string[] = [];
+  const taskId = options.taskId ?? randomUUID();
+  if (options.dry_run === true) {
+    try {
+      return {
+        result: runDryRun({
+          program: parseResult.program,
+          inputVars,
+          taskId,
+          registry: toolRegistry.registry,
+          allowlist: new Set(toolRegistry.allowedToolNames),
+          templateToolNames: toolRegistry.templateToolNames,
+          hardExcludedReasons: toolRegistry.hardExcludedReasons,
+          callerContext,
+          warnings,
+        }),
+        registryBuild: {
+          callerContext,
+          allowlistSource: callerContext.origin === 'host' ? 'resolveHostToolExposure' : 'assembleNativeToolRegistry',
+          allowedToolNames: toolRegistry.allowedToolNames,
+          toolRegistry,
+        },
+      };
+    } catch (error) {
+      return {
+        result: expectedMacroErrorResult(error),
+        registryBuild: {
+          callerContext,
+          allowlistSource: callerContext.origin === 'host' ? 'resolveHostToolExposure' : 'assembleNativeToolRegistry',
+          allowedToolNames: toolRegistry.allowedToolNames,
+          toolRegistry,
+        },
+      };
+    }
+  }
+
   const taskRegistry = options.taskRegistry ?? new MacroTaskRegistry();
   const task = taskRegistry.create({
-    taskId: options.taskId,
+    taskId,
     sessionId: options.sessionId,
     source: options.source,
   });
   options.onTaskTransition?.(task);
 
   const result = await evaluateProgram(parseResult.program, {
-    inputVars: options.inputVars ?? options.input_vars,
+    inputVars,
     taskId: task.task_id,
     sessionId: options.sessionId,
     vaultRoot: options.config.instance.vault.path,
@@ -112,6 +178,14 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
     templateToolNames: toolRegistry.templateToolNames,
     hardExcludedReasons: toolRegistry.hardExcludedReasons,
     callerContext,
+    traceMode: options.trace ?? 'summary',
+    progressMode: options.progress ?? 'milestones',
+    progressToken: options.progressToken,
+    progressNotificationSink: options.progressNotificationSink,
+    budgetLimits: {
+      ...(options.budget ?? {}),
+      timeout_ms: options.budget?.timeout_ms ?? options.config.macro?.defaultTimeoutMs ?? 60000,
+    },
     listTasks: (context) => taskRegistry.list(context.sessionId),
     checkCancelled: (where) => {
       if (taskRegistry.isCancellationRequested(task.task_id)) {
@@ -184,7 +258,7 @@ export function registerMacroTools(
         'Run a FlashQuery macro as one structured orchestration request. Supports inline macro source execution through the production parser and evaluator.',
       inputSchema: callMacroInputSchema.shape,
     },
-    async (params, extra: { signal?: AbortSignal }) => {
+    async (params, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
       if (getIsShuttingDown()) {
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed.');
       }
@@ -230,6 +304,17 @@ export function registerMacroTools(
           brokerTools: options.brokerTools,
           templateReverseMap: templateMetadata.templateReverseMap,
           templateToolNames: templateMetadata.templateToolNames,
+          budget: params.budget,
+          dry_run: params.dry_run,
+          trace: params.trace,
+          progress: params.progress,
+          progressToken: extra._meta?.progressToken,
+          progressNotificationSink: async (notification) => {
+            await extra.sendNotification?.({
+              method: 'notifications/progress',
+              params: notification,
+            } as ServerNotification);
+          },
         });
         return result;
       }
@@ -237,6 +322,24 @@ export function registerMacroTools(
   );
 
   return { registrationSessionId };
+}
+
+function expectedMacroErrorResult(error: unknown): ToolResult {
+  if (error instanceof MacroExpectedError) {
+    return jsonExpectedError({
+      error: error.error,
+      message: error.message,
+      details: error.details,
+    });
+  }
+  if (error && typeof error === 'object' && 'error' in error && 'message' in error) {
+    const envelope = error as { error: string; message: string; details?: Record<string, unknown> };
+    return jsonExpectedError(envelope);
+  }
+  return jsonRuntimeError({
+    error: 'tool_call_failed',
+    message: error instanceof Error ? error.message : String(error),
+  });
 }
 
 function transitionTaskFromResult(

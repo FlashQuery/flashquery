@@ -648,6 +648,24 @@ class FQCClient:
         else:
             return resp.json()
 
+    def _post_mcp_messages(self, payload: dict) -> list[dict]:
+        """POST JSON-RPC and return every parsed response/notification message."""
+        url = f"{self.base_url}/mcp"
+        hdrs = self._headers()
+        resp = self._http.post(url, headers=hdrs, json=payload, timeout=30)
+        if not resp.ok:
+            raise requests.HTTPError(f"HTTP {resp.status_code} {resp.reason}: {resp.text[:500]}", response=resp)
+        sid = resp.headers.get("mcp-session-id")
+        if sid:
+            self.session_id = sid
+        content_type = resp.headers.get("content-type", "")
+        if "text/event-stream" in content_type:
+            messages = self._parse_sse(resp.text)
+            if not messages:
+                raise RuntimeError("SSE response contained no JSON-RPC messages")
+            return messages
+        return [resp.json()]
+
     # ------------------------------------------------------------------
     # Session lifecycle
     # ------------------------------------------------------------------
@@ -817,6 +835,78 @@ class FQCClient:
             server_url=self.base_url,
             config_source=self.config_source,
         )
+
+    def call_tool_with_progress(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        *,
+        progress_token: str | int,
+    ) -> tuple[ToolResult, list[dict[str, Any]]]:
+        """Call a tool with params._meta.progressToken and capture matching progress notifications."""
+        clean_args = {k: v for k, v in arguments.items() if v is not None}
+        if not self.session_id:
+            self.initialize()
+
+        payload = {
+            "jsonrpc": "2.0",
+            "id": self._next_id(),
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": clean_args,
+                "_meta": {"progressToken": progress_token},
+            },
+        }
+        t0 = time.monotonic()
+        try:
+            messages = self._post_mcp_messages(payload)
+        except Exception as e:
+            elapsed = int((time.monotonic() - t0) * 1000)
+            return ToolResult(
+                tool=tool_name,
+                ok=False,
+                text="",
+                timing_ms=elapsed,
+                arguments=clean_args,
+                error=f"HTTP request failed: {e}",
+                server_url=self.base_url,
+                config_source=self.config_source,
+            ), []
+
+        elapsed = int((time.monotonic() - t0) * 1000)
+        notifications = [
+            msg for msg in messages
+            if msg.get("method") == "notifications/progress"
+            and (msg.get("params") or {}).get("progressToken") == progress_token
+        ]
+        raw = next((msg for msg in reversed(messages) if msg.get("id") == payload["id"]), messages[-1])
+        if "error" in raw:
+            return ToolResult(
+                tool=tool_name,
+                ok=False,
+                text="",
+                timing_ms=elapsed,
+                arguments=clean_args,
+                raw_response=raw,
+                error=f"JSON-RPC error: {raw['error'].get('message', raw['error'])}",
+                server_url=self.base_url,
+                config_source=self.config_source,
+            ), notifications
+
+        tool_result = raw.get("result", {})
+        text = "\n".join([c.get("text", "") for c in tool_result.get("content", [])])
+        return ToolResult(
+            tool=tool_name,
+            ok=not bool(tool_result.get("isError")),
+            text=text,
+            timing_ms=elapsed,
+            arguments=clean_args,
+            raw_response=raw,
+            error=(f"Tool returned error: {text[:200]}" if tool_result.get("isError") else None),
+            server_url=self.base_url,
+            config_source=self.config_source,
+        ), notifications
 
     # ------------------------------------------------------------------
     # Context manager support

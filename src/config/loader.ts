@@ -230,6 +230,13 @@ const HostMcpToolsSchema = z
   })
   .strict();
 
+const MacroSchema = z
+  .object({
+    default_timeout_ms: z.number().int().positive().default(60000),
+  })
+  .strip()
+  .prefault({});
+
 // ConfigSchema: strict schema — only known v1.7 fields accepted
 // Note: legacy field rejection (projects, defaults, vault) is enforced in loadConfig()
 // before this schema runs, providing clear actionable error messages.
@@ -247,6 +254,7 @@ const ConfigSchema = z
     logging: LoggingSchema,
     locking: LockingSchema,
     trash_folder: TrashFolderSchema,
+    macro: MacroSchema,
   })
   .strict();
 
@@ -271,6 +279,7 @@ export interface FlashQueryConfig {
   trashFolder: { enabled: boolean; path: string; collisionStrategy: 'suffix' | 'timestamp' };
   hostMcpTools?: { tools?: string[]; excludedTools?: string[] };
   templates?: { defaultAccess: 'permissive' | 'restrictive' };
+  macro: { defaultTimeoutMs: number };
   llm?: {
     providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean }>;
     models: Array<{

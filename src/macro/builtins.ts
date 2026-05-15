@@ -158,7 +158,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     requireNamedArgs('echo', named, []);
     const message = positional.map(stringifyMacroValue).join(' ');
     context.log.push(message);
-    context.trace.push({ kind: 'log', message, at: new Date().toISOString() });
+    context.traceBuilder.add({ kind: 'log', message });
     return null;
   },
   status: async (positional, named, context) => {
@@ -176,12 +176,11 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
       ...(progress === undefined ? {} : { progress }),
       ...(total === undefined ? {} : { total }),
     };
-    context.progress.push(entry);
-    context.trace.push({
+    await context.progressEmitter.emitExplicitStatus(entry);
+    context.traceBuilder.add({
       kind: 'progress',
       ...(message === undefined ? {} : { message }),
       result,
-      at: new Date().toISOString(),
     });
     await context.progressSink?.(entry, context);
     return null;

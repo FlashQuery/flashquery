@@ -210,23 +210,23 @@ Plans:
 
 **Requirements:** MACRO-OBS-02, MACRO-OBS-03, MACRO-RESP-05, MACRO-INT-04, MACRO-INT-07
 
-**Plans:** 5 plans
+**Plans:** 5/5 plans complete
 
 Plans:
 **Wave 0**
-- [ ] 137-01-PLAN.md — Create trace, progress, dry-run, budget, warning, and handler contract tests.
+- [x] 137-01-PLAN.md — Create trace, progress, dry-run, budget, warning, and handler contract tests.
 
 **Wave 1** *(blocked on Wave 0 completion)*
-- [ ] 137-02-PLAN.md — Implement mode-aware trace writing and warning propagation.
+- [x] 137-02-PLAN.md — Implement mode-aware trace writing and warning propagation.
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 137-03-PLAN.md — Implement shared progress emission and progress-token capture.
+- [x] 137-03-PLAN.md — Implement shared progress emission and progress-token capture.
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 137-04-PLAN.md — Implement dry-run pre-flight and runtime budget enforcement.
+- [x] 137-04-PLAN.md — Implement dry-run pre-flight and runtime budget enforcement.
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 137-05-PLAN.md — Add directed coverage rows/scenarios and final validation gates.
+- [x] 137-05-PLAN.md — Add directed coverage rows/scenarios and final validation gates.
 
 **Success criteria:**
 1. Trace modes `full`, `summary`, and `none` behave exactly as specified, including value truncation.

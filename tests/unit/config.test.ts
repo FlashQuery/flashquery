@@ -140,6 +140,36 @@ trash_folder:
     }
   });
 
+  it('defaults macro.default_timeout_ms to config.macro.defaultTimeoutMs 60000', () => {
+    const config = loadConfig(FIXTURE_PATH);
+    expect(config.macro.defaultTimeoutMs).toBe(60000);
+  });
+
+  it('loads explicit macro.default_timeout_ms as config.macro.defaultTimeoutMs', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-macro-timeout-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "macro-timeout-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+macro:
+  default_timeout_ms: 1234
+`);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.macro.defaultTimeoutMs).toBe(1234);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('rejects unsupported trash_folder collision_strategy values', () => {
     const tmpFile = join(tmpdir(), `fqc-test-trash-folder-invalid-${Date.now()}.yaml`);
     writeFileSync(tmpFile, `

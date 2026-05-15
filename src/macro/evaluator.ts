@@ -16,8 +16,10 @@ import {
   jsonExpectedError,
   jsonRuntimeError,
   macroResult,
+  withWarnings,
   type ToolResult,
   type TraceStep,
+  type WarningCode,
 } from '../mcp/utils/response-formats.js';
 import type { McpBroker } from '../services/mcp-broker.js';
 import { NullMcpBroker } from '../services/mcp-broker.js';
@@ -29,6 +31,9 @@ import { resolveNamespaceIntrospection } from './introspection.js';
 import { preScanToolReferences } from './permission-prescan.js';
 import { dispatchMacroTool } from './dispatcher.js';
 import { MACRO_SAFE_POINTS, type MacroSafePoint } from './safe-points.js';
+import { TraceBuilder, type TraceMode } from './trace-builder.js';
+import { ProgressEmitter, type ProgressMode, type ProgressNotificationSink } from './progress-emitter.js';
+import { BudgetTracker, type MacroBudgetLimits } from './budget.js';
 
 const ESCAPED_DOLLAR_SENTINEL = '\uE000';
 
@@ -75,11 +80,17 @@ export interface MacroTaskRecord {
 export interface MacroInvocationContext {
   inputVars: Record<string, MacroValue>;
   trace: TraceStep[];
+  traceMode: TraceMode;
+  traceBuilder: TraceBuilder;
   log: string[];
   budget: MacroBudget;
+  budgetTracker: BudgetTracker;
+  warnings: WarningCode[];
   taskId: string;
   sessionId?: string;
   progress: MacroProgressEntry[];
+  progressMode: ProgressMode;
+  progressEmitter: ProgressEmitter;
   cancelled: MacroCancellationState;
   builtins: Record<string, MacroBuiltin>;
   vaultRoot?: string;
@@ -100,6 +111,7 @@ export interface MacroInvocationContext {
     entry: MacroProgressEntry,
     context: MacroInvocationContext
   ) => void | Promise<void>;
+  progressNotificationSink?: ProgressNotificationSink;
   /**
    * Returns task records visible to the current MCP session only (REQ-040 ac3).
    * Implementations must filter cross-session records before returning. The
@@ -116,9 +128,13 @@ export interface EvaluateProgramOptions {
   taskId?: string;
   sessionId?: string;
   trace?: TraceStep[];
+  traceMode?: TraceMode;
   log?: string[];
   budget?: Partial<MacroBudget>;
+  budgetLimits?: MacroBudgetLimits;
   progress?: MacroProgressEntry[];
+  progressMode?: ProgressMode;
+  progressToken?: string | number;
   cancelled?: boolean | MacroCancellationState;
   broker?: McpBroker;
   toolRegistry?: ToolRegistry;
@@ -129,6 +145,7 @@ export interface EvaluateProgramOptions {
   callerContext?: MacroCallerContext;
   dispatchTool?: MacroInvocationContext['dispatchTool'];
   progressSink?: MacroInvocationContext['progressSink'];
+  progressNotificationSink?: ProgressNotificationSink;
   listTasks?: MacroInvocationContext['listTasks'];
   vaultRoot?: string;
   stdin?: MacroValue;
@@ -238,16 +255,34 @@ export function createInvocationContext(
     model_calls: options.budget?.model_calls ?? 0,
     external_tool_calls: options.budget?.external_tool_calls ?? 0,
   };
+  const warnings: WarningCode[] = [];
+  const traceMode = options.traceMode ?? 'full';
+  const trace = [...(options.trace ?? [])];
+  const progressMode = options.progressMode ?? 'milestones';
+  const progress = [...(options.progress ?? [])];
+  const budgetTracker = new BudgetTracker(options.budgetLimits ?? {}, budget);
   const inputVars = cloneMacroObject(options.inputVars ?? options.input_vars ?? {});
 
   const context: MacroInvocationContext = {
     inputVars,
-    trace: [...(options.trace ?? [])],
+    trace,
+    traceMode,
+    traceBuilder: new TraceBuilder(traceMode, trace, warnings),
     log: [...(options.log ?? [])],
     budget,
+    budgetTracker,
+    warnings,
     taskId: options.taskId ?? randomUUID(),
     sessionId: options.sessionId,
-    progress: [...(options.progress ?? [])],
+    progress,
+    progressMode,
+    progressEmitter: new ProgressEmitter(
+      progressMode,
+      options.progressToken,
+      options.progressNotificationSink,
+      warnings,
+      progress
+    ),
     cancelled,
     builtins: { ...standardBuiltins, ...shellBuiltins, ...(options.builtins ?? {}) },
     vaultRoot: options.vaultRoot,
@@ -264,8 +299,10 @@ export function createInvocationContext(
     callerContext: options.callerContext,
     dispatchTool: options.dispatchTool,
     progressSink: options.progressSink,
+    progressNotificationSink: options.progressNotificationSink,
     listTasks: options.listTasks,
     checkCancelled: async (atSafePoint: string) => {
+      budgetTracker.checkTimeout();
       if (cancelled.value) {
         throw new MacroCancellationError(context.taskId, atSafePoint);
       }
@@ -504,6 +541,7 @@ async function execStatement(
       }
       for (const itemValue of iterable) {
         await context.checkCancelled(MACRO_SAFE_POINTS.forLoopIteration);
+        await context.progressEmitter.emitForLoopIteration(`for ${stmt.varName}`);
         const child = new Env(env);
         child.setLocal(stmt.varName, itemValue);
         await execBlock(stmt.body, child, context);
@@ -775,6 +813,16 @@ async function evalToolCall(
 ): Promise<MacroValue> {
   const arg = await evalToolArg(call, env, context);
   await context.checkCancelled(MACRO_SAFE_POINTS.beforeToolCall(call.server, call.tool));
+  const toolName = `${call.server}.${call.tool}`;
+  const isModelCall = call.server === 'fq' && call.tool === 'call_model';
+  const isExternalToolCall = call.server !== 'fq';
+  if (isModelCall) {
+    context.budgetTracker.beforeModelCall();
+    await context.progressEmitter.emitModelCallStart(toolName);
+  } else {
+    if (isExternalToolCall) context.budgetTracker.beforeExternalToolCall();
+    await context.progressEmitter.emitToolCallStart(toolName);
+  }
   if (!context.toolRegistry && !context.dispatchTool) {
     throw new MacroRuntimeError(
       `No tool dispatcher configured for ${call.server}.${call.tool}.`,
@@ -800,10 +848,13 @@ async function evalToolCall(
     if (isToolResult(dispatched)) {
       throwExpectedToolResult(dispatched);
     }
-    context.budget.external_tool_calls += 1;
+    if (isModelCall) {
+      context.budgetTracker.afterModelCall(extractTokenUsage(dispatched));
+      await context.progressEmitter.emitModelCallFinish(toolName);
+    }
     pushTrace(context, {
-      kind: 'tool_call',
-      name: `${call.server}.${call.tool}`,
+      kind: isModelCall ? 'model_call' : 'tool_call',
+      name: toolName,
       args: arg,
       result: dispatched,
     });
@@ -832,10 +883,13 @@ async function evalToolCall(
     });
   }
 
-  context.budget.external_tool_calls += 1;
+  if (isModelCall) {
+    context.budgetTracker.afterModelCall(extractTokenUsage(parsed));
+    await context.progressEmitter.emitModelCallFinish(toolName);
+  }
   pushTrace(context, {
-    kind: 'tool_call',
-    name: `${call.server}.${call.tool}`,
+    kind: isModelCall ? 'model_call' : 'tool_call',
+    name: toolName,
     args: arg,
     result: parsed,
   });
@@ -866,9 +920,13 @@ async function evalToolExists(
   expr: Extract<Expr | Statement, { kind: 'ToolExistsCall' }>,
   context: MacroInvocationContext
 ): Promise<MacroValue> {
-  return resolveNamespaceIntrospection(expr.server, expr.method, context.broker, {
+  const exists = await resolveNamespaceIntrospection(expr.server, expr.method, context.broker, {
     line: expr.line,
   });
+  if (expr.server !== 'fq' && exists === false && !context.warnings.includes('broker_unavailable')) {
+    context.warnings.push('broker_unavailable');
+  }
+  return exists;
 }
 
 function interpolate(raw: string, env: Env): string {
@@ -905,20 +963,21 @@ function stringifyMacroValue(value: MacroValue): string {
 }
 
 function buildSuccessPayload(context: MacroInvocationContext, result: MacroValue) {
-  return {
+  const payload = {
     task_id: context.taskId,
     result,
-    trace: context.trace,
+    ...(context.traceMode === 'none' || context.trace.length === 0 ? {} : { trace: context.trace }),
     ...(context.log.length === 0 ? {} : { log: context.log }),
     ...(context.progress.length === 0 ? {} : { progress: context.progress }),
     token_total: context.budget.token_total,
     model_calls: context.budget.model_calls,
     external_tool_calls: context.budget.external_tool_calls,
   };
+  return withWarnings(payload, context.warnings);
 }
 
 function pushTrace(context: MacroInvocationContext, step: Omit<TraceStep, 'at'>): void {
-  context.trace.push({ ...step, at: new Date().toISOString() });
+  context.traceBuilder.add(step);
 }
 
 function parseToolResultPayload(result: ToolResult): unknown {
@@ -936,6 +995,26 @@ function isToolResult(value: unknown): value is ToolResult {
     value !== null &&
     Array.isArray((value as { content?: unknown }).content)
   );
+}
+
+function extractTokenUsage(value: unknown): number {
+  if (!isRecord(value)) return 0;
+  const metadata = value['metadata'];
+  if (!isRecord(metadata)) return 0;
+  const tokens = metadata['tokens'];
+  if (isRecord(tokens)) {
+    return toNumber(tokens['input']) + toNumber(tokens['output']);
+  }
+  const cumulative = metadata['trace_cumulative'];
+  if (isRecord(cumulative) && isRecord(cumulative['total_tokens'])) {
+    const total = cumulative['total_tokens'];
+    return toNumber(total['input']) + toNumber(total['output']);
+  }
+  return 0;
+}
+
+function toNumber(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
 function throwExpectedToolResult(result: ToolResult): never {
