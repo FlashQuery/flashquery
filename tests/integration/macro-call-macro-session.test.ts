@@ -6,10 +6,12 @@ import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { MacroTaskRegistry } from '../../src/macro/task-registry.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
-import { registerMacroTools } from '../../src/mcp/tools/macro.js';
+import { registerMacroTools, type RegisterMacroToolsResult } from '../../src/mcp/tools/macro.js';
 import { NullMcpBroker } from '../../src/services/mcp-broker.js';
 import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
 import { TEST_DATABASE_URL, TEST_SUPABASE_KEY, TEST_SUPABASE_URL } from '../helpers/test-env.js';
+
+const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 function testConfig(): FlashQueryConfig {
   return {
@@ -53,6 +55,21 @@ async function connectClient(
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
   return client;
+}
+
+async function connectClientWithNaturalSessionFallback(
+  name: string,
+  taskRegistry: MacroTaskRegistry
+): Promise<{ client: Client; registration: RegisterMacroToolsResult }> {
+  const server = wrapServerWithToolCatalog(new McpServer({ name: `macro-natural-session-${name}`, version: '1.0.0' }));
+  const registration = registerMacroTools(server, testConfig(), {
+    broker: new NullMcpBroker(),
+    taskRegistry,
+  });
+  const client = new Client({ name: `macro-natural-session-client-${name}`, version: '1.0.0' });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  return { client, registration };
 }
 
 describe('call_macro public session scoping integration', () => {
@@ -99,6 +116,50 @@ describe('call_macro public session scoping integration', () => {
       expect(taskRegistry.list('session-b')).toEqual([]);
     } finally {
       await Promise.all([firstClient.close(), secondClient.close()]);
+    }
+  });
+
+  it('T-I-002c uses distinct registration-scoped UUID fallback sessions when SDK extra has no session ID', async () => {
+    const taskRegistry = new MacroTaskRegistry();
+    const first = await connectClientWithNaturalSessionFallback('a', taskRegistry);
+    const second = await connectClientWithNaturalSessionFallback('b', taskRegistry);
+    const config = testConfig();
+
+    try {
+      expect(first.registration.registrationSessionId).toMatch(UUID_V4_PATTERN);
+      expect(second.registration.registrationSessionId).toMatch(UUID_V4_PATTERN);
+      expect(first.registration.registrationSessionId).not.toBe(second.registration.registrationSessionId);
+      expect(first.registration.registrationSessionId).not.toBe(config.instance.id);
+      expect(second.registration.registrationSessionId).not.toBe(config.instance.id);
+      expect(first.registration.registrationSessionId).not.toBe(`host:${config.instance.id}`);
+      expect(second.registration.registrationSessionId).not.toBe(`host:${config.instance.id}`);
+
+      const source = `
+        sleep 500
+        visible = list_tasks
+        exit { task_id: task_id, visible: $visible }
+      `;
+      const firstCall = first.client.callTool({ name: 'call_macro', arguments: { source } });
+      const secondCall = second.client.callTool({ name: 'call_macro', arguments: { source } });
+
+      const [firstResult, secondResult] = await Promise.all([firstCall, secondCall]);
+      const firstPayload = parseToolText(firstResult);
+      const secondPayload = parseToolText(secondResult);
+      const firstValue = firstPayload['result'] as Record<string, unknown>;
+      const secondValue = secondPayload['result'] as Record<string, unknown>;
+      const firstVisible = firstValue['visible'] as Array<Record<string, unknown>>;
+      const secondVisible = secondValue['visible'] as Array<Record<string, unknown>>;
+
+      expect(firstValue['task_id']).toBe(firstPayload['task_id']);
+      expect(secondValue['task_id']).toBe(secondPayload['task_id']);
+      expect(firstVisible.map((task) => task['task_id'])).toEqual([firstPayload['task_id']]);
+      expect(secondVisible.map((task) => task['task_id'])).toEqual([secondPayload['task_id']]);
+      expect(JSON.stringify(firstVisible)).not.toContain(String(secondPayload['task_id']));
+      expect(JSON.stringify(secondVisible)).not.toContain(String(firstPayload['task_id']));
+      expect(taskRegistry.list(first.registration.registrationSessionId)).toEqual([]);
+      expect(taskRegistry.list(second.registration.registrationSessionId)).toEqual([]);
+    } finally {
+      await Promise.all([first.client.close(), second.client.close()]);
     }
   });
 });

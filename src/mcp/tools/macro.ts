@@ -54,6 +54,10 @@ export interface RegisterMacroToolsOptions {
   sessionIdProvider?: (extra: unknown) => string | undefined;
 }
 
+export interface RegisterMacroToolsResult {
+  registrationSessionId: string;
+}
+
 export interface RunMacroSourceResult {
   result: Awaited<ReturnType<typeof evaluateProgram>>;
   registryBuild: {
@@ -168,7 +172,7 @@ export function registerMacroTools(
   server: McpServer,
   config: FlashQueryConfig,
   options: RegisterMacroToolsOptions = {}
-): void {
+): RegisterMacroToolsResult {
   const broker = options.broker ?? new NullMcpBroker();
   const taskRegistry = options.taskRegistry ?? new MacroTaskRegistry();
   const registrationSessionId = options.sessionId ?? randomUUID();
@@ -231,6 +235,8 @@ export function registerMacroTools(
       }
     }
   );
+
+  return { registrationSessionId };
 }
 
 function transitionTaskFromResult(

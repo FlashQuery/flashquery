@@ -116,6 +116,8 @@ None.
 
 No blocking gaps found. The phase goal is achieved in the codebase: task lifecycle, immediate terminal cleanup, session scoping, cooperative cancellation safe points, concurrency isolation, and directed cancellation coverage are implemented and wired.
 
+Follow-up coverage note: Phase 136 deliberately reframed T-U-184 to the REQ-050 cancellation-mid-tool contract. The original in-flight-tool timeout scenario described by earlier T-U-184 wording is REQ-060 budget behavior and is now tracked for Phase 137 as T-U-211a in the macro language test plan, with a matching carry-over reminder in the Phase 137 gap-analysis section.
+
 ---
 
 _Verified: 2026-05-14T22:54:44Z_
