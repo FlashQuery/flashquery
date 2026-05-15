@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: executing
-stopped_at: Completed 137-05-PLAN.md
-last_updated: "2026-05-15T04:14:39Z"
+status: verifying
+stopped_at: Completed 138-04-PLAN.md
+last_updated: "2026-05-15T05:10:22.115Z"
 last_activity: 2026-05-15
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 36
-  completed_plans: 35
-  percent: 97
+  completed_plans: 36
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 
 Phase: 138 (handler-source-resolution-scenario-closure) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-15
 
 ## Performance Metrics
@@ -123,6 +123,7 @@ Last activity: 2026-05-15
 | Phase 138 P01 | 5min | 3 tasks | 3 files |
 | Phase 138 P02 | 8min | 3 tasks | 6 files |
 | Phase 138 P03 | 13m09s | 2 tasks | 5 files |
+| Phase 138 P04 | 51m | 3 tasks | 35 files |
 
 ## Decisions
 
@@ -223,6 +224,8 @@ Last activity: 2026-05-15
 - [Phase 138]: 138-02 skipped T-I-006 because the inherited local document resolver has no per-caller ACL path for permission_denied.
 - [Phase 138]: 138-03 keeps macro write-lock behavior inherited from existing tool handlers; no macro-layer acquireLock calls were added.
 - [Phase 138]: 138-03 real transport coverage uses a minimal no-LLM HTTP fixture so inline call_macro execution does not require Supabase template binding setup.
+- [Phase 138]: Used positional scenario runner filters because --filter is not supported by the directed or YAML runners. — Scenario runner compatibility; positional filters preserve the intended macro verification scope.
+- [Phase 138]: Executed migrated macro POC examples as runMacroSource fixtures with deterministic native and broker stubs. — Deterministic stubs keep fixture validation local, fast, and independent of external brokers.
 
 ## Accumulated Context
 
@@ -336,8 +339,8 @@ Last activity: 2026-05-15
 
 ## Session Continuity
 
-Last session: 2026-05-15T04:14:39Z
-Stopped at: Completed 138-03-PLAN.md
+Last session: 2026-05-15T05:10:02.316Z
+Stopped at: Completed 138-04-PLAN.md
 Resume: None
 
 ## Deferred Items

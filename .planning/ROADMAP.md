@@ -241,13 +241,13 @@ Plans:
 
 **Requirements:** MACRO-SRC-01, MACRO-SRC-02, MACRO-SRC-03, MACRO-SRC-04, MACRO-INT-02
 
-**Plans:** 3/4 plans complete
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 138-01-PLAN.md — Add handler schema and invalid source selector contract coverage.
 - [x] 138-02-PLAN.md — Implement source_ref document resolution and source_ref integration coverage.
 - [x] 138-03-PLAN.md — Add macro write-lock inheritance and real MCP transport coverage.
-- [ ] 138-04-PLAN.md — Close scenario matrices and migrated POC fixture validation.
+- [x] 138-04-PLAN.md — Close scenario matrices and migrated POC fixture validation.
 
 **Success criteria:**
 1. Inline `source` and vault `source_ref` requests execute end-to-end through the public MCP handler.
