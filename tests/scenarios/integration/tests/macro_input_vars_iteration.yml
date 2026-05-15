@@ -1,0 +1,44 @@
+name: macro_input_vars_iteration
+description: >
+  T-Y-003: call_macro accepts list-typed input_vars, iterates zero-to-N values,
+  and returns the expected count and last value from the production engine.
+coverage:
+  - IS-14
+
+steps:
+  - label: "call_macro iterates over three input_vars values"
+    assert:
+      op: call_macro
+      args:
+        input_vars:
+          items: ["alpha-${run.id}", "beta-${run.id}", "gamma-${run.id}"]
+        source: |
+          items = input_var "items"
+          seen = 0
+          last = null
+          for item in $items do
+            seen = add $seen 1
+            last = $item
+          done
+          exit { seen: $seen, last: $last }
+      expect_json_equals:
+        path: result.seen
+        value: 3
+      expect_contains: "gamma-${run.id}"
+
+  - label: "call_macro handles zero input_vars values"
+    assert:
+      op: call_macro
+      args:
+        input_vars:
+          items: []
+        source: |
+          items = input_var "items"
+          seen = 0
+          for item in $items do
+            seen = add $seen 1
+          done
+          exit { seen: $seen }
+      expect_json_equals:
+        path: result.seen
+        value: 0

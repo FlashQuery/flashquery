@@ -1,0 +1,65 @@
+name: macro_call_model_branch_mutate
+description: >
+  T-Y-002: call_macro calls fq.call_model with response_format, branches on
+  the returned model response, and mutates a document when a response exists.
+coverage:
+  - IS-10
+deps: [llm]
+server_modes: [managed]
+
+extra_config:
+  host_mcp_tools:
+    tools:
+      - call_macro
+      - call_model
+      - write_document
+      - get_document
+      - archive_document
+
+steps:
+  - label: "Create macro model branch target"
+    action: vault.write
+    name: macro_model_doc
+    path: "macro/model-branch-${run.id}.md"
+    title: "Macro Model Branch ${run.id}"
+    content: "Initial macro model branch body ${run.id}."
+    tags: [macro-model-branch]
+
+  - label: "call_macro uses response_format verdict to branch and mutate"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          verdict = fq.call_model({
+            resolver: "model",
+            name: "fast",
+            messages: [
+              {
+                role: "user",
+            content: "Return JSON only: {\"ready\":\"yes\",\"reason\":\"phase-138\"}."
+              }
+            ],
+            parameters: {
+              response_format: { type: "json_object" }
+            }
+          })
+          if $verdict.response then
+            fq.write_document({
+              mode: "update",
+              identifier: "${macro_model_doc.path}",
+              content: "Macro model branch updated ${run.id}: $verdict.response"
+            })
+            exit { mutated: "yes", response: $verdict.response }
+          else
+            exit { mutated: "no", response: null }
+          fi
+      expect_json_equals:
+        path: result.mutated
+        value: "yes"
+
+  - label: "Read-back proves model branch mutated the document"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${macro_model_doc.path}"
+      expect_contains: "Macro model branch updated ${run.id}"

@@ -1,0 +1,64 @@
+name: macro_concurrent_write_lock
+description: >
+  T-Y-004: call_macro write workflows run with locking enabled and both
+  document writes complete through the existing write-lock layer.
+coverage:
+  - IA-09
+deps: [locking]
+server_modes: [managed]
+
+extra_config:
+  locking:
+    enabled: true
+  host_mcp_tools:
+    tools:
+      - call_macro
+      - write_document
+      - get_document
+
+steps:
+  - label: "First macro write succeeds with document locking enabled"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          first = fq.write_document({
+            mode: "create",
+            path: "macro/lock-one-${run.id}.md",
+            title: "Macro Lock One ${run.id}",
+            content: "Macro lock one ${run.id}"
+          })
+          exit { path: $first.path }
+      expect_json_equals:
+        path: result.path
+        value: "macro/lock-one-${run.id}.md"
+
+  - label: "Second macro write succeeds through the same lock layer"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          second = fq.write_document({
+            mode: "create",
+            path: "macro/lock-two-${run.id}.md",
+            title: "Macro Lock Two ${run.id}",
+            content: "Macro lock two ${run.id}"
+          })
+          exit { path: $second.path }
+      expect_json_equals:
+        path: result.path
+        value: "macro/lock-two-${run.id}.md"
+
+  - label: "First macro-written document is readable"
+    assert:
+      op: get_document
+      args:
+        identifiers: "macro/lock-one-${run.id}.md"
+      expect_contains: "Macro lock one ${run.id}"
+
+  - label: "Second macro-written document is readable"
+    assert:
+      op: get_document
+      args:
+        identifiers: "macro/lock-two-${run.id}.md"
+      expect_contains: "Macro lock two ${run.id}"

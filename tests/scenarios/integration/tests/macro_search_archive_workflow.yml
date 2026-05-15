@@ -1,0 +1,48 @@
+name: macro_search_archive_workflow
+description: >
+  T-Y-001: call_macro searches for tagged documents, archives the matching
+  document through the native registry, and the archived document disappears
+  from active search results.
+coverage:
+  - IS-13
+deps: [embeddings, git]
+
+steps:
+  - label: "Create searchable macro archive target"
+    action: vault.write
+    name: macro_archive_doc
+    path: "macro/search-archive-${run.id}.md"
+    title: "Macro Search Archive ${run.id}"
+    content: "Macro archive target marker ${run.id}"
+    tags: [macro-search-archive, "macro-search-archive-${run.id}"]
+
+  - label: "call_macro searches and archives each matching document"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          found = fq.search({
+            query: "Macro Search Archive ${run.id}",
+            mode: "filesystem",
+            entity_types: ["documents"],
+            limit: 5
+          })
+          archived = 0
+          for doc in $found.results do
+            fq.archive_document({ identifiers: $doc.path })
+            archived = add $archived 1
+          done
+          exit { archived: $archived, total: $found.total }
+      expect_json_equals:
+        path: result.archived
+        value: 1
+
+  - label: "Archived macro target is absent from active search"
+    assert:
+      op: search
+      args:
+        query: "Macro Search Archive ${run.id}"
+        mode: filesystem
+        entity_types: [documents]
+        limit: 5
+      expect_empty: true
