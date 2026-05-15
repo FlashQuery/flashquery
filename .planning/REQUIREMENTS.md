@@ -91,7 +91,7 @@
 ### Concurrency, Budgets, And Integration
 
 - [x] **MACRO-INT-01**: Concurrent macro invocations across sessions do not leak state.
-- [ ] **MACRO-INT-02**: Macro-executed writes inherit FlashQuery's existing write-lock table behavior.
+- [x] **MACRO-INT-02**: Macro-executed writes inherit FlashQuery's existing write-lock table behavior.
 - [x] **MACRO-INT-03**: `archive_document` acquires the standard document write lock.
 - [x] **MACRO-INT-04**: Budget enforcement covers total tokens, model calls, external tool calls, and timeout.
 - [x] **MACRO-INT-05**: `call_macro` is registered in the MCP server and canonical tool metadata.
@@ -138,7 +138,7 @@
 | MACRO-DISP-01, MACRO-DISP-02, MACRO-DISP-03, MACRO-DISP-04, MACRO-DISP-05, MACRO-DISP-06, MACRO-DISP-07 | Phase 135 | Complete |
 | MACRO-OBS-04, MACRO-OBS-05, MACRO-OBS-06, MACRO-INT-01 | Phase 136 | Pending |
 | MACRO-OBS-02, MACRO-OBS-03, MACRO-RESP-05, MACRO-INT-04, MACRO-INT-07 | Phase 137 | Pending |
-| MACRO-SRC-01, MACRO-SRC-02, MACRO-SRC-03, MACRO-SRC-04, MACRO-INT-02 | Phase 138 | Pending |
+| MACRO-SRC-01, MACRO-SRC-02, MACRO-SRC-03, MACRO-SRC-04, MACRO-INT-02 | Phase 138 | In Progress |
 
 **Coverage:**
 - v3.4 requirements: 63 total

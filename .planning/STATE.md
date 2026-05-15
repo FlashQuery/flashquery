@@ -4,14 +4,14 @@ milestone: v3.4
 milestone_name: macro-support
 status: executing
 stopped_at: Completed 137-05-PLAN.md
-last_updated: "2026-05-15T03:59:50.328Z"
+last_updated: "2026-05-15T04:14:39Z"
 last_activity: 2026-05-15
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 36
-  completed_plans: 34
-  percent: 94
+  completed_plans: 35
+  percent: 97
 ---
 
 # FlashQuery Core — State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-14)
 ## Current Position
 
 Phase: 138 (handler-source-resolution-scenario-closure) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-15
 
@@ -122,6 +122,7 @@ Last activity: 2026-05-15
 | Phase 136 P04 | 14m37s | 3 tasks | 9 files |
 | Phase 138 P01 | 5min | 3 tasks | 3 files |
 | Phase 138 P02 | 8min | 3 tasks | 6 files |
+| Phase 138 P03 | 13m09s | 2 tasks | 5 files |
 
 ## Decisions
 
@@ -220,6 +221,8 @@ Last activity: 2026-05-15
 - [Phase 138]: 138-01 validates invalid source/source_ref combinations before macro parse/evaluation while leaving valid source_ref document resolution to Plan 02.
 - [Phase 138]: 138-02 resolved source_ref through resolveDocumentIdentifier with lazy Supabase client acquisition to preserve inline handler independence.
 - [Phase 138]: 138-02 skipped T-I-006 because the inherited local document resolver has no per-caller ACL path for permission_denied.
+- [Phase 138]: 138-03 keeps macro write-lock behavior inherited from existing tool handlers; no macro-layer acquireLock calls were added.
+- [Phase 138]: 138-03 real transport coverage uses a minimal no-LLM HTTP fixture so inline call_macro execution does not require Supabase template binding setup.
 
 ## Accumulated Context
 
@@ -333,8 +336,8 @@ Last activity: 2026-05-15
 
 ## Session Continuity
 
-Last session: 2026-05-15T03:59:18.279Z
-Stopped at: Completed 137-05-PLAN.md
+Last session: 2026-05-15T04:14:39Z
+Stopped at: Completed 138-03-PLAN.md
 Resume: None
 
 ## Deferred Items
