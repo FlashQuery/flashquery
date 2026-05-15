@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { MacroTaskRegistry } from '../../src/macro/task-registry.js';
 import { NullMcpBroker } from '../../src/services/mcp-broker.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
-import { callMacroInputSchema, registerMacroTools, runMacroSource } from '../../src/mcp/tools/macro.js';
+import {
+  callMacroInputSchema,
+  registerMacroTools,
+  resolveMacroSourceForRequest,
+  runMacroSource,
+} from '../../src/mcp/tools/macro.js';
 import { parseToolPayload } from './macro-test-helpers.js';
 
 function config(): FlashQueryConfig {
@@ -22,6 +30,17 @@ function registeredCallMacroHandler() {
   const handler = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro')?.handler;
   expect(handler).toBeDefined();
   return handler!;
+}
+
+function mockSupabaseClient() {
+  const query = {
+    select: () => query,
+    eq: () => query,
+    single: async () => ({ data: null, error: null }),
+  };
+  return {
+    from: () => query,
+  };
 }
 
 describe('macro handler request schema', () => {
@@ -158,6 +177,93 @@ describe('macro handler source selector validation', () => {
 });
 
 describe('macro handler progress token threading', () => {
+  it('T-U-224 resolves source_ref into the same dry-run and task execution path as inline source', async () => {
+    const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-macro-handler-'));
+    try {
+      const macroSource = 'status "resolved-source-ref"\nexit "ok"';
+      await writeFile(
+        join(vaultPath, 'library.md'),
+        [
+          '---',
+          'fq_status: active',
+          '---',
+          '',
+          '# Macro Library',
+          '',
+          '```fqm name=selected',
+          macroSource,
+          '```',
+          '',
+        ].join('\n')
+      );
+
+      const sourceRef = 'library.md::selected';
+      const resolved = await resolveMacroSourceForRequest({
+        source_ref: sourceRef,
+        config: {
+          ...config(),
+          instance: {
+            ...config().instance,
+            vault: { path: vaultPath, markdownExtensions: ['.md'] },
+          },
+        },
+        supabase: mockSupabaseClient() as never,
+      });
+      expect(resolved).toMatchObject({ ok: true, source: macroSource, identifier: sourceRef });
+      if (!resolved.ok) throw new Error('source_ref did not resolve');
+
+      const common = {
+        config: config(),
+        catalog: [],
+        broker: new NullMcpBroker(),
+        nativeDispatchContext: {
+          signal: new AbortController().signal,
+          instanceId: 'macro-handler-test',
+          logContext: {},
+        },
+        taskId: 'task-source-ref',
+      };
+
+      const sourceRefDryRun = await runMacroSource({
+        ...common,
+        source: resolved.source,
+        sourceIdentifier: resolved.identifier,
+        dry_run: true,
+      });
+      const inlineDryRun = await runMacroSource({
+        ...common,
+        source: macroSource,
+        dry_run: true,
+      });
+
+      expect(parseToolPayload(sourceRefDryRun.result)).toEqual(parseToolPayload(inlineDryRun.result));
+
+      const transitions: unknown[] = [];
+      const registry = new MacroTaskRegistry();
+      const executed = await runMacroSource({
+        ...common,
+        source: resolved.source,
+        sourceIdentifier: resolved.identifier,
+        taskRegistry: registry,
+        onTaskTransition: (record) => transitions.push(record),
+      });
+
+      expect(parseToolPayload(executed.result)).toMatchObject({ task_id: 'task-source-ref', result: 'ok' });
+      expect(transitions[0]).toMatchObject({
+        task_id: 'task-source-ref',
+        status: 'working',
+        source_preview: sourceRef,
+      });
+      expect(transitions.at(-1)).toMatchObject({
+        task_id: 'task-source-ref',
+        status: 'completed',
+      });
+      expect(registry.list()).toEqual([]);
+    } finally {
+      await rm(vaultPath, { recursive: true, force: true });
+    }
+  });
+
   it('T-U-233 threads _meta.progressToken-style values into the engine notification path', async () => {
     const notifications: unknown[] = [];
     const result = await runMacroSource({
