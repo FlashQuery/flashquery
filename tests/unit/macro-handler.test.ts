@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { MacroTaskRegistry } from '../../src/macro/task-registry.js';
 import { NullMcpBroker } from '../../src/services/mcp-broker.js';
-import { runMacroSource } from '../../src/mcp/tools/macro.js';
+import { callMacroInputSchema, runMacroSource } from '../../src/mcp/tools/macro.js';
 import { parseToolPayload } from './macro-test-helpers.js';
 
 function config(): FlashQueryConfig {
@@ -13,6 +13,89 @@ function config(): FlashQueryConfig {
     macro: { defaultTimeoutMs: 60000 },
   } as FlashQueryConfig;
 }
+
+describe('macro handler request schema', () => {
+  it('T-U-216 accepts documented production fields and strips deferred task-spec fields', () => {
+    const parsed = callMacroInputSchema.safeParse({
+      source: 'exit "ok"',
+      source_ref: 'Macros/lib.md::add',
+      input_vars: { name: 'Ada' },
+      budget: {
+        max_total_tokens: 100,
+        max_model_calls: 2,
+        max_external_tool_calls: 3,
+        timeout_ms: 1000,
+      },
+      dry_run: true,
+      trace: 'full',
+      progress: 'silent',
+      task: 'deferred',
+      taskHint: 'later',
+      pollInterval: 100,
+      ttl: 5000,
+    });
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) {
+      throw new Error(parsed.error.message);
+    }
+    expect(parsed.data).toEqual({
+      source: 'exit "ok"',
+      source_ref: 'Macros/lib.md::add',
+      input_vars: { name: 'Ada' },
+      budget: {
+        max_total_tokens: 100,
+        max_model_calls: 2,
+        max_external_tool_calls: 3,
+        timeout_ms: 1000,
+      },
+      dry_run: true,
+      trace: 'full',
+      progress: 'silent',
+    });
+    expect(parsed.data).not.toHaveProperty('task');
+    expect(parsed.data).not.toHaveProperty('taskHint');
+    expect(parsed.data).not.toHaveProperty('pollInterval');
+    expect(parsed.data).not.toHaveProperty('ttl');
+  });
+
+  it('T-U-217 preserves documented defaults for omitted trace, progress, dry_run, and timeout_ms', async () => {
+    const notifications: unknown[] = [];
+    const result = await runMacroSource({
+      source: 'status "milestone"\nexit "ok"',
+      progressToken: 'default-progress-token',
+      progressNotificationSink: async (entry) => notifications.push(entry),
+      config: config(),
+      catalog: [],
+      broker: new NullMcpBroker(),
+      nativeDispatchContext: { signal: new AbortController().signal, instanceId: 'macro-handler-test', logContext: {} },
+    });
+
+    const payload = parseToolPayload(result.result);
+    expect(payload).toMatchObject({ result: 'ok' });
+    expect(payload['trace']).toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: 'progress', message: 'milestone' })])
+    );
+    expect(notifications).toEqual([
+      expect.objectContaining({ progressToken: 'default-progress-token', message: 'milestone' }),
+    ]);
+
+    const timedOut = await runMacroSource({
+      source: 'sleep 20',
+      config: {
+        ...config(),
+        macro: { defaultTimeoutMs: 1 },
+      },
+      catalog: [],
+      broker: new NullMcpBroker(),
+      nativeDispatchContext: { signal: new AbortController().signal, instanceId: 'macro-handler-test', logContext: {} },
+    });
+    expect(parseToolPayload(timedOut.result)).toMatchObject({
+      error: 'timeout',
+      details: { timeout_ms: 1 },
+    });
+  });
+});
 
 describe('macro handler progress token threading', () => {
   it('T-U-233 threads _meta.progressToken-style values into the engine notification path', async () => {
