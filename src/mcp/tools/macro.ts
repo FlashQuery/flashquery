@@ -434,23 +434,23 @@ export function registerMacroTools(
       inputSchema: callMacroInputSchema.shape,
     },
     async (params, extra: RequestHandlerExtra<ServerRequest, ServerNotification>) => {
-      if (getIsShuttingDown()) {
-        return jsonRuntimeError('Server is shutting down; new requests cannot be processed.');
-      }
+      try {
+        if (getIsShuttingDown()) {
+          return jsonRuntimeError('Server is shutting down; new requests cannot be processed.');
+        }
 
-      const requestSource = typeof params.source === 'string' ? params.source : undefined;
-      const requestSourceRef = typeof params.source_ref === 'string' ? params.source_ref : undefined;
-      const resolvedSource = await resolveMacroSourceForRequest({
-        source: requestSource,
-        source_ref: requestSourceRef,
-        config,
-        getSupabase: () => supabaseManager.getClient(),
-      });
-      if (!resolvedSource.ok) {
-        return resolvedSource.result;
-      }
+        const requestSource = typeof params.source === 'string' ? params.source : undefined;
+        const requestSourceRef = typeof params.source_ref === 'string' ? params.source_ref : undefined;
+        const resolvedSource = await resolveMacroSourceForRequest({
+          source: requestSource,
+          source_ref: requestSourceRef,
+          config,
+          getSupabase: () => supabaseManager.getClient(),
+        });
+        if (!resolvedSource.ok) {
+          return resolvedSource.result;
+        }
 
-      {
         const callerContext: MacroCallerContext = { origin: 'host' };
         const { getNativeToolCatalog } = await import('../tool-catalog.js');
         const catalog = getNativeToolCatalog(server);
@@ -486,6 +486,12 @@ export function registerMacroTools(
           },
         });
         return result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return jsonRuntimeError({
+          error: 'runtime_error',
+          message: `Error running call_macro: ${message}`,
+        });
       }
     }
   );

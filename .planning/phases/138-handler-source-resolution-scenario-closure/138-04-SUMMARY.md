@@ -29,7 +29,7 @@ key-files:
     - tests/scenarios/integration/tests/macro_search_archive_workflow.yml
     - tests/scenarios/integration/tests/macro_call_model_branch_mutate.yml
     - tests/scenarios/integration/tests/macro_input_vars_iteration.yml
-    - tests/scenarios/integration/tests/macro_concurrent_write_lock.yml
+    - tests/scenarios/integration/tests/macro_sequential_write_lock.yml
     - tests/unit/macro-poc-fixtures.test.ts
     - tests/fixtures/macro/poc-examples/
   modified:
@@ -96,7 +96,7 @@ Directed scenario runs repeatedly emitted non-fatal `clean_test_tables.py` timeo
 - `tests/scenarios/integration/tests/macro_search_archive_workflow.yml` - T-Y-001 search/archive workflow.
 - `tests/scenarios/integration/tests/macro_call_model_branch_mutate.yml` - T-Y-002 call_model branch/mutate workflow.
 - `tests/scenarios/integration/tests/macro_input_vars_iteration.yml` - T-Y-003 input_vars iteration workflow.
-- `tests/scenarios/integration/tests/macro_concurrent_write_lock.yml` - T-Y-004 write-lock workflow.
+- `tests/scenarios/integration/tests/macro_sequential_write_lock.yml` - T-Y-004 sequential write-lock workflow; parallel contention is covered by `macro-write-lock.integration.test.ts`.
 - `tests/scenarios/integration/INTEGRATION_COVERAGE.md` - Added IS-10, IS-13, IS-14, and IA-09 rows with substitution note.
 - `tests/unit/macro-poc-fixtures.test.ts` - Unit execution suite for migrated POC fixtures.
 - `tests/fixtures/macro/poc-examples/` - 17 migrated `.fqm` fixtures, README, and sample vault data.

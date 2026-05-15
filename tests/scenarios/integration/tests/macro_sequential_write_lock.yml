@@ -1,7 +1,8 @@
-name: macro_concurrent_write_lock
+name: macro_sequential_write_lock
 description: >
-  T-Y-004: call_macro write workflows run with locking enabled and both
-  document writes complete through the existing write-lock layer.
+  T-Y-004: call_macro write workflows run sequentially with locking enabled and
+  both document writes complete through the existing write-lock layer. Parallel
+  contention is covered by macro-write-lock.integration.test.ts.
 coverage:
   - IA-09
 deps: [locking]

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -301,13 +300,90 @@ describe('macro handler progress token threading', () => {
     expect(notifications).toEqual([]);
   });
 
-  it('preserves RegisterMacroToolsResult registrationSessionId fallback contract', () => {
-    const source = readFileSync('src/mcp/tools/macro.ts', 'utf8');
-    expect(source).toContain('RegisterMacroToolsResult');
-    expect(source).toContain('registrationSessionId');
-    expect(source).toContain('return { registrationSessionId }');
-    expect(source).toContain('_meta?.progressToken');
-    expect(source).toContain('notifications/progress');
-    expect(source).toContain('sendNotification');
+  it('returns a runtime envelope instead of rejecting when handler internals throw', async () => {
+    const server = wrapServerWithToolCatalog(new McpServer({ name: 'macro-handler-boundary', version: '1.0.0' }));
+    registerMacroTools(server, {
+      ...config(),
+      llm: { providers: [], models: [], purposes: [] },
+    } as FlashQueryConfig);
+    const handler = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro')?.handler;
+    expect(handler).toBeDefined();
+
+    const result = await handler!(
+      { source: 'exit "unreachable"' },
+      { signal: new AbortController().signal } as never
+    );
+
+    expect(result.isError).toBe(true);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'runtime_error',
+      message: expect.stringContaining('Error running call_macro:'),
+    });
+  });
+
+  it('preserves RegisterMacroToolsResult session fallback and progress notification behavior', async () => {
+    const server = wrapServerWithToolCatalog(new McpServer({ name: 'macro-handler-session-fallback', version: '1.0.0' }));
+    const taskRegistry = new MacroTaskRegistry();
+    const fallbackSessionId = 'registration-session';
+    const providerSessionId = 'provider-session';
+    taskRegistry.create({ taskId: 'fallback-visible', sessionId: fallbackSessionId, source: 'sleep 1000' });
+    taskRegistry.create({ taskId: 'provider-hidden', sessionId: providerSessionId, source: 'sleep 1000' });
+    const registration = registerMacroTools(server, config(), {
+      sessionId: fallbackSessionId,
+      taskRegistry,
+    });
+    const handler = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro')?.handler;
+    expect(handler).toBeDefined();
+
+    const notifications: unknown[] = [];
+    const result = await handler!(
+      { source: 'status "handler-progress"\nvisible = list_tasks\nexit { visible: $visible }', progress: 'full' },
+      {
+        _meta: { progressToken: 'handler-token' },
+        sendNotification: async (notification: unknown) => notifications.push(notification),
+        signal: new AbortController().signal,
+      } as never
+    );
+
+    const payload = parseToolPayload(result);
+    const value = payload['result'] as Record<string, unknown>;
+    const visible = value['visible'] as Array<Record<string, unknown>>;
+    expect(registration.registrationSessionId).toBe(fallbackSessionId);
+    expect(visible.map((task) => task['task_id'])).toContain('fallback-visible');
+    expect(visible.map((task) => task['task_id'])).not.toContain('provider-hidden');
+    expect(notifications).toEqual([
+      expect.objectContaining({
+        method: 'notifications/progress',
+        params: expect.objectContaining({
+          progressToken: 'handler-token',
+          message: 'handler-progress',
+        }),
+      }),
+    ]);
+  });
+
+  it('sessionIdProvider overrides the registration session fallback', async () => {
+    const server = wrapServerWithToolCatalog(new McpServer({ name: 'macro-handler-session-provider', version: '1.0.0' }));
+    const taskRegistry = new MacroTaskRegistry();
+    taskRegistry.create({ taskId: 'fallback-hidden', sessionId: 'registration-session', source: 'sleep 1000' });
+    taskRegistry.create({ taskId: 'provider-visible', sessionId: 'provider-session', source: 'sleep 1000' });
+    registerMacroTools(server, config(), {
+      sessionId: 'registration-session',
+      sessionIdProvider: () => 'provider-session',
+      taskRegistry,
+    });
+    const handler = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro')?.handler;
+    expect(handler).toBeDefined();
+
+    const result = await handler!(
+      { source: 'visible = list_tasks\nexit { visible: $visible }' },
+      { signal: new AbortController().signal } as never
+    );
+
+    const payload = parseToolPayload(result);
+    const value = payload['result'] as Record<string, unknown>;
+    const visible = value['visible'] as Array<Record<string, unknown>>;
+    expect(visible.map((task) => task['task_id'])).toContain('provider-visible');
+    expect(visible.map((task) => task['task_id'])).not.toContain('fallback-hidden');
   });
 });
