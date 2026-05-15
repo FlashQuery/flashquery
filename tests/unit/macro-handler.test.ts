@@ -300,6 +300,37 @@ describe('macro handler progress token threading', () => {
     expect(notifications).toEqual([]);
   });
 
+  it('fails and clears a registered task when post-registration execution throws unexpectedly', async () => {
+    const taskRegistry = new MacroTaskRegistry();
+    const transitions: unknown[] = [];
+    const result = await runMacroSource({
+      source: 'exit "unreachable"',
+      taskId: 'task-transition-throws',
+      sessionId: 'session-transition-throws',
+      taskRegistry,
+      onTaskTransition: (record) => {
+        transitions.push(record);
+        if (record.status === 'working') {
+          throw new Error('transition listener unavailable');
+        }
+      },
+      config: config(),
+      catalog: [],
+      broker: new NullMcpBroker(),
+      nativeDispatchContext: { signal: new AbortController().signal, instanceId: 'macro-handler-test', logContext: {} },
+    });
+
+    expect(result.result.isError).toBe(true);
+    expect(parseToolPayload(result.result)).toMatchObject({
+      error: 'runtime_error',
+      message: expect.stringContaining('transition listener unavailable'),
+    });
+    expect(transitions).toEqual([
+      expect.objectContaining({ task_id: 'task-transition-throws', status: 'working' }),
+    ]);
+    expect(taskRegistry.list('session-transition-throws')).toEqual([]);
+  });
+
   it('returns a runtime envelope instead of rejecting when handler internals throw', async () => {
     const server = wrapServerWithToolCatalog(new McpServer({ name: 'macro-handler-boundary', version: '1.0.0' }));
     registerMacroTools(server, {

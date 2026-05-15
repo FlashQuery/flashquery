@@ -340,45 +340,59 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
     sessionId: options.sessionId,
     source: options.sourceIdentifier ?? options.source,
   });
-  options.onTaskTransition?.(task);
-
-  const result = await evaluateProgram(parseResult.program, {
-    inputVars,
-    taskId: task.task_id,
-    sessionId: options.sessionId,
-    vaultRoot: options.config.instance.vault.path,
-    broker: options.broker,
-    toolRegistry: toolRegistry.registry,
-    allowedToolNames: toolRegistry.allowedToolNames,
-    templateToolNames: toolRegistry.templateToolNames,
-    hardExcludedReasons: toolRegistry.hardExcludedReasons,
+  const registryBuild = {
     callerContext,
-    traceMode: options.trace ?? 'summary',
-    progressMode: options.progress ?? 'milestones',
-    progressToken: options.progressToken,
-    progressNotificationSink: options.progressNotificationSink,
-    budgetLimits: {
-      ...(options.budget ?? {}),
-      timeout_ms: options.budget?.timeout_ms ?? options.config.macro?.defaultTimeoutMs ?? 60000,
-    },
-    listTasks: (context) => taskRegistry.list(context.sessionId),
-    checkCancelled: (where) => {
-      if (taskRegistry.isCancellationRequested(task.task_id)) {
-        throw new MacroCancellationError(task.task_id, where);
-      }
-    },
-  });
-  transitionTaskFromResult(taskRegistry, task, result, options.onTaskTransition);
-
-  return {
-    result,
-    registryBuild: {
-      callerContext,
-      allowlistSource: callerContext.origin === 'host' ? 'resolveHostToolExposure' : 'assembleNativeToolRegistry',
-      allowedToolNames: toolRegistry.allowedToolNames,
-      toolRegistry,
-    },
+    allowlistSource: callerContext.origin === 'host' ? 'resolveHostToolExposure' as const : 'assembleNativeToolRegistry' as const,
+    allowedToolNames: toolRegistry.allowedToolNames,
+    toolRegistry,
   };
+
+  try {
+    options.onTaskTransition?.(task);
+    const result = await evaluateProgram(parseResult.program, {
+      inputVars,
+      taskId: task.task_id,
+      sessionId: options.sessionId,
+      vaultRoot: options.config.instance.vault.path,
+      broker: options.broker,
+      toolRegistry: toolRegistry.registry,
+      allowedToolNames: toolRegistry.allowedToolNames,
+      templateToolNames: toolRegistry.templateToolNames,
+      hardExcludedReasons: toolRegistry.hardExcludedReasons,
+      callerContext,
+      traceMode: options.trace ?? 'summary',
+      progressMode: options.progress ?? 'milestones',
+      progressToken: options.progressToken,
+      progressNotificationSink: options.progressNotificationSink,
+      budgetLimits: {
+        ...(options.budget ?? {}),
+        timeout_ms: options.budget?.timeout_ms ?? options.config.macro?.defaultTimeoutMs ?? 60000,
+      },
+      listTasks: (context) => taskRegistry.list(context.sessionId),
+      checkCancelled: (where) => {
+        if (taskRegistry.isCancellationRequested(task.task_id)) {
+          throw new MacroCancellationError(task.task_id, where);
+        }
+      },
+    });
+    try {
+      transitionTaskFromResult(taskRegistry, task, result, options.onTaskTransition);
+    } catch (error) {
+      taskRegistry.fail(task.task_id);
+      throw error;
+    }
+    return { result, registryBuild };
+  } catch (error) {
+    taskRegistry.fail(task.task_id);
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      result: jsonRuntimeError({
+        error: 'runtime_error',
+        message: `Error running macro: ${message}`,
+      }),
+      registryBuild,
+    };
+  }
 }
 
 function createNativeDispatchContext(config: FlashQueryConfig, signal?: AbortSignal): NativeToolDispatchContext {
