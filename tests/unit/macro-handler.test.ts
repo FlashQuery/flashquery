@@ -43,8 +43,8 @@ function mockSupabaseClient() {
 }
 
 describe('macro handler request schema', () => {
-  it('T-U-216 accepts documented production fields and strips deferred task-spec fields', () => {
-    const parsed = callMacroInputSchema.safeParse({
+  it('T-U-216 accepts documented production fields and rejects deferred task-spec fields', () => {
+    const documented = callMacroInputSchema.safeParse({
       source: 'exit "ok"',
       source_ref: 'Macros/lib.md::add',
       input_vars: { name: 'Ada' },
@@ -57,34 +57,47 @@ describe('macro handler request schema', () => {
       dry_run: true,
       trace: 'full',
       progress: 'silent',
+    });
+
+    expect(documented.success).toBe(true);
+    if (!documented.success) {
+      throw new Error(documented.error.message);
+    }
+    expect(documented.data).toEqual({
+      source: 'exit "ok"',
+      source_ref: 'Macros/lib.md::add',
+      input_vars: { name: 'Ada' },
+      budget: {
+        max_total_tokens: 100,
+        max_model_calls: 2,
+        max_external_tool_calls: 3,
+        timeout_ms: 1000,
+      },
+      dry_run: true,
+      trace: 'full',
+      progress: 'silent',
+    });
+
+    const parsed = callMacroInputSchema.safeParse({
+      source: 'exit "ok"',
       task: 'deferred',
       taskHint: 'later',
       pollInterval: 100,
       ttl: 5000,
     });
 
-    expect(parsed.success).toBe(true);
-    if (!parsed.success) {
-      throw new Error(parsed.error.message);
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      throw new Error('deferred task-spec fields were accepted');
     }
-    expect(parsed.data).toEqual({
-      source: 'exit "ok"',
-      source_ref: 'Macros/lib.md::add',
-      input_vars: { name: 'Ada' },
-      budget: {
-        max_total_tokens: 100,
-        max_model_calls: 2,
-        max_external_tool_calls: 3,
-        timeout_ms: 1000,
-      },
-      dry_run: true,
-      trace: 'full',
-      progress: 'silent',
-    });
-    expect(parsed.data).not.toHaveProperty('task');
-    expect(parsed.data).not.toHaveProperty('taskHint');
-    expect(parsed.data).not.toHaveProperty('pollInterval');
-    expect(parsed.data).not.toHaveProperty('ttl');
+    expect(parsed.error.issues).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'unrecognized_keys',
+          keys: expect.arrayContaining(['task', 'taskHint', 'pollInterval', 'ttl']),
+        }),
+      ])
+    );
   });
 
   it('T-U-217 preserves documented defaults for omitted trace, progress, dry_run, and timeout_ms', async () => {

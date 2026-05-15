@@ -80,7 +80,7 @@ Note: Test Plan §4.10.6 originally reserved `M-16`/`M-17`/`M-18` for these scen
 
 ## Phase 138 Macro Source Resolution And Scenario Closure
 
-Note: Test Plan §4.10.5 originally reserved `M-04`, `M-05`, `M-19`, and `M-20`; the live matrix uses `ML-21` through `ML-24` to avoid collisions with existing memory lifecycle rows and prior macro-language coverage.
+Note: Test Plan §4.10.5 originally reserved `M-03` through `M-20`; the live matrix uses `ML-21` through `ML-32` to avoid collisions with existing memory lifecycle rows and prior macro-language coverage.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
@@ -88,6 +88,14 @@ Note: Test Plan §4.10.5 originally reserved `M-04`, `M-05`, `M-19`, and `M-20`;
 | ML-22 | REQ-002 / REQ-006 / T-S-005: `call_macro` returns stable `invalid_input` reasons for the source_ref named-block lookup and format error matrix. | test_macro_source_ref_error_matrix | 2026-05-15 |  |
 | ML-23 | REQ-004 / T-S-019: `call_macro` treats archived macro-library documents referenced by `source_ref` as `not_found` and does not execute their blocks. | test_macro_archived_source_ref | 2026-05-15 |  |
 | ML-24 | REQ-058 / REQ-059 / T-S-020: macro-dispatched `archive_document` calls serialize through the existing document write-lock layer. | test_macro_archive_write_lock | 2026-05-15 |  |
+| ML-25 | REQ-001 / REQ-052 / T-S-003: inline `call_macro` creates a document, applies tags, and returns the document ID/path through the canonical success envelope. | test_macro_inline_create_doc | 2026-05-15 | 2026-05-15 |
+| ML-26 | REQ-007 / REQ-008 / REQ-037 / T-S-006: public `call_macro` returns the full four-array `input_var` missing-input envelope and applies optional defaults. | test_macro_input_var_contract | 2026-05-15 | 2026-05-15 |
+| ML-27 | REQ-053 / T-S-008: `dry_run: true` returns `MacroDryRunResult` with tool references and does not create the target vault file. | test_macro_dry_run_no_side_effects | 2026-05-15 | 2026-05-15 |
+| ML-28 | REQ-024 / T-S-011: a macro branches on a recoverable `fq.get_document` `not_found` envelope and creates a fallback document. | test_macro_recoverable_tool_error | 2026-05-15 | 2026-05-15 |
+| ML-29 | REQ-024 / REQ-052 / T-S-012: `exit { ... }` preserves the structured object value under `result`. | test_macro_structured_exit | 2026-05-15 | 2026-05-15 |
+| ML-30 | REQ-024 / T-S-013: a macro that falls off the end returns `{ result: null }`. | test_macro_falloff_null | 2026-05-15 | 2026-05-15 |
+| ML-31 | REQ-024 / REQ-036 / T-S-014: `fail "msg"` returns `macro_aborted` and statements after `fail` do not execute. | test_macro_fail_halts | 2026-05-15 | 2026-05-15 |
+| ML-32 | REQ-025 / T-S-015: running the same macro source twice through public `call_macro` gets isolated scope and distinct task IDs. | test_macro_repeated_invocation_isolation | 2026-05-15 | 2026-05-15 |
 
 ## 1. Document Lifecycle
 

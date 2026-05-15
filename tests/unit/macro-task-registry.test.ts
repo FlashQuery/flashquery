@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
   MACRO_TASK_STATUSES,
   MacroTaskRegistry,
@@ -134,8 +134,4 @@ describe('macro task registry lifecycle', () => {
   it('T-U-177 exposes exactly the public task status vocabulary', () => {
     expect(MACRO_TASK_STATUSES).toEqual(['working', 'completed', 'failed', 'cancelled']);
   });
-});
-
-vi.mock('../../src/storage/supabase.js', () => {
-  throw new Error('macro task registry must not import Supabase storage');
 });

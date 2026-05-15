@@ -1,0 +1,66 @@
+name: macro_concurrent_write_lock
+description: >
+  T-Y-004: two public call_macro requests write different documents at the same
+  time while document locking is enabled. Both writes should succeed through
+  the shared FlashQuery write-lock layer.
+coverage:
+  - IA-09
+deps: [locking]
+server_modes: [managed]
+
+extra_config:
+  locking:
+    enabled: true
+  host_mcp_tools:
+    tools:
+      - call_macro
+      - write_document
+      - get_document
+
+steps:
+  - label: "Two macro writes run concurrently and both return document paths"
+    parallel:
+      - label: "First concurrent macro write succeeds"
+        assert:
+          op: call_macro
+          args:
+            source: |
+              first = fq.write_document({
+                mode: "create",
+                path: "macro/concurrent-lock-one-${run.id}.md",
+                title: "Macro Concurrent Lock One ${run.id}",
+                content: "Macro concurrent lock one ${run.id}"
+              })
+              exit { path: $first.path }
+          expect_json_equals:
+            path: result.path
+            value: "macro/concurrent-lock-one-${run.id}.md"
+      - label: "Second concurrent macro write succeeds"
+        assert:
+          op: call_macro
+          args:
+            source: |
+              second = fq.write_document({
+                mode: "create",
+                path: "macro/concurrent-lock-two-${run.id}.md",
+                title: "Macro Concurrent Lock Two ${run.id}",
+                content: "Macro concurrent lock two ${run.id}"
+              })
+              exit { path: $second.path }
+          expect_json_equals:
+            path: result.path
+            value: "macro/concurrent-lock-two-${run.id}.md"
+
+  - label: "First concurrent macro-written document is readable"
+    assert:
+      op: get_document
+      args:
+        identifiers: "macro/concurrent-lock-one-${run.id}.md"
+      expect_contains: "Macro concurrent lock one ${run.id}"
+
+  - label: "Second concurrent macro-written document is readable"
+    assert:
+      op: get_document
+      args:
+        identifiers: "macro/concurrent-lock-two-${run.id}.md"
+      expect_contains: "Macro concurrent lock two ${run.id}"

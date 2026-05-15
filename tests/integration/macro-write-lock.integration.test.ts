@@ -166,7 +166,7 @@ describe.skipIf(!HAS_SUPABASE)('macro write-lock inheritance integration', () =>
     }
   }, 20_000);
 
-  it('T-I-011 inherits archive_document and remove_document lock_contention without macro-layer acquireLock', async () => {
+  it('T-I-011a inherits archive_document and remove_document lock_contention without macro-layer acquireLock', async () => {
     await callMacro(writeDocumentMacro('macro-write-lock/archive.md', 'Macro Lock Archive'));
     await callMacro(writeDocumentMacro('macro-write-lock/remove.md', 'Macro Lock Remove'));
 
@@ -202,4 +202,56 @@ describe.skipIf(!HAS_SUPABASE)('macro write-lock inheritance integration', () =>
       await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
     }
   }, 35_000);
+
+  it('T-I-011 same-doc macro archive_document and remove_document serialize cleanly through tool locks', async () => {
+    const created = await callMacro(writeDocumentMacro('macro-write-lock/race.md', 'Macro Lock Race'));
+    expect(created).toMatchObject({
+      result: {
+        path: 'macro-write-lock/race.md',
+        fq_id: expect.any(String),
+      },
+    });
+    const fqcId = (created.result as { fq_id: string }).fq_id;
+
+    const [archivePayload, removePayload] = await Promise.all([
+      callMacro('exit fq.archive_document({ identifiers: "macro-write-lock/race.md" })'),
+      callMacro('exit fq.remove_document({ identifiers: "macro-write-lock/race.md" })'),
+    ]);
+
+    const results = [archivePayload.result, removePayload.result] as Array<Record<string, unknown>>;
+    expect(results).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: 'macro-write-lock/race.md',
+          fq_id: fqcId,
+        }),
+      ])
+    );
+    for (const result of results) {
+      if (result.error) {
+        expect(result).toMatchObject({
+          error: 'not_found',
+          identifier: 'macro-write-lock/race.md',
+        });
+      } else {
+        expect(result).toMatchObject({
+          path: 'macro-write-lock/race.md',
+          fq_id: fqcId,
+        });
+      }
+      expect(result).not.toMatchObject({
+        error: 'conflict',
+        details: { reason: 'lock_contention' },
+      });
+    }
+
+    const reacquired = await acquireLock(
+      supabaseManager.getClient(),
+      config.instance.id,
+      'documents',
+      { ttlSeconds: config.locking.ttlSeconds, timeoutMs: 500 }
+    );
+    expect(reacquired).toBe(true);
+    await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
+  }, 45_000);
 });

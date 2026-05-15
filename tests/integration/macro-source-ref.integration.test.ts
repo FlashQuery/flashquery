@@ -160,7 +160,7 @@ describe.skipIf(!HAS_SUPABASE)('call_macro source_ref integration', () => {
     });
   });
 
-  it('T-I-008 returns named-block errors for invalid multi-block selectors', async () => {
+  it('T-I-012 returns named-block errors for invalid multi-block selectors', async () => {
     await writeFile(
       join(vaultPath, 'Macros', 'multi.md'),
       [

@@ -210,6 +210,25 @@ Action steps perform operations against the live FlashQuery server. The `action:
 
 **Failure behavior.** If an action step fails, the test is aborted immediately. Subsequent steps that reference the failed step's bound variables would error, so there is no value in continuing. The failure and all prior step results are recorded in the report.
 
+### Parallel Steps
+
+Use `parallel:` for lock and contention workflows that need multiple MCP calls in flight at the same time. Each child is an `action` or `assert` step with the same shape as a top-level step. Named variable binding is intentionally not supported inside parallel groups; assert returned values directly in each child and verify final state in later top-level steps.
+
+```yaml
+- label: "Two writes race through the lock layer"
+  parallel:
+    - label: "First write"
+      assert:
+        op: call_macro
+        args: { source: "exit fq.write_document({...})" }
+        expect_json_path: result.fq_id
+    - label: "Second write"
+      assert:
+        op: call_macro
+        args: { source: "exit fq.write_document({...})" }
+        expect_json_path: result.fq_id
+```
+
 ---
 
 ### Assert steps

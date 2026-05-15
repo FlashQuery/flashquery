@@ -115,7 +115,7 @@ describe.skipIf(!HAS_SUPABASE)('archive_document shared lock integration', () =>
     return parseResult<{ fq_id: string; path: string }>(result);
   }
 
-  it('T-I-011 held-lock proxy proves archive_document and remove_document contend on the shared documents lock', async () => {
+  it('T-I-011a held-lock proxy proves archive_document and remove_document contend on the shared documents lock', async () => {
     const archiveTarget = await writeDoc('archive-lock/archive.md', 'Archive Lock Target');
     const removeTarget = await writeDoc('archive-lock/remove.md', 'Remove Lock Target');
     const lockedConfig = makeConfig(vaultPath, true);
@@ -147,5 +147,52 @@ describe.skipIf(!HAS_SUPABASE)('archive_document shared lock integration', () =>
     } finally {
       await releaseLock(supabaseManager.getClient(), lockedConfig.instance.id, 'documents');
     }
+  }, 40_000);
+
+  it('T-I-011 same-doc archive_document and remove_document serialize and terminate cleanly via the shared lock', async () => {
+    const target = await writeDoc('archive-lock/race-target.md', 'Archive Remove Race Target');
+    const lockedConfig = makeConfig(vaultPath, true);
+    handlers = createHandlers(lockedConfig);
+
+    const [archivePayload, removePayload] = await Promise.all([
+      handlers.archive_document({ identifiers: target.path }).then(parseResult),
+      handlers.remove_document({ identifiers: target.path }).then(parseResult),
+    ]);
+
+    const payloads = [archivePayload, removePayload];
+    expect(payloads).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          path: target.path,
+          fq_id: target.fq_id,
+        }),
+      ])
+    );
+    for (const payload of payloads) {
+      if (payload.error) {
+        expect(payload).toMatchObject({
+          error: 'not_found',
+          identifier: target.path,
+        });
+      } else {
+        expect(payload).toMatchObject({
+          path: target.path,
+          fq_id: target.fq_id,
+        });
+      }
+      expect(payload).not.toMatchObject({
+        error: 'conflict',
+        details: { reason: 'lock_contention' },
+      });
+    }
+
+    const reacquired = await acquireLock(
+      supabaseManager.getClient(),
+      lockedConfig.instance.id,
+      'documents',
+      { ttlSeconds: lockedConfig.locking.ttlSeconds, timeoutMs: 500 }
+    );
+    expect(reacquired).toBe(true);
+    await releaseLock(supabaseManager.getClient(), lockedConfig.instance.id, 'documents');
   }, 40_000);
 });

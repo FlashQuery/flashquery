@@ -7,6 +7,7 @@ import type { RequestHandlerExtra } from '@modelcontextprotocol/sdk/shared/proto
 import type { ServerNotification, ServerRequest } from '@modelcontextprotocol/sdk/types.js';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FlashQueryConfig } from '../../config/loader.js';
+import { FM } from '../../constants/frontmatter-fields.js';
 import {
   evaluateProgram,
   MacroCancellationError,
@@ -52,7 +53,7 @@ export const callMacroInputSchema = z.object({
   dry_run: z.boolean().optional(),
   trace: z.enum(['full', 'summary', 'none']).optional(),
   progress: z.enum(['full', 'milestones', 'silent']).optional(),
-});
+}).strict();
 
 export interface RunMacroSourceOptions {
   source: string;
@@ -196,7 +197,7 @@ export async function resolveMacroSourceForRequest(
     );
     const raw = await (options.readDocument ?? ((absPath) => readFile(absPath, 'utf-8')))(resolved.absPath);
     const parsed = matter(raw);
-    if (parsed.data['status'] === 'archived' || parsed.data['fq_status'] === 'archived') {
+    if (parsed.data['status'] === 'archived' || parsed.data[FM.STATUS] === 'archived') {
       return {
         ok: false,
         result: jsonExpectedError({

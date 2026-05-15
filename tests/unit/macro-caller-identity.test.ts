@@ -92,10 +92,23 @@ describe('macro caller identity', () => {
 
   it('T-U-171 public call_macro Zod request schema does not expose callerKind', () => {
     expect(Object.keys(callMacroInputSchema.shape)).not.toContain('callerKind');
-    expect(callMacroInputSchema.safeParse({
+    const parsed = callMacroInputSchema.safeParse({
       source: 'exit 1',
       callerKind: 'delegated',
-    }).data).not.toHaveProperty('callerKind');
+    });
+    expect(parsed.success).toBe(false);
+    if (parsed.success) {
+      expect(parsed.data).not.toHaveProperty('callerKind');
+    } else {
+      expect(parsed.error.issues).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            code: 'unrecognized_keys',
+            keys: expect.arrayContaining(['callerKind']),
+          }),
+        ])
+      );
+    }
   });
 
   it('threads brokerTools through runMacroSource so brokered dispatch is reachable from the runner', async () => {

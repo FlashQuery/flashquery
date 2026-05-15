@@ -144,6 +144,7 @@ import re
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -772,6 +773,68 @@ def _execute_assert(
     return _evaluate_assertions(result, assert_spec, label, run)
 
 
+def _execute_parallel(
+    step: dict,
+    ctx: TestContext,
+    run: TestRun,
+    variables: dict[str, dict],
+) -> bool:
+    """Execute action/assert child steps concurrently for lock/contention workflows."""
+    children = step.get("parallel") or []
+    label = step.get("label") or "parallel"
+    if not isinstance(children, list) or not children:
+        run.step(label=label, passed=False, detail="parallel step requires a non-empty list", timing_ms=0)
+        return False
+
+    unsupported = [
+        index
+        for index, child in enumerate(children, start=1)
+        if not isinstance(child, dict) or not (("action" in child) or ("assert" in child))
+    ]
+    if unsupported:
+        run.step(
+            label=label,
+            passed=False,
+            detail=f"parallel supports only action/assert child steps; invalid child indexes: {unsupported}",
+            timing_ms=0,
+        )
+        return False
+
+    t0 = time.monotonic()
+
+    def run_child(child: dict) -> bool:
+        if child.get("name"):
+            raise ValueError("parallel child steps do not support name binding")
+        if "action" in child:
+            passed, _extracted = _execute_action(child, ctx, run, variables)
+            return passed
+        return _execute_assert(child, ctx, run, variables)
+
+    child_results: list[bool] = []
+    with ThreadPoolExecutor(max_workers=len(children)) as executor:
+        futures = [executor.submit(run_child, child) for child in children]
+        for future in as_completed(futures):
+            try:
+                child_results.append(future.result())
+            except Exception as exc:
+                child_results.append(False)
+                run.step(
+                    label=f"{label}: child exception",
+                    passed=False,
+                    detail=f"{type(exc).__name__}: {exc}",
+                    timing_ms=0,
+                )
+
+    passed = all(child_results)
+    run.step(
+        label=label,
+        passed=passed,
+        detail=f"{sum(1 for result in child_results if result)}/{len(children)} parallel child steps passed",
+        timing_ms=int((time.monotonic() - t0) * 1000),
+    )
+    return passed
+
+
 def _list_tools(client: FQCClient) -> ToolResult:
     """Return MCP tools/list as a ToolResult so YAML assertions can inspect public tool discovery."""
     if not client.session_id:
@@ -897,6 +960,10 @@ def run_yaml_test(
                     # Assert failures don't abort — collect the full picture
                     _execute_assert(step, ctx, run, variables)
 
+                elif "parallel" in step:
+                    if not _execute_parallel(step, ctx, run, variables):
+                        break
+
                 elif "startup_error" in step:
                     _execute_startup_error(step, args, run)
 
@@ -915,7 +982,7 @@ def run_yaml_test(
                         label=f"step {i}: unrecognized",
                         passed=False,
                         detail=(
-                            f"Each step must have an 'action', 'assert', 'startup_error', 'startup_success', or 'sleep' key. "
+                            f"Each step must have an 'action', 'assert', 'parallel', 'startup_error', 'startup_success', or 'sleep' key. "
                             f"Got: {list(step.keys())}"
                         ),
                         timing_ms=0,
