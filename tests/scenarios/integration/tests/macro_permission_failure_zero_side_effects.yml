@@ -5,6 +5,7 @@ description: >
   the blocked create target must remain absent.
 coverage:
   - IS-12
+server_modes: [managed]
 
 extra_config:
   host_mcp_tools:
