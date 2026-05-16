@@ -36,6 +36,7 @@ from __future__ import annotations
 COVERAGE = ["M-15"]
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -73,7 +74,13 @@ def _extract_field(text: str, field: str) -> str:
 
 
 def _extract_memory_id(text: str) -> str:
-    """Extract memory ID from save_memory response: 'Memory saved (id: <uuid>)'."""
+    """Extract memory ID from final JSON or legacy save_memory response."""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict) and payload.get("memory_id"):
+            return str(payload["memory_id"])
+    except json.JSONDecodeError:
+        pass
     m = re.search(r"\(id:\s*([0-9a-fA-F-]{36})\)", text)
     return m.group(1) if m else ""
 
@@ -151,8 +158,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(plugin_id)
+        register_result.expect_json_equals("status", "registered")
+        register_result.expect_json_equals("plugin_id", plugin_id)
 
         run.step(
             label=f"register_plugin (id={plugin_id})",
@@ -185,9 +192,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if scoped_memory_id:
             ctx.cleanup.track_mcp_memory(scoped_memory_id)
         # Must save successfully and return a memory ID
-        scoped_save_result.expect_contains("Memory saved")
-        # Must NOT show "not found" warning — scope was resolved
-        scoped_save_result.expect_not_contains("not found")
+        scoped_save_result.expect_json_path("memory_id")
+        scoped_save_result.expect_json_equals("plugin_scope", plugin_id)
 
         run.step(
             label=f"save_memory with plugin_scope='{plugin_id}' (M-15)",
@@ -231,9 +237,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         fuzzy_memory_id = _extract_memory_id(fuzzy_save_result.text)
         if fuzzy_memory_id:
             ctx.cleanup.track_mcp_memory(fuzzy_memory_id)
-        fuzzy_save_result.expect_contains("Memory saved")
-        fuzzy_save_result.expect_contains("auto-corrected")
-        fuzzy_save_result.expect_contains(plugin_id)
+        fuzzy_save_result.expect_json_path("memory_id")
+        fuzzy_save_result.expect_json_equals("plugin_scope", plugin_id)
 
         run.step(
             label=f"save_memory fuzzy plugin_scope='{fuzzy_scope}' → resolves to '{plugin_id}' (M-15)",
@@ -261,9 +266,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         global_memory_id = _extract_memory_id(global_save_result.text)
         if global_memory_id:
             ctx.cleanup.track_mcp_memory(global_memory_id)
-        global_save_result.expect_contains("Memory saved")
-        # Without a plugin_scope, response should mention Global
-        global_save_result.expect_contains("Global")
+        global_save_result.expect_json_path("memory_id")
+        global_save_result.expect_json_equals("plugin_scope", "global")
 
         run.step(
             label="save_memory without plugin_scope → defaults to Global",
@@ -299,11 +303,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── Step 5: list_memories by tag — scoped memory appears ─────
+        # ── Step 5: search memories by tag — scoped memory appears ───
         log_mark = ctx.server.log_position if ctx.server else 0
         list_result = ctx.client.call_tool(
-            "list_memories",
+            "search",
+            entity_types=["memories"],
+            query="",
             tags=[f"scope-test-{run.run_id}"],
+            limit=10,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -313,7 +320,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             list_result.expect_contains(global_memory_id)
 
         run.step(
-            label="list_memories by tag — scoped and global memories both visible",
+            label="search memories by tag — scoped and global memories both visible",
             passed=(list_result.ok and list_result.status == "pass"),
             detail=expectation_detail(list_result) or list_result.error or "",
             timing_ms=list_result.timing_ms,

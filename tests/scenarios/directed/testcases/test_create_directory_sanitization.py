@@ -31,6 +31,7 @@ from __future__ import annotations
 COVERAGE = ["F-33", "F-34", "F-35", "F-36"]
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -38,6 +39,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+
+
+def _first_path(result) -> str:
+    try:
+        return str(json.loads(result.text)["results"][0]["path"])
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -74,13 +82,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # Colon → space: dir becomes "meeting notes"
         sanitized_dir_exists = ctx.vault._abs(f"{base_dir}/meeting notes").is_dir()
-        sanitized_note_in_response = 'sanitized from "meeting:notes"' in result.text
-        passed_f33 = result.ok and sanitized_dir_exists and sanitized_note_in_response
+        response_path = _first_path(result)
+        passed_f33 = result.ok and sanitized_dir_exists and response_path == f"{base_dir}/meeting notes"
 
         run.step(
             label="F-33: colon in segment sanitized to space; response reports original name",
             passed=passed_f33,
-            detail=f"dir_exists={sanitized_dir_exists} sanitized_note={sanitized_note_in_response} | ok={result.ok} | {result.text[:300]}",
+            detail=f"dir_exists={sanitized_dir_exists} response_path={response_path!r} | ok={result.ok} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -94,15 +102,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # Both illegal chars sanitized → dir becomes "foo  bar" → after collapse → "foo bar"
         sanitized_dir_exists = ctx.vault._abs(f"{base_dir}/foo  bar").is_dir() or ctx.vault._abs(f"{base_dir}/foo bar").is_dir()
-        # Response must explicitly say "replaced" — ':|' alone is insufficient because the original
-        # path "foo:|bar" echoes back in the "sanitized from" clause, making ':|' always present.
-        replaced_reported = "replaced" in result.text
-        passed_f34 = result.ok and sanitized_dir_exists and replaced_reported
+        response_path = _first_path(result)
+        passed_f34 = result.ok and sanitized_dir_exists and response_path == f"{base_dir}/foo bar"
 
         run.step(
             label="F-34: multiple illegal chars in one segment — response reports all replacements",
             passed=passed_f34,
-            detail=f"dir_exists={sanitized_dir_exists} replaced_reported={replaced_reported} | ok={result.ok} | {result.text[:300]}",
+            detail=f"dir_exists={sanitized_dir_exists} response_path={response_path!r} | ok={result.ok} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -115,13 +121,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # NUL → space: dir becomes "bad name"
         sanitized_dir_exists = ctx.vault._abs(f"{base_dir}/bad name").is_dir()
-        replaced_reported = "replaced" in result.text
-        passed_f35 = result.ok and sanitized_dir_exists and replaced_reported
+        response_path = _first_path(result)
+        passed_f35 = result.ok and sanitized_dir_exists and response_path == f"{base_dir}/bad name"
 
         run.step(
             label="F-35: NUL byte sanitized to space; response reports replacement",
             passed=passed_f35,
-            detail=f"dir_exists={sanitized_dir_exists} replaced_reported={replaced_reported} | ok={result.ok} | {result.text[:300]}",
+            detail=f"dir_exists={sanitized_dir_exists} response_path={response_path!r} | ok={result.ok} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -135,13 +141,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # \x01 → space: dir becomes "ctrl char"
         sanitized_dir_exists = ctx.vault._abs(f"{base_dir}/ctrl char").is_dir()
-        replaced_reported = "replaced" in result.text
-        passed_f36 = result.ok and sanitized_dir_exists and replaced_reported
+        response_path = _first_path(result)
+        passed_f36 = result.ok and sanitized_dir_exists and response_path == f"{base_dir}/ctrl char"
 
         run.step(
             label="F-36: control character (byte \\x01) sanitized to space; response reports replacement",
             passed=passed_f36,
-            detail=f"dir_exists={sanitized_dir_exists} replaced_reported={replaced_reported} | ok={result.ok} | {result.text[:300]}",
+            detail=f"dir_exists={sanitized_dir_exists} response_path={response_path!r} | ok={result.ok} | {result.text[:300]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

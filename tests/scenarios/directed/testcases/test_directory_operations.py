@@ -37,6 +37,7 @@ from __future__ import annotations
 COVERAGE = ["F-12", "F-13", "F-14", "F-15"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -46,6 +47,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+
+
+def _first_result(result) -> dict:
+    try:
+        payload = json.loads(result.text)
+        first = payload["results"][0]
+        return first if isinstance(first, dict) else {}
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        return {}
+
+
+def _per_path_error(result, *, error: str | None = None, reason: str | None = None) -> bool:
+    item = _first_result(result)
+    details = item.get("details") if isinstance(item.get("details"), dict) else {}
+    return (
+        result.ok
+        and (error is None or item.get("error") == error)
+        and (reason is None or details.get("reason") == reason)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -190,19 +210,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Expect a tool error (isError=True → result.ok=False)
+        # manage_directory reports per-path errors in results[] while keeping
+        # the MCP call itself successful.
         dir_still_there = ctx.vault._abs(nonempty_dir_rel).is_dir()
         doc_still_there = ctx.vault._abs(created_path).is_file()
-        passed_f13 = (not rm_nonempty.ok) and dir_still_there and doc_still_there
+        passed_f13 = (
+            _per_path_error(rm_nonempty, error="conflict", reason="directory_not_empty")
+            and dir_still_there
+            and doc_still_there
+        )
 
         detail_f13_parts = []
-        if rm_nonempty.ok:
-            detail_f13_parts.append(
-                "Expected error response, but tool succeeded. "
-                f"text={rm_nonempty.text[:200]!r}"
-            )
-        else:
-            detail_f13_parts.append(f"Got expected error: {rm_nonempty.error or rm_nonempty.text[:200]!r}")
+        detail_f13_parts.append(f"per_path_result={_first_result(rm_nonempty)!r}")
         if not dir_still_there:
             detail_f13_parts.append("non-empty dir was deleted (data loss!)")
         if not doc_still_there:
@@ -227,13 +246,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
             root_results.append((attempt, r, logs))
 
         vault_root_intact = vault_root.is_dir()
-        # Each attempt must NOT succeed; any clear error response is acceptable.
-        all_refused = all(not r.ok for _, r, _ in root_results)
+        all_refused = all(_per_path_error(r, error="invalid_input", reason="vault_root") for _, r, _ in root_results)
         passed_f14 = all_refused and vault_root_intact
 
         detail_f14_parts = []
         for attempt, r, _ in root_results:
-            mark = "refused" if not r.ok else "ACCEPTED (defect)"
+            mark = "refused" if _per_path_error(r, error="invalid_input", reason="vault_root") else "ACCEPTED (defect)"
             detail_f14_parts.append(f"path={attempt!r}: {mark}")
         if not vault_root_intact:
             detail_f14_parts.append("vault root no longer exists (catastrophic)")
@@ -259,12 +277,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # Sanity checks: nothing outside the vault was touched
         etc_intact = Path("/etc").is_dir()
         parent_intact = vault_root.parent.is_dir()
-        all_traversal_refused = all(not r.ok for _, r, _ in traversal_results)
+        all_traversal_refused = all(_per_path_error(r, error="invalid_input", reason="path_traversal") for _, r, _ in traversal_results)
         passed_f15 = all_traversal_refused and etc_intact and parent_intact
 
         detail_f15_parts = []
         for attempt, r, _ in traversal_results:
-            mark = "refused" if not r.ok else "ACCEPTED (defect)"
+            mark = "refused" if _per_path_error(r, error="invalid_input", reason="path_traversal") else "ACCEPTED (defect)"
             detail_f15_parts.append(f"path={attempt!r}: {mark}")
         if not etc_intact:
             detail_f15_parts.append("/etc no longer exists (catastrophic)")

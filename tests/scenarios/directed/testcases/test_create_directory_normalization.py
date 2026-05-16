@@ -31,6 +31,7 @@ from __future__ import annotations
 COVERAGE = ["F-30", "F-31", "F-32"]
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -38,6 +39,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+
+
+def _first_path(result) -> str:
+    try:
+        return str(json.loads(result.text)["results"][0]["path"])
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -74,13 +82,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # After stripping the leading "/", this becomes "{base_dir}/leading_test"
         dir_exists = ctx.vault._abs(f"{base_dir}/leading_test").is_dir()
-        no_leading_slash_in_response = "leading_test/" in result.text
-        passed_f30 = result.ok and dir_exists and no_leading_slash_in_response
+        response_path = _first_path(result)
+        passed_f30 = result.ok and dir_exists and response_path == f"{base_dir}/leading_test"
 
         run.step(
             label="F-30: leading slash in path is stripped",
             passed=passed_f30,
-            detail=f"dir_exists={dir_exists} response_has_entry={no_leading_slash_in_response} | ok={result.ok} | {result.text[:200]}",
+            detail=f"dir_exists={dir_exists} response_path={response_path!r} | ok={result.ok} | {result.text[:200]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -92,14 +100,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         dir_exists = ctx.vault._abs(f"{base_dir}/trailing_test").is_dir()
-        has_entry = "trailing_test/" in result.text
-        no_double_slash = "//" not in result.text
-        passed_f31 = result.ok and dir_exists and has_entry and no_double_slash
+        response_path = _first_path(result)
+        passed_f31 = result.ok and dir_exists and response_path == f"{base_dir}/trailing_test"
 
         run.step(
             label="F-31: trailing slash in path is stripped",
             passed=passed_f31,
-            detail=f"dir_exists={dir_exists} has_entry={has_entry} no_double_slash={no_double_slash} | ok={result.ok} | {result.text[:200]}",
+            detail=f"dir_exists={dir_exists} response_path={response_path!r} | ok={result.ok} | {result.text[:200]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -112,13 +119,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # Consecutive slashes collapsed: "{base_dir}//double//slash" → "{base_dir}/double/slash"
         dir_exists = ctx.vault._abs(f"{base_dir}/double/slash").is_dir()
-        no_double_slash_in_response = "//" not in result.text
-        passed_f32 = result.ok and dir_exists and no_double_slash_in_response
+        response_path = _first_path(result)
+        passed_f32 = result.ok and dir_exists and response_path == f"{base_dir}/double/slash"
 
         run.step(
             label="F-32: consecutive slashes in path are collapsed",
             passed=passed_f32,
-            detail=f"dir_exists={dir_exists} no_double_slash={no_double_slash_in_response} | ok={result.ok} | {result.text[:200]}",
+            detail=f"dir_exists={dir_exists} response_path={response_path!r} | ok={result.ok} | {result.text[:200]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,

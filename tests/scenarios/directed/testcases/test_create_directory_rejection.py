@@ -41,6 +41,7 @@ from __future__ import annotations
 COVERAGE = ["F-37", "F-38", "F-39", "F-40", "F-41", "F-42", "F-43", "F-44", "F-46", "F-47", "F-48", "F-49"]
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -49,6 +50,25 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+
+
+def _first_result(result) -> dict:
+    try:
+        payload = json.loads(result.text)
+        first = payload["results"][0]
+        return first if isinstance(first, dict) else {}
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
+        return {}
+
+
+def _per_path_error(result, *, error: str | None = None, reason: str | None = None) -> bool:
+    item = _first_result(result)
+    details = item.get("details") if isinstance(item.get("details"), dict) else {}
+    return (
+        result.ok
+        and (error is None or item.get("error") == error)
+        and (reason is None or details.get("reason") == reason)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -83,12 +103,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=["../../etc"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f37 = (
-            not result.ok
-            and ("resolves outside the vault root" in result.text
-                 or "Path traversal detected" in result.text
-                 or "must be within the vault root" in result.text)
-        )
+        passed_f37 = _per_path_error(result, error="invalid_input", reason="path_traversal")
 
         run.step(
             label="F-37: path traversal (../../etc) is rejected",
@@ -108,9 +123,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f38 = (
-            not result_slash.ok
-            and not result_dot.ok
-            and not result_empty.ok
+            _per_path_error(result_slash, error="invalid_input", reason="vault_root")
+            and _per_path_error(result_dot, error="invalid_input", reason="vault_root")
+            and _per_path_error(result_empty, error="invalid_input", reason="vault_root")
         )
 
         run.step(
@@ -132,7 +147,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/link/subdir"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f39 = not result.ok and "symlink" in result.text
+        passed_f39 = _per_path_error(result, error="invalid_input", reason="invalid_directory_path")
 
         run.step(
             label="F-39: symlink in path is rejected",
@@ -148,7 +163,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=["../../etc"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f48_traversal = not result.ok and "Invalid root_path:" in result.text
+        passed_f48_traversal = _per_path_error(result, error="invalid_input", reason="path_traversal")
 
         run.step(
             label="F-48: invalid root_path (traversal) rejects entire call before any paths processed",
@@ -169,8 +184,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/afile.md/sub"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # root_path pointing to a file → entire call rejected before any paths processed
-        passed_f49 = not result.ok and "Invalid root_path:" in result.text
+        passed_f49 = _per_path_error(result, error="conflict", reason="not_directory")
 
         run.step(
             label="F-49: root_path pointing to existing file rejects entire call",
@@ -191,7 +205,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/notes.md/subfolder"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f40 = not result.ok and "already exists as a file at" in result.text
+        passed_f40 = _per_path_error(result, error="conflict", reason="not_directory")
 
         run.step(
             label="F-40: file conflict — existing file at path segment blocks directory creation",
@@ -212,7 +226,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/mid/notes.md/sub"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f41 = not result.ok and "already exists as a file at" in result.text
+        passed_f41 = _per_path_error(result, error="conflict", reason="not_directory")
 
         run.step(
             label="F-41: file conflict mid-hierarchy — file at notes.md blocks notes.md/sub",
@@ -228,7 +242,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/   "])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f42 = not result.ok and "whitespace-only" in result.text
+        passed_f42 = _per_path_error(result, error="invalid_input", reason="invalid_directory_path") and "whitespace-only" in result.text
 
         run.step(
             label="F-42: whitespace-only segment rejected",
@@ -245,7 +259,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/{long_segment}"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f43 = not result.ok and "255-byte" in result.text
+        passed_f43 = _per_path_error(result, error="invalid_input", reason="invalid_directory_path") and "255-byte" in result.text
 
         run.step(
             label="F-43: segment exceeding 255 bytes rejected",
@@ -262,7 +276,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=[long_path])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f44 = not result.ok and ("4,096" in result.text or "4096" in result.text or "too long" in result.text.lower())
+        passed_f44 = _per_path_error(result, error="invalid_input", reason="invalid_directory_path")
 
         run.step(
             label="F-44: total resolved path exceeding 4,096 bytes rejected",
@@ -275,13 +289,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-46: empty array is rejected ─────────────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("manage_directory", action="create", paths=[[]])
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f46 = not result.ok and (
-            "No paths provided." in result.text
-            or 'at least one path' in result.text
-        )
+        try:
+            payload = json.loads(result.text)
+            result_count = len(payload.get("results", []))
+        except json.JSONDecodeError:
+            result_count = -1
+        passed_f46 = result.ok and result_count == 0
 
         run.step(
             label="F-46: empty array rejected",

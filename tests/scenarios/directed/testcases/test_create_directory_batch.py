@@ -26,6 +26,7 @@ from __future__ import annotations
 COVERAGE = ["F-23", "F-24", "F-25", "F-45"]
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -33,6 +34,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+
+
+def _payload(result) -> dict:
+    try:
+        return json.loads(result.text)
+    except json.JSONDecodeError:
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -73,10 +81,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         batch_c_exists = ctx.vault._abs(f"{base_dir}/batch_c").is_dir()
         batch_c_sub_exists = ctx.vault._abs(f"{base_dir}/batch_c/sub").is_dir()
         all_batch_exist = batch_a_exists and batch_b_exists and batch_c_exists and batch_c_sub_exists
+        payload = _payload(result)
+        results = payload.get("results", [])
         passed_f23 = (
             result.ok
             and all_batch_exist
-            and '"status":"created"' in result.text
+            and len(results) == len(batch_paths)
+            and all(item.get("status") == "created" for item in results)
         )
 
         run.step(
@@ -91,24 +102,26 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── F-45: 51-path batch is rejected immediately before any paths are processed ──
+        # ── F-45: 51-path batch returns ordered per-path results ─────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         paths_51 = [f"{base_dir}/p{i}" for i in range(51)]
         result = ctx.client.call_tool("manage_directory", action="create", paths=paths_51)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # None of the 51 dirs should have been created
-        none_created = not any(ctx.vault._abs(p).exists() for p in paths_51)
+        payload = _payload(result)
+        results = payload.get("results", [])
+        all_created = all(ctx.vault._abs(p).is_dir() for p in paths_51)
         passed_f45 = (
-            not result.ok
-            and "Too many paths" in result.text
-            and none_created
+            result.ok
+            and len(results) == len(paths_51)
+            and all(item.get("status") == "created" for item in results)
+            and all_created
         )
 
         run.step(
-            label="F-45: 51-path batch is rejected immediately before any paths are processed",
+            label="F-45: 51-path batch returns ordered per-path results",
             passed=passed_f45,
-            detail=f"ok={result.ok} none_created={none_created} | {result.text[:200]}",
+            detail=f"ok={result.ok} result_count={len(results)} all_created={all_created} | {result.text[:200]}",
             timing_ms=result.timing_ms,
             tool_result=result,
             server_logs=step_logs,
@@ -123,12 +136,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
         good1_exists = ctx.vault._abs(f"{base_dir}/good1").is_dir()
         good2_exists = ctx.vault._abs(f"{base_dir}/good2").is_dir()
         # isError must be false (partial success — D-04); Failed block must be present
+        payload = _payload(result)
+        results = payload.get("results", [])
         passed_f24 = (
-            result.ok  # isError=false → result.ok=True
+            result.ok  # per-path failures are reported inside results[]
             and good1_exists
             and good2_exists
-            and '"error":"invalid_input"' in result.text
-            and "../../escape" in result.text
+            and len(results) == 3
+            and results[0].get("status") == "created"
+            and results[1].get("error") == "invalid_input"
+            and results[1].get("identifier") == "../../escape"
+            and results[2].get("status") == "created"
         )
 
         run.step(
@@ -146,13 +164,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("manage_directory", action="create", paths=all_fail_paths)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
+        payload = _payload(result)
+        results = payload.get("results", [])
         passed_f25 = (
-            not result.ok
-            and '"error":"invalid_input"' in result.text
+            result.ok
+            and len(results) == len(all_fail_paths)
+            and all(item.get("error") == "invalid_input" for item in results)
+            and all((item.get("details") or {}).get("reason") == "path_traversal" for item in results)
         )
 
         run.step(
-            label="F-25: all paths fail (traversal) → isError: true, All paths failed: header",
+            label="F-25: all paths fail (traversal) as ordered per-path errors",
             passed=passed_f25,
             detail=f"ok={result.ok} | {result.text[:200]}",
             timing_ms=result.timing_ms,

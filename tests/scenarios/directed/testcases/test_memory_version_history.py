@@ -68,12 +68,24 @@ TEST_NAME = "test_memory_version_history"
 
 def _extract_memory_id(text: str) -> str:
     """Extract a memory ID (UUID) from FQC save_memory response."""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict) and payload.get("memory_id"):
+            return str(payload["memory_id"])
+    except json.JSONDecodeError:
+        pass
     m = re.search(r"\(id:\s*([0-9a-fA-F-]{36})\)", text)
     return m.group(1) if m else ""
 
 
 def _extract_new_version_id(text: str) -> str:
     """Extract the new version ID from update_memory response (format: 'New version id: UUID')."""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict) and payload.get("memory_id"):
+            return str(payload["memory_id"])
+    except json.JSONDecodeError:
+        pass
     m = re.search(r"New version id:\s*([0-9a-fA-F-]{36})", text)
     return m.group(1) if m else ""
 
@@ -90,6 +102,12 @@ def _find_uuid_in_response(text: str, uuid_list: list[str]) -> str | None:
 
 def _extract_tags_from_response(text: str) -> list[str]:
     """Extract tags from get_memory response (format: 'Tags: ["tag1","tag2",...]')."""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict) and isinstance(payload.get("tags"), list):
+            return [str(tag) for tag in payload["tags"]]
+    except json.JSONDecodeError:
+        pass
     m = re.search(r"Tags:\s*\[(.*?)\]", text, re.DOTALL)
     if m:
         tags_str = m.group(1)
@@ -237,10 +255,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     if "version-history-test" in current_tags and len(current_tags) > 3:
                         current_tags.remove("version-history-test")
 
+                update_from_id = memory_state[memory_id].get("latest_version_id", memory_id)
                 update_result = ctx.client.call_tool(
                     "write_memory",
-            mode="update",
-                    memory_id=memory_id,
+                    mode="update",
+                    memory_id=update_from_id,
                     content=content,
                     tags=current_tags,
                 )
@@ -266,6 +285,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     get_result = ctx.client.call_tool(
                         "get_memory",
                         memory_ids=latest_version_id,
+                        include=["content", "tags_full"],
                     )
                     step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -332,6 +352,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             get_result = ctx.client.call_tool(
                 "get_memory",
                 memory_ids=latest_version_id,
+                include=["content", "tags_full"],
             )
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

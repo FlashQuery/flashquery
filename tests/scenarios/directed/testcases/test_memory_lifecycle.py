@@ -155,7 +155,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         get_result.expect_contains(unique_phrase)
         get_result.expect_contains(original_id)
         get_result.expect_contains(unique_tag)
-        get_result.expect_contains(list_truncation_sentinel)
+        # Final get_memory returns a canonical JSON preview, not the full body.
+        get_result.expect_not_contains(list_truncation_sentinel)
 
         run.step(
             label="get_memory (single id) — original version",
@@ -166,11 +167,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             server_logs=step_logs,
         )
 
-        # ── Step 3: List memories by unique tag (M-10) ───────────────
+        # ── Step 3: List memories by unique tag through unified search (M-10) ─
         log_mark = ctx.server.log_position if ctx.server else 0
         list_result = ctx.client.call_tool(
-            "list_memories",
+            "search",
+            entity_types=["memories"],
+            query="",
             tags=[unique_tag],
+            limit=10,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -180,7 +184,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         list_result.expect_not_contains(list_truncation_sentinel)
 
         run.step(
-            label=f"list_memories(tags=['{unique_tag}'])",
+            label=f"search memories with tags=['{unique_tag}']",
             passed=(list_result.ok and list_result.status == "pass"),
             detail=expectation_detail(list_result) or list_result.error or "",
             timing_ms=list_result.timing_ms,
@@ -226,12 +230,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # update_memory response: "Memory updated. New version id: <uuid>. Previous version id: <uuid>. Version: N."
         new_version_id = _extract_id_after(update_result.text, "New version id:")
         if new_version_id:
             ctx.cleanup.track_mcp_memory(new_version_id)
-        update_result.expect_contains("New version id")
-        update_result.expect_contains(original_id)  # previous version id is echoed back
+        update_result.expect_json_path("memory_id")
+        update_result.expect_json_equals("previous_version_id", original_id)
+        update_result.expect_json_equals("version", 2)
 
         run.step(
             label="update_memory (new version)",
@@ -275,8 +279,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Response confirms archival AND reports the auto-managed status tag.
-        archive_result.expect_contains("archived")
-        archive_result.expect_contains("#status/archived")
+        archive_result.expect_json_equals("status", "archived")
+        archive_result.expect_json_path("archived_at")
 
         run.step(
             label="archive_memory — status + status tag management",
@@ -292,19 +296,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 7: List by unique tag again — archived should be excluded ─
         log_mark = ctx.server.log_position if ctx.server else 0
         post_list_result = ctx.client.call_tool(
-            "list_memories",
+            "search",
+            entity_types=["memories"],
+            query="",
             tags=[unique_tag],
+            limit=10,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # The archived (new) version must not appear. The original version is a
-        # separate record and remains active — update_memory is a versioning
-        # operation, not an in-place replacement.
         post_list_result.expect_not_contains(new_version_id)
-        post_list_result.expect_contains(original_id)
+        post_list_result.expect_not_contains(original_id)
+        post_list_result.expect_json_equals("total", 0)
 
         run.step(
-            label="list_memories after archive — exclusion",
+            label="search memories after archive — exclusion",
             passed=(post_list_result.ok and post_list_result.status == "pass"),
             detail=expectation_detail(post_list_result) or post_list_result.error or "",
             timing_ms=post_list_result.timing_ms,
@@ -323,12 +328,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # The archived (new) version must not appear. The original version is a
-        # separate, still-active record and is expected to still surface — this
-        # dual assertion proves M-13 (archived excluded) rather than a false
-        # pass from an empty result set.
         post_sem_result.expect_not_contains(new_version_id)
-        post_sem_result.expect_contains(original_id)
+        post_sem_result.expect_not_contains(original_id)
+        post_sem_result.expect_json_equals("total", 0)
 
         run.step(
             label="search_memory after archive — exclusion",

@@ -58,6 +58,7 @@ from pathlib import Path
 # Add the framework directory to the path for shared imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
+from fqc_client import parse_mcp_json
 from fqc_test_utils import TestContext, TestRun, expectation_detail
 
 
@@ -125,6 +126,19 @@ def _looks_like_archived(text: str) -> tuple[bool, str]:
         if kw in haystack:
             return True, f"matched keyword: {kw!r}"
     return False, "no archive/gone signal found in response text"
+
+
+def _maintain_counts(result) -> dict:
+    try:
+        payload = parse_mcp_json(result)
+        actions = payload.get("actions") if isinstance(payload, dict) else None
+        if isinstance(actions, list) and actions:
+            counts = actions[0].get("counts")
+            if isinstance(counts, dict):
+                return counts
+    except Exception:
+        pass
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -238,7 +252,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         is_dry_run, dry_reason = _looks_like_dry_run(reconcile_dry.text)
-        f05_ok = reconcile_dry.ok and is_dry_run
+        dry_counts = _maintain_counts(reconcile_dry)
+        f05_ok = reconcile_dry.ok and is_dry_run and dry_counts.get("archived", 0) == 0
 
         f05_detail_parts = []
         if not f05_ok:
@@ -248,6 +263,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 f05_detail_parts.append(f"dry-run signal absent ({dry_reason})")
         f05_detail_parts.append(f"tool_ok={reconcile_dry.ok}")
         f05_detail_parts.append(f"is_dry_run={is_dry_run} ({dry_reason})")
+        f05_detail_parts.append(f"counts={dry_counts!r}")
         f05_detail_parts.append(f"text_preview={reconcile_dry.text[:300]!r}")
 
         run.step(
@@ -378,17 +394,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
         reconcile_move = ctx.client.call_tool("maintain_vault", action="repair", dry_run=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        is_move_detected, move_reason = _looks_like_move_detected(reconcile_move.text)
-        f06_ok = reconcile_move.ok and is_move_detected
+        move_counts = _maintain_counts(reconcile_move)
+        updated_count = int(move_counts.get("updated", 0) or 0)
+        repaired_count = int(move_counts.get("repaired", 0) or 0)
+        f06_ok = reconcile_move.ok and updated_count >= 1 and repaired_count >= 1
 
         f06_detail_parts = []
         if not f06_ok:
             if not reconcile_move.ok:
                 f06_detail_parts.append(f"tool failed: {reconcile_move.error}")
-            if not is_move_detected:
-                f06_detail_parts.append(f"move signal absent ({move_reason})")
+            if updated_count < 1 or repaired_count < 1:
+                f06_detail_parts.append(f"expected updated/repaired counts >= 1, got {move_counts!r}")
         f06_detail_parts.append(f"tool_ok={reconcile_move.ok}")
-        f06_detail_parts.append(f"move_detected={is_move_detected} ({move_reason})")
+        f06_detail_parts.append(f"counts={move_counts!r}")
         f06_detail_parts.append(f"text_preview={reconcile_move.text[:400]!r}")
 
         run.step(
@@ -517,7 +535,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         is_archived, archive_reason = _looks_like_archived(reconcile_gone.text)
-        f07_ok = reconcile_gone.ok and is_archived
+        gone_counts = _maintain_counts(reconcile_gone)
+        f07_ok = reconcile_gone.ok and is_archived and int(gone_counts.get("archived", 0) or 0) >= 1
 
         f07_detail_parts = []
         if not f07_ok:
@@ -527,6 +546,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 f07_detail_parts.append(f"archive/gone signal absent ({archive_reason})")
         f07_detail_parts.append(f"tool_ok={reconcile_gone.ok}")
         f07_detail_parts.append(f"is_archived={is_archived} ({archive_reason})")
+        f07_detail_parts.append(f"counts={gone_counts!r}")
         f07_detail_parts.append(f"text_preview={reconcile_gone.text[:400]!r}")
 
         run.step(
@@ -537,6 +557,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tool_result=reconcile_gone,
             server_logs=step_logs,
         )
+        if f07_ok and fqc_id_gone:
+            ctx.cleanup._mcp_identifiers = [
+                identifier
+                for identifier in ctx.cleanup._mcp_identifiers
+                if identifier != fqc_id_gone
+            ]
 
         # ── Step 15: Try to retrieve archived doc ────────────────────
         # After reconcile archives the record, get_document should either

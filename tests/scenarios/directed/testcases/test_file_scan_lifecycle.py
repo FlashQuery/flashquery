@@ -35,6 +35,7 @@ from __future__ import annotations
 COVERAGE = ["F-02", "F-03", "F-04"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -101,6 +102,29 @@ def _looks_like_clear_error(text: str, error_detail: str | None) -> tuple[bool, 
         if kw in haystack:
             return True, f"matched keyword: {kw!r}"
     return False, "no clear missing-file signal in response text"
+
+
+def _is_maintenance_conflict(result) -> bool:
+    try:
+        payload = json.loads(result.text)
+    except json.JSONDecodeError:
+        return False
+    details = payload.get("details") if isinstance(payload, dict) else None
+    return (
+        isinstance(payload, dict)
+        and payload.get("error") == "conflict"
+        and isinstance(details, dict)
+        and details.get("reason") == "maintenance_in_progress"
+    )
+
+
+def _sync_scan_when_available(ctx, timeout_s: float = 15.0):
+    deadline = time.time() + timeout_s
+    result = ctx.scan_vault()
+    while _is_maintenance_conflict(result) and time.time() < deadline:
+        time.sleep(0.25)
+        result = ctx.scan_vault()
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +205,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tool_result=bg_scan_result,
             server_logs=step_logs,
         )
+        if bg_scan_result.ok:
+            _sync_scan_when_available(ctx)
 
         # ── F-03 Step 1: Create document for update test ──────────────
         log_mark = ctx.server.log_position if ctx.server else 0
@@ -220,7 +246,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-03 Step 2: Initial sync scan to index F-03 document ─────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan1_result = ctx.scan_vault()
+        scan1_result = _sync_scan_when_available(ctx)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -293,7 +319,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-03 Step 5: Re-scan to pick up the file change ───────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan2_result = ctx.scan_vault()
+        scan2_result = _sync_scan_when_available(ctx)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -383,7 +409,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-04 Step 2: Sync scan to index F-04 document ─────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan3_result = ctx.scan_vault()
+        scan3_result = _sync_scan_when_available(ctx)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -465,7 +491,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-04 Step 5: Re-scan to detect the deletion ───────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan4_result = ctx.scan_vault()
+        scan4_result = _sync_scan_when_available(ctx)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -539,6 +565,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tool_result=reconcile_result,
             server_logs=step_logs,
         )
+        if reconcile_result.ok and fqc_id_f04:
+            ctx.cleanup._mcp_identifiers = [
+                identifier
+                for identifier in ctx.cleanup._mcp_identifiers
+                if identifier != fqc_id_f04
+            ]
 
         # ── Optionally retain files for debugging ─────────────────────
         if args.keep:
