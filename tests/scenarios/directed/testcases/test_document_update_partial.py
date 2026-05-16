@@ -4,16 +4,16 @@ Test: update_document partial updates preserve untouched fields, and reserved
 frontmatter fields are protected from override via both create and update.
 
 Scenario:
-    1. Create a document (create_document) with title T1, body B, tags [t1, t2],
-       custom frontmatter {project: "x"}, AND attempt to override reserved
-       fields {fqc_id: "bogus-uuid-123", status: "archived"}. Verify on disk
-       that the server-generated fqc_id and status="active" won (D-21).
-    2. Update title only (update_document title=T2) — verify body and tags
+    1. Create a document (write_document) with title T1, body B, tags [t1, t2],
+       custom frontmatter {project: "x"}.
+    2. Attempt to create another document with reserved frontmatter overrides
+       and verify the final write_document contract rejects it (D-21).
+    3. Update title only (write_document title=T2) — verify body and tags
        unchanged on disk (D-09).
-    3. Update tags only — verify title T2 preserved, body preserved (D-10).
-    4. Update custom frontmatter adding {client: "acme"} and again attempt
-       to override fqc_id — verify custom field added, project preserved,
-       and fqc_id still unchanged (D-11, D-22).
+    4. Update tags only — verify title T2 preserved, body preserved (D-10).
+    5. Update custom frontmatter adding {client: "acme"} — verify custom field
+       added and project preserved (D-11).
+    6. Attempt to update reserved frontmatter and verify rejection (D-22).
     Cleanup is automatic (filesystem + database) even if the test fails.
 
 Coverage points: D-09, D-10, D-11, D-21, D-22
@@ -110,7 +110,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         port_range=port_range,
     ) as ctx:
 
-        # ── Step 1: Create with custom + reserved-field override attempt ──
+        # ── Step 1: Create with custom frontmatter ───────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_result = ctx.client.call_tool(
             "write_document",
@@ -121,8 +121,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tags=original_tags,
             frontmatter={
                 "project": "x",
-                FM.ID: bogus_fqc_id,
-                FM.STATUS: "archived",
             },
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -139,10 +137,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if created_fqc_id:
             ctx.cleanup.track_mcp_document(created_fqc_id)
 
-        create_result.expect_contains(title_1)
+        create_result.expect_json_equals("title", title_1)
+        create_result.expect_json_equals("path", test_path)
 
         run.step(
-            label="create_document with custom + reserved frontmatter override attempt",
+            label="write_document create with custom frontmatter",
             passed=(create_result.ok and create_result.status == "pass"),
             detail=expectation_detail(create_result) or create_result.error or "",
             timing_ms=create_result.timing_ms,
@@ -152,13 +151,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not create_result.ok:
             return run
 
-        # ── Step 2: Verify reserved fields were NOT overridden (D-21) ─────
+        # ── Step 2: Verify baseline document state on disk ───────────────
         t0 = time.monotonic()
         try:
             doc = ctx.vault.read_file(created_path or test_path)
             elapsed = int((time.monotonic() - t0) * 1000)
             checks = {
-                "fqc_id is server-generated (not bogus)": doc.fqc_id and doc.fqc_id != bogus_fqc_id,
+                "fqc_id is server-generated": bool(doc.fqc_id),
                 "fqc_id matches response": doc.fqc_id == created_fqc_id if created_fqc_id else True,
                 "status is active (not archived)": doc.status == "active",
                 "custom project field present": doc.frontmatter.get("project") == "x",
@@ -175,16 +174,45 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     f"title={doc.title!r}, tags={doc.tags!r}, "
                     f"project={doc.frontmatter.get('project')!r}"
                 )
-            run.step("D-21: reserved fields protected on create",
+            run.step("baseline create state has generated metadata and custom frontmatter",
                      passed=all_ok, detail=detail, timing_ms=elapsed)
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
-            run.step("D-21: reserved fields protected on create",
+            run.step("baseline create state has generated metadata and custom frontmatter",
                      passed=False, detail=f"Exception: {e}", timing_ms=elapsed)
+
+        # ── Step 3: Reserved fields are rejected on create (D-21) ────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        reserved_create_result = ctx.client.call_tool(
+            "write_document",
+            mode="create",
+            title=f"{title_1} Reserved",
+            content="Reserved field rejection probe.",
+            path=f"_test/{TEST_NAME}_reserved_{run.run_id}.md",
+            frontmatter={
+                FM.ID: bogus_fqc_id,
+                FM.STATUS: "archived",
+            },
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        reserved_create_result.expect_json_equals("error", "invalid_input")
+        reserved_create_result.expect_json_equals("details.field", FM.ID)
+
+        run.step(
+            label="D-21: reserved frontmatter rejected on create",
+            passed=(reserved_create_result.ok and reserved_create_result.status == "pass"),
+            detail=expectation_detail(reserved_create_result) or reserved_create_result.error or "",
+            timing_ms=reserved_create_result.timing_ms,
+            tool_result=reserved_create_result,
+            server_logs=step_logs,
+        )
+        if not reserved_create_result.ok:
+            return run
 
         read_identifier = created_fqc_id or test_path
 
-        # ── Step 3: Update title only (D-09) ──────────────────────────────
+        # ── Step 4: Update title only (D-09) ──────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         title_update_result = ctx.client.call_tool(
             "write_document",
@@ -194,7 +222,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        title_update_result.expect_contains(title_2)
+        title_update_result.expect_json_equals("title", title_2)
 
         run.step(
             label="update_document (title only)",
@@ -236,7 +264,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run.step("D-09: title-only update preserves body and tags",
                      passed=False, detail=f"Exception: {e}", timing_ms=elapsed)
 
-        # ── Step 4: Update tags only (D-10) ───────────────────────────────
+        # ── Step 5: Update tags only (D-10) ───────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         tags_update_result = ctx.client.call_tool(
             "write_document",
@@ -286,7 +314,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run.step("D-10: tags-only update preserves title and body",
                      passed=False, detail=f"Exception: {e}", timing_ms=elapsed)
 
-        # ── Step 5: Update custom frontmatter + retry reserved override (D-11, D-22) ──
+        # ── Step 6: Update custom frontmatter (D-11) ─────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         fm_update_result = ctx.client.call_tool(
             "write_document",
@@ -294,14 +322,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
             identifier=read_identifier,
             frontmatter={
                 "client": "acme",
-                FM.ID: bogus_fqc_id,
-                FM.STATUS: "archived",
             },
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
-            label="update_document (custom frontmatter + reserved override attempt)",
+            label="update_document (custom frontmatter only)",
             passed=(fm_update_result.ok and fm_update_result.status == "pass"),
             detail=expectation_detail(fm_update_result) or fm_update_result.error or "",
             timing_ms=fm_update_result.timing_ms,
@@ -311,7 +337,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not fm_update_result.ok:
             return run
 
-        # Verify on disk: client added, project preserved, reserved fields protected
+        # Verify on disk: client added, project preserved, reserved fields unchanged
         t0 = time.monotonic()
         try:
             doc = ctx.vault.read_file(created_path or test_path)
@@ -336,12 +362,37 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     f"project={doc.frontmatter.get('project')!r}, "
                     f"client={doc.frontmatter.get('client')!r}"
                 )
-            run.step("D-11 & D-22: custom frontmatter update, reserved fields protected",
+            run.step("D-11: custom frontmatter update preserves existing fields",
                      passed=all_ok, detail=detail, timing_ms=elapsed)
         except Exception as e:
             elapsed = int((time.monotonic() - t0) * 1000)
-            run.step("D-11 & D-22: custom frontmatter update, reserved fields protected",
+            run.step("D-11: custom frontmatter update preserves existing fields",
                      passed=False, detail=f"Exception: {e}", timing_ms=elapsed)
+
+        # ── Step 7: Reserved fields are rejected on update (D-22) ────────
+        log_mark = ctx.server.log_position if ctx.server else 0
+        reserved_update_result = ctx.client.call_tool(
+            "write_document",
+            mode="update",
+            identifier=read_identifier,
+            frontmatter={
+                FM.ID: bogus_fqc_id,
+                FM.STATUS: "archived",
+            },
+        )
+        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+
+        reserved_update_result.expect_json_equals("error", "invalid_input")
+        reserved_update_result.expect_json_equals("details.field", FM.ID)
+
+        run.step(
+            label="D-22: reserved frontmatter rejected on update",
+            passed=(reserved_update_result.ok and reserved_update_result.status == "pass"),
+            detail=expectation_detail(reserved_update_result) or reserved_update_result.error or "",
+            timing_ms=reserved_update_result.timing_ms,
+            tool_result=reserved_update_result,
+            server_logs=step_logs,
+        )
 
         # ── Optionally retain files for debugging ─────────────────────
         if args.keep:

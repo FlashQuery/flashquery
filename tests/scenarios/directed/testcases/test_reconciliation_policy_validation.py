@@ -49,6 +49,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from fqc_client import parse_mcp_json
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +59,14 @@ from fqc_test_utils import TestContext, TestRun, expectation_detail
 TEST_NAME = "test_reconciliation_policy_validation"
 PLUGIN_ID_BAD = "recon_pv_bad"    # Scenario A: invalid schema (on_added: auto-track, no track_as)
 PLUGIN_ID_RO  = "recon_pv_ro"     # Scenario B: read-only folder
+
+
+def _json_payload(result) -> dict:
+    try:
+        payload = parse_mcp_json(result)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -152,9 +161,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         #   Expected path: registration is rejected (ok=False OR text lacks "registered successfully")
         #   Defect path:   registration succeeds with no warning → RO-35/RO-36 defect
         response_text_bad = bad_register_result.text or ""
+        bad_payload = _json_payload(bad_register_result)
         registered_successfully_bad = (
             bad_register_result.ok
-            and "registered successfully" in response_text_bad.lower()
+            and bad_payload.get("status") == "registered"
         )
 
         # RO-35: register_plugin should NOT report "registered successfully"
@@ -203,7 +213,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "unregister_plugin",
                     plugin_id=PLUGIN_ID_BAD,
                     plugin_instance=instance_name_bad,
-                    confirm_destroy=True,
+                    force=True,
                 )
                 bad_plugin_registered = False
                 ctx.cleanup._plugin_registrations = [
@@ -248,7 +258,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
             step_logs_confirm = ctx.server.logs_since(log_mark) if ctx.server else None
 
             # The valid schema should register successfully
-            confirm_ok = confirm_result.ok and "registered successfully" in (confirm_result.text or "").lower()
+            confirm_result.expect_json_equals("plugin_id", PLUGIN_ID_BAD)
+            confirm_result.expect_json_equals("plugin_instance", instance_name_bad)
+            confirm_result.expect_json_equals("status", "registered")
+            confirm_ok = confirm_result.ok and confirm_result.status == "pass"
             if confirm_ok:
                 bad_plugin_registered = True
                 ctx.cleanup.track_plugin_registration(PLUGIN_ID_BAD, instance_name_bad)
@@ -275,7 +288,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                         "unregister_plugin",
                         plugin_id=PLUGIN_ID_BAD,
                         plugin_instance=instance_name_bad,
-                        confirm_destroy=True,
+                        force=True,
                     )
                     if teardown_bad.ok:
                         bad_plugin_registered = False
@@ -300,8 +313,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        ro_register_result.expect_contains("registered successfully")
-        ro_register_result.expect_contains(instance_name_ro)
+        ro_register_result.expect_json_equals("plugin_id", PLUGIN_ID_RO)
+        ro_register_result.expect_json_equals("plugin_instance", instance_name_ro)
+        ro_register_result.expect_json_equals("status", "registered")
 
         ro_reg_ok = ro_register_result.ok and ro_register_result.status == "pass"
         run.step(
@@ -442,7 +456,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "unregister_plugin",
                     plugin_id=PLUGIN_ID_RO,
                     plugin_instance=instance_name_ro,
-                    confirm_destroy=True,
+                    force=True,
                 )
                 if not teardown_ro.ok:
                     ctx.cleanup_errors.append(

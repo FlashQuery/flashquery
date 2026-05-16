@@ -149,7 +149,7 @@ Core CRUD operations on vault documents via MCP.
 | D-17 | Move document creates intermediate directories (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
 | D-18 | Move document preserves fqc_id and all associations (VALIDATED) | test_document_copy_and_move | 2026-04-14 | 2026-05-07 |
 | D-19 | Create document with custom frontmatter fields (VALIDATED) | test_document_defaults | 2026-04-14 | 2026-05-07 |
-| D-20 | Create document without explicit path (defaults to vault root) (VALIDATED) | test_document_defaults | 2026-04-14 | 2026-05-07 |
+| D-20 | `write_document(mode:"create")` without explicit path is rejected with `invalid_input` (`path` is required by the final MCP consolidation contract) (VALIDATED) | test_document_defaults | 2026-05-16 | 2026-05-16 |
 | D-21 | Reserved frontmatter fields cannot be overridden via create (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
 | D-22 | Reserved frontmatter fields cannot be overridden via update (VALIDATED) | test_document_update_partial | 2026-04-14 | 2026-05-07 |
 | D-23 | get_document returns clear error when file manually deleted from vault (DB row present, no scan run) (VALIDATED) | test_document_manual_delete_stale_reads | 2026-04-14 | 2026-05-07 |

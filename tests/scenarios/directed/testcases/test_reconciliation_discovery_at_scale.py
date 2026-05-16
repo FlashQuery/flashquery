@@ -88,14 +88,30 @@ def _extract_recon_summary(text: str) -> str:
     return m.group(0).strip() if m else ""
 
 
+def _extract_reconciliation(text: str) -> dict:
+    """Extract canonical reconciliation counts from a JSON tool response."""
+    try:
+        payload = json.loads(text)
+        recon = payload.get("reconciliation") if isinstance(payload, dict) else None
+        return recon if isinstance(recon, dict) else {}
+    except json.JSONDecodeError:
+        return {}
+
+
 def _parse_auto_tracked(summary: str) -> int:
     """Return the auto-tracked count from a reconciliation summary, or 0."""
+    recon = _extract_reconciliation(summary)
+    if recon:
+        return int(recon.get("auto_tracked", 0) or 0)
     m = re.search(r"Auto-tracked\s+(\d+)\s+new document", summary)
     return int(m.group(1)) if m else 0
 
 
 def _parse_archived(summary: str) -> int:
     """Return the archived count from a reconciliation summary, or 0."""
+    recon = _extract_reconciliation(summary)
+    if recon:
+        return int(recon.get("archived", 0) or 0)
     m = re.search(r"Archived\s+(\d+)\s+record", summary)
     return int(m.group(1)) if m else 0
 
@@ -232,9 +248,10 @@ def _reconcile_until_complete(ctx, run, plugin_id, instance_name, table,
         if log_added > max_log_candidates:
             max_log_candidates = log_added
 
+        recon = _extract_reconciliation(result.text)
         summary = _extract_recon_summary(result.text)
-        batch_added = _parse_auto_tracked(summary)
-        batch_archived = _parse_archived(summary)
+        batch_added = int(recon.get("auto_tracked", 0) or 0)
+        batch_archived = int(recon.get("archived", 0) or 0)
         total_added += batch_added
 
         # Compose step detail — include log-level candidate count for defect diagnosis
@@ -244,6 +261,7 @@ def _reconcile_until_complete(ctx, run, plugin_id, instance_name, table,
             f"total_added={total_added}",
             f"batch_archived={batch_archived}",
             f"log_candidates_added={log_added}",
+            f"reconciliation={recon!r}",
             f"summary={summary!r}",
         ]
         if result.error:
@@ -377,8 +395,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
+        register_result.expect_json_equals("plugin_id", PLUGIN_ID)
+        register_result.expect_json_equals("plugin_instance", instance_name)
+        register_result.expect_json_equals("status", "registered")
 
         run.step(
             label="register_plugin (watched folder + auto-track schema)",
@@ -496,9 +515,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
+        recon2_counts = _extract_reconciliation(recon2.text)
         recon2_summary = _extract_recon_summary(recon2.text)
-        archived_count_2 = _parse_archived(recon2_summary)
-        added_count_2    = _parse_auto_tracked(recon2_summary)
+        archived_count_2 = int(recon2_counts.get("archived", 0) or 0)
+        added_count_2    = int(recon2_counts.get("auto_tracked", 0) or 0)
         log_counts_2     = _extract_recon_log_counts(step_logs)
         log_deleted_2    = log_counts_2.get("deleted", 0)
 

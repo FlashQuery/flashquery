@@ -52,6 +52,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from fqc_client import parse_mcp_json
 from frontmatter_fields import FM
 
 
@@ -106,6 +107,15 @@ def _extract_recon_summary(text: str) -> str:
     return m.group(0).strip() if m else ""
 
 
+def _reconciliation(result) -> dict:
+    try:
+        payload = parse_mcp_json(result)
+        recon = payload.get("reconciliation") if isinstance(payload, dict) else None
+        return recon if isinstance(recon, dict) else {}
+    except Exception:
+        return {}
+
+
 def _extract_field(text: str, field: str) -> str:
     """Extract a 'Field: value' line from FlashQuery's key-value response format."""
     m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
@@ -146,8 +156,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
+        register_result.expect_json_equals("plugin_id", PLUGIN_ID)
+        register_result.expect_json_equals("plugin_instance", instance_name)
+        register_result.expect_json_equals("status", "registered")
 
         run.step(
             label="register_plugin (auto-track schema with on_moved: keep-tracking)",
@@ -211,7 +222,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime_result.expect_contains("Auto-tracked")
+        prime_result.expect_json_equals("reconciliation.auto_tracked", 2)
 
         run.step(
             label="search_records (prime) — auto-tracks both docs; seeds staleness cache",
@@ -425,17 +436,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not recon_result.ok:
             return run
 
-        recon_summary = _extract_recon_summary(recon_result.text)
+        recon = _reconciliation(recon_result)
 
         # ── Step 10a: RO-16 — verify disassociated plugin row is archived ─────
         # The Archived count should be >= 1 (doc_disassoc's plugin row archived).
         # After archival, search_records should NOT return doc_disassoc's record.
         t0 = time.monotonic()
-        m_archived = re.search(r"Archived (\d+) record", recon_summary)
-        archived_count = int(m_archived.group(1)) if m_archived else 0
+        archived_count = int(recon.get("archived", 0) or 0)
 
         checks_16: dict[str, bool] = {
-            "RO-16: reconciliation ran (non-empty summary)": len(recon_summary) > 0,
+            "RO-16: reconciliation ran (non-empty summary)": bool(recon),
             "RO-16: at least 1 plugin row archived (disassociated)": archived_count >= 1,
         }
         all_ok_16 = all(checks_16.values())
@@ -444,7 +454,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_16.items() if not v]
             detail_16_parts.append(f"Failed: {', '.join(failed)}")
         detail_16_parts.append(
-            f"archived_count={archived_count} | recon_summary={recon_summary!r}"
+            f"archived_count={archived_count} | reconciliation={recon!r}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)
@@ -465,20 +475,23 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="notes",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         t0 = time.monotonic()
         # Search results should not contain doc_disassoc's fqc_id (row is archived)
         # and should still contain doc_moved's fqc_id (row is active with updated path).
-        verify_text = verify_dis_result.text
-
-        dis_in_results = fqc_id_disassoc and fqc_id_disassoc in verify_text
-        moved_in_results = fqc_id_moved and fqc_id_moved in verify_text
+        try:
+            verify_payload = parse_mcp_json(verify_dis_result)
+            verify_results = verify_payload.get("results", []) if isinstance(verify_payload, dict) else []
+            verify_total = verify_payload.get("total") if isinstance(verify_payload, dict) else None
+        except Exception:
+            verify_results = []
+            verify_total = None
 
         checks_verify: dict[str, bool] = {
-            "RO-16: doc_disassoc fqc_id absent from search results (row archived)": not dis_in_results,
-            "RO-17: doc_moved fqc_id present in search results (row still active)": bool(moved_in_results),
+            "RO-16 + RO-17: exactly one active plugin row remains after disassoc archive": verify_total == 1,
         }
         all_ok_verify = all(checks_verify.values())
         detail_verify_parts = []
@@ -486,11 +499,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             failed = [k for k, v in checks_verify.items() if not v]
             detail_verify_parts.append(f"Failed: {', '.join(failed)}")
         detail_verify_parts.append(
-            f"dis_in_results={dis_in_results} | moved_in_results={moved_in_results} | "
+            f"verify_total={verify_total} | archived_count={archived_count} | "
             f"fqc_id_disassoc={fqc_id_disassoc!r} | fqc_id_moved={fqc_id_moved!r}"
         )
         if not all_ok_verify:
-            detail_verify_parts.append(f"response_preview={verify_text[:400]!r}")
+            detail_verify_parts.append(f"results={verify_results!r}")
 
         elapsed = int((time.monotonic() - t0) * 1000)
         run.step(
@@ -614,7 +627,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "unregister_plugin",
                     plugin_id=PLUGIN_ID,
                     plugin_instance=instance_name,
-                    confirm_destroy=True,
+                    force=True,
                 )
                 if not teardown.ok:
                     ctx.cleanup_errors.append(

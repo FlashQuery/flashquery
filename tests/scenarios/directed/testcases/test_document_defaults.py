@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test: custom frontmatter fields (D-19) and default path assignment (D-20).
+Test: custom frontmatter fields (D-19) and missing-path validation (D-20).
 
 Scenario Part A — Custom frontmatter (D-19):
     1. Create a document via MCP with custom frontmatter fields
@@ -9,13 +9,10 @@ Scenario Part A — Custom frontmatter (D-19):
     3. Get document by fqc_id and verify the response
     4. Read the vault file on disk and verify custom fields are in frontmatter
 
-Scenario Part B — Default path (D-20):
+Scenario Part B — Missing path validation (D-20):
     5. Create a document WITHOUT providing a path argument
-    6. Force file scan
-    7. Parse the assigned path from the create response
-    8. Verify the path is non-empty (FQC assigned one)
-    9. Verify the document is retrievable via the assigned path
-   10. Verify the file exists on disk at the returned path
+    6. Verify the final write_document contract rejects the request with
+       invalid_input/details.field="path"
     Cleanup is automatic (filesystem + database) even if the test fails.
 
 Modes:
@@ -231,7 +228,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 timing_ms=elapsed,
             )
 
-        # ── Part B: Default path assignment (D-20) ────────────────────────
+        # ── Part B: Missing path validation (D-20) ────────────────────────
 
         # ── Step 5: Create document WITHOUT a path argument ───────────────
         log_mark = ctx.server.log_position if ctx.server else 0
@@ -241,109 +238,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
             title=default_path_title,
             content="Default path test",
             tags=default_path_tags,
-            # Deliberately omit `path` — FQC must assign one
+            # Deliberately omit `path` — final write_document requires it.
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Parse the auto-assigned path and fqc_id
-        created_path_b = _extract_field(create_b_result.text, "Path")
-        created_fqc_id_b = _extract_field(create_b_result.text, "FQC ID")
-
-        # Register for cleanup using the dynamically assigned path
-        if created_path_b:
-            ctx.cleanup.track_file(created_path_b)
-            parts = Path(created_path_b).parts
-            for i in range(1, len(parts)):
-                ctx.cleanup.track_dir(str(Path(*parts[:i])))
-        if created_fqc_id_b:
-            ctx.cleanup.track_mcp_document(created_fqc_id_b)
-
-        create_b_result.expect_contains(default_path_title)
+        create_b_result.expect_json_equals("error", "invalid_input")
+        create_b_result.expect_json_equals("details.field", "path")
 
         run.step(
-            label="create_document without path argument (D-20)",
+            label="write_document create without path is rejected (D-20)",
             passed=(create_b_result.ok and create_b_result.status == "pass"),
             detail=expectation_detail(create_b_result) or create_b_result.error or "",
             timing_ms=create_b_result.timing_ms,
             tool_result=create_b_result,
             server_logs=step_logs,
         )
-        if not create_b_result.ok:
-            return run
-
-        # ── Step 6: Verify FQC assigned a non-empty path ─────────────────
-        t0 = time.monotonic()
-        path_assigned = bool(created_path_b and created_path_b.strip())
-        elapsed = int((time.monotonic() - t0) * 1000)
-        run.step(
-            label="Verify FQC assigned a non-empty path (D-20)",
-            passed=path_assigned,
-            detail="" if path_assigned else f"Path was empty in response: {create_b_result.text[:300]}",
-            timing_ms=elapsed,
-        )
-        if not path_assigned:
-            return run
-
-        # ── Step 7: Force file scan ───────────────────────────────────────
-        log_mark = ctx.server.log_position if ctx.server else 0
-        scan_b_result = ctx.scan_vault()
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        run.step(
-            label="force_file_scan after default-path create",
-            passed=scan_b_result.ok,
-            detail=scan_b_result.error or "",
-            timing_ms=scan_b_result.timing_ms,
-            tool_result=scan_b_result,
-            server_logs=step_logs,
-        )
-        if not scan_b_result.ok:
-            return run
-
-        # ── Step 8: Verify document is retrievable via assigned path ──────
-        identifier_b = created_fqc_id_b or created_path_b
-
-        log_mark = ctx.server.log_position if ctx.server else 0
-        get_b_result = ctx.client.call_tool(
-            "get_document",
-            identifiers=identifier_b,
-        )
-        step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        get_b_result.expect_contains("Default path test")
-
-        run.step(
-            label=f"get_document(identifier='{identifier_b}') for default-path doc (D-20)",
-            passed=(get_b_result.ok and get_b_result.status == "pass"),
-            detail=expectation_detail(get_b_result) or get_b_result.error or "",
-            timing_ms=get_b_result.timing_ms,
-            tool_result=get_b_result,
-            server_logs=step_logs,
-        )
-
-        # ── Step 9: Verify file exists on disk at the returned path ──────
-        t0 = time.monotonic()
-        try:
-            file_exists_on_disk = ctx.vault.exists(created_path_b)
-            elapsed = int((time.monotonic() - t0) * 1000)
-            detail = "" if file_exists_on_disk else (
-                f"File not found on disk at vault-relative path: {created_path_b!r}. "
-                f"vault_root={ctx.vault.vault_root}"
-            )
-            run.step(
-                label=f"Verify file exists on disk at assigned path '{created_path_b}' (D-20)",
-                passed=file_exists_on_disk,
-                detail=detail,
-                timing_ms=elapsed,
-            )
-        except Exception as e:
-            elapsed = int((time.monotonic() - t0) * 1000)
-            run.step(
-                label="Verify file exists on disk at assigned path (D-20)",
-                passed=False,
-                detail=f"Exception: {e}",
-                timing_ms=elapsed,
-            )
 
         # ── Optionally retain files for debugging ─────────────────────────
         if args.keep:
@@ -371,7 +280,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Test: custom frontmatter fields (D-19) and default path assignment (D-20).",
+        description="Test: custom frontmatter fields (D-19) and missing-path validation (D-20).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

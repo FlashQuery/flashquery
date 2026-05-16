@@ -60,6 +60,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from fqc_client import parse_mcp_json
 from frontmatter_fields import FM
 
 
@@ -81,9 +82,27 @@ _UUID_RE = re.compile(
 
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FlashQuery's key-value response format."""
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
     m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
+
+
+def _reconciliation(result) -> dict:
+    try:
+        payload = parse_mcp_json(result)
+        recon = payload.get("reconciliation") if isinstance(payload, dict) else None
+        return recon if isinstance(recon, dict) else {}
+    except Exception:
+        return {}
 
 
 def _build_schema_yaml(folder: str) -> str:
@@ -165,8 +184,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg_result.expect_contains("registered successfully")
-        reg_result.expect_contains(instance_name)
+        reg_result.expect_json_equals("plugin_id", PLUGIN_ID)
+        reg_result.expect_json_equals("plugin_instance", instance_name)
+        reg_result.expect_json_equals("status", "registered")
 
         run.step(
             label="register_plugin (doc-tracking schema with on_added:auto-track)",
@@ -244,7 +264,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        prime_result.expect_contains("Auto-tracked")
+        prime_result.expect_json_equals("reconciliation.auto_tracked", 5)
         run.step(
             label="search_records (prime) — auto-tracks all 5 docs (5 'added')",
             passed=(prime_result.ok and prime_result.status == "pass"),
@@ -457,7 +477,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="notes",
-            fields={"label": f"sentinel-{run.run_id[:8]}"},
+            data={"label": f"sentinel-{run.run_id[:8]}"},
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -481,24 +501,22 @@ def run_test(args: argparse.Namespace) -> TestRun:
         #   (e) The response is a valid reconciliation summary (no unexpected errors)
         t0 = time.monotonic()
         response_text = main_result.text
-        recon_summary = _extract_recon_summary(response_text)
+        recon = _reconciliation(main_result)
 
         checks: dict[str, bool] = {}
         detail_parts: list[str] = []
 
-        # (a) 'added' → "Auto-tracked" present with count >= 1
-        m_added = re.search(r"Auto-tracked (\d+) new document", recon_summary)
-        added_count = int(m_added.group(1)) if m_added else 0
+        # (a) 'added' → auto_tracked count >= 1
+        added_count = int(recon.get("auto_tracked", 0) or 0)
         checks["added: at least 1 auto-tracked"] = added_count >= 1
         if added_count < 1:
             detail_parts.append(f"'Auto-tracked' missing or count=0 (got {added_count})")
 
-        # (b) 'deleted' + 'disassociated' + 'resurrected_as_deleted' → "Archived" present with count >= 3
+        # (b) 'deleted' + 'disassociated' + 'resurrected_as_deleted' → archived count >= 3
         # deleted_doc, disassociated_doc, and resurrected_doc (also deleted from disk) all
         # produce an "archive plugin row" action. resurrected_doc's row will be un-archived
         # in the second pass when the file is restored.
-        m_archived = re.search(r"Archived (\d+) record", recon_summary)
-        archived_count = int(m_archived.group(1)) if m_archived else 0
+        archived_count = int(recon.get("archived", 0) or 0)
         checks["archived count >= 3 (deleted + disassociated + resurrected_as_deleted)"] = archived_count >= 3
         if archived_count < 3:
             detail_parts.append(
@@ -515,15 +533,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
 
         # (d) Summary is non-empty (reconciliation actually ran, not cache-skipped)
-        checks["reconciliation ran (non-empty summary)"] = len(recon_summary) > 0
-        if not recon_summary:
+        checks["reconciliation ran (non-empty summary)"] = bool(recon)
+        if not recon:
             detail_parts.append(
                 "Reconciliation summary is empty — staleness cache may still be active. "
                 "Ensure the 32s sleep elapsed before the main call."
             )
 
         all_ok = all(checks.values())
-        detail_parts.append(f"recon_summary={recon_summary!r}")
+        detail_parts.append(f"reconciliation={recon!r}")
         if not all_ok:
             detail_parts.append(f"full_response_preview={response_text[:400]!r}")
 
@@ -545,7 +563,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        second_recon = _extract_recon_summary(second_result.text)
+        second_recon = _reconciliation(second_result)
         # Within the 30s staleness window, reconciliation is skipped entirely.
         # The summary should be empty (no new auto-tracks, syncs, or archives).
         no_new_actions = not second_recon
@@ -653,11 +671,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # Step 17: Verify 'resurrected', 'unchanged', and exactly-one constraint.
         t0 = time.monotonic()
         recon2_summary = _extract_recon_summary(recon2_result.text)
+        recon2 = _reconciliation(recon2_result)
 
-        # (a) 'resurrected' must appear in formatted response text (count > 0)
+        # (a) 'resurrected' must appear in canonical reconciliation counts.
         # resurrected_doc + disassociated_doc both have archived rows + active fqc_docs → 2 resurrected
-        m_resurrected = re.search(r"Resurrected (\d+) record", recon2_summary)
-        resurrected_count = int(m_resurrected.group(1)) if m_resurrected else 0
+        resurrected_count = int(recon2.get("resurrected", 0) or 0)
         resurrected_present = resurrected_count >= 1
 
         # (b) 'unchanged' must appear in server debug log (not in formatted response text)
@@ -707,7 +725,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
         detail2_parts.append(
             f"resurrected={resurrected_count} unchanged={unchanged_count} "
-            f"total_classified={total_classified} | recon_summary={recon2_summary!r}"
+            f"total_classified={total_classified} | reconciliation={recon2!r} | "
+            f"recon_summary={recon2_summary!r}"
         )
 
         elapsed = int((time.monotonic() - t0) * 1000)
@@ -725,7 +744,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "unregister_plugin",
                     plugin_id=PLUGIN_ID,
                     plugin_instance=instance_name,
-                    confirm_destroy=True,
+                    force=True,
                 )
                 if not teardown.ok:
                     ctx.cleanup_errors.append(

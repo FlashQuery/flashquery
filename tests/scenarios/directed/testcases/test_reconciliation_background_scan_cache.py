@@ -123,9 +123,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
-        register_result.expect_contains("notes")
+        register_result.expect_json_equals("plugin_id", PLUGIN_ID)
+        register_result.expect_json_equals("plugin_instance", instance_name)
+        register_result.expect_json_equals("status", "registered")
 
         run.step(
             label="register_plugin (declares watched folder with on_added: auto-track)",
@@ -180,7 +180,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search1_result.expect_contains("Auto-tracked")
+        search1_result.expect_json_equals("reconciliation.auto_tracked", 1)
 
         run.step(
             label="search_records (1st call) — reconciliation auto-tracks file 1, populates staleness cache",
@@ -262,10 +262,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # The response must contain "Auto-tracked" — proving the full diff ran
+        # The response must include auto_tracked=1 — proving the full diff ran
         # (not skipped by the staleness cache) and file 2 was detected as added.
-        search2_result.expect_contains(
-            "Auto-tracked",
+        search2_result.expect_json_equals(
+            "reconciliation.auto_tracked",
+            1,
             label="RO-70: full reconciliation diff ran after background scan, file 2 detected as added",
         )
 
@@ -285,7 +286,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "unregister_plugin",
                     plugin_id=PLUGIN_ID,
                     plugin_instance=instance_name,
-                    confirm_destroy=True,
+                    force=True,
                 )
                 if not teardown.ok:
                     ctx.cleanup_errors.append(

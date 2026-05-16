@@ -51,6 +51,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
 from fqc_test_utils import TestContext, TestRun, expectation_detail
+from fqc_client import parse_mcp_json
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +110,12 @@ def _build_schema_yaml(watched_folder: str) -> str:
 
 def _extract_records(text: str) -> list:
     """Parse the records JSON array from a search_records response."""
+    try:
+        payload = _json.loads(text)
+        records = payload.get("results") if isinstance(payload, dict) else None
+        return records if isinstance(records, list) else []
+    except _json.JSONDecodeError:
+        pass
     start = text.find("[")
     if start == -1:
         return []
@@ -135,6 +142,15 @@ def _extract_recon_summary(text: str) -> str:
     return m.group(0).strip() if m else ""
 
 
+def _reconciliation(result) -> dict:
+    try:
+        payload = parse_mcp_json(result)
+        recon = payload.get("reconciliation") if isinstance(payload, dict) else None
+        return recon if isinstance(recon, dict) else {}
+    except Exception:
+        return {}
+
+
 _UUID_RE = re.compile(
     r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
 )
@@ -142,6 +158,12 @@ _UUID_RE = re.compile(
 
 def _extract_record_id(text: str) -> str:
     """Extract the record UUID from a create_record response ('Created record <uuid> ...')."""
+    try:
+        payload = _json.loads(text)
+        if isinstance(payload, dict) and payload.get("id"):
+            return str(payload["id"])
+    except _json.JSONDecodeError:
+        pass
     m = _UUID_RE.search(text)
     return m.group(0) if m else ""
 
@@ -177,10 +199,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
-        register_result.expect_contains(DOC_TABLE)
-        register_result.expect_contains(PLAIN_TABLE)
+        register_result.expect_json_equals("plugin_id", PLUGIN_ID)
+        register_result.expect_json_equals("plugin_instance", instance_name)
+        register_result.expect_json_equals("status", "registered")
+        register_result.expect_json_equals("table_count", 2)
 
         run.step(
             label=f"register_plugin (doc-backed: {DOC_TABLE}, plain: {PLAIN_TABLE})",
@@ -241,7 +263,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recon1_result.expect_contains("Auto-tracked")
+        recon1_result.expect_json_equals("reconciliation.auto_tracked", DOC_COUNT)
 
         run.step(
             label=f"search_records({DOC_TABLE}) — triggers first reconciliation pass",
@@ -257,13 +279,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 5: Verify doc-backed table auto-tracked; summary silent on plain table ──
         t0 = time.monotonic()
         recon1_summary = _extract_recon_summary(recon1_result.text)
+        recon1 = _reconciliation(recon1_result)
         doc_records_1 = _extract_records(recon1_result.text)
 
         # Summary must mention auto-tracking for the doc-backed table.
         # It must NOT mention PLAIN_TABLE by name — reconciliation does not scan
         # non-document-backed tables, so they should be invisible to the reconciler.
-        auto_tracked_match = re.search(r"Auto-tracked\s+(\d+)\s+new document", recon1_summary)
-        count_1 = int(auto_tracked_match.group(1)) if auto_tracked_match else 0
+        count_1 = int(recon1.get("auto_tracked", 0) or 0)
 
         checks_step5 = {
             f"first recon auto-tracked {DOC_COUNT} doc(s)": count_1 >= DOC_COUNT,
@@ -295,11 +317,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             log_mark = ctx.server.log_position if ctx.server else 0
             create_plain = ctx.client.call_tool(
                 "write_record",
-            mode="create",
+                mode="create",
                 plugin_id=PLUGIN_ID,
                 plugin_instance=instance_name,
                 table=PLAIN_TABLE,
-                fields={
+                data={
                     "label": f"Metadata {i} {rid}",
                     "notes": f"Manually created plain record {i}",
                 },
@@ -351,13 +373,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 9: Verify second recon does not touch plain table ────────────
         t0 = time.monotonic()
         recon2_summary = _extract_recon_summary(recon2_result.text)
+        recon2 = _reconciliation(recon2_result)
         doc_records_2 = _extract_records(recon2_result.text)
 
         # Second pass should see all files as unchanged; plain table stays invisible.
         # A non-empty summary here would indicate spurious activity.
-        synced_or_archived = bool(
-            re.search(r"(Synced fields|Archived|Auto-tracked)", recon2_summary, re.IGNORECASE)
-        )
+        synced_or_archived = bool(recon2)
 
         checks_step9 = {
             f"doc-backed table still has {DOC_COUNT} record(s)": len(doc_records_2) == DOC_COUNT,
@@ -413,8 +434,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         checks_step10 = {
             f"plain table still has exactly {PLAIN_COUNT} record(s)": len(plain_records) == PLAIN_COUNT,
-            "all plain records are status active": all(
-                r.get("status") == "active" for r in plain_records
+            "all manually-created plain record ids are present": (
+                {str(r.get("id")) for r in plain_records} == set(plain_record_ids)
             ),
         }
         all_ok_10 = all(checks_step10.values())

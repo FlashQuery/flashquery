@@ -152,9 +152,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
-        register_result.expect_contains("items")
+        register_result.expect_json_equals("plugin_id", PLUGIN_ID)
+        register_result.expect_json_equals("plugin_instance", instance_name)
+        register_result.expect_json_equals("status", "registered")
 
         run.step(
             label="register_plugin (declares watched folder with on_added: auto-track)",
@@ -214,7 +214,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search1_result.expect_contains("Auto-tracked")
+        search1_result.expect_json_equals("reconciliation.auto_tracked", SEED_COUNT)
 
         run.step(
             label=f"search_records (1st call) — auto-tracks {SEED_COUNT} seed files, populates staleness cache",
@@ -358,8 +358,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search3_result.expect_contains(
-            "Auto-tracked",
+        search3_result.expect_json_equals(
+            "reconciliation.auto_tracked",
+            1,
             label="RO-76: full reconciliation diff ran after background scan, new file detected as added",
         )
 
@@ -379,7 +380,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "unregister_plugin",
                     plugin_id=PLUGIN_ID,
                     plugin_instance=instance_name,
-                    confirm_destroy=True,
+                    force=True,
                 )
                 if not teardown.ok:
                     ctx.cleanup_errors.append(

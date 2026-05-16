@@ -119,10 +119,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
-        register_result.expect_contains("Tables created")
-        register_result.expect_contains("notes")
+        register_result.expect_json_equals("plugin_id", PLUGIN_ID)
+        register_result.expect_json_equals("plugin_instance", instance_name)
+        register_result.expect_json_equals("status", "registered")
+        register_result.expect_json_equals("table_count", 1)
 
         run.step(
             label="register_plugin (declares watched folder with on_added: auto-track)",
@@ -172,7 +172,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: search_records — reconciliation fires, auto-tracks file ─
         # RO-01: reconciliation is triggered before the search executes.
         # RO-04: the new file (no plugin row) is classified as 'added' and auto-tracked.
-        # The response text will contain "Auto-tracked" from formatReconciliationSummary.
+        # The response JSON includes a reconciliation summary object.
         log_mark = ctx.server.log_position if ctx.server else 0
         search1_result = ctx.client.call_tool(
             "search_records",
@@ -182,7 +182,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        search1_result.expect_contains("Auto-tracked")
+        search1_result.expect_json_equals("reconciliation.auto_tracked", 1)
 
         run.step(
             label="search_records (1st call) — reconciliation auto-tracks added file (RO-01, RO-04)",
@@ -197,7 +197,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 5: search_records again immediately — idempotency (RO-03) ─
         # Within the 30s staleness window: reconciliation is skipped entirely.
-        # The response must NOT contain "Auto-tracked" a second time — if it did,
+        # The response must not include another reconciliation block; if it did,
         # that would mean a duplicate row was inserted (not idempotent).
         log_mark = ctx.server.log_position if ctx.server else 0
         search2_result = ctx.client.call_tool(
@@ -209,7 +209,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Within the staleness window, no new auto-tracking should occur.
-        search2_result.expect_not_contains("Auto-tracked")
+        search2_result.expect_json_no_path("reconciliation")
 
         run.step(
             label="search_records (2nd call immediately after) — reconciliation idempotent (RO-03)",
@@ -227,7 +227,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "unregister_plugin",
                     plugin_id=PLUGIN_ID,
                     plugin_instance=instance_name,
-                    confirm_destroy=True,
+                    force=True,
                 )
                 if not teardown.ok:
                     ctx.cleanup_errors.append(
