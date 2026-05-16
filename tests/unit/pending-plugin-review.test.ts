@@ -114,10 +114,12 @@ describe('clear_pending_reviews', () => {
       pending: 1,
       items: [{
         id: 'review-1',
+        fqc_id: 'uuid-1',
         type: 'template_available',
         plugin_id: 'crm',
         table: 'fqcp_test_contacts',
         path: 'Contacts/Ada.md',
+        context: { path: 'Contacts/Ada.md' },
       }],
     });
     expect(result.isError).toBeFalsy();
@@ -233,10 +235,12 @@ describe('clear_pending_reviews', () => {
       pending: 1,
       items: [{
         id: 'review-x',
+        fqc_id: 'uuid-x',
         type: 'resurrected',
         plugin_id: 'crm',
         table: 'fqcp_crm_contacts',
         path: null,
+        context: { moved_from: '/old' },
       }],
     });
   });

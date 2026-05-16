@@ -497,7 +497,7 @@ export function registerMacroTools(
             await extra.sendNotification?.({
               method: 'notifications/progress',
               params: notification,
-            } as ServerNotification);
+            });
           },
         });
         return result;

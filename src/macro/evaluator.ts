@@ -31,7 +31,7 @@ import { shellBuiltins } from './shell-verbs.js';
 import { resolveNamespaceIntrospection } from './introspection.js';
 import { preScanToolReferences } from './permission-prescan.js';
 import { dispatchMacroTool } from './dispatcher.js';
-import { MACRO_SAFE_POINTS, type MacroSafePoint } from './safe-points.js';
+import { MACRO_SAFE_POINTS } from './safe-points.js';
 import { TraceBuilder, type TraceMode } from './trace-builder.js';
 import { ProgressEmitter, type ProgressMode, type ProgressNotificationSink } from './progress-emitter.js';
 import { BudgetTracker, type MacroBudgetLimits } from './budget.js';
@@ -167,7 +167,7 @@ export class MacroRuntimeError extends Error {
 export class MacroCancellationError extends Error {
   constructor(
     public readonly taskId: string,
-    public readonly atSafePoint: MacroSafePoint | string
+    public readonly atSafePoint: string
   ) {
     super('Macro cancelled');
     this.name = 'MacroCancellationError';
@@ -264,8 +264,7 @@ export function createInvocationContext(
   const budgetTracker = new BudgetTracker(options.budgetLimits ?? {}, budget);
   const inputVars = cloneMacroObject(options.inputVars ?? options.input_vars ?? {});
 
-  let context!: MacroInvocationContext;
-  context = {
+  const context: MacroInvocationContext = {
     inputVars,
     trace,
     traceMode,

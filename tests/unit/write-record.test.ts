@@ -181,10 +181,12 @@ describe('record output helpers', () => {
         items: [
           {
             id: 'review-row-1',
+            fqc_id: null,
             type: 'field_conflict',
             plugin_id: 'crm',
             table: 'contacts',
             path: 'People/Ada.md',
+            context: { path: 'People/Ada.md' },
           },
         ],
       },

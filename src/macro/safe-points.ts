@@ -4,8 +4,9 @@ export const MACRO_SAFE_POINTS = {
   forLoopIteration: 'for_loop_iteration',
   whileLoopIteration: 'while_loop_iteration',
   betweenPipelineStages: 'between_pipeline_stages',
-  beforeCall: (name: string) => `before_call:${name}`,
-  beforeToolCall: (server: string, tool: string) => `before_tool_call:${server}.${tool}`,
+  beforeCall: (name: string): `before_call:${string}` => `before_call:${name}`,
+  beforeToolCall: (server: string, tool: string): `before_tool_call:${string}.${string}` =>
+    `before_tool_call:${server}.${tool}`,
   insideSleep: 'inside_sleep',
   insideSlowOp: 'inside_slow_op',
 } as const;

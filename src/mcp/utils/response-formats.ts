@@ -46,7 +46,7 @@ export const WARNING_CODES = [
 
 export type CanonicalErrorCode = (typeof CANONICAL_ERROR_CODES)[number];
 export type MacroErrorCode = (typeof MACRO_ERROR_CODES)[number];
-export type WarningCode = (typeof WARNING_CODES)[number] | string;
+export type WarningCode = (typeof WARNING_CODES)[number] | (string & {});
 
 export interface ErrorEnvelope {
   error: string;
