@@ -29,8 +29,14 @@ TEST_NAME = "test_call_model_references"
 
 
 def _extract_fq_id(text: str) -> str | None:
-    """Extract the FQC ID value from create_document's key-value response."""
-    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
+    """Extract the FQC ID value from write_document's canonical JSON response."""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict) and payload.get("fq_id"):
+            return str(payload["fq_id"])
+    except Exception:
+        pass
+    m = re.search(r"^FQC ID:\s*(.+)", text, re.MULTILINE)
     return m.group(1) if m else None
 
 COVERAGE = [

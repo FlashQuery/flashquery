@@ -128,11 +128,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Response contains the success line, instance name, and the created table.
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
-        register_result.expect_contains("Tables created")
-        register_result.expect_contains("items")
+        register_result.expect_json_equals("plugin_id", PLUGIN_ID)
+        register_result.expect_json_equals("plugin_instance", instance_name)
+        register_result.expect_json_equals("status", "registered")
+        register_result.expect_json_equals("table_count", 1)
 
         run.step(
             label="register_plugin (inline YAML)",
@@ -153,12 +152,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
             "get_plugin_info",
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
+            include=["schema", "tables", "status_detail"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Schema, tables, and version must all surface in the response text.
         info_result.expect_contains("Test Lifecycle Plugin")
-        info_result.expect_contains("Version: 1.0.0")
+        info_result.expect_contains("1.0.0")
         info_result.expect_contains("items")
         info_result.expect_contains("title")
         info_result.expect_contains("count")
@@ -180,18 +180,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="items",
-            fields={
+            data={
                 "title": original_title,
                 "notes": original_notes,
                 "count": initial_count,
             },
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # create_record returns "Created record <uuid> in <table>"
         m = _UUID_RE.search(create_result.text)
         record_id = m.group(0) if m else ""
-        create_result.expect_contains("Created record")
+        create_result.expect_json_path("id")
 
         run.step(
             label="create_record (items)",
@@ -239,12 +239,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_instance=instance_name,
             table="items",
             id=record_id,
-            fields={"notes": updated_notes},
+            data={"notes": updated_notes},
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        update_result.expect_contains("Updated record")
-        update_result.expect_contains(record_id)
+        update_result.expect_json_equals("id", record_id)
 
         run.step(
             label="update_record (notes only)",
@@ -292,6 +292,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_instance=instance_name,
             table="items",
             query=unique_marker,
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -311,14 +312,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         archive_result = ctx.client.call_tool(
             "archive_record",
-            plugin_id=PLUGIN_ID,
-            plugin_instance=instance_name,
-            table="items",
-            id=record_id,
+            targets=[{
+                "plugin_id": PLUGIN_ID,
+                "plugin_instance": instance_name,
+                "table": "items",
+                "id": record_id,
+            }],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        archive_result.expect_contains("Archived record")
         archive_result.expect_contains(record_id)
 
         run.step(
@@ -341,7 +343,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        post_search_result.expect_not_contains(record_id)
+        post_search_result.expect_json_equals("total", 0)
+        post_search_result.expect_json_equals("results", [])
 
         run.step(
             label="search_records after archive — exclusion",

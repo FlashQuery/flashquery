@@ -138,9 +138,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
-        register_result.expect_contains("Tables created")
+        register_result.expect_json_equals("plugin_id", PLUGIN_ID)
+        register_result.expect_json_equals("plugin_instance", instance_name)
+        register_result.expect_json_equals("status", "registered")
+        register_result.expect_json_equals("table_count", 2)
 
         run.step(
             label="register_plugin (document-backed + plain tables)",
@@ -185,16 +186,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="milestones",
-            fields={
+            data={
                 "name": milestone_name,
                 "notes": milestone_notes,
             },
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         m = _UUID_RE.search(create_ms_result.text)
         milestone_id = m.group(0) if m else ""
-        create_ms_result.expect_contains("Created record")
+        create_ms_result.expect_json_path("id")
 
         run.step(
             label="create_record in plain milestones table",
@@ -238,16 +240,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="projects",
-            fields={
+            data={
                 "title": project_title,
                 "phase": project_phase,
             },
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         m2 = _UUID_RE.search(create_proj_result.text)
         project_id = m2.group(0) if m2 else ""
-        create_proj_result.expect_contains("Created record")
+        create_proj_result.expect_json_path("id")
 
         run.step(
             label="create_record in document-backed projects table",

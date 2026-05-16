@@ -195,9 +195,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Empty search results should surface the canonical "No documents found." message
-        miss_result.expect_contains("No documents found.")
-        miss_result.expect_not_contains(unique_title)
+        miss_result.expect_json_equals("total", 0)
+        miss_result.expect_json_equals("results", [])
 
         run.step(
             label=f"search_documents(query='{nonsense_query}') — empty result",
@@ -329,8 +328,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Archived doc should NOT appear; result set should be empty
-        post_tag_result.expect_not_contains(unique_title)
-        post_tag_result.expect_contains("No documents found.")
+        post_tag_result.expect_json_equals("total", 0)
+        post_tag_result.expect_json_equals("results", [])
 
         run.step(
             label=f"search_documents(tags=['{unique_tag}']) — post-archive exclusion",
@@ -351,7 +350,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        post_title_result.expect_not_contains(unique_title)
+        post_title_result.expect_json_equals("total", 0)
+        post_title_result.expect_json_equals("results", [])
 
         run.step(
             label=f"search_documents(query='{unique_title}') — post-archive exclusion",

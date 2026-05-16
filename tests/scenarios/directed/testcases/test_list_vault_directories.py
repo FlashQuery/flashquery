@@ -24,6 +24,7 @@ from __future__ import annotations
 COVERAGE = ["F-55", "F-56", "F-57", "F-58", "F-62", "F-63", "F-64", "F-67"]
 
 import argparse
+import json
 import sys
 from pathlib import Path
 
@@ -31,6 +32,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framewor
 from fqc_test_utils import TestContext, TestRun, expectation_detail
 
 TEST_NAME = "test_list_vault_directories"
+
+
+def _entries(text: str) -> list[dict]:
+    try:
+        payload = json.loads(text)
+        entries = payload.get("entries") if isinstance(payload, dict) else None
+        return entries if isinstance(entries, list) else []
+    except Exception:
+        return []
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
@@ -66,8 +76,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="directories")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        notes_absent = "notes.md" not in result.text
-        passed_f55 = result.ok and "alpha/" in result.text and notes_absent
+        entries = _entries(result.text)
+        notes_absent = all(e.get("name") != "notes.md" for e in entries)
+        alpha_present = any(e.get("name") == "alpha" and e.get("type") == "directory" for e in entries)
+        passed_f55 = result.ok and alpha_present and notes_absent
 
         run.step(
             label="F-55: show=directories returns only directory entries (no files)",
@@ -83,11 +95,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="directories", recursive=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        alpha_pos = result.text.find("alpha/")
-        beta_pos = result.text.find("beta/")
-        # Find position of alpha/child/ — the nested entry
-        child_text = "alpha/child/"
-        child_pos = result.text.find(child_text)
+        entries = _entries(result.text)
+        alpha_pos = next((i for i, e in enumerate(entries) if e.get("path", "").endswith("/alpha")), -1)
+        beta_pos = next((i for i, e in enumerate(entries) if e.get("path", "").endswith("/beta")), -1)
+        child_pos = next((i for i, e in enumerate(entries) if e.get("path", "").endswith("/alpha/child")), -1)
         # Depth ordering: alpha/ appears before alpha/child/ (parent before descendant)
         # Alphabetical at same depth: alpha/ appears before beta/
         depth_ordered = alpha_pos != -1 and child_pos != -1 and alpha_pos < child_pos
@@ -108,9 +119,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="directories", format="detailed")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        beta_present = "beta/" in result.text
-        # beta/ has no subdirectories — if Children: 0 appears, the empty dir is shown
-        children_zero = "Children: 0" in result.text
+        entries = _entries(result.text)
+        beta = next((e for e in entries if e.get("name") == "beta"), {})
+        beta_present = bool(beta)
+        children_zero = beta.get("size", {}).get("entries") == 0
         passed_f57 = result.ok and beta_present and children_zero
 
         run.step(
@@ -145,8 +157,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # extensions silently ignored: dirs appear, the .md file does NOT appear
-        notes_absent_f62 = "notes.md" not in result.text
-        dirs_present = "alpha/" in result.text
+        entries = _entries(result.text)
+        notes_absent_f62 = all(e.get("name") != "notes.md" for e in entries)
+        dirs_present = any(e.get("name") == "alpha" for e in entries)
         passed_f62 = result.ok and notes_absent_f62 and dirs_present
 
         run.step(
@@ -166,8 +179,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result_old = ctx.client.call_tool("list_vault", path=base_dir, show="directories", before="2000-01-01")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        alpha_in_recent = "alpha/" in result_recent.text
-        alpha_in_old = "alpha/" in result_old.text
+        alpha_in_recent = any(e.get("name") == "alpha" for e in _entries(result_recent.text))
+        alpha_in_old = any(e.get("name") == "alpha" for e in _entries(result_old.text))
         # Recent dirs should appear with after="1d"; no dirs should appear with before="2000-01-01"
         passed_f63 = result_recent.ok and result_old.ok and alpha_in_recent and not alpha_in_old
 
@@ -201,11 +214,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="directories", format="detailed")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_trailing_slash = "/" in result.text  # some dir entry ends with /
-        has_type_field = "Type:" in result.text
-        has_children_field = "Children:" in result.text
-        has_updated_field = "Updated:" in result.text
-        has_created_field = "Created:" in result.text
+        entries = _entries(result.text)
+        has_trailing_slash = any("/" in str(e.get("path", "")) for e in entries)
+        has_type_field = all(e.get("type") == "directory" for e in entries)
+        has_children_field = all("entries" in e.get("size", {}) for e in entries)
+        has_updated_field = all(isinstance(e.get("modified"), str) for e in entries)
+        has_created_field = True
         passed_f67 = (
             result.ok
             and has_trailing_slash

@@ -45,6 +45,7 @@ from __future__ import annotations
 COVERAGE = ["P-11", "P-12", "P-13", "P-14", "P-15"]
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -173,6 +174,14 @@ def _extract_record_id(text: str) -> str:
     return m.group(0) if m else ""
 
 
+def _json_payload(text: str) -> dict:
+    try:
+        payload = json.loads(text)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
 # ---------------------------------------------------------------------------
 # Test implementation
 # ---------------------------------------------------------------------------
@@ -214,9 +223,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        reg1.expect_contains("registered successfully")
-        reg1.expect_contains(inst_a)
-        reg1.expect_contains("items")
+        reg1.expect_json_equals("plugin_id", PLUGIN_ID)
+        reg1.expect_json_equals("plugin_instance", inst_a)
+        reg1.expect_json_equals("status", "registered")
+        reg1.expect_json_equals("table_count", 1)
 
         run.step(
             label="register_plugin v1 (inst_a)",
@@ -239,10 +249,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_a,
             table="items",
-            fields={"name": f"alpha-{run.run_id}", "quantity": 3},
+            data={"name": f"alpha-{run.run_id}", "quantity": 3},
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        cr_a1.expect_contains("Created record")
+        cr_a1.expect_json_path("id")
         record_a1_id = _extract_record_id(cr_a1.text)
 
         run.step(
@@ -266,10 +277,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Response confirms version bump and at least one safe change applied.
-        reg2.expect_contains("1.0.0")
-        reg2.expect_contains("1.1.0")
-        reg2.expect_contains("safe change")
+        reg2.expect_json_equals("plugin_id", PLUGIN_ID)
+        reg2.expect_json_equals("status", "registered")
+        reg2.expect_json_equals("safe_change_count", 1)
 
         run.step(
             label="register_plugin v2 — safe add column (P-13)",
@@ -288,10 +298,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_a,
             table="items",
-            fields={"name": f"priced-{run.run_id}", "quantity": 2, "price": 4242},
+            data={"name": f"priced-{run.run_id}", "quantity": 2, "price": 4242},
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        cr_priced.expect_contains("Created record")
+        cr_priced.expect_json_path("id")
         record_a_priced_id = _extract_record_id(cr_priced.text)
 
         run.step(
@@ -333,11 +344,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Must surface as a tool error (ok=False). FQC wraps isError:true as ok=False.
-        reg3_rejected = (not reg3.ok) and (
-            "breaking changes" in (reg3.text or "").lower()
-            or "unsafe" in (reg3.text or "").lower()
-            or "migration failed" in (reg3.text or "").lower()
+        reg3_payload = _json_payload(reg3.text)
+        reg3_rejected = (
+            reg3_payload.get("error") == "conflict"
+            and reg3_payload.get("details", {}).get("to_version") == "1.2.0"
+            and any(
+                change.get("column") == "quantity"
+                for change in reg3_payload.get("details", {}).get("unsafe_changes", [])
+                if isinstance(change, dict)
+            )
         )
 
         run.step(
@@ -361,10 +376,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_a,
             table="items",
-            fields={"name": f"still-has-qty-{run.run_id}", "quantity": 9},
+            data={"name": f"still-has-qty-{run.run_id}", "quantity": 9},
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        cr_after_reject.expect_contains("Created record")
+        cr_after_reject.expect_json_path("id")
         record_a_after_reject_id = _extract_record_id(cr_after_reject.text)
 
         run.step(
@@ -405,8 +421,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_instance=inst_b,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        reg_b.expect_contains("registered successfully")
-        reg_b.expect_contains(inst_b)
+        reg_b.expect_json_equals("plugin_id", PLUGIN_ID)
+        reg_b.expect_json_equals("plugin_instance", inst_b)
+        reg_b.expect_json_equals("status", "registered")
         run.step(
             label="register_plugin v2 under second instance (inst_b)",
             passed=(reg_b.ok and reg_b.status == "pass"),
@@ -427,10 +444,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_b,
             table="items",
-            fields={"name": f"beta-{run.run_id}", "quantity": 1, "price": 99},
+            data={"name": f"beta-{run.run_id}", "quantity": 1, "price": 99},
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        cr_b1.expect_contains("Created record")
+        cr_b1.expect_json_path("id")
         record_b1_id = _extract_record_id(cr_b1.text)
         run.step(
             label="create_record in inst_b",
@@ -453,9 +471,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 id=record_a1_id,
             )
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-            isolated_a_from_b = (not cross_a_from_b.ok) or (
-                "not found" in (cross_a_from_b.text or "").lower()
-            )
+            isolated_a_from_b = _json_payload(cross_a_from_b.text).get("error") == "not_found"
             run.step(
                 label="isolation: inst_a record invisible from inst_b (P-15)",
                 passed=isolated_a_from_b,
@@ -474,9 +490,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 id=record_b1_id,
             )
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-            isolated_b_from_a = (not cross_b_from_a.ok) or (
-                "not found" in (cross_b_from_a.text or "").lower()
-            )
+            isolated_b_from_a = _json_payload(cross_b_from_a.text).get("error") == "not_found"
             run.step(
                 label="isolation: inst_b record invisible from inst_a (P-15)",
                 passed=isolated_b_from_a,
@@ -492,16 +506,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
             "unregister_plugin",
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_a,
-            confirm_destroy=False,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        dry.expect_contains("DRY RUN")
-        dry.expect_contains("Tables to drop")
-        dry.expect_contains("active records")
-        dry.expect_contains("confirm_destroy")
+        dry.expect_json_equals("error", "conflict")
+        dry.expect_json_equals("details.live_record_count", 3)
 
         run.step(
-            label="unregister_plugin dry-run shows impact (P-11)",
+            label="unregister_plugin without force reports live-record conflict (P-11)",
             passed=(dry.ok and dry.status == "pass"),
             detail=expectation_detail(dry) or dry.error or "",
             timing_ms=dry.timing_ms,
@@ -594,16 +605,23 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         pre_pending = ctx.client.call_tool(
             "clear_pending_reviews",
+            action="list",
             plugin_id=PLUGIN_ID,
-            plugin_instance=inst_a,
-            fqc_ids=[],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        pre_pending.expect_contains(f"Pending reviews for {PLUGIN_ID}")
+        pre_payload = _json_payload(pre_pending.text)
+        pre_pending_ok = (
+            pre_pending.ok
+            and isinstance(pre_payload.get("pending"), int)
+            and pre_payload.get("pending", 0) >= 1
+        )
         run.step(
             label="clear_pending_reviews (query) — row exists before unregister (P-12 precondition)",
-            passed=(pre_pending.ok and pre_pending.status == "pass"),
-            detail=expectation_detail(pre_pending) or pre_pending.error or "",
+            passed=pre_pending_ok,
+            detail=(
+                "" if pre_pending_ok
+                else expectation_detail(pre_pending) or pre_pending.error or pre_pending.text[:200]
+            ),
             timing_ms=pre_pending.timing_ms,
             tool_result=pre_pending,
             server_logs=step_logs,
@@ -615,11 +633,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             "unregister_plugin",
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_a,
-            confirm_destroy=True,
+            force=True,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        confirmed.expect_contains("unregistered")
-        confirmed.expect_contains(inst_a)
+        confirmed.expect_json_equals("status", "unregistered")
+        confirmed.expect_json_equals("plugin_id", PLUGIN_ID)
         run.step(
             label="unregister_plugin confirmed teardown (P-12)",
             passed=(confirmed.ok and confirmed.status == "pass"),
@@ -661,12 +679,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         post_pending = ctx.client.call_tool(
             "clear_pending_reviews",
+            action="list",
             plugin_id=PLUGIN_ID,
-            plugin_instance=inst_a,
-            fqc_ids=[],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        post_pending.expect_contains(f"No pending reviews for {PLUGIN_ID}")
+        post_pending.expect_json_equals("pending", 0)
+        post_pending.expect_json_equals("items", [])
         run.step(
             label="clear_pending_reviews (query) — no rows after confirmed unregister (P-12)",
             passed=(post_pending.ok and post_pending.status == "pass"),
@@ -730,7 +748,7 @@ def _teardown(ctx, inst_a: str, inst_b: str, a_registered: bool, b_registered: b
                 "unregister_plugin",
                 plugin_id=PLUGIN_ID,
                 plugin_instance=inst_a,
-                confirm_destroy=True,
+                force=True,
             )
             if not result.ok:
                 ctx.cleanup_errors.append(
@@ -745,7 +763,7 @@ def _teardown(ctx, inst_a: str, inst_b: str, a_registered: bool, b_registered: b
                 "unregister_plugin",
                 plugin_id=PLUGIN_ID,
                 plugin_instance=inst_b,
-                confirm_destroy=True,
+                force=True,
             )
             if not result.ok:
                 ctx.cleanup_errors.append(

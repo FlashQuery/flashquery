@@ -40,6 +40,7 @@ COVERAGE = ["X-04"]
 REQUIRES_MANAGED = True
 
 import argparse
+import json
 import os
 import re
 import sys
@@ -239,24 +240,26 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # Tool must return an error containing the contention message
         contention_result.expect_contains("Write lock timeout")
-        contention_result.expect_contains("Retry in a few seconds")
-
-        lock_error_ok = (
-            not contention_result.ok
-            and contention_result.status != "pass"
+        try:
+            contention_payload = json.loads(contention_result.text)
+        except Exception:
+            contention_payload = {}
+        contention_reason_ok = (
+            isinstance(contention_payload, dict)
+            and contention_payload.get("error") == "conflict"
+            and contention_payload.get("details", {}).get("reason") == "lock_contention"
         )
+
         expectations_ok = all(e["passed"] for e in contention_result.expectations)
 
         run.step(
             label="save_memory under held lock → 'Write lock timeout' error with retry guidance",
-            passed=(lock_error_ok and expectations_ok),
+            passed=(expectations_ok and contention_reason_ok),
             detail=(
                 expectation_detail(contention_result)
-                or (
-                    "Expected isError response but got success"
-                    if not lock_error_ok
-                    else contention_result.error or ""
-                )
+                or ("" if contention_reason_ok else f"Unexpected error JSON: {contention_result.text[:300]}")
+                or contention_result.error
+                or ""
             ),
             timing_ms=contention_result.timing_ms,
             tool_result=contention_result,
@@ -287,7 +290,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        save_result.expect_contains("Memory saved")
+        save_result.expect_json_path("memory_id")
 
         saved_memory_id = _extract_field(save_result.text, "Memory ID")
         if saved_memory_id:

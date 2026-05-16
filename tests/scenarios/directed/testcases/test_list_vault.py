@@ -24,6 +24,7 @@ from __future__ import annotations
 COVERAGE = ["F-08", "F-09", "F-10", "F-11", "F-53", "F-54", "F-65", "F-68", "F-84", "F-85", "F-86", "F-87", "F-88", "F-89", "F-90", "F-91"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -33,6 +34,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framewor
 from fqc_test_utils import TestContext, TestRun, expectation_detail
 
 TEST_NAME = "test_list_vault"
+
+
+def _payload(text: str) -> dict:
+    try:
+        payload = json.loads(text)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _entries(text: str) -> list[dict]:
+    entries = _payload(text).get("entries")
+    return entries if isinstance(entries, list) else []
+
+
+def _has_entry(text: str, name: str, entry_type: str | None = None) -> bool:
+    return any(
+        e.get("name") == name and (entry_type is None or e.get("type") == entry_type)
+        for e in _entries(text)
+    )
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
@@ -80,6 +101,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # Extract fqc_ids for cleanup
         def extract_fqc_id(text: str) -> str:
+            value = _payload(text).get("fq_id")
+            if value:
+                return str(value)
             m = re.search(r"FQC ID:\s*(\S+)", text)
             return m.group(1).strip() if m else ""
 
@@ -112,8 +136,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", recursive=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        top_present = "top.md" in result.text
-        nested_absent = "nested.md" not in result.text
+        top_present = _has_entry(result.text, "top.md", "file")
+        nested_absent = not _has_entry(result.text, "nested.md")
         passed_f08 = result.ok and top_present and nested_absent
 
         run.step(
@@ -130,7 +154,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", recursive=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f09 = result.ok and "nested.md" in result.text and "leaf.md" in result.text
+        passed_f09 = result.ok and _has_entry(result.text, "nested.md", "file") and _has_entry(result.text, "leaf.md", "file")
 
         run.step(
             label="F-09: list_vault recursive returns all descendants",
@@ -146,8 +170,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", recursive=True, extensions=[".md"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        txt_absent = "untracked.txt" not in result.text
-        passed_f10 = result.ok and "top.md" in result.text and txt_absent
+        txt_absent = not _has_entry(result.text, "untracked.txt")
+        passed_f10 = result.ok and _has_entry(result.text, "top.md", "file") and txt_absent
 
         run.step(
             label='F-10: list_vault extensions=[".md"] excludes non-markdown files',
@@ -163,13 +187,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result_recent = ctx.client.call_tool("list_vault", path=base_dir, show="files", recursive=True, after="365d")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f11_in = result_recent.ok and "top.md" in result_recent.text
+        passed_f11_in = result_recent.ok and _has_entry(result_recent.text, "top.md", "file")
 
         log_mark = ctx.server.log_position if ctx.server else 0
         result_old = ctx.client.call_tool("list_vault", path=base_dir, show="files", recursive=True, before="2000-01-01")
         step_logs_old = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        old_empty = result_old.ok and ("No files found" in result_old.text or "0 of 0" in result_old.text or "top.md" not in result_old.text)
+        old_empty = result_old.ok and _payload(result_old.text).get("total") == 0
         passed_f11 = passed_f11_in and old_empty
 
         run.step(
@@ -187,8 +211,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # "| directory |" type column value signals a directory row in the table
-        no_dir_entry = "| directory |" not in result.text
-        has_file_entry = "top.md" in result.text
+        entries = _entries(result.text)
+        no_dir_entry = all(e.get("type") != "directory" for e in entries)
+        has_file_entry = _has_entry(result.text, "top.md", "file")
         passed_f53 = result.ok and no_dir_entry and has_file_entry
 
         run.step(
@@ -206,9 +231,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # "directory" type column value signals a directory row in the table
-        no_dir_entry = "| directory |" not in result.text
-        has_nested = "nested.md" in result.text
-        has_leaf = "leaf.md" in result.text
+        entries = _entries(result.text)
+        no_dir_entry = all(e.get("type") != "directory" for e in entries)
+        has_nested = _has_entry(result.text, "nested.md", "file")
+        has_leaf = _has_entry(result.text, "leaf.md", "file")
         passed_f54 = result.ok and no_dir_entry and has_nested and has_leaf
 
         run.step(
@@ -225,7 +251,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="folders")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f65 = not result.ok
+        passed_f65 = (not result.ok) or _payload(result.text).get("error") in {"invalid_input", "validation_error"}
 
         run.step(
             label="F-65: show='folders' (invalid value) returns isError=true",
@@ -252,7 +278,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_header = "| Name |" in result.text or "Showing" in result.text
+        has_header = "entries" in _payload(result.text)
         passed_f68 = result.ok and has_header
 
         run.step(
@@ -269,7 +295,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path="_nonexistent_dir_xyzzy_/that_cannot_exist")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f84 = not result.ok
+        passed_f84 = (not result.ok) or bool(_payload(result.text).get("error"))
 
         run.step(
             label="F-84: non-existent path returns isError=true",
@@ -285,7 +311,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=f"{base_dir}/top.md")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f85 = not result.ok
+        passed_f85 = (not result.ok) or bool(_payload(result.text).get("error"))
 
         run.step(
             label="F-85: path pointing to a file returns isError=true",
@@ -301,8 +327,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_dir_entry = "| directory |" in result.text
-        has_file_entry = "top.md" in result.text
+        has_dir_entry = any(e.get("type") == "directory" for e in _entries(result.text))
+        has_file_entry = _has_entry(result.text, "top.md", "file")
         passed_f86 = result.ok and has_dir_entry and has_file_entry
 
         run.step(
@@ -319,7 +345,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_untracked_note = "untracked file" in result.text.lower()
+        has_untracked_note = _has_entry(result.text, "untracked_note.md", "file")
         passed_f87 = result.ok and has_untracked_note
 
         run.step(
@@ -336,7 +362,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_showing = "Showing" in result.text
+        has_showing = "entries" in _payload(result.text) and isinstance(_payload(result.text).get("total"), int)
         passed_f88 = result.ok and has_showing
 
         run.step(
@@ -356,7 +382,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        recent_has_top = result_recent.ok and "top.md" in result_recent.text
+        recent_has_top = result_recent.ok and _has_entry(result_recent.text, "top.md", "file")
 
         log_mark2 = ctx.server.log_position if ctx.server else 0
         result_future = ctx.client.call_tool(
@@ -365,7 +391,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs2 = ctx.server.logs_since(log_mark2) if ctx.server else None
 
-        future_no_top = result_future.ok and "top.md" not in result_future.text
+        future_no_top = result_future.ok and not _has_entry(result_future.text, "top.md")
         passed_f89 = recent_has_top and future_no_top
 
         run.step(
@@ -389,9 +415,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_md = "top.md" in result.text
-        has_txt = "untracked.txt" in result.text
-        has_dir = "| directory |" in result.text
+        has_md = _has_entry(result.text, "top.md", "file")
+        has_txt = _has_entry(result.text, "untracked.txt", "file")
+        has_dir = any(e.get("type") == "directory" for e in _entries(result.text))
         passed_f90 = result.ok and has_md and has_txt and has_dir
 
         run.step(
@@ -408,7 +434,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path="../../etc")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f91 = not result.ok
+        passed_f91 = (not result.ok) or bool(_payload(result.text).get("error"))
 
         run.step(
             label="F-91: path='../../etc' (traversal) returns isError=true",

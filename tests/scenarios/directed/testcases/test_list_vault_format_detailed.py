@@ -37,6 +37,7 @@ from __future__ import annotations
 COVERAGE = ["F-76", "F-77", "F-78", "F-79", "F-83"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -46,6 +47,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framewor
 from fqc_test_utils import TestContext, TestRun, expectation_detail
 
 TEST_NAME = "test_list_vault_format_detailed"
+
+
+def _payload(text: str) -> dict:
+    try:
+        payload = json.loads(text)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _entries(text: str) -> list[dict]:
+    entries = _payload(text).get("entries")
+    return entries if isinstance(entries, list) else []
+
+
+def _extract_fqc_id(text: str) -> str:
+    value = _payload(text).get("fq_id")
+    if value:
+        return str(value)
+    m = re.search(r"FQC ID:\s*(\S+)", text)
+    return m.group(1).strip() if m else ""
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
@@ -75,9 +97,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tags=["fqc-test", run.run_id],
         )
 
-        m = re.search(r"FQC ID:\s*(\S+)", tracked_result.text)
-        if m:
-            ctx.cleanup.track_mcp_document(m.group(1).strip())
+        fid = _extract_fqc_id(tracked_result.text)
+        if fid:
+            ctx.cleanup.track_mcp_document(fid)
 
         # Create an untracked file directly for F-77
         t0 = time.monotonic()
@@ -97,9 +119,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="detailed")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # Two files (tracked.md + untracked.md) → must have --- separator between them.
-        has_separator = "---" in result.text
-        has_kv_format = bool(re.search(r"^\w[\w ]+: .+", result.text, re.MULTILINE))
+        entries = _entries(result.text)
+        has_separator = len(entries) == 2
+        has_kv_format = all({"name", "path", "type", "modified", "size"}.issubset(e.keys()) for e in entries)
         passed_f76 = result.ok and has_separator and has_kv_format
 
         run.step(
@@ -116,8 +138,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="detailed")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_size_field = "Size:" in result.text
-        has_size_unit = any(u in result.text for u in [" B", "KB", "MB", "GB"])
+        entries = _entries(result.text)
+        has_size_field = all("size" in e for e in entries)
+        has_size_unit = all(isinstance(e.get("size", {}).get("chars"), int) for e in entries)
         passed_f77 = result.ok and has_size_field and has_size_unit
 
         run.step(
@@ -134,7 +157,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="directories", format="detailed")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f78 = result.ok and "Type: directory" in result.text
+        passed_f78 = result.ok and any(e.get("type") == "directory" for e in _entries(result.text))
 
         run.step(
             label="F-78: directory detailed block contains 'Type: directory'",
@@ -170,8 +193,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # With show="all", source sorts dirs first then files ([...dirs, ...files]).
         # "Type: directory" appears in the directory entry; "tracked.md" appears in a file entry.
-        dir_pos = result.text.find("Type: directory")
-        file_pos = result.text.find("tracked.md")
+        entries = _entries(result.text)
+        dir_pos = next((i for i, e in enumerate(entries) if e.get("type") == "directory"), -1)
+        file_pos = next((i for i, e in enumerate(entries) if e.get("type") == "file"), -1)
         dirs_before_files = dir_pos != -1 and file_pos != -1 and dir_pos < file_pos
         passed_f83 = result.ok and dirs_before_files
 

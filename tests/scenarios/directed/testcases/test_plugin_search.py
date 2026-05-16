@@ -138,9 +138,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        register_result.expect_contains("registered successfully")
-        register_result.expect_contains(instance_name)
-        register_result.expect_contains("items")
+        register_result.expect_json_equals("plugin_id", plugin_id)
+        register_result.expect_json_equals("plugin_instance", instance_name)
+        register_result.expect_json_equals("status", "registered")
+        register_result.expect_json_equals("table_count", 1)
 
         run.step(
             label="register_plugin (inline YAML)",
@@ -163,17 +164,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=plugin_id,
             plugin_instance=instance_name,
             table="items",
-            fields={
+            data={
                 "name": "Alpha Widget",
                 "category": "hardware",
                 "priority": "high",
             },
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         m = _UUID_RE.search(create1.text)
         record_id_1 = m.group(0) if m else ""
-        create1.expect_contains("Created record")
+        create1.expect_json_path("id")
 
         run.step(
             label="create_record (Record 1: Alpha Widget / hardware / high)",
@@ -194,17 +196,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=plugin_id,
             plugin_instance=instance_name,
             table="items",
-            fields={
+            data={
                 "name": "Beta Gadget",
                 "category": "software",
                 "priority": "low",
             },
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         m = _UUID_RE.search(create2.text)
         record_id_2 = m.group(0) if m else ""
-        create2.expect_contains("Created record")
+        create2.expect_json_path("id")
 
         run.step(
             label="create_record (Record 2: Beta Gadget / software / low)",
@@ -225,17 +228,18 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_id=plugin_id,
             plugin_instance=instance_name,
             table="items",
-            fields={
+            data={
                 "name": "Gamma Device",
                 "category": "hardware",
                 "priority": "low",
             },
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         m = _UUID_RE.search(create3.text)
         record_id_3 = m.group(0) if m else ""
-        create3.expect_contains("Created record")
+        create3.expect_json_path("id")
 
         run.step(
             label="create_record (Record 3: Gamma Device / hardware / low)",
@@ -257,6 +261,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_instance=instance_name,
             table="items",
             query="Widget",
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -282,6 +287,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             plugin_instance=instance_name,
             table="items",
             filters={"category": "hardware", "priority": "low"},
+            include=["data"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -309,10 +315,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 try:
                     archive = ctx.client.call_tool(
                         "archive_record",
-                        plugin_id=plugin_id,
-                        plugin_instance=instance_name,
-                        table="items",
-                        id=rec_id,
+                        targets=[{
+                            "plugin_id": plugin_id,
+                            "plugin_instance": instance_name,
+                            "table": "items",
+                            "id": rec_id,
+                        }],
                     )
                     if not archive.ok:
                         ctx.cleanup_errors.append(

@@ -51,6 +51,7 @@ from __future__ import annotations
 COVERAGE = ["X-05", "X-11"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -101,6 +102,18 @@ def _register_doc(ctx, created_path: str, created_fqc_id: str) -> None:
             ctx.cleanup.track_dir(str(Path(*parts[:i])))
     if created_fqc_id:
         ctx.cleanup.track_mcp_document(created_fqc_id)
+
+
+def _maintain_vault_ok(text: str) -> bool:
+    try:
+        payload = json.loads(text)
+        return isinstance(payload, dict) and (
+            isinstance(payload.get("results"), list)
+            or isinstance(payload.get("actions"), list)
+            or payload.get("success") is True
+        )
+    except Exception:
+        return "complete" in text.lower()
 
 
 def _create_doc(ctx, title: str, path: str, run_id: str, tags: list[str]) -> tuple[str, str]:
@@ -195,10 +208,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         scan_result = ctx.client.call_tool("maintain_vault", action="sync", background=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        scan_result.expect_contains("complete")
+        scan_ok = scan_result.ok and scan_result.status == "pass" and _maintain_vault_ok(scan_result.text)
         run.step(
             label="force_file_scan after creating 3 batch-archive documents",
-            passed=(scan_result.ok and scan_result.status == "pass"),
+            passed=scan_ok,
             detail=expectation_detail(scan_result) or scan_result.error or "",
             timing_ms=scan_result.timing_ms,
             tool_result=scan_result,
@@ -328,10 +341,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         scan2_result = ctx.client.call_tool("maintain_vault", action="sync", background=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        scan2_result.expect_contains("complete")
+        scan2_ok = scan2_result.ok and scan2_result.status == "pass" and _maintain_vault_ok(scan2_result.text)
         run.step(
             label="force_file_scan after creating 2 batch-tag documents",
-            passed=(scan2_result.ok and scan2_result.status == "pass"),
+            passed=scan2_ok,
             detail=expectation_detail(scan2_result) or scan2_result.error or "",
             timing_ms=scan2_result.timing_ms,
             tool_result=scan2_result,
@@ -354,8 +367,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
             add_tags=[batch_apply_tag],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        tag_result.expect_contains("Updated tags")
 
         # Verify on disk that both documents received the tag
         t0 = time.monotonic()

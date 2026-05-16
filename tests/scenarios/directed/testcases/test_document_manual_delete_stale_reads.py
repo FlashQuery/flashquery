@@ -387,6 +387,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tool_result=reconcile_result,
             server_logs=step_logs,
         )
+        if reconcile_result.ok and created_fqc_id:
+            ctx.cleanup._mcp_identifiers = [
+                i for i in ctx.cleanup._mcp_identifiers
+                if i != created_fqc_id
+            ]
 
         # ── Optionally retain files for debugging ─────────────────────
         if args.keep:

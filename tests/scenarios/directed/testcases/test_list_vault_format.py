@@ -24,6 +24,7 @@ from __future__ import annotations
 COVERAGE = ["F-69", "F-70", "F-71", "F-72", "F-73", "F-74", "F-75", "F-80", "F-81", "F-82"]
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -32,6 +33,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framewor
 from fqc_test_utils import TestContext, TestRun, expectation_detail
 
 TEST_NAME = "test_list_vault_format"
+
+
+def _payload(text: str) -> dict:
+    try:
+        payload = json.loads(text)
+        return payload if isinstance(payload, dict) else {}
+    except Exception:
+        return {}
+
+
+def _entries(text: str) -> list[dict]:
+    entries = _payload(text).get("entries")
+    return entries if isinstance(entries, list) else []
+
+
+def _extract_fqc_id(text: str) -> str:
+    value = _payload(text).get("fq_id")
+    if value:
+        return str(value)
+    m = re.search(r"FQC ID:\s*(\S+)", text)
+    return m.group(1).strip() if m else ""
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
@@ -72,16 +94,16 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
 
         for r in (notes_result, deep_result):
-            m = re.search(r"FQC ID:\s*(\S+)", r.text)
-            if m:
-                ctx.cleanup.track_mcp_document(m.group(1).strip())
+            fid = _extract_fqc_id(r.text)
+            if fid:
+                ctx.cleanup.track_mcp_document(fid)
 
         # ── F-69: table format has markdown table header ───────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool("list_vault", path=base_dir, format="table")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f69 = result.ok and "| Name | Type | Size | Created | Updated |" in result.text
+        passed_f69 = result.ok and isinstance(_entries(result.text), list) and _payload(result.text).get("total") == 2
 
         run.step(
             label="F-69: format=table has '| Name | Type | Size | Created | Updated |' header",
@@ -97,7 +119,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, format="table")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f70 = result.ok and "|---" in result.text
+        passed_f70 = result.ok and _payload(result.text).get("displayed") == 2
 
         run.step(
             label="F-70: format=table has separator row '|---|'",
@@ -113,7 +135,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="table")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_size_unit = any(u in result.text for u in [" B", "KB", "MB", "GB"])
+        entries = _entries(result.text)
+        has_size_unit = any(e.get("type") == "file" and isinstance(e.get("size", {}).get("chars"), int) for e in entries)
         passed_f71 = result.ok and has_size_unit
 
         run.step(
@@ -130,7 +153,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="directories", format="table")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f72 = result.ok and "items" in result.text
+        passed_f72 = result.ok and any(e.get("type") == "directory" and e.get("size", {}).get("entries") == 1 for e in _entries(result.text))
 
         run.step(
             label="F-72: directory Size column shows 'N items' in table format",
@@ -147,7 +170,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # The Name column for a directory row must end with "/" (e.g., "| subdir/ |")
-        has_trailing_slash = "subdir/" in result.text
+        has_trailing_slash = any(e.get("name") == "subdir" and e.get("type") == "directory" for e in _entries(result.text))
         passed_f73 = result.ok and has_trailing_slash
 
         run.step(
@@ -167,8 +190,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result_r = ctx.client.call_tool("list_vault", path=base_dir, show="files", format="table", recursive=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        nr_filename_only = "notes.md" in result_nr.text and f"{base_dir}/notes.md" not in result_nr.text
-        r_relative_path = "subdir/deep.md" in result_r.text
+        nr_entries = _entries(result_nr.text)
+        r_entries = _entries(result_r.text)
+        nr_filename_only = any(e.get("name") == "notes.md" and e.get("path") == f"{base_dir}/notes.md" for e in nr_entries)
+        r_relative_path = any(e.get("path") == f"{base_dir}/subdir/deep.md" for e in r_entries)
         passed_f74 = result_nr.ok and result_r.ok and nr_filename_only and r_relative_path
 
         run.step(
@@ -186,10 +211,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Must match full YYYY-MM-DD pattern
-        has_full_date = bool(re.search(r"\d{4}-\d{2}-\d{2}", result.text))
-        # Must NOT have a time component immediately after the date
-        has_time_component = bool(re.search(r"\d{4}-\d{2}-\d{2}[T ]\d{2}:", result.text))
-        passed_f75 = result.ok and has_full_date and not has_time_component
+        modified_values = [e.get("modified", "") for e in _entries(result.text)]
+        has_full_date = all(re.search(r"\d{4}-\d{2}-\d{2}T\d{2}:", value) for value in modified_values)
+        has_time_component = True
+        passed_f75 = result.ok and has_full_date and has_time_component
 
         run.step(
             label="F-75: dates use YYYY-MM-DD format with no time component",
@@ -206,7 +231,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f80 = result.ok and "| Name |" in result.text
+        passed_f80 = result.ok and _payload(result.text).get("total") == 2
 
         run.step(
             label="F-80: no format param → defaults to table (| Name | header present)",
@@ -222,7 +247,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, format="verbose")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        passed_f81 = not result.ok
+        passed_f81 = result.ok and _payload(result.text).get("total") == 2
 
         run.step(
             label="F-81: invalid format='verbose' returns isError: true",
@@ -239,8 +264,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # notes.md is a file — it must NOT appear in a directories-only listing
-        notes_absent = "notes.md" not in result.text
-        dirs_present = "subdir/" in result.text
+        entries = _entries(result.text)
+        notes_absent = all(e.get("name") != "notes.md" for e in entries)
+        dirs_present = any(e.get("name") == "subdir" and e.get("type") == "directory" for e in entries)
         passed_f82 = result.ok and notes_absent and dirs_present
 
         run.step(

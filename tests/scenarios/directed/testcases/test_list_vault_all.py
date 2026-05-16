@@ -24,6 +24,7 @@ from __future__ import annotations
 COVERAGE = ["F-59", "F-60", "F-61"]
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -32,6 +33,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framewor
 from fqc_test_utils import TestContext, TestRun, expectation_detail
 
 TEST_NAME = "test_list_vault_all"
+
+
+def _payload(text: str) -> dict:
+    try:
+        data = json.loads(text)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _entries(text: str) -> list[dict]:
+    entries = _payload(text).get("entries")
+    return entries if isinstance(entries, list) else []
+
+
+def _extract_fqc_id(text: str) -> str:
+    value = _payload(text).get("fq_id")
+    if value:
+        return str(value)
+    m = re.search(r"FQC ID:\s*(\S+)", text)
+    return m.group(1).strip() if m else ""
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
@@ -63,9 +85,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
 
         # Extract fqc_id for cleanup
-        m = re.search(r"FQC ID:\s*(\S+)", readme_result.text)
-        if m:
-            ctx.cleanup.track_mcp_document(m.group(1).strip())
+        fid = _extract_fqc_id(readme_result.text)
+        if fid:
+            ctx.cleanup.track_mcp_document(fid)
 
         # Create a .txt file directly so F-61 can verify extensions filter excludes it
         txt_abs = ctx.vault._abs(f"{base_dir}/notes.txt")
@@ -77,8 +99,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         result = ctx.client.call_tool("list_vault", path=base_dir, show="all")
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        has_projects = "Projects/" in result.text
-        has_readme = "readme.md" in result.text
+        entries = _entries(result.text)
+        has_projects = any(e.get("name") == "Projects" and e.get("type") == "directory" for e in entries)
+        has_readme = any(e.get("name") == "readme.md" and e.get("type") == "file" for e in entries)
         passed_f59 = result.ok and has_projects and has_readme
 
         run.step(
@@ -96,13 +119,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Find the position of first directory vs first file
-        projects_pos = result.text.find("Projects/")
-        readme_pos = result.text.find("readme.md")
-        dirs_before_files = (
-            projects_pos != -1
-            and readme_pos != -1
-            and projects_pos < readme_pos
-        )
+        entries = _entries(result.text)
+        first_file = next((i for i, e in enumerate(entries) if e.get("type") == "file"), -1)
+        last_dir = max((i for i, e in enumerate(entries) if e.get("type") == "directory"), default=-1)
+        projects_pos = next((i for i, e in enumerate(entries) if e.get("name") == "Projects"), -1)
+        readme_pos = next((i for i, e in enumerate(entries) if e.get("name") == "readme.md"), -1)
+        dirs_before_files = last_dir != -1 and first_file != -1 and last_dir < first_file
         passed_f60 = result.ok and dirs_before_files
 
         run.step(
@@ -120,9 +142,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Extensions filter applies to files only; directories always appear
-        has_projects = "Projects/" in result.text
-        has_readme = "readme.md" in result.text
-        txt_absent = "notes.txt" not in result.text
+        entries = _entries(result.text)
+        has_projects = any(e.get("name") == "Projects" and e.get("type") == "directory" for e in entries)
+        has_readme = any(e.get("name") == "readme.md" and e.get("type") == "file" for e in entries)
+        txt_absent = all(e.get("name") != "notes.txt" for e in entries)
         passed_f61 = result.ok and has_projects and has_readme and txt_absent
 
         run.step(

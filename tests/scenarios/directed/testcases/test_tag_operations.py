@@ -37,6 +37,7 @@ from __future__ import annotations
 COVERAGE = ["T-01", "T-02", "T-03", "T-04", "T-05", "T-06", "T-07"]
 
 import argparse
+import json
 import re
 import sys
 import time
@@ -75,7 +76,13 @@ def _extract_field(text: str, field: str) -> str:
 
 
 def _extract_memory_id(text: str) -> str:
-    """Parse the memory UUID from a save_memory response like 'Memory saved (id: <uuid>).'"""
+    """Parse the memory UUID from write_memory's canonical JSON response."""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict) and payload.get("memory_id"):
+            return str(payload["memory_id"])
+    except Exception:
+        pass
     m = re.search(r"\(id:\s*([0-9a-fA-F-]{36})\)", text)
     return m.group(1) if m else ""
 
@@ -198,7 +205,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        add_result.expect_contains("Updated tags")
         add_result.expect_contains(add_new_tag)
 
         # Disk verification — ground truth
@@ -237,8 +243,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        idem_result.expect_contains("Updated tags")
-
         doc = ctx.vault.read_file(path_1)
         # Count occurrences — should be exactly 1, not duplicated
         idempotent_count = sum(1 for t in doc.tags if t == idempotent_tag)
@@ -272,8 +276,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        rm_result.expect_contains("Updated tags")
-
         doc = ctx.vault.read_file(path_1)
         checks = {
             "removed tag gone from disk": remove_existing_tag not in doc.tags,
@@ -305,8 +307,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # No error even though the tag was never there
-        graceful_result.expect_contains("Updated tags")
-
         doc = ctx.vault.read_file(path_1)
         checks = {
             "no error response": graceful_result.ok and graceful_result.status == "pass",
@@ -336,8 +336,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
             add_tags=[batch_tag],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-
-        batch_result.expect_contains("Updated tags")
 
         doc1 = ctx.vault.read_file(path_1)
         doc2 = ctx.vault.read_file(path_2)
@@ -375,8 +373,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        norm_result.expect_contains("Updated tags")
-
         doc = ctx.vault.read_file(path_1)
         checks = {
             "normalized tag present": normalized_tag in doc.tags,
@@ -413,7 +409,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         memory_id = _extract_memory_id(save_mem.text)
         if memory_id:
             ctx.cleanup.track_mcp_memory(memory_id)
-        save_mem.expect_contains("Memory saved")
+        save_mem.expect_json_path("memory_id")
 
         run.step(
             label="save_memory (fixture for T-05)",
@@ -434,8 +430,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-            # Response echoes the memory id and the applied tag
-            mem_tag_result.expect_contains(memory_id)
             mem_tag_result.expect_contains(mem_add_tag)
 
             # Ground-truth verification via get_memory

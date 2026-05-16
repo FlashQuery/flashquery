@@ -37,6 +37,7 @@ COVERAGE = [
 ]
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -51,6 +52,15 @@ TEST_NAME = "test_foundation_json_response"
 
 
 def _extract_field(text: str, field: str) -> str:
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = json.loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
     match = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
     return match.group(1).strip() if match else ""
 

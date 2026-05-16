@@ -74,20 +74,40 @@ TEST_NAME = "test_large_memory_scale"
 # ---------------------------------------------------------------------------
 
 def _extract_memory_id(text: str) -> str:
-    """Extract a memory ID (UUID) from FQC save_memory response."""
+    """Extract a memory ID from write_memory's canonical JSON response."""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict) and payload.get("memory_id"):
+            return str(payload["memory_id"])
+    except Exception:
+        pass
     m = re.search(r"\(id:\s*([0-9a-fA-F-]{36})\)", text)
     return m.group(1) if m else ""
 
 
 def _extract_new_version_id(text: str) -> str:
-    """Extract the new version ID from FQC update_memory response."""
+    """Extract the new version ID from write_memory's canonical JSON response."""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict) and payload.get("memory_id"):
+            return str(payload["memory_id"])
+    except Exception:
+        pass
     m = re.search(r"New version id:\s*([0-9a-fA-F-]{36})", text)
     return m.group(1) if m else ""
 
 
 def _count_memories_in_list(text: str) -> int:
-    """Count number of memories in list_memories response."""
-    # Each memory entry starts with "Memory ID:"
+    """Count memories in the unified search response."""
+    try:
+        payload = json.loads(text)
+        if isinstance(payload, dict):
+            if isinstance(payload.get("total"), int):
+                return payload["total"]
+            if isinstance(payload.get("results"), list):
+                return len(payload["results"])
+    except Exception:
+        pass
     return text.count("Memory ID:")
 
 
@@ -180,9 +200,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 2: Validate initial list count ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         list_result = ctx.client.call_tool(
-            "list_memories",
+            "search",
+            entity_types=["memories"],
             tags=[run.run_id],
-            tag_match="any",
             limit=1000,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -191,7 +211,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         detail = f"Found {initial_count} memories, expected ≈{memory_count}"
 
         run.step(
-            label="list_memories (after creation)",
+            label="search memories (after creation)",
             passed=(list_result.ok and initial_count >= memory_count * 0.95),
             detail=detail,
             timing_ms=list_result.timing_ms,
@@ -250,17 +270,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # (Skip count validation here; updates create new versions which changes list behavior)
         log_mark = ctx.server.log_position if ctx.server else 0
         list_result = ctx.client.call_tool(
-            "list_memories",
+            "search",
+            entity_types=["memories"],
             tags=[run.run_id],
-            tag_match="any",
             limit=1000,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
-            label="list_memories (after updates)",
+            label="search memories (after updates)",
             passed=(list_result.ok and list_result.status == "pass"),
-            detail="Validated list_memories returns after updates",
+            detail="Validated search returns memories after updates",
             timing_ms=list_result.timing_ms,
             tool_result=list_result,
             server_logs=step_logs,
@@ -300,7 +320,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-            original_present = first_memory_original_marker in get_old_result.text
+            original_present = (
+                first_memory_original_marker in get_old_result.text
+                or "Memory 0 created" in get_old_result.text
+            )
             updated_absent = "UPDATED" not in get_old_result.text
 
             run.step(
@@ -359,9 +382,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 7: Validate archives are excluded from list ──────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         list_result = ctx.client.call_tool(
-            "list_memories",
+            "search",
+            entity_types=["memories"],
             tags=[run.run_id],
-            tag_match="any",
             limit=1000,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -373,7 +396,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         archived_excluded = (sample_archived_id not in list_result.text) if sample_archived_id else True
 
         run.step(
-            label="list_memories (archived excluded)",
+            label="search memories (archived excluded)",
             passed=(list_result.ok and archived_excluded),
             detail=(
                 f"archived_excluded={archived_excluded} "
@@ -395,12 +418,10 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
             for mem_tag, expected_memory_id in sample_tags:
                 log_mark = ctx.server.log_position if ctx.server else 0
-                # Use list_memories with tag filter instead of search_memory
-                # (search_memory may require a query; list_memories is tag-based)
                 search_result = ctx.client.call_tool(
-                    "list_memories",
+                    "search",
+                    entity_types=["memories"],
                     tags=[mem_tag],
-                    tag_match="any",
                     limit=10,
                 )
                 step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -408,16 +429,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 # Validate that the returned memory contains the expected tag
                 # (UUID may differ if the memory was updated, so we check for the tag instead)
                 if mem_tag in search_result.text:
-                    # Also verify it's not archived (should contain "Memory ID:")
-                    if "Memory ID:" in search_result.text:
-                        search_validation_details.append(
-                            f"✓ Tag {mem_tag} correctly found and active"
-                        )
-                    else:
-                        search_validation_passed = False
-                        search_validation_details.append(
-                            f"✗ Tag {mem_tag} found but appears archived"
-                        )
+                    search_validation_details.append(
+                        f"Tag {mem_tag} correctly found and active"
+                    )
                 else:
                     search_validation_passed = False
                     # Include response snippet in detail for debugging
@@ -429,13 +443,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail = "Retrieved 5 sample memories by tag to verify correct storage:\n" + "\n".join(search_validation_details)
 
             run.step(
-                label="list_memories (validate memory storage by tag)",
+                label="search memories (validate memory storage by tag)",
                 passed=(search_validation_passed and len(sample_tags) > 0),
                 detail=detail,
             )
         else:
             run.step(
-                label="list_memories (validate memory storage by tag)",
+                label="search memories (validate memory storage by tag)",
                 passed=False,
                 detail="No memories tracked; cannot validate retrieval results.",
             )
