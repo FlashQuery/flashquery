@@ -62,14 +62,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
             # and L-31 degenerated into a 2-failure case (valid_path also
             # not found) instead of the intended 1-valid + 1-invalid mix.
             client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 path=valid_path,
                 title="L-31 valid fixture",
                 content="valid content",
             )
             # Force a sync scan so valid_path is indexed before L-31 / L-31a
             # reference it.
-            client.call_tool("force_file_scan", background=False)
+            client.call_tool("maintain_vault", action="sync", background=False)
 
             # L-30: nonexistent reference → reference_resolution_failed
             ghost_ref = "Nonexistent/ghost_no_such_doc.md"
@@ -168,7 +169,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             p.write_text(
                 f"---\nfq_id: {_uuid.uuid4()}\n---\n\nsource\n"
             )
-            client.call_tool("force_file_scan", background=False)
+            client.call_tool("maintain_vault", action="sync", background=False)
 
             r = client.call_tool(
                 "call_model", resolver="model", name="fast",

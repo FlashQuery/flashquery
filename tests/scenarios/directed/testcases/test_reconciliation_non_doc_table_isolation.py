@@ -294,7 +294,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         for i in range(PLAIN_COUNT):
             log_mark = ctx.server.log_position if ctx.server else 0
             create_plain = ctx.client.call_tool(
-                "create_record",
+                "write_record",
+            mode="create",
                 plugin_id=PLUGIN_ID,
                 plugin_instance=instance_name,
                 table=PLAIN_TABLE,

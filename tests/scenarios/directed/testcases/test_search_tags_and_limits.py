@@ -70,8 +70,17 @@ TEST_NAME = "test_search_tags_and_limits"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -122,7 +131,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1: Create Doc A (both alpha + beta tags) via MCP ────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_a = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_a,
             content=body_a,
             path=path_a,
@@ -157,7 +167,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 2: Create Doc B (alpha tag only) via MCP ────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_b = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_b,
             content=body_b,
             path=path_b,
@@ -192,7 +203,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 3: Create Doc C (both alpha + beta tags) via MCP ────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_c = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_c,
             content=body_c,
             path=path_c,
@@ -244,7 +256,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # Docs A and C should appear; Doc B (alpha only) should NOT appear
         log_mark = ctx.server.log_position if ctx.server else 0
         all_tags_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             tags=[alpha_tag, beta_tag],
             tag_match="all",
             mode="filesystem",
@@ -270,7 +283,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 6: S-06 — limit=2: all 3 docs match, only 2 returned
         log_mark = ctx.server.log_position if ctx.server else 0
         limit_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             tags=[alpha_tag],
             limit=2,
             mode="filesystem",

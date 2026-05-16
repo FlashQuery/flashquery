@@ -162,7 +162,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
 
                 create = client.call_tool(
-                    "create_document",
+                    "write_document",
+            mode="create",
                     title=f"{TEST_NAME} marker {run_id}",
                     path=doc_path,
                     content=f"{MARKER}\n",

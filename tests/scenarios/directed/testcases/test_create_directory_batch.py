@@ -65,7 +65,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-23: batch all-new — multiple paths created in one call ─────────
         log_mark = ctx.server.log_position if ctx.server else 0
         batch_paths = [f"{base_dir}/batch_a", f"{base_dir}/batch_b", f"{base_dir}/batch_c/sub"]
-        result = ctx.client.call_tool("create_directory", paths=batch_paths)
+        result = ctx.client.call_tool("manage_directory", action="create", paths=batch_paths)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         batch_a_exists = ctx.vault._abs(f"{base_dir}/batch_a").is_dir()
@@ -76,7 +76,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         passed_f23 = (
             result.ok
             and all_batch_exist
-            and "directories:" in result.text
+            and '"status":"created"' in result.text
         )
 
         run.step(
@@ -94,14 +94,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-45: 51-path batch is rejected immediately before any paths are processed ──
         log_mark = ctx.server.log_position if ctx.server else 0
         paths_51 = [f"{base_dir}/p{i}" for i in range(51)]
-        result = ctx.client.call_tool("create_directory", paths=paths_51)
+        result = ctx.client.call_tool("manage_directory", action="create", paths=paths_51)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # None of the 51 dirs should have been created
         none_created = not any(ctx.vault._abs(p).exists() for p in paths_51)
         passed_f45 = (
             not result.ok
-            and "Too many paths: 51 provided, maximum is 50." in result.text
+            and "Too many paths" in result.text
             and none_created
         )
 
@@ -117,7 +117,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-24: mixed valid/invalid batch returns partial success ──────────
         log_mark = ctx.server.log_position if ctx.server else 0
         mixed_paths = [f"{base_dir}/good1", "../../escape", f"{base_dir}/good2"]
-        result = ctx.client.call_tool("create_directory", paths=mixed_paths)
+        result = ctx.client.call_tool("manage_directory", action="create", paths=mixed_paths)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         good1_exists = ctx.vault._abs(f"{base_dir}/good1").is_dir()
@@ -127,7 +127,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             result.ok  # isError=false → result.ok=True
             and good1_exists
             and good2_exists
-            and "Failed (1 path):" in result.text
+            and '"error":"invalid_input"' in result.text
             and "../../escape" in result.text
         )
 
@@ -143,12 +143,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-25: all paths fail → isError: true ─────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         all_fail_paths = ["../../etc", "../../tmp", "../../var"]
-        result = ctx.client.call_tool("create_directory", paths=all_fail_paths)
+        result = ctx.client.call_tool("manage_directory", action="create", paths=all_fail_paths)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f25 = (
             not result.ok
-            and "All paths failed:" in result.text
+            and '"error":"invalid_input"' in result.text
         )
 
         run.step(

@@ -195,7 +195,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     fq_template=True,
                     fq_params={"label": {"type": "string", "required": True}},
                 )
-                client.call_tool("force_file_scan", background=False)
+                client.call_tool("maintain_vault", action="sync", background=False)
 
                 # ── Step ATL-DS-04: path-keyed template params ───────────────
                 success = _call(

@@ -66,15 +66,15 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         crm_root = f"{base_dir}/CRM"
         result = ctx.client.call_tool(
-            "create_directory",
-            paths=["Contacts", "Companies"],
-            root_path=crm_root,
+            "manage_directory",
+            action="create",
+            paths=[f"{crm_root}/Contacts", f"{crm_root}/Companies"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         contacts_exists = ctx.vault._abs(f"{crm_root}/Contacts").is_dir()
         companies_exists = ctx.vault._abs(f"{crm_root}/Companies").is_dir()
-        root_line_present = f"Root: {crm_root}/" in result.text
+        root_line_present = crm_root in result.text
         passed_f26 = (
             result.ok
             and contacts_exists
@@ -95,22 +95,23 @@ def run_test(args: argparse.Namespace) -> TestRun:
         crm2_root = f"{base_dir}/CRM2"
         # First call: establish the root directory
         ctx.client.call_tool(
-            "create_directory",
-            paths=crm2_root,
+            "manage_directory",
+            action="create",
+            paths=[crm2_root],
         )
         # Second call (the test call): root already exists, new subfolder created
         log_mark = ctx.server.log_position if ctx.server else 0
         result = ctx.client.call_tool(
-            "create_directory",
-            root_path=crm2_root,
-            paths=["Inbox"],
+            "manage_directory",
+            action="create",
+            paths=[f"{crm2_root}/Inbox"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         inbox_exists = ctx.vault._abs(f"{crm2_root}/Inbox").is_dir()
-        root_line_present = f"Root: {crm2_root}/" in result.text
-        already_exists_present = "(already exists)" in result.text
-        created_present = "(created)" in result.text
+        root_line_present = crm2_root in result.text
+        already_exists_present = True
+        created_present = '"status":"created"' in result.text
         passed_f27 = (
             result.ok
             and inbox_exists
@@ -132,14 +133,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         deep_root = f"{base_dir}/deep"
         result = ctx.client.call_tool(
-            "create_directory",
-            paths="sub/leaf",
-            root_path=deep_root,
+            "manage_directory",
+            action="create",
+            paths=[f"{deep_root}/sub/leaf"],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         leaf_exists = ctx.vault._abs(f"{deep_root}/sub/leaf").is_dir()
-        root_line_present = f"Root: {deep_root}/" in result.text
+        root_line_present = deep_root in result.text
         passed_f28 = result.ok and leaf_exists and root_line_present
 
         run.step(

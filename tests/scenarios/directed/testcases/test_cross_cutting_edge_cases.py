@@ -78,8 +78,17 @@ EMBEDDING_NONBLOCKING_THRESHOLD_MS = 5000
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -97,7 +106,8 @@ def _register_doc(ctx, created_path: str, created_fqc_id: str) -> None:
 def _create_doc(ctx, title: str, path: str, run_id: str, tags: list[str]) -> tuple[str, str]:
     """Create a document and return (fqc_id, resolved_path). Returns ('', '') on failure."""
     result = ctx.client.call_tool(
-        "create_document",
+        "write_document",
+            mode="create",
         title=title,
         content=f"## {title}\n\nCreated by {TEST_NAME} (run {run_id}).",
         path=path,
@@ -144,7 +154,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             path = f"_test/{TEST_NAME}_arc{i}_{run.run_id}.md"
             log_mark = ctx.server.log_position if ctx.server else 0
             result = ctx.client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=title,
                 content=f"## {title}\n\nBatch archive fixture {i} (run {run.run_id}).",
                 path=path,
@@ -181,7 +192,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 2: force_file_scan to register them ─────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan_result = ctx.client.call_tool("force_file_scan", background=False)
+        scan_result = ctx.client.call_tool("maintain_vault", action="sync", background=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         scan_result.expect_contains("complete")
@@ -237,7 +248,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: Verify archived docs don't appear in search ──────
         log_mark = ctx.server.log_position if ctx.server else 0
         search_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query=batch_tag,
             tags=[batch_tag],
             limit=10,
@@ -275,7 +287,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             path = f"_test/{TEST_NAME}_tag{i}_{run.run_id}.md"
             log_mark = ctx.server.log_position if ctx.server else 0
             result = ctx.client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=title,
                 content=f"## {title}\n\nBatch tag fixture {i} (run {run.run_id}).",
                 path=path,
@@ -312,7 +325,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 6: force_file_scan again ─────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan2_result = ctx.client.call_tool("force_file_scan", background=False)
+        scan2_result = ctx.client.call_tool("maintain_vault", action="sync", background=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         scan2_result.expect_contains("complete")
@@ -415,7 +428,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = emb_ctx.server.log_position if emb_ctx.server else 0
         t_create_start = time.monotonic()
         create_result = emb_ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=x11_title,
             content=(
                 f"## Fire-and-Forget Embedding Test\n\n"

@@ -30,7 +30,7 @@ TEST_NAME = "test_call_model_references"
 
 def _extract_fq_id(text: str) -> str | None:
     """Extract the FQC ID value from create_document's key-value response."""
-    m = re.search(r"^FQC ID:\s*([0-9a-f-]+)\s*$", text, re.MULTILINE)
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1) if m else None
 
 COVERAGE = [
@@ -78,7 +78,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             body_path = f"_test/{TEST_NAME}_{run_id}_body.md"
             body_text = "Reference target body."
             create_body = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} body {run_id}",
                 path=body_path,
                 content=body_text,
@@ -98,7 +99,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             sec_path = f"_test/{TEST_NAME}_{run_id}_section.md"
             sec_body = "intro\n\n## Target\n\nsection content here\n\n## Other\n\nother\n"
             create_sec = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} section {run_id}",
                 path=sec_path,
                 content=sec_body,
@@ -113,7 +115,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             target_path = f"_test/{TEST_NAME}_{run_id}_target.md"
             target_body = "pointer target body"
             create_target = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} target {run_id}",
                 path=target_path,
                 content=target_body,
@@ -143,7 +146,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             # Trigger scan so the new file is indexed (fq_id from frontmatter
             # becomes the fqc_documents row id; required for {{id:uuid->...}}).
-            client.call_tool("force_file_scan", background=False)
+            client.call_tool("maintain_vault", action="sync", background=False)
 
             # ── L-24: {{ref:path}} resolves full body ───────────────────
             r = client.call_tool(

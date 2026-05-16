@@ -73,8 +73,17 @@ TEST_NAME = "test_reconcile_documents"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -152,7 +161,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1: Create document via MCP ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_dry = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_dry,
             content=(
                 f"## Dry Run Test\n\n"
@@ -224,7 +234,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 4: F-05 — Call reconcile_documents(dry_run=True) ────
         log_mark = ctx.server.log_position if ctx.server else 0
-        reconcile_dry = ctx.client.call_tool("reconcile_documents", dry_run=True)
+        reconcile_dry = ctx.client.call_tool("maintain_vault", action="repair", dry_run=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         is_dry_run, dry_reason = _looks_like_dry_run(reconcile_dry.text)
@@ -269,7 +279,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 6: Create second document (to be moved) via MCP ─────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_moved = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_moved,
             content=(
                 f"## Moved File Test\n\n"
@@ -364,7 +375,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 9: F-06 — Call reconcile_documents(dry_run=False) ───
         log_mark = ctx.server.log_position if ctx.server else 0
-        reconcile_move = ctx.client.call_tool("reconcile_documents", dry_run=False)
+        reconcile_move = ctx.client.call_tool("maintain_vault", action="repair", dry_run=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         is_move_detected, move_reason = _looks_like_move_detected(reconcile_move.text)
@@ -411,7 +422,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 11: Create third document (to be deleted) via MCP ───
         log_mark = ctx.server.log_position if ctx.server else 0
         create_gone = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_gone,
             content=(
                 f"## Gone File Test\n\n"
@@ -501,7 +513,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 14: F-07 — Call reconcile_documents(dry_run=False) ──
         log_mark = ctx.server.log_position if ctx.server else 0
-        reconcile_gone = ctx.client.call_tool("reconcile_documents", dry_run=False)
+        reconcile_gone = ctx.client.call_tool("maintain_vault", action="repair", dry_run=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         is_archived, archive_reason = _looks_like_archived(reconcile_gone.text)

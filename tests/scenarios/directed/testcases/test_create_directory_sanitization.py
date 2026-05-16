@@ -69,7 +69,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-33: colon (:) is sanitized to space ────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/meeting:notes")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/meeting:notes"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Colon → space: dir becomes "meeting notes"
@@ -89,7 +89,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-34: multiple illegal characters in one segment all sanitized ────
         # Use "foo:|bar" — colon and pipe in same segment → "foo  bar" → collapsed → "foo bar"
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/foo:|bar")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/foo:|bar"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Both illegal chars sanitized → dir becomes "foo  bar" → after collapse → "foo bar"
@@ -110,7 +110,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-35: NUL byte in segment sanitized to space ──────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/bad\x00name")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/bad\x00name"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # NUL → space: dir becomes "bad name"
@@ -130,7 +130,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-36: control character (byte 1–31, not NUL) sanitized to space ───
         log_mark = ctx.server.log_position if ctx.server else 0
         # \x01 is byte 1 (SOH), a non-NUL control character
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/ctrl\x01char")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/ctrl\x01char"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # \x01 → space: dir becomes "ctrl char"

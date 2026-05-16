@@ -75,8 +75,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         ctx.cleanup.track_dir(base_dir)
 
         # ── F-96: chmod 000 on a subdirectory — listing still ok ─────────────
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/accessible")
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/restricted")
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/accessible"])
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/restricted"])
 
         # Put a file in accessible/
         accessible_file = ctx.vault._abs(f"{base_dir}/accessible/note.txt")

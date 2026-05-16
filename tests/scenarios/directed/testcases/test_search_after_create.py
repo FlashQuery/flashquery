@@ -148,7 +148,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: Search by unique title ────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         search_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query=unique_title,
             mode="filesystem",
         )
@@ -169,7 +170,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 5: Search by unique tag ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         tag_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             tags=[run.run_id],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None

@@ -244,7 +244,8 @@ def generate_report(
     date_slug   = now.strftime("%Y-%m-%d %H:%M")
 
     passed = sum(1 for r in test_results if r["run"]["status"] == "PASS")
-    failed = sum(1 for r in test_results if r["run"]["status"] != "PASS")
+    skipped = sum(1 for r in test_results if r["run"]["status"] == "SKIP")
+    failed = sum(1 for r in test_results if r["run"]["status"] not in {"PASS", "SKIP"})
     total  = len(test_results)
 
     server_mode = (server_info or {}).get("mode", "external")
@@ -274,6 +275,7 @@ def generate_report(
     lines.append(f"total: {total}")
     lines.append(f"pass: {passed}")
     lines.append(f"fail: {failed}")
+    lines.append(f"skip: {skipped}")
     lines.append(f'server_mode: "{server_mode}"')
     lines.append(f'os: "{platform.system()}"')
     if seed is not None:
@@ -301,7 +303,10 @@ def generate_report(
         if seed is not None:
             lines.append(f"**Test order:** shuffled (seed={seed})")
     lines.append(f"**Duration:** {_fmt_ms(suite_duration_ms)}")
-    lines.append(f"**Summary:** {passed} passed, {failed} failed — {total} tests total")
+    summary_parts = [f"{passed} passed", f"{failed} failed"]
+    if skipped:
+        summary_parts.append(f"{skipped} skipped")
+    lines.append(f"**Summary:** {', '.join(summary_parts)} — {total} tests total")
     lines.append("")
 
     # ── Per-test sections ─────────────────────────────────────────────────
@@ -320,6 +325,11 @@ def generate_report(
         # H1 per test — makes each test a top-level navigable section
         lines.append(f"# {status}: {test_name} ({_fmt_ms(total_ms)})")
         lines.append("")
+
+        if status == "SKIP":
+            lines.append(f"**Reason:** {run.get('skip_reason', 'unspecified')}")
+            lines.append("")
+            continue
 
         # Summary table
         if steps:
@@ -456,7 +466,19 @@ def _run_single_test(
 
     if not hasattr(mod, "run_test"):
         print(f"  SKIP: {test_file.stem} has no run_test() function", file=sys.stderr)
-        return None  # type: ignore[return-value]
+        return {
+            "run": {
+                "test": test_file.stem,
+                "run_id": "skipped",
+                "status": "SKIP",
+                "exit_code": 0,
+                "total_ms": 0,
+                "steps": [],
+                "skip_reason": "no run_test() function",
+            },
+            "server_logs": None,
+            "coverage": [],
+        }
 
     # Skip managed-only tests when running against an external server
     if getattr(mod, "REQUIRES_MANAGED", False) and server is None:
@@ -465,7 +487,19 @@ def _run_single_test(
             f"(test always spawns its own server)",
             file=sys.stderr,
         )
-        return None  # type: ignore[return-value]
+        return {
+            "run": {
+                "test": test_file.stem,
+                "run_id": "skipped",
+                "status": "SKIP",
+                "exit_code": 0,
+                "total_ms": 0,
+                "steps": [],
+                "skip_reason": "requires --managed mode",
+            },
+            "server_logs": None,
+            "coverage": list(getattr(mod, "COVERAGE", [])),
+        }
 
     # Capture server log position before the test
     log_mark = server.log_position if server else 0
@@ -813,8 +847,13 @@ def run_suite(args: argparse.Namespace) -> int:
         steps_total = len(result["run"].get("steps", []))
         residue = result["run"].get("cleanup_residue") or {}
 
-        icon = "PASS" if status == "PASS" and not residue else "FAIL"
+        if status == "SKIP":
+            icon = "SKIP"
+        else:
+            icon = "PASS" if status == "PASS" and not residue else "FAIL"
         suffix = ""
+        if status == "SKIP":
+            suffix = f" [{result['run'].get('skip_reason', 'unspecified')}]"
         if residue:
             total_residue = sum(v for v in residue.values() if isinstance(v, int))
             suffix = f" [residue: {total_residue} row{'s' if total_residue != 1 else ''}]"
@@ -825,14 +864,14 @@ def run_suite(args: argparse.Namespace) -> int:
         )
         # When the test failed and we're in a managed mode, hint at how to
         # inspect what ended up in the DB.
-        if status != "PASS" and active_server is not None:
+        if status not in {"PASS", "SKIP"} and active_server is not None:
             print(
                 f"    To inspect DB state: "
                 f"python3 tests/scenarios/dbtools/snapshot.py --instance-id {active_server.instance_id}",
                 file=sys.stderr,
             )
 
-        if (status != "PASS" or residue) and args.stop_on_fail:
+        if (status not in {"PASS", "SKIP"} or residue) and args.stop_on_fail:
             print(f"  Stopping (--stop-on-fail)", file=sys.stderr)
             break
 
@@ -849,7 +888,8 @@ def run_suite(args: argparse.Namespace) -> int:
 
     # ── Summary ───────────────────────────────────────────────────
     passed = sum(1 for r in test_results if r["run"]["status"] == "PASS")
-    failed = sum(1 for r in test_results if r["run"]["status"] != "PASS")
+    skipped = sum(1 for r in test_results if r["run"]["status"] == "SKIP")
+    failed = sum(1 for r in test_results if r["run"]["status"] not in {"PASS", "SKIP"})
     residue_hits = [
         r for r in test_results if r["run"].get("cleanup_residue")
     ]
@@ -874,6 +914,8 @@ def run_suite(args: argparse.Namespace) -> int:
     print(file=sys.stderr)
     print(f"  PASS:    {passed}", file=sys.stderr)
     print(f"  FAIL:    {failed}", file=sys.stderr)
+    if skipped:
+        print(f"  SKIP:    {skipped}", file=sys.stderr)
     if args.strict_cleanup:
         print(f"  RESIDUE: {len(residue_hits)} test(s) left rows behind", file=sys.stderr)
     print(f"  REPORT:  {report_path}", file=sys.stderr)

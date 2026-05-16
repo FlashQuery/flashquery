@@ -73,8 +73,17 @@ TEST_NAME = "test_search_modes"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -185,7 +194,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1a: Create Doc A via MCP ────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_a = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_a,
             content=body_a,
             path=path_a,
@@ -208,7 +218,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1b: Create Doc B via MCP ────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_b = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_b,
             content=body_b,
             path=path_b,
@@ -251,7 +262,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # concept does ("library"/"forbidden knowledge"/"arcane lore").
         log_mark = ctx.server.log_position if ctx.server else 0
         sem_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query="repository of arcane wisdom",
             tags=[unique_tag],
             mode="semantic",
@@ -274,7 +286,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # Use a literal token from Doc B's title — filesystem half should hit.
         log_mark = ctx.server.log_position if ctx.server else 0
         mixed_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query=f"Bravo Ledger {run.run_id}",
             tags=[unique_tag],
             mode="mixed",
@@ -328,7 +341,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 5: Create Doc C with a unique literal token ─────────
         log_mark = ctx2.server.log_position if ctx2.server else 0
         create_c = ctx2.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_c,
             content=body_c,
             path=path_c,
@@ -365,7 +379,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 6: Semantic search without embeddings (S-09) ────────
         log_mark = ctx2.server.log_position if ctx2.server else 0
         sem_fallback = ctx2.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query=fallback_token,
             mode="semantic",
         )
@@ -384,7 +399,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 7: Mixed search without embeddings (X-10) ───────────
         log_mark = ctx2.server.log_position if ctx2.server else 0
         mixed_fallback = ctx2.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query=fallback_token,
             mode="mixed",
         )

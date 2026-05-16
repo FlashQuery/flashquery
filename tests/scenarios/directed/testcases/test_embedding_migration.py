@@ -68,7 +68,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
             # L-23 step 1: save_memory writes a memory entry — embedding routed through 'embedding' purpose
             seed_text = "FlashQuery embedding migration test — phase 104 L-23 unique marker abc123xyz"
-            save_result = client.call_tool("save_memory", **{
+            save_result = client.call_tool("write_memory",
+            mode="create", **{
                 "content": seed_text,
                 "category": "test",
                 "scope": "global",
@@ -83,7 +84,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             time.sleep(3)
 
             # L-23 step 2: search_memory finds the seed entry by semantic query
-            search_result = client.call_tool("search_memory", **{
+            search_result = client.call_tool("search",
+            entity_types=["memories"], **{
                 "query": "phase 104 L-23 unique marker",
                 "limit": 5,
             })

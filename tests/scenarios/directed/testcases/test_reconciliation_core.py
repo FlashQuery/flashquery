@@ -155,7 +155,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 3: force_file_scan to index the new file ────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan_result = ctx.client.call_tool("force_file_scan", background=False)
+        scan_result = ctx.client.call_tool("maintain_vault", action="sync", background=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(

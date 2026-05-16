@@ -72,8 +72,17 @@ TEST_NAME = "test_document_archive_and_search"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -118,7 +127,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1: Create document via MCP ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=unique_title,
             content=body,
             path=test_path,
@@ -156,7 +166,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 2: Baseline search by unique tag (must hit) ─────────
         log_mark = ctx.server.log_position if ctx.server else 0
         baseline_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             tags=[unique_tag],
             mode="filesystem",
         )
@@ -177,7 +188,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 3: Search for a non-matching query (S-04, X-09) ─────
         log_mark = ctx.server.log_position if ctx.server else 0
         miss_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query=nonsense_query,
             mode="filesystem",
         )
@@ -309,7 +321,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 6: Search by tag again — archived must be excluded (D-13, S-05) ─
         log_mark = ctx.server.log_position if ctx.server else 0
         post_tag_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             tags=[unique_tag],
             mode="filesystem",
         )
@@ -331,7 +344,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 7: Search by title — archived must also be excluded ─
         log_mark = ctx.server.log_position if ctx.server else 0
         post_title_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query=unique_title,
             mode="filesystem",
         )

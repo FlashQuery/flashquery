@@ -67,12 +67,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-19: create_directory creates a single directory ────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/inbox")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/inbox"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         dir_exists = ctx.vault._abs(f"{base_dir}/inbox").is_dir()
-        # base_dir pre-exists, so only inbox is created → exactly 1 new directory
-        passed_f19 = result.ok and dir_exists and "Created 1 directory:" in result.text
+        passed_f19 = result.ok and dir_exists and '"status":"created"' in result.text
 
         run.step(
             label="F-19: create_directory creates single directory",
@@ -85,14 +84,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-20: create_directory creates deep hierarchy (mkdir -p) ────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/alpha/beta/gamma")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/alpha/beta/gamma"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         alpha_exists = ctx.vault._abs(f"{base_dir}/alpha").is_dir()
         beta_exists = ctx.vault._abs(f"{base_dir}/alpha/beta").is_dir()
         gamma_exists = ctx.vault._abs(f"{base_dir}/alpha/beta/gamma").is_dir()
         dirs_created = alpha_exists and beta_exists and gamma_exists
-        passed_f20 = result.ok and dirs_created and "directories:" in result.text
+        passed_f20 = result.ok and dirs_created and '"status":"created"' in result.text
 
         run.step(
             label="F-20: create_directory creates deep hierarchy (mkdir -p)",
@@ -106,15 +105,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-21: calling create_directory on existing directory is idempotent
         log_mark = ctx.server.log_position if ctx.server else 0
         # Create the dir first
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/dupe")
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/dupe"])
         # Call again — should succeed with "already exists"
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/dupe")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/dupe"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f21 = (
             result.ok
-            and "already exists" in result.text
-            and "Created 0 directories:" in result.text
+            and '"status":"unchanged"' in result.text
         )
 
         run.step(
@@ -129,9 +127,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-22: partial-existing hierarchy — only new segments counted ─────
         log_mark = ctx.server.log_position if ctx.server else 0
         # Create partial hierarchy first
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/hier/a/b")
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/hier/a/b"])
         # Now extend it — a and b already exist, c and d are new
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/hier/a/b/c/d")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/hier/a/b/c/d"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         c_exists = ctx.vault._abs(f"{base_dir}/hier/a/b/c").is_dir()
@@ -140,8 +138,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             result.ok
             and c_exists
             and d_exists
-            and "already exists" in result.text
-            and "created" in result.text
+            and '"status":"created"' in result.text
         )
 
         run.step(
@@ -155,11 +152,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-29: create_directory is idempotent — repeated identical calls succeed ──
         log_mark = ctx.server.log_position if ctx.server else 0
-        result1 = ctx.client.call_tool("create_directory", paths=f"{base_dir}/idem")
+        result1 = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/idem"])
         timing1 = result1.timing_ms
-        result2 = ctx.client.call_tool("create_directory", paths=f"{base_dir}/idem")
+        result2 = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/idem"])
         timing2 = result2.timing_ms
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/idem")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/idem"])
         timing3 = result.timing_ms
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -167,14 +164,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             result1.ok
             and result2.ok
             and result.ok
-            and "already exists" in result2.text
-            and "already exists" in result.text
+            and '"status":"unchanged"' in result2.text
+            and '"status":"unchanged"' in result.text
         )
 
         run.step(
             label="F-29: create_directory is idempotent — repeated identical calls all succeed with (already exists)",
             passed=passed_f29,
-            detail=f"call1_ok={result1.ok} call2_ok={result2.ok} call3_ok={result.ok} | call2_already_exists={'already exists' in result2.text} call3_already_exists={'already exists' in result.text} | {result.text[:200]}",
+            detail=f"call1_ok={result1.ok} call2_ok={result2.ok} call3_ok={result.ok} | call2_unchanged={'\"status\":\"unchanged\"' in result2.text} call3_unchanged={'\"status\":\"unchanged\"' in result.text} | {result.text[:200]}",
             timing_ms=timing1 + timing2 + timing3,
             tool_result=result,
             server_logs=step_logs,
@@ -182,13 +179,13 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-31: trailing slash stripped — creates dir without trailing-slash artifact
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/withslash/")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/withslash/"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         dir_exists = ctx.vault._abs(f"{base_dir}/withslash").is_dir()
         # Response should show the path without double-slash
         no_double_slash = "//" not in result.text
-        passed_f31 = result.ok and dir_exists and no_double_slash and "withslash/" in result.text
+        passed_f31 = result.ok and dir_exists and no_double_slash and '"path":"' in result.text
 
         run.step(
             label="F-31: trailing slash stripped (creates withslash/ not withslash//)",

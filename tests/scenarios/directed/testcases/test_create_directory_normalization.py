@@ -69,7 +69,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-30: leading `/` is stripped ────────────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"/{base_dir}/leading_test")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"/{base_dir}/leading_test"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # After stripping the leading "/", this becomes "{base_dir}/leading_test"
@@ -88,7 +88,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-31: trailing `/` is stripped ───────────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/trailing_test/")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/trailing_test/"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         dir_exists = ctx.vault._abs(f"{base_dir}/trailing_test").is_dir()
@@ -107,7 +107,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-32: consecutive slashes are collapsed ───────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}//double//slash")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}//double//slash"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Consecutive slashes collapsed: "{base_dir}//double//slash" → "{base_dir}/double/slash"

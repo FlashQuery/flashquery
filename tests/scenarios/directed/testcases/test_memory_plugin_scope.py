@@ -58,8 +58,17 @@ TEST_NAME = "test_memory_plugin_scope"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -164,7 +173,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # the full save_memory → find_plugin_scope → store path works end-to-end.
         log_mark = ctx.server.log_position if ctx.server else 0
         scoped_save_result = ctx.client.call_tool(
-            "save_memory",
+            "write_memory",
+            mode="create",
             content=scoped_content,
             tags=["fqc-test", f"scope-test-{run.run_id}"],
             plugin_scope=plugin_id,
@@ -210,7 +220,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # proving the fuzzy path fired rather than falling back to global.
         log_mark = ctx.server.log_position if ctx.server else 0
         fuzzy_save_result = ctx.client.call_tool(
-            "save_memory",
+            "write_memory",
+            mode="create",
             content=fuzzy_content,
             tags=["fqc-test", f"scope-test-{run.run_id}"],
             plugin_scope=fuzzy_scope,
@@ -240,7 +251,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 3: Save memory WITHOUT plugin_scope (global baseline) ─
         log_mark = ctx.server.log_position if ctx.server else 0
         global_save_result = ctx.client.call_tool(
-            "save_memory",
+            "write_memory",
+            mode="create",
             content=global_content,
             tags=["fqc-test", f"scope-test-{run.run_id}"],
         )

@@ -50,11 +50,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         ctx.cleanup.track_dir(base_dir)
 
         # ── Setup: create mix of directories and files ─────────────────────────
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/Projects")
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/Archive")
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/Projects"])
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/Archive"])
 
         readme_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=f"Readme {run.run_id}",
             content="Project readme document.",
             path=f"{base_dir}/readme.md",

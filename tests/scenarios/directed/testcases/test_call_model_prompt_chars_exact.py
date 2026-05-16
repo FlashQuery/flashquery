@@ -55,7 +55,7 @@ COVERAGE = ["L-44", "L-45"]
 
 def _extract_fq_id(text: str) -> str | None:
     """Extract the FQC ID value from create_document's key-value response."""
-    m = re.search(r"^FQC ID:\s*([0-9a-f-]+)\s*$", text, re.MULTILINE)
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1) if m else None
 
 
@@ -103,7 +103,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             body_path = f"_test/{TEST_NAME}_{run_id}_body.md"
             body_text = "Reference target body."  # length 22
             create_body = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} body {run_id}",
                 path=body_path,
                 content=body_text,

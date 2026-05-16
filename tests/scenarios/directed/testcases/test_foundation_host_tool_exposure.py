@@ -126,7 +126,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             "D-foundation-tools-3/4: category/name selectors filter host catalog",
             filtered_names,
             ["get_document", "list_vault", "search", "call_model"],
-            ["write_memory", "create_document", "force_file_scan", "get_briefing"],
+            ["write_memory", "write_document", "force_file_scan", "get_briefing"],
         )
 
     with TestContext(

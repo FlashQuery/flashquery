@@ -268,7 +268,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # The scan must process the 100 bulk + 1 new + 10 existing = 111 files,
         # which takes ≥2s and provides a reliable race window for step 7.
         log_mark = ctx.server.log_position if ctx.server else 0
-        bg_scan_result = ctx.client.call_tool("force_file_scan", background=True)
+        bg_scan_result = ctx.client.call_tool("maintain_vault", action="sync", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # Record the trigger time for calculating the remaining wait in step 8.

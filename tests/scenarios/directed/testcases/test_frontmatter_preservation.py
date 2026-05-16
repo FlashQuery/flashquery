@@ -74,7 +74,7 @@ def _extract_field(text: str, field: str) -> str:
     except json.JSONDecodeError:
         pass
 
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 

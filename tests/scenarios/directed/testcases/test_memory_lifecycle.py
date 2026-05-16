@@ -64,6 +64,12 @@ _UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 
 def _extract_id_after(text: str, label: str) -> str:
     """Extract a UUID that appears after a given label, e.g. 'New version id: <uuid>'."""
+    try:
+        payload = __import__("json").loads(text)
+        if isinstance(payload, dict) and payload.get("memory_id"):
+            return str(payload["memory_id"])
+    except Exception:
+        pass
     m = re.search(rf"{re.escape(label)}\s*([0-9a-fA-F-]{{36}})", text)
     return m.group(1) if m else ""
 
@@ -112,18 +118,17 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1: Save memory via MCP (M-01) ───────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         save_result = ctx.client.call_tool(
-            "save_memory",
+            "write_memory",
+            mode="create",
             content=original_content,
             tags=tags,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
-        # save_memory response: "Memory saved (id: <uuid>). Tags: ... Scope: ..."
-        m = re.search(r"\(id:\s*([0-9a-fA-F-]{36})\)", save_result.text)
-        original_id = m.group(1) if m else ""
+        original_id = _extract_id_after(save_result.text, "Memory ID")
         if original_id:
             ctx.cleanup.track_mcp_memory(original_id)
-        save_result.expect_contains("Memory saved")
+        save_result.expect_json_path("memory_id")
         save_result.expect_contains(unique_tag)
 
         run.step(
@@ -191,7 +196,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         time.sleep(2.0)
         log_mark = ctx.server.log_position if ctx.server else 0
         sem_result = ctx.client.call_tool(
-            "search_memory",
+            "search",
+            entity_types=["memories"],
             query=unique_phrase,
             tags=[unique_tag],
             threshold=0.1,
@@ -213,7 +219,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # Omit tags so we can verify existing tags are preserved (M-07).
         log_mark = ctx.server.log_position if ctx.server else 0
         update_result = ctx.client.call_tool(
-            "update_memory",
+            "write_memory",
+            mode="update",
             memory_id=original_id,
             content=updated_content,
         )
@@ -308,7 +315,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 7b: search_memory after archive — excluded (M-13) ───
         log_mark = ctx.server.log_position if ctx.server else 0
         post_sem_result = ctx.client.call_tool(
-            "search_memory",
+            "search",
+            entity_types=["memories"],
             query=unique_phrase,
             tags=[unique_tag],
             threshold=0.1,

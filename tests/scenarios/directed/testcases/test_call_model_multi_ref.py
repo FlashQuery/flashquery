@@ -62,7 +62,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             path_a = f"_test/{TEST_NAME}_{run_id}_doc_a.md"
             body_a = "Document A content."
             create_a = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} doc_a {run_id}",
                 path=path_a,
                 content=body_a,
@@ -75,7 +76,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             path_b = f"_test/{TEST_NAME}_{run_id}_doc_b.md"
             body_b = "Document B content."
             create_b = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} doc_b {run_id}",
                 path=path_b,
                 content=body_b,

@@ -70,8 +70,17 @@ TEST_NAME = "test_large_vault_scale"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -97,7 +106,8 @@ def _create_doc(
 
     log_mark = ctx.server.log_position if ctx.server else 0
     result = ctx.client.call_tool(
-        "create_document",
+        "write_document",
+            mode="create",
         title=title,
         content=f"## {title}\n\nFile created by {TEST_NAME} (run {run.run_id}).",
         path=path,
@@ -190,7 +200,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 2: Force file scan to index external files ────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan_result = ctx.client.call_tool("force_file_scan", background=False)
+        scan_result = ctx.client.call_tool("maintain_vault", action="sync", background=False)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -248,7 +258,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # background=True: create_document updates DB synchronously, so Step 6's count
         # assertion is accurate without waiting for scan/embedding completion.
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan_result = ctx.client.call_tool("force_file_scan", background=True)
+        scan_result = ctx.client.call_tool("maintain_vault", action="sync", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -288,7 +298,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             fqc_id, path, _ = created_docs[i]
             log_mark = ctx.server.log_position if ctx.server else 0
             update_result = ctx.client.call_tool(
-                "update_document",
+                "write_document",
+            mode="update",
                 identifier=fqc_id,
                 content=(
                     f"## Updated Document {i}\n\n"
@@ -332,7 +343,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # so we don't need the scan to complete before asserting.  Re-embedding 6 updated
         # files via the remote API takes >30 s, which exceeds the HTTP timeout.
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan_result = ctx.client.call_tool("force_file_scan", background=True)
+        scan_result = ctx.client.call_tool("maintain_vault", action="sync", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -360,7 +371,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # background=True: mid-test external files don't affect tag-based search (Step 11)
         # or archive assertions (Step 12). Final count (Step 13) checks ok only.
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan_result = ctx.client.call_tool("force_file_scan", background=True)
+        scan_result = ctx.client.call_tool("maintain_vault", action="sync", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -376,7 +387,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # Search for documents by tag to verify index is current
         log_mark = ctx.server.log_position if ctx.server else 0
         search_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             tags=["created"],
             tag_match="any",
             limit=100,
@@ -422,7 +434,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 12: Validate archives are excluded from search ─────
         log_mark = ctx.server.log_position if ctx.server else 0
         search_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query="document",
             limit=1000,
         )

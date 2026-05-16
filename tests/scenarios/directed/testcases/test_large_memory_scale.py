@@ -142,7 +142,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             mem_tag = f"mem-{i}"
             save_result = ctx.client.call_tool(
-                "save_memory",
+                "write_memory",
+            mode="create",
                 content=content,
                 tags=["fqc-test", "scale-test", mem_tag, run.run_id],
             )
@@ -214,7 +215,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 f"Version: 2"
             )
             update_result = ctx.client.call_tool(
-                "update_memory",
+                "write_memory",
+            mode="update",
                 memory_id=memory_id,
                 content=updated_content,
             )

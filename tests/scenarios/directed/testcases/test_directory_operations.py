@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Test: remove_directory success, failure, and safety guards. legacy migration evidence
+Test: manage_directory remove success, failure, and safety guards.
 
 Scenario:
-    1. Create an empty directory under the vault and call remove_directory on it legacy migration evidence
-       (MCP tool: remove_directory) — expect success and verify the directory is gone. legacy migration evidence
-    2. Create a non-empty directory containing a document, then call remove_directory legacy migration evidence
+    1. Create an empty directory under the vault and call manage_directory remove on it.
+       (MCP tool: manage_directory) — expect success and verify the directory is gone.
+    2. Create a non-empty directory containing a document, then call manage_directory remove
        on it — expect an error and verify the directory and its contents still exist.
     3. Attempt to remove the vault root (via "", ".", and "/") — expect an error each
        time; verify the vault root still exists.
@@ -60,8 +60,17 @@ TEST_NAME = "test_directory_operations"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -117,11 +126,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
             return run
 
-        # ── Step 2: F-12 remove_directory on empty directory ───────── legacy migration evidence
+        # ── Step 2: F-12 manage_directory remove on empty directory ─────────
         log_mark = ctx.server.log_position if ctx.server else 0
         rm_empty = ctx.client.call_tool(
-            "remove_directory", legacy migration evidence
-            path=empty_dir_rel,
+            "manage_directory",
+            action="remove",
+            paths=[empty_dir_rel],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -132,7 +142,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail_f12 = (detail_f12 + " | dir still exists on disk").strip(" |")
 
         run.step(
-            label="F-12: remove_directory succeeds on empty directory", legacy migration evidence
+            label="F-12: remove_directory succeeds on empty directory",
             passed=passed_f12,
             detail=detail_f12,
             timing_ms=rm_empty.timing_ms,
@@ -143,7 +153,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 3: Create a non-empty directory with a document ─────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_result = ctx.client.call_tool(
-            "create_document", legacy migration evidence
+            "write_document",
+            mode="create",
             title=f"FQC RmDir Doc {run.run_id}",
             content=f"## Body\n\nCreated by {TEST_NAME} run {run.run_id}.",
             path=nonempty_doc_rel,
@@ -170,11 +181,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if not create_result.ok:
             return run
 
-        # ── Step 4: F-13 remove_directory on non-empty directory ───── legacy migration evidence
+        # ── Step 4: F-13 manage_directory remove rejects non-empty directory ─────
         log_mark = ctx.server.log_position if ctx.server else 0
         rm_nonempty = ctx.client.call_tool(
-            "remove_directory", legacy migration evidence
-            path=nonempty_dir_rel,
+            "manage_directory",
+            action="remove",
+            paths=[nonempty_dir_rel],
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
@@ -197,7 +209,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail_f13_parts.append("document inside was deleted (data loss!)")
 
         run.step(
-            label="F-13: remove_directory rejects non-empty directory", legacy migration evidence
+            label="F-13: manage_directory remove rejects non-empty directory",
             passed=passed_f13,
             detail=" | ".join(detail_f13_parts),
             timing_ms=rm_nonempty.timing_ms,
@@ -210,7 +222,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         root_results = []
         for attempt in root_attempts:
             log_mark = ctx.server.log_position if ctx.server else 0
-            r = ctx.client.call_tool("remove_directory", path=attempt) legacy migration evidence
+            r = ctx.client.call_tool("manage_directory", action="remove", paths=[attempt])
             logs = ctx.server.logs_since(log_mark) if ctx.server else None
             root_results.append((attempt, r, logs))
 
@@ -227,7 +239,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail_f14_parts.append("vault root no longer exists (catastrophic)")
 
         run.step(
-            label="F-14: remove_directory refuses vault root", legacy migration evidence
+            label="F-14: remove_directory refuses vault root",
             passed=passed_f14,
             detail=" | ".join(detail_f14_parts),
             timing_ms=sum(r.timing_ms for _, r, _ in root_results),
@@ -240,7 +252,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         traversal_results = []
         for attempt in traversal_attempts:
             log_mark = ctx.server.log_position if ctx.server else 0
-            r = ctx.client.call_tool("remove_directory", path=attempt) legacy migration evidence
+            r = ctx.client.call_tool("manage_directory", action="remove", paths=[attempt])
             logs = ctx.server.logs_since(log_mark) if ctx.server else None
             traversal_results.append((attempt, r, logs))
 
@@ -260,7 +272,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             detail_f15_parts.append("vault parent dir no longer exists (catastrophic)")
 
         run.step(
-            label="F-15: remove_directory blocks path traversal", legacy migration evidence
+            label="F-15: manage_directory remove blocks path traversal",
             passed=passed_f15,
             detail=" | ".join(detail_f15_parts),
             timing_ms=sum(r.timing_ms for _, r, _ in traversal_results),
@@ -294,7 +306,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Test: remove_directory success, failure, and safety guards.", legacy migration evidence
+        description="Test: manage_directory remove success, failure, and safety guards.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

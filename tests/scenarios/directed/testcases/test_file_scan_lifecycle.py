@@ -58,8 +58,17 @@ TEST_NAME = "test_file_scan_lifecycle"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -139,8 +148,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         t_bg_start = time.monotonic()
         bg_scan_result = ctx.client.call_tool(
-            "force_file_scan",
-            background=True,
+            "maintain_vault", action="sync", background=True,
         )
         bg_elapsed_ms = int((time.monotonic() - t_bg_start) * 1000)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -177,7 +185,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-03 Step 1: Create document for update test ──────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_f03_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_f03,
             content=original_body_f03,
             path=path_f03,
@@ -339,7 +348,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-04 Step 1: Create document for delete test ──────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_f04_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=title_f04,
             content=original_body_f04,
             path=path_f04,
@@ -517,8 +527,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Housekeeping: reconcile so DB row of deleted doc can be archived ─
         log_mark = ctx.server.log_position if ctx.server else 0
         reconcile_result = ctx.client.call_tool(
-            "reconcile_documents",
-            dry_run=False,
+            "maintain_vault", action="repair", dry_run=False,
         )
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 

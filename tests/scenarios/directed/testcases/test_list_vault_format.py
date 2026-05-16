@@ -50,10 +50,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         ctx.cleanup.track_dir(base_dir)
 
         # ── Setup: create a tracked document, a subdirectory, and a nested file ─
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/subdir")
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/subdir"])
 
         notes_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=f"Notes {run.run_id}",
             content="Hello world — 11 bytes",
             path=f"{base_dir}/notes.md",
@@ -62,7 +63,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # Create a file inside subdir so F-74 can verify recursive relative-path names
         deep_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=f"Deep {run.run_id}",
             content="Nested file.",
             path=f"{base_dir}/subdir/deep.md",

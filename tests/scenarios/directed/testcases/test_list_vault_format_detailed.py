@@ -64,10 +64,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         ctx.cleanup.track_dir(base_dir)
 
         # ── Setup: create tracked document and a subdirectory ─────────────────
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/subdir")
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/subdir"])
 
         tracked_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=f"Tracked Doc {run.run_id}",
             content="Tracked document content.",
             path=f"{base_dir}/tracked.md",

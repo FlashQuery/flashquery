@@ -180,7 +180,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 3: Create a record in the plain milestones table ────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_ms_result = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="milestones",
@@ -232,7 +233,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 5: Create a record in the document-backed projects table
         log_mark = ctx.server.log_position if ctx.server else 0
         create_proj_result = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="projects",

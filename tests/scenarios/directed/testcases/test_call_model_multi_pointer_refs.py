@@ -63,7 +63,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             target_summary_path = f"_test/{TEST_NAME}_{run_id}/target_summary.md"
             target_summary_body = "summary content for L-59"
             create_summary = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} target_summary {run_id}",
                 path=target_summary_path,
                 content=target_summary_body,
@@ -76,7 +77,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             target_action_path = f"_test/{TEST_NAME}_{run_id}/target_action.md"
             target_action_body = "action items content for L-59"
             create_action = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} target_action {run_id}",
                 path=target_action_path,
                 content=target_action_body,
@@ -107,7 +109,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             l60_target_path = f"_test/{TEST_NAME}_{run_id}/l60_target.md"
             l60_target_body = "L-60 target body"
             create_l60_target = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} l60_target {run_id}",
                 path=l60_target_path,
                 content=l60_target_body,
@@ -130,7 +133,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
 
             # Trigger scan once for both raw-written source files.
-            client.call_tool("force_file_scan", background=False)
+            client.call_tool("maintain_vault", action="sync", background=False)
 
             # ── Step L-59: two pointer refs against same source, different paths ──
             r = client.call_tool(

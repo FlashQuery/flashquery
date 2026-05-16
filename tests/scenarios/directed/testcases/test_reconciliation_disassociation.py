@@ -108,7 +108,7 @@ def _extract_recon_summary(text: str) -> str:
 
 def _extract_field(text: str, field: str) -> str:
     """Extract a 'Field: value' line from FlashQuery's key-value response format."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -562,7 +562,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         disassoc_title = f"Disassoc Doc {run.run_id[:8]}"
         log_mark2 = ctx.server.log_position if ctx.server else 0
         search_doc_result = ctx.client.call_tool(
-            "search_documents",
+            "search",
+            entity_types=["documents"],
             query=disassoc_title,
         )
         step_logs2 = ctx.server.logs_since(log_mark2) if ctx.server else None

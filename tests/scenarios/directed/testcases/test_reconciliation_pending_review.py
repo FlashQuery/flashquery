@@ -119,7 +119,7 @@ def _extract_pending_count(text: str) -> int:
 
 def _extract_field(text: str, field: str) -> str:
     """Extract a 'Field: value' line from FlashQuery's key-value response format."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 

@@ -50,11 +50,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Setup: create directory structure ─────────────────────────────────
         # Create: base_dir/alpha/, base_dir/beta/, base_dir/alpha/child/
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/alpha/child")
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/beta")
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/alpha/child"])
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/beta"])
 
         # Create dot-prefixed directory directly (create_directory also creates it)
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/.hidden")
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/.hidden"])
 
         # Create a file in base_dir so F-55 and F-62 can assert it doesn't appear
         notes_path = ctx.vault._abs(f"{base_dir}/notes.md")

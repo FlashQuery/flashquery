@@ -216,7 +216,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # at this point — that would trigger a premature reconciliation against
         # stale fqc_documents (file 2 not yet indexed).
         log_mark = ctx.server.log_position if ctx.server else 0
-        bg_scan_result = ctx.client.call_tool("force_file_scan", background=True)
+        bg_scan_result = ctx.client.call_tool("maintain_vault", action="sync", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(

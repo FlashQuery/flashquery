@@ -116,8 +116,17 @@ Section starting with digit-letter (3D)."""
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -161,7 +170,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Setup: Create demo standup document ───────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_standup = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title="Weekly Standup — Sprint 12",
             content=DEMO_BODY,
             path=path_standup,
@@ -190,7 +200,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Setup: Create numeric anchor document ─────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_numeric = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title="Numeric Anchor Test",
             content=NUMERIC_BODY,
             path=path_numeric,
@@ -213,7 +224,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Setup: Create numeric edge cases document ──────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_numericedge = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title="Numeric Edge Cases",
             content=NUMERIC_EDGE_BODY,
             path=path_numericedge,

@@ -85,7 +85,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
     ) as ctx:
         log_mark = ctx.server.log_position if ctx.server else 0
         create_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title="Foundation JSON Response",
             content="JSON response helper scenario body.",
             path=path,

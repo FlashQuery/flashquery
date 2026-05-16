@@ -101,7 +101,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             doc58_path = f"_test/{TEST_NAME}_{run_id}_doc58.md"
             sec_body = "intro\n\n## Target\n\nsection content here\n\n## Other\n\nother\n"
             create58 = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} doc58 {run_id}",
                 path=doc58_path,
                 content=sec_body,
@@ -119,7 +120,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             raw_files.append(p62)
 
             # Force a sync scan so all raw-written files are indexed.
-            client.call_tool("force_file_scan", background=False)
+            client.call_tool("maintain_vault", action="sync", background=False)
 
             # ── L-54: missing pointer path → "not found in frontmatter" reason ──
             r = client.call_tool(

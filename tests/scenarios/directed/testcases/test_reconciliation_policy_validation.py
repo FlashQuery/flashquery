@@ -386,7 +386,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # a warning or return an error that mentions the read-only restriction.
         log_mark = ctx.server.log_position if ctx.server else 0
         write_result = ctx.client.call_tool(
-            "update_document",
+            "write_document",
+            mode="update",
             identifier=watched_file_path,
             content="## Attempted Write\n\nThis content was written by the test.",
         )

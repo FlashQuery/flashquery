@@ -56,8 +56,17 @@ TEST_NAME = "test_create_read_update"
 # ---------------------------------------------------------------------------
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -98,7 +107,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 1: Create document via MCP ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=unique_title,
             content=original_body,
             path=test_path,
@@ -188,7 +198,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: Update document via MCP ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         update_result = ctx.client.call_tool(
-            "update_document",
+            "write_document",
+            mode="update",
             identifier=read_identifier,
             title=updated_title,
             content=updated_body,

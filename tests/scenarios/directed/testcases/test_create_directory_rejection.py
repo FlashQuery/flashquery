@@ -80,7 +80,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-37: path traversal (../../etc) is rejected ──────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths="../../etc")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=["../../etc"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f37 = (
@@ -102,9 +102,9 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-38: vault root targets ("/", ".", "") all rejected ──────────────
         # Test "/" — after stripping leading slash → "" → vault root → rejected
         log_mark = ctx.server.log_position if ctx.server else 0
-        result_slash = ctx.client.call_tool("create_directory", paths="/")
-        result_dot = ctx.client.call_tool("create_directory", paths=".")
-        result_empty = ctx.client.call_tool("create_directory", paths="")
+        result_slash = ctx.client.call_tool("manage_directory", action="create", paths=["/"])
+        result_dot = ctx.client.call_tool("manage_directory", action="create", paths=["."])
+        result_empty = ctx.client.call_tool("manage_directory", action="create", paths=[""])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f38 = (
@@ -129,7 +129,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         os.symlink("/tmp", str(sym_path))
 
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/link/subdir")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/link/subdir"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f39 = not result.ok and "symlink" in result.text
@@ -145,7 +145,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-48: invalid root_path (traversal) rejects entire call before any paths processed ──
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths="a", root_path="../../etc")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=["../../etc"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f48_traversal = not result.ok and "Invalid root_path:" in result.text
@@ -166,7 +166,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         root_file.write_text("content")
 
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths="sub", root_path=f"{base_dir}/afile.md")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/afile.md/sub"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         # root_path pointing to a file → entire call rejected before any paths processed
@@ -188,7 +188,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         file_path.write_text("existing content")
 
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/notes.md/subfolder")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/notes.md/subfolder"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f40 = not result.ok and "already exists as a file at" in result.text
@@ -209,7 +209,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         mid_file.write_text("content")
 
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/mid/notes.md/sub")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/mid/notes.md/sub"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f41 = not result.ok and "already exists as a file at" in result.text
@@ -225,7 +225,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-42: whitespace-only segment is rejected ─────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/   ")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/   "])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f42 = not result.ok and "whitespace-only" in result.text
@@ -242,7 +242,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-43: segment > 255 bytes is rejected ─────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         long_segment = "x" * 256
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/{long_segment}")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/{long_segment}"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f43 = not result.ok and "255-byte" in result.text
@@ -259,7 +259,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── F-44: total path > 4096 bytes is rejected ─────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         long_path = f"{base_dir}/" + "/".join(["xx"] * 2050)
-        result = ctx.client.call_tool("create_directory", paths=long_path)
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[long_path])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f44 = not result.ok and ("4,096" in result.text or "4096" in result.text or "too long" in result.text.lower())
@@ -275,7 +275,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-46: empty array is rejected ─────────────────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=[])
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[[]])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         passed_f46 = not result.ok and (
@@ -294,7 +294,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-47: type error (number in paths) is rejected ────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=123)
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[123])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         has_validation_error = any(kw in result.text.lower() for kw in ["invalid", "type", "expected", "array", "must be", "string"])

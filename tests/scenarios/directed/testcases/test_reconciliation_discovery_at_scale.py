@@ -423,7 +423,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── Step 3: force_file_scan (background) — index watched files ───────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan1 = ctx.client.call_tool("force_file_scan", background=True)
+        scan1 = ctx.client.call_tool("maintain_vault", action="sync", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
@@ -567,7 +567,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── force_file_scan (background) — index outside typed files ─────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        scan2 = ctx.client.call_tool("force_file_scan", background=True)
+        scan2 = ctx.client.call_tool("maintain_vault", action="sync", background=True)
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(

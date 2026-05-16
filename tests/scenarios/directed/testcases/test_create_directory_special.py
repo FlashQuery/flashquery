@@ -64,7 +64,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         # ── F-50: dot-prefixed directory IS created ───────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
-        result = ctx.client.call_tool("create_directory", paths=f"{base_dir}/.plugin-staging/temp")
+        result = ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/.plugin-staging/temp"])
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         staging_exists = ctx.vault._abs(f"{base_dir}/.plugin-staging").is_dir()

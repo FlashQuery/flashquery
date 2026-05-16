@@ -156,7 +156,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             ]
 
             save_result = ctx.client.call_tool(
-                "save_memory",
+                "write_memory",
+            mode="create",
                 content=content,
                 tags=initial_tags,
             )
@@ -237,7 +238,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
                         current_tags.remove("version-history-test")
 
                 update_result = ctx.client.call_tool(
-                    "update_memory",
+                    "write_memory",
+            mode="update",
                     memory_id=memory_id,
                     content=content,
                     tags=current_tags,

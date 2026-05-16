@@ -175,7 +175,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 3: Create a record (P-04) ───────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         create_result = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="items",
@@ -232,7 +233,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 5: Update one field (P-06) ──────────────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         update_result = ctx.client.call_tool(
-            "update_record",
+            "write_record",
+            mode="update",
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="items",

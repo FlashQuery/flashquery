@@ -146,7 +146,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 _write_doc(server.vault_path, dup_a, "DUP A\n", fq_title="Shared A")
                 _write_doc(server.vault_path, dup_b, "DUP B\n", fq_title="Shared B")
                 _write_doc(server.vault_path, nested, "literal {{ref:missing-nested.md}} remains\n", fq_title="Nested")
-                client.call_tool("force_file_scan", background=False)
+                client.call_tool("maintain_vault", action="sync", background=False)
 
                 success_content = f"{{{{ref:{target}}}}} | {{{{ref:{target_id}}}}} | {{{{ref:target}}}} | {{{{ref:{email_doc}}}}} | {{{{ref:{target}#Section}}}} | {{{{ref:{source}->pointer}}}} | {{{{ref:{nested}}}}}"
                 success = _call(client, success_content)

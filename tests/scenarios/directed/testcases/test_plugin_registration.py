@@ -234,7 +234,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 2: Create baseline records in inst_a ──────────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         cr_a1 = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_a,
             table="items",
@@ -282,7 +283,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: Create record using new `price` column ────────────
         log_mark = ctx.server.log_position if ctx.server else 0
         cr_priced = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_a,
             table="items",
@@ -354,7 +356,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 6: Verify `quantity` column still usable post-reject ─
         log_mark = ctx.server.log_position if ctx.server else 0
         cr_after_reject = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_a,
             table="items",
@@ -419,7 +422,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # Create a distinct record in inst_b
         log_mark = ctx.server.log_position if ctx.server else 0
         cr_b1 = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=PLUGIN_ID,
             plugin_instance=inst_b,
             table="items",

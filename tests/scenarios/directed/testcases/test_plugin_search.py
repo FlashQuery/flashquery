@@ -62,8 +62,17 @@ _UUID_RE = re.compile(r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]
 
 
 def _extract_field(text: str, field: str) -> str:
-    """Extract a 'Field: value' line from FQC key-value response text."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    """Extract a legacy key-value field or its canonical JSON equivalent."""
+    json_key = {"FQC ID": "fq_id", "Path": "path", "Memory ID": "memory_id"}.get(field)
+    if json_key:
+        try:
+            payload = __import__("json").loads(text)
+            value = payload.get(json_key) if isinstance(payload, dict) else None
+            if value is not None:
+                return str(value)
+        except Exception:
+            pass
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -149,7 +158,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 2: Create Record 1 — Alpha Widget / hardware / high ──
         log_mark = ctx.server.log_position if ctx.server else 0
         create1 = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=plugin_id,
             plugin_instance=instance_name,
             table="items",
@@ -179,7 +189,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 3: Create Record 2 — Beta Gadget / software / low ───
         log_mark = ctx.server.log_position if ctx.server else 0
         create2 = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=plugin_id,
             plugin_instance=instance_name,
             table="items",
@@ -209,7 +220,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # ── Step 4: Create Record 3 — Gamma Device / hardware / low ──
         log_mark = ctx.server.log_position if ctx.server else 0
         create3 = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=plugin_id,
             plugin_instance=instance_name,
             table="items",

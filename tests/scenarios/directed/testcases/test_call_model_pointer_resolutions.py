@@ -30,7 +30,7 @@ TEST_NAME = "test_call_model_pointer_resolutions"
 
 def _extract_fq_id(text: str) -> str | None:
     """Extract the FQC ID value from create_document's key-value response."""
-    m = re.search(r"^FQC ID:\s*([0-9a-f-]+)\s*$", text, re.MULTILINE)
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1) if m else None
 
 
@@ -84,7 +84,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             target49_path = f"{base}/projections/target49.md"
             target49_body = "target49 body"
             create49 = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} target49 {run_id}",
                 path=target49_path,
                 content=target49_body,
@@ -99,7 +100,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             target50_path = f"{base}/uuid-target/target50.md"
             target50_body = "target50 body content"
             create50 = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} target50 {run_id}",
                 path=target50_path,
                 content=target50_body,
@@ -125,7 +127,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             target51_path = f"{base}/bare-name/{target51_basename}.md"
             target51_body = "target51 unique body"
             create51 = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} target51 {run_id}",
                 path=target51_path,
                 content=target51_body,
@@ -140,7 +143,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             target52_path = f"{base}/old52.md"
             target52_body = "predecessor52 body text"
             create52 = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} target52 {run_id}",
                 path=target52_path,
                 content=target52_body,
@@ -155,7 +159,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
             target53_path = f"{base}/nested53.md"
             target53_body = "nested53 deep target body"
             create53 = client.call_tool(
-                "create_document",
+                "write_document",
+            mode="create",
                 title=f"{TEST_NAME} target53 {run_id}",
                 path=target53_path,
                 content=target53_body,
@@ -220,7 +225,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             )
 
             # Trigger scan to register all sources + targets in fqc_documents.
-            client.call_tool("force_file_scan", background=False)
+            client.call_tool("maintain_vault", action="sync", background=False)
 
             # ── L-49: path-style pointer value ────────────────────────────
             r = client.call_tool(

@@ -51,24 +51,27 @@ def run_test(args: argparse.Namespace) -> TestRun:
         ctx.cleanup.track_dir(base_dir)
 
         # ── Setup: create directory structure ─────────────────────────────────
-        ctx.client.call_tool("create_directory", paths=f"{base_dir}/sub/deep")
+        ctx.client.call_tool("manage_directory", action="create", paths=[f"{base_dir}/sub/deep"])
 
         top_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=f"Top {run.run_id}",
             content="Top-level document.",
             path=f"{base_dir}/top.md",
             tags=["fqc-test", run.run_id],
         )
         nested_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=f"Nested {run.run_id}",
             content="Nested document.",
             path=f"{base_dir}/sub/nested.md",
             tags=["fqc-test", run.run_id],
         )
         leaf_result = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=f"Leaf {run.run_id}",
             content="Leaf document.",
             path=f"{base_dir}/sub/deep/leaf.md",

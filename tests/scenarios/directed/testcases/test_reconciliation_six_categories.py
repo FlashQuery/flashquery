@@ -82,7 +82,7 @@ _UUID_RE = re.compile(
 
 def _extract_field(text: str, field: str) -> str:
     """Extract a 'Field: value' line from FlashQuery's key-value response format."""
-    m = re.search(rf"^{re.escape(field)}:\s*(.+)$", text, re.MULTILINE)
+    m = re.search("^" + re.escape(field) + r":\s*(.+)", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
 
@@ -265,7 +265,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # will update fqc_documents.updated_at → updated_at > last_seen_updated_at
         log_mark = ctx.server.log_position if ctx.server else 0
         upd_result = ctx.client.call_tool(
-            "update_document",
+            "write_document",
+            mode="update",
             identifier=path_modified,
             content="## Modified Doc\n\nContent CHANGED — triggers 'modified' classification.",
         )
@@ -383,7 +384,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         # We use create_document (MCP) so fqc_documents gets a row before Step 9's scan.
         log_mark = ctx.server.log_position if ctx.server else 0
         cr_added = ctx.client.call_tool(
-            "create_document",
+            "write_document",
+            mode="create",
             title=f"RO02 Added Doc {run.run_id[:8]}",
             content="## Added Doc\n\nThis doc has no plugin row yet.",
             path=path_added,
@@ -450,7 +452,8 @@ def run_test(args: argparse.Namespace) -> TestRun:
         #                       (resurrected_doc is restored to disk AFTER this pass so its row is archived here)
         log_mark = ctx.server.log_position if ctx.server else 0
         main_result = ctx.client.call_tool(
-            "create_record",
+            "write_record",
+            mode="create",
             plugin_id=PLUGIN_ID,
             plugin_instance=instance_name,
             table="notes",
