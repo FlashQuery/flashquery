@@ -752,6 +752,9 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-05 | `call_model` with an unknown model name (e.g. `"nonexistent-model"`) returns `isError: true`; response text includes the unknown name and a list of available model names | test_call_model_errors | 2026-04-30 | 2026-05-07 |
 | L-06 | `call_model` with an unknown purpose name (e.g. `"nonexistent-purpose"`) returns `isError: true`; response text includes the unknown name and a list of available purpose names | test_call_model_errors | 2026-04-30 | 2026-05-07 |
 | L-07 | `call_model` targeting a purpose whose `models:` list is empty returns `isError: true`; response text identifies the purpose name (purpose is defined in config but has no model assigned — the "defined but unassigned" state) | test_call_model_resolution_edge_cases | 2026-04-30 | 2026-05-07 |
+| L-101 | `call_model` with `resolver=purpose` walks the purpose's configured model list in order and uses the first later model that succeeds after earlier models fail | test_call_model_fallback | 2026-05-16 | 2026-05-16 |
+| L-102 | `call_model` reports `metadata.fallback_position` as the 1-based index of the successful model in an arbitrary-length purpose fallback chain, not simply whether fallback happened or whether the last model was used | test_call_model_fallback | 2026-05-16 | 2026-05-16 |
+| L-103 | `call_model` returns `isError:true` with an exhausted-chain error listing every attempted model in order when all models in a multi-model purpose fallback chain fail | test_call_model_fallback | 2026-05-16 | 2026-05-16 |
 
 ### 15.3 `call_model` — Parameter Handling
 
@@ -923,9 +926,9 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Cross-cutting | 11 | 11 | 0 |
 | Git Behaviors | 3 | 3 | 0 |
 | Plugin Reconciliation | 59 | 59 | 0 |
-| LLM Tools | 109 | 108 | 1 |
+| LLM Tools | 112 | 111 | 1 |
 | Macro Language | 26 | 26 | 0 |
-| **Total** | **419** | **414** | **5** |
+| **Total** | **422** | **417** | **5** |
 
 ---
 
@@ -1627,6 +1630,9 @@ Covers: L-08
 
 ### test_call_model_resolution_edge_cases
 Covers: L-04, L-07
+
+### test_call_model_fallback
+Covers: L-101, L-102, L-103
 
 ### test_call_model_bad_provider_param
 Covers: L-09
