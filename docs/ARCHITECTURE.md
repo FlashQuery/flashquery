@@ -1,7 +1,7 @@
 # FlashQuery — Architecture
 
 **Version:** 0.1.0
-**Last Updated:** 2026-05-07
+**Last Updated:** 2026-05-17
 
 FlashQuery is a local-first data management layer for AI workflows. It exposes MCP tools that let AI agents save memories, create and search documents, and query relational data, with all storage under the user's control. This document describes the system's structure, data flow, and deployment model. For hands-on setup, start with the [README](../README.md); for production concerns, see [`DEPLOYMENT.md`](./DEPLOYMENT.md).
 
@@ -76,7 +76,7 @@ All three are stored in places the user owns: the vault directory on local disk,
 2. The MCP server authenticates the request (bearer token verification for streamable-http; local trust for stdio) and routes it to the matching tool handler.
 3. The handler parses and validates the arguments with Zod.
 4. The handler calls into the storage layers it needs — typically the embedding provider (to generate a vector), the Supabase client (to write the row), and the vault (if the tool produces a file).
-5. The handler returns a response: `{"content": [{"type": "text", "text": "Memory saved with ID ..."}]}`.
+5. The handler returns an MCP text response whose `content[0].text` usually contains JSON, for example a memory identification payload with `memory_id`, timestamps, tags, and optional included fields.
 6. The AI tool receives the response and continues its workflow.
 
 ### Delegated LLM flow
@@ -84,7 +84,7 @@ All three are stored in places the user owns: the vault directory on local disk,
 `call_model` uses the same MCP request path, then adds a model-dispatch layer:
 
 1. The caller selects a model alias or purpose name from the `llm:` section of `flashquery.yml`.
-2. Host-authored document references in `system` and `user` messages (`{{ref:...}}`, `{{id:...}}`, or late-bound `{{ref:@alias}}`) are resolved against the vault before the provider call.
+2. Host-authored document references in `system` and `user` messages (`{{ref:...}}` or late-bound `{{ref:@alias}}`) are resolved against the vault before the provider call. Legacy `{{id:...}}` text is not active reference syntax.
 3. Mode 1 calls a configured provider directly and returns a `response`, `messages`, and `metadata` envelope.
 4. Mode 2 is selected for purpose calls that expose model-visible native tools or template tools. FlashQuery runs the delegated model in a bounded internal loop, dispatches approved tool calls against its own MCP handlers, and returns aggregate loop metadata under `metadata.tools`.
 5. Usage is recorded once per completed `call_model` invocation in `fqc_llm_usage`; per-iteration loop detail stays in the response envelope and runtime logs.
@@ -195,7 +195,7 @@ The optional `llm:` section uses a three-layer shape:
 - `models:` define aliases, provider mapping, underlying model IDs, type, cost, optional context window, tags, and tool capability declarations.
 - `purposes:` define fallback chains and defaults. A purpose can also expose FlashQuery-managed native tools with `tools`, remove items from a tier with `excluded_tools`, and bind vault templates with `templates`.
 
-Purpose tool exposure supports `tier:read-only`, `tier:read-write`, and explicit native tool names. Hard-excluded tools such as `call_model`, `register_plugin`, `unregister_plugin`, and `get_plugin_info` are removed from delegated model-visible registries even if listed.
+Purpose tool exposure supports `tier:read-only`, `tier:read-write`, and explicit native tool names. Hard-excluded tools such as `call_model`, `call_macro`, `register_plugin`, `unregister_plugin`, `get_plugin_info`, `clear_pending_reviews`, and `maintain_vault` are removed from delegated model-visible registries even if listed.
 
 Vault templates are ordinary documents with `fq_template: true` frontmatter. Purpose-bound templates can be exposed as generated provider-safe tools named `flashquery_<namespace>_<slug>`, or injected by host-authored references through `template_params`.
 
