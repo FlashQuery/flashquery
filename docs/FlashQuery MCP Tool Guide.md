@@ -1,14 +1,67 @@
 # FlashQuery MCP Tool Guide
 
-All tools are called with the `mcp__flashquery__` prefix in clients that expose MCP tool names directly. Example: `mcp__flashquery__write_document`. Tool responses use `content[0].text`; most current data tools return JSON in that text field. Successful tools usually omit `isError`; expected and runtime failures set `isError: true`.
+All tools are called with the `mcp__flashquery__` prefix in clients that expose MCP tool names directly. Example: `mcp__flashquery__write_document`.
 
-This guide describes the final consolidated host MCP tool surface. The exact tools visible to a host can be filtered with `host_mcp_tools` in `flashquery.yml`; if `host_mcp_tools` is omitted, all current host-eligible final and transitional tools are registered. Removed legacy names are listed only as migration evidence near the end.
+This guide describes the current consolidated host MCP tool surface. The exact tools visible to a host can be filtered with `host_mcp_tools` in `flashquery.yml`; if `host_mcp_tools` is omitted, all current host-eligible final and transitional tools are registered. Removed legacy names are listed only as migration references near the end.
 
-## Current Tool Surface
+## Response Conventions
 
-### Documents
+Every tool returns MCP text content:
 
-Use `write_document` to create or update whole documents.
+```json
+{
+  "content": [{ "type": "text", "text": "{...}" }]
+}
+```
+
+Most current data tools put JSON in `content[0].text`. Successful tools usually omit `isError`; some explicitly return `isError: false`. Expected errors such as `not_found`, `invalid_input`, `conflict`, `unsupported`, and `ambiguous_identifier` return a JSON error envelope in `content[0].text` and use `isError: false` or omit runtime error semantics. Runtime failures set `isError: true`.
+
+Expected JSON error payloads generally look like:
+
+```json
+{
+  "error": "not_found",
+  "message": "No document matches identifier 'missing.md'",
+  "identifier": "missing.md",
+  "details": {}
+}
+```
+
+Batch tools preserve input order and usually return per-item errors inside the successful outer MCP response.
+
+## Documents
+
+### `write_document`
+
+**Status:** final
+**Category:** doc-write
+**Tier:** read-write
+**Use when:** Creating a new Markdown document or updating an existing document body, title, custom frontmatter, or whole tag list.
+**Do not use when:** You need heading-aware insertion or section replacement; use `insert_in_doc` or `replace_doc_section`. For additive tag edits, use `apply_tags`.
+
+**Behavior**
+
+`write_document` has explicit `create` and `update` modes. Create mode writes a new vault Markdown file, inserts a `fqc_documents` row, sets FlashQuery-managed frontmatter, and starts a fire-and-forget embedding update. Update mode resolves one existing document by `fq_id`, path, or filename; merges custom frontmatter; replaces the full tag list when `tags` is provided; preserves or sets FlashQuery-managed fields; updates the database row; and starts a background re-embed. When locking is enabled, it acquires the `documents` write lock. FQ-managed frontmatter fields are rejected if passed directly through `frontmatter`. A `null` custom frontmatter value removes that custom field during update.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `mode` | `"create" \| "update"` | yes | none | Explicit write mode. |
+| `identifier` | `string` | update | none | Existing document identifier for update mode. Accepts path, `fq_id`, or filename. |
+| `path` | `string` | create | none | Vault-relative path for create mode. Must stay inside the vault and point to a file path. |
+| `title` | `string` | create | none | Document title; maps to the canonical title frontmatter field. |
+| `content` | `string` | no | `""` on create; existing body on update | Markdown body. |
+| `frontmatter` | `object` | no | `{}` | Custom frontmatter. FlashQuery-managed fields are rejected. `null` removes a custom field on update. |
+| `tags` | `string[]` | no | `[]` on create; existing tags on update | Replacement tag list, validated and deduplicated. |
+
+Create mode requires `path` and `title`. Update mode requires `identifier` and at least one of `content`, `title`, `frontmatter`, or `tags`.
+
+**Output**
+
+Success returns a document write JSON payload with `mode`, `identifier`, `title`, `path`, `fq_id`, `modified`, and `size.chars`. Create can include warnings such as `plugin_readonly_folder`. Expected errors include `invalid_input`, `conflict`, `not_found`, and `ambiguous_identifier`. Runtime errors set `isError: true`.
+
+**Examples**
 
 ```js
 mcp__flashquery__write_document({
@@ -21,9 +74,51 @@ mcp__flashquery__write_document({
 })
 ```
 
-For updates, pass `mode: "update"` and `identifier`, then include at least one of `content`, `title`, `frontmatter`, or `tags`. `tags` replaces the full document tag list; use `apply_tags` for additive tag changes.
+```json
+{
+  "mode": "create",
+  "identifier": "Projects/Alpha/Plan.md",
+  "title": "Alpha Plan",
+  "path": "Projects/Alpha/Plan.md",
+  "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+  "modified": "2026-05-17T12:00:00.000Z",
+  "size": { "chars": 23 }
+}
+```
 
-Use `get_document` to read one or more documents by `fq_id`, vault-relative path, or filename. Use `include` for `body`, `frontmatter`, and `headings`; use `sections` for heading extraction. Section extraction supports `include_nested`, `occurrence`, and `max_depth`. Use `follow_ref` to follow a dot-separated frontmatter pointer and return the target document under `followed_ref`.
+**Related tools**
+
+Use `get_document` to read documents, `insert_in_doc` for anchored insertion, `replace_doc_section` for section replacement, `apply_tags` for additive tag changes, and `remove_document` for trash/delete lifecycle.
+
+### `get_document`
+
+**Status:** final
+**Category:** doc-read
+**Tier:** read-only
+**Use when:** Reading one or more documents, extracting headings or sections, or following a frontmatter pointer.
+**Do not use when:** You need search/discovery; use `search` or `list_vault`.
+
+**Behavior**
+
+`get_document` resolves each identifier as a vault-relative path, `fq_id`, or unique filename. A single string returns one flat object. An array returns an ordered array of per-document success or error objects; partial failures do not fail the outer call. By default it includes `body`. Section extraction is case-insensitive substring matching, with digit-leading queries anchored to the heading start. `follow_ref` resolves a dot-separated frontmatter path on the source document and returns the target document under `followed_ref`.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `identifiers` | `string \| string[]` | yes | none | One or more document identifiers: path, `fq_id`, or filename. |
+| `include` | `("body" \| "frontmatter" \| "headings")[]` | no | `["body"]` | Payload sections to include. |
+| `sections` | `string[]` | no | none | Heading names to extract. Requires `body` in `include`. |
+| `include_nested` | `boolean` | no | `true` | Whether section extraction includes nested subsection content. |
+| `occurrence` | `number` | no | `1` | 1-indexed heading occurrence. Valid only when `sections` has exactly one element. |
+| `max_depth` | `number` | no | `6` | Heading depth for `headings`, integer 1-6. |
+| `follow_ref` | `string` | no | none | Dot path into source frontmatter whose string value is resolved as a document identifier. |
+
+**Output**
+
+Success includes `identifier`, `title`, `path`, `fq_id`, `modified`, and `size.chars`, plus requested `body`, `frontmatter`, `headings`, and/or `followed_ref`. Expected errors use canonical JSON envelopes. `follow_ref` pre-resolution errors appear at the top level; post-resolution target errors can appear under `followed_ref`.
+
+**Examples**
 
 ```js
 mcp__flashquery__get_document({
@@ -33,30 +128,250 @@ mcp__flashquery__get_document({
 })
 ```
 
-Use `search` for document search. Set `entity_types: ["documents"]` when the search should not include memories.
+```json
+{
+  "identifier": "Projects/Alpha/Plan.md",
+  "title": "Alpha Plan",
+  "path": "Projects/Alpha/Plan.md",
+  "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+  "modified": "2026-05-17T12:00:00.000Z",
+  "size": { "chars": 320 },
+  "body": "## Scope\n\nInitial notes.",
+  "frontmatter": {},
+  "headings": [{ "level": 2, "text": "Scope", "line": 1, "chars": 15 }]
+}
+```
+
+**Related tools**
+
+Use `search` to discover documents, `list_vault` to browse paths, and `call_model` document references when the target consumer is a configured model.
+
+### `archive_document`
+
+**Status:** final
+**Category:** doc-write
+**Tier:** read-write
+**Use when:** Hiding documents from normal search while keeping the vault file and FlashQuery identity.
+**Do not use when:** You want trash or hard-delete behavior; use `remove_document`.
+
+**Behavior**
+
+Archives one or more documents by setting status to `archived` and preserving the file, `fq_id`, and history. Re-archiving is idempotent. Batch input returns ordered per-item results and errors. The tool acquires the `documents` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `identifiers` | `string \| string[]` | yes | none | One or more document identifiers: path, `fq_id`, or filename. |
+
+**Output**
+
+Single success returns a document identification payload with `status: "archived"` and `archived_at`. Batch success returns an ordered array. Expected per-item errors include `not_found` and `ambiguous_identifier`.
+
+**Examples**
 
 ```js
-mcp__flashquery__search({
-  query: "alpha launch risks",
-  entity_types: ["documents"],
-  mode: "mixed",
-  limit: 10
+mcp__flashquery__archive_document({
+  identifiers: ["Notes/old.md", "missing.md"]
 })
 ```
 
-Use `list_vault` to browse paths and inspect vault structure without reading full document bodies.
+```json
+[
+  {
+    "identifier": "Notes/old.md",
+    "title": "Old Note",
+    "path": "Notes/old.md",
+    "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+    "modified": "2026-05-17T12:00:00.000Z",
+    "size": { "chars": 42 },
+    "status": "archived",
+    "archived_at": "2026-05-17T12:00:00.000Z"
+  },
+  {
+    "error": "not_found",
+    "message": "No document matches identifier 'missing.md'",
+    "identifier": "missing.md"
+  }
+]
+```
+
+**Related tools**
+
+Use `remove_document` when the document should leave its current vault path. Use `search` with `include_archived: true` to include archived documents.
+
+### `remove_document`
+
+**Status:** final
+**Category:** doc-write
+**Tier:** read-write
+**Use when:** Removing documents from their current vault path through FlashQuery's archive-then-trash/delete lifecycle.
+**Do not use when:** You only want reversible archive state; use `archive_document`.
+
+**Behavior**
+
+For each document, `remove_document` first writes archived lifecycle state, updates the database row, then either moves the file into the configured trash folder or physically deletes it when trash is disabled. When trash is enabled, the original path is recorded in frontmatter and trash basename collisions follow configured collision handling. Batch responses preserve input order and return per-document errors. Bulk removal over five items adds a warning. On removal failure after archive writes, it attempts rollback. The tool acquires the `documents` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `identifiers` | `string \| string[]` | yes | none | One or more document identifiers: path, `fq_id`, or filename. |
+
+**Output**
+
+Single success returns document archive fields plus `moved_to`, which is a trash path when trash is enabled or `null` when hard-deleted. Batch success returns `{ "results": [...] }` and may include `warnings`.
+
+**Examples**
 
 ```js
-mcp__flashquery__list_vault({
-  path: "Projects",
-  recursive: true,
-  include: ["metadata", "tracking"]
+mcp__flashquery__remove_document({
+  identifiers: ["Scratch/old-plan.md"]
 })
 ```
 
-`list_vault` supports `show: "files" | "directories" | "all"`, optional `extensions`, date filters (`after`, `before`, `date_field`), `recursive`, `limit`, and include-gated `metadata` and `tracking`.
+```json
+{
+  "identifier": "Scratch/old-plan.md",
+  "title": "Old Plan",
+  "path": "Scratch/old-plan.md",
+  "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+  "modified": "2026-05-17T12:00:00.000Z",
+  "size": { "chars": 100 },
+  "status": "archived",
+  "archived_at": "2026-05-17T12:00:00.000Z",
+  "moved_to": "Trash/old-plan.md"
+}
+```
 
-Use `insert_in_doc` for markdown-aware insertion and `replace_doc_section` for section replacement.
+**Related tools**
+
+Use `archive_document` for archive-only behavior and `manage_directory` for empty directory removal.
+
+### `copy_document`
+
+**Status:** final
+**Category:** doc-write
+**Tier:** read-write
+**Use when:** Duplicating one document as a new file with a fresh `fq_id`.
+**Do not use when:** You need batch copying or customized metadata during copy; call once per target and update afterward.
+
+**Behavior**
+
+Copies one source document to one destination. It preserves source title, tags, and custom frontmatter, but assigns a new `fq_id`, timestamps, active status, and database row. If `destination` is omitted, it writes to the vault root using a sanitized title filename. It rejects destination conflicts, starts a fire-and-forget embedding update, and acquires the `documents` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `identifier` | `string` | yes | none | Source document identifier: path, `fq_id`, or filename. Array input is rejected. |
+| `destination` | `string` | no | sanitized title at vault root | Vault-relative destination path. |
+
+**Output**
+
+Success returns document identification for the new copy. Expected errors include `invalid_input`, `conflict`, `not_found`, and `ambiguous_identifier`.
+
+**Examples**
+
+```js
+mcp__flashquery__copy_document({
+  identifier: "Templates/Contact.md",
+  destination: "People/Ada.md"
+})
+```
+
+```json
+{
+  "identifier": "People/Ada.md",
+  "title": "Contact",
+  "path": "People/Ada.md",
+  "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+  "modified": "2026-05-17T12:00:00.000Z",
+  "size": { "chars": 250 }
+}
+```
+
+**Related tools**
+
+Use `move_document` to preserve identity at a new path, and `write_document` to create a customized new file.
+
+### `move_document`
+
+**Status:** final
+**Category:** doc-write
+**Tier:** read-write
+**Use when:** Moving or renaming a document while preserving its identity.
+**Do not use when:** You need automatic backlink rewriting or batch moves.
+
+**Behavior**
+
+Moves one document to a destination path, preserving `fq_id`, history, and plugin associations. Intermediate directories are created. If the destination extension is omitted, the source extension is used. Existing links in other files are not updated. Plugin-owned documents can return `warnings: ["plugin_ownership_path_expectation"]`. The tool updates the database path and acquires the `documents` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `identifier` | `string` | yes | none | Source document path, `fq_id`, or filename. |
+| `destination` | `string` | yes | none | Vault-relative destination path, filename required; extension optional. |
+
+**Output**
+
+Success returns document identification for the moved document, plus optional warnings. Expected errors include `not_found`, `ambiguous_identifier`, `invalid_input`, and `conflict`.
+
+**Examples**
+
+```js
+mcp__flashquery__move_document({
+  identifier: "Notes/Draft.md",
+  destination: "Archive/Draft.md"
+})
+```
+
+```json
+{
+  "identifier": "Notes/Draft.md",
+  "title": "Draft",
+  "path": "Archive/Draft.md",
+  "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+  "modified": "2026-05-17T12:00:00.000Z",
+  "size": { "chars": 120 }
+}
+```
+
+**Related tools**
+
+Use `copy_document` for a fresh identity and `insert_doc_link` or manual edits to update references.
+
+### `insert_in_doc`
+
+**Status:** final
+**Category:** doc-write
+**Tier:** read-write
+**Use when:** Inserting Markdown at the top, bottom, before a heading, after a heading, or at the end of a section.
+**Do not use when:** You need to replace or delete a section; use `replace_doc_section`.
+
+**Behavior**
+
+Resolves one document, reads its Markdown body, applies heading-aware insertion, writes the file, updates the content hash in `fqc_documents`, and starts a background embedding update. Heading modes support `contains` or `exact` matching, optional heading level, occurrence disambiguation, and nested-section behavior. `top` and `bottom` reject heading-specific options. The tool acquires the `documents` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `identifier` | `string` | yes | none | Document identifier: path, `fq_id`, or filename. |
+| `position` | `"top" \| "bottom" \| "after_heading" \| "before_heading" \| "end_of_section"` | yes | none | Insert position. |
+| `content` | `string` | yes | none | Markdown content to insert, excluding the anchor heading. |
+| `heading` | `string` | heading modes | none | Anchor heading for `after_heading`, `before_heading`, or `end_of_section`. |
+| `occurrence` | `number` | no | `1` | 1-indexed heading occurrence. Omit only when a heading query resolves to one match. |
+| `include_nested` | `boolean` | no | `true` | For `end_of_section`, whether child sections are included before insertion point. |
+| `heading_match` | `"contains" \| "exact"` | no | `"contains"` | Heading matching mode. |
+| `heading_level` | `number` | no | none | Optional Markdown heading level filter, 1-6. |
+
+**Output**
+
+Success returns document identification plus `inserted_at` for heading-aware modes. Expected errors include `invalid_input`, `not_found`, `ambiguous_identifier`, and lock `conflict`.
+
+**Examples**
 
 ```js
 mcp__flashquery__insert_in_doc({
@@ -68,6 +383,58 @@ mcp__flashquery__insert_in_doc({
 })
 ```
 
+```json
+{
+  "identifier": "Projects/Alpha/Plan.md",
+  "title": "Alpha Plan",
+  "path": "Projects/Alpha/Plan.md",
+  "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+  "modified": "2026-05-17T12:00:00.000Z",
+  "size": { "chars": 350 },
+  "inserted_at": {
+    "position": "end_of_section",
+    "heading": "Tasks",
+    "heading_match": "contains",
+    "occurrence": 1,
+    "include_nested": false
+  }
+}
+```
+
+**Related tools**
+
+Use `replace_doc_section` for replacement/deletion and `write_document` for whole-body replacement.
+
+### `replace_doc_section`
+
+**Status:** final
+**Category:** doc-write
+**Tier:** read-write
+**Use when:** Replacing or deleting one matched Markdown heading section.
+**Do not use when:** You only need to append near a section; use `insert_in_doc`.
+
+**Behavior**
+
+Resolves one document, finds a heading by text, optional match mode, optional level, and optional occurrence, then replaces the section body while preserving the heading line. Passing empty `content` deletes the heading and section. With `include_nested: true`, nested headings are part of the replacement range; with `false`, child headings are preserved. The tool writes the file, updates document tracking, and acquires the `documents` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `identifier` | `string` | yes | none | Document path, `fq_id`, or filename. |
+| `heading` | `string` | yes | none | Heading text to match. |
+| `content` | `string` | yes | none | New section body. Empty string deletes the heading and section. |
+| `include_nested` | `boolean` | no | `true` | Whether nested headings are included in the replacement range. |
+| `heading_match` | `"contains" \| "exact"` | no | `"contains"` | Heading matching mode. |
+| `heading_level` | `number` | no | none | Optional Markdown heading level filter, 1-6. |
+| `occurrence` | `number` | no | none | 1-indexed occurrence when multiple headings match. |
+
+**Output**
+
+Success returns document identification plus section mutation metadata. Expected errors include `not_found`, `ambiguous_identifier`, `invalid_input`, and lock `conflict`.
+
+**Examples**
+
 ```js
 mcp__flashquery__replace_doc_section({
   identifier: "Projects/Alpha/Plan.md",
@@ -77,91 +444,398 @@ mcp__flashquery__replace_doc_section({
 })
 ```
 
-Use `move_document`, `copy_document`, `archive_document`, and `remove_document` for document lifecycle operations. `archive_document` keeps the file and marks it archived; `remove_document` performs the configured removal lifecycle.
-
-```js
-mcp__flashquery__remove_document({
-  identifiers: ["Scratch/old-plan.md"]
-})
+```json
+{
+  "identifier": "Projects/Alpha/Plan.md",
+  "title": "Alpha Plan",
+  "path": "Projects/Alpha/Plan.md",
+  "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+  "modified": "2026-05-17T12:00:00.000Z",
+  "size": { "chars": 300 },
+  "replaced_section": {
+    "heading": "Risks",
+    "heading_match": "exact",
+    "include_nested": true
+  }
+}
 ```
 
-When `trash_folder.enabled` is true, `remove_document` archives the document state, records the original path in frontmatter, and moves the file under the configured trash folder. When trash is disabled, the file is physically deleted after the archive state is written.
+**Related tools**
 
-Use `apply_tags` to add or remove tags on documents and memories without replacing whole tag lists.
+Use `insert_in_doc` to insert without replacing and `get_document` with `sections` to inspect before changing.
+
+### `apply_tags`
+
+**Status:** final
+**Category:** doc-write, memory
+**Tier:** read-write
+**Use when:** Adding or removing tags idempotently on explicit document and memory targets.
+**Do not use when:** You need to replace a document or memory's entire tag list; use `write_document` or `write_memory`.
+
+**Behavior**
+
+`apply_tags` accepts the current `targets` array or transitional convenience inputs for document identifiers or one memory ID. It normalizes tags, applies idempotent additions and no-op removals, validates final tag sets, and returns ordered per-target results. Document targets update frontmatter and `fqc_documents`; memory targets update `fqc_memory`. If memory is disabled by config, memory targets return per-item `unsupported`.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `targets` | `{ entity_type, identifier }[]` | preferred | none | Ordered explicit targets. `entity_type` is `"document"` or `"memory"`. |
+| `identifiers` | `string \| string[]` | no | none | Convenience input for document targets. Use instead of `targets`. |
+| `memory_id` | `string` | no | none | Convenience input for one memory target. Use instead of `targets`. |
+| `add_tags` | `string[]` | conditional | none | Tags to add. At least one of `add_tags` or `remove_tags` is required. |
+| `remove_tags` | `string[]` | conditional | none | Tags to remove. Missing tags are silent no-ops. |
+
+**Output**
+
+Success returns an ordered array. Document items contain document identification, `tags`, and `entity_type: "document"`. Memory items contain memory identification, `tags`, and `entity_type: "memory"`. Per-target expected errors are embedded in the array.
+
+**Examples**
 
 ```js
 mcp__flashquery__apply_tags({
-  targets: [{ entity_type: "document", identifier: "Projects/Alpha/Plan.md" }],
-  add_tags: ["reviewed"],
+  targets: [{ entity_type: "document", identifier: "Notes/Idea.md" }],
+  add_tags: ["planning"],
   remove_tags: ["draft"]
 })
 ```
 
-### Memories
+```json
+[
+  {
+    "identifier": "Notes/Idea.md",
+    "title": "Idea",
+    "path": "Notes/Idea.md",
+    "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+    "modified": "2026-05-17T12:00:00.000Z",
+    "size": { "chars": 120 },
+    "tags": ["planning"],
+    "entity_type": "document"
+  }
+]
+```
 
-Use `write_memory` to create or update persistent memories.
+**Related tools**
+
+Use `write_document` or `write_memory` for replacement semantics and `search` for tag-filtered discovery.
+
+## Memories
+
+### `write_memory`
+
+**Status:** final
+**Category:** memory
+**Tier:** read-write
+**Use when:** Creating a persistent memory or creating a new latest version of an existing memory.
+**Do not use when:** You only need retrieval or search; use `get_memory` or `search`.
+
+**Behavior**
+
+Create mode inserts a new active memory with version `1`, a chain root, optional tags, optional plugin scope, and a background embedding update. Update mode requires an existing latest memory and creates a new latest version through the memory-version RPC; it does not mutate a historical version in place. In update mode, omitted `content` preserves existing content and omitted `tags` preserves existing tags. The plugin scope is preserved on update. The tool acquires the `memory` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `mode` | `"create" \| "update"` | yes | none | Memory write mode. |
+| `content` | `string` | create | existing content on update | Memory content or replacement content. |
+| `memory_id` | `string` | update | none | Existing latest memory ID for update mode. |
+| `tags` | `string[]` | no | `[]` on create; existing tags on update | Validated memory tags. Replaces the list in update mode. |
+| `plugin_scope` | `string` | no | global | Plugin scope for create mode. Fuzzy-resolved to a registered plugin when possible. |
+| `include` | `("content" \| "tags_full")[]` | no | identification only | Optional payload fields. |
+
+**Output**
+
+Success returns memory identification: `memory_id`, `content_preview`, `tags`, `plugin_scope`, `created_at`, and `updated_at`, plus version metadata and optional `content`/`tags_full` when requested. Expected errors include `invalid_input`, `not_found`, `conflict`, and tag validation errors.
+
+**Examples**
 
 ```js
 mcp__flashquery__write_memory({
   mode: "create",
   content: "The user prefers concise implementation updates.",
-  tags: ["preference"]
-})
-```
-
-Use `mode: "update"` with `memory_id` to create a new latest version of an existing memory. Use `get_memory` for exact retrieval and `archive_memory` when a memory should stop appearing in normal search.
-
-`get_memory` accepts `memory_ids` as a single ID or an array. `archive_memory` accepts `memory_ids`; the legacy singular `memory_id` input is still accepted by the handler during migration, but new calls should use `memory_ids`.
-
-Use `search` for memory search or tag-filtered memory lists.
-
-```js
-mcp__flashquery__search({
-  query: "communication preferences",
-  entity_types: ["memories"],
-  mode: "semantic",
-  limit: 5
-})
-```
-
-```js
-mcp__flashquery__search({
   tags: ["preference"],
-  entity_types: ["memories"],
-  tag_match: "all",
-  limit: 20
+  include: ["content"]
 })
 ```
 
-### Records And Plugins
+```json
+{
+  "memory_id": "550e8400-e29b-41d4-a716-446655440000",
+  "content_preview": "The user prefers concise implementation updates.",
+  "tags": ["preference"],
+  "plugin_scope": "global",
+  "created_at": "2026-05-17T12:00:00.000Z",
+  "updated_at": "2026-05-17T12:00:00.000Z",
+  "content": "The user prefers concise implementation updates."
+}
+```
 
-Use `write_record` to create or update plugin-owned relational records.
+**Related tools**
+
+Use `get_memory` for exact retrieval, `archive_memory` to hide a memory chain, and `apply_tags` for additive tag changes.
+
+### `get_memory`
+
+**Status:** final
+**Category:** memory
+**Tier:** read-only
+**Use when:** Retrieving one or more memories by exact ID.
+**Do not use when:** You need to discover memories by query or tag; use `search`.
+
+**Behavior**
+
+Fetches one or more memory rows by ID scoped to the current FlashQuery instance. A single ID returns one object or an expected `not_found` error. Array input returns ordered per-ID results and per-ID errors.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `memory_ids` | `string \| string[]` | yes | none | Single memory ID or ordered array of IDs. |
+| `include` | `("content" \| "tags_full")[]` | no | identification only | Optional payload fields. |
+
+**Output**
+
+Success returns memory identification plus version fields and optional included fields. Batch output is an ordered array.
+
+**Examples**
 
 ```js
-mcp__flashquery__write_record({
-  mode: "create",
-  plugin_id: "crm",
-  table: "contacts",
-  data: { name: "Ada Lovelace", status: "active" }
+mcp__flashquery__get_memory({
+  memory_ids: "550e8400-e29b-41d4-a716-446655440000",
+  include: ["content", "tags_full"]
 })
 ```
 
-Use `get_record`, `search_records`, and `archive_record` for record reads, queries, and archival. `archive_record` uses `targets: [{ plugin_id, plugin_instance, table, id }]`, not a top-level `ids` field. Use `register_plugin`, `get_plugin_info`, and `unregister_plugin` for plugin lifecycle management.
+```json
+{
+  "memory_id": "550e8400-e29b-41d4-a716-446655440000",
+  "content_preview": "The user prefers concise implementation updates.",
+  "tags": ["preference"],
+  "plugin_scope": "global",
+  "created_at": "2026-05-17T12:00:00.000Z",
+  "updated_at": "2026-05-17T12:00:00.000Z",
+  "content": "The user prefers concise implementation updates.",
+  "tags_full": ["preference"]
+}
+```
 
-`search_records` can search one plugin table with `plugin_id` and `table`, or search all taggable plugin tables with `taggable_tables_only: true`. The `include` options are `data` and `schema_metadata`.
+**Related tools**
 
-Use `clear_pending_reviews` to inspect or clear pending plugin reconciliation review rows.
+Use `search` to find memory IDs and `write_memory` to create or version memories.
+
+### `archive_memory`
+
+**Status:** final
+**Category:** memory
+**Tier:** read-write
+**Use when:** A memory is outdated, wrong, or should stop appearing in default search.
+**Do not use when:** You want to preserve and correct a memory; use `write_memory` with `mode: "update"`.
+
+**Behavior**
+
+Archives one or more memory version chains. The preferred input is `memory_ids`; the singular `memory_id` is still accepted by the handler during migration. Archive is idempotent across the chain and records `archived_at`. Empty arrays return an empty array.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `memory_ids` | `string \| string[]` | preferred | none | Single memory ID or ordered array of IDs to archive. |
+| `memory_id` | `string` | no | none | Legacy singular memory ID accepted during migration. |
+
+**Output**
+
+Success returns one memory result for single input or an ordered array for batch input. Per-item errors include `not_found`.
+
+**Examples**
 
 ```js
-mcp__flashquery__clear_pending_reviews({
-  action: "list",
-  plugin_id: "crm"
+mcp__flashquery__archive_memory({
+  memory_ids: ["550e8400-e29b-41d4-a716-446655440000"]
 })
 ```
 
-### Vault Maintenance And Directories
+```json
+[
+  {
+    "memory_id": "550e8400-e29b-41d4-a716-446655440000",
+    "content_preview": "The user prefers concise implementation updates.",
+    "tags": ["preference"],
+    "plugin_scope": "global",
+    "created_at": "2026-05-17T12:00:00.000Z",
+    "updated_at": "2026-05-17T12:00:00.000Z",
+    "archived_at": "2026-05-17T12:00:00.000Z"
+  }
+]
+```
 
-Use `manage_directory` to create folders or remove empty folders.
+**Related tools**
+
+Use `search` with `include_archived: true` to include archived memories and `write_memory` to create a replacement version.
+
+## Search And Vault Browsing
+
+### `search`
+
+**Status:** final
+**Category:** doc-read, memory
+**Tier:** read-only
+**Use when:** Searching documents and memories by title, path, tags, content preview/text, semantic similarity, or mixed mode.
+**Do not use when:** You need literal body grep, regex, line ranges, or byte ranges; those parameters are explicitly unsupported.
+
+**Behavior**
+
+`search` unifies document and memory search. `mode: "filesystem"` uses document title/path/tags and memory content/tags. `mode: "semantic"` uses embeddings and returns `unsupported` if semantic search is unavailable. `mode: "mixed"` combines semantic and filesystem results and falls back with warnings when embeddings are unavailable. Empty query requires filters or `list_all: true`. Archived entities are excluded unless `include_archived` is true.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `query` | `string` | no | none | Search query. Empty query requires filters or `list_all: true`. |
+| `mode` | `"filesystem" \| "semantic" \| "mixed"` | no | `"mixed"` | Search mode. |
+| `tags` | `string[]` | no | none | Tag filter. |
+| `tag_match` | `"any" \| "all"` | no | `"any"` | Tag matching mode. |
+| `limit` | `number` | no | `10` | Global result limit after merge/dedupe/sort. |
+| `entity_types` | `("documents" \| "memories")[]` | no | enabled domains | Search domains. |
+| `list_all` | `boolean` | no | `false` | Allows empty unfiltered list-mode search. |
+| `path_filter` | `string` | no | none | Document path substring filter for filesystem/list searches. |
+| `include_archived` | `boolean` | no | `false` | Include archived documents and memories. |
+| `body_contains`, `body_regex`, `regex`, `line_range`, `lines`, `byte_range` | `unknown` | no | none | Unsupported literal body-search parameters; return validation guidance. |
+
+**Output**
+
+Success returns `{ query, entity_types, mode, total, warnings?, results }`. Document results include `entity_type`, `identifier`, `title`, `path`, `fq_id`, `tags`, `modified`, `size`, `match_source`, and optional `score`. Memory results include `entity_type`, `identifier`, `memory_id`, `content_preview`, `tags`, `plugin_scope`, timestamps, `match_source`, and optional `score`.
+
+**Examples**
+
+```js
+mcp__flashquery__search({
+  query: "alpha launch risks",
+  entity_types: ["documents"],
+  mode: "mixed",
+  limit: 10
+})
+```
+
+```json
+{
+  "query": "alpha launch risks",
+  "entity_types": ["documents"],
+  "mode": "mixed",
+  "total": 1,
+  "results": [
+    {
+      "entity_type": "document",
+      "identifier": "Projects/Alpha/Plan.md",
+      "title": "Alpha Plan",
+      "path": "Projects/Alpha/Plan.md",
+      "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+      "tags": ["project"],
+      "modified": "2026-05-17T12:00:00.000Z",
+      "size": { "chars": 320 },
+      "match_source": ["filesystem"]
+    }
+  ]
+}
+```
+
+**Related tools**
+
+Use `get_document` or `get_memory` after search returns exact IDs. Use `search_records` for plugin-owned structured records.
+
+### `list_vault`
+
+**Status:** final
+**Category:** doc-read
+**Tier:** read-only
+**Use when:** Browsing vault structure and metadata without reading full document bodies.
+**Do not use when:** You need semantic or tag/content search; use `search`.
+
+**Behavior**
+
+Lists files and/or directories under a vault directory. Root paths such as `/`, empty string, or `.` list the vault root. Dotfiles and dot-directories are skipped. Symlinks are skipped silently. Directories sort by depth then path; files sort newest-first by selected date field. Optional tracking enrichment reads `fqc_documents` for tracked Markdown files. Date filters accept ISO dates or relative forms such as `7d`, `24h`, or `1w`.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `path` | `string` | no | `"/"` | Vault-relative directory path. Must be a directory. |
+| `show` | `"files" \| "directories" \| "all"` | no | `"all"` | Entry types to include. |
+| `include` | `("metadata" \| "tracking")[]` | no | `[]` | `metadata` adds created/children fields; `tracking` adds title, tags, status, and `fq_id` for tracked files. |
+| `recursive` | `boolean` | no | `false` | Walk subdirectories recursively. |
+| `extensions` | `string[]` | no | none | Case-insensitive file extension filter. Ignored for `show: "directories"`. |
+| `after` | `string` | no | none | Date filter for entries after a relative or ISO time. |
+| `before` | `string` | no | none | Date filter for entries before a relative or ISO time. |
+| `date_field` | `"updated" \| "created"` | no | `"updated"` | Timestamp used for filtering and file sorting. |
+| `limit` | positive integer | no | `200` | Maximum returned entries. |
+
+**Output**
+
+Success returns `{ path, total, displayed, truncated, entries }`. File entries include `name`, `path`, `type: "file"`, `modified`, and `size.chars`; tracking fields are optional. Directory entries include `name`, `path`, `type: "directory"`, `modified`, and `size.entries`; metadata can add `created` and `children`.
+
+**Examples**
+
+```js
+mcp__flashquery__list_vault({
+  path: "Projects",
+  recursive: true,
+  include: ["metadata", "tracking"],
+  limit: 50
+})
+```
+
+```json
+{
+  "path": "Projects",
+  "total": 1,
+  "displayed": 1,
+  "truncated": false,
+  "entries": [
+    {
+      "name": "Plan.md",
+      "path": "Projects/Alpha/Plan.md",
+      "type": "file",
+      "modified": "2026-05-17T12:00:00.000Z",
+      "size": { "chars": 320 },
+      "title": "Alpha Plan",
+      "tags": ["project"],
+      "status": "active",
+      "fq_id": "550e8400-e29b-41d4-a716-446655440000"
+    }
+  ]
+}
+```
+
+**Related tools**
+
+Use `get_document` to read a file returned by `list_vault` and `manage_directory` to create or remove directories.
+
+## Directories And Maintenance
+
+### `manage_directory`
+
+**Status:** final
+**Category:** doc-write
+**Tier:** read-write
+**Use when:** Creating vault folders or removing empty vault folders.
+**Do not use when:** You need file/document lifecycle; use document tools.
+
+**Behavior**
+
+Processes directory paths in order. Create mode is recursive and idempotent: existing directories return `status: "unchanged"`. Remove mode removes only empty directories and returns per-path conflicts for non-empty directories. Paths are normalized, sanitized, validated to stay inside the vault, and locked per directory when locking is enabled. Partial successes stay in the ordered results array.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `action` | `"create" \| "remove"` | yes | none | Directory operation. |
+| `paths` | `string[]` | yes | none | Vault-relative directory paths to process in order. Duplicate paths execute sequentially. |
+
+**Output**
+
+Always returns JSON `{ "results": [...] }` with `isError: false` for normal per-path outcomes. Success items contain `path`, `action`, `status`, and `timestamp`. Error items contain canonical error fields.
+
+**Examples**
 
 ```js
 mcp__flashquery__manage_directory({
@@ -170,9 +844,49 @@ mcp__flashquery__manage_directory({
 })
 ```
 
-`manage_directory` creates directories recursively. Removal is empty-directory only and returns per-path errors for conflicts such as non-empty directories.
+```json
+{
+  "results": [
+    {
+      "path": "Projects/Alpha",
+      "action": "create",
+      "status": "created",
+      "timestamp": "2026-05-17T12:00:00.000Z"
+    }
+  ]
+}
+```
 
-Use `maintain_vault` for administrative maintenance when files changed outside FlashQuery or the index needs an explicit sync/repair/status check.
+**Related tools**
+
+Use `write_document` to create files inside directories and `remove_document` to remove files.
+
+### `maintain_vault`
+
+**Status:** final
+**Category:** system
+**Tier:** admin
+**Use when:** Running administrative vault sync, repair, or background job status checks after external file changes.
+**Do not use when:** A normal read/write tool can answer the request; normal tools return current authoritative state.
+
+**Behavior**
+
+Delegates to the maintenance service. `sync` scans external filesystem changes. `repair` reconciles tracked document state. Arrays can include `sync` and `repair`, with repair running before sync. `background` is valid only for `sync`; `dry_run` is valid only for `repair`; `status` requires `job_id`.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `action` | `"sync" \| "repair" \| "status" \| ("sync" \| "repair")[]` | yes | none | Maintenance action or run action array. |
+| `dry_run` | `boolean` | no | `false` | Only valid for repair. |
+| `background` | `boolean` | no | `false` | Only valid for sync. |
+| `job_id` | `string` | status | none | Required for `action: "status"`. |
+
+**Output**
+
+Success returns the maintenance service payload. Run results include action timing, `dry_run`, counts for scanned/added/updated/repaired/archived, and optional warnings. Background sync returns job metadata; status returns job status. Expected validation errors use canonical JSON; runtime maintenance failures set `isError: true`.
+
+**Examples**
 
 ```js
 mcp__flashquery__maintain_vault({
@@ -181,15 +895,765 @@ mcp__flashquery__maintain_vault({
 })
 ```
 
-`maintain_vault` actions are `sync`, `repair`, and `status`. `dry_run` is valid only for `repair`; `background` is valid only for `sync`; `status` requires `job_id`.
+```json
+{
+  "actions": [
+    {
+      "action": "repair",
+      "started_at": "2026-05-17T12:00:00.000Z",
+      "finished_at": "2026-05-17T12:00:01.000Z",
+      "dry_run": false,
+      "counts": { "scanned": 10, "added": 0, "updated": 1, "repaired": 1, "archived": 0 }
+    }
+  ]
+}
+```
 
-### LLM Tools
+**Related tools**
 
-Use `call_model` for configured model-purpose calls and discovery. Execution resolvers are `model` and `purpose`; discovery resolvers are `list_models`, `list_purposes`, `search`, and `help`. `name` and `messages` are required only for `model` and `purpose`. `template_params` hydrates document/template references in original `system` and `user` messages. Caller-provided provider tools are rejected; delegated model tool access is controlled by purpose configuration. See `docs/Document Reference System.md` and `docs/LLM Providers Models and Purposes.md`.
+Use `list_vault`, `search`, and `get_document` for normal discovery and reads.
 
-Use `get_llm_usage` for usage reporting. Supported modes are `summary`, `by_purpose`, `by_model`, and `recent`, with optional period/date, purpose, model, trace, and recent-limit filters.
+## Plugins And Records
 
-### Host Tool Exposure
+### `register_plugin`
+
+**Status:** final
+**Category:** plugin
+**Tier:** admin
+**Use when:** Registering a plugin schema or applying a safe additive schema update.
+**Do not use when:** You only need to inspect an installed plugin; use `get_plugin_info`.
+
+**Behavior**
+
+Reads plugin YAML from `schema_path` or `schema_yaml`, defaulting `plugin_instance` to `default`. `schema_path` takes precedence when both are provided. First registration creates plugin tables, inserts a registry row, loads the plugin manager, rebuilds type registry, and reloads manifests. Same-version re-registration is idempotent. Version upgrades analyze schema changes and apply safe additive table/column changes; unsafe removals or type changes return a `conflict` with guidance. Version downgrades update registry metadata without DDL downgrade. Plugin table names use the plugin and instance prefix.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `schema_path` | `string` | conditional | none | Path to YAML schema file on disk. Takes precedence over `schema_yaml`. |
+| `schema_yaml` | `string` | conditional | none | Inline YAML schema. Required when `schema_path` is absent. |
+| `plugin_instance` | `string` | no | `"default"` | Plugin instance identifier. |
+
+**Output**
+
+Success returns plugin identification plus `registered_at`, `was_new`, `plugin_instance`, `schema_version`, and sometimes `safe_change_count`. Expected errors include invalid input and unsafe migration `conflict`. Runtime errors cover YAML/DDL/database failures.
+
+**Examples**
+
+```js
+mcp__flashquery__register_plugin({
+  schema_yaml: "plugin:\n  id: crm\n  name: CRM\n  version: 1.0.0\ntables: []"
+})
+```
+
+```json
+{
+  "plugin_id": "crm",
+  "name": "CRM",
+  "status": "registered",
+  "table_count": 0,
+  "registered_at": "2026-05-17T12:00:00.000Z",
+  "was_new": true,
+  "plugin_instance": "default",
+  "schema_version": "1.0.0"
+}
+```
+
+**Related tools**
+
+Use `get_plugin_info` after registration, `unregister_plugin` for removal, and `write_record` for plugin-owned rows.
+
+### `get_plugin_info`
+
+**Status:** final
+**Category:** plugin
+**Tier:** read-only
+**Use when:** Inspecting a registered plugin's tables, schema, or status details.
+**Do not use when:** You need to create or update plugin registration; use `register_plugin`.
+
+**Behavior**
+
+Reads the in-memory plugin manager entry for `plugin_id` and `plugin_instance`. Defaults include to `["tables"]`. Returns an expected `not_found` error if the plugin instance is not registered.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `plugin_id` | `string` | yes | none | Plugin identifier. |
+| `plugin_instance` | `string` | no | `"default"` | Plugin instance identifier. |
+| `include` | `("schema" \| "tables" \| "status_detail")[]` | no | `["tables"]` | Payload sections to include. |
+
+**Output**
+
+Success returns plugin identification. Optional `tables` is a list of schema table names, `schema` is the parsed schema object, and `status_detail` includes `plugin_instance`, `table_prefix`, and version.
+
+**Examples**
+
+```js
+mcp__flashquery__get_plugin_info({
+  plugin_id: "crm",
+  include: ["tables", "status_detail"]
+})
+```
+
+```json
+{
+  "plugin_id": "crm",
+  "name": "CRM",
+  "status": "registered",
+  "table_count": 2,
+  "tables": ["contacts", "opportunities"],
+  "status_detail": {
+    "plugin_instance": "default",
+    "table_prefix": "fqcp_crm_default_",
+    "version": "1.0.0"
+  }
+}
+```
+
+**Related tools**
+
+Use `register_plugin` to create/update registrations and `search_records` to inspect plugin data.
+
+### `unregister_plugin`
+
+**Status:** final
+**Category:** plugin
+**Tier:** admin
+**Use when:** Removing a plugin registry entry and clearing FlashQuery plugin state.
+**Do not use when:** You want to delete plugin table rows; forced unregister leaves live records orphaned.
+
+**Behavior**
+
+Inventories plugin tables and live active rows. Without `force`, live records return a `conflict`. With `force: true`, the registry entry and pending review state are removed, in-memory plugin state is unloaded, type registry and manifests are refreshed, document ownership is cleared, and plugin-scoped memories are deleted. Existing plugin table rows are not dropped and can be orphaned. The tool acquires the `plugins` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `plugin_id` | `string` | yes | none | Plugin identifier. |
+| `plugin_instance` | `string` | no | `"default"` | Plugin instance identifier. |
+| `force` | `boolean` | no | `false` | Unregister even when live records exist. |
+
+**Output**
+
+Success returns plugin identification with `status: "unregistered"`, `plugin_instance`, `unregistered_at`, `documents_ownership_cleared`, `plugin_scoped_memories_deleted`, and optional warning `orphaned_records: N`.
+
+**Examples**
+
+```js
+mcp__flashquery__unregister_plugin({
+  plugin_id: "crm",
+  force: true
+})
+```
+
+```json
+{
+  "plugin_id": "crm",
+  "name": "CRM",
+  "status": "unregistered",
+  "table_count": 2,
+  "plugin_instance": "default",
+  "unregistered_at": "2026-05-17T12:00:00.000Z",
+  "documents_ownership_cleared": 0,
+  "plugin_scoped_memories_deleted": 0,
+  "warnings": ["orphaned_records: 3"]
+}
+```
+
+**Related tools**
+
+Use `archive_record` to archive individual records before unregistering and `clear_pending_reviews` for review queue administration.
+
+### `write_record`
+
+**Status:** final
+**Category:** plugin
+**Tier:** read-write
+**Use when:** Creating or updating one schema-validated plugin-owned structured record.
+**Do not use when:** The data belongs in Markdown documents or memories.
+
+**Behavior**
+
+Validates the plugin table, validates input against the plugin schema, runs plugin document reconciliation as a preamble, then inserts or updates one row in the plugin table. Create mode rejects caller-provided `id`; update mode requires `id`. Tables with `embed_fields` start fire-and-forget embedding updates. The response can include reconciliation and pending review payloads. The tool acquires the `records` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `mode` | `"create" \| "update"` | yes | none | Record write mode. |
+| `plugin_id` | `string` | yes | none | Plugin identifier. |
+| `plugin_instance` | `string` | no | `"default"` | Plugin instance identifier. |
+| `table` | `string` | yes | none | Table name from plugin schema. |
+| `id` | `string` | update | none | Record UUID. Required for update and not allowed for create. |
+| `data` | `object` | yes | none | Schema-validated record fields. |
+| `include` | `("data" \| "schema_metadata")[]` | no | identification only | Optional payload sections. |
+
+**Output**
+
+Success returns record identification: `id`, `plugin_id`, `table`, `created_at`, and `updated_at`, plus optional `data`, `schema_metadata`, `reconciliation`, and `pending_review`. Expected errors include invalid input, table not found, record not found, and schema validation failures.
+
+**Examples**
+
+```js
+mcp__flashquery__write_record({
+  mode: "create",
+  plugin_id: "crm",
+  table: "contacts",
+  data: { name: "Ada Lovelace", status: "active" },
+  include: ["data"]
+})
+```
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "plugin_id": "crm",
+  "table": "contacts",
+  "created_at": "2026-05-17T12:00:00.000Z",
+  "updated_at": "2026-05-17T12:00:00.000Z",
+  "data": { "name": "Ada Lovelace", "status": "active" }
+}
+```
+
+**Related tools**
+
+Use `get_record`, `search_records`, and `archive_record` for record lifecycle reads and archival.
+
+### `get_record`
+
+**Status:** final
+**Category:** plugin
+**Tier:** read-only
+**Use when:** Retrieving one plugin-owned record by exact ID.
+**Do not use when:** You need filtering or text search; use `search_records`.
+
+**Behavior**
+
+Runs plugin document reconciliation as a preamble, validates the plugin table, fetches one row scoped to the current FlashQuery instance, and returns a record payload. Missing rows return expected `not_found`.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `plugin_id` | `string` | yes | none | Plugin identifier. |
+| `plugin_instance` | `string` | no | `"default"` | Plugin instance identifier. |
+| `table` | `string` | yes | none | Table name from plugin schema. |
+| `id` | `string` | yes | none | Record UUID. |
+| `include` | `("data" \| "schema_metadata")[]` | no | `["data"]` | Optional payload sections. |
+
+**Output**
+
+Success returns record identification plus included data and optional reconciliation/pending review payloads.
+
+**Examples**
+
+```js
+mcp__flashquery__get_record({
+  plugin_id: "crm",
+  table: "contacts",
+  id: "550e8400-e29b-41d4-a716-446655440000",
+  include: ["data"]
+})
+```
+
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "plugin_id": "crm",
+  "table": "contacts",
+  "created_at": "2026-05-17T12:00:00.000Z",
+  "updated_at": "2026-05-17T12:00:00.000Z",
+  "data": { "name": "Ada Lovelace", "status": "active" }
+}
+```
+
+**Related tools**
+
+Use `write_record` to create/update and `search_records` to discover records.
+
+### `archive_record`
+
+**Status:** final
+**Category:** plugin
+**Tier:** read-write
+**Use when:** Soft-archiving plugin-owned records while preserving history.
+**Do not use when:** You need to update fields; use `write_record`.
+
+**Behavior**
+
+Processes ordered archive targets. For each target, it runs plugin document reconciliation, validates the table, sets `status: "archived"` and `updated_at`, and sets `archived_at` when the table has that column. Tables without `archived_at` return `warnings: ["archived_at_unavailable"]`. The tool acquires the `records` lock when configured.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `targets` | `{ plugin_id, plugin_instance?, table, id }[]` | yes | none | Ordered archive targets. |
+
+**Output**
+
+Success returns an ordered array of record payloads or per-target errors. Runtime database failures can fail the outer call.
+
+**Examples**
+
+```js
+mcp__flashquery__archive_record({
+  targets: [{ plugin_id: "crm", table: "contacts", id: "550e8400-e29b-41d4-a716-446655440000" }]
+})
+```
+
+```json
+[
+  {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "plugin_id": "crm",
+    "table": "contacts",
+    "created_at": "2026-05-17T12:00:00.000Z",
+    "updated_at": "2026-05-17T12:05:00.000Z",
+    "archived_at": "2026-05-17T12:05:00.000Z"
+  }
+]
+```
+
+**Related tools**
+
+Use `search_records` to find record IDs and `unregister_plugin` only for plugin registry lifecycle.
+
+### `search_records`
+
+**Status:** final
+**Category:** plugin
+**Tier:** read-only
+**Use when:** Searching or filtering plugin-owned structured records.
+**Do not use when:** You need documents or memories; use `search`.
+
+**Behavior**
+
+Can search one plugin table or, with `taggable_tables_only: true`, all registered plugin tables that have a `tags` or `tag` column. For one table, filters are equality predicates combined with AND. With `query` and `embed_fields`, semantic vector search is used. With `query` and no embedding fields, text columns are searched with ILIKE. With no query, filters-only search runs. All normal searches are scoped to active rows in the current FlashQuery instance. Record tools run plugin document reconciliation as a preamble.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `plugin_id` | `string` | conditional | none | Required unless `taggable_tables_only` is true. |
+| `plugin_instance` | `string` | no | `"default"` | Plugin instance identifier. |
+| `table` | `string` | conditional | none | Required unless `taggable_tables_only` is true. |
+| `filters` | `object` | no | none | Field equality filters. |
+| `query` | `string` | no | none | Text or semantic query. |
+| `tag` | `string` | no | none | Tag filter for taggable table aggregation. |
+| `taggable_tables_only` | `boolean` | no | `false` | Search all registered taggable plugin tables. |
+| `include` | `("data" \| "schema_metadata")[]` | no | result defaults | Optional payload sections. |
+| `limit` | `number` | no | `10` | Maximum result count. |
+
+**Output**
+
+Success returns a search envelope with `plugin_id`, `table`, `query`, `tag`, `total`, and `results`. Results contain record identification and optional `data`, `schema_metadata`, `similarity`, and reconciliation information. If no taggable tables exist, returns total `0` with warning `plugin_no_taggable_tables`.
+
+**Examples**
+
+```js
+mcp__flashquery__search_records({
+  plugin_id: "crm",
+  table: "contacts",
+  filters: { status: "active" },
+  query: "Ada",
+  include: ["data"],
+  limit: 5
+})
+```
+
+```json
+{
+  "plugin_id": "crm",
+  "table": "contacts",
+  "query": "Ada",
+  "total": 1,
+  "results": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "plugin_id": "crm",
+      "table": "contacts",
+      "created_at": "2026-05-17T12:00:00.000Z",
+      "updated_at": "2026-05-17T12:00:00.000Z",
+      "data": { "name": "Ada Lovelace", "status": "active" }
+    }
+  ]
+}
+```
+
+**Related tools**
+
+Use `get_record` for exact ID retrieval and `search` for documents/memories.
+
+### `clear_pending_reviews`
+
+**Status:** final
+**Category:** plugin
+**Tier:** admin
+**Use when:** Listing or clearing pending plugin reconciliation review rows.
+**Do not use when:** You need normal record lifecycle; use record tools.
+
+**Behavior**
+
+`action: "list"` returns matching pending review rows. `action: "clear"` deletes rows scoped by `plugin_id`, `ids`, or all current-instance pending rows when no filters are provided. The instance scope is the FlashQuery server instance ID, not the plugin instance name. Clearing by IDs with no matches returns warning `no_matching_items`.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `action` | `"list" \| "clear"` | yes | none | List or clear pending review rows. |
+| `plugin_id` | `string` | no | none | Optional plugin filter. |
+| `ids` | `string[]` | no | none | Pending review row IDs returned by list mode. |
+
+**Output**
+
+List mode returns `{ pending, items }`. Clear mode returns `{ cleared, items, warnings? }`. Each item includes `id`, `fqc_id`, `type`, `plugin_id`, `table`, `path`, and `context`.
+
+**Examples**
+
+```js
+mcp__flashquery__clear_pending_reviews({
+  action: "list",
+  plugin_id: "crm"
+})
+```
+
+```json
+{
+  "pending": 1,
+  "items": [
+    {
+      "id": "review-row-id",
+      "fqc_id": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "orphaned_document",
+      "plugin_id": "crm",
+      "table": "contacts",
+      "path": "People/Ada.md",
+      "context": {}
+    }
+  ]
+}
+```
+
+**Related tools**
+
+Use `get_record`, `write_record`, and `archive_record` for record lifecycle changes.
+
+## LLM And Macro Tools
+
+### `call_model`
+
+**Status:** final
+**Category:** llm
+**Tier:** admin
+**Use when:** Calling a configured model or purpose, discovering model/purpose configuration, or hydrating document references for model calls.
+**Do not use when:** You need local data operations; use the direct MCP tools. It is hard-excluded from delegated native tool access because it can recursively call models.
+
+**Behavior**
+
+`call_model` is always registered. If `llm:` is absent, only `resolver: "help"` succeeds; other resolvers return an LLM-not-configured runtime error. Execution resolvers `model` and `purpose` require `name` and `messages`. Discovery resolvers `list_models`, `list_purposes`, `search`, and `help` do not call a provider. Before execution calls, FlashQuery hydrates host-authored `{{ref:...}}` placeholders only in original `system` and `user` messages. Reference failures return `reference_resolution_failed` before any model call. Purpose calls may run a managed tool loop when the purpose exposes native tools or templates. Caller-provided provider tools are rejected; delegated model tool access is controlled by purpose configuration. When `trace_id` is provided, usage rows are correlated and response metadata includes trace totals.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `resolver` | `"model" \| "purpose" \| "list_models" \| "list_purposes" \| "search" \| "help"` | yes | none | Execution or discovery resolver. |
+| `name` | `string` | model/purpose | none | Model alias or purpose name. Ignored by discovery resolvers. |
+| `messages` | OpenAI-style message array | model/purpose | none | Required for execution. References are hydrated only in original system/user string content. |
+| `return_messages` | `boolean` | no | `false` | Include post-hydration messages and final assistant message on success. |
+| `parameters` | `object` | no | `{}` | Provider parameters and FlashQuery loop controls. For `search`, must contain non-empty `query`. |
+| `template_params` | `object` | no | `{}` | Template/alias parameters for host-authored reference hydration. Ignored by discovery. |
+| `trace_id` | `string` | no | none | Usage correlation ID. |
+
+**Output**
+
+Execution success returns a `CallModelEnvelope` JSON payload:
+
+```json
+{
+  "response": "The model response.",
+  "messages": [],
+  "metadata": {
+    "resolver": "purpose",
+    "name": "summarizer",
+    "resolved_model_name": "fast",
+    "provider_name": "openai",
+    "fallback_position": 1,
+    "tokens": { "input": 1200, "output": 300 },
+    "cost_usd": 0.00036,
+    "latency_ms": 1800
+  }
+}
+```
+
+Discovery calls return resolver-specific JSON, not the execution envelope. `help` works even when LLM execution is unconfigured. `resolver: "search"` without `parameters.query` returns `isError: true` with text guidance.
+
+**Examples**
+
+```js
+mcp__flashquery__call_model({
+  resolver: "purpose",
+  name: "summarizer",
+  messages: [
+    { role: "user", content: "Summarize {{ref:Docs/brief.md}}" }
+  ],
+  return_messages: true
+})
+```
+
+```json
+{
+  "response": "Brief summary...",
+  "messages": [
+    { "role": "user", "content": "Summarize <hydrated document body>" },
+    { "role": "assistant", "content": "Brief summary..." }
+  ],
+  "metadata": {
+    "resolver": "purpose",
+    "name": "summarizer",
+    "resolved_model_name": "fast",
+    "provider_name": "openai",
+    "fallback_position": 1,
+    "tokens": { "input": 1200, "output": 300 },
+    "cost_usd": 0.00036,
+    "latency_ms": 1800,
+    "injected_references": [{ "ref": "{{ref:Docs/brief.md}}", "chars": 1000 }],
+    "prompt_chars": 1030
+  }
+}
+```
+
+**Related tools**
+
+See `docs/Document Reference System.md` for reference syntax and `docs/LLM Providers Models and Purposes.md` for configuration. Use `get_llm_usage` for usage reporting.
+
+### `get_llm_usage`
+
+**Status:** final
+**Category:** llm
+**Tier:** read-only
+**Use when:** Inspecting aggregated LLM usage, costs, models, purposes, or trace records.
+**Do not use when:** You need to call a model; use `call_model`.
+
+**Behavior**
+
+Queries `fqc_llm_usage` and returns pre-aggregated data, not arbitrary raw table dumps. Date filtering uses `period` or explicit `from_date`/`to_date`; explicit dates override period. `to_date` date-only values are interpreted as end-of-day inclusive. Purpose and model filters are lowercased. `recent` returns newest-first records. When filtering by `trace_id`, the open upper time bound is omitted to avoid race conditions with usage rows written just after model completion.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `mode` | `"summary" \| "by_purpose" \| "by_model" \| "recent"` | yes | none | Aggregation mode. |
+| `period` | `"24h" \| "7d" \| "30d" \| "all"` | no | `"7d"` | Relative date shortcut. Overridden by explicit dates. |
+| `from_date` | `string` | no | none | ISO lower bound, inclusive. |
+| `to_date` | `string` | no | none | ISO upper bound, inclusive. |
+| `purpose_name` | `string` | no | none | Filter to one purpose name. |
+| `model_name` | `string` | no | none | Filter to one model alias. |
+| `trace_id` | `string` | no | none | Filter to one trace. |
+| `limit` | positive integer up to 1000 | recent only | `20` | Recent mode result limit. |
+
+**Output**
+
+Success returns mode-specific JSON. `summary` includes totals and prior-period comparison when applicable. `by_purpose` and `by_model` return grouped breakdowns. `recent` returns individual newest-first usage records. Invalid date parameters and Supabase unavailability return `isError: true`.
+
+**Examples**
+
+```js
+mcp__flashquery__get_llm_usage({
+  mode: "by_purpose",
+  period: "7d"
+})
+```
+
+```json
+{
+  "mode": "by_purpose",
+  "period": { "from": "2026-05-10T12:00:00.000Z", "to": "2026-05-17T12:00:00.000Z" },
+  "purposes": [
+    {
+      "purpose_name": "summarizer",
+      "total_calls": 4,
+      "input_tokens": 4000,
+      "output_tokens": 1000,
+      "cost_usd": 0.002
+    }
+  ]
+}
+```
+
+**Related tools**
+
+Use `call_model` for execution and `call_model({ resolver: "list_purposes" })` for configured purpose discovery.
+
+### `call_macro`
+
+**Status:** final
+**Category:** llm
+**Tier:** admin
+**Use when:** Running a FlashQuery macro as a structured orchestration request.
+**Do not use when:** A single direct MCP tool call is enough. It is hard-excluded from delegated native tool access because it can recursively orchestrate tools and models.
+
+**Behavior**
+
+Runs inline macro `source` or resolves macro code from `source_ref`. Exactly one of `source` or `source_ref` is required. It builds a native tool registry from the FlashQuery tool catalog and configured external broker tools, resolves template tool metadata, supports dry-run parsing, applies budgets, and can emit MCP progress notifications when the client provides a progress token. Macro expected errors return structured expected envelopes; runtime failures set `isError: true`.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `source` | `string` | conditional | none | Inline macro source. Mutually exclusive with `source_ref`. |
+| `source_ref` | `string` | conditional | none | Document or fenced-block reference for macro source. Mutually exclusive with `source`. |
+| `input_vars` | `object` | no | `{}` | Values for macro input variables. |
+| `budget` | `object` | no | none | Optional `max_total_tokens`, `max_model_calls`, `max_external_tool_calls`, and `timeout_ms`. |
+| `dry_run` | `boolean` | no | `false` | Parse and analyze without side effects. |
+| `trace` | `"full" \| "summary" \| "none"` | no | implementation default | Trace detail level. |
+| `progress` | `"full" \| "milestones" \| "silent"` | no | implementation default | Progress notification verbosity. |
+
+**Output**
+
+Execution success returns `{ task_id, result, trace?, token_total?, model_calls?, external_tool_calls?, warnings? }`. Dry-run success returns `{ task_id, parsed_ok: true, input_var_contract, tool_references, server_references, warnings? }`.
+
+**Examples**
+
+```js
+mcp__flashquery__call_macro({
+  source: "let result = fq.search({ query: \"alpha\", entity_types: [\"documents\"] }); result",
+  dry_run: true
+})
+```
+
+```json
+{
+  "task_id": "550e8400-e29b-41d4-a716-446655440000",
+  "parsed_ok": true,
+  "input_var_contract": { "required": [], "optional": [] },
+  "tool_references": ["fq.search"],
+  "server_references": ["fq"]
+}
+```
+
+**Related tools**
+
+Use direct MCP tools for simple operations. Transitional `get_briefing` and `insert_doc_link` remain only until macro parity covers those workflows.
+
+## Transitional Tools
+
+### `get_briefing`
+
+**Status:** transitional
+**Category:** doc-read, memory, plugin
+**Tier:** read-only
+**Use when:** Getting a tag-scoped overview of related documents, memories, and optionally plugin records while macro parity is pending.
+**Do not use when:** You need full-text search; use `search`. New workflow design should prefer `call_macro` once parity exists.
+
+**Behavior**
+
+Builds structured JSON groups of matching documents and memories, and includes plugin record counts when `plugin_id` and record entity type are active. Entity domains are affected by enabled configuration categories. Explicitly requested disabled domains produce warnings. Removal gate: `call_macro` parity.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `tags` | `string[]` | yes | none | Tags to filter by. |
+| `tag_match` | `"any" \| "all"` | no | `"any"` | Tag matching mode. |
+| `limit` | `number` | no | `20` | Maximum results per section. |
+| `entity_types` | `("documents" \| "memories" \| "records")[]` | no | enabled docs/memories, plus records when `plugin_id` is provided | Domains to include. |
+| `plugin_id` | `string` | no | none | Include records from this plugin. |
+
+**Output**
+
+Success returns structured briefing groups, counts, optional warnings, and `removal_gate: "call_macro parity"`.
+
+**Examples**
+
+```js
+mcp__flashquery__get_briefing({
+  tags: ["alpha"],
+  tag_match: "any",
+  entity_types: ["documents", "memories"]
+})
+```
+
+```json
+{
+  "tags": ["alpha"],
+  "tag_match": "any",
+  "documents": [],
+  "memories": [],
+  "removal_gate": "call_macro parity"
+}
+```
+
+**Related tools**
+
+Use `search` for active search workflows and `call_macro` for replaceable briefing orchestration.
+
+### `insert_doc_link`
+
+**Status:** transitional
+**Category:** doc-write
+**Tier:** read-write
+**Use when:** Adding a wiki-style document link to one or more source documents while macro parity is pending.
+**Do not use when:** New workflows can express this through `call_macro`.
+
+**Behavior**
+
+Resolves one target document, derives display text from its title, builds `[[Target Title]]`, and adds it to a frontmatter array property on each source document. The default property is `links`. Existing links are deduplicated and return `status: "unchanged"`. Source resolution errors are per-item. Target resolution errors fail the call as expected errors. Removal gate: `call_macro` parity.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `identifiers` | `string \| string[]` | yes | none | Source document identifier(s): path, `fq_id`, or filename. |
+| `target_identifier` | `string` | yes | none | Target document identifier. |
+| `property` | `string` | no | `"links"` | Frontmatter property to append to. |
+
+**Output**
+
+Success returns `{ results, removal_gate: "call_macro parity" }`. Each result contains document identification, `status: "updated" | "unchanged"`, `property`, `link`, and `target` details, or a per-source error object.
+
+**Examples**
+
+```js
+mcp__flashquery__insert_doc_link({
+  identifiers: ["Projects/Alpha/Plan.md"],
+  target_identifier: "People/Ada.md",
+  property: "related"
+})
+```
+
+```json
+{
+  "results": [
+    {
+      "identifier": "Projects/Alpha/Plan.md",
+      "title": "Alpha Plan",
+      "path": "Projects/Alpha/Plan.md",
+      "fq_id": "550e8400-e29b-41d4-a716-446655440000",
+      "modified": "2026-05-17T12:00:00.000Z",
+      "size": { "chars": 320 },
+      "status": "updated",
+      "property": "related",
+      "link": "[[Ada Lovelace]]",
+      "target": {
+        "identifier": "People/Ada.md",
+        "fq_id": "660e8400-e29b-41d4-a716-446655440000",
+        "path": "People/Ada.md",
+        "title": "Ada Lovelace"
+      }
+    }
+  ],
+  "removal_gate": "call_macro parity"
+}
+```
+
+**Related tools**
+
+Use `call_macro` once the link-insertion workflow has macro parity. Use `write_document` for general frontmatter updates.
+
+## Host Tool Exposure
 
 `host_mcp_tools` can reduce the host-visible tool surface:
 
@@ -204,37 +1668,45 @@ host_mcp_tools:
 
 Valid selectors are exact current tool names, `tier:read-only`, `tier:read-write`, and categories: `category:doc-read`, `category:doc-write`, `category:memory`, `category:plugin`, `category:llm`, and `category:system`. `category:doc-write` includes document read tools as well as document write tools. Removed legacy names are rejected with replacement suggestions. `host_mcp_tools.tools: []` is invalid; omit `tools` to keep the default full host surface.
 
-## Transitional Tools
+The native tool catalog still records all registered tools for macro/agent dispatch; host exposure filters SDK registration.
 
-`get_briefing` and `insert_doc_link` are transitional macro-dependent legacy tools. They remain available only until `call_macro` reaches parity for those workflows. Any retained guidance must name that removal gate.
+## Delegated Native Tool Exposure
 
-Use `get_briefing` for a tag-scoped overview of documents, memories, and optionally plugin records while macro parity is pending.
+Purpose-level delegated tool selectors use the same metadata but exclude unsafe tools. Broad delegated tiers include only data categories (`doc-read`, `doc-write`, `memory`, and `plugin`) and exclude hard-blocked tools.
 
-Use `insert_doc_link` to add a wiki-style document link to a frontmatter property while macro parity is pending. It returns structured JSON with `status: "updated"` or `status: "unchanged"` and a `removal_gate` value of `call_macro parity`.
+Hard-excluded delegated tools:
+
+| Tool | Reason |
+|---|---|
+| `call_model` | Can recursively call models. |
+| `call_macro` | Can recursively orchestrate tools and models. |
+| `register_plugin` | Plugin administration is unsafe for delegated native access. |
+| `unregister_plugin` | Plugin administration is unsafe for delegated native access. |
+| `get_plugin_info` | Exposes plugin administration details and is not delegated. |
+| `clear_pending_reviews` | Administrative review queue management. |
+| `maintain_vault` | System administration. |
 
 ## Removed Legacy Migration Reference
 
-The following names are removed legacy migration references and must not appear in active instructions or examples: `append_to_doc`, `create_document`, `update_document`, `update_doc_header`, `search_documents`, `save_memory`, `update_memory`, `search_memory`, `list_memories`, `force_file_scan`, `reconcile_documents`, `create_directory`, `remove_directory`, `create_record`, `update_record`, `search_all`, `list_projects`, and `get_project_info`.
+The following names are removed legacy migration references and must not appear in active instructions or examples. FlashQuery does not alias them; selector validation rejects removed names with replacement suggestions.
 
-Replacement summary:
-
-| Removed legacy name | Final replacement |
-|---|---|
-| Removed legacy migration: `create_document` | `write_document` with `mode: "create"` |
-| Removed legacy migration: `update_document` | `write_document` with `mode: "update"` |
-| Removed legacy migration: `append_to_doc` | `insert_in_doc` with `position: "bottom"` or a heading-aware position |
-| Removed legacy migration: `update_doc_header` | `write_document` with `mode: "update"` and `frontmatter` |
-| Removed legacy migration: `search_documents` | `search` with `entity_types: ["documents"]` |
-| Removed legacy migration: `save_memory` | `write_memory` with `mode: "create"` |
-| Removed legacy migration: `update_memory` | `write_memory` with `mode: "update"` |
-| Removed legacy migration: `search_memory` | `search` with `entity_types: ["memories"]` |
-| Removed legacy migration: `list_memories` | `search` with `entity_types: ["memories"]` and tag/list-mode arguments |
-| Removed legacy migration: `force_file_scan` | `maintain_vault` with `action: "sync"` |
-| Removed legacy migration: `reconcile_documents` | `maintain_vault` with `action: "repair"` |
-| Removed legacy migration: `create_directory` | `manage_directory` with `action: "create"` |
-| Removed legacy migration: `remove_directory` | `manage_directory` with `action: "remove"` |
-| Removed legacy migration: `create_record` | `write_record` with `mode: "create"` |
-| Removed legacy migration: `update_record` | `write_record` with `mode: "update"` |
-| Removed legacy migration: `search_all` | `search` with `entity_types` |
-| Removed legacy migration: `list_projects` | `list_vault` or `search` with path/tag filters |
-| Removed legacy migration: `get_project_info` | `search`, `get_document`, or transitional `get_briefing` with the `call_macro` removal gate noted |
+| Removed legacy name | Final replacement | Notes |
+|---|---|---|
+| `create_document` | `write_document` with `mode: "create"` | `write_document` uses explicit mode and rejects FQ-managed frontmatter. |
+| `update_document` | `write_document` with `mode: "update"` | Tags are replacement semantics. |
+| `append_to_doc` | `insert_in_doc` | Use `position: "bottom"` or a heading-aware position. |
+| `update_doc_header` | `write_document` with `mode: "update"` | Use `frontmatter` for custom fields or `title`/`tags` for canonical fields. |
+| `search_documents` | `search` with `entity_types: ["documents"]` | Unified search handles documents and memories. |
+| `save_memory` | `write_memory` with `mode: "create"` | New tool supports explicit create/update modes. |
+| `update_memory` | `write_memory` with `mode: "update"` | Updates create a new latest version. |
+| `search_memory` | `search` with `entity_types: ["memories"]` | Unified search handles tag and query filters. |
+| `list_memories` | `search` with `entity_types: ["memories"]` | Use empty query with filters or `list_all: true`. |
+| `force_file_scan` | `maintain_vault` with `action: "sync"` | System admin replacement. |
+| `reconcile_documents` | `maintain_vault` with `action: "repair"` | System admin replacement. |
+| `create_directory` | `manage_directory` with `action: "create"` | Directory create is recursive and idempotent. |
+| `remove_directory` | `manage_directory` with `action: "remove"` | Empty-directory removal only. |
+| `create_record` | `write_record` with `mode: "create"` | Plugin schema-validated write. |
+| `update_record` | `write_record` with `mode: "update"` | Requires record `id`. |
+| `search_all` | `search` with `entity_types` | Unified document/memory surface. |
+| `list_projects` | `list_vault` or `search` | Project concepts are represented by vault structure and metadata. |
+| `get_project_info` | `search`, `get_document`, or transitional `get_briefing` | Use `get_briefing` only with the `call_macro` removal gate noted. |

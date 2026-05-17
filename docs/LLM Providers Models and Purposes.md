@@ -29,7 +29,7 @@ That separation is what lets FlashQuery do useful orchestration:
 
 ## Minimal Configuration
 
-The `llm:` section is optional. If it is absent, `call_model` is still listed as an MCP tool, but execution calls return an "LLM is not configured" error.
+The `llm:` section is optional. If it is absent, `call_model` is still listed as an MCP tool. `resolver: "help"` still returns protocol help, but model execution and configuration discovery resolvers return an "LLM is not configured" error until `llm:` is configured.
 
 Here is a minimal working language-model configuration:
 
@@ -331,7 +331,7 @@ purposes:
       - manage_directory
 ```
 
-Some tools are always excluded from delegated model-visible native access, even if listed: `call_model`, `register_plugin`, `unregister_plugin`, plugin administration tools, and `get_plugin_info`.
+Some tools are always excluded from delegated model-visible native access, even if listed: `call_model`, `call_macro`, `register_plugin`, `unregister_plugin`, plugin administration tools, and `get_plugin_info`.
 
 Administrative tools are also hard-excluded from delegated native access: `clear_pending_reviews` and `maintain_vault`. Removed legacy administrative names such as `force_file_scan` and `reconcile_documents` are not available as current host tools and are rejected by startup validation when used in purpose tool configuration.
 
