@@ -1,6 +1,6 @@
 {
   "name": "flashquery",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Open source, local-first data management layer for AI workflows",
   "type": "module",
   "bin": {
@@ -41,7 +41,7 @@
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@supabase/supabase-js": "^2.100.0",
     "async-mutex": "^0.5.0",
-    "chevrotain": "^12.0.0",
+    "chevrotain": "^11.2.0",
     "commander": "^14.0.3",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",

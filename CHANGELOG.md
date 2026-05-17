@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-05-17
+
+This release introduces FlashQuery macros: a deterministic orchestration layer for multi-step MCP workflows. Macros can call approved FlashQuery tools, branch on structured results, load reusable source blocks from vault documents, and expose dry-run, trace, progress, timeout, and cancellation controls for safer automation.
+
+### Added
+- Add `call_macro` as a host MCP tool for running inline macros or vault-backed `source_ref` macro blocks.
+- Add the FlashQuery macro language runtime with lexer/parser support, bindings, loops, conditionals, pipelines, structured `exit`, `fail`, `input_var`, and recoverable tool-error branching.
+- Add macro dispatch through the native FlashQuery tool registry, with host exposure filtering, delegated-call hard exclusions, permission pre-scan diagnostics, and template-masquerade protection.
+- Add macro source libraries through fenced `fqm` blocks, including named-block selection with `path::name` references and archived-source hiding.
+- Add macro observability and controls, including task IDs, isolated invocation scope, cancellation safe points, trace modes, milestone progress notifications, dry-run analysis, token/model/external-tool budgets, and timeout envelopes.
+- Add read-only macro shell verbs with vault-jailed path handling, forbidden mutation-flag rejection, brokered `_exists` checks, and namespace introspection.
+- Add runnable macro examples and POC fixtures covering common document, shell, input, cancellation, and recovery workflows.
+
+### Changed
+- Keep `call_macro` out of delegated model-visible native tool registries so recursive model orchestration stays host-controlled.
+- Run the full directed and integration scenario suites by default.
+- Update the MCP tool guide, architecture notes, LLM provider guidance, and setup docs for the current macro and final MCP tool surfaces.
+- Keep macro parser dependencies compatible with the existing Node.js 20+ support contract.
+
+### Fixed
+- Fix macro task lifecycle cleanup so failed macro tasks are cleared on unexpected errors.
+- Fix macro cancellation and timeout behavior so execution stops at safe points without continuing later side effects.
+- Fix macro source selector validation and source-ref error envelopes before execution.
+- Fix macro builtin validation, registry allowlist separation, permission pre-scan coverage, and delegated hard-exclusion handling.
+- Fix heading extraction so Markdown headings inside fenced code blocks do not affect document outline or section-boundary behavior.
+- Fix directed and integration scenario coverage for final JSON tool contracts, call-model fallback behavior, reconciliation workflows, and macro scenario closure.
+
+### Security
+- Enforce JWT `nbf` and `exp` claims for newly issued access and refresh tokens while preserving compatibility with legacy signed tokens and raw-secret bearer auth.
+- Harden macro shell execution boundaries by rejecting vault-jail escapes and forbidden mutation flags before execution.
+- Harden macro dispatch boundaries by rejecting forbidden native tool references before any nested result or side effect can occur.
+
 ## [3.0.0] - 2026-05-14
 
 This release consolidates FlashQuery's MCP surface into a smaller, structured, metadata-backed tool set. It replaces legacy one-off tools with final primitives for documents, memories, search, records, directories, and vault maintenance, while standardizing JSON response contracts across the public MCP API.
@@ -349,7 +381,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/FlashQuery/flashquery/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/FlashQuery/flashquery/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/FlashQuery/flashquery/compare/v1.3.0...v2.0.0
 [1.3.0]: https://github.com/FlashQuery/flashquery/compare/v1.2.0...v1.3.0
