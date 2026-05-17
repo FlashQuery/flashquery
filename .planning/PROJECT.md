@@ -8,13 +8,13 @@ FlashQuery Core is an open source, local-first data management layer for individ
 
 **v3.0 complete (2026-04-30).** Native LLM Access milestone closed: three-layer provider/model/purpose config, completions client with fallback chains, `call_model` MCP tool, cost tracking, embedding migration, config template hardened (B-01 BLOCKER fixed), and v3.0 audit gaps resolved (Phase 106). 1306 unit tests passing. Ready for `/gsd-complete-milestone v3.0`.
 
-## Current State: v3.4 in progress — Macro Support
+## Current State: v3.4 shipped — Macro Support
 
-**Last shipped:** v3.3 MCP Tools Consolidation (57/57 requirements complete; phases 121-129 shipped 2026-05-14). FlashQuery now has a smaller final MCP surface with centralized tool metadata, host/delegated exposure parity, consistent JSON response contracts, canonical expected-error envelopes, and same-phase test/scenario coverage for migrated tools.
+**Last shipped:** v3.4 macro-support (63/63 requirements complete; phases 130-138 shipped 2026-05-17). FlashQuery now includes `call_macro`, a deterministic macro runtime for multi-step MCP orchestration with inline and vault-backed sources, structured execution results, native tool dispatch, permission pre-scan, dry-run, trace, progress, budgets, and cancellation.
 
 **Current tool surface:** Final primitives now center on `write_document`, `write_memory`, `write_record`, `search`, `manage_directory`, `maintain_vault`, and structured read/archive/get flows. Removed legacy tool names are absent from host and delegated surfaces with replacement suggestions rather than compatibility aliases. Delegated broad tiers derive from canonical metadata, including corrected data tools such as `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`.
 
-**Current focus:** Phase 135 complete — namespaced macro tool calls now route through the native/broker registry with static permission pre-scan, dispatch backstop, internal caller identity, and hard exclusions. Next up is Phase 136 task lifecycle and cancellation.
+**Current focus:** Awaiting next milestone definition. Start with `/gsd-new-milestone`.
 
 ## Current Milestone: v3.4 macro-support
 
@@ -219,13 +219,21 @@ Any MCP-compatible AI can save and retrieve organized, persistent, searchable da
 - ✓ SYS-01 through SYS-06 — `manage_directory`, `maintain_vault`, final reference-tool compliance, dead project-tool absence, and gated transitional macro-dependent tools
 - ✓ TEST-01 through TEST-08 — Phase-local traceability and five-layer coverage expectations satisfied across the milestone
 
-### Active (v3.4 — macro-support)
+### Validated (v3.4 — macro-support, shipped 2026-05-17)
 
-- [ ] Macro engine foundation: response-format additions, metadata, MCP scaffold, broker shim, and `archive_document` write-lock fix
-- [ ] Lexer, parser, fence extraction, and `source_ref::name` named block resolution
-- [ ] Evaluator core with walk-up scope, truthiness, interpolation, field access, termination, and per-invocation isolation
-- [ ] Standard builtins, shell verbs, vault jail, `_exists()`, task registry, cancellation, trace/progress, dry-run, budgets, and warnings
-- [ ] `call_macro` handler integrated with source resolution, native tool registry dispatch, permission pre-scan, scenario coverage, and POC fixture validation
+- ✓ MACRO-SRC-01 through MACRO-SRC-08 — `call_macro` request schema, inline/source_ref exclusivity, document-backed source resolution, archived source hiding, `fqm` named blocks, and input variable contracts
+- ✓ MACRO-PARSE-01 through MACRO-PARSE-10 — Chevrotain lexer/parser for the v0 macro grammar with stable structured parse errors
+- ✓ MACRO-EVAL-01 through MACRO-EVAL-08 — async evaluator semantics for scope, control flow, truthiness, interpolation, field access, termination, assignment ordering, and isolated invocations
+- ✓ MACRO-DISP-01 through MACRO-DISP-07 — native/broker registry dispatch, static permission pre-scan, dispatch backstop, caller identity, and recursive/model/template hard exclusions
+- ✓ MACRO-BI-01 through MACRO-BI-07 — standard data, arithmetic, range, input, termination, echo/status, and task-scope builtins
+- ✓ MACRO-SHELL-01 through MACRO-SHELL-05 — read-only shell verbs, vault jail, forbidden mutation flag rejection, no process-global cwd mutation, and `_exists()` introspection
+- ✓ MACRO-OBS-01 through MACRO-OBS-06 — trace modes, progress modes, task lifecycle, session scoping, and cooperative cancellation safe points
+- ✓ MACRO-RESP-01 through MACRO-RESP-05 — macro success, dry-run, expected-error, runtime-error, warning, and response helper contracts
+- ✓ MACRO-INT-01 through MACRO-INT-07 — concurrent isolation, inherited write locks, `archive_document` lock coverage, budget enforcement, MCP registration, broker shim, and progress token capture
+
+### Active
+
+- [ ] Next milestone requirements to be defined with `/gsd-new-milestone`
 
 ### Out of Scope
 
@@ -259,10 +267,11 @@ Any MCP-compatible AI can save and retrieve organized, persistent, searchable da
 
 **Key use case:** "The Dissolved CRM" — contact records in Supabase, contact notes as vault markdown, interaction history appended by AI, browsable in Obsidian and queryable by any AI. No CRM vendor, no lock-in, data owned by the user.
 
-**Current codebase state (v3.3 complete — 2026-05-14):**
-- Final MCP tool surface is metadata-backed, host-filtered, delegated-aware, and structured around JSON envelopes and identification blocks.
-- Cross-phase integration audit scored 9/9 integration and 8/8 flows with no blockers.
-- Milestone validation records lint, unit, integration, E2E, directed scenario, YAML scenario, build, and coverage-audit evidence for final tool consolidation.
+**Current codebase state (v3.4 complete — 2026-05-17):**
+- FlashQuery Macro Language v0 is implemented behind the public `call_macro` MCP tool.
+- Macro workflows can run inline source or vault-backed `fqm` blocks, dispatch approved FlashQuery tools, branch on structured results, and return one structured execution or dry-run result.
+- Cross-phase milestone audit scored 63/63 requirements, 9/9 phases, 9/9 integration, 12/12 flows, and Nyquist compliant.
+- One non-blocking tech debt item remains: an ACL-related `source_ref` integration case is skipped because the local resolver has no ACL surface.
 - 3 CLI commands: `flashquery start`, `flashquery backup`, `flashquery scan`
 - Stack: TypeScript strict ESM, Node.js ≥20, `@modelcontextprotocol/sdk@1.27.1`, `@supabase/supabase-js`, `pg`, `gray-matter`, `zod`, `vitest`, `simple-git`, `async-mutex`
 
@@ -330,4 +339,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-14 after starting v3.4 macro-support milestone*
+*Last updated: 2026-05-17 after shipping v3.4 macro-support milestone*

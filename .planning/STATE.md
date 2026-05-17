@@ -2,39 +2,39 @@
 gsd_state_version: 1.0
 milestone: v3.4
 milestone_name: macro-support
-status: milestone_complete
+status: Awaiting next milestone
 stopped_at: Completed 138-04-PLAN.md
-last_updated: "2026-05-15T05:10:22.115Z"
-last_activity: 2026-05-15
+last_updated: "2026-05-17T23:39:11.356Z"
+last_activity: 2026-05-17 — Milestone v3.4 completed and archived
 progress:
   total_phases: 9
-  completed_phases: 10
+  completed_phases: 9
   total_plans: 36
   completed_plans: 36
-  percent: 111
+  percent: 100
 ---
 
 # FlashQuery Core — State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-14)
+See: .planning/PROJECT.md (updated 2026-05-17)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 138 — handler-source-resolution-scenario-closure
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 138
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-15
+Phase: Milestone v3.4 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-17 — Milestone v3.4 completed and archived
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 65 (this milestone)
+- Total plans completed: 36 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -53,10 +53,12 @@ Last activity: 2026-05-15
 | 129 | 3 | - | - |
 | 130 | 2 | - | - |
 | 131 | 5 | - | - |
+| 132 | 4 | - | - |
 | 133 | 3 | - | - |
 | 134 | 5 | - | - |
 | 135 | 4 | - | - |
 | 136 | 4 | - | - |
+| 137 | 5 | - | - |
 | 138 | 4 | - | - |
 
 *Updated after each plan completion*
@@ -380,6 +382,14 @@ Items acknowledged and deferred at v3.1 milestone close on 2026-05-05:
 | uat_gaps | phase 110 (110-HUMAN-UAT.md) | passed |
 
 Total deferred: 28 items. These predate the v3.1 milestone work and represent cross-milestone debt (debug-session backlog, dangling quick-task index entries, and audit label/status mismatches on completed UAT files). Not blocking v3.1; carried into the next milestone for incremental cleanup.
+
+Items acknowledged and deferred at v3.4 milestone close on 2026-05-17:
+
+| Category | Item | Status |
+|----------|------|--------|
+| uat_gaps | phase 130 (130-HUMAN-UAT.md; 0 open scenarios) | passed |
+
+Total newly deferred at v3.4 close: 1 item. This is an audit label/status mismatch on a completed UAT file, not an open scenario or implementation blocker.
 
 ## Operator Next Steps
 
