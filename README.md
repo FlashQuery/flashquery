@@ -6,7 +6,7 @@
 
 Local-first data management layer for AI workflows — save and search memories, documents, and relational data owned entirely by you.
 
-**[flashquery.ai/open](https://flashquery.ai/open)** &nbsp;·&nbsp; [Plugins & demos](https://github.com/FlashQuery/flashquery-plugins) &nbsp;·&nbsp; [Architecture](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Deployment](./docs/DEPLOYMENT.md) &nbsp;·&nbsp; [Contributing](./CONTRIBUTING.md)
+**[flashquery.ai/open](https://flashquery.ai/open)** &nbsp;·&nbsp; [Plugins & demos](https://github.com/FlashQuery/flashquery-plugins) &nbsp;·&nbsp; [MCP Tool Guide](./docs/FlashQuery%20MCP%20Tool%20Guide.md) &nbsp;·&nbsp; [Architecture](./docs/ARCHITECTURE.md) &nbsp;·&nbsp; [Deployment](./docs/DEPLOYMENT.md) &nbsp;·&nbsp; [Contributing](./CONTRIBUTING.md)
 
 ---
 
@@ -139,6 +139,8 @@ Run `make help` to see all available targets. For production deployment (reverse
 
 FlashQuery uses **streamable-http** transport by default, listening on `http://localhost:3100/mcp`.
 
+For the complete current host-visible MCP tool surface, tool inputs, response envelopes, and examples, see [`docs/FlashQuery MCP Tool Guide.md`](./docs/FlashQuery%20MCP%20Tool%20Guide.md).
+
 ### Claude Code
 
 ```bash
@@ -254,9 +256,9 @@ LOG_LEVEL=info
 
 **Symlinks in vault** — FlashQuery does not follow symbolic links. Symlinks are skipped during scanning; original files sync normally. Symlink handling is unreliable on network filesystems (NFS, SMB) and in containers, so this is deliberate.
 
-**Multiple instances on the same vault** — Concurrent writes from two instances can cause race conditions on document updates and stale plugin table references. One instance per vault is recommended. Multi-instance coordination is planned for v2.1.
+**Multiple instances on the same vault** — Database-backed write locks coordinate shared document, memory, and record writes when enabled, but they do not make the vault a fully multi-writer filesystem. One primary writer per vault is recommended; run additional instances only when you understand the lock boundaries.
 
-**Plugin table consistency** — Plugin tables reference documents by `fqc_id`. In rare cases (external file edits that strip frontmatter) references can be temporarily orphaned. Run `fqc scan` to recover. File watcher support is planned for v2.1.
+**Plugin table consistency** — Plugin tables reference documents by `fqc_id`. In rare cases (external file edits that strip frontmatter) references can be temporarily orphaned. Run `flashquery scan` to recover. File watcher recovery is a roadmap item.
 
 For technical details on all three: [ARCHITECTURE.md § Plugin Propagation Design](./docs/ARCHITECTURE.md#plugin-propagation-design).
 
@@ -266,6 +268,7 @@ For technical details on all three: [ARCHITECTURE.md § Plugin Propagation Desig
 
 **Using FlashQuery**
 - [**flashquery-plugins**](https://github.com/FlashQuery/flashquery-plugins) — Claude skills and demo apps that showcase what FlashQuery can do
+- [`docs/FlashQuery MCP Tool Guide.md`](./docs/FlashQuery%20MCP%20Tool%20Guide.md) — current MCP tool contracts, input options, response envelopes, examples, and migration notes
 - [`docs/Document Reference System.md`](./docs/Document%20Reference%20System.md) — passing documents, sections, and templates into delegated model calls
 - [`docs/LLM Providers Models and Purposes.md`](./docs/LLM%20Providers%20Models%20and%20Purposes.md) — configuring model providers, aliases, purposes, fallbacks, and template tools
 - [`docs/CLAUDE-CODE-SETUP.md`](./docs/CLAUDE-CODE-SETUP.md) — Claude Code registration, token management, troubleshooting
