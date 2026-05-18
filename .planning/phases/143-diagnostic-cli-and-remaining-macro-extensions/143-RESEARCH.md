@@ -351,17 +351,15 @@ This scaffold shape is specified by REQ-072. [CITED: MCP Broker Requirements.md]
 | A1 | Freezing/cloning `_self` at evaluator entry is the right implementation detail. [ASSUMED] | Common Pitfalls | If the parser/runtime expects mutable binding internals, tests may require a different read-only enforcement mechanism. |
 | A2 | A small controlled YAML emitter may be sufficient if it only emits comments and scalar keys. [ASSUMED] | Don't Hand-Roll | If tool names/descriptions include difficult YAML/comment edge cases, using `js-yaml` or stricter escaping is safer. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should the CLI command name be `list-tools` under the `fqc` program name or should docs also accept the binary alias `flashquery list-tools`?** [VERIFIED: package.json + src/index.ts]
    - What we know: `package.json` exposes the binary as `flashquery`, while `src/index.ts` sets Commander `.name('fqc')`. [VERIFIED: package.json + src/index.ts]
-   - What's unclear: Whether the help text should be renamed from `fqc` to `flashquery` during this phase. [ASSUMED]
-   - Recommendation: Do not rename the existing program name unless tests or user docs require it; implement the binary-compatible command. [ASSUMED]
+   - Resolution: Implement the binary-compatible command `flashquery list-tools <server>` without renaming the existing Commander program name from `fqc`. Help text renaming is out of scope unless tests or source docs explicitly require it. [RESOLVED: 143-01-PLAN.md]
 
 2. **Should T-E-003/T-E-004 be implemented or explicitly waived as optional differentials?** [CITED: MCP Broker Test Plan.md]
    - What we know: The test plan marks them optional differential tests if production coverage already proves the same contracts. [VERIFIED: 143-CONTEXT.md]
-   - What's unclear: Whether planner wants extra differential confidence or shorter closure. [ASSUMED]
-   - Recommendation: Add a plan checkpoint after unit/integration gates; if TOFU/error taxonomy coverage is already green from prior phases, document waiver rather than building POC-coupled E2E. [ASSUMED]
+   - Resolution: Plan 05 requires implementing T-E-003/T-E-004 only if current production tests do not already prove equivalent TOFU hash and `formatToolError` taxonomy contracts. Otherwise execution must record explicit optional waivers in `143-VALIDATION.md` and tick/annotate the authoritative MCP Broker Test Plan rows with cited green evidence. [RESOLVED: 143-05-PLAN.md]
 
 ## Environment Availability
 
