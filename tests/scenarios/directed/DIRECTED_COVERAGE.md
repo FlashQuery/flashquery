@@ -235,6 +235,14 @@ Core CRUD operations on vault documents via MCP.
 | D-39e | get_document follow_ref + sections + occurrence out of range -> occurrence_out_of_range with query/matches_found/matched_headings/requested_occurrence nested under followed_ref (per spec §4.5 Error 3 follow_ref variant + OQ #17) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
 | D-39f | get_document follow_ref pre-resolution follow_ref_path_not_found is NOT nested under followed_ref — stays at top level (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 
+## Phase 139 MCP Broker Foundation
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| MCB-01 | Macro calls brokered tool against fixture server; returns coerced JSON value through `call_macro` success envelope. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-18 |
+| MCB-02 | Macro calls brokered tool that returns `isError:true`; macro fails-fast with `tool_call_failed` envelope normalized via `formatToolError`. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-18 |
+| MCB-18 | Rejected reverse request (sampling / elicitation) audit-logged with `status: 'rejected_unsupported'` without raw prompt payload. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-18 |
+
 ## 2. Document Content Operations
 
 Surgical editing tools for modifying document content at specific locations.
