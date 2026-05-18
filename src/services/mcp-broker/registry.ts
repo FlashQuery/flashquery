@@ -1,4 +1,4 @@
-import type { BrokeredTool, ConsumerContext, RegistryKey } from './types.js';
+import type { BrokerToolRef, BrokeredTool, ConsumerContext, RegistryKey } from './types.js';
 
 const REGISTRY_DELIMITER = '__';
 const MACRO_DELIMITER = '.';
@@ -32,6 +32,8 @@ export interface RegisterBrokeredToolInput {
   inputSchema: unknown;
   tofuHash: string;
 }
+
+export type UnregisterBrokeredToolInput = BrokerToolRef | RegistryKey;
 
 export function makeRegistryKey(serverId: string, toolName: string): RegistryKey {
   validateRegistryPart(serverId, 'serverId');
@@ -134,9 +136,28 @@ export class ToolRegistry {
     return tool === undefined ? undefined : cloneTool(tool);
   }
 
+  hasTool(serverId: string, toolName: string): boolean {
+    return this.#tools.has(makeRegistryKey(serverId, toolName));
+  }
+
   getByRegistryKey(key: RegistryKey): BrokeredTool | undefined {
     const tool = this.#tools.get(key);
     return tool === undefined ? undefined : cloneTool(tool);
+  }
+
+  unregisterTool(serverId: string, toolName: string): boolean {
+    return this.#tools.delete(makeRegistryKey(serverId, toolName));
+  }
+
+  unregisterTools(inputs: UnregisterBrokeredToolInput[]): RegistryKey[] {
+    const removed: RegistryKey[] = [];
+    for (const input of inputs) {
+      const key = typeof input === 'string' ? input : makeRegistryKey(input.serverId, input.toolName);
+      if (this.#tools.delete(key)) {
+        removed.push(key);
+      }
+    }
+    return removed;
   }
 
   listAll(): BrokeredTool[] {
