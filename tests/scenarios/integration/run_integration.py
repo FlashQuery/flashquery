@@ -143,9 +143,11 @@ import random
 import re
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
 
@@ -882,6 +884,58 @@ def _list_tools(client: FQCClient) -> ToolResult:
 # Single-test executor
 # ---------------------------------------------------------------------------
 
+class _ScriptedOpenAIProvider:
+    """Tiny OpenAI-compatible chat completions fixture for managed YAML tests."""
+
+    def __init__(self, responses: list[dict[str, Any]]) -> None:
+        self.responses = list(responses)
+        self.requests: list[dict[str, Any]] = []
+        self._server = ThreadingHTTPServer(("127.0.0.1", 0), self._handler())
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self.endpoint = f"http://127.0.0.1:{self._server.server_port}"
+
+    def _handler(self) -> type[BaseHTTPRequestHandler]:
+        parent = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def do_POST(self) -> None:  # noqa: N802
+                length = int(self.headers.get("content-length", "0"))
+                raw_body = self.rfile.read(length).decode("utf-8")
+                try:
+                    parent.requests.append(json.loads(raw_body or "{}"))
+                except json.JSONDecodeError:
+                    parent.requests.append({"raw": raw_body})
+
+                if not parent.responses:
+                    payload = json.dumps({
+                        "error": {
+                            "message": "scripted mock provider exhausted",
+                            "type": "mock_provider_exhausted",
+                        }
+                    }).encode("utf-8")
+                    self.send_response(500)
+                else:
+                    payload = json.dumps(parent.responses.pop(0)).encode("utf-8")
+                    self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+            def log_message(self, _format: str, *_args: Any) -> None:
+                return
+
+        return Handler
+
+    def start(self) -> None:
+        self._thread.start()
+
+    def stop(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+        self._thread.join(timeout=5)
+
+
 def run_yaml_test(
     test_def: dict,
     args: argparse.Namespace,
@@ -910,11 +964,28 @@ def run_yaml_test(
     }
     cleanup_errors: list[str] = []   # populated after TestContext exits
 
-    # extra_config from YAML lets individual tests inject llm:, etc. into the
-    # managed server config without requiring a separate server invocation.
-    yaml_extra_config: dict | None = test_def.get("extra_config") or None
+    mock_provider: _ScriptedOpenAIProvider | None = None
 
     try:
+        mock_spec = test_def.get("mock_openai") or None
+        if mock_spec is not None:
+            substituted_mock_spec = _substitute(mock_spec, variables)
+            responses = substituted_mock_spec.get("responses") if isinstance(substituted_mock_spec, dict) else None
+            if not isinstance(responses, list) or not responses:
+                raise RuntimeError("mock_openai.responses must be a non-empty list")
+            mock_provider = _ScriptedOpenAIProvider(responses)
+            mock_provider.start()
+            variables["mock_openai"] = {"endpoint": mock_provider.endpoint}
+
+        # extra_config from YAML lets individual tests inject llm:, etc. into the
+        # managed server config without requiring a separate server invocation.
+        raw_extra_config = test_def.get("extra_config") or None
+        yaml_extra_config: dict | None = (
+            _substitute(raw_extra_config, variables)
+            if raw_extra_config is not None
+            else None
+        )
+
         with TestContext(
             test_prefix="_integration",
             fqc_dir=args.fqc_dir,
@@ -993,6 +1064,9 @@ def run_yaml_test(
         if "API key" in msg or "require_embedding" in msg:
             raise DepNotMet("embeddings", msg) from e
         raise  # any other RuntimeError is a real failure
+    finally:
+        if mock_provider is not None:
+            mock_provider.stop()
 
     run.record_cleanup(cleanup_errors)
     return run

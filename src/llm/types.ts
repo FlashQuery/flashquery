@@ -63,8 +63,15 @@ interface TraceCumulative {
   total_latency_ms: number;
 }
 
+export interface BrokeredToolCallTraceEntry {
+  server: string;
+  tool: string;
+  count: number;
+  cost: number;
+}
+
 export interface AgentLoopToolCallLogEntry {
-  kind?: 'native' | 'template';
+  kind?: 'native' | 'template' | 'brokered';
   tool_call_id: string;
   tool_name: string;
   arguments?: Record<string, unknown>;
@@ -124,6 +131,7 @@ export interface CallModelMetadata {
   latency_ms: number;
   trace_id?: string;
   trace_cumulative?: TraceCumulative;
+  tool_calls?: BrokeredToolCallTraceEntry[];
   injected_references?: InjectedReferenceMetadata[];
   prompt_chars?: number;
   tools?: AgentLoopMetadataTools;

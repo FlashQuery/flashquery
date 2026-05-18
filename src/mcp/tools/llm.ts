@@ -28,6 +28,8 @@ import { llmClient, NullLlmClient, LlmHttpError, LlmNetworkError, type LlmComple
 import { LlmFallbackError } from '../../llm/resolver.js';
 import { computeCost, getRecordedTraceUsageSnapshot } from '../../llm/cost-tracker.js';
 import { executeAgentLoop } from '../../llm/agent-loop.js';
+import { getBrokeredToolCallTraceSnapshot } from '../../services/mcp-broker/trace.js';
+import type { Broker } from '../../services/mcp-broker/index.js';
 import { assertResponseFormatAllowedWithTools, modelCapabilitiesWithDefaults } from '../../llm/capabilities.js';
 import { buildListModelsContent, buildListPurposesContent, buildSearchContent } from '../../llm/discovery-content.js';
 import { buildCallModelHelpContent, CALL_MODEL_RESOLVERS } from '../../llm/help-content.js';
@@ -268,6 +270,10 @@ function buildMode2Envelope(
       cost_usd: loopEnvelope.metadata.cost_usd,
       latency_ms: loopEnvelope.metadata.latency_ms,
     });
+    const brokeredToolCalls = getBrokeredToolCallTraceSnapshot(params.trace_id);
+    if (brokeredToolCalls.length > 0) {
+      metadata.tool_calls = brokeredToolCalls;
+    }
   }
   if (injectionMetadata) {
     metadata.injected_references = injectionMetadata.injectedReferences;
@@ -290,7 +296,7 @@ function buildMode2Envelope(
 // `instanceof NullLlmClient` guard inside the handler signals unconfigured state.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function registerLlmTools(server: McpServer, config: FlashQueryConfig): void {
+export function registerLlmTools(server: McpServer, config: FlashQueryConfig, options: { broker?: Broker } = {}): void {
   const nativeToolCatalog = getNativeToolCatalog(server);
 
   server.registerTool(
@@ -549,6 +555,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       let toolRegistry: ToolRegistryAssembly | undefined;
       let purposeProviderParameters = params.parameters;
       let purposeDefaults: Record<string, unknown> = {};
+      let purposeMcpServers: string[] = [];
 
       if (resolvedResolver === 'purpose') {
         const normalizedPurposeName = resolvedName.toLowerCase();
@@ -560,6 +567,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             isError: true,
           };
         }
+        purposeMcpServers = purpose.mcpServers ?? [];
         purposeDefaults = purpose?.defaults ?? {};
         const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
         if (!runtimeTemplateBindingsResult.ok) {
@@ -670,7 +678,11 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
       }
 
       // Step 2: Dispatch by resolver
-      if (resolvedResolver === 'purpose' && hasModelVisibleTools(toolRegistry)) {
+      const hasBrokeredPurposeTools =
+        resolvedResolver === 'purpose' &&
+        options.broker !== undefined &&
+        purposeMcpServers.length > 0;
+      if (resolvedResolver === 'purpose' && (hasModelVisibleTools(toolRegistry) || hasBrokeredPurposeTools)) {
         try {
           const loopEnvelope = await executeAgentLoop({
             instanceId: config.instance.id,
@@ -682,6 +694,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig): v
             // toolRegistry carries the templateReverseMap used for generated template tool dispatch.
             toolRegistry,
             templateDispatchContext: { config, logger },
+            broker: options.broker,
             traceId: params.trace_id ?? null,
             chatByPurpose: client.chatByPurposeUnrecorded.bind(client),
             modelCostLookup: (modelName) => config.llm?.models.find((model) => model.name === modelName),

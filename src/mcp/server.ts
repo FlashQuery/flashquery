@@ -482,7 +482,7 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   registerScanTools(server, config);
   registerPendingReviewTools(server, config);
   registerFileTools(server, config);
-  registerLlmTools(server, config);
+  registerLlmTools(server, config, { broker });
   registerLlmUsageTools(server, config);
   registerMacroTools(server, config, { broker });
   validateAndCacheNativeToolSchemas(getNativeToolCatalog(server));

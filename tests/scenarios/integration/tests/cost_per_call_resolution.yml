@@ -19,6 +19,23 @@ mock_openai:
                   name: basic__slow
                   arguments:
                     ms: 0
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 12
+        completion_tokens: 4
+    - choices:
+        - message:
+            role: assistant
+            content: "INT-MCB-07 server default cost complete"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 14
+        completion_tokens: 6
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
               - id: call_basic_echo
                 type: function
                 function:
@@ -33,7 +50,7 @@ mock_openai:
     - choices:
         - message:
             role: assistant
-            content: "INT-MCB-07 brokered cost resolution complete"
+            content: "INT-MCB-07 per-tool override cost complete"
           finish_reason: stop
       usage:
         prompt_tokens: 14
@@ -79,7 +96,7 @@ extra_config:
           timeout_ms: 30000
 
 steps:
-  - label: "INT-MCB-07: brokered calls record server default and per-tool override costs"
+  - label: "INT-MCB-07: server default cost records in observable brokered trace"
     assert:
       op: call_model
       args:
@@ -89,14 +106,15 @@ steps:
         return_messages: true
         messages:
           - role: user
-            content: "Call basic__slow with ms 0 and basic__echo with marker cost-override-${run.id}, then provide the final response."
-      expect_contains: "INT-MCB-07 brokered cost resolution complete"
+            content: "Call basic__slow with ms 0, then provide the final response."
+      expect_contains: "INT-MCB-07 server default cost complete"
       expect_json_equals:
         path: metadata.tool_calls[0].cost
         value: 0.125
       expect_json_path:
         - metadata.tool_calls[0].count
-        - metadata.tool_calls[1].count
+        - metadata.tool_calls[0].server
+        - metadata.tool_calls[0].tool
 
   - label: "INT-MCB-07: per-tool echo override beats server default in observable trace"
     assert:
@@ -108,7 +126,8 @@ steps:
         return_messages: true
         messages:
           - role: user
-            content: "Call basic__slow with ms 0 and basic__echo with marker cost-override-${run.id}, then provide the final response."
+            content: "Call basic__echo with marker cost-override-${run.id}, then provide the final response."
+      expect_contains: "INT-MCB-07 per-tool override cost complete"
       expect_json_equals:
-        path: metadata.tool_calls[1].cost
+        path: metadata.tool_calls[0].cost
         value: 0.25

@@ -290,10 +290,10 @@ brokered tool-call cost tracing.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| INT-MCB-01 | Configure `mcp_servers` plus `purposes.broker_researcher.mcp_servers`, invoke `call_model`, and dispatch `basic__echo` through the brokered purpose tool surface. | brokered_purpose_dispatch | 2026-05-18 |  |
-| INT-MCB-04 | Unknown `host.mcp_servers` entry fails managed startup with the named host context and missing server ID. | host_unknown_server_fail_loud | 2026-05-18 |  |
-| INT-MCB-05 | Unknown `purposes.<name>.mcp_servers` entry fails managed startup with the named purpose and missing server ID. | purpose_unknown_server_fail_loud | 2026-05-18 |  |
-| INT-MCB-07 | Server-default and per-tool override `cost_per_call` values surface in observable brokered `tool_calls` trace entries; per-tool override beats server default. | cost_per_call_resolution | 2026-05-18 |  |
+| INT-MCB-01 | Configure `mcp_servers` plus `purposes.broker_researcher.mcp_servers`, invoke `call_model`, and dispatch `basic__echo` through the brokered purpose tool surface. | brokered_purpose_dispatch    | 2026-05-17   | 2026-05-17   |
+| INT-MCB-04 | Unknown `host.mcp_servers` entry fails managed startup with the named host context and missing server ID. | host_unknown_server_fail_loud | 2026-05-17   | 2026-05-17   |
+| INT-MCB-05 | Unknown `purposes.<name>.mcp_servers` entry fails managed startup with the named purpose and missing server ID. | purpose_unknown_server_fail_loud | 2026-05-17   | 2026-05-17   |
+| INT-MCB-07 | Server-default and per-tool override `cost_per_call` values surface in observable brokered `tool_calls` trace entries; per-tool override beats server default. | cost_per_call_resolution     | 2026-05-17   | 2026-05-17   |
 
 ---
 
