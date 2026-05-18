@@ -21,7 +21,7 @@ import { extractMacroFences } from '../../macro/fence-extractor.js';
 import { selectMacroSourceBlock, splitMacroSourceRef } from '../../macro/source-ref.js';
 import type { MacroCallerContext } from '../../macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../llm/tool-registry.js';
-import type { McpBroker } from '../../services/mcp-broker.js';
+import type { BrokeredTool, McpBroker } from '../../services/mcp-broker.js';
 import { NullMcpBroker } from '../../services/mcp-broker.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, type ToolResult } from '../utils/response-formats.js';
@@ -396,10 +396,11 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
   }
 }
 
-function createNativeDispatchContext(config: FlashQueryConfig, signal?: AbortSignal): NativeToolDispatchContext {
+function createNativeDispatchContext(config: FlashQueryConfig, signal?: AbortSignal, traceId?: string): NativeToolDispatchContext {
   return {
     signal: signal ?? new AbortController().signal,
     instanceId: config.instance.id,
+    ...(traceId === undefined ? {} : { traceId }),
     logContext: { tool: 'call_macro' },
   };
 }
@@ -467,6 +468,9 @@ export function registerMacroTools(
         }
 
         const callerContext: MacroCallerContext = { origin: 'host' };
+        const currentSessionId = options.sessionIdProvider?.(extra) ?? resolveSessionId(extra) ?? registrationSessionId;
+        const consumerContext = { kind: 'host' as const, traceId: currentSessionId };
+        const visibleBrokerTools = await broker.listToolsForConsumer(consumerContext);
         const { getNativeToolCatalog } = await import('../tool-catalog.js');
         const catalog = getNativeToolCatalog(server);
         const templateMetadata = await assembleMacroTemplateMetadata({
@@ -483,9 +487,9 @@ export function registerMacroTools(
           catalog,
           broker,
           taskRegistry,
-          sessionId: options.sessionIdProvider?.(extra) ?? resolveSessionId(extra) ?? registrationSessionId,
-          nativeDispatchContext: createNativeDispatchContext(config, extra?.signal),
-          brokerTools: options.brokerTools,
+          sessionId: currentSessionId,
+          nativeDispatchContext: createNativeDispatchContext(config, extra?.signal, currentSessionId),
+          brokerTools: options.brokerTools ?? groupBrokerToolsForMacro(visibleBrokerTools),
           templateReverseMap: templateMetadata.templateReverseMap,
           templateToolNames: templateMetadata.templateToolNames,
           budget: params.budget,
@@ -512,6 +516,20 @@ export function registerMacroTools(
   );
 
   return { registrationSessionId };
+}
+
+function groupBrokerToolsForMacro(tools: BrokeredTool[]): BrokerToolServerConfig[] {
+  const byServer = new Map<string, { label: string; tools: string[] }>();
+  for (const tool of tools) {
+    const existing = byServer.get(tool.serverId) ?? { label: tool.serverId, tools: [] };
+    existing.tools.push(tool.toolName);
+    byServer.set(tool.serverId, existing);
+  }
+  return [...byServer.entries()].map(([server, value]) => ({
+    server,
+    label: value.label,
+    tools: value.tools,
+  }));
 }
 
 function expectedMacroErrorResult(error: unknown): ToolResult {

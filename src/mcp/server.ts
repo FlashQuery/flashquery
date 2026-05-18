@@ -21,6 +21,7 @@ import { registerFileTools } from './tools/files.js';
 import { registerLlmTools } from './tools/llm.js';
 import { registerLlmUsageTools } from './tools/llm-usage.js';
 import { registerMacroTools } from './tools/macro.js';
+import { createBroker, type Broker } from '../services/mcp-broker.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from './tool-catalog.js';
 import { validateAndCacheNativeToolSchemas } from '../llm/tool-registry.js';
 import { getResolvedHostToolExposure, type FlashQueryConfig } from '../config/loader.js';
@@ -461,8 +462,13 @@ export function createAuthorizeHandler(config: FlashQueryConfig) {
  * Wraps the server with correlation ID context before tool registration so all handlers
  * automatically propagate REQ:uuid through their async call stacks.
  */
-export function createMcpServer(config: FlashQueryConfig, version: string): McpServer {
+export interface CreateMcpServerOptions {
+  broker?: Broker;
+}
+
+export function createMcpServer(config: FlashQueryConfig, version: string, options: CreateMcpServerOptions = {}): McpServer {
   const server = new McpServer({ name: 'flashquery', version });
+  const broker = options.broker ?? createBroker(config);
   // Apply correlation ID wrapping BEFORE tool registration so all 26 tools
   // automatically inherit context without modifying individual tool files.
   wrapServerWithCorrelationIds(server);
@@ -478,7 +484,7 @@ export function createMcpServer(config: FlashQueryConfig, version: string): McpS
   registerFileTools(server, config);
   registerLlmTools(server, config);
   registerLlmUsageTools(server, config);
-  registerMacroTools(server, config);
+  registerMacroTools(server, config, { broker });
   validateAndCacheNativeToolSchemas(getNativeToolCatalog(server));
   return server;
 }

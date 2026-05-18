@@ -16,6 +16,7 @@ import {
   clearBrokeredToolCallTrace,
   getBrokeredToolCallTraceSnapshot,
 } from '../../src/services/mcp-broker/trace.js';
+import { createBroker, type Broker } from '../../src/services/mcp-broker.js';
 
 const MCP_ACCEPT = 'application/json, text/event-stream';
 const INSTANCE_ID = `mcp-broker-e2e-${randomUUID().slice(0, 8)}`;
@@ -37,6 +38,7 @@ let server: Server;
 let port: number;
 let vaultPath: string;
 let sessionId: string | undefined;
+const brokers: Broker[] = [];
 
 function makeConfig(): FlashQueryConfig {
   return {
@@ -74,7 +76,6 @@ function makeConfig(): FlashQueryConfig {
       },
     },
     host: { mcpServers: ['basic'], toolSearch: 'disabled' },
-    llm: { providers: [], models: [], purposes: [] },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'error', output: 'stderr' },
     macro: { defaultTimeoutMs: 60000 },
@@ -200,7 +201,9 @@ beforeAll(async () => {
         if (sid && transports[sid]) delete transports[sid];
       };
 
-      const mcpServer = createMcpServer(config, '0.1.0');
+      const broker = createBroker(config);
+      brokers.push(broker);
+      const mcpServer = createMcpServer(config, '0.1.0', { broker });
       await mcpServer.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } else {
@@ -232,6 +235,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   clearBrokeredToolCallTrace();
+  await Promise.allSettled(brokers.splice(0).map((broker) => broker.shutdown(50)));
   await new Promise<void>((resolveServer, reject) => {
     server.close((error) => {
       if (error) reject(error);
