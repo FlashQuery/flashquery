@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
-import { createBroker, type BrokerClientConfig, type McpBroker } from '../../../src/services/mcp-broker/index.js';
+import { createBroker, hashToolSchema, type BrokerClientConfig, type McpBroker } from '../../../src/services/mcp-broker/index.js';
 import type { BrokeredTool, ConsumerContext, RegistryKey, TofuDriftBundle } from '../../../src/services/mcp-broker/types.js';
 
 const fixtureDir = resolve(fileURLToPath(new URL('../../fixtures/mcp-servers', import.meta.url)));
@@ -53,10 +53,23 @@ function brokerConfig(initialTools: Tool[], laterTools: Tool[], overrides: Parti
   };
 }
 
+function brokeredTool(serverId: string, tool: Tool): BrokeredTool {
+  return {
+    serverId,
+    toolName: tool.name,
+    registryKey: `${serverId}__${tool.name}`,
+    ...(tool.description === undefined ? {} : { description: tool.description, upstreamDescription: tool.description }),
+    inputSchema: tool.inputSchema,
+    tofuHash: hashToolSchema({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema }),
+    costPerCall: 0,
+  };
+}
+
 function createTrackedBroker(options: {
   initialTools: Tool[];
   laterTools: Tool[];
   onTofuDrift?: (bundle: TofuDriftBundle) => void;
+  onAudit?: (event: unknown) => void;
   serverConfig?: Partial<BrokerClientConfig>;
 }): { broker: McpBroker; sinkEvents: SinkEvent[] } {
   const sinkEvents: SinkEvent[] = [];
@@ -71,6 +84,27 @@ function createTrackedBroker(options: {
       removeTools: (keys) => sinkEvents.push({ type: 'remove', keys }),
     },
     onTofuDrift: options.onTofuDrift,
+    onAudit: options.onAudit,
+  });
+  brokers.push(broker);
+  return { broker, sinkEvents };
+}
+
+function createManualBroker(options: {
+  onTofuDrift?: (bundle: TofuDriftBundle) => void;
+  onAudit?: (event: unknown) => void;
+} = {}): { broker: McpBroker; sinkEvents: SinkEvent[] } {
+  const sinkEvents: SinkEvent[] = [];
+  const broker = createBroker({
+    mcpServers: {},
+    host: { mcpServers: ['quirky'] },
+    llm: { purposes: [] },
+    indexSink: {
+      addTools: (tools) => sinkEvents.push({ type: 'add', keys: tools.map((tool) => tool.registryKey) }),
+      removeTools: (keys) => sinkEvents.push({ type: 'remove', keys }),
+    },
+    onTofuDrift: options.onTofuDrift,
+    onAudit: options.onAudit,
   });
   brokers.push(broker);
   return { broker, sinkEvents };
@@ -146,5 +180,199 @@ describe('mcp broker TOFU list_changed integration', () => {
 
     expect(await visibleKeys(broker)).toEqual(['quirky__kept']);
     expect(sinkEvents.filter((event) => event.type === 'remove').flatMap((event) => event.keys)).toContain('quirky__removed');
+  });
+
+  it('T-I-013 silently trusts first observation without prompting', async () => {
+    const driftBundles: TofuDriftBundle[] = [];
+    const { broker } = createTrackedBroker({
+      initialTools: [toolSnapshot('trusted')],
+      laterTools: [toolSnapshot('trusted')],
+      onTofuDrift: (bundle) => driftBundles.push(bundle),
+    });
+
+    const tools = await broker.listToolsForConsumer(ctx);
+
+    expect(tools).toMatchObject([{ registryKey: 'quirky__trusted', tofuHash: expect.stringMatching(/^[a-f0-9]{64}$/) }]);
+    expect(driftBundles).toEqual([]);
+    expect(broker.getPendingSchemaDrift()).toEqual([]);
+  });
+
+  it('T-I-014 and T-I-015 emits full drift payload and removes the changed tool from callable and indexed surfaces', async () => {
+    const driftBundles: TofuDriftBundle[] = [];
+    const { broker, sinkEvents } = createTrackedBroker({
+      initialTools: [toolSnapshot('payload', ['value'])],
+      laterTools: [toolSnapshot('payload', ['value', 'token'])],
+      onTofuDrift: (bundle) => driftBundles.push(bundle),
+    });
+
+    const [initialTool] = await broker.listToolsForConsumer(ctx);
+    await waitForCondition(() => driftBundles.length === 1);
+
+    expect(await visibleKeys(broker)).toEqual([]);
+    expect(sinkEvents.filter((event) => event.type === 'remove').flatMap((event) => event.keys)).toContain('quirky__payload');
+    expect(driftBundles.length).toBeGreaterThanOrEqual(1);
+    expect(driftBundles[0]).toEqual({
+      event: 'schema_drift_detected',
+      server: 'quirky',
+      changes: [
+        expect.objectContaining({
+          event: 'schema_drift_detected',
+          server: 'quirky',
+          tool: 'payload',
+          old_schema: { name: 'payload', description: 'payload description', inputSchema: expect.objectContaining({ required: ['value'] }) },
+          new_schema: {
+            name: 'payload',
+            description: 'payload description',
+            inputSchema: expect.objectContaining({ required: ['value', 'token'] }),
+          },
+          diff_summary: expect.stringContaining('Added required parameter: token'),
+          options: ['approve', 'reject'],
+          answer_shape: 'frontmatter.user_decisions.quirky__payload.tofu_decision',
+        }),
+      ],
+    });
+    expect(driftBundles[0]?.changes[0]?.old_schema).not.toEqual(driftBundles[0]?.changes[0]?.new_schema);
+    expect(broker.getPendingSchemaDrift()[0]?.old_schema).toEqual(driftBundles[0]?.changes[0]?.old_schema);
+    expect(initialTool?.tofuHash).not.toBeUndefined();
+  });
+
+  it('T-I-016 approval replaces the old hash and restores registry plus index sink', async () => {
+    const auditEvents: unknown[] = [];
+    const { broker, sinkEvents } = createTrackedBroker({
+      initialTools: [toolSnapshot('approvable', ['value'])],
+      laterTools: [toolSnapshot('approvable', ['value', 'token'])],
+      onAudit: (event) => auditEvents.push(event),
+    });
+
+    const [trustedTool] = await broker.listToolsForConsumer(ctx);
+    await waitForCondition(() => broker.getPendingSchemaDrift().length === 1);
+    const pendingHash = hashToolSchema({
+      name: 'approvable',
+      description: 'approvable description',
+      inputSchema: toolSnapshot('approvable', ['value', 'token']).inputSchema,
+    });
+
+    const resolved = broker.resolveSchemaDrift(
+      [{ server: 'quirky', tool: 'approvable', decision: 'approve' }],
+      { traceId: 'trace-approve' }
+    );
+
+    expect(resolved).toEqual([{ server: 'quirky', tool: 'approvable', decision: 'approve' }]);
+    const [approvedTool] = await broker.listToolsForConsumer(ctx);
+    expect(approvedTool).toMatchObject({ registryKey: 'quirky__approvable', tofuHash: pendingHash });
+    expect(approvedTool?.tofuHash).not.toBe(trustedTool?.tofuHash);
+    expect(sinkEvents.at(-1)).toEqual({ type: 'add', keys: ['quirky__approvable'] });
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'mcp_broker_tofu_decision',
+        server: 'quirky',
+        tool: 'approvable',
+        decision: 'approve',
+        old_hash: trustedTool?.tofuHash,
+        new_hash: pendingHash,
+      })
+    );
+  });
+
+  it('T-I-017 rejection preserves the old hash and keeps the changed tool blocked until schema reverts', async () => {
+    const auditEvents: unknown[] = [];
+    const initial = toolSnapshot('rejectable', ['value']);
+    const changed = toolSnapshot('rejectable', ['value', 'token']);
+    const { broker } = createManualBroker({
+      onAudit: (event) => auditEvents.push(event),
+    });
+
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', initial)]);
+    const [trustedTool] = await broker.listToolsForConsumer(ctx);
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', changed)]);
+    const changedHash = hashToolSchema({ name: changed.name, description: changed.description, inputSchema: changed.inputSchema });
+
+    broker.resolveSchemaDrift([{ server: 'quirky', tool: 'rejectable', decision: 'reject' }], { traceId: 'trace-reject' });
+
+    expect(await visibleKeys(broker)).toEqual([]);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'mcp_broker_tofu_decision',
+        server: 'quirky',
+        tool: 'rejectable',
+        decision: 'reject',
+        old_hash: trustedTool?.tofuHash,
+        new_hash: changedHash,
+      })
+    );
+
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', initial)]);
+    const [revertedTool] = await broker.listToolsForConsumer(ctx);
+    expect(revertedTool).toMatchObject({ registryKey: 'quirky__rejectable', tofuHash: trustedTool?.tofuHash });
+  });
+
+  it('T-I-018 bundles multiple changed tools from one notification into one needs-user-input payload', async () => {
+    const driftBundles: TofuDriftBundle[] = [];
+    const { broker } = createTrackedBroker({
+      initialTools: [toolSnapshot('first', ['value']), toolSnapshot('second', ['value'])],
+      laterTools: [toolSnapshot('first', ['value', 'token']), toolSnapshot('second', ['value', 'token'])],
+      onTofuDrift: (bundle) => driftBundles.push(bundle),
+    });
+
+    expect(await visibleKeys(broker)).toEqual(['quirky__first', 'quirky__second']);
+    await waitForCondition(() => driftBundles.length === 1);
+
+    expect(driftBundles).toHaveLength(1);
+    expect(driftBundles[0]?.changes.map((change) => change.tool).sort()).toEqual(['first', 'second']);
+    expect(await visibleKeys(broker)).toEqual([]);
+  });
+
+  it('T-I-019 a fresh broker object resets in-memory TOFU and silently trusts the changed server shape', async () => {
+    const firstDrifts: TofuDriftBundle[] = [];
+    const changed = toolSnapshot('restart_reset', ['value', 'token']);
+    const first = createTrackedBroker({
+      initialTools: [toolSnapshot('restart_reset', ['value'])],
+      laterTools: [changed],
+      onTofuDrift: (bundle) => firstDrifts.push(bundle),
+    });
+    expect(await visibleKeys(first.broker)).toEqual(['quirky__restart_reset']);
+    await waitForCondition(() => firstDrifts.length === 1);
+    expect(await visibleKeys(first.broker)).toEqual([]);
+    await first.broker.shutdown(50);
+    brokers.splice(brokers.indexOf(first.broker), 1);
+
+    const secondDrifts: TofuDriftBundle[] = [];
+    const second = createTrackedBroker({
+      initialTools: [changed],
+      laterTools: [changed],
+      onTofuDrift: (bundle) => secondDrifts.push(bundle),
+    });
+
+    const [trustedAfterRestart] = await second.broker.listToolsForConsumer(ctx);
+    expect(trustedAfterRestart).toMatchObject({ registryKey: 'quirky__restart_reset' });
+    expect(secondDrifts).toEqual([]);
+    expect(second.broker.getPendingSchemaDrift()).toEqual([]);
+  });
+
+  it('T-I-020 same broker process preserves TOFU pins across reconnect-style refreshes', async () => {
+    const driftBundles: TofuDriftBundle[] = [];
+    const { broker } = createManualBroker({
+      onTofuDrift: (bundle) => driftBundles.push(bundle),
+    });
+
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', toolSnapshot('reconnect_pin', ['value']))]);
+    const [trustedTool] = await broker.listToolsForConsumer(ctx);
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', toolSnapshot('reconnect_pin', ['value', 'token']))]);
+
+    expect(await visibleKeys(broker)).toEqual([]);
+    expect(driftBundles).toHaveLength(1);
+    expect(driftBundles[0]?.changes[0]).toMatchObject({
+      tool: 'reconnect_pin',
+      old_schema: expect.objectContaining({ inputSchema: expect.objectContaining({ required: ['value'] }) }),
+      new_schema: expect.objectContaining({ inputSchema: expect.objectContaining({ required: ['value', 'token'] }) }),
+    });
+    expect(driftBundles[0]?.changes[0]?.old_schema).toMatchObject({ name: 'reconnect_pin' });
+    expect(trustedTool?.tofuHash).toBe(
+      hashToolSchema({
+        name: 'reconnect_pin',
+        description: 'reconnect_pin description',
+        inputSchema: toolSnapshot('reconnect_pin', ['value']).inputSchema,
+      })
+    );
   });
 });
