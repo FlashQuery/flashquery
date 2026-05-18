@@ -180,4 +180,31 @@ describe('fq.search_tools handler', () => {
     ]);
     expect(JSON.stringify(getBrokerAuditTraceSnapshot())).not.toMatch(/arguments|result_payload|content/);
   });
+
+  it('filters host index sink updates to host-visible brokered servers', () => {
+    const service = ToolSearchService.createEmpty();
+    const sink = service.createHostIndexSink(['basic']);
+
+    sink.addTools([
+      brokeredTool({ serverId: 'basic', registryKey: 'basic__echo' }),
+      brokeredTool({
+        serverId: 'hidden',
+        registryKey: 'hidden__echo',
+        description: 'Classified quarantine utility.',
+      }),
+    ]);
+
+    expect(service.search('repeat diagnostics', 5)).toEqual([
+      expect.objectContaining({ registry_key: 'basic__echo' }),
+    ]);
+    expect(service.search('classified quarantine', 5)).toEqual([]);
+
+    sink.removeTools(['hidden__echo']);
+    expect(service.search('repeat diagnostics', 5)).toEqual([
+      expect.objectContaining({ registry_key: 'basic__echo' }),
+    ]);
+
+    sink.removeTools(['basic__echo']);
+    expect(service.search('repeat diagnostics', 5)).toEqual([]);
+  });
 });
