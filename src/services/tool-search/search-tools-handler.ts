@@ -15,11 +15,6 @@ export interface CreateSearchToolsHandlerOptions {
   now?: () => bigint;
 }
 
-function auditConsumer(ctx: ConsumerContext): { kind: 'host' } | { kind: 'purpose'; purpose_id: string } {
-  if (ctx.kind === 'host') return { kind: 'host' };
-  return { kind: 'purpose', purpose_id: ctx.purposeId };
-}
-
 function elapsedMicros(start: bigint, now: () => bigint): number {
   return Number((now() - start) / 1000n);
 }
@@ -40,7 +35,8 @@ export function createSearchToolsHandler(options: CreateSearchToolsHandlerOption
     const results = options.service.search(parsed.data.query, parsed.data.limit);
     recordBrokerAuditEvent({
       type: 'mcp_broker_search_tools',
-      consumer: auditConsumer(options.consumerContext),
+      consumer: options.consumerContext.kind === 'host' ? 'host' : `purpose:${options.consumerContext.purposeId}`,
+      ...(options.consumerContext.kind === 'purpose' ? { purpose_id: options.consumerContext.purposeId } : {}),
       query: parsed.data.query,
       result_count: results.length,
       latency_us: elapsedMicros(start, now),

@@ -178,6 +178,48 @@ args: {}
     ]));
   });
 
+  it('accepts the REQ-090 minimal frontmatter shape without tier or args', () => {
+    const result = validateToolMeta([
+      fixture('minimal_tool', `
+name: minimal_tool
+description: "Use this minimal tool for validation coverage. Pass {help: true} for full documentation."
+`),
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(result.meta.get('minimal_tool')).toMatchObject({
+      name: 'minimal_tool',
+      args: {},
+    });
+    expect(result.meta.get('minimal_tool')).not.toHaveProperty('tier');
+    expect(result.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining("missing optional frontmatter field 'args'"),
+      }),
+    ]));
+  });
+
+  it('warns instead of failing when optional tier metadata is outside the legacy vocabulary', () => {
+    const result = validateToolMeta([
+      fixture('future_tool', `
+name: future_tool
+description: "Use this future tool for validation coverage. Pass {help: true} for full documentation."
+tier: delegated-safe
+args: {}
+`),
+    ]);
+
+    expect(result.ok).toBe(true);
+    expect(result.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining("optional frontmatter field 'tier'"),
+      }),
+    ]));
+  });
+
+
   it('T-U-033 exposes the canonical default help_hint verbatim', () => {
     expect(DEFAULT_HELP_HINT).toBe(
       "FlashQuery-native tool. Pass `{help: true}` for full documentation, examples, and common patterns before composing your call if you're uncertain about parameters."

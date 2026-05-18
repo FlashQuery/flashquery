@@ -203,7 +203,8 @@ export type BrokerAuditEvent =
   | {
       ts: string;
       type: 'mcp_broker_search_tools';
-      consumer: { kind: 'host' } | { kind: 'purpose'; purpose_id: string };
+      consumer: 'host' | `purpose:${string}`;
+      purpose_id?: string;
       query: string;
       result_count: number;
       latency_us: number;

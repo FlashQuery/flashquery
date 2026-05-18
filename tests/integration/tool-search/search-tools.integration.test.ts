@@ -147,8 +147,8 @@ function parseCorpusDocuments(path: string): ToolSearchDocument[] {
       argNames: Object.keys(properties),
       arg_summary: Object.entries(properties).map(([name, property]) => ({
         name,
-        ...(property.description ? { description: property.description } : {}),
-        ...(required.has(name) ? { required: true } : {}),
+        description: property.description ?? '',
+        required: required.has(name),
       })),
     });
     index = jsonEnd;
@@ -164,8 +164,9 @@ function fixtureDocuments(): ToolSearchDocument[] {
   ];
 }
 
-function hasRelevantResult(results: SearchResult[] | ToolSearchDocument[], relevantTools: RankingFixture['relevant_tools']): boolean {
-  return results.some((result) => relevantTools.some((relevant) => relevant.server === result.server && relevant.tool === result.tool));
+function firstRelevantRank(results: SearchResult[] | ToolSearchDocument[], relevantTools: RankingFixture['relevant_tools']): number {
+  const index = results.findIndex((result) => relevantTools.some((relevant) => relevant.server === result.server && relevant.tool === result.tool));
+  return index < 0 ? 0 : index + 1;
 }
 
 function p95(values: number[]): number {
@@ -182,8 +183,8 @@ function syntheticDocuments(count: number): ToolSearchDocument[] {
     argNames: ['query', 'limit', 'format'],
     arg_summary: [
       { name: 'query', description: 'Natural-language search query.', required: true },
-      { name: 'limit', description: 'Maximum results to return.' },
-      { name: 'format', description: 'Output format selector.' },
+      { name: 'limit', description: 'Maximum results to return.', required: false },
+      { name: 'format', description: 'Output format selector.', required: false },
     ],
   }));
 }
@@ -230,7 +231,13 @@ describe('Phase C fq.search_tools integration', () => {
       tool: 'get_document',
       registry_key: 'get_document',
       description: expect.stringContaining('Read'),
-      arg_summary: expect.any(Array),
+      arg_summary: expect.arrayContaining([
+        expect.objectContaining({
+          name: expect.any(String),
+          description: expect.any(String),
+          required: expect.any(Boolean),
+        }),
+      ]),
       score: expect.any(Number),
       normalizedScore: expect.any(Number),
       has_help: true,
@@ -257,6 +264,13 @@ describe('Phase C fq.search_tools integration', () => {
       server: 'basic',
       tool: 'echo',
       registry_key: 'basic__echo',
+      arg_summary: expect.arrayContaining([
+        expect.objectContaining({
+          name: expect.any(String),
+          description: expect.any(String),
+          required: expect.any(Boolean),
+        }),
+      ]),
       has_help: false,
     });
     expect(result).not.toHaveProperty('help_hint');
@@ -356,8 +370,11 @@ describe('Phase C fq.search_tools integration', () => {
     const indexer = new PureBM25Indexer(undefined, undefined, true);
     indexer.build(fixtureDocuments());
 
-    const failures: string[] = [];
-    let checked = 0;
+    let obviousCount = 0;
+    let obviousHitAt5 = 0;
+    let reciprocalRankTotal = 0;
+    let reciprocalRankCount = 0;
+    const misses: string[] = [];
     for (const fixture of rankingFixtures.queries) {
       const limit = 8;
       const results = indexer.search(fixture.query, limit);
@@ -365,24 +382,21 @@ describe('Phase C fq.search_tools integration', () => {
         expect(results.every((result) => result.normalizedScore < 0.7)).toBe(true);
         continue;
       }
-      checked++;
-      if (!hasRelevantResult(results, fixture.relevant_tools)) {
-        failures.push(`${fixture.id}:${fixture.query}`);
+      const rank = firstRelevantRank(results, fixture.relevant_tools);
+      if (rank === 0) {
+        misses.push(`${fixture.id}:${fixture.query}`);
+      } else {
+        reciprocalRankTotal += 1 / rank;
+        reciprocalRankCount++;
+        if (fixture.category === 'obvious' && rank <= 5) obviousHitAt5++;
       }
+      if (fixture.category === 'obvious') obviousCount++;
     }
 
-    expect(checked).toBeGreaterThan(0);
-    expect(failures).toEqual([
-      '4:show me the commit history',
-      '13:I want to know what changed since my last commit',
-      '14:store this information so I can find it later',
-      '15:I need a small embedded database for some local data',
-      '19:connect my regional database to the Cloudflare edge',
-      '23:find my notes from before',
-      '31:remove an item',
-      '35:key-value store',
-      '45:automate browser interactions for testing',
-    ]);
+    expect(reciprocalRankCount).toBeGreaterThan(0);
+    expect(obviousHitAt5 / obviousCount).toBeGreaterThanOrEqual(0.8);
+    expect(reciprocalRankTotal / reciprocalRankCount).toBeGreaterThanOrEqual(0.7);
+    expect(misses.length).toBeLessThanOrEqual(9);
   });
 
   it('T-I-042 runs all 18 queries-call-macro.json placement fixtures against production search', () => {
@@ -480,7 +494,8 @@ describe('Phase C fq.search_tools integration', () => {
 
     expect(getBrokerAuditTraceSnapshot()).toContainEqual(expect.objectContaining({
       type: 'mcp_broker_search_tools',
-      consumer: { kind: 'purpose', purpose_id: 'research' },
+      consumer: 'purpose:research',
+      purpose_id: 'research',
       query: 'echo diagnostic',
       result_count: 1,
       latency_us: 250,
@@ -532,12 +547,11 @@ describe('Phase C fq.search_tools integration', () => {
         ].join('\n'),
       },
       {
-        filePath: 'src/mcp/tools/missing_args.tool.md',
+        filePath: 'src/mcp/tools/minimal_shape.tool.md',
         raw: [
           '---',
-          'name: missing_args',
-          'description: "Missing args but says Pass {help: true}."',
-          'tier: read-only',
+          'name: minimal_shape',
+          'description: "Minimal REQ-090 shape says Pass {help: true}."',
           '---',
           'Body.',
         ].join('\n'),
@@ -549,9 +563,14 @@ describe('Phase C fq.search_tools integration', () => {
       expect.arrayContaining([
         "frontmatter name 'wrong_name' must match file basename 'bad_name'",
         'description must end with a sentence containing help and true, such as {help: true}.',
-        "missing required frontmatter field 'args'",
       ])
     );
+    expect(result.diagnostics).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        level: 'warning',
+        message: expect.stringContaining("missing optional frontmatter field 'args'"),
+      }),
+    ]));
   });
 
   it('T-I-026 substitutes description_override in flat list, search results, and the indexed document', async () => {

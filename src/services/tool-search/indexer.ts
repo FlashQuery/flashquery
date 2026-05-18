@@ -12,8 +12,8 @@ export interface BM25Preproc {
 
 export interface ToolArgSummary {
   name: string;
-  description?: string;
-  required?: boolean;
+  description: string;
+  required: boolean;
 }
 
 export interface ToolSearchDocument {
@@ -42,6 +42,15 @@ export interface ToolSearchKey {
   server: string;
   tool: string;
   registry_key?: string;
+}
+
+export interface Indexer {
+  readonly name: string;
+  build(tools: ToolSearchDocument[]): Promise<void>;
+  addTools(tools: ToolSearchDocument[]): Promise<void>;
+  removeTools(keys: Array<string | ToolSearchKey>): Promise<void>;
+  search(query: string, k: number): ToolSearchResult[];
+  getStats(): ToolSearchStats;
 }
 
 interface Posting {
@@ -122,7 +131,7 @@ function keyToRegistryKey(key: string | ToolSearchKey): string {
   return key.registry_key || `${key.server}__${key.tool}`;
 }
 
-export class PureBM25Indexer {
+export class PureBM25Indexer implements Indexer {
   readonly name = 'pure';
 
   #params: BM25Params;
@@ -155,13 +164,14 @@ export class PureBM25Indexer {
     this.#delta = BM25_DELTA;
   }
 
-  build(tools: ToolSearchDocument[]): void {
+  build(tools: ToolSearchDocument[]): Promise<void> {
     this.#reset();
     this.#addFreshDocuments(tools);
     this.#recomputeIdf();
+    return Promise.resolve();
   }
 
-  addTools(tools: ToolSearchDocument[]): void {
+  addTools(tools: ToolSearchDocument[]): Promise<void> {
     let changed = false;
     for (const tool of tools) {
       const key = registryKeyFor(tool);
@@ -173,9 +183,10 @@ export class PureBM25Indexer {
       changed = true;
     }
     if (changed) this.#recomputeIdf();
+    return Promise.resolve();
   }
 
-  removeTools(keys: Array<string | ToolSearchKey>): void {
+  removeTools(keys: Array<string | ToolSearchKey>): Promise<void> {
     let changed = false;
     for (const key of keys) {
       const docId = this.#keyIndex.get(keyToRegistryKey(key));
@@ -184,6 +195,7 @@ export class PureBM25Indexer {
       changed = true;
     }
     if (changed) this.#recomputeIdf();
+    return Promise.resolve();
   }
 
   search(query: string, k: number): ToolSearchResult[] {

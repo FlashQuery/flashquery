@@ -50,7 +50,8 @@ function summarizeMetaArgs(args: unknown): ToolArgSummary[] {
   if (!isRecord(args)) return [];
   return Object.entries(args).map(([name, value]) => ({
     name,
-    ...(typeof value === 'string' ? { description: value } : {}),
+    description: typeof value === 'string' ? value : '',
+    required: false,
   }));
 }
 
@@ -60,8 +61,8 @@ function summarizeJsonSchema(schema: unknown): ToolArgSummary[] {
   const required = new Set(Array.isArray(schema['required']) ? schema['required'].filter((key): key is string => typeof key === 'string') : []);
   return Object.entries(properties).map(([name, property]) => ({
     name,
-    ...(isRecord(property) && typeof property['description'] === 'string' ? { description: property['description'] } : {}),
-    ...(required.has(name) ? { required: true } : {}),
+    description: isRecord(property) && typeof property['description'] === 'string' ? property['description'] : '',
+    required: required.has(name),
   }));
 }
 
@@ -96,7 +97,7 @@ export class ToolSearchService {
 
   private constructor(documents: ToolSearchDocument[] = [], metadata: Map<string, PresentationMetadata> = new Map()) {
     this.#metadata = metadata;
-    this.#indexer.build(documents);
+    void this.#indexer.build(documents);
     this.#built = documents.length > 0;
   }
 
@@ -147,7 +148,7 @@ export class ToolSearchService {
         argSummary: document.arg_summary ?? [],
       });
     }
-    this.#indexer.addTools(documents);
+    void this.#indexer.addTools(documents);
     this.#built = true;
   }
 
@@ -156,7 +157,7 @@ export class ToolSearchService {
     for (const key of keys) {
       this.#metadata.delete(key);
     }
-    this.#indexer.removeTools(keys);
+    void this.#indexer.removeTools(keys);
   }
 
   getStats(): ToolSearchStats {
@@ -204,7 +205,7 @@ export class ToolSearchService {
     for (const [key, value] of metadata) {
       this.#metadata.set(key, value);
     }
-    this.#indexer.build(documents);
+    void this.#indexer.build(documents);
     this.#built = true;
   }
 }

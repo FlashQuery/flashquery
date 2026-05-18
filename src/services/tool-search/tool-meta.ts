@@ -15,13 +15,14 @@ const SHORT_DESCRIPTION_THRESHOLD = 40;
 const MIN_HELP_BODY_WORDS = 500;
 const MAX_HELP_BODY_WORDS = 1500;
 const VALID_TIERS = new Set(['read-only', 'read-write', 'admin']);
+type ToolMetaTier = 'read-only' | 'read-write' | 'admin';
 
 export interface ToolMeta {
   name: string;
   description: string;
   helpHint: string;
   helpPageBody: string;
-  tier: 'read-only' | 'read-write' | 'admin';
+  tier?: ToolMetaTier;
   args: unknown;
   filePath: string;
 }
@@ -153,10 +154,9 @@ export function validateToolMeta(sources: readonly ToolMetaSource[]): ToolMetaVa
 
     validateRequiredStringField(data, 'name', source.filePath, diagnostics);
     validateRequiredStringField(data, 'description', source.filePath, diagnostics);
-    validateRequiredStringField(data, 'tier', source.filePath, diagnostics);
 
     if (!Object.hasOwn(data, 'args') || data['args'] === null || data['args'] === undefined) {
-      diagnostics.push(errorDiagnostic(source.filePath, "missing required frontmatter field 'args'"));
+      diagnostics.push(warningDiagnostic(source.filePath, "missing optional frontmatter field 'args'; search arg summaries will fall back to the handler schema when available"));
     }
 
     if (Object.hasOwn(data, 'help_hint') && typeof data['help_hint'] !== 'string') {
@@ -185,8 +185,12 @@ export function validateToolMeta(sources: readonly ToolMetaSource[]): ToolMetaVa
       ));
     }
 
-    if (tier && !VALID_TIERS.has(tier)) {
-      diagnostics.push(errorDiagnostic(source.filePath, "frontmatter field 'tier' must be one of read-only, read-write, admin"));
+    if (Object.hasOwn(data, 'tier')) {
+      if (typeof data['tier'] !== 'string' || tier === '') {
+        diagnostics.push(warningDiagnostic(source.filePath, "optional frontmatter field 'tier' should be one of read-only, read-write, admin when provided"));
+      } else if (!VALID_TIERS.has(tier)) {
+        diagnostics.push(warningDiagnostic(source.filePath, "optional frontmatter field 'tier' should be one of read-only, read-write, admin when provided"));
+      }
     }
 
     const bodyWordCount = countWords(parsed.content);
@@ -221,6 +225,10 @@ export function validateToolMeta(sources: readonly ToolMetaSource[]): ToolMetaVa
   if (!hasErrors) {
     for (const record of parsedRecords) {
       const name = (record.data['name'] as string).trim();
+      const rawTier = record.data['tier'];
+      const tier = typeof rawTier === 'string' && VALID_TIERS.has(rawTier.trim())
+        ? rawTier.trim() as ToolMetaTier
+        : undefined;
       meta.set(name, {
         name,
         description: (record.data['description'] as string).trim(),
@@ -228,8 +236,8 @@ export function validateToolMeta(sources: readonly ToolMetaSource[]): ToolMetaVa
           ? record.data['help_hint'].trim()
           : DEFAULT_HELP_HINT,
         helpPageBody: record.body,
-        tier: (record.data['tier'] as ToolMeta['tier']).trim() as ToolMeta['tier'],
-        args: record.data['args'],
+        ...(tier === undefined ? {} : { tier }),
+        args: record.data['args'] ?? {},
         filePath: record.source.filePath,
       });
     }

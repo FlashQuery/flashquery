@@ -202,27 +202,27 @@ function resultKeys(indexer: PureBM25Indexer, query: string, limit = 8): string[
 }
 
 describe('PureBM25Indexer', () => {
-  it('T-U-022 makes addTools equivalent to one-shot build for the same live tools', () => {
+  it('T-U-022 makes addTools equivalent to one-shot build for the same live tools', async () => {
     const tools = corpus();
     const oneShot = new PureBM25Indexer();
-    oneShot.build(tools);
+    await oneShot.build(tools);
 
     const incremental = new PureBM25Indexer();
-    incremental.build(tools.slice(0, 3));
-    incremental.addTools(tools.slice(3));
+    await incremental.build(tools.slice(0, 3));
+    await incremental.addTools(tools.slice(3));
 
     expect(resultKeys(incremental, 'search local documents')).toEqual(resultKeys(oneShot, 'search local documents'));
     expect(incremental.getStats().documents).toBe(oneShot.getStats().documents);
   });
 
-  it('T-U-023 tolerates nonexistent removes and preserves remaining rankings', () => {
+  it('T-U-023 tolerates nonexistent removes and preserves remaining rankings', async () => {
     const tools = corpus();
     const reference = new PureBM25Indexer();
-    reference.build(tools.filter((tool) => tool.registry_key !== 'github__search_repositories'));
+    await reference.build(tools.filter((tool) => tool.registry_key !== 'github__search_repositories'));
 
     const indexer = new PureBM25Indexer();
-    indexer.build(tools);
-    indexer.removeTools(['github__search_repositories', 'ghost__missing']);
+    await indexer.build(tools);
+    await indexer.removeTools(['github__search_repositories', 'ghost__missing']);
 
     expect(resultKeys(indexer, 'local markdown document')).toEqual(resultKeys(reference, 'local markdown document'));
     expect(indexer.search('repository language topic', 3).some((result) => result.registry_key === 'github__search_repositories')).toBe(
@@ -230,30 +230,30 @@ describe('PureBM25Indexer', () => {
     );
   });
 
-  it('T-U-024 prevents duplicate documents across add/remove/add round trips', () => {
+  it('T-U-024 prevents duplicate documents across add/remove/add round trips', async () => {
     const tools = corpus();
     const indexer = new PureBM25Indexer();
-    indexer.build(tools);
-    indexer.addTools(tools.slice(0, 2));
+    await indexer.build(tools);
+    await indexer.addTools(tools.slice(0, 2));
     expect(indexer.getStats().documents).toBe(tools.length);
 
-    indexer.removeTools(['brave__web_search']);
+    await indexer.removeTools(['brave__web_search']);
     expect(indexer.getStats().documents).toBe(tools.length - 1);
 
-    indexer.addTools([tools[0]]);
-    indexer.addTools([tools[0]]);
+    await indexer.addTools([tools[0]]);
+    await indexer.addTools([tools[0]]);
     expect(indexer.getStats().documents).toBe(tools.length);
     expect(resultKeys(indexer, 'current internet web pages').filter((key) => key === 'brave__web_search')).toHaveLength(1);
   });
 
-  it('T-U-025 reports live document and token counts, not deleted docs', () => {
+  it('T-U-025 reports live document and token counts, not deleted docs', async () => {
     const tools = corpus();
     const indexer = new PureBM25Indexer();
-    indexer.build(tools.slice(0, 4));
+    await indexer.build(tools.slice(0, 4));
     const before = indexer.getStats();
 
-    indexer.addTools([tools[4], tools[0]]);
-    indexer.removeTools(['brave__web_search', 'ghost__missing']);
+    await indexer.addTools([tools[4], tools[0]]);
+    await indexer.removeTools(['brave__web_search', 'ghost__missing']);
     const after = indexer.getStats();
 
     expect(after.documents).toBe(4);
@@ -261,7 +261,7 @@ describe('PureBM25Indexer', () => {
     expect(after.tokens).toBeLessThan(before.tokens + 30);
 
     const reference = new PureBM25Indexer();
-    reference.build([tools[1], tools[2], tools[3], tools[4]]);
+    await reference.build([tools[1], tools[2], tools[3], tools[4]]);
     expect(after.termCount).toBe(reference.getStats().termCount);
     expect(Math.abs(after.avgPostingsPerTerm - reference.getStats().avgPostingsPerTerm)).toBeLessThan(EPSILON);
   });
@@ -271,6 +271,14 @@ describe('PureBM25Indexer', () => {
     expect(BM25_DELTA).toBe(0.25);
     expect(NAME_BOOST).toBe(3);
     expect(BM25_PREPROC).toEqual({ stopwords: true, stemming: false });
+  });
+
+  it('pins mutation methods to the async Indexer contract', async () => {
+    const indexer = new PureBM25Indexer();
+
+    await expect(indexer.build(corpus())).resolves.toBeUndefined();
+    await expect(indexer.addTools([])).resolves.toBeUndefined();
+    await expect(indexer.removeTools([])).resolves.toBeUndefined();
   });
 
   it('T-U-027 keeps the inline 153-word English stopword set from the POC', () => {

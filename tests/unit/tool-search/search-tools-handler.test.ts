@@ -100,9 +100,39 @@ describe('fq.search_tools handler', () => {
         score: expect.any(Number),
         normalizedScore: expect.any(Number),
         arg_summary: [
-          expect.objectContaining({ name: 'identifier', description: 'Document path or ID.' }),
+          expect.objectContaining({ name: 'identifier', description: 'Document path or ID.', required: false }),
         ],
       }),
+    ]);
+  });
+
+  it('defaults arg_summary description and required fields when schema metadata is absent', async () => {
+    const consumerContext: ConsumerContext = {
+      kind: 'purpose',
+      purposeId: 'research',
+      traceId: 'trace-arg-defaults',
+      interactive: true,
+    };
+    const service = await ToolSearchService.buildForConsumer({
+      nativeToolCatalog: [],
+      nativeToolNames: [],
+      broker: makeBroker([brokeredTool({
+        description: 'Repeat diagnostics with bare schema metadata.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            value: { type: 'string' },
+          },
+        },
+      })]),
+      consumerContext,
+      toolMeta: new Map(),
+    });
+
+    const [result] = service.search('bare schema metadata', 1);
+
+    expect(result?.arg_summary).toEqual([
+      { name: 'value', description: '', required: false },
     ]);
   });
 
@@ -171,7 +201,8 @@ describe('fq.search_tools handler', () => {
       expect.objectContaining({
         ts: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         type: 'mcp_broker_search_tools',
-        consumer: { kind: 'purpose', purpose_id: 'research' },
+        consumer: 'purpose:research',
+        purpose_id: 'research',
         query: 'anything',
         result_count: 0,
         latency_us: expect.any(Number),
