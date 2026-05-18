@@ -140,6 +140,7 @@ export async function registerHostBrokeredTools(
             serverId: tool.serverId,
             toolName: tool.toolName,
             costPerCall: visibleTool.costPerCall,
+            consumerContext: ctx,
           });
           return result;
         } catch (error: unknown) {

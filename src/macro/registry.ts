@@ -182,6 +182,7 @@ function wrapBrokerTool(input: {
         serverId: input.server,
         toolName: input.tool,
         costPerCall: visibleTool.costPerCall,
+        consumerContext,
       });
       if (isCallToolErrorResult(result)) {
         const normalized = formatToolError(result, ref);

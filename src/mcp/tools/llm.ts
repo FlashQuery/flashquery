@@ -271,9 +271,7 @@ function buildMode2Envelope(
       latency_ms: loopEnvelope.metadata.latency_ms,
     });
     const brokeredToolCalls = getBrokeredToolCallTraceSnapshot(params.trace_id);
-    if (brokeredToolCalls.length > 0) {
-      metadata.tool_calls = brokeredToolCalls;
-    }
+    metadata.tool_calls = brokeredToolCalls;
   }
   if (injectionMetadata) {
     metadata.injected_references = injectionMetadata.injectedReferences;
@@ -895,6 +893,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
       // (setting to undefined still leaves the key present in the object; we need key absent)
       if (params.trace_id) {
         metadata.trace_id = params.trace_id;
+        metadata.tool_calls = getBrokeredToolCallTraceSnapshot(params.trace_id);
         if (traceCumulative !== undefined) {
           // Normal path: Supabase pre-snapshot succeeded; traceCumulative includes prior calls.
           metadata.trace_cumulative = traceCumulative;

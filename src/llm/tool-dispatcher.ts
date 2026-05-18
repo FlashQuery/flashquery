@@ -247,6 +247,7 @@ async function dispatchBrokeredToolCall(
       serverId: ref.serverId,
       toolName: ref.toolName,
       costPerCall: visibleTool.costPerCall,
+      consumerContext: options.consumerContext,
     });
     if (result.isError === true) {
       const normalized = formatToolError(result, ref);

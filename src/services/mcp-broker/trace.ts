@@ -1,10 +1,13 @@
-import type { BrokerAuditEvent, BrokerAuditEventInput } from './types.js';
+import type { BrokerAuditEvent, BrokerAuditEventInput, ConsumerContext } from './types.js';
 
 export interface BrokeredToolCallTraceEntry {
   server: string;
   tool: string;
   count: number;
   cost: number;
+  consumer_kind?: ConsumerContext['kind'];
+  purpose_id?: string;
+  trace_id?: string;
 }
 
 interface RecordBrokeredToolCallInput {
@@ -12,6 +15,7 @@ interface RecordBrokeredToolCallInput {
   serverId: string;
   toolName: string;
   costPerCall?: number;
+  consumerContext?: ConsumerContext;
 }
 
 const _brokeredToolCalls = new Map<string, Map<string, BrokeredToolCallTraceEntry>>();
@@ -33,6 +37,13 @@ export function recordBrokeredToolCall(input: RecordBrokeredToolCallInput): void
     tool: input.toolName,
     count,
     cost: count * costPerCall,
+    ...(input.consumerContext
+      ? {
+          consumer_kind: input.consumerContext.kind,
+          ...(input.consumerContext.kind === 'purpose' ? { purpose_id: input.consumerContext.purposeId } : {}),
+          trace_id: input.consumerContext.traceId,
+        }
+      : {}),
   });
   _brokeredToolCalls.set(input.traceId, calls);
 }
