@@ -93,6 +93,26 @@ describe('macro runtime budgets', () => {
     });
   });
 
+  it('blocks nested call_macro when outer token budgets cannot be shared', async () => {
+    let dispatched = false;
+    const result = await evaluateProgram(parseProgram('fq.call_macro({ source: "fq.call_model({})" })'), {
+      budgetLimits: { max_total_tokens: 1 },
+      dispatchTool: async () => {
+        dispatched = true;
+        return { content: [{ type: 'text', text: '{}' }] };
+      },
+    });
+
+    expect(dispatched).toBe(false);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'budget_exceeded',
+      details: {
+        which: 'nested_call_macro',
+        active_limits: { max_total_tokens: 1 },
+      },
+    });
+  });
+
   it('T-U-215 budget counters are isolated per invocation', async () => {
     const first = await evaluateProgram(parseProgram('fq.call_model({})'), {
       budgetLimits: { max_model_calls: 1 },

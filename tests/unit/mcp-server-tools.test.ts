@@ -418,6 +418,44 @@ describe('host brokered tool registration', () => {
     );
   });
 
+  it('preserves extra object arguments when brokered JSON Schema omits additionalProperties', async () => {
+    const server = makeCapturingServer();
+    const broker = makeMockBroker({
+      visibleTools: [
+        makeBrokeredTool({
+          inputSchema: {
+            type: 'object',
+            properties: { text: { type: 'string' } },
+            required: ['text'],
+          },
+        }),
+      ],
+    });
+    await registerHostBrokeredTools(server, {
+      broker,
+      hostConfig: { mcpServers: ['basic'], toolSearch: 'disabled' },
+      traceIdProvider: () => 'trace-default-extra-args',
+    });
+    const registrationConfig = server.registerTool.mock.calls[0]?.[1] as {
+      inputSchema: { safeParse(input: unknown): { success: boolean; data?: unknown } };
+    };
+    const args = { text: 'hello', dynamic: { preserved: true } };
+
+    expect(registrationConfig.inputSchema.safeParse(args)).toEqual({
+      success: true,
+      data: args,
+    });
+
+    const handler = server.registerTool.mock.calls[0]?.[2] as (args: unknown, extra: unknown) => Promise<CallToolResult>;
+    await handler(args, {});
+
+    expect(broker.callTool).toHaveBeenCalledWith(
+      { serverId: 'basic', toolName: 'echo' },
+      args,
+      expect.objectContaining({ kind: 'host' })
+    );
+  });
+
   it('returns sanitized errors for thrown broker failures without recording tool-call cost', async () => {
     clearBrokeredToolCallTrace('trace-thrown');
     const server = makeCapturingServer();

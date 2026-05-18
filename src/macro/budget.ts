@@ -62,6 +62,9 @@ export class BudgetTracker {
   beforeNestedMacroCall(): void {
     this.checkTimeout();
     const activeLimits: Record<string, number> = {};
+    if (this.limits.max_total_tokens !== undefined) {
+      activeLimits.max_total_tokens = this.limits.max_total_tokens;
+    }
     if (this.limits.max_model_calls !== undefined) {
       activeLimits.max_model_calls = this.limits.max_model_calls;
     }
