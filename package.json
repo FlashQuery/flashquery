@@ -25,6 +25,7 @@
     "test:integration": "vitest run --config tests/config/vitest.integration.config.ts",
     "test:e2e": "vitest run --config tests/config/vitest.e2e.config.ts",
     "test:benchmark": "vitest run --config tests/config/vitest.benchmark.config.ts",
+    "bench:mcp-broker": "npm run test:benchmark -- --run tests/benchmark/**/*.bench.ts",
     "lint": "eslint src/ --max-warnings 0",
     "format": "prettier --write src/",
     "format:check": "prettier --check src/",
