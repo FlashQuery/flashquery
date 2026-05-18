@@ -168,7 +168,6 @@ export class PureBM25Indexer {
       const existing = this.#keyIndex.get(key);
       if (existing !== undefined && !this.#deletedDocs.has(existing)) {
         this.#removeLiveDocument(existing);
-        changed = true;
       }
       this.#indexDocument({ ...tool, registry_key: key });
       changed = true;

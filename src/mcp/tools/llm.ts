@@ -308,7 +308,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
         limit: z.number().int().positive().max(50).optional().describe('Maximum ranked results to return. Defaults to 8.'),
       },
     },
-    async () => ({
+    () => ({
       content: [{
         type: 'text' as const,
         text: 'search_tools is available inside call_model tool_search-enabled delegated purpose calls. Host search index support is initialized by the host tool-search lifecycle.',
@@ -574,6 +574,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
       let purposeProviderParameters = params.parameters;
       let purposeDefaults: Record<string, unknown> = {};
       let purposeMcpServers: string[] = [];
+      let purposeToolSearch: 'enabled' | 'disabled' = 'disabled';
 
       if (resolvedResolver === 'purpose') {
         const normalizedPurposeName = resolvedName.toLowerCase();
@@ -586,7 +587,8 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
           };
         }
         purposeMcpServers = purpose.mcpServers ?? [];
-        purposeDefaults = purpose?.defaults ?? {};
+        purposeDefaults = purpose.defaults ?? {};
+        purposeToolSearch = purpose.toolSearch ?? 'disabled';
         const runtimeTemplateBindingsResult = await safeLoadPurposeTemplateRuntimeBindings(config.instance.id);
         if (!runtimeTemplateBindingsResult.ok) {
           return {
@@ -594,7 +596,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
             isError: true,
           };
         }
-        for (const modelName of purpose?.models ?? []) {
+        for (const modelName of purpose.models ?? []) {
           const capabilityCheck = assertResponseFormatAllowedWithTools(
             config,
             normalizedPurposeName,
@@ -713,7 +715,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
             toolRegistry,
             templateDispatchContext: { config, logger },
             broker: options.broker,
-            toolSearch: purpose?.toolSearch ?? 'disabled',
+            toolSearch: purposeToolSearch,
             traceId: params.trace_id ?? null,
             chatByPurpose: client.chatByPurposeUnrecorded.bind(client),
             modelCostLookup: (modelName) => config.llm?.models.find((model) => model.name === modelName),

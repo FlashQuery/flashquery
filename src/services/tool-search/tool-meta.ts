@@ -110,7 +110,7 @@ export function validateToolMeta(sources: readonly ToolMetaSource[]): ToolMetaVa
       continue;
     }
 
-    const data = parsed.data as Record<string, unknown>;
+    const data: Record<string, unknown> = parsed.data;
     const fileToolName = basename(source.filePath, '.tool.md');
     parsedRecords.push({
       source,

@@ -110,7 +110,7 @@ steps:
         value: search_tools
       expect_json_contains:
         path: messages[2].content
-        value: '"has_help":true'
+        value: '\"has_help\":true'
       expect_json_path:
         - metadata.tools.calls_log[1].tool_calls[0].tool_name
         - messages[2].content

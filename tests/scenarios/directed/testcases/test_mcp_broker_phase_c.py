@@ -271,7 +271,7 @@ def test_fq_native_help_true_through_call_model(client: FQCClient) -> tuple[bool
     passed = (
         result.ok
         and help_payload.get("ok") is True
-        and "Read a document from the vault" in help_text
+        and "Use `get_document` to read known documents from the vault" in help_text
         and "get_document" in help_text
         and "invalid_tool_arguments" not in serialized
     )

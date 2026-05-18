@@ -99,8 +99,8 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| INT-MCB-08 | `description_override` is visible to delegated flat brokered dispatch and to `fq.search_tools` result text in managed YAML mode. | description_override_substitution | 2026-05-18   |  |
-| INT-MCB-13 | A `tool_search: enabled` purpose searches visible brokered and FQ-native tools, then dispatches the discovered brokered result tool in managed YAML mode. | search_tools_workflow        | 2026-05-18   |  |
+| INT-MCB-08 | `description_override` is visible to delegated flat brokered dispatch and to `fq.search_tools` result text in managed YAML mode. | description_override_substitution | 2026-05-18   | 2026-05-18   |
+| INT-MCB-13 | A `tool_search: enabled` purpose searches visible brokered and FQ-native tools, then dispatches the discovered brokered result tool in managed YAML mode. | search_tools_workflow        | 2026-05-18   | 2026-05-18   |
 
 ---
 

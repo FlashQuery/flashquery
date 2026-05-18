@@ -53,7 +53,7 @@ export function recordBrokerAuditEvent(event: BrokerAuditEventInput): BrokerAudi
   const timestamped: BrokerAuditEvent = {
     ...event,
     ts: event.ts ?? new Date().toISOString(),
-  } as BrokerAuditEvent;
+  };
   _brokerAuditEvents.push(structuredClone(timestamped));
   return timestamped;
 }

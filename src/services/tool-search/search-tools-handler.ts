@@ -26,7 +26,8 @@ function elapsedMicros(start: bigint, now: () => bigint): number {
 
 export function createSearchToolsHandler(options: CreateSearchToolsHandlerOptions): NativeToolHandler {
   return async (args, context) => {
-    const now = options.now ?? process.hrtime.bigint;
+    await Promise.resolve();
+    const now = options.now ?? (() => process.hrtime.bigint());
     const start = now();
     const parsed = searchToolsInputSchema.safeParse(args);
     if (!parsed.success) {

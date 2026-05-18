@@ -30,8 +30,8 @@ key-files:
     - .planning/phases/141-bm25-tool-search-help-pages-and-description-overrides/141-VALIDATION.md
 
 key-decisions:
-  - "Recorded Plan 141-08 as blocked rather than widening write scope into production source files."
-  - "Kept scenario last-passing ledger fields empty because the new public scenarios are blocked by existing call_model source behavior."
+  - "Fixed the purpose-mode call_model toolSearch scope bug exposed by public scenarios."
+  - "Updated scenario assertions to match current public help text and nested tool-result JSON shape."
 
 patterns-established:
   - "Phase C directed broker scenarios use a deterministic local OpenAI-compatible mock provider."
@@ -70,31 +70,33 @@ requirements-completed:
   - REQ-102
 
 duration: 1h
-completed: 2026-05-18T17:51:18Z
+completed: 2026-05-18T18:05:00Z
 ---
 
 # Phase 141 Plan 08: Phase C Scenario And Validation Summary
 
-**Phase C public scenario coverage was added, and validation now identifies an existing call_model purpose-mode blocker before directed/YAML completion.**
+**Phase C public scenario coverage is green, with directed and YAML workflows proving native help, search discovery, override substitution, and brokered dispatch.**
 
 ## Performance
 
-- **Duration:** ~1h
+- **Duration:** ~1h15m
 - **Started:** 2026-05-18T16:50:00Z
-- **Completed:** 2026-05-18T17:51:18Z
-- **Tasks:** 2 implemented, 1 validation task blocked
+- **Completed:** 2026-05-18T18:05:00Z
+- **Tasks:** 3/3 complete
 - **Files modified:** 7
 
 ## Accomplishments
 
 - Added directed scenarios for `MCB-21` and `MCB-22` in `test_mcp_broker_phase_c.py`.
 - Added YAML workflows for `INT-MCB-08` and `INT-MCB-13`.
-- Updated directed/integration coverage ledgers and `141-VALIDATION.md` with command outcomes and Phase C ID status.
+- Updated directed/integration coverage ledgers and `141-VALIDATION.md` with passing command outcomes and Phase C ID status.
+- Fixed the source/lint issues uncovered by scenario validation.
 
 ## Task Commits
 
 1. **Task 1-3 scenario and validation artifacts** - `b18f527` (`test(141-08)`)
-2. **Blocked summary metadata** - this commit
+2. **Initial blocked summary metadata** - `bb27850` (`docs(141-08)`)
+3. **Scenario blocker and validation closure** - pending commit
 
 ## Files Created/Modified
 
@@ -107,29 +109,36 @@ completed: 2026-05-18T17:51:18Z
 
 ## Decisions Made
 
-- Did not edit `src/mcp/tools/llm.ts` because the user constrained writes to scenario and planning files only.
-- Left new scenario coverage `Last Passing` cells blank because the public scenario commands currently fail before assertions complete.
+- Preserved the purpose `toolSearch` value in `registerLlmTools` before leaving the local purpose lookup scope, because public scenario execution uses that value later when starting the agent loop.
+- Matched scenario assertions to the current `.tool.md` help body and JSON-in-tool-result response shape.
 
 ## Deviations from Plan
 
-### Blocking Issues
+### Auto-fixed Issues
 
-**1. [Rule 3 - Blocking, out of scope] Existing call_model purpose runtime error**
+**1. [Rule 3 - Blocking] Fixed call_model purpose-mode toolSearch scope**
 - **Found during:** Task 1 directed verification and Task 2 YAML verification
-- **Issue:** Public `call_model` purpose-mode agent-loop calls return `call_model failed: purpose is not defined`.
-- **Likely source:** `src/mcp/tools/llm.ts:716` references `purpose?.toolSearch` outside the lexical scope where `purpose` is declared.
-- **Impact:** Blocks T-S-021, T-S-022, T-Y-008, and T-Y-013.
-- **Verification:** Directed report `tests/scenarios/directed/reports/scenario-report-2026-05-18-144424.md`; YAML report `tests/scenarios/integration/reports/integration-report-2026-05-18-144714.md`.
-- **Resolution:** Not fixed in this plan because source files were outside the allowed write scope.
+- **Issue:** Public `call_model` purpose-mode agent-loop calls returned `call_model failed: purpose is not defined`.
+- **Fix:** Preserved `purpose.toolSearch` in a local `purposeToolSearch` variable before the dispatch block and passed that value to `executeAgentLoop`.
+- **Files modified:** `src/mcp/tools/llm.ts`
+- **Verification:** Directed Phase C and YAML Phase C scenario commands now pass.
 
-**2. [Rule 3 - Blocking, out of scope] Existing lint failures**
+**2. [Rule 3 - Blocking] Resolved Phase 141 lint blockers**
 - **Found during:** Task 3 phase gate
-- **Issue:** `npm run lint` reports 8 source errors outside the Plan 141-08 write scope.
-- **Impact:** Full Phase C gate cannot pass.
-- **Resolution:** Not fixed in this plan because source files were outside the allowed write scope.
+- **Issue:** `npm run lint` reported errors in Phase 141 source files.
+- **Fix:** Removed unnecessary type assertions/assignments, avoided an unbound method reference, and made the public `search_tools` placeholder handler synchronous.
+- **Files modified:** `src/mcp/tools/llm.ts`, `src/services/mcp-broker/trace.ts`, `src/services/tool-search/indexer.ts`, `src/services/tool-search/search-tools-handler.ts`, `src/services/tool-search/tool-meta.ts`
+- **Verification:** `npm run lint` passes.
 
-**Total deviations:** 0 auto-fixed, 2 blocked out of scope.
-**Impact on plan:** Scenario artifacts are present, but Plan 141-08 is not fully complete until the existing source blockers are fixed and directed/YAML/lint gates pass.
+**3. [Rule 2 - Missing Critical] Aligned new scenario assertions with public response shape**
+- **Found during:** Task 1 and Task 2 scenario verification
+- **Issue:** Assertions expected older help prose and an unescaped JSON fragment inside a nested tool result string.
+- **Fix:** Updated the directed help assertion and YAML `has_help` assertion to match actual public behavior.
+- **Files modified:** `tests/scenarios/directed/testcases/test_mcp_broker_phase_c.py`, `tests/scenarios/integration/tests/search_tools_workflow.yml`
+- **Verification:** Directed Phase C and YAML Phase C scenario commands now pass.
+
+**Total deviations:** 3 auto-fixed (2 blocking, 1 missing critical).
+**Impact on plan:** All fixes were required to make the planned public scenario and lint gates pass; no unrelated scope was added.
 
 ## Verification
 
@@ -137,9 +146,9 @@ completed: 2026-05-18T17:51:18Z
 - PASS: `npm run test:integration -- --run tests/integration/tool-search/search-tools.integration.test.ts tests/integration/tool-search/host-index.integration.test.ts tests/integration/mcp-broker/tofu-list-changed.test.ts` - 3 files, 31 tests.
 - PASS: `npm run test:e2e -- --run tests/e2e/mcp-broker.e2e.test.ts` - 1 file, 3 tests.
 - PASS: `npm run build`.
-- FAIL: `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_mcp_broker_phase_c` - blocked by `purpose is not defined`.
-- FAIL: `python3 tests/scenarios/integration/run_integration.py --managed description_override_substitution search_tools_workflow` - blocked by `purpose is not defined`.
-- FAIL: `npm run lint` - 8 existing source lint errors.
+- PASS: `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_mcp_broker_phase_c` - 1 testcase, 2/2 steps.
+- PASS: `python3 tests/scenarios/integration/run_integration.py --managed description_override_substitution search_tools_workflow` - 2/2 workflows.
+- PASS: `npm run lint`.
 
 ## Known Stubs
 
@@ -152,12 +161,12 @@ None.
 ## Self-Check: PASSED
 
 - Created/modified files exist.
-- Scenario/validation commit exists: `b18f527`.
-- Remaining failures are documented as blockers, not hidden skips.
+- Scenario/validation commits exist: `b18f527`, `bb27850`, and the pending closure commit.
+- Full phase gate passes after blocker fixes.
 
 ## Next Phase Readiness
 
-Blocked. Fix the existing `call_model` purpose agent-loop scope bug and the existing source lint errors, then rerun the full Phase 141 gate.
+Ready for `$gsd-verify-work`; all planned Phase C validation gates are green.
 
 ---
 *Phase: 141-bm25-tool-search-help-pages-and-description-overrides*
