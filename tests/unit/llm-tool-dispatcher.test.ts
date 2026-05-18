@@ -2,6 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { LlmChatToolCall } from '../../src/llm/types.js';
 import type { Broker, BrokeredTool, ConsumerContext } from '../../src/services/mcp-broker/index.js';
+import {
+  clearBrokeredToolCallTrace,
+  getBrokeredToolCallTraceSnapshot,
+} from '../../src/services/mcp-broker/trace.js';
 
 type ToolDispatcherModule = {
   dispatchToolCalls: (options: Record<string, unknown>) => Promise<{
@@ -85,6 +89,34 @@ function makeBroker(tools: BrokeredTool[], callTool = vi.fn()): Broker {
 }
 
 describe('TOOL-05 internal native tool dispatch contract', () => {
+  it('records brokered dispatcher tool_calls trace entries with resolved per-tool cost and no payload data', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    clearBrokeredToolCallTrace('trace-dispatch-cost');
+    const consumerContext: ConsumerContext = { kind: 'purpose', purposeId: 'research', traceId: 'trace-dispatch-cost' };
+    const broker = makeBroker([
+      brokeredTool({ costPerCall: 0.01 }),
+    ], vi.fn(async () => ({
+      structuredContent: { secret: 'result-payload' },
+      content: [{ type: 'text' as const, text: JSON.stringify({ value: 'result-payload' }) }],
+    })));
+
+    await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [
+        toolCall('basic__echo', { value: 'arg-secret' }, 'call_one'),
+        toolCall('basic__echo', { value: 'arg-secret-two' }, 'call_two'),
+      ],
+      nativeToolNames: [],
+      broker,
+      consumerContext,
+    }));
+
+    expect(getBrokeredToolCallTraceSnapshot('trace-dispatch-cost')).toEqual([
+      { server: 'basic', tool: 'echo', count: 2, cost: 0.02 },
+    ]);
+    expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-dispatch-cost'))).not.toContain('arg-secret');
+    expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-dispatch-cost'))).not.toContain('result-payload');
+  });
+
   it('routes registry-key tool calls to Broker.callTool after consumer visibility passes', async () => {
     const { dispatchToolCalls } = await loadDispatcher();
     const args = { value: { stringNumber: '42', number: 42, nullish: null, array: [1, 'two'] } };

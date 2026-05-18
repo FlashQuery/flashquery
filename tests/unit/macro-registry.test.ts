@@ -10,6 +10,10 @@ import type {
 } from '../../src/macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../src/llm/tool-registry.js';
 import { NullBroker, type Broker, type ConsumerContext } from '../../src/services/mcp-broker.js';
+import {
+  clearBrokeredToolCallTrace,
+  getBrokeredToolCallTraceSnapshot,
+} from '../../src/services/mcp-broker/trace.js';
 
 function makeConfig(overrides: Partial<FlashQueryConfig> = {}): FlashQueryConfig {
   return {
@@ -80,6 +84,46 @@ const catalog = [
 ];
 
 describe('macro ToolRegistry construction', () => {
+  it('records brokered macro tool_calls trace entries using visible broker tool cost', async () => {
+    clearBrokeredToolCallTrace('trace-registry');
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool: vi.fn(async () => ({
+        structuredContent: { ok: true, secret: 'payload-secret' },
+        content: [{ type: 'text' as const, text: '{"ok":true}' }],
+      })),
+      listToolsForConsumer: vi.fn(async () => [
+        {
+          serverId: 'brave_search',
+          toolName: 'web_search',
+          registryKey: 'brave_search__web_search',
+          description: 'Search',
+          inputSchema: { type: 'object' },
+          tofuHash: 'hash',
+          costPerCall: 0.005,
+        },
+      ]),
+      shutdown: vi.fn(),
+    };
+    const result = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'host' },
+      broker,
+      catalog,
+      nativeDispatchContext: nativeDispatchContext(),
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    await result.registry.brave_search.tools.web_search({ query: 'arg-secret' }, {} as Parameters<ToolFn>[1]);
+
+    expect(getBrokeredToolCallTraceSnapshot('trace-registry')).toEqual([
+      { server: 'brave_search', tool: 'web_search', count: 1, cost: 0.005 },
+    ]);
+    expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-registry'))).not.toContain('arg-secret');
+    expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-registry'))).not.toContain('payload-secret');
+  });
+
   it('builds fq registry entries from host exposure using resolveHostToolExposure for origin: host', async () => {
     const callerContext: MacroCallerContext = { origin: 'host' };
     const result = await buildToolRegistry({
