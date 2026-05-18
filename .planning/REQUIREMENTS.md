@@ -154,8 +154,8 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [x] **REQ-114**: Consumer context is inherited across nested macro frames.
 - [x] **REQ-115**: `ConsumerContext` is established once at the outermost frame.
 - [x] **REQ-116**: `Broker.listToolsForConsumer(ctx)` returns the filtered view.
-- [ ] **REQ-117**: Lazy spawn is unified across host and delegated consumers.
-- [ ] **REQ-118**: TOFU pins are shared across consumers.
+- [x] **REQ-117**: Lazy spawn is unified across host and delegated consumers.
+- [x] **REQ-118**: TOFU pins are shared across consumers.
 
 ## Future Requirements
 

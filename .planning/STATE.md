@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: executing
-stopped_at: Completed 142-03-PLAN.md
-last_updated: "2026-05-18T20:22:04.000Z"
+stopped_at: Completed 142-04-PLAN.md
+last_updated: "2026-05-18T20:36:31.925Z"
 last_activity: 2026-05-18
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 29
-  completed_plans: 25
+  completed_plans: 26
   percent: 60
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 ## Current Position
 
 Phase: 142 (host-surface-and-consumer-context) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-18
 
@@ -143,6 +143,7 @@ Last activity: 2026-05-18
 | Phase 142 P01 | 3m02s | 2 tasks | 4 files |
 | Phase 142 P02 | 8m | 2 tasks | 7 files |
 | Phase 142 P03 | 18m48s | 2 tasks | 13 files |
+| Phase 142 P04 | 5m04s | 2 tasks | 4 files |
 
 ## Decisions
 
@@ -154,6 +155,8 @@ Last activity: 2026-05-18
 - [Phase 142]: 142-03 `tool_calls` metadata is always present for traced `call_model` responses, using an empty array when no brokered calls occurred.
 - [Phase 142]: 142-03 nested macro execution preserves the exact outer ConsumerContext via MacroCallerContext rather than reconstructing host defaults.
 - [Phase 142]: 142-03 `fq.call_macro` is callable from macro frames while `fq.call_model` remains delegated-hard-excluded.
+- [Phase 142]: 142-04 kept host search assertions on the existing ToolSearchService and public search_tools handler rather than introducing a second host indexer.
+- [Phase 142]: 142-04 added a narrow read-only McpBroker client debug snapshot instead of exposing BrokerClient instances or changing the public Broker interface.
 - [Phase 136]: 136-01 Wave 0 tests intentionally remain RED until `src/macro/task-registry.ts` and dedicated cancellation behavior land.
 - [Phase 136]: 136-01 existing T-U-125 `list_tasks` coverage was extended with a real `MacroTaskRegistry` provider contract.
 - Kept template rendering inside src/llm/reference-resolver.ts and reused resolveAndBuildDocument for document params.
@@ -393,8 +396,8 @@ Last activity: 2026-05-18
 
 ## Session Continuity
 
-Last session: 2026-05-18T20:22:04.000Z
-Stopped at: Completed 142-03-PLAN.md
+Last session: 2026-05-18T20:36:31.901Z
+Stopped at: Completed 142-04-PLAN.md
 Resume: None
 
 ## Deferred Items
