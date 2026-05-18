@@ -199,9 +199,19 @@ export type BrokerAuditEvent =
       new_hash: string;
       trace_id?: string;
       purpose_id?: string;
+    }
+  | {
+      ts: string;
+      type: 'mcp_broker_search_tools';
+      consumer: { kind: 'host' } | { kind: 'purpose'; purpose_id: string };
+      query: string;
+      result_count: number;
+      latency_us: number;
+      trace_id?: string;
     };
 
 export type BrokerAuditEventInput =
   | (Omit<Extract<BrokerAuditEvent, { type: 'mcp_broker_reverse_request_rejected' }>, 'ts'> & { ts?: string })
   | (Omit<Extract<BrokerAuditEvent, { type: 'mcp_broker_tofu_decision' }>, 'ts'> & { ts?: string })
-  | (Omit<Extract<BrokerAuditEvent, { type: 'mcp_broker_tofu_blocked' }>, 'ts'> & { ts?: string });
+  | (Omit<Extract<BrokerAuditEvent, { type: 'mcp_broker_tofu_blocked' }>, 'ts'> & { ts?: string })
+  | (Omit<Extract<BrokerAuditEvent, { type: 'mcp_broker_search_tools' }>, 'ts'> & { ts?: string });
