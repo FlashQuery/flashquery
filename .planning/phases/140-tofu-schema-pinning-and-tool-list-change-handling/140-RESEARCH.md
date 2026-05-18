@@ -363,22 +363,25 @@ For tools, use `ToolListChangedNotificationSchema` from SDK types and `client.li
 | A3 | Add a small no-op index sink in Phase 140 and attach BM25 in Phase 141. | Summary / Pitfalls | If Phase 140 must fully assert index behavior now, Phase 141 boundary needs revision. |
 | A4 | Extend context/options with an interactivity marker for autonomous mode. | Common Pitfalls | If an existing hidden chat-session signal exists elsewhere, planner should reuse it instead. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **What is the exact approval write-back API?**
    - What we know: payload `answer_shape` points at `frontmatter.user_decisions.<server>__<tool>.tofu_decision`. [CITED: MCP Broker Requirements §7.5]
    - What's unclear: current Phase 139 broker has no public method for applying approval/rejection decisions. [VERIFIED: codebase grep]
    - Recommendation: planner should include a broker method such as `resolveSchemaDrift(decisions, ctx)` or macro re-invocation hook, then test approve/reject. [ASSUMED]
+   - **RESOLVED:** Plan `140-03` implements a broker re-approval resolver API and macro re-invocation path. Plan `140-05` proves approval and rejection through directed/E2E tests.
 
 2. **How should autonomous mode be represented?**
    - What we know: autonomous drift must record `blocked_on_user` and not prompt. [CITED: MCP Broker Requirements §7.5]
    - What's unclear: current `ConsumerContext` does not encode live-chat availability. [VERIFIED: codebase grep]
    - Recommendation: add an explicit field or call option; do not infer from `kind: 'purpose'` alone because future host/delegated flows may differ. [ASSUMED]
+   - **RESOLVED:** Plan `140-03` adds explicit interactivity/autonomous signaling to the drift emission path instead of inferring from consumer kind. Plan `140-04` includes T-I-032b coverage for no-live-chat `blocked_on_user` behavior.
 
 3. **How strong must Phase 140 index assertions be before BM25 exists?**
    - What we know: canonical Phase B requires synchronous index updates. [CITED: MCP Broker Requirements §7.9]
    - What's unclear: BM25 implementation is planned for Phase 141. [CITED: .planning/ROADMAP.md]
    - Recommendation: assert calls to a synchronous test sink in Phase 140 and reserve ranking/search behavior for Phase 141. [ASSUMED]
+   - **RESOLVED:** Plans `140-01` and `140-02` create and assert a synchronous no-op/test index sink seam. Phase 140 verifies `addTools`/`removeTools` calls synchronously; Phase 141 remains responsible for BM25 ranking and `search_tools` behavior.
 
 ## Environment Availability
 
