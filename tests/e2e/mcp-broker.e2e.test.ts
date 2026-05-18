@@ -15,7 +15,7 @@ import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { OpenAICompatibleLlmClient } from '../../src/llm/client.js';
 import { executeAgentLoop } from '../../src/llm/agent-loop.js';
-import { createMcpServer } from '../../src/mcp/server.js';
+import { createInitializedMcpServer } from '../../src/mcp/server.js';
 import {
   clearBrokerAuditTrace,
   clearBrokeredToolCallTrace,
@@ -377,7 +377,7 @@ beforeAll(async () => {
 
       const broker = createBroker(config);
       brokers.push(broker);
-      const mcpServer = createMcpServer(config, '0.1.0', { broker });
+      const mcpServer = await createInitializedMcpServer(config, '0.1.0', { broker });
       await mcpServer.connect(transport);
       await transport.handleRequest(req, res, req.body);
     } else {

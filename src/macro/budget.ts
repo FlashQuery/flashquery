@@ -58,6 +58,27 @@ export class BudgetTracker {
     }
     this.counters.external_tool_calls += 1;
   }
+
+  beforeNestedMacroCall(): void {
+    this.checkTimeout();
+    const activeLimits: Record<string, number> = {};
+    if (this.limits.max_model_calls !== undefined) {
+      activeLimits.max_model_calls = this.limits.max_model_calls;
+    }
+    if (this.limits.max_external_tool_calls !== undefined) {
+      activeLimits.max_external_tool_calls = this.limits.max_external_tool_calls;
+    }
+    if (Object.keys(activeLimits).length > 0) {
+      throw new MacroExpectedError(
+        'budget_exceeded',
+        'Nested call_macro cannot run with active model or external tool budgets.',
+        {
+          which: 'nested_call_macro',
+          active_limits: activeLimits,
+        }
+      );
+    }
+  }
 }
 
 function throwBudgetExceeded(which: string, limit: number, consumed: number): never {

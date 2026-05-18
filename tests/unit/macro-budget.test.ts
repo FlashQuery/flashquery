@@ -73,6 +73,26 @@ describe('macro runtime budgets', () => {
     });
   });
 
+  it('blocks nested call_macro when outer external tool budgets cannot be shared', async () => {
+    let dispatched = false;
+    const result = await evaluateProgram(parseProgram('fq.call_macro({ source: "brave.web({})" })'), {
+      budgetLimits: { max_external_tool_calls: 0 },
+      dispatchTool: async () => {
+        dispatched = true;
+        return { content: [{ type: 'text', text: '{}' }] };
+      },
+    });
+
+    expect(dispatched).toBe(false);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'budget_exceeded',
+      details: {
+        which: 'nested_call_macro',
+        active_limits: { max_external_tool_calls: 0 },
+      },
+    });
+  });
+
   it('T-U-215 budget counters are isolated per invocation', async () => {
     const first = await evaluateProgram(parseProgram('fq.call_model({})'), {
       budgetLimits: { max_model_calls: 1 },

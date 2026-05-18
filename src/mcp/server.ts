@@ -554,6 +554,16 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   return server;
 }
 
+export async function createInitializedMcpServer(
+  config: FlashQueryConfig,
+  version: string,
+  options: CreateMcpServerOptions = {}
+): Promise<McpServer> {
+  const server = createMcpServer(config, version, options);
+  await initializeHostToolSearchForServer(server);
+  return server;
+}
+
 export async function initMCP(
   config: FlashQueryConfig,
   version = '0.1.0',
@@ -574,8 +584,7 @@ export async function initMCP(
 
   if (transportType === 'stdio') {
     // Stdio path — identical to v1.5 behavior (HTTP-06)
-    const server = createMcpServer(config, version);
-    await initializeHostToolSearchForServer(server);
+    const server = await createInitializedMcpServer(config, version);
     const transport = new StdioServerTransport();
     await server.connect(transport);
     logger.info('MCP server: ready (stdio transport)');
@@ -669,8 +678,7 @@ export async function initMCP(
             if (sid && transports[sid]) delete transports[sid];
           };
 
-          const server = createMcpServer(config, version);
-          await initializeHostToolSearchForServer(server);
+          const server = await createInitializedMcpServer(config, version);
           await server.connect(transport);
           await transport.handleRequest(req, res, req.body);
         } else {

@@ -759,7 +759,11 @@ async function evalToolCall(
   await context.checkCancelled(MACRO_SAFE_POINTS.beforeToolCall(call.server, call.tool));
   const toolName = `${call.server}.${call.tool}`;
   const isModelCall = call.server === 'fq' && call.tool === 'call_model';
+  const isNestedMacroCall = call.server === 'fq' && call.tool === 'call_macro';
   const isExternalToolCall = call.server !== 'fq';
+  if (isNestedMacroCall) {
+    context.budgetTracker.beforeNestedMacroCall();
+  }
   if (isModelCall) {
     context.budgetTracker.beforeModelCall();
     await context.progressEmitter.emitModelCallStart(toolName);
