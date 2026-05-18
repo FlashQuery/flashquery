@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: executing
-stopped_at: Completed 142-04-PLAN.md
-last_updated: "2026-05-18T20:36:31.925Z"
+stopped_at: Completed 142-05-PLAN.md
+last_updated: "2026-05-18T21:04:02.694Z"
 last_activity: 2026-05-18
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 29
-  completed_plans: 26
+  completed_plans: 28
   percent: 60
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 ## Current Position
 
 Phase: 142 (host-surface-and-consumer-context) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-05-18
 
@@ -144,6 +144,7 @@ Last activity: 2026-05-18
 | Phase 142 P02 | 8m | 2 tasks | 7 files |
 | Phase 142 P03 | 18m48s | 2 tasks | 13 files |
 | Phase 142 P04 | 5m04s | 2 tasks | 4 files |
+| Phase 142 P5 | 23m30s | 2 tasks | 10 files |
 
 ## Decisions
 
@@ -283,7 +284,8 @@ Last activity: 2026-05-18
 - [Phase 140]: 140-05 retains rejected TOFU hashes so the same rejected upstream schema stays blocked without repeated prompts.
 - [Phase 140]: 140-06 used the managed YAML runner and server-quirky fixture for T-Y-012, with no runner changes or new packages.
 - [Phase 140]: 140-06 recorded the directed cleanup helper timeout as non-blocking because Phase B directed validation passed 4/4 steps with zero residue.
-
+- [Phase 142]: 142-05 YAML mcp.list_tools assertions serialize full tool objects so host brokered description_override can be validated through public tools/list.
+- [Phase 142]: 142-05 MCB-13 uses public nested macro re-entry because delegated call_model intentionally hard-excludes call_macro; purpose-rooted inheritance remains covered by 142-03 unit coverage.
 ## Accumulated Context
 
 ### Milestone v3.1 Initialization (2026-05-01)
@@ -396,8 +398,8 @@ Last activity: 2026-05-18
 
 ## Session Continuity
 
-Last session: 2026-05-18T20:36:31.901Z
-Stopped at: Completed 142-04-PLAN.md
+Last session: 2026-05-18T21:04:02.665Z
+Stopped at: Completed 142-05-PLAN.md
 Resume: None
 
 ## Deferred Items
