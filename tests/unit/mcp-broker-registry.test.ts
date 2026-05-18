@@ -69,7 +69,7 @@ describe('mcp broker registry utilities', () => {
     ]);
   });
 
-  it('filters host and purpose views without mutating canonical entries', () => {
+  it('T-U-036 filters host views to host.mcp_servers and excludes hidden servers', () => {
     const registry = new ToolRegistry({
       mcpServers: {
         brave_search: {
@@ -82,6 +82,7 @@ describe('mcp broker registry utilities', () => {
           },
         },
         github: { costPerCall: 0.75 },
+        slack: { costPerCall: 0.9 },
       },
       host: { mcpServers: ['brave_search'] },
       llm: {
@@ -105,19 +106,17 @@ describe('mcp broker registry utilities', () => {
       inputSchema: { type: 'object' },
       tofuHash: 'hash-github',
     });
+    registry.registerTool({
+      serverId: 'slack',
+      toolName: 'post_message',
+      description: 'Slack post',
+      inputSchema: { type: 'object' },
+      tofuHash: 'hash-slack',
+    });
 
     const hostTools = registry.listToolsForConsumer({ kind: 'host', traceId: 'trace-host' });
-    const researchTools = registry.listToolsForConsumer({
-      kind: 'purpose',
-      purposeId: 'research',
-      traceId: 'trace-research',
-    });
-    const codingTools = registry.listToolsForConsumer({ kind: 'purpose', purposeId: 'coding', traceId: 'trace-coding' });
 
     expect(hostTools.map((tool) => tool.registryKey)).toEqual(['brave_search__web_search']);
-    expect(researchTools.map((tool) => tool.registryKey)).toEqual(['brave_search__web_search', 'github__search']);
-    expect(codingTools.map((tool) => tool.registryKey)).toEqual(['github__search']);
-
     expect(hostTools[0]).toMatchObject({
       description: 'Search with Brave',
       upstreamDescription: 'Upstream Brave description',
@@ -125,6 +124,68 @@ describe('mcp broker registry utilities', () => {
       tofuHash: 'hash-brave',
     });
     hostTools[0].description = 'mutated copy';
+    expect(registry.get('brave_search', 'web_search')?.description).toBe('Search with Brave');
+  });
+
+  it('T-U-037 filters purpose views to their own mcp_servers and keeps returned tools cloned', () => {
+    const registry = new ToolRegistry({
+      mcpServers: {
+        brave_search: {
+          costPerCall: 0.25,
+          toolOverrides: {
+            web_search: {
+              costPerCall: 0.5,
+              descriptionOverride: 'Search with Brave',
+            },
+          },
+        },
+        github: { costPerCall: 0.75 },
+        slack: { costPerCall: 0.9 },
+      },
+      host: { mcpServers: ['brave_search'] },
+      llm: {
+        purposes: [
+          { name: 'research', mcpServers: ['github'] },
+          { name: 'ops', mcpServers: ['slack'] },
+        ],
+      },
+    });
+    registry.registerTool({
+      serverId: 'brave_search',
+      toolName: 'web_search',
+      description: 'Upstream Brave description',
+      inputSchema: { type: 'object' },
+      tofuHash: 'hash-brave',
+    });
+    registry.registerTool({
+      serverId: 'github',
+      toolName: 'search',
+      description: 'GitHub search',
+      inputSchema: { type: 'object' },
+      tofuHash: 'hash-github',
+    });
+    registry.registerTool({
+      serverId: 'slack',
+      toolName: 'post_message',
+      description: 'Slack post',
+      inputSchema: { type: 'object' },
+      tofuHash: 'hash-slack',
+    });
+
+    const hostTools = registry.listToolsForConsumer({ kind: 'host', traceId: 'trace-host' });
+    hostTools[0].description = 'mutated host-view copy';
+
+    const researchTools = registry.listToolsForConsumer({
+      kind: 'purpose',
+      purposeId: 'research',
+      traceId: 'trace-research',
+    });
+    const opsTools = registry.listToolsForConsumer({ kind: 'purpose', purposeId: 'ops', traceId: 'trace-ops' });
+
+    expect(researchTools.map((tool) => tool.registryKey)).toEqual(['github__search']);
+    expect(researchTools.map((tool) => tool.registryKey)).not.toContain('brave_search__web_search');
+    expect(researchTools.map((tool) => tool.registryKey)).not.toContain('slack__post_message');
+    expect(opsTools.map((tool) => tool.registryKey)).toEqual(['slack__post_message']);
     expect(registry.get('brave_search', 'web_search')?.description).toBe('Search with Brave');
   });
 

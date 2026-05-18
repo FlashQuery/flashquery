@@ -32,7 +32,7 @@ created: 2026-05-18
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 142-W0-01 | W0 | 0 | REQ-031, REQ-116 | T-142-01 | Host and purpose filtered views exclude unauthorized server tools. | unit | `npm test -- --run tests/unit/mcp-broker-registry.test.ts` | extend existing | pending |
+| 142-W0-01 | W0 | 0 | REQ-031, REQ-116 | T-142-01 | Planned unit tests: `T-U-036 filters host views to host.mcp_servers and excludes hidden servers`; `T-U-037 filters purpose views to their own mcp_servers and keeps returned tools cloned`. | unit | `npm test -- --run tests/unit/mcp-broker-registry.test.ts` | extend existing | planned |
 | 142-W0-02 | W0 | 0 | REQ-005..010, REQ-113 | T-142-02 | Planned unit tests: `REQ-005 REQ-009 defaults omitted host to no broker visibility and disabled host search`; `REQ-006 accepts empty host config as disabled broker host visibility`; `REQ-007 rejects unknown host broker server references with [host] scope and the missing ID`; `REQ-008 rejects unknown purpose broker server references with [purpose:<name>] scope and the missing ID`; `REQ-010 REQ-113 loads host.tool_search enabled with broker visibility distinct from host_mcp_tools`. | unit/YAML | `npm test -- --run tests/unit/config.test.ts` plus Phase D YAML scenarios | partial | planned |
 | 142-W0-03 | W0 | 0 | REQ-035, REQ-066 | T-142-03 | Host cannot call hidden registry keys; visible host brokered calls trace correctly. | integration | `npm run test:integration -- --run tests/integration/mcp-broker/host-surface.test.ts` | missing W0 | pending |
 | 142-W0-04 | W0 | 0 | REQ-114, REQ-115, REQ-067 | T-142-04 | Nested macro frames inherit consumer context, trace scope, and `interactive`. | unit/directed | `npm test -- --run tests/unit/macro*.test.ts` plus directed MCB-13/14 sibling | missing W0 | pending |
@@ -41,7 +41,7 @@ created: 2026-05-18
 
 ## Wave 0 Requirements
 
-- [ ] Add or relabel unit coverage for `T-U-036` and `T-U-037` in `tests/unit/mcp-broker-registry.test.ts`.
+- [x] Add or relabel unit coverage for `T-U-036` and `T-U-037` in `tests/unit/mcp-broker-registry.test.ts`.
 - [ ] Add focused host MCP surface integration coverage for `T-I-030` hidden/unknown brokered dispatch rejection.
 - [ ] Add shared broker lifecycle integration coverage for `T-I-031` lazy-spawn unification and `T-I-032` shared TOFU pins.
 - [ ] Add host index integration coverage for `T-I-038` startup index build and `T-I-039` host-visible `list_changed` index updates.
