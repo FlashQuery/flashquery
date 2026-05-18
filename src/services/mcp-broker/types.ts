@@ -65,6 +65,12 @@ export interface TofuDriftPayload {
   answer_shape: string;
 }
 
+export interface TofuDriftBundle {
+  event: 'schema_drift_detected';
+  server: string;
+  changes: TofuDriftPayload[];
+}
+
 export interface TofuEntry {
   serverId: string;
   toolName: string;

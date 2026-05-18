@@ -1,29 +1,62 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { BrokerClient } from './client.js';
+import { diffToolSnapshots } from './diff.js';
 import { formatToolError, toThrowableToolError } from './errors.js';
 import { ToolRegistry, type ToolRegistryConfig } from './registry.js';
-import type { Broker, BrokerClientConfig, BrokerConnectionOptions, BrokeredTool, BrokerToolRef, ConsumerContext } from './types.js';
+import { InMemoryTofuStore } from './tofu.js';
+import type {
+  Broker,
+  BrokerClientConfig,
+  BrokerConnectionOptions,
+  BrokeredTool,
+  BrokerToolRef,
+  ConsumerContext,
+  RegistryKey,
+  TofuDriftBundle,
+  TofuDriftPayload,
+  ToolIndexSink,
+} from './types.js';
 
 export { BrokerClient } from './client.js';
+export { diffToolSnapshots } from './diff.js';
 export { formatToolError, stripRawFromToolError, toThrowableToolError } from './errors.js';
 export { ToolRegistry, isRegistryKey, makeRegistryKey, parseMacroRef, parseRegistryKey } from './registry.js';
 export { clearBrokeredToolCallTrace, getBrokeredToolCallTraceSnapshot, recordBrokeredToolCall } from './trace.js';
-export { canonicalJson, hashToolSchema } from './tofu.js';
+export { InMemoryTofuStore, canonicalJson, hashToolSchema } from './tofu.js';
 export type * from './types.js';
 
 export interface BrokerConfig extends ToolRegistryConfig {
   mcpServers?: Record<string, BrokerClientConfig>;
+  indexSink?: ToolIndexSink;
+  onTofuDrift?: (bundle: TofuDriftBundle) => void | Promise<void>;
 }
+
+const NOOP_INDEX_SINK: ToolIndexSink = {
+  addTools: () => undefined,
+  removeTools: () => undefined,
+};
 
 export class McpBroker implements Broker {
   readonly #clients: Map<string, BrokerClient>;
   readonly #registry: ToolRegistry;
+  readonly #tofuStore = new InMemoryTofuStore();
+  readonly #indexSink: ToolIndexSink;
+  readonly #onTofuDrift?: (bundle: TofuDriftBundle) => void | Promise<void>;
 
   constructor(config: BrokerConfig) {
+    this.#indexSink = config.indexSink ?? NOOP_INDEX_SINK;
+    this.#onTofuDrift = config.onTofuDrift;
     this.#clients = new Map(
       Object.entries(config.mcpServers ?? {}).map(([serverId, serverConfig]) => [
         serverId,
-        new BrokerClient({ ...serverConfig, serverId }),
+        new BrokerClient({
+          ...serverConfig,
+          serverId,
+          onToolListChanged: async (changedServerId, tools) => {
+            await this.applyToolListSnapshot(changedServerId, tools);
+            await serverConfig.onToolListChanged?.(changedServerId, tools);
+          },
+        }),
       ])
     );
     this.#registry = new ToolRegistry(config);
@@ -32,7 +65,43 @@ export class McpBroker implements Broker {
   async ensureConnected(serverId: string): Promise<void> {
     const client = this.#client(serverId);
     await client.ensureConnected();
-    this.#registry.registerTools(await client.listTools());
+    await this.applyToolListSnapshot(serverId, await client.listTools());
+  }
+
+  async applyToolListSnapshot(serverId: string, refreshedTools: BrokeredTool[]): Promise<void> {
+    const previousTools = this.#registry.listAll().filter((tool) => tool.serverId === serverId);
+    const diff = diffToolSnapshots(previousTools, refreshedTools);
+    const removedKeys = this.#removeTools([...diff.removed, ...diff.changed]);
+    if (removedKeys.length > 0) {
+      this.#indexSink.removeTools(removedKeys);
+    }
+
+    const toolsToAdd: BrokeredTool[] = [];
+    const drifts: TofuDriftPayload[] = [];
+    for (const tool of [...diff.added, ...diff.changed]) {
+      const observation = this.#tofuStore.observe({
+        serverId,
+        toolName: tool.toolName,
+        description: tool.upstreamDescription ?? tool.description,
+        inputSchema: tool.inputSchema,
+      });
+      if (observation.status === 'trusted') {
+        toolsToAdd.push(this.#registry.registerTool(tool));
+      } else if (observation.drift !== undefined) {
+        drifts.push(observation.drift);
+      }
+    }
+
+    for (const tool of diff.removed) {
+      this.#tofuStore.markRemoved(serverId, tool.toolName);
+    }
+
+    if (toolsToAdd.length > 0) {
+      this.#indexSink.addTools(toolsToAdd);
+    }
+    if (drifts.length > 0) {
+      await this.#onTofuDrift?.({ event: 'schema_drift_detected', server: serverId, changes: drifts });
+    }
   }
 
   async callTool(ref: BrokerToolRef, args: unknown, ctx: ConsumerContext): Promise<CallToolResult> {
@@ -66,6 +135,10 @@ export class McpBroker implements Broker {
       throw toThrowableToolError(formatToolError(new Error(`Unknown MCP broker server '${serverId}'.`), { serverId }));
     }
     return client;
+  }
+
+  #removeTools(tools: BrokeredTool[]): RegistryKey[] {
+    return this.#registry.unregisterTools(tools.map((tool) => tool.registryKey));
   }
 }
 
