@@ -76,14 +76,14 @@ Plans:
 
 **Requirements:** REQ-038..049, REQ-061..064, REQ-068, REQ-070, REQ-105
 
-**Plans:** 4/6 plans executed
+**Plans:** 5/6 plans executed
 
 Plans:
 - [x] 140-01-PLAN.md — TOFU state machine, diff utility, and registry blocking APIs
 - [x] 140-02-PLAN.md — `notifications/tools/list_changed` subscription and synchronous broker routing
 - [x] 140-03-PLAN.md — Macro `needs_user_input`, approve/reject resolution, autonomous block, and audit events
 - [x] 140-04-PLAN.md — Phase B broker integration coverage
-- [ ] 140-05-PLAN.md — Phase B E2E and directed scenario coverage
+- [x] 140-05-PLAN.md — Phase B E2E and directed scenario coverage
 - [ ] 140-06-PLAN.md — Phase B YAML workflow and validation record
 
 **Success criteria:**
