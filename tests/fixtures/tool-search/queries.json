@@ -1,0 +1,472 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created": "2026-05-15",
+    "description": "Curated query set with ground-truth labels for the BM25 tool-search POC. Queries span four categories: obvious (expect correct tool at rank 1), oblique (expect correct tool in top-3, tests semantic flex), adversarial (synonyms / typos / cross-tool collisions, tests robustness), recall-stress (intentionally vague, establishes floor on completely ambiguous inputs). Ground-truth `relevant_tools` is a SET of tools considered correct matches for the query — Precision@K, Recall@K, and MRR are all computed against this set.",
+    "categories": {
+      "obvious": "Direct queries; correct tool should rank #1. Tests baseline competence.",
+      "oblique": "Indirect queries that don't use the tool's literal vocabulary; correct tool should rank in top-3. Tests semantic flex via lexical overlap.",
+      "adversarial": "Synonyms, typos, or queries where multiple tools have legitimate claims. Tests robustness and disambiguation under collision.",
+      "recall_stress": "Intentionally vague or nonsensical queries. Tests that BM25 doesn't over-confidently rank irrelevant tools. Many of these have empty `relevant_tools` — the right answer is 'nothing should rank confidently.'"
+    },
+    "tool_id_format": "Tools are identified by {server, tool} pairs matching the corpus.md headings. E.g., {server: 'server-filesystem', tool: 'read_text_file'} maps to corpus.md's `## Server: server-filesystem` → `### Tool: read_text_file`."
+  },
+  "queries": [
+    {
+      "id": 1,
+      "category": "obvious",
+      "query": "read a text file from disk",
+      "relevant_tools": [
+        {"server": "server-filesystem", "tool": "read_text_file"}
+      ],
+      "notes": "Corpus also has read_file (DEPRECATED — should rank LOWER than read_text_file based on description hint), read_multiple_files, and read_media_file. BM25 may struggle to prefer the canonical over the deprecated alias."
+    },
+    {
+      "id": 2,
+      "category": "obvious",
+      "query": "list all files in a directory",
+      "relevant_tools": [
+        {"server": "server-filesystem", "tool": "list_directory"},
+        {"server": "server-filesystem", "tool": "list_directory_with_sizes"}
+      ],
+      "notes": "Both list_directory and list_directory_with_sizes legitimate; either at rank 1 is acceptable."
+    },
+    {
+      "id": 3,
+      "category": "obvious",
+      "query": "get the current git status",
+      "relevant_tools": [
+        {"server": "server-git", "tool": "git_status"}
+      ]
+    },
+    {
+      "id": 4,
+      "category": "obvious",
+      "query": "show me the commit history",
+      "relevant_tools": [
+        {"server": "server-git", "tool": "git_log"}
+      ]
+    },
+    {
+      "id": 5,
+      "category": "obvious",
+      "query": "create a new GitHub issue",
+      "relevant_tools": [
+        {"server": "github-mcp-server", "tool": "create_issue"}
+      ]
+    },
+    {
+      "id": 6,
+      "category": "obvious",
+      "query": "merge a pull request on GitHub",
+      "relevant_tools": [
+        {"server": "github-mcp-server", "tool": "merge_pull_request"}
+      ]
+    },
+    {
+      "id": 7,
+      "category": "obvious",
+      "query": "fetch the contents of a URL",
+      "relevant_tools": [
+        {"server": "server-fetch", "tool": "fetch"}
+      ]
+    },
+    {
+      "id": 8,
+      "category": "obvious",
+      "query": "take a screenshot of the current page",
+      "relevant_tools": [
+        {"server": "playwright-mcp", "tool": "browser_take_screenshot"}
+      ]
+    },
+    {
+      "id": 9,
+      "category": "obvious",
+      "query": "click on an element on the page",
+      "relevant_tools": [
+        {"server": "playwright-mcp", "tool": "browser_click"}
+      ]
+    },
+    {
+      "id": 10,
+      "category": "obvious",
+      "query": "navigate the browser to a URL",
+      "relevant_tools": [
+        {"server": "playwright-mcp", "tool": "browser_navigate"}
+      ],
+      "notes": "Corpus also has mcp-server-browserbase/navigate — both legitimate. Top-3 should include both."
+    },
+    {
+      "id": 11,
+      "category": "obvious",
+      "query": "get the YouTube transcript for a video",
+      "relevant_tools": [
+        {"server": "mcp-server-youtube-transcript", "tool": "get_transcript"}
+      ]
+    },
+    {
+      "id": 12,
+      "category": "obvious",
+      "query": "execute a SELECT SQL query",
+      "relevant_tools": [
+        {"server": "server-sqlite", "tool": "read_query"}
+      ],
+      "notes": "Corpus also has cloudflare-mcp/d1_database_query which is also a SQL-query tool — should be in top-3 as a legitimate alternative."
+    },
+
+    {
+      "id": 13,
+      "category": "oblique",
+      "query": "I want to know what changed since my last commit",
+      "relevant_tools": [
+        {"server": "server-git", "tool": "git_diff_unstaged"},
+        {"server": "server-git", "tool": "git_diff_staged"},
+        {"server": "server-git", "tool": "git_diff"},
+        {"server": "server-git", "tool": "git_status"}
+      ],
+      "notes": "All four git_diff variants and git_status are legitimate; any of them in top-3 is a pass."
+    },
+    {
+      "id": 14,
+      "category": "oblique",
+      "query": "store this information so I can find it later",
+      "relevant_tools": [
+        {"server": "server-memory", "tool": "create_entities"},
+        {"server": "server-memory", "tool": "add_observations"},
+        {"server": "server-filesystem", "tool": "write_file"}
+      ],
+      "notes": "Both memory-graph storage and filesystem write are legitimate interpretations. BM25 likely favors filesystem/write_file due to 'store' being more associated with file I/O in tool descriptions."
+    },
+    {
+      "id": 15,
+      "category": "oblique",
+      "query": "I need a small embedded database for some local data",
+      "relevant_tools": [
+        {"server": "server-sqlite", "tool": "create_table"},
+        {"server": "server-sqlite", "tool": "list_tables"},
+        {"server": "server-sqlite", "tool": "read_query"}
+      ],
+      "notes": "Any sqlite tool ranks well; this just tests that the server is identifiable from oblique terminology."
+    },
+    {
+      "id": 16,
+      "category": "oblique",
+      "query": "automate filling out a form on a website",
+      "relevant_tools": [
+        {"server": "playwright-mcp", "tool": "browser_fill_form"},
+        {"server": "playwright-mcp", "tool": "browser_type"}
+      ]
+    },
+    {
+      "id": 17,
+      "category": "oblique",
+      "query": "look at the source code of my Cloudflare Worker",
+      "relevant_tools": [
+        {"server": "cloudflare-mcp", "tool": "workers_get_worker_code"},
+        {"server": "cloudflare-mcp", "tool": "workers_get_worker"}
+      ]
+    },
+    {
+      "id": 18,
+      "category": "oblique",
+      "query": "find Terraform modules I can use in my infrastructure",
+      "relevant_tools": [
+        {"server": "terraform-mcp-server", "tool": "search_modules"}
+      ]
+    },
+    {
+      "id": 19,
+      "category": "oblique",
+      "query": "connect my regional database to the Cloudflare edge",
+      "relevant_tools": [
+        {"server": "cloudflare-mcp", "tool": "hyperdrive_configs_list"},
+        {"server": "cloudflare-mcp", "tool": "hyperdrive_config_get"},
+        {"server": "cloudflare-mcp", "tool": "hyperdrive_config_edit"}
+      ],
+      "notes": "'Hyperdrive' is Cloudflare's regional-DB-to-edge feature — the query describes the use case without naming the feature. BM25 will succeed only if Cloudflare's hyperdrive tool descriptions explain the feature in plain terms."
+    },
+    {
+      "id": 20,
+      "category": "oblique",
+      "query": "I need to look up biomedical research",
+      "relevant_tools": [
+        {"server": "biomcp", "tool": "biomcp"}
+      ],
+      "notes": "BioMCP is a single tool with a ~10KB description. This tests whether the massive description helps or hurts ranking."
+    },
+    {
+      "id": 21,
+      "category": "oblique",
+      "query": "create a new cloud storage bucket",
+      "relevant_tools": [
+        {"server": "cloudflare-mcp", "tool": "r2_bucket_create"}
+      ]
+    },
+    {
+      "id": 22,
+      "category": "oblique",
+      "query": "switch between git branches",
+      "relevant_tools": [
+        {"server": "server-git", "tool": "git_checkout"},
+        {"server": "server-git", "tool": "git_branch"}
+      ]
+    },
+    {
+      "id": 23,
+      "category": "oblique",
+      "query": "find my notes from before",
+      "relevant_tools": [
+        {"server": "server-memory", "tool": "search_nodes"},
+        {"server": "server-memory", "tool": "read_graph"},
+        {"server": "server-memory", "tool": "open_nodes"}
+      ]
+    },
+    {
+      "id": 24,
+      "category": "oblique",
+      "query": "I want to make a backup of this branch first",
+      "relevant_tools": [
+        {"server": "server-git", "tool": "git_create_branch"},
+        {"server": "github-mcp-server", "tool": "create_branch"}
+      ]
+    },
+
+    {
+      "id": 25,
+      "category": "adversarial",
+      "query": "search for code",
+      "relevant_tools": [
+        {"server": "github-mcp-server", "tool": "search_code"},
+        {"server": "server-filesystem", "tool": "search_files"}
+      ],
+      "notes": "Cross-server collision: GitHub has search_code, memory has search_nodes, filesystem has search_files. 'Code' should bias toward GitHub's tool."
+    },
+    {
+      "id": 26,
+      "category": "adversarial",
+      "query": "remove a file from my GitHub repo",
+      "relevant_tools": [
+        {"server": "github-mcp-server", "tool": "delete_file"}
+      ],
+      "notes": "Verb mismatch: query uses 'remove', tool uses 'delete'. Tests synonym handling. BM25 won't auto-bridge 'remove'↔'delete' without stemming or a synonym dictionary."
+    },
+    {
+      "id": 27,
+      "category": "adversarial",
+      "query": "find the latest release",
+      "relevant_tools": [
+        {"server": "github-mcp-server", "tool": "get_latest_release"}
+      ],
+      "notes": "Competing tools: github/list_releases, get_release_by_tag both relevant but get_latest_release is the specific match for 'latest'."
+    },
+    {
+      "id": 28,
+      "category": "adversarial",
+      "query": "search for issues",
+      "relevant_tools": [
+        {"server": "github-mcp-server", "tool": "search_issues"}
+      ],
+      "notes": "Many GitHub 'search' tools; this should disambiguate via 'issues' token."
+    },
+    {
+      "id": 29,
+      "category": "adversarial",
+      "query": "list all the things I have starred",
+      "relevant_tools": [
+        {"server": "github-mcp-server", "tool": "list_starred_repositories"}
+      ],
+      "notes": "'Things' is intentionally vague; should test whether BM25 latches onto 'starred' as the disambiguator."
+    },
+    {
+      "id": 30,
+      "category": "adversarial",
+      "query": "lits files in directory",
+      "relevant_tools": [
+        {"server": "server-filesystem", "tool": "list_directory"}
+      ],
+      "notes": "INTENTIONAL TYPO ('lits' for 'list'). Tests BM25 robustness to typos. Likely fails without edit-distance support — that's the data point we want."
+    },
+    {
+      "id": 31,
+      "category": "adversarial",
+      "query": "remove an item",
+      "relevant_tools": [
+        {"server": "server-memory", "tool": "delete_entities"},
+        {"server": "server-memory", "tool": "delete_observations"},
+        {"server": "server-memory", "tool": "delete_relations"},
+        {"server": "github-mcp-server", "tool": "delete_file"},
+        {"server": "cloudflare-mcp", "tool": "kv_namespace_delete"},
+        {"server": "cloudflare-mcp", "tool": "d1_database_delete"},
+        {"server": "cloudflare-mcp", "tool": "r2_bucket_delete"},
+        {"server": "cloudflare-mcp", "tool": "hyperdrive_config_delete"}
+      ],
+      "notes": "Vague delete; many legitimate matches. Recall@K should be high; Precision@K naturally lower. Tests how BM25 handles 'large relevant set' queries."
+    },
+    {
+      "id": 32,
+      "category": "adversarial",
+      "query": "wait for something on the page",
+      "relevant_tools": [
+        {"server": "playwright-mcp", "tool": "browser_wait_for"}
+      ]
+    },
+    {
+      "id": 33,
+      "category": "adversarial",
+      "query": "run a query against a database",
+      "relevant_tools": [
+        {"server": "server-sqlite", "tool": "read_query"},
+        {"server": "server-sqlite", "tool": "write_query"},
+        {"server": "cloudflare-mcp", "tool": "d1_database_query"}
+      ],
+      "notes": "Cross-server collision between SQLite and Cloudflare D1."
+    },
+    {
+      "id": 34,
+      "category": "adversarial",
+      "query": "open it",
+      "relevant_tools": [
+        {"server": "server-memory", "tool": "open_nodes"},
+        {"server": "playwright-mcp", "tool": "browser_navigate"}
+      ],
+      "notes": "Extremely vague pronoun. Tests Recall under maximum ambiguity. Either match in top-3 is reasonable; neither at rank 1 is also acceptable."
+    },
+    {
+      "id": 35,
+      "category": "adversarial",
+      "query": "key-value store",
+      "relevant_tools": [
+        {"server": "cloudflare-mcp", "tool": "kv_namespaces_list"},
+        {"server": "cloudflare-mcp", "tool": "kv_namespace_create"},
+        {"server": "cloudflare-mcp", "tool": "kv_namespace_get"},
+        {"server": "cloudflare-mcp", "tool": "kv_namespace_update"},
+        {"server": "cloudflare-mcp", "tool": "kv_namespace_delete"}
+      ],
+      "notes": "Term 'key-value' should map to Cloudflare KV cluster directly. Tests whether BM25 picks up the multi-word term."
+    },
+    {
+      "id": 36,
+      "category": "adversarial",
+      "query": "I want to comment on something on GitHub",
+      "relevant_tools": [
+        {"server": "github-mcp-server", "tool": "add_issue_comment"},
+        {"server": "github-mcp-server", "tool": "add_pull_request_review_comment"},
+        {"server": "github-mcp-server", "tool": "add_reply_to_pull_request_comment"},
+        {"server": "github-mcp-server", "tool": "add_comment_to_pending_review"}
+      ],
+      "notes": "Multiple legitimate 'add comment' tools on GitHub. Tests recall on duplicate-ish tools."
+    },
+
+    {
+      "id": 37,
+      "category": "recall_stress",
+      "query": "help me with my stuff",
+      "relevant_tools": [],
+      "notes": "EMPTY relevant set. The right answer is 'nothing should rank confidently.' If BM25 returns high scores for anything, that's a false positive worth measuring."
+    },
+    {
+      "id": 38,
+      "category": "recall_stress",
+      "query": "tool",
+      "relevant_tools": [],
+      "notes": "Single-word query that matches the literal token 'tool' if it appears in descriptions. Tests how BM25 handles meta-words. Empty relevant set."
+    },
+    {
+      "id": 39,
+      "category": "recall_stress",
+      "query": "do something useful",
+      "relevant_tools": [],
+      "notes": "Maximally vague. Empty relevant set."
+    },
+    {
+      "id": 40,
+      "category": "recall_stress",
+      "query": "I need a thing",
+      "relevant_tools": [],
+      "notes": "No information content. Empty relevant set."
+    },
+    {
+      "id": 41,
+      "category": "recall_stress",
+      "query": "manage my bitcoin wallet",
+      "relevant_tools": [],
+      "notes": "Domain not represented in corpus. Tests that BM25 doesn't force-rank irrelevant tools. Empty relevant set; if anything ranks above a low confidence threshold, that's a false positive."
+    },
+
+    {
+      "id": 42,
+      "category": "obvious",
+      "query": "read all files in a folder at once",
+      "relevant_tools": [
+        {"server": "server-filesystem", "tool": "read_multiple_files"}
+      ]
+    },
+    {
+      "id": 43,
+      "category": "obvious",
+      "query": "show me what's in my knowledge graph",
+      "relevant_tools": [
+        {"server": "server-memory", "tool": "read_graph"}
+      ]
+    },
+    {
+      "id": 44,
+      "category": "obvious",
+      "query": "create a new GitHub repository",
+      "relevant_tools": [
+        {"server": "github-mcp-server", "tool": "create_repository"}
+      ]
+    },
+    {
+      "id": 45,
+      "category": "oblique",
+      "query": "automate browser interactions for testing",
+      "relevant_tools": [
+        {"server": "mcp-server-browserbase", "tool": "act"},
+        {"server": "playwright-mcp", "tool": "browser_click"},
+        {"server": "playwright-mcp", "tool": "browser_type"}
+      ],
+      "notes": "Two competing browser-automation servers (Browserbase + Playwright). Tests how BM25 handles cross-server functional overlap."
+    },
+    {
+      "id": 46,
+      "category": "oblique",
+      "query": "run an AWS CLI command",
+      "relevant_tools": [
+        {"server": "aws-mcp-server", "tool": "aws_cli_pipeline"},
+        {"server": "aws-mcp-server", "tool": "aws_cli_help"}
+      ]
+    },
+    {
+      "id": 47,
+      "category": "obvious",
+      "query": "what's the latest version of a Terraform provider",
+      "relevant_tools": [
+        {"server": "terraform-mcp-server", "tool": "get_latest_provider_version"}
+      ]
+    },
+    {
+      "id": 48,
+      "category": "adversarial",
+      "query": "create",
+      "relevant_tools": [
+        {"server": "server-filesystem", "tool": "create_directory"},
+        {"server": "server-sqlite", "tool": "create_table"},
+        {"server": "server-memory", "tool": "create_entities"},
+        {"server": "server-memory", "tool": "create_relations"},
+        {"server": "server-git", "tool": "git_create_branch"},
+        {"server": "github-mcp-server", "tool": "create_branch"},
+        {"server": "github-mcp-server", "tool": "create_gist"},
+        {"server": "github-mcp-server", "tool": "create_issue"},
+        {"server": "github-mcp-server", "tool": "create_or_update_file"},
+        {"server": "github-mcp-server", "tool": "create_pull_request"},
+        {"server": "github-mcp-server", "tool": "create_pull_request_review"},
+        {"server": "github-mcp-server", "tool": "create_repository"},
+        {"server": "cloudflare-mcp", "tool": "d1_database_create"},
+        {"server": "cloudflare-mcp", "tool": "kv_namespace_create"},
+        {"server": "cloudflare-mcp", "tool": "r2_bucket_create"}
+      ],
+      "notes": "Single verb. Highest-recall query in the set. Tests whether BM25 can return a broad-but-relevant top-K. Precision@K naturally low; Recall@K and the spread of servers in top-K is the signal."
+    }
+  ]
+}

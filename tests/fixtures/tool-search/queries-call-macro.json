@@ -1,0 +1,155 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "created": "2026-05-15",
+    "description": "Empirical validation query set for call_macro ranking behavior. Tests whether BM25 naturally ranks call_macro below direct FlashQuery tools for single-operation queries and at or above direct tools for compound/composition-shaped queries. Referenced by JIT-Compiled Macros Research §15.5 (OQ #11) and Native Tool Search §5.7.11.1. Designed to be run against corpus-flashquery.md plus optionally the original corpus.md to test cross-server effects.",
+    "categories": {
+      "single_shot": "Queries describing a single FlashQuery operation. Expected: direct FlashQuery tool ranks at #1; call_macro either does not appear in top-5 or ranks well below the direct tool.",
+      "compound": "Queries describing chained/composed/multi-step FlashQuery operations. Expected: call_macro ranks #1 or shares top-3 with relevant direct tools — this is the case where call_macro is the right answer.",
+      "borderline": "Queries that could legitimately go either direction. Expected: no failure — either call_macro or direct tools at top-3 is acceptable.",
+      "out_of_scope": "Queries that should not strongly match call_macro OR any FlashQuery tool. Expected: low normalized scores across the board (recall_stress equivalent)."
+    },
+    "expected_winning_config": {
+      "library": "pure",
+      "k1": 2.0,
+      "b": 0.5,
+      "preproc": {"stemming": false, "stopwords": true},
+      "nameBoost": 3
+    },
+    "interpretation": "If call_macro appears in the top-3 for any single_shot query, that is the empirical evidence that would force a score-penalty rule. If call_macro appears outside the top-3 for any compound query, that suggests its description needs lexical strengthening. If both behave correctly, the no-penalty stance is empirically confirmed."
+  },
+  "queries": [
+    {
+      "id": "ss-1",
+      "category": "single_shot",
+      "query": "write a new document to the vault",
+      "expected_top_tool": {"server": "flashquery", "tool": "write_document"},
+      "call_macro_should_not_be_top": true,
+      "notes": "Direct write operation. call_macro's 'execute', 'macro', 'chain' vocabulary should not match 'write', 'document', 'vault'."
+    },
+    {
+      "id": "ss-2",
+      "category": "single_shot",
+      "query": "move a document to a new path",
+      "expected_top_tool": {"server": "flashquery", "tool": "move_document"},
+      "call_macro_should_not_be_top": true
+    },
+    {
+      "id": "ss-3",
+      "category": "single_shot",
+      "query": "archive an old document",
+      "expected_top_tool": {"server": "flashquery", "tool": "archive_document"},
+      "call_macro_should_not_be_top": true
+    },
+    {
+      "id": "ss-4",
+      "category": "single_shot",
+      "query": "search the vault for documents about onboarding",
+      "expected_top_tool": {"server": "flashquery", "tool": "search"},
+      "call_macro_should_not_be_top": true
+    },
+    {
+      "id": "ss-5",
+      "category": "single_shot",
+      "query": "apply tags to a document",
+      "expected_top_tool": {"server": "flashquery", "tool": "apply_tags"},
+      "call_macro_should_not_be_top": true
+    },
+    {
+      "id": "ss-6",
+      "category": "single_shot",
+      "query": "read a specific document from the vault",
+      "expected_top_tool": {"server": "flashquery", "tool": "get_document"},
+      "call_macro_should_not_be_top": true
+    },
+    {
+      "id": "ss-7",
+      "category": "single_shot",
+      "query": "remember that the user prefers concise responses",
+      "expected_top_tool": {"server": "flashquery", "tool": "write_memory"},
+      "call_macro_should_not_be_top": true,
+      "notes": "Indirect query — tests that 'remember' lexically routes to write_memory and not to call_macro."
+    },
+    {
+      "id": "ss-8",
+      "category": "single_shot",
+      "query": "replace one section of a document",
+      "expected_top_tool": {"server": "flashquery", "tool": "replace_doc_section"},
+      "call_macro_should_not_be_top": true
+    },
+
+    {
+      "id": "co-1",
+      "category": "compound",
+      "query": "chain multiple FlashQuery operations together",
+      "expected_call_macro_top": true,
+      "notes": "Directly lexical-matches call_macro's description on 'chain' and 'multiple'."
+    },
+    {
+      "id": "co-2",
+      "category": "compound",
+      "query": "execute a script that combines several tool calls",
+      "expected_call_macro_top": true,
+      "notes": "Matches 'execute', 'script', 'combines', 'tool calls'."
+    },
+    {
+      "id": "co-3",
+      "category": "compound",
+      "query": "compose multiple steps in one round-trip",
+      "expected_call_macro_top": true,
+      "notes": "Matches 'compose', 'multiple', 'round-trip'."
+    },
+    {
+      "id": "co-4",
+      "category": "compound",
+      "query": "run conditional logic over my documents",
+      "expected_call_macro_top": true,
+      "notes": "Conditional logic is a call_macro capability not present in any direct tool."
+    },
+    {
+      "id": "co-5",
+      "category": "compound",
+      "query": "orchestrate a workflow with variables and loops",
+      "expected_call_macro_top": true,
+      "notes": "Matches 'orchestrate', 'variables', 'loops' — all in call_macro's description."
+    },
+    {
+      "id": "co-6",
+      "category": "compound",
+      "query": "run a macro that does several things at once",
+      "expected_call_macro_top": true,
+      "notes": "Direct mention of 'macro'."
+    },
+
+    {
+      "id": "bo-1",
+      "category": "borderline",
+      "query": "write to a document and also tag it",
+      "expected_call_macro_top": false,
+      "expected_top_tool": {"server": "flashquery", "tool": "write_document"},
+      "notes": "Compound goal but stated in single-operation language. Either write_document at #1 with apply_tags top-3, OR call_macro top-3, is acceptable. Tests how BM25 disambiguates."
+    },
+    {
+      "id": "bo-2",
+      "category": "borderline",
+      "query": "do several operations on my vault",
+      "expected_call_macro_top": false,
+      "notes": "Vague compound query. call_macro is reasonable; multiple direct tools also reasonable. Tests recall on compound-shaped vague queries."
+    },
+
+    {
+      "id": "oos-1",
+      "category": "out_of_scope",
+      "query": "make me coffee",
+      "expected_call_macro_top": false,
+      "notes": "Recall_stress equivalent. Normalized scores should be low across the board."
+    },
+    {
+      "id": "oos-2",
+      "category": "out_of_scope",
+      "query": "weather forecast for tomorrow",
+      "expected_call_macro_top": false,
+      "notes": "Recall_stress equivalent."
+    }
+  ]
+}

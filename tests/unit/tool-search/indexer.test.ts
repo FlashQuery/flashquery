@@ -306,8 +306,8 @@ describe('BM25 POC fixtures', () => {
       readFile('tests/fixtures/tool-search/corpus-flashquery.md', 'utf8'),
     ]);
 
-    expect(JSON.parse(queries)).toHaveLength(48);
-    expect(JSON.parse(callMacroQueries)).toHaveLength(18);
+    expect(JSON.parse(queries).queries).toHaveLength(48);
+    expect(JSON.parse(callMacroQueries).queries).toHaveLength(18);
     expect(corpusText.trim().length).toBeGreaterThan(0);
     expect(flashqueryCorpusText.trim().length).toBeGreaterThan(0);
   });
