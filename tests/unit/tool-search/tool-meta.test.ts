@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  assertRegisteredToolsHaveToolMeta,
   DEFAULT_HELP_HINT,
+  loadToolMetaSync,
   TOOL_META_GLOB,
   validateToolMeta,
 } from '../../../src/services/tool-search/tool-meta.js';
@@ -240,6 +242,25 @@ args: {}
     ]) {
       expect(searchToolsText).toContain(term);
     }
+  });
+
+  it('T-U-044 loads the production TOOL_META corpus once from source-tree help pages', () => {
+    const meta = loadToolMetaSync();
+
+    expect(meta.get('get_document')?.description).toBe(
+      'Read one or more vault documents with include-gated bodies, frontmatter, headings, sections, and frontmatter references. Pass {help: true} for full help.'
+    );
+    expect(meta.get('call_macro')?.description).toBe(CANONICAL_CALL_MACRO_DESCRIPTION);
+    expect(meta.get('search_tools')?.helpPageBody).toContain('SearchResult');
+  });
+
+  it('fails startup-style catalog validation when a registered native tool is missing help metadata', () => {
+    const meta = loadToolMetaSync();
+
+    expect(() => assertRegisteredToolsHaveToolMeta([
+      { name: 'get_document' },
+      { name: 'missing_registered_tool' },
+    ], meta)).toThrow('Missing .tool.md metadata for registered tools: missing_registered_tool');
   });
 });
 

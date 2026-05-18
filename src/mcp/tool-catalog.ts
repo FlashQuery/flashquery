@@ -1,5 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { NativeToolDefinition, NativeToolHandler } from '../llm/tool-registry.js';
+import type { ToolMeta } from '../services/tool-search/tool-meta.js';
 import { getToolMetadata } from './tool-metadata.js';
 
 type ToolRegistrationConfig = {
@@ -10,6 +11,7 @@ type ToolRegistrationConfig = {
 type RegisterToolFunction = McpServer['registerTool'];
 type ToolCatalogOptions = {
   hostEnabledToolNames?: ReadonlySet<string>;
+  toolMeta?: ReadonlyMap<string, ToolMeta>;
 };
 
 const toolCatalogs = new WeakMap<McpServer, NativeToolDefinition[]>();
@@ -37,7 +39,7 @@ export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalo
   // catalog. Host exposure filters SDK registration, not macro/agent dispatch
   // catalog membership.
   server.registerTool = ((name: string, config: ToolRegistrationConfig, cb: unknown) => {
-    const metadataDescription = getToolMetadata(name)?.description;
+    const metadataDescription = options.toolMeta?.get(name)?.description ?? getToolMetadata(name)?.description;
     const registeredConfig = metadataDescription === undefined
       ? config
       : { ...config, description: metadataDescription };

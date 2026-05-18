@@ -25,6 +25,7 @@ import { createBroker, type Broker } from '../services/mcp-broker.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from './tool-catalog.js';
 import { validateAndCacheNativeToolSchemas } from '../llm/tool-registry.js';
 import { getResolvedHostToolExposure, type FlashQueryConfig } from '../config/loader.js';
+import { assertRegisteredToolsHaveToolMeta, loadToolMetaSync } from '../services/tool-search/tool-meta.js';
 
 // ── HTTP Error Code and Message Mapping (D-04) ──
 
@@ -469,11 +470,12 @@ export interface CreateMcpServerOptions {
 export function createMcpServer(config: FlashQueryConfig, version: string, options: CreateMcpServerOptions = {}): McpServer {
   const server = new McpServer({ name: 'flashquery', version });
   const broker = options.broker ?? createBroker(config);
+  const toolMeta = loadToolMetaSync();
   // Apply correlation ID wrapping BEFORE tool registration so all 26 tools
   // automatically inherit context without modifying individual tool files.
   wrapServerWithCorrelationIds(server);
   const hostEnabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
-  wrapServerWithToolCatalog(server, { hostEnabledToolNames });
+  wrapServerWithToolCatalog(server, { hostEnabledToolNames, toolMeta });
   registerMemoryTools(server, config);
   registerDocumentTools(server, config);
   registerPluginTools(server, config);
@@ -485,7 +487,9 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   registerLlmTools(server, config, { broker });
   registerLlmUsageTools(server, config);
   registerMacroTools(server, config, { broker });
-  validateAndCacheNativeToolSchemas(getNativeToolCatalog(server));
+  const catalog = getNativeToolCatalog(server);
+  assertRegisteredToolsHaveToolMeta(catalog, toolMeta);
+  validateAndCacheNativeToolSchemas(catalog);
   return server;
 }
 

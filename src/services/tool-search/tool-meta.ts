@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { basename } from 'node:path';
 import fg from 'fast-glob';
@@ -57,6 +58,38 @@ export async function loadToolMeta(): Promise<Map<string, ToolMeta>> {
   }
 
   return result.meta;
+}
+
+export function loadToolMetaSync(): Map<string, ToolMeta> {
+  const filePaths = fg.sync(TOOL_META_GLOB, { onlyFiles: true, unique: true });
+  const sources = filePaths.sort().map((filePath) => ({
+    filePath,
+    raw: readFileSync(filePath, 'utf8'),
+  }));
+  const result = validateToolMeta(sources);
+
+  if (!result.ok) {
+    const errors = result.diagnostics
+      .filter((diagnostic) => diagnostic.level === 'error')
+      .map((diagnostic) => `${diagnostic.filePath}: ${diagnostic.message}`)
+      .join('\n');
+    throw new Error(`Invalid .tool.md metadata:\n${errors}`);
+  }
+
+  return result.meta;
+}
+
+export function assertRegisteredToolsHaveToolMeta(
+  catalog: Array<{ name: string }>,
+  meta: ReadonlyMap<string, ToolMeta>
+): void {
+  const missing = catalog
+    .map((tool) => tool.name)
+    .filter((name) => meta.get(name) === undefined);
+
+  if (missing.length > 0) {
+    throw new Error(`Missing .tool.md metadata for registered tools: ${missing.sort().join(', ')}`);
+  }
 }
 
 export function validateToolMeta(sources: readonly ToolMetaSource[]): ToolMetaValidationResult {

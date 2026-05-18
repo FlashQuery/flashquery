@@ -80,4 +80,14 @@ describe('native tool catalog capture', () => {
       'insert_in_doc',
     ]));
   });
+
+  it('T-U-044 uses .tool.md descriptions in the native catalog at startup', () => {
+    const config = makeConfig();
+    const server = createMcpServer(config, 'test');
+    const catalog = getNativeToolCatalog(server);
+
+    expect(catalog.find((tool) => tool.name === 'get_document')?.description).toBe(
+      'Read one or more vault documents with include-gated bodies, frontmatter, headings, sections, and frontmatter references. Pass {help: true} for full help.'
+    );
+  });
 });
