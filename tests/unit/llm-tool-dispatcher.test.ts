@@ -115,6 +115,19 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
     ]);
     expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-dispatch-cost'))).not.toContain('arg-secret');
     expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-dispatch-cost'))).not.toContain('result-payload');
+
+    clearBrokeredToolCallTrace('trace-dispatch-zero-cost');
+    await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [toolCall('basic__echo', { value: 'zero' }, 'call_zero')],
+      nativeToolNames: [],
+      broker: makeBroker([brokeredTool()], vi.fn(async () => ({
+        content: [{ type: 'text' as const, text: '{"value":"zero"}' }],
+      }))),
+      consumerContext: { kind: 'purpose', purposeId: 'research', traceId: 'trace-dispatch-zero-cost' } satisfies ConsumerContext,
+    }));
+    expect(getBrokeredToolCallTraceSnapshot('trace-dispatch-zero-cost')).toEqual([
+      { server: 'basic', tool: 'echo', count: 1, cost: 0 },
+    ]);
   });
 
   it('routes registry-key tool calls to Broker.callTool after consumer visibility passes', async () => {

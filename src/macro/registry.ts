@@ -1,7 +1,12 @@
 import { z } from 'zod';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { resolveHostToolExposure } from '../mcp/tool-exposure.js';
-import { formatToolError, type Broker, type ConsumerContext } from '../services/mcp-broker.js';
+import {
+  formatToolError,
+  recordBrokeredToolCall,
+  type Broker,
+  type ConsumerContext,
+} from '../services/mcp-broker.js';
 import {
   assembleNativeToolRegistry,
   type NativeToolDefinition,
@@ -138,8 +143,22 @@ function wrapBrokerTool(input: {
     void context;
     const ref = { serverId: input.server, toolName: input.tool };
     const consumerContext = makeBrokerConsumerContext(input.callerContext, input.nativeDispatchContext);
+    const visibleTools = await input.broker.listToolsForConsumer(consumerContext);
+    const visibleTool = visibleTools.find((tool) => tool.serverId === input.server && tool.toolName === input.tool);
+    if (visibleTool === undefined) {
+      throw new MacroExpectedError('unknown_tool', `Brokered tool '${input.server}.${input.tool}' is not available.`, {
+        server: input.server,
+        tool: input.tool,
+      });
+    }
     try {
       const result = await input.broker.callTool(ref, coerceBrokerToolArguments(arg), consumerContext);
+      recordBrokeredToolCall({
+        traceId: consumerContext.traceId,
+        serverId: input.server,
+        toolName: input.tool,
+        costPerCall: visibleTool.costPerCall,
+      });
       if (isCallToolErrorResult(result)) {
         const normalized = formatToolError(result, ref);
         throw new MacroExpectedError('tool_call_failed', normalized.message, normalized);
@@ -147,6 +166,12 @@ function wrapBrokerTool(input: {
       return coerceCallToolResult(result);
     } catch (error: unknown) {
       if (error instanceof MacroExpectedError) throw error;
+      recordBrokeredToolCall({
+        traceId: consumerContext.traceId,
+        serverId: input.server,
+        toolName: input.tool,
+        costPerCall: visibleTool.costPerCall,
+      });
       const normalized = formatToolError(error, ref);
       throw new MacroExpectedError('tool_call_failed', normalized.message, normalized);
     }

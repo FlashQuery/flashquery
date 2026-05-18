@@ -2,7 +2,13 @@ import { z } from 'zod';
 import type { LlmChatToolCall, LlmToolMessage } from './types.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { dispatchTemplateToolCall, type TemplateToolReverseMap } from './template-tools.js';
-import { formatToolError, parseRegistryKey, type Broker, type ConsumerContext } from '../services/mcp-broker/index.js';
+import {
+  formatToolError,
+  parseRegistryKey,
+  recordBrokeredToolCall,
+  type Broker,
+  type ConsumerContext,
+} from '../services/mcp-broker/index.js';
 import type {
   NativeToolDefinition,
   NativeToolDispatchContext,
@@ -200,7 +206,8 @@ async function dispatchBrokeredToolCall(
   }
 
   const visibleTools = await options.broker.listToolsForConsumer(options.consumerContext);
-  if (!visibleTools.some((tool) => tool.registryKey === toolCall.function.name)) {
+  const visibleTool = visibleTools.find((tool) => tool.registryKey === toolCall.function.name);
+  if (visibleTool === undefined) {
     return dispatchError(
       toolCall,
       args,
@@ -213,6 +220,12 @@ async function dispatchBrokeredToolCall(
 
   try {
     const result = await options.broker.callTool(ref, args, options.consumerContext);
+    recordBrokeredToolCall({
+      traceId: options.consumerContext.traceId,
+      serverId: ref.serverId,
+      toolName: ref.toolName,
+      costPerCall: visibleTool.costPerCall,
+    });
     if (result.isError === true) {
       const normalized = formatToolError(result, ref);
       return dispatchError(toolCall, args, normalized.kind, normalized.message, undefined, 'brokered');
@@ -225,6 +238,12 @@ async function dispatchBrokeredToolCall(
       logEntry: makeLogEntry(toolCall, args, payload, content, 'brokered'),
     };
   } catch (error: unknown) {
+    recordBrokeredToolCall({
+      traceId: options.consumerContext.traceId,
+      serverId: ref.serverId,
+      toolName: ref.toolName,
+      costPerCall: visibleTool.costPerCall,
+    });
     const normalized = formatToolError(error, ref);
     return dispatchError(toolCall, args, normalized.kind, normalized.message, undefined, 'brokered');
   }

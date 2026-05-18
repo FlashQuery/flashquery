@@ -34,6 +34,10 @@ export interface LlmUsageRecord {
   traceId: string | null;
 }
 
+export interface BrokeredToolCallsTrace {
+  tool_calls: Array<{ server: string; tool: string; count: number; cost: number }>;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // computeCost — relocated from src/mcp/tools/llm.ts (D-02)
 // Formula: (inputTokens * cpm.input + outputTokens * cpm.output) / 1_000_000

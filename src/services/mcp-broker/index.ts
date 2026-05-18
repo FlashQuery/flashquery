@@ -7,6 +7,7 @@ import type { Broker, BrokerClientConfig, BrokerConnectionOptions, BrokeredTool,
 export { BrokerClient } from './client.js';
 export { formatToolError, stripRawFromToolError } from './errors.js';
 export { ToolRegistry, isRegistryKey, makeRegistryKey, parseMacroRef, parseRegistryKey } from './registry.js';
+export { clearBrokeredToolCallTrace, getBrokeredToolCallTraceSnapshot, recordBrokeredToolCall } from './trace.js';
 export { canonicalJson, hashToolSchema } from './tofu.js';
 export type * from './types.js';
 

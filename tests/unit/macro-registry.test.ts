@@ -83,6 +83,18 @@ const catalog = [
   nativeTool('call_macro'),
 ];
 
+function brokeredSearchTool(costPerCall = 0) {
+  return {
+    serverId: 'brave_search',
+    toolName: 'web_search',
+    registryKey: 'brave_search__web_search',
+    description: 'Search',
+    inputSchema: { type: 'object' },
+    tofuHash: 'hash',
+    costPerCall,
+  };
+}
+
 describe('macro ToolRegistry construction', () => {
   it('records brokered macro tool_calls trace entries using visible broker tool cost', async () => {
     clearBrokeredToolCallTrace('trace-registry');
@@ -199,7 +211,7 @@ describe('macro ToolRegistry construction', () => {
       ensureConnected: vi.fn(),
       isConnected: vi.fn(async (serverId: string) => serverId === 'brave_search'),
       callTool,
-      listToolsForConsumer: vi.fn(async (_ctx: ConsumerContext) => []),
+      listToolsForConsumer: vi.fn(async (_ctx: ConsumerContext) => [brokeredSearchTool()]),
       shutdown: vi.fn(),
     };
 
@@ -231,7 +243,7 @@ describe('macro ToolRegistry construction', () => {
         content: [{ type: 'text' as const, text: 'upstream rejected' }],
         isError: true,
       })),
-      listToolsForConsumer: vi.fn(async () => []),
+      listToolsForConsumer: vi.fn(async () => [brokeredSearchTool()]),
       shutdown: vi.fn(),
     };
 
@@ -260,7 +272,7 @@ describe('macro ToolRegistry construction', () => {
         structuredContent: { ok: true },
         content: [{ type: 'text' as const, text: '{"ok":true}' }],
       })),
-      listToolsForConsumer: vi.fn(async () => []),
+      listToolsForConsumer: vi.fn(async () => [brokeredSearchTool()]),
       shutdown: vi.fn(),
     };
     const brokerWithExplodingLegacyProbe = Object.assign(broker, {
@@ -291,7 +303,7 @@ describe('macro ToolRegistry construction', () => {
       ensureConnected: vi.fn(),
       isConnected: vi.fn(),
       callTool,
-      listToolsForConsumer: vi.fn(async () => []),
+      listToolsForConsumer: vi.fn(async () => [brokeredSearchTool()]),
       shutdown: vi.fn(),
     };
     const context = nativeDispatchContext();
