@@ -46,12 +46,12 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 ### Registry And Dispatch
 
-- [ ] **REQ-027**: Registry is keyed by `(serverId, toolName)` with one `RegistryKey` string form.
-- [ ] **REQ-028**: `parseMacroRef(ref)` splits on the first dot only.
-- [ ] **REQ-029**: `makeRegistryKey(serverId, toolName)` produces the LLM-facing tool name.
-- [ ] **REQ-030**: FQ-native tools are not registry-keyed with an `fq__` prefix.
-- [ ] **REQ-031**: A single registry supports per-consumer filtered views.
-- [ ] **REQ-032**: Tool-name collisions across servers retain unique registry keys.
+- [x] **REQ-027**: Registry is keyed by `(serverId, toolName)` with one `RegistryKey` string form.
+- [x] **REQ-028**: `parseMacroRef(ref)` splits on the first dot only.
+- [x] **REQ-029**: `makeRegistryKey(serverId, toolName)` produces the LLM-facing tool name.
+- [x] **REQ-030**: FQ-native tools are not registry-keyed with an `fq__` prefix.
+- [x] **REQ-031**: A single registry supports per-consumer filtered views.
+- [x] **REQ-032**: Tool-name collisions across servers retain unique registry keys.
 - [ ] **REQ-033**: `tool-dispatcher.ts` routes brokered registry keys to `Broker.callTool`.
 - [ ] **REQ-034**: Brokered `CallToolResult` values are wrapped as `NativeToolResponse` for the agent loop.
 - [ ] **REQ-035**: Dispatch routing respects consumer visibility.
@@ -78,10 +78,10 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 ### Errors, Health, Notifications, And Observability
 
-- [ ] **REQ-050**: Every broker-emitted error normalizes through `formatToolError(input)`.
-- [ ] **REQ-051**: `ToolErrorKind` discriminated union is the canonical taxonomy.
-- [ ] **REQ-052**: `experimental_tasks_required` subkind is emitted when the SDK error matches the required regex.
-- [ ] **REQ-053**: `raw` is stripped before any process-boundary egress.
+- [x] **REQ-050**: Every broker-emitted error normalizes through `formatToolError(input)`.
+- [x] **REQ-051**: `ToolErrorKind` discriminated union is the canonical taxonomy.
+- [x] **REQ-052**: `experimental_tasks_required` subkind is emitted when the SDK error matches the required regex.
+- [x] **REQ-053**: `raw` is stripped before any process-boundary egress.
 - [ ] **REQ-054**: `Broker.isConnected(serverId, opts)` is a live probe.
 - [ ] **REQ-055**: Default connection-health mode is deep probe.
 - [ ] **REQ-056**: Shallow probe is opt-in.
@@ -143,9 +143,9 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [ ] **REQ-103**: `_self` engine binding is available for `source_ref` macros.
 - [ ] **REQ-104**: `continue` and `break` loop-control statements are supported.
 - [ ] **REQ-105**: `needs_user_input` macro exit reason is supported.
-- [ ] **REQ-106**: `CallToolResult` coercion rule includes the `isError` carve-out.
-- [ ] **REQ-107**: Brokered-tool errors propagate fail-fast by default.
-- [ ] **REQ-108**: Macro object arguments pass through without coercion.
+- [x] **REQ-106**: `CallToolResult` coercion rule includes the `isError` carve-out.
+- [x] **REQ-107**: Brokered-tool errors propagate fail-fast by default.
+- [x] **REQ-108**: Macro object arguments pass through without coercion.
 - [ ] **REQ-109**: `<server>._exists()` uses deep probe.
 - [ ] **REQ-110**: Concurrent macro execution against shared brokered servers is safe.
 - [ ] **REQ-111**: Brokered tools have no broker-side tier classification.

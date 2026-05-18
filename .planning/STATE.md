@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: in_progress
-stopped_at: Completed 139-01-PLAN.md
-last_updated: "2026-05-18T01:19:08.960Z"
-last_activity: 2026-05-18 — Completed 139-01 broker config/types foundation
+stopped_at: Completed 139-02-PLAN.md
+last_updated: "2026-05-18T01:28:25.551Z"
+last_activity: 2026-05-18 — Completed 139-02 registry/errors/macro coercion foundation
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
-  percent: 17
+  completed_plans: 2
+  percent: 33
 ---
 
 # FlashQuery Core — State
@@ -26,15 +26,15 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 ## Current Position
 
 Phase: 139 — Broker Foundation, Registry, And Dispatch
-Plan: 02 — Registry utilities, error taxonomy, and macro CallToolResult coercion
-Status: Phase 139 in progress; 139-01 complete
-Last activity: 2026-05-18 — Completed 139-01 broker config/types foundation
+Plan: 03 — Stdio BrokerClient lifecycle and public broker orchestration
+Status: Phase 139 in progress; 139-02 complete
+Last activity: 2026-05-18 — Completed 139-02 registry/errors/macro coercion foundation
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 37 (this milestone)
+- Total plans completed: 38 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -128,6 +128,7 @@ Last activity: 2026-05-18 — Completed 139-01 broker config/types foundation
 | Phase 138 P03 | 13m09s | 2 tasks | 5 files |
 | Phase 138 P04 | 51m | 3 tasks | 35 files |
 | Phase 139 P01 | 5m05s | 2 tasks | 5 files |
+| Phase 139 P02 | 5m23s | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -232,6 +233,9 @@ Last activity: 2026-05-18 — Completed 139-01 broker config/types foundation
 - [Phase 138]: Executed migrated macro POC examples as runMacroSource fixtures with deterministic native and broker stubs. — Deterministic stubs keep fixture validation local, fast, and independent of external brokers.
 - [Phase 139]: 139-01 kept broker config support scoped to parsing and validation; runtime host registration, BM25 indexing, and hot reload remain later plans.
 - [Phase 139]: 139-01 TOFU hashes use upstream name, description, and inputSchema only; downstream description overrides are excluded from hash input.
+- [Phase 139]: 139-02 ToolRegistry accepts structural config-shaped input and returns copy-on-read consumer-filtered views.
+- [Phase 139]: 139-02 McpError normalization uses structural code detection in addition to instanceof for SDK/runtime compatibility.
+- [Phase 139]: 139-02 Brokered macro CallToolResult coercion lives in src/macro/coerce.ts and checks isError before value binding.
 
 ## Accumulated Context
 
@@ -345,8 +349,8 @@ Last activity: 2026-05-18 — Completed 139-01 broker config/types foundation
 
 ## Session Continuity
 
-Last session: 2026-05-18T01:19:08.937Z
-Stopped at: Completed 139-01-PLAN.md
+Last session: 2026-05-18T01:28:25.528Z
+Stopped at: Completed 139-02-PLAN.md
 Resume: None
 
 ## Deferred Items
