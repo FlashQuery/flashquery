@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
-status: in_progress
-stopped_at: Completed 139-05-PLAN.md
-last_updated: "2026-05-18T02:19:44.118Z"
-last_activity: 2026-05-18 — Completed 139-05 Phase A E2E and directed broker coverage
+status: executing
+stopped_at: Completed 139-06-PLAN.md
+last_updated: "2026-05-18T02:56:00.000Z"
+last_activity: 2026-05-18 — Completed 139-06 Phase A YAML scenarios and validation record
 progress:
   total_phases: 5
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_plans: 6
+  percent: 20
 ---
 
 # FlashQuery Core — State
@@ -21,20 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** v3.5 MCP Broker — ready to plan Phase 139
+**Current focus:** v3.5 MCP Broker — ready to plan Phase 140
 
 ## Current Position
 
 Phase: 139 — Broker Foundation, Registry, And Dispatch
-Plan: 05 — Phase A E2E and directed scenario coverage
-Status: Phase 139 in progress; 139-05 complete
-Last activity: 2026-05-18 — Completed 139-05 Phase A E2E and directed broker coverage
+Plan: 06 — Phase A YAML scenarios and validation record
+Status: Phase 139 complete; ready for Phase 140 planning
+Last activity: 2026-05-18 — Completed 139-06 Phase A YAML scenarios and validation record
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 39 (this milestone)
+- Total plans completed: 40 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -132,6 +132,7 @@ Last activity: 2026-05-18 — Completed 139-05 Phase A E2E and directed broker c
 | Phase 139 P03 | 28m43s | 3 tasks | 10 files |
 | Phase 139 P04 | 13m34s | 5 tasks | 14 files |
 | Phase 139 P05 | 14m12s | 2 tasks | 5 files |
+| Phase 139 P06 | 36min | 2 tasks | 11 files |
 
 ## Decisions
 
@@ -247,6 +248,8 @@ Last activity: 2026-05-18 — Completed 139-05 Phase A E2E and directed broker c
 - [Phase 139]: 139-04 Brokered tool_calls trace entries store only server, tool, count, and resolved cost.
 - [Phase 139]: 139-05 Public call_macro broker dispatch uses the MCP session ID as trace ID so brokered tool_calls cost snapshots are observable.
 - [Phase 139]: 139-05 Directed Phase A broker scenarios force a dedicated managed server to inject stdio fixture mcp_servers config.
+- [Phase 139]: Use an in-process OpenAI-compatible mock endpoint for YAML call_model tests so broker dispatch scenarios do not depend on external network or API credentials.
+- [Phase 139]: Expose only sanitized broker trace snapshots through call_model metadata, preserving observable cost assertions without leaking raw broker internals.
 
 ## Accumulated Context
 
@@ -360,8 +363,8 @@ Last activity: 2026-05-18 — Completed 139-05 Phase A E2E and directed broker c
 
 ## Session Continuity
 
-Last session: 2026-05-18T02:19:44.087Z
-Stopped at: Completed 139-05-PLAN.md
+Last session: 2026-05-18T02:53:51.121Z
+Stopped at: Completed 139-06-PLAN.md
 Resume: None
 
 ## Deferred Items
