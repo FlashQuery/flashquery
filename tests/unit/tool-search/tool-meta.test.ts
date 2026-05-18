@@ -1,9 +1,31 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_HELP_HINT,
   TOOL_META_GLOB,
   validateToolMeta,
 } from '../../../src/services/tool-search/tool-meta.js';
+
+const CORE_HELP_PAGE_BATCH = [
+  'apply_tags',
+  'archive_document',
+  'archive_memory',
+  'copy_document',
+  'get_document',
+  'get_memory',
+  'search',
+  'write_document',
+  'write_memory',
+] as const;
+
+const REQUIRED_HELP_SECTIONS = [
+  'purpose',
+  'params',
+  'returns',
+  'examples',
+  'gotchas',
+  'related tools',
+] as const;
 
 const VALID_BODY = `
 # Test tool
@@ -149,5 +171,31 @@ args: {}
 
   it('keeps the production loader fixed to source-tree tool help pages', () => {
     expect(TOOL_META_GLOB).toBe('src/mcp/tools/*.tool.md');
+  });
+
+  it('validates the first core memory document search help-page batch', () => {
+    const sources = CORE_HELP_PAGE_BATCH.map((name) => ({
+      filePath: `src/mcp/tools/${name}.tool.md`,
+      raw: readFileSync(`src/mcp/tools/${name}.tool.md`, 'utf8'),
+    }));
+
+    const result = validateToolMeta(sources);
+
+    expect(result.ok).toBe(true);
+    expect([...result.meta.keys()].sort()).toEqual([...CORE_HELP_PAGE_BATCH].sort());
+
+    for (const name of CORE_HELP_PAGE_BATCH) {
+      const meta = result.meta.get(name);
+      expect(meta).toBeDefined();
+      expect(meta?.description).toMatch(/help\s*[`:{]?\s*true[`}]?[^.]*\.\s*$/i);
+      expect(meta?.helpHint).toEqual(expect.any(String));
+      expect(meta?.helpHint.length).toBeGreaterThan(0);
+      expect(meta?.helpPageBody.trim().length).toBeGreaterThan(0);
+
+      const body = meta?.helpPageBody ?? '';
+      for (const section of REQUIRED_HELP_SECTIONS) {
+        expect(body).toMatch(new RegExp(`^## ${section}$`, 'im'));
+      }
+    }
   });
 });
