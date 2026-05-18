@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { LlmChatMessage, LlmChatResult, LlmChatToolCall } from '../../src/llm/types.js';
+import type { Broker, BrokeredTool, ConsumerContext } from '../../src/services/mcp-broker/index.js';
 
 type AgentLoopModule = {
   executeAgentLoop: (options: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -75,7 +76,87 @@ function buildOptions(overrides: Record<string, unknown> = {}): Record<string, u
   };
 }
 
+function brokeredTool(overrides: Partial<BrokeredTool> = {}): BrokeredTool {
+  return {
+    serverId: 'basic',
+    toolName: 'echo',
+    registryKey: 'basic__echo',
+    description: 'Echoes a value through the broker.',
+    inputSchema: {
+      type: 'object',
+      properties: { value: {} },
+      additionalProperties: false,
+    },
+    tofuHash: 'hash-basic-echo',
+    costPerCall: 0,
+    ...overrides,
+  };
+}
+
+function makeBroker(tools: BrokeredTool[]): Broker {
+  return {
+    ensureConnected: vi.fn(),
+    callTool: vi.fn(),
+    isConnected: vi.fn(async () => false),
+    listToolsForConsumer: vi.fn(async (_ctx: ConsumerContext) => tools),
+    shutdown: vi.fn(),
+  };
+}
+
 describe('ATL-U-13 loop executor state machine contract', () => {
+  it('adds consumer-visible brokered tools to delegated model calls using registry-key names', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const broker = makeBroker([brokeredTool()]);
+    const chat: ScriptedChat = vi.fn()
+      .mockResolvedValueOnce(chatResult({
+        message: { role: 'assistant', content: 'done' },
+        finishReason: 'stop',
+      }));
+
+    const result = await executeAgentLoop(buildOptions({
+      broker,
+      chat,
+      traceId: 'trace-broker-visible',
+      nativeToolNames: ['get_document'],
+      providerTools: [{ type: 'function', function: { name: 'get_document', parameters: {} } }],
+    }));
+
+    expect(broker.listToolsForConsumer).toHaveBeenCalledWith({
+      kind: 'purpose',
+      purposeId: 'research',
+      traceId: 'trace-broker-visible',
+    });
+    expect(chat).toHaveBeenCalledWith('research', expect.any(Array), expect.objectContaining({
+      tools: expect.arrayContaining([
+        expect.objectContaining({
+          type: 'function',
+          function: expect.objectContaining({
+            name: 'basic__echo',
+            description: 'Echoes a value through the broker.',
+            parameters: brokeredTool().inputSchema,
+          }),
+        }),
+      ]),
+    }));
+    expect(result.metadata.tools.native_tool_names).toEqual(['get_document']);
+  });
+
+  it('does not enter delegated tool mode when the purpose has no native or brokered tools', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const broker = makeBroker([]);
+    const chat = vi.fn();
+
+    const result = await executeAgentLoop(buildOptions({
+      broker,
+      chat,
+      nativeToolNames: [],
+      providerTools: [],
+    }));
+
+    expect(result).toHaveProperty('mode', 'mode_1');
+    expect(chat).not.toHaveBeenCalled();
+  });
+
   it('ATL-U-13 selects Mode 2 when the final model-visible registry is non-empty and returns stop_reason final_response', async () => {
     const { executeAgentLoop } = await loadAgentLoop();
     const result = await executeAgentLoop(buildOptions());
