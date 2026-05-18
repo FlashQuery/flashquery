@@ -422,7 +422,7 @@ afterAll(async () => {
 });
 
 describe('Phase A MCP broker E2E', () => {
-  it('T-E-A1 invokes a stdio brokered fixture tool through public call_macro and records resolved cost', async () => {
+  it('T-E-A1 / T-E-D1 invokes a stdio brokered fixture tool through public call_macro and records host trace scope', async () => {
     const messages = await callMacro(102, {
       trace: 'summary',
       source: `
@@ -441,7 +441,14 @@ describe('Phase A MCP broker E2E', () => {
     });
     expect(JSON.stringify(payload)).not.toContain('No MCP broker is configured');
     expect(getBrokeredToolCallTraceSnapshot(sessionId ?? '')).toEqual([
-      { server: 'basic', tool: 'echo', count: 1, cost: 0.25 },
+      {
+        server: 'basic',
+        tool: 'echo',
+        count: 1,
+        cost: 0.25,
+        consumer_kind: 'host',
+        trace_id: sessionId,
+      },
     ]);
   });
 });

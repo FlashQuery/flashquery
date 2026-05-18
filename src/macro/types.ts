@@ -20,6 +20,7 @@ export interface MacroCallerContext {
   origin: 'host' | 'delegated';
   purposeName?: string;
   interactive?: boolean;
+  consumerContext?: import('../services/mcp-broker/types.js').ConsumerContext;
 }
 
 export interface MacroNeedsUserInputPayload {

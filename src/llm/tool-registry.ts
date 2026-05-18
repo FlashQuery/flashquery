@@ -1,5 +1,6 @@
 import type { FlashQueryConfig } from '../config/loader.js';
 import type { logger } from '../logging/logger.js';
+import type { MacroCallerContext } from '../macro/types.js';
 import { z } from 'zod';
 import type {
   TemplateToolDiagnostics,
@@ -23,6 +24,7 @@ export interface NativeToolDispatchContext {
   instanceId: string;
   logger?: Pick<typeof logger, 'debug' | 'warn' | 'error'>;
   logContext?: Record<string, unknown>;
+  macroCallerContext?: MacroCallerContext;
 }
 
 export type NativeToolHandler = (

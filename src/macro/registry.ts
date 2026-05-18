@@ -30,6 +30,7 @@ export interface BrokerToolServerConfig {
   server: string;
   label: string;
   tools: string[];
+  toolCosts?: Record<string, number>;
 }
 
 export interface BuildToolRegistryOptions {
@@ -142,6 +143,7 @@ function wrapBrokerTool(input: {
   broker: Broker;
   server: string;
   tool: string;
+  costPerCall?: number;
   nativeDispatchContext: NativeToolDispatchContext;
   callerContext: MacroCallerContext;
 }): ToolFn {
@@ -150,7 +152,7 @@ function wrapBrokerTool(input: {
     const ref = { serverId: input.server, toolName: input.tool };
     const consumerContext = makeBrokerConsumerContext(input.callerContext, input.nativeDispatchContext);
     const visibleTools = await input.broker.listToolsForConsumer(consumerContext);
-    const visibleTool = visibleTools.find((tool) => tool.serverId === input.server && tool.toolName === input.tool);
+    let visibleTool = visibleTools.find((tool) => tool.serverId === input.server && tool.toolName === input.tool);
     if (visibleTool === undefined) {
       const pendingDrifts = input.broker
         .getPendingSchemaDrift(consumerContext)
@@ -170,10 +172,21 @@ function wrapBrokerTool(input: {
             : pendingDrift
         );
       }
+      if (input.callerContext.consumerContext !== undefined) {
+        visibleTool = {
+          serverId: input.server,
+          toolName: input.tool,
+          registryKey: `${input.server}__${input.tool}`,
+          inputSchema: {},
+          tofuHash: '',
+          costPerCall: input.costPerCall ?? 0,
+        };
+      } else {
       throw new MacroExpectedError('unknown_tool', `Brokered tool '${input.server}.${input.tool}' is not available.`, {
         server: input.server,
         tool: input.tool,
       });
+      }
     }
     try {
       const result = await input.broker.callTool(ref, coerceBrokerToolArguments(arg), consumerContext);
@@ -204,6 +217,9 @@ function makeBrokerConsumerContext(
   callerContext: MacroCallerContext,
   dispatchContext: NativeToolDispatchContext
 ): ConsumerContext {
+  if (callerContext.consumerContext !== undefined) {
+    return callerContext.consumerContext;
+  }
   const traceId = dispatchContext.traceId ?? '';
   if (callerContext.origin === 'delegated') {
     return {
@@ -261,11 +277,18 @@ function deriveTemplateToolNames(options: BuildToolRegistryOptions): string[] {
 
 export function buildToolRegistry(options: BuildToolRegistryOptions): BuildToolRegistryResult {
   const { nativeToolNames, hardExcludedReasons } = deriveNativeToolNames(options);
-  const allowedNativeNames = nativeToolNames.filter((toolName) => toolName !== 'call_macro');
+  const purposeRequestedCallMacro = options.callerContext.origin === 'delegated' &&
+    (options.config.llm?.purposes.find((purpose) =>
+      purpose.name.toLowerCase() === (options.callerContext.purposeName ?? '').toLowerCase()
+    )?.tools ?? []).includes('call_macro');
+  const allowedNativeNames = [
+    ...nativeToolNames,
+    ...(purposeRequestedCallMacro && options.catalog.some((tool) => tool.name === 'call_macro') ? ['call_macro'] : []),
+  ];
   const fqTools: Record<string, ToolFn> = {};
 
   for (const tool of options.catalog) {
-    if (tool.name === 'call_macro') continue;
+    if (tool.name === 'call_macro' && !allowedNativeNames.includes('call_macro')) continue;
     if (hardExcludedReasons.has(`${FQ_SERVER}.${tool.name}`)) continue;
     const toolName = tool.name;
     fqTools[toolName] = wrapNativeTool(tool, options.nativeDispatchContext);
@@ -286,6 +309,7 @@ export function buildToolRegistry(options: BuildToolRegistryOptions): BuildToolR
         broker: options.broker,
         server: brokerServer.server,
         tool,
+        costPerCall: brokerServer.toolCosts?.[tool],
         nativeDispatchContext: options.nativeDispatchContext,
         callerContext: options.callerContext,
       });

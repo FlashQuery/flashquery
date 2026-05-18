@@ -201,7 +201,7 @@ export class McpBroker implements Broker {
   }
 
   async listToolsForConsumer(ctx: ConsumerContext): Promise<BrokeredTool[]> {
-    await Promise.all(
+    await Promise.allSettled(
       this.#registry
         .listVisibleServerIds(ctx)
         .filter((serverId) => this.#clients.has(serverId))

@@ -275,13 +275,20 @@ export async function resolveMacroSourceForRequest(
 }
 
 export async function runMacroSource(options: RunMacroSourceOptions): Promise<RunMacroSourceResult> {
-  const callerContext = options.callerContext ?? { origin: 'host' as const };
+  const callerContext = establishMacroCallerContext(
+    options.callerContext ?? { origin: 'host' as const },
+    options.nativeDispatchContext.traceId ?? null
+  );
+  const nativeDispatchContext: NativeToolDispatchContext = {
+    ...options.nativeDispatchContext,
+    macroCallerContext: callerContext,
+  };
   const toolRegistry = buildToolRegistry({
     config: options.config,
     callerContext,
     broker: options.broker,
     catalog: options.catalog,
-    nativeDispatchContext: options.nativeDispatchContext,
+    nativeDispatchContext,
     brokerTools: options.brokerTools,
     templateReverseMap: options.templateReverseMap,
     templateToolNames: options.templateToolNames,
@@ -406,6 +413,35 @@ function createNativeDispatchContext(config: FlashQueryConfig, signal?: AbortSig
   };
 }
 
+function establishMacroCallerContext(
+  callerContext: MacroCallerContext,
+  traceId: string | null
+): MacroCallerContext {
+  if (callerContext.consumerContext !== undefined) return callerContext;
+  const resolvedTraceId = traceId ?? '';
+  if (callerContext.origin === 'delegated') {
+    return {
+      ...callerContext,
+      consumerContext: {
+        kind: 'purpose',
+        purposeId: callerContext.purposeName ?? '',
+        traceId: resolvedTraceId,
+        ...(callerContext.interactive === undefined ? {} : { interactive: callerContext.interactive }),
+      },
+    };
+  }
+  const interactive = callerContext.interactive ?? true;
+  return {
+    ...callerContext,
+    interactive,
+    consumerContext: {
+      kind: 'host',
+      traceId: resolvedTraceId,
+      interactive,
+    },
+  };
+}
+
 async function loadRuntimeTemplateBindings(config: FlashQueryConfig) {
   if (config.llm === undefined) return [];
   const { loadPurposeTemplateRuntimeBindings } = await import('../../llm/purpose-template-bindings.js');
@@ -468,17 +504,25 @@ export function registerMacroTools(
           return resolvedSource.result;
         }
 
-        const callerContext: MacroCallerContext = { origin: 'host' };
         const currentSessionId = options.sessionIdProvider?.(extra) ?? resolveSessionId(extra) ?? registrationSessionId;
-        const consumerContext = { kind: 'host' as const, traceId: currentSessionId };
-        applyTofuDecisionsFromInputVars(broker, params.input_vars, currentSessionId);
+        const parentCallerContext = (extra as RequestHandlerExtra<ServerRequest, ServerNotification> & {
+          macroCallerContext?: MacroCallerContext;
+        }).macroCallerContext;
+        const callerContext: MacroCallerContext = establishMacroCallerContext(
+          parentCallerContext ?? { origin: 'host' },
+          currentSessionId
+        );
+        const consumerContext = callerContext.consumerContext ?? { kind: 'host' as const, traceId: currentSessionId, interactive: true };
+        const currentTraceId = consumerContext.traceId;
+        applyTofuDecisionsFromInputVars(broker, params.input_vars, currentTraceId);
         await broker.listToolsForConsumer(consumerContext);
-        applyTofuDecisionsFromInputVars(broker, params.input_vars, currentSessionId);
+        applyTofuDecisionsFromInputVars(broker, params.input_vars, currentTraceId);
         const visibleBrokerTools = await broker.listToolsForConsumer(consumerContext);
         const pendingBrokerTools = broker.getPendingSchemaDrift(consumerContext).map((drift) => ({
           serverId: drift.server,
           toolName: drift.tool,
         }));
+        const sourceBrokerTools = inferBrokerToolsFromSource(resolvedSource.source, config, callerContext);
         const { getNativeToolCatalog } = await import('../tool-catalog.js');
         const catalog = getNativeToolCatalog(server);
         const templateMetadata = await assembleMacroTemplateMetadata({
@@ -495,9 +539,13 @@ export function registerMacroTools(
           catalog,
           broker,
           taskRegistry,
-          sessionId: currentSessionId,
+          sessionId: currentTraceId,
           nativeDispatchContext: createNativeDispatchContext(config, extra?.signal, currentSessionId),
-          brokerTools: options.brokerTools ?? groupBrokerToolsForMacro([...visibleBrokerTools, ...pendingBrokerTools]),
+          brokerTools: options.brokerTools ?? groupBrokerToolsForMacro([
+            ...visibleBrokerTools,
+            ...pendingBrokerTools,
+            ...sourceBrokerTools,
+          ]),
           templateReverseMap: templateMetadata.templateReverseMap,
           templateToolNames: templateMetadata.templateToolNames,
           budget: params.budget,
@@ -526,17 +574,47 @@ export function registerMacroTools(
   return { registrationSessionId };
 }
 
-function groupBrokerToolsForMacro(tools: Array<Pick<BrokeredTool, 'serverId' | 'toolName'>>): BrokerToolServerConfig[] {
-  const byServer = new Map<string, { label: string; tools: string[] }>();
+function inferBrokerToolsFromSource(
+  source: string,
+  config: FlashQueryConfig,
+  callerContext: MacroCallerContext
+): Array<Pick<BrokeredTool, 'serverId' | 'toolName' | 'costPerCall'>> {
+  const consumerContext = callerContext.consumerContext;
+  const visibleServers = consumerContext?.kind === 'purpose'
+    ? new Set(config.llm?.purposes.find((purpose) =>
+      purpose.name.toLowerCase() === consumerContext.purposeId.toLowerCase()
+    )?.mcpServers ?? [])
+    : new Set(config.host?.mcpServers ?? []);
+  const refs: Array<Pick<BrokeredTool, 'serverId' | 'toolName' | 'costPerCall'>> = [];
+  for (const match of source.matchAll(/\b([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\s*\(/g)) {
+    const serverId = match[1] ?? '';
+    const toolName = match[2] ?? '';
+    if (serverId === 'fq' || !visibleServers.has(serverId)) continue;
+    const serverConfig = config.mcpServers?.[serverId];
+    refs.push({
+      serverId,
+      toolName,
+      costPerCall: serverConfig?.toolOverrides?.[toolName]?.costPerCall ?? serverConfig?.costPerCall ?? 0,
+    });
+  }
+  return refs;
+}
+
+function groupBrokerToolsForMacro(tools: Array<Pick<BrokeredTool, 'serverId' | 'toolName'> & Partial<Pick<BrokeredTool, 'costPerCall'>>>): BrokerToolServerConfig[] {
+  const byServer = new Map<string, { label: string; tools: string[]; toolCosts: Record<string, number> }>();
   for (const tool of tools) {
-    const existing = byServer.get(tool.serverId) ?? { label: tool.serverId, tools: [] };
+    const existing = byServer.get(tool.serverId) ?? { label: tool.serverId, tools: [], toolCosts: {} };
     existing.tools.push(tool.toolName);
+    if (typeof tool.costPerCall === 'number') {
+      existing.toolCosts[tool.toolName] = tool.costPerCall;
+    }
     byServer.set(tool.serverId, existing);
   }
   return [...byServer.entries()].map(([server, value]) => ({
     server,
     label: value.label,
     tools: value.tools,
+    toolCosts: value.toolCosts,
   }));
 }
 

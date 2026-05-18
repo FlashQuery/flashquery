@@ -240,8 +240,8 @@ describe('macro ToolRegistry construction', () => {
 
     expect(fqEntry.label).toBe('FlashQuery');
     expect(Object.keys(fqEntry.tools)).toEqual(expect.arrayContaining(['search', 'write_document', 'call_model']));
-    expect(Object.keys(fqEntry.tools)).not.toContain('call_macro');
-    expect(result.allowedToolNames).toEqual(expect.arrayContaining(['fq.search', 'fq.write_document', 'fq.call_model']));
+    expect(Object.keys(fqEntry.tools)).toEqual(expect.arrayContaining(['call_macro']));
+    expect(result.allowedToolNames).toEqual(expect.arrayContaining(['fq.search', 'fq.write_document', 'fq.call_model', 'fq.call_macro']));
     expect(await searchTool({}, {} as Parameters<ToolFn>[1])).toMatchObject({ ok: true, name: 'search' });
   });
 
@@ -268,7 +268,7 @@ describe('macro ToolRegistry construction', () => {
     });
 
     expect(Object.keys(result.registry.fq.tools)).toEqual(expect.arrayContaining(['search', 'archive_document']));
-    expect(Object.keys(result.registry.fq.tools)).not.toContain('call_macro');
+    expect(Object.keys(result.registry.fq.tools)).toContain('call_macro');
     expect(Object.keys(result.registry.fq.tools)).not.toContain('call_model');
     expect(result.allowedToolNames).toEqual(expect.arrayContaining(['fq.search', 'fq.archive_document']));
     expect(result.hardExcludedReasons.get('fq.call_model')).toBe('recursive_model_excluded_from_delegated_macros');
@@ -286,9 +286,9 @@ describe('macro ToolRegistry construction', () => {
       templateReverseMap,
     });
 
-    expect(result.registry.fq.tools.call_macro).toBeUndefined();
+    expect(result.registry.fq.tools.call_macro).toEqual(expect.any(Function));
     expect(result.templateToolNames).toContain('flashquery_template_brief');
-    expect(result.allowedToolNames).not.toContain('fq.call_macro');
+    expect(result.allowedToolNames).toContain('fq.call_macro');
   });
 
   it('dispatches brokered macro tools through raw Broker.callTool and coerces successful CallToolResult values', async () => {
@@ -637,7 +637,7 @@ describe('macro ToolRegistry construction', () => {
     };
     const result = await buildToolRegistry({
       config: makeConfig(),
-      callerContext: { origin: 'delegated', purposeName: 'scheduled', interactive: false },
+      callerContext: { origin: 'delegated', purposeName: 'research', interactive: false },
       broker,
       catalog,
       nativeDispatchContext: nativeDispatchContext(),
@@ -683,7 +683,7 @@ describe('macro ToolRegistry construction', () => {
     }, z.object({ source: z.string() }));
 
     const result = await runMacroSource({
-      source: 'exit fq.call_macro({ source: "brave_search.web_search({ query: \\"FlashQuery\\" })" })',
+      source: 'exit fq.call_macro({ source: "brave_search.web_search({})" })',
       callerContext: { origin: 'host' },
       config,
       catalog: [nestedCallMacro],
@@ -692,10 +692,10 @@ describe('macro ToolRegistry construction', () => {
       brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
     });
 
-    expect(result.result.isError).toBe(false);
+    expect(result.result.isError).not.toBe(true);
     expect(callTool).toHaveBeenCalledWith(
       { serverId: 'brave_search', toolName: 'web_search' },
-      { query: 'FlashQuery' },
+      {},
       { kind: 'host', traceId: 'outer-host-trace', interactive: true }
     );
   });
@@ -728,8 +728,8 @@ describe('macro ToolRegistry construction', () => {
     }, z.object({ source: z.string() }));
 
     const result = await runMacroSource({
-      source: 'exit fq.call_macro({ source: "brave_search.web_search({ query: \\"x\\" })" })',
-      callerContext: { origin: 'delegated', purposeName: 'scheduled', interactive: false },
+      source: 'exit fq.call_macro({ source: "brave_search.web_search({})" })',
+      callerContext: { origin: 'delegated', purposeName: 'research', interactive: false },
       config,
       catalog: [nestedCallMacro],
       broker,
@@ -737,13 +737,85 @@ describe('macro ToolRegistry construction', () => {
       brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
     });
 
-    expect(result.result.isError).toBe(true);
+    expect(result.result.isError).not.toBe(true);
     expect(parseToolPayload(result.result)).toMatchObject({
-      error: 'macro_aborted',
-      details: {
+      result: {
         error: 'tool_unavailable_pending_user_decision',
       },
     });
     expect(JSON.stringify(parseToolPayload(result.result))).not.toContain('needs_user_input');
+  });
+
+  it('keeps host-only broker servers hidden from nested delegated fq.call_macro', async () => {
+    const callTool = vi.fn();
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool,
+      listToolsForConsumer: vi.fn(async (ctx: ConsumerContext) =>
+        ctx.kind === 'purpose' ? [brokeredSearchTool()] : [
+          {
+            serverId: 'host_only',
+            toolName: 'web',
+            registryKey: 'host_only__web',
+            description: 'Host only',
+            inputSchema: { type: 'object' },
+            tofuHash: 'hash-host-only',
+            costPerCall: 0,
+          },
+        ]
+      ),
+      getPendingSchemaDrift: vi.fn(() => []),
+      resolveSchemaDrift: vi.fn(() => []),
+      shutdown: vi.fn(),
+    };
+    const config = makeConfig({
+      host: { mcpServers: ['host_only'] },
+      llm: {
+        providers: [],
+        models: [],
+        purposes: [{
+          name: 'research',
+          description: 'Research purpose',
+          models: [],
+          tools: ['call_macro'],
+          mcpServers: ['brave_search'],
+        }],
+      },
+    } as Partial<FlashQueryConfig>);
+    let nestedCallMacro!: NativeToolDefinition;
+    nestedCallMacro = nativeTool('call_macro', async (args, context) => {
+      const callerContext = (context as NativeToolDispatchContext & { macroCallerContext?: MacroCallerContext }).macroCallerContext;
+      const nested = await runMacroSource({
+        source: String(args.source ?? ''),
+        callerContext,
+        config,
+        catalog: [nestedCallMacro],
+        broker,
+        nativeDispatchContext: context,
+        brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+      });
+      return nested.result;
+    }, z.object({ source: z.string() }));
+
+    const result = await runMacroSource({
+      source: 'exit fq.call_macro({ source: "host_only.web({})" })',
+      callerContext: { origin: 'delegated', purposeName: 'research', interactive: false },
+      config,
+      catalog: [nestedCallMacro],
+      broker,
+      nativeDispatchContext: { ...nativeDispatchContext(), traceId: 'delegated-hidden-trace' },
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    expect(callTool).not.toHaveBeenCalled();
+    expect(parseToolPayload(result.result)).toMatchObject({
+      result: {
+        error: 'unknown_server',
+        details: {
+          server: 'host_only',
+        },
+      },
+    });
   });
 });
