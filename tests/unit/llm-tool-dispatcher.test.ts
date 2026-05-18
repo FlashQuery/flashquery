@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { LlmChatToolCall } from '../../src/llm/types.js';
+import type { Broker, BrokeredTool, ConsumerContext } from '../../src/services/mcp-broker/index.js';
 
 type ToolDispatcherModule = {
   dispatchToolCalls: (options: Record<string, unknown>) => Promise<{
@@ -60,7 +61,101 @@ function buildDispatcherOptions(overrides: Record<string, unknown> = {}): Record
   };
 }
 
+function brokeredTool(overrides: Partial<BrokeredTool> = {}): BrokeredTool {
+  return {
+    serverId: 'basic',
+    toolName: 'echo',
+    registryKey: 'basic__echo',
+    description: 'Echo through broker',
+    inputSchema: { type: 'object', properties: { value: {} } },
+    tofuHash: 'hash-basic-echo',
+    costPerCall: 0,
+    ...overrides,
+  };
+}
+
+function makeBroker(tools: BrokeredTool[], callTool = vi.fn()): Broker {
+  return {
+    ensureConnected: vi.fn(),
+    callTool,
+    isConnected: vi.fn(),
+    listToolsForConsumer: vi.fn(async (_ctx: ConsumerContext) => tools),
+    shutdown: vi.fn(),
+  };
+}
+
 describe('TOOL-05 internal native tool dispatch contract', () => {
+  it('routes registry-key tool calls to Broker.callTool after consumer visibility passes', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const args = { value: { stringNumber: '42', number: 42, nullish: null, array: [1, 'two'] } };
+    const rawResult = {
+      content: [{ type: 'text' as const, text: JSON.stringify({ value: args.value }) }],
+      structuredContent: { value: args.value },
+    };
+    const callTool = vi.fn(async () => rawResult);
+    const consumerContext: ConsumerContext = { kind: 'purpose', purposeId: 'research', traceId: 'trace-dispatch' };
+    const broker = makeBroker([brokeredTool()], callTool);
+
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [toolCall('basic__echo', args)],
+      nativeToolNames: [],
+      broker,
+      consumerContext,
+    }));
+
+    expect(broker.listToolsForConsumer).toHaveBeenCalledWith(consumerContext);
+    expect(callTool).toHaveBeenCalledWith({ serverId: 'basic', toolName: 'echo' }, args, consumerContext);
+    expect(result.messages[0].content).toBe(JSON.stringify({ ok: true, result: { content: rawResult.content } }));
+    expect(result.logEntries[0]).toMatchObject({
+      kind: 'brokered',
+      tool_call_id: 'call_basic__echo',
+      tool_name: 'basic__echo',
+      status: 'success',
+    });
+  });
+
+  it('rejects registry-key tool calls that are not visible to the consumer', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const callTool = vi.fn();
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [toolCall('basic__echo', { value: 'hidden' })],
+      nativeToolNames: [],
+      broker: makeBroker([], callTool),
+      consumerContext: { kind: 'purpose', purposeId: 'research', traceId: 'trace-hidden' } satisfies ConsumerContext,
+    }));
+
+    expect(callTool).not.toHaveBeenCalled();
+    expect(JSON.parse(result.messages[0].content ?? '{}')).toMatchObject({
+      ok: false,
+      error: { code: 'tool_not_in_registry', recoverable: true },
+    });
+  });
+
+  it('wraps brokered isError results without a native help footer', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const callTool = vi.fn(async () => ({
+      content: [{ type: 'text' as const, text: 'upstream rejected input' }],
+      isError: true,
+    }));
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [toolCall('basic__echo', { value: 'bad' })],
+      nativeToolNames: [],
+      broker: makeBroker([brokeredTool()], callTool),
+      consumerContext: { kind: 'purpose', purposeId: 'research', traceId: 'trace-error' } satisfies ConsumerContext,
+    }));
+
+    const payload = JSON.parse(result.messages[0].content ?? '{}');
+    expect(payload).toMatchObject({
+      ok: false,
+      error: {
+        code: 'is_error_result',
+        message: 'upstream rejected input',
+        recoverable: true,
+      },
+    });
+    expect(payload.error.message).not.toContain('help');
+  });
+
   it('TOOL-05 dispatches only tools in the immutable nativeToolNames snapshot', async () => {
     const { dispatchToolCalls } = await loadDispatcher();
     const result = await dispatchToolCalls(buildDispatcherOptions({
