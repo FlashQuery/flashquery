@@ -127,6 +127,16 @@ Plans:
 
 **Requirements:** REQ-005..010, REQ-031, REQ-035, REQ-065..067, REQ-113..118
 
+**Plans:** 6 plans
+
+Plans:
+- [ ] 142-01-PLAN.md — Host config defaults and shared registry filtering tests
+- [ ] 142-02-PLAN.md — Host brokered tool registration, dispatch, and drift bundling
+- [ ] 142-03-PLAN.md — Brokered trace metadata and nested ConsumerContext inheritance
+- [ ] 142-04-PLAN.md — Host search plus shared lazy-spawn and TOFU integration
+- [ ] 142-05-PLAN.md — Phase D directed and YAML scenario gates
+- [ ] 142-06-PLAN.md — Phase D validation record and requirements checklist closure
+
 **Success criteria:**
 1. `host:` config is parsed, validated, and plumbed independently of existing `host_mcp_tools`.
 2. Host-visible brokered tools are registered through the host MCP surface using registry-key names and overridden descriptions.
