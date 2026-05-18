@@ -61,16 +61,16 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 ### TOFU And Safety
 
 - [ ] **REQ-038**: TOFU hash is SHA-256 over canonical JSON of `{name, description, inputSchema}`.
-- [ ] **REQ-039**: TOFU storage is in-memory and FlashQuery-process-scoped.
-- [ ] **REQ-040**: First observation of a `(server, tool)` pair is silently trusted.
-- [ ] **REQ-041**: Hash mismatch on subsequent observation triggers re-approval.
+- [x] **REQ-039**: TOFU storage is in-memory and FlashQuery-process-scoped.
+- [x] **REQ-040**: First observation of a `(server, tool)` pair is silently trusted.
+- [x] **REQ-041**: Hash mismatch on subsequent observation triggers re-approval.
 - [ ] **REQ-042**: Re-approval payload carries old schema, new schema, and diff summary.
 - [ ] **REQ-043**: Approval replaces the hash and re-adds the tool to the indexer.
 - [ ] **REQ-044**: Rejection preserves the old hash and removes the tool from the registry.
-- [ ] **REQ-045**: `notifications/tools/list_changed` supports bulk re-approval.
+- [x] **REQ-045**: `notifications/tools/list_changed` supports bulk re-approval.
 - [ ] **REQ-046**: Every TOFU approval or rejection is audit-logged.
-- [ ] **REQ-047**: TOFU map entries are retained when tools are removed.
-- [ ] **REQ-048**: No re-approval prompt rate limiting exists in v1.
+- [x] **REQ-047**: TOFU map entries are retained when tools are removed.
+- [x] **REQ-048**: No re-approval prompt rate limiting exists in v1.
 - [ ] **REQ-049**: If no interactive chat session exists, schema drift records an event, blocks the tool, and does not prompt.
 - [x] **REQ-058**: Sampling capability is not advertised or handled.
 - [x] **REQ-059**: Elicitation capability is not advertised or handled.
@@ -86,14 +86,14 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [x] **REQ-055**: Default connection-health mode is deep probe.
 - [x] **REQ-056**: Shallow probe is opt-in.
 - [x] **REQ-057**: Future HTTP brokers use protocol-level `tools/list` no-op probing.
-- [ ] **REQ-061**: Subscribe to `notifications/tools/list_changed` at every brokered server connect.
-- [ ] **REQ-062**: Diff routing handles new, changed, and removed tools.
-- [ ] **REQ-063**: Indexer updates from `list_changed` are synchronous in the notification handler.
-- [ ] **REQ-064**: Diff classification utility is reusable.
+- [x] **REQ-061**: Subscribe to `notifications/tools/list_changed` at every brokered server connect.
+- [x] **REQ-062**: Diff routing handles new, changed, and removed tools.
+- [x] **REQ-063**: Indexer updates from `list_changed` are synchronous in the notification handler.
+- [x] **REQ-064**: Diff classification utility is reusable.
 - [ ] **REQ-065**: Per-`call_model` trace records gain a `tool_calls` array.
 - [ ] **REQ-066**: Host-initiated brokered calls also produce `tool_calls` entries.
 - [ ] **REQ-067**: Host-invoked macros inherit the host trace scope.
-- [ ] **REQ-068**: Rejected reverse requests are audit-logged.
+- [x] **REQ-068**: Rejected reverse requests are audit-logged.
 - [ ] **REQ-069**: `search_tools` invocations are audit-logged.
 - [ ] **REQ-070**: TOFU approvals and rejections are audit-logged.
 

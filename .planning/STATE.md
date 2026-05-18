@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: executing
-stopped_at: Completed 140-01-PLAN.md
-last_updated: "2026-05-18T13:18:58Z"
-last_activity: 2026-05-18 -- Completed 140-01 TOFU state foundation
+stopped_at: Completed 139-06-PLAN.md
+last_updated: "2026-05-18T13:35:56.252Z"
+last_activity: 2026-05-18
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 12
-  completed_plans: 6
+  completed_plans: 8
   percent: 20
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 ## Current Position
 
 Phase: 140 (tofu-schema-pinning-and-tool-list-change-handling) — EXECUTING
-Plan: 2 of 6
-Status: Ready for next Phase 140 plan
-Last activity: 2026-05-18 -- Completed 140-01 TOFU state foundation
+Plan: 3 of 6
+Status: Ready to execute
+Last activity: 2026-05-18
 
 ## Performance Metrics
 
@@ -134,6 +134,7 @@ Last activity: 2026-05-18 -- Completed 140-01 TOFU state foundation
 | Phase 139 P05 | 14m12s | 2 tasks | 5 files |
 | Phase 139 P06 | 36min | 2 tasks | 11 files |
 | Phase 140 P01 | 5m45s | 3 tasks | 7 files |
+| Phase 140 P02 | 12m09s | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -253,6 +254,8 @@ Last activity: 2026-05-18 -- Completed 140-01 TOFU state foundation
 - [Phase 139]: Expose only sanitized broker trace snapshots through call_model metadata, preserving observable cost assertions without leaking raw broker internals.
 - [Phase 140]: 140-01 keeps TOFU process-local with trusted and pending schema snapshots separated until approval or rejection.
 - [Phase 140]: 140-01 registry drift blocking removes brokered tools from the registry map so listToolsForConsumer remains the callable gate.
+- [Phase 140]: 140-02 uses one manual ToolListChangedNotificationSchema handler per BrokerClient and routes refreshes through shared broker TOFU state.
+- [Phase 140]: 140-02 keeps BM25/search_tools out of scope behind a synchronous ToolIndexSink seam.
 
 ## Accumulated Context
 
@@ -366,7 +369,7 @@ Last activity: 2026-05-18 -- Completed 140-01 TOFU state foundation
 
 ## Session Continuity
 
-Last session: 2026-05-18T02:53:51.121Z
+Last session: 2026-05-18T13:35:56.226Z
 Stopped at: Completed 139-06-PLAN.md
 Resume: None
 
