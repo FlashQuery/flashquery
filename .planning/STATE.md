@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: in_progress
-stopped_at: Completed 139-03-PLAN.md
-last_updated: "2026-05-18T01:43:23.583Z"
-last_activity: 2026-05-18 — Completed 139-03 stdio BrokerClient lifecycle and public broker orchestration
+stopped_at: Completed 139-04-PLAN.md
+last_updated: "2026-05-18T02:01:27.839Z"
+last_activity: 2026-05-18 — Completed 139-04 agent-loop and macro broker dispatch seams
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
-  percent: 50
+  completed_plans: 4
+  percent: 67
 ---
 
 # FlashQuery Core — State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 
 Phase: 139 — Broker Foundation, Registry, And Dispatch
 Plan: 04 — Agent-loop and macro broker dispatch seams
-Status: Phase 139 in progress; 139-03 complete
-Last activity: 2026-05-18 — Completed 139-03 stdio BrokerClient lifecycle and public broker orchestration
+Status: Phase 139 in progress; 139-04 complete
+Last activity: 2026-05-18 — Completed 139-04 agent-loop and macro broker dispatch seams
 
 ## Performance Metrics
 
@@ -130,6 +130,7 @@ Last activity: 2026-05-18 — Completed 139-03 stdio BrokerClient lifecycle and 
 | Phase 139 P01 | 5m05s | 2 tasks | 5 files |
 | Phase 139 P02 | 5m23s | 3 tasks | 6 files |
 | Phase 139 P03 | 28m43s | 3 tasks | 10 files |
+| Phase 139 P04 | 13m34s | 5 tasks | 14 files |
 
 ## Decisions
 
@@ -240,6 +241,9 @@ Last activity: 2026-05-18 — Completed 139-03 stdio BrokerClient lifecycle and 
 - [Phase 139]: 139-03 BrokerClient returns raw CallToolResult for protocol responses while lifecycle failures reject with NormalizedToolError.
 - [Phase 139]: 139-03 Unsupported reverse requests are audited with server ID, method, status, and trace context only; raw payloads are not logged.
 - [Phase 139]: 139-03 Existing src/services/mcp-broker.ts remains compatible for Plan 139-04 while re-exporting the production broker factory.
+- [Phase 139]: 139-04 McpBroker.listToolsForConsumer connects only consumer-visible servers before returning brokered tool definitions.
+- [Phase 139]: 139-04 Brokered dispatch seams adapt raw CallToolResult at the consumer boundary: LLM wraps content, macro coerces success values.
+- [Phase 139]: 139-04 Brokered tool_calls trace entries store only server, tool, count, and resolved cost.
 
 ## Accumulated Context
 
@@ -353,8 +357,8 @@ Last activity: 2026-05-18 — Completed 139-03 stdio BrokerClient lifecycle and 
 
 ## Session Continuity
 
-Last session: 2026-05-18T01:43:23.558Z
-Stopped at: Completed 139-03-PLAN.md
+Last session: 2026-05-18T02:01:27.813Z
+Stopped at: Completed 139-04-PLAN.md
 Resume: None
 
 ## Deferred Items

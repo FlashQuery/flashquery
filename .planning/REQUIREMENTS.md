@@ -52,11 +52,11 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [x] **REQ-030**: FQ-native tools are not registry-keyed with an `fq__` prefix.
 - [x] **REQ-031**: A single registry supports per-consumer filtered views.
 - [x] **REQ-032**: Tool-name collisions across servers retain unique registry keys.
-- [ ] **REQ-033**: `tool-dispatcher.ts` routes brokered registry keys to `Broker.callTool`.
-- [ ] **REQ-034**: Brokered `CallToolResult` values are wrapped as `NativeToolResponse` for the agent loop.
-- [ ] **REQ-035**: Dispatch routing respects consumer visibility.
+- [x] **REQ-033**: `tool-dispatcher.ts` routes brokered registry keys to `Broker.callTool`.
+- [x] **REQ-034**: Brokered `CallToolResult` values are wrapped as `NativeToolResponse` for the agent loop.
+- [x] **REQ-035**: Dispatch routing respects consumer visibility.
 - [x] **REQ-036**: Concurrent brokered calls to the same server are safe.
-- [ ] **REQ-037**: Arguments pass through without engine-side type coercion.
+- [x] **REQ-037**: Arguments pass through without engine-side type coercion.
 
 ### TOFU And Safety
 
