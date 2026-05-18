@@ -11,6 +11,7 @@ import type {
   ToolCall,
   ToolRegistry,
   MacroCallerContext,
+  MacroNeedsUserInputPayload,
 } from './types.js';
 import {
   jsonExpectedError,
@@ -194,6 +195,16 @@ export class MacroFailError extends Error {
   }
 }
 
+export class MacroNeedsUserInputError extends Error {
+  constructor(
+    public readonly payload: MacroNeedsUserInputPayload,
+    public readonly line?: number
+  ) {
+    super('macro needs user input');
+    this.name = 'MacroNeedsUserInputError';
+  }
+}
+
 export class MacroExpectedError extends Error {
   constructor(
     public readonly error: string,
@@ -355,6 +366,27 @@ export async function evaluateProgram(
         message: error.message,
         details: { line: error.line },
       });
+    }
+    if (error instanceof MacroNeedsUserInputError) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify(
+              withWarnings(
+                {
+                  task_id: context.taskId,
+                  reason: 'needs_user_input',
+                  payload: error.payload,
+                  ...(error.line === undefined ? {} : { line: error.line }),
+                },
+                context.warnings
+              )
+            ),
+          },
+        ],
+        isError: false,
+      };
     }
     if (error instanceof MacroExpectedError) {
       return jsonExpectedError({
@@ -591,6 +623,7 @@ async function evalCall(
       error instanceof MacroCancellationError ||
       error instanceof MacroExitError ||
       error instanceof MacroFailError ||
+      error instanceof MacroNeedsUserInputError ||
       error instanceof MacroExpectedError
     ) {
       throw error;
@@ -777,6 +810,7 @@ async function evalToolCall(
   try {
     result = await context.dispatchTool(call.server, call.tool, arg, context);
   } catch (error) {
+    if (error instanceof MacroNeedsUserInputError) throw error;
     throw new MacroRuntimeError(`Tool call failed: ${call.server}.${call.tool}`, call.line, {
       server: call.server,
       tool: call.tool,

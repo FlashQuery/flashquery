@@ -21,6 +21,21 @@ export interface MacroCallerContext {
   purposeName?: string;
 }
 
+export interface MacroNeedsUserInputPayload {
+  question: string;
+  context?: unknown;
+  options?: readonly string[];
+  answer_shape?: string;
+  resume_hint?: string;
+  event?: string;
+  server?: string;
+  tool?: string;
+  old_schema?: unknown;
+  new_schema?: unknown;
+  diff_summary?: string;
+  changes?: unknown;
+}
+
 export interface Program {
   kind: 'Program';
   statements: Statement[];
