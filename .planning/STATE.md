@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: executing
-stopped_at: Completed 139-06-PLAN.md
-last_updated: "2026-05-18T02:56:00.000Z"
-last_activity: 2026-05-18 — Completed 139-06 Phase A YAML scenarios and validation record
+stopped_at: Completed 140-01-PLAN.md
+last_updated: "2026-05-18T13:18:58Z"
+last_activity: 2026-05-18 -- Completed 140-01 TOFU state foundation
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 6
+  total_plans: 12
   completed_plans: 6
   percent: 20
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** v3.5 MCP Broker — ready to plan Phase 140
+**Current focus:** Phase 140 — tofu-schema-pinning-and-tool-list-change-handling
 
 ## Current Position
 
-Phase: 139 — Broker Foundation, Registry, And Dispatch
-Plan: 06 — Phase A YAML scenarios and validation record
-Status: Phase 139 complete; ready for Phase 140 planning
-Last activity: 2026-05-18 — Completed 139-06 Phase A YAML scenarios and validation record
+Phase: 140 (tofu-schema-pinning-and-tool-list-change-handling) — EXECUTING
+Plan: 2 of 6
+Status: Ready for next Phase 140 plan
+Last activity: 2026-05-18 -- Completed 140-01 TOFU state foundation
 
 ## Performance Metrics
 
@@ -133,6 +133,7 @@ Last activity: 2026-05-18 — Completed 139-06 Phase A YAML scenarios and valida
 | Phase 139 P04 | 13m34s | 5 tasks | 14 files |
 | Phase 139 P05 | 14m12s | 2 tasks | 5 files |
 | Phase 139 P06 | 36min | 2 tasks | 11 files |
+| Phase 140 P01 | 5m45s | 3 tasks | 7 files |
 
 ## Decisions
 
@@ -250,6 +251,8 @@ Last activity: 2026-05-18 — Completed 139-06 Phase A YAML scenarios and valida
 - [Phase 139]: 139-05 Directed Phase A broker scenarios force a dedicated managed server to inject stdio fixture mcp_servers config.
 - [Phase 139]: Use an in-process OpenAI-compatible mock endpoint for YAML call_model tests so broker dispatch scenarios do not depend on external network or API credentials.
 - [Phase 139]: Expose only sanitized broker trace snapshots through call_model metadata, preserving observable cost assertions without leaking raw broker internals.
+- [Phase 140]: 140-01 keeps TOFU process-local with trusted and pending schema snapshots separated until approval or rejection.
+- [Phase 140]: 140-01 registry drift blocking removes brokered tools from the registry map so listToolsForConsumer remains the callable gate.
 
 ## Accumulated Context
 
