@@ -1,0 +1,129 @@
+import { ErrorCode, McpError, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import type { NormalizedToolError, ToolErrorKind } from './types.js';
+
+const EXPERIMENTAL_TASKS_PATTERN = /requires task-based execution|callToolStream/i;
+
+export interface FormatToolErrorContext {
+  serverId?: string;
+  toolName?: string;
+}
+
+export type SerializedToolError = Omit<NormalizedToolError, 'raw'>;
+
+export function formatToolError(input: unknown, context: FormatToolErrorContext = {}): NormalizedToolError {
+  if (isCallToolErrorResult(input)) {
+    return withContext(
+      {
+        kind: 'is_error_result',
+        message: extractCallToolResultMessage(input),
+        raw: input,
+      },
+      context
+    );
+  }
+
+  if (isMcpErrorLike(input)) {
+    return withContext(
+      {
+        kind: mapMcpErrorKind(input),
+        message: normalizeMcpMessage(input),
+        code: input.code,
+        ...(EXPERIMENTAL_TASKS_PATTERN.test(input.message) ? { subkind: 'experimental_tasks_required' } : {}),
+        raw: input,
+      },
+      context
+    );
+  }
+
+  if (input instanceof Error) {
+    return withContext(
+      {
+        kind: mapNativeErrorKind(input),
+        message: input.message,
+        raw: input,
+      },
+      context
+    );
+  }
+
+  return withContext(
+    {
+      kind: 'unknown',
+      message: stringifyUnknown(input),
+      raw: input,
+    },
+    context
+  );
+}
+
+export function stripRawFromToolError(error: NormalizedToolError): SerializedToolError {
+  const { raw: _raw, ...serialized } = error;
+  return serialized;
+}
+
+function withContext(error: NormalizedToolError, context: FormatToolErrorContext): NormalizedToolError {
+  return {
+    ...error,
+    ...(context.serverId === undefined ? {} : { serverId: context.serverId }),
+    ...(context.toolName === undefined ? {} : { toolName: context.toolName }),
+  };
+}
+
+function isCallToolErrorResult(value: unknown): value is CallToolResult {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'isError' in value &&
+    (value as { isError?: unknown }).isError === true &&
+    Array.isArray((value as { content?: unknown }).content)
+  );
+}
+
+function extractCallToolResultMessage(result: CallToolResult): string {
+  const firstText = result.content.find(
+    (item): item is { type: 'text'; text: string } =>
+      typeof item === 'object' &&
+      item !== null &&
+      (item as { type?: unknown }).type === 'text' &&
+      typeof (item as { text?: unknown }).text === 'string'
+  );
+  return firstText?.text ?? 'Brokered tool returned an error result.';
+}
+
+function isMcpErrorLike(value: unknown): value is McpError {
+  return value instanceof McpError || (value instanceof Error && typeof (value as { code?: unknown }).code === 'number');
+}
+
+function mapMcpErrorKind(error: Pick<McpError, 'code'>): ToolErrorKind {
+  if (error.code === ErrorCode.MethodNotFound) return 'unsupported_method';
+  if (error.code === ErrorCode.InvalidParams) return 'bad_args';
+  if (error.code === ErrorCode.ConnectionClosed) return 'transport_closed';
+  if (error.code === ErrorCode.RequestTimeout) return 'server_timeout';
+  return 'unknown';
+}
+
+function normalizeMcpMessage(error: Pick<McpError, 'code' | 'message'>): string {
+  return error.message.replace(new RegExp(`^MCP error ${error.code}:\\s*`), '');
+}
+
+function mapNativeErrorKind(error: Error): ToolErrorKind {
+  const message = error.message;
+  const code = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : '';
+  const combined = `${code} ${message}`;
+
+  if (/\bEPIPE\b|Connection closed|transport closed/i.test(combined)) return 'transport_closed';
+  if (/timed out|timeout|RequestTimeout/i.test(combined)) return 'server_timeout';
+  if (/spawn .*ENOENT|ENOENT|exited|crashed/i.test(combined)) return 'server_crashed';
+  return 'unknown';
+}
+
+function stringifyUnknown(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value === null) return 'Unknown broker error: null';
+  if (value === undefined) return 'Unknown broker error: undefined';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
