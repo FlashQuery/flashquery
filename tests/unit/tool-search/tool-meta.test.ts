@@ -29,6 +29,28 @@ const RECORD_PLUGIN_HELP_PAGE_BATCH = [
   'write_record',
 ] as const;
 
+const LLM_VAULT_EDITING_HELP_PAGE_BATCH = [
+  'call_macro',
+  'call_model',
+  'get_briefing',
+  'get_llm_usage',
+  'insert_doc_link',
+  'insert_in_doc',
+  'list_vault',
+  'maintain_vault',
+  'manage_directory',
+  'move_document',
+  'remove_document',
+  'replace_doc_section',
+  'search_tools',
+] as const;
+
+const CANONICAL_CALL_MACRO_DESCRIPTION =
+  'Execute a FlashQuery macro to chain multiple tool operations, pass intermediate results between them, or run conditional logic in a single round-trip. Use for compound or composite work that combines several individual FlashQuery tool calls into one orchestrated execution. The macro language supports variables, conditionals, loops, and composition of any FlashQuery-native or brokered tool, with intermediate state held inside the engine rather than in the conversation context. For one-shot single-tool operations, prefer the direct tool. Pass help:true for syntax and patterns.';
+
+const CANONICAL_CALL_MACRO_HELP_HINT =
+  "FlashQuery's general-purpose execution tool — runs a macro that can chain multiple FlashQuery operations, pass intermediate results between them, or run conditional logic in a single round-trip. Best for compound or composite work; for one-shot single-tool operations, prefer the direct tool. Pass `{help: true}` for syntax and patterns.";
+
 const REQUIRED_HELP_SECTIONS = [
   'purpose',
   'params',
@@ -191,9 +213,37 @@ args: {}
   it('validates the records plugin and pending-review help-page batch', () => {
     expectHelpPageBatch(RECORD_PLUGIN_HELP_PAGE_BATCH);
   });
+
+  it('validates the LLM, macro, vault, editing, and search_tools help-page batch', () => {
+    const result = expectHelpPageBatch(LLM_VAULT_EDITING_HELP_PAGE_BATCH);
+
+    expect(result.meta.get('call_macro')?.description).toBe(CANONICAL_CALL_MACRO_DESCRIPTION);
+    expect(result.meta.get('call_macro')?.helpHint).toBe(CANONICAL_CALL_MACRO_HELP_HINT);
+
+    const searchTools = result.meta.get('search_tools');
+    expect(searchTools).toBeDefined();
+    const searchToolsText = [
+      searchTools?.description ?? '',
+      searchTools?.helpHint ?? '',
+      searchTools?.helpPageBody ?? '',
+      JSON.stringify(searchTools?.args ?? {}),
+    ].join('\n');
+
+    for (const term of [
+      'query',
+      'limit',
+      'SearchResult',
+      'score',
+      'normalizedScore',
+      'has_help',
+      'help_hint',
+    ]) {
+      expect(searchToolsText).toContain(term);
+    }
+  });
 });
 
-function expectHelpPageBatch(names: readonly string[]): void {
+function expectHelpPageBatch(names: readonly string[]): ReturnType<typeof validateToolMeta> {
   const sources = names.map((name) => ({
     filePath: `src/mcp/tools/${name}.tool.md`,
     raw: readFileSync(`src/mcp/tools/${name}.tool.md`, 'utf8'),
@@ -217,4 +267,6 @@ function expectHelpPageBatch(names: readonly string[]): void {
       expect(body).toMatch(new RegExp(`^## ${section}$`, 'im'));
     }
   }
+
+  return result;
 }
