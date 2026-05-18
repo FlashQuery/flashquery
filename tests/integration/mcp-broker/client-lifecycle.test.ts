@@ -1,11 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ToolListChangedNotificationSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
-import type { BrokerClientConfig, ConsumerContext } from '../../../src/services/mcp-broker/types.js';
-import { BrokerClient, McpBroker, NullBroker, createBroker } from '../../../src/services/mcp-broker/index.js';
+import type { BrokerClientConfig, BrokeredTool, ConsumerContext } from '../../../src/services/mcp-broker/types.js';
+import { BrokerClient, McpBroker, NullBroker, createBroker, hashToolSchema } from '../../../src/services/mcp-broker/index.js';
 import { formatToolError } from '../../../src/services/mcp-broker/errors.js';
 
 const fixtureDir = resolve(fileURLToPath(new URL('../../fixtures/mcp-servers', import.meta.url)));
@@ -13,6 +14,7 @@ const basicServer = resolve(fixtureDir, 'server-basic.ts');
 const authServer = resolve(fixtureDir, 'server-auth.ts');
 const quirkyServer = resolve(fixtureDir, 'server-quirky.ts');
 const ctx: ConsumerContext = { kind: 'host', traceId: 'trace-test' };
+const purposeCtx: ConsumerContext = { kind: 'purpose', purposeId: 'research', traceId: 'trace-purpose-test' };
 
 const clients: BrokerClient[] = [];
 const brokers: Array<{ shutdown(graceMs?: number): Promise<void> }> = [];
@@ -80,6 +82,18 @@ function toolSnapshot(name: string, required: string[] = []): Tool {
       },
       required,
     },
+  };
+}
+
+function brokeredTool(serverId: string, tool: Tool): BrokeredTool {
+  return {
+    serverId,
+    toolName: tool.name,
+    registryKey: `${serverId}__${tool.name}`,
+    ...(tool.description === undefined ? {} : { description: tool.description, upstreamDescription: tool.description }),
+    inputSchema: tool.inputSchema,
+    tofuHash: hashToolSchema({ name: tool.name, description: tool.description, inputSchema: tool.inputSchema }),
+    costPerCall: 0,
   };
 }
 
@@ -447,6 +461,112 @@ describe('mcp broker client lifecycle integration', () => {
     expect(hostTools).toEqual([]);
     expect(purposeTools.map((tool) => tool.registryKey)).toContain('basic__echo');
     await expect(broker.shutdown(100)).resolves.toBeUndefined();
+  });
+
+  it('T-I-031 host-first then purpose listing shares one BrokerClient and server process for the same configured server', async () => {
+    const broker = createBroker({
+      mcpServers: {
+        basic: config(),
+      },
+      host: { mcpServers: ['basic'] },
+      llm: { purposes: [{ name: 'research', mcpServers: ['basic'] }] },
+    });
+    brokers.push(broker);
+
+    expect(broker.getClientDebugSnapshot('basic')).toEqual({ pid: null, spawnCount: 0, restartCount: 0 });
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toContain('basic__echo');
+    const hostSnapshot = broker.getClientDebugSnapshot('basic');
+
+    expect((await broker.listToolsForConsumer(purposeCtx)).map((tool) => tool.registryKey)).toContain('basic__echo');
+    expect(broker.getClientDebugSnapshot('basic')).toEqual(hostSnapshot);
+    expect(hostSnapshot).toMatchObject({ pid: expect.any(Number), spawnCount: 1, restartCount: 0 });
+  });
+
+  it('T-I-031 purpose-first then host listing shares one BrokerClient and server process for the same configured server', async () => {
+    const broker = createBroker({
+      mcpServers: {
+        basic: config(),
+      },
+      host: { mcpServers: ['basic'] },
+      llm: { purposes: [{ name: 'research', mcpServers: ['basic'] }] },
+    });
+    brokers.push(broker);
+
+    expect((await broker.listToolsForConsumer(purposeCtx)).map((tool) => tool.registryKey)).toContain('basic__echo');
+    const purposeSnapshot = broker.getClientDebugSnapshot('basic');
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toContain('basic__echo');
+    expect(broker.getClientDebugSnapshot('basic')).toEqual(purposeSnapshot);
+    expect(purposeSnapshot).toMatchObject({ pid: expect.any(Number), spawnCount: 1, restartCount: 0 });
+  });
+
+  it('T-I-032 host first-observation pins TOFU and later drift blocks the delegated purpose without a fresh trust path', async () => {
+    const broker = createBroker({
+      mcpServers: {},
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [{ name: 'research', mcpServers: ['quirky'] }] },
+    });
+    brokers.push(broker);
+
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', toolSnapshot('shared_pin', ['value']))], {
+      traceId: ctx.traceId,
+    });
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual(['quirky__shared_pin']);
+    expect((await broker.listToolsForConsumer(purposeCtx)).map((tool) => tool.registryKey)).toEqual(['quirky__shared_pin']);
+
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', toolSnapshot('shared_pin', ['value', 'token']))], {
+      traceId: ctx.traceId,
+    });
+
+    expect((await broker.listToolsForConsumer(purposeCtx)).map((tool) => tool.registryKey)).toEqual([]);
+    expect(broker.getPendingSchemaDrift({ purposeId: 'research', traceId: purposeCtx.traceId })).toEqual([
+      expect.objectContaining({
+        server: 'quirky',
+        tool: 'shared_pin',
+        old_schema: expect.objectContaining({ inputSchema: expect.objectContaining({ required: ['value'] }) }),
+        new_schema: expect.objectContaining({ inputSchema: expect.objectContaining({ required: ['value', 'token'] }) }),
+      }),
+    ]);
+  });
+
+  it('T-I-032 purpose first-observation pins TOFU and later drift blocks the host without a fresh trust path', async () => {
+    const broker = createBroker({
+      mcpServers: {},
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [{ name: 'research', mcpServers: ['quirky'] }] },
+    });
+    brokers.push(broker);
+
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', toolSnapshot('purpose_pin', ['value']))], {
+      traceId: purposeCtx.traceId,
+      purposeId: 'research',
+    });
+    expect((await broker.listToolsForConsumer(purposeCtx)).map((tool) => tool.registryKey)).toEqual(['quirky__purpose_pin']);
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual(['quirky__purpose_pin']);
+
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', toolSnapshot('purpose_pin', ['value', 'token']))], {
+      traceId: purposeCtx.traceId,
+      purposeId: 'research',
+    });
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual([]);
+    expect(broker.getPendingSchemaDrift({ traceId: ctx.traceId })).toEqual([
+      expect.objectContaining({
+        server: 'quirky',
+        tool: 'purpose_pin',
+        old_schema: expect.objectContaining({ inputSchema: expect.objectContaining({ required: ['value'] }) }),
+        new_schema: expect.objectContaining({ inputSchema: expect.objectContaining({ required: ['value', 'token'] }) }),
+      }),
+    ]);
+  });
+
+  it('source assertion: McpBroker owns one #clients map and one in-memory TOFU store per broker instance', () => {
+    const source = readFileSync(resolve('src/services/mcp-broker/index.ts'), 'utf8');
+
+    expect(source.match(/readonly #clients: Map<string, BrokerClient>/g)).toHaveLength(1);
+    expect(source.match(/readonly #tofuStore = new InMemoryTofuStore\(\)/g)).toHaveLength(1);
+    expect(source).toContain('listToolsForConsumer(ctx: ConsumerContext)');
+    expect(source).toContain('this.ensureConnected(serverId, snapshotOptionsFromConsumerContext(ctx))');
   });
 
   it('NullBroker returns no tools and fails calls predictably', async () => {
