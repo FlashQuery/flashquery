@@ -1,7 +1,13 @@
 import process from 'node:process';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { ErrorCode, McpError, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import {
+  ErrorCode,
+  McpError,
+  ToolListChangedNotificationSchema,
+  type CallToolResult,
+  type Tool,
+} from '@modelcontextprotocol/sdk/types.js';
 import { logger } from '../../logging/logger.js';
 import { formatToolError, toThrowableToolError, type FormatToolErrorContext } from './errors.js';
 import { hashToolSchema } from './tofu.js';
@@ -166,6 +172,7 @@ export class BrokerClient {
     });
     this.#bindStderr(transport);
     this.#bindUnsupportedRequestAudit(client);
+    this.#bindToolListChanged(client);
 
     client.onclose = () => {
       if (!this.#closed) this.#needsRestart = true;
@@ -178,7 +185,7 @@ export class BrokerClient {
       this.#client = client;
       this.#transport = transport;
       await client.connect(transport, { timeout: DEFAULT_CONNECT_TIMEOUT_MS });
-      await this.#discoverTools(client);
+      await this.#refreshTools(client);
     } catch (error) {
       this.#client = null;
       this.#transport = null;
@@ -197,9 +204,15 @@ export class BrokerClient {
     }
   }
 
-  async #discoverTools(client: Client): Promise<void> {
+  async #refreshTools(client: Client): Promise<BrokeredTool[]> {
     const result = await client.listTools(undefined, { timeout: this.#config.perCallTimeoutMs });
-    this.#tools = result.tools.map((tool) => ({
+    const tools = result.tools.map((tool) => this.#toBrokeredTool(tool));
+    this.#tools = tools;
+    return tools.map((tool) => ({ ...tool }));
+  }
+
+  #toBrokeredTool(tool: Tool): BrokeredTool {
+    return {
       serverId: this.#config.serverId,
       toolName: tool.name,
       registryKey: `${this.#config.serverId}__${tool.name}`,
@@ -211,7 +224,7 @@ export class BrokerClient {
         inputSchema: tool.inputSchema,
       }),
       costPerCall: this.#config.toolOverrides[tool.name]?.costPerCall ?? this.#config.costPerCall,
-    }));
+    };
   }
 
   async #resetConnection(): Promise<void> {
@@ -253,6 +266,13 @@ export class BrokerClient {
       });
       return Promise.reject(new McpError(ErrorCode.MethodNotFound, `${request.method} rejected_unsupported`));
     };
+  }
+
+  #bindToolListChanged(client: SdkClient): void {
+    client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+      const tools = await this.#refreshTools(client);
+      await this.#config.onToolListChanged?.(this.#config.serverId, tools);
+    });
   }
 
   #emitAudit(event: BrokerAuditEvent): void {

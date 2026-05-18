@@ -20,6 +20,7 @@ export interface BrokerServerConfig {
 export interface BrokerClientConfig extends BrokerServerConfig {
   serverId: string;
   onAudit?: (event: BrokerAuditEvent) => void;
+  onToolListChanged?: (serverId: string, tools: BrokeredTool[]) => void | Promise<void>;
 }
 
 export type RegistryKey = string;
