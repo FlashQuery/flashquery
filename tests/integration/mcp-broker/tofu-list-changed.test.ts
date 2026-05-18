@@ -375,4 +375,110 @@ describe('mcp broker TOFU list_changed integration', () => {
       })
     );
   });
+
+  it('T-I-027 description_override changes do not affect the upstream TOFU hash or trigger drift', async () => {
+    const upstream = toolSnapshot('overridden');
+    const first = createTrackedBroker({
+      initialTools: [upstream],
+      laterTools: [upstream],
+      serverConfig: {
+        toolOverrides: {
+          overridden: { costPerCall: 0, descriptionOverride: 'First downstream description' },
+        },
+      },
+    });
+    const second = createTrackedBroker({
+      initialTools: [upstream],
+      laterTools: [upstream],
+      serverConfig: {
+        toolOverrides: {
+          overridden: { costPerCall: 0, descriptionOverride: 'Second downstream description' },
+        },
+      },
+    });
+
+    const [firstTool] = await first.broker.listToolsForConsumer(ctx);
+    const [secondTool] = await second.broker.listToolsForConsumer(ctx);
+
+    expect(firstTool).toMatchObject({
+      registryKey: 'quirky__overridden',
+      description: 'First downstream description',
+      upstreamDescription: 'overridden description',
+    });
+    expect(secondTool).toMatchObject({
+      registryKey: 'quirky__overridden',
+      description: 'Second downstream description',
+      upstreamDescription: 'overridden description',
+    });
+    expect(firstTool?.tofuHash).toBe(hashToolSchema({ name: upstream.name, description: upstream.description, inputSchema: upstream.inputSchema }));
+    expect(secondTool?.tofuHash).toBe(firstTool?.tofuHash);
+    expect(first.broker.getPendingSchemaDrift()).toEqual([]);
+    expect(second.broker.getPendingSchemaDrift()).toEqual([]);
+  });
+
+  it('T-I-032a removing description_override between starts does not trigger TOFU re-approval', async () => {
+    const upstream = toolSnapshot('override_removed');
+    const withOverride = createTrackedBroker({
+      initialTools: [upstream],
+      laterTools: [upstream],
+      serverConfig: {
+        toolOverrides: {
+          override_removed: { costPerCall: 0, descriptionOverride: 'Temporary downstream description' },
+        },
+      },
+    });
+    const withoutOverride = createTrackedBroker({
+      initialTools: [upstream],
+      laterTools: [upstream],
+    });
+
+    const [overriddenTool] = await withOverride.broker.listToolsForConsumer(ctx);
+    const [plainTool] = await withoutOverride.broker.listToolsForConsumer(ctx);
+
+    expect(overriddenTool).toMatchObject({
+      registryKey: 'quirky__override_removed',
+      description: 'Temporary downstream description',
+      upstreamDescription: 'override_removed description',
+    });
+    expect(plainTool).toMatchObject({
+      registryKey: 'quirky__override_removed',
+      description: 'override_removed description',
+    });
+    expect(plainTool?.tofuHash).toBe(overriddenTool?.tofuHash);
+    expect(withoutOverride.broker.getPendingSchemaDrift()).toEqual([]);
+  });
+
+  it('T-I-032b autonomous drift records blocked_on_user and emits no needs_user_input prompt', async () => {
+    const driftBundles: TofuDriftBundle[] = [];
+    const auditEvents: unknown[] = [];
+    const { broker } = createManualBroker({
+      onTofuDrift: (bundle) => driftBundles.push(bundle),
+      onAudit: (event) => auditEvents.push(event),
+    });
+    const trusted = toolSnapshot('autonomous', ['value']);
+    const changed = toolSnapshot('autonomous', ['value', 'token']);
+
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', trusted)]);
+    await broker.applyToolListSnapshot('quirky', [brokeredTool('quirky', changed)], {
+      interactive: false,
+      traceId: 'trace-autonomous',
+      purposeId: 'scheduled-purpose',
+    });
+
+    expect(await visibleKeys(broker)).toEqual([]);
+    expect(driftBundles).toEqual([]);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'mcp_broker_tofu_blocked',
+        server: 'quirky',
+        tool: 'autonomous',
+        status: 'blocked_on_user',
+        trace_id: 'trace-autonomous',
+        purpose_id: 'scheduled-purpose',
+        old_hash: hashToolSchema({ name: trusted.name, description: trusted.description, inputSchema: trusted.inputSchema }),
+        new_hash: hashToolSchema({ name: changed.name, description: changed.description, inputSchema: changed.inputSchema }),
+      })
+    );
+    expect(JSON.stringify(auditEvents)).not.toContain('needs_user_input');
+  });
 });
