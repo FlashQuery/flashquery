@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { loadConfig } from '../../src/config/loader.js';
 import { evaluateProgram } from '../../src/macro/evaluator.js';
 import { MacroTaskRegistry } from '../../src/macro/task-registry.js';
@@ -16,22 +16,26 @@ describe('macro runtime budgets', () => {
 
   it('T-U-211a in-flight tool call completes before timeout envelope surfaces at next safe point', async () => {
     let handlerCompleted = false;
-    const startedAt = Date.now();
-    const result = await evaluateProgram(parseProgram('brave.web({})\necho "after"'), {
-      budgetLimits: { timeout_ms: 5 },
-      dispatchTool: async () => {
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        handlerCompleted = true;
-        return { content: [{ type: 'text', text: '{}' }] };
-      },
-    });
+    let now = 1_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      const result = await evaluateProgram(parseProgram('brave.web({})\necho "after"'), {
+        budgetLimits: { timeout_ms: 5 },
+        dispatchTool: async () => {
+          await Promise.resolve();
+          now += 6;
+          handlerCompleted = true;
+          return { content: [{ type: 'text', text: '{}' }] };
+        },
+      });
 
-    const payload = parseToolPayload(result);
-    expect(handlerCompleted).toBe(true);
-    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(20);
-    expect(payload).toMatchObject({ error: 'timeout', details: { timeout_ms: 5 } });
-    expect((payload['details'] as Record<string, unknown>)['elapsed_ms']).toEqual(expect.any(Number));
-    expect(JSON.stringify(payload)).not.toContain('after');
+      const payload = parseToolPayload(result);
+      expect(handlerCompleted).toBe(true);
+      expect(payload).toMatchObject({ error: 'timeout', details: { timeout_ms: 5, elapsed_ms: 6 } });
+      expect(JSON.stringify(payload)).not.toContain('after');
+    } finally {
+      nowSpy.mockRestore();
+    }
   });
 
   it('T-U-212 max_total_tokens halts after the offending model call returns', async () => {
