@@ -1,0 +1,54 @@
+# CallToolResult coercion paths (Tier 2 / REQ-106).
+#
+# When the macro engine receives a `CallToolResult` envelope from a
+# brokered tool, it applies the five-step coercion rule:
+#
+#   1. If isError === true  → raise `fail` via formatToolError
+#   2. Else if structuredContent !== undefined → bind structuredContent
+#   3. Else if content[0].text is JSON-parseable  → bind parsed JSON
+#   4. Else if content[0].text exists              → bind raw string
+#   5. Else (multimodal, no text)                  → bind full envelope
+#
+# The CRITICAL invariant is that step 1 runs BEFORE coercion — without
+# it, an error message string would silently become the macro's bound
+# value and execution would continue with garbage (POC Probe 7 + 10).
+#
+# This example exercises steps 2–5 against the synthetic `coerce_demo`
+# brokered server in mockbrokers.ts. Each call lands in a different
+# coercion path; the snapshot envelope's `state_notes` capture which
+# path was taken (kind: "coerce", path: <one of five>) for testgen
+# assertions.
+#
+# Step 1 (isError fail-fast) is demonstrated in example 24 — it would
+# abort this script before reaching the later paths.
+
+echo "=== Coercion path 2: structured_content ==="
+v_struct = coerce_demo.structured()
+echo "  bound: $v_struct"
+echo "  kind:  $v_struct.kind"
+
+echo ""
+echo "=== Coercion path 3: json_text (text parses as JSON) ==="
+v_json = coerce_demo.json_text()
+echo "  bound: $v_json"
+echo "  parsed: $v_json.parsed"
+echo "  numbers: $v_json.numbers"
+
+echo ""
+echo "=== Coercion path 4: raw_string (text NOT JSON) ==="
+v_raw = coerce_demo.raw_string()
+echo "  bound: '$v_raw' (this is a JS string)"
+
+echo ""
+echo "=== Coercion path 5: passthrough (multimodal — no text item) ==="
+v_pass = coerce_demo.multimodal()
+echo "  bound full envelope: $v_pass"
+
+# Summary — each coercion path emitted a `coerce` state_note. Test
+# authors inspect the snapshot's state_notes to verify routing.
+exit {
+  structured: $v_struct,
+  json_text: $v_json,
+  raw_string: $v_raw,
+  passthrough: $v_pass
+}

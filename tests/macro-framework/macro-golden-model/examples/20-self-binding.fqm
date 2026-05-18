@@ -1,0 +1,59 @@
+# `_self` engine binding (Tier 2 / REQ-103).
+#
+# When a macro is loaded via `source_ref` (production: the macro lives in
+# a vault document at `<path>`), the engine populates a special variable
+# `_self` with a SNAPSHOT of that source document at macro start. The
+# snapshot is read-only and immutable for the macro's lifetime; macros
+# that need fresh state mid-run call `fq.get_document(_self.path)`.
+#
+# The golden simulates "loaded via source_ref" with a sidecar JSON file
+# passed via `--self-binding examples/20-self-binding.json`. Without the
+# sidecar, accessing `_self.*` raises a runtime error with the spec-
+# mandated message:
+#     "`_self` is only available when the macro was loaded via source_ref."
+#
+# Demonstrates:
+#   - REQ-103: `_self.{path, frontmatter.*, title, tags, fq_id}` access
+#   - Read-only nature: parser rejects `_self = ...` and `_self.x = ...`
+#     (the latter has no LHS-dotted form in the grammar — implicit).
+#   - The mid-run "refresh latest state" pattern via fq.get_document.
+#
+# Run:
+#   npx tsx src/run.ts examples/20-self-binding.fqm \
+#     --self-binding examples/20-self-binding.json
+
+echo "=== _self binding (REQ-103) ==="
+echo ""
+echo "Source document metadata (read-only snapshot at macro start):"
+echo "  path:  $_self.path"
+echo "  title: $_self.title"
+echo "  fq_id: $_self.fq_id"
+echo "  tags:  $_self.tags"
+
+# Dotted frontmatter access mirrors how production macros read declared
+# parameters from the source doc's YAML header.
+echo ""
+echo "Frontmatter fields:"
+echo "  status:     $_self.frontmatter.status"
+echo "  related_to: $_self.frontmatter.related_to"
+echo "  owner:      $_self.frontmatter.owner"
+
+# Snapshot semantics: even if the document changes during this run, the
+# bound `_self` values stay frozen. Re-read via fq.get_document for the
+# latest persisted state. (Mock just returns a canned doc here; the
+# important thing is the pattern.)
+echo ""
+echo "=== Re-read the source via fq.get_document for fresh state ==="
+fresh = fq.get_document({ identifiers: $_self.path })
+# The mock's canned drafts don't include this path, so it returns
+# not_found — that's fine; the demonstration is the call pattern.
+if $fresh.error then
+  echo "Fresh re-read returned $fresh.error — using the snapshot is fine"
+fi
+
+exit {
+  self_path: $_self.path,
+  self_title: $_self.title,
+  self_fq_id: $_self.fq_id,
+  self_status: $_self.frontmatter.status
+}

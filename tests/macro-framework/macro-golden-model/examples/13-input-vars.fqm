@@ -1,0 +1,110 @@
+# input_vars demo — the IN side of the function-call contract.
+#
+# Per OQ #23 (resolved 2026-05-12), macros declare their expected inputs
+# EXPLICITLY via the `input_var "<key>" [--default <literal>]` builtin.
+# Each line at the top of the macro is one input declaration; together
+# they form the macro's input contract. The pre-flight check validates
+# the caller-supplied `input_vars` map against this contract BEFORE any
+# execution begins.
+#
+# Run with all inputs supplied:
+#   npm run script -- examples/13-input-vars.fqm \
+#     --input-vars '{"search_phrases":["AI safety","model alignment"],"output_path":"Research/web-output.md","hits_per_topic":3,"reviewer_email":"matt@example.com"}'
+#
+# Run with only the required input — the optional ones use their defaults:
+#   npm run script -- examples/13-input-vars.fqm \
+#     --input-vars '{"search_phrases":["AI safety","model alignment"]}'
+#
+# Demonstrates:
+#   - Required input declaration (`input_var "key"`)
+#   - Optional input with a string default (`--default "Research/..."`)
+#   - Optional input with a number default (`--default 2`)
+#   - Optional input with a `null` default (`--default null`)
+#   - Optional input with a LIST default (`--default ["#draft", "#review"]`)
+#   - Optional input with an OBJECT default (`--default { ... }`) —
+#     together these cover all five REQ-007 ac2 default-literal types
+#     (string, number, null, list, object).
+#   - Branching on `null` to decide whether a value was caller-supplied
+#   - The function-call contract: documented inputs (here) +
+#     documented output (the exit value at the end)
+#   - Channel separation: echo for narration, exit for structured handoff
+
+# --- Input contract ------------------------------------------------------
+# Required: the list of search phrases to research. Pre-flight fails
+# with `invalid_input` if missing from `input_vars`.
+search_phrases = input_var "search_phrases"
+
+# Optional: where to write the catalog. String default.
+output_path = input_var "output_path" --default "Research/web-output.md"
+
+# Optional: max hits to fetch per phrase. Number default.
+hits_per_topic = input_var "hits_per_topic" --default 2
+
+# Optional: reviewer email to copy on the resulting handoff record.
+# Null default — the macro decides downstream what null means.
+reviewer_email = input_var "reviewer_email" --default null
+
+# Optional: tags to apply to the saved catalog. LIST default — covers the
+# fourth REQ-007 ac2 default-literal type. List items are string literals.
+tags = input_var "tags" --default ["#draft", "#review"]
+
+# Optional: per-fetch tuning. OBJECT default — covers the fifth REQ-007 ac2
+# default-literal type. Object fields are read via dotted access below.
+fetch_config = input_var "fetch_config" --default { timeout: 30, retry: false }
+
+# --- Body ----------------------------------------------------------------
+
+echo "starting research with these queries:" $search_phrases
+echo "will save output to:" $output_path
+echo "hits per phrase:" $hits_per_topic
+echo "tags to apply:" $tags
+echo "fetch timeout:" $fetch_config.timeout
+
+total_queries = count $search_phrases
+pages = []
+i = 0
+for p in $search_phrases do
+  i = add $i 1
+  status --progress $i --total $total_queries "searching: $p"
+
+  hits = brave_search.web_search({ query: $p, count: $hits_per_topic })
+  for h in $hits do
+    page = web_fetch.fetch({ url: $h.url })
+    pages = append $pages {
+      query: $p,
+      url: $h.url,
+      title: $h.title,
+      content: $page.content
+    }
+  done
+done
+
+n = count $pages
+echo "fetched $n pages total"
+
+saved = fq.write_document({
+  mode: "create",
+  path: $output_path,
+  title: "Research output",
+  content: "auto-generated from $n pages across the provided queries"
+})
+
+# Branch on the null default. If the caller supplied a reviewer email,
+# emit a status line for it; otherwise note that none was provided.
+if $reviewer_email then
+  echo "will notify reviewer: $reviewer_email"
+else
+  echo "no reviewer email supplied — skipping notification"
+fi
+
+# Exit with a structured handoff. The surrounding skill workflow will read
+# result.file.fq_id to fetch the saved document in its next step.
+exit {
+  summary: "completed $n-page research over $search_phrases",
+  count: $n,
+  file: $saved,
+  queries_used: $search_phrases,
+  reviewer_email: $reviewer_email,
+  tags: $tags,
+  fetch_config: $fetch_config
+}

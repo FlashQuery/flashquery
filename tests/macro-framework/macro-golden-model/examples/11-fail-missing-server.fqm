@@ -1,0 +1,43 @@
+# Demonstrates `_exists() = false` for a *registered-but-disconnected*
+# brokered server, with `fail` then halting the macro.
+#
+# Scenario: `brave_search` IS a known server in the in-macro registry
+# (it appears in examples 09, 10, 13), but in this run the host
+# launches the macro with the broker layer disconnected — emulated by
+# the runner's `--without-server brave_search` flag, which drops the
+# entry from the registry passed to the engine. With no live broker,
+# `brave_search._exists()` falls through to the broker probe
+# (`NullMcpBroker.exists() -> false` per REQ-045 ac3 + ac6) and the
+# guard trips.
+#
+# Why this shape, not an unknown server name. Per REQ-028 ac3+ac4 the
+# pre-scan rejects any `<unknown>.<tool>(...)` reference BEFORE
+# execution, so a macro that mentions e.g. `pretend_search.web_search`
+# never reaches `fail` — the pre-scan returns an `unknown_server`
+# envelope first. This example exists to exercise the *runtime*
+# `_exists() = false` → `fail` path cleanly; it deliberately makes no
+# tool-call references beyond the introspection method (which is
+# engine-resolved and exempt from the registry-membership check per
+# REQ-045 ac1).
+#
+# Run with the disconnect emulation:
+#   tsx src/run.ts examples/11-fail-missing-server.fqm --without-server brave_search
+#
+# Expected outcome: macro aborts with the message from `fail`. The
+# runner prints "MACRO ABORTED (fail): ..." (REQ-024 ac3
+# `macro_aborted` envelope with `details.line`) and exits with status 1.
+#
+# Demonstrates:
+#   - REQ-045 ac3+ac6: brokered `_exists()` returning false via NullMcpBroker
+#   - REQ-013 ac4: `!` negation on a tool-call expression in an `if`
+#   - REQ-036: `fail "message"` aborting the macro immediately
+#   - REQ-024 ac3: canonical `macro_aborted` envelope with `details.line`
+
+echo "About to check whether 'brave_search' is reachable…"
+
+if ! brave_search._exists() then
+  fail "brave_search broker is not connected. This macro requires it. Aborting."
+fi
+
+# Anything below this point will NOT run, because `fail` threw above.
+echo "This line should never appear in the output."

@@ -1,0 +1,24 @@
+{
+  "name": "flashquery-macro-prototype",
+  "version": "0.3.0",
+  "description": "Standalone prototype of the FlashQuery macro language. Validates the surface syntax, evaluator, and tool-dispatch model end-to-end. Not connected to FlashQuery; uses mock tools to demonstrate the pattern.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "demo": "tsx src/demo.ts",
+    "demo:syntax-error": "tsx src/demo-syntax-error.ts",
+    "demo:cancel": "tsx src/demo-cancel.ts",
+    "script": "tsx src/run.ts"
+  },
+  "dependencies": {
+    "@types/shelljs": "^0.10.0",
+    "chevrotain": "^11.0.3",
+    "fast-glob": "^3.3.3",
+    "shelljs": "^0.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}

@@ -1,0 +1,45 @@
+# `needs_user_input` — the fifth macro termination (Tier 2 / REQ-105).
+#
+# A macro that needs clarification from the user (e.g., "which workspace
+# should I use?") raises `needs_user_input` instead of guessing. The host
+# (chat session in production; runner here) renders the question, collects
+# the answer, writes it to the `answer_shape` location, and re-invokes the
+# macro. On re-invocation, the macro reads the answer from that location
+# and proceeds.
+#
+# Payload schema (per REQ-105 / §7.15 Extension 3):
+#   --question (required)        free-text question
+#   --answer_shape (required)    where to write the answer (dotted path
+#                                or section heading)
+#   --context (optional)         what state the macro is in
+#   --options (optional)         discrete choices the host can render
+#   --resume_hint (optional)     behavior on re-invocation
+#
+# This example demonstrates the SIMPLEST shape: a question with options
+# and an answer_shape. It exits via `needs_user_input` — the runner
+# renders the canonical envelope and exits cleanly (exit code 0; this
+# is a normal control-flow exit, not an error).
+#
+# Run:
+#   npx tsx src/run.ts examples/22-needs-user-input.fqm
+
+echo "Inspecting available workspaces…"
+
+# In a real macro we'd call something like
+#   workspaces = fq.list_workspaces()
+# and try to pick one. Here we hard-code "ambiguous" so the question is
+# unconditional.
+
+ws_count = 2
+echo "Found $ws_count workspaces — cannot pick automatically"
+
+needs_user_input \
+  --question "Which workspace should this document live in?" \
+  --context "Two workspaces could match: 'personal' and 'team'. Both have similar tags." \
+  --options ["personal", "team"] \
+  --answer_shape "frontmatter.workspace" \
+  --resume_hint "On answer, the macro will write the document to that workspace and proceed."
+
+# Anything below this point will NOT execute — needs_user_input raised
+# a termination that unwinds to the runner.
+echo "this line should never appear"

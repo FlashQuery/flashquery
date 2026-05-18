@@ -1,0 +1,31 @@
+# Cancellation demo.
+#
+# This macro does some real-looking work (calls "slow_op" several times,
+# each sleeping for a configurable duration). It's designed to be cancelled
+# mid-execution by the demo-cancel.ts runner, which schedules a
+# taskRegistry.cancel() after a short delay. The evaluator's cooperative
+# cancellation check sees the `cancelled` status at the next safe point
+# and throws MacroCancellationError, transitioning the task to terminal
+# `cancelled` state cleanly.
+#
+# Run via:  npm run demo:cancel
+# (which uses examples/07-cancellation.fqm + cancels after 500ms by default)
+
+status "starting long-running workflow"
+
+stage1 = slow_op 300 "stage-1"
+status --progress 1 --total 4 "stage 1 complete"
+
+stage2 = slow_op 400 "stage-2"
+status --progress 2 --total 4 "stage 2 complete"
+
+# This stage is the one the demo cancels mid-execution. The macro never
+# returns from here in the cancel demo; the runner reports the cancelled
+# task state instead.
+stage3 = slow_op 800 "stage-3"
+status --progress 3 --total 4 "stage 3 complete"
+
+stage4 = slow_op 200 "stage-4"
+status --progress 4 --total 4 "all stages complete"
+
+echo "workflow finished successfully"

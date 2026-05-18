@@ -1,0 +1,82 @@
+# `fq.search_tools` — single-shot tool discovery (Tier 2 / REQ-082..087).
+#
+# When a macro author or delegated LLM isn't sure which tool to use, the
+# `fq.search_tools` MCP tool offers a BM25-backed search across all
+# known tools (FQ-native + brokered) and returns SearchResult envelopes
+# ready to drive a direct tool invocation in one round trip.
+#
+# SearchResult shape (per REQ-082):
+#   {
+#     server: string,
+#     tool: string,
+#     description: string,
+#     score: number,
+#     normalizedScore: number,
+#     arg_summary: string,  // per REQ-082 ac3 — argument-shape summary
+#     has_help?: boolean,   // populated ONLY for fq-native (REQ-083)
+#     help_hint?: string,   //   "    "      "    "    "
+#   }
+#
+# Adjacent to the search-tools surface is the `help: true` sentinel
+# (REQ-093). Any tool call with `help: true` in its args returns the
+# tool's help-page body instead of dispatching. This example shows both
+# in their canonical use pattern: search → pick → consult help → call.
+
+echo "=== Discover tools relevant to 'write document' ==="
+hits = fq.search_tools({ query: "write document", limit: 5 })
+
+hit_count = count $hits
+echo "Got $hit_count hits — inspecting:"
+# Pick the first hit during iteration so we can consult its help next.
+# (The macro language doesn't yet have list indexing; iterate-and-break
+# is the idiomatic v0.2 pattern.)
+top_tool = "(none)"
+top_arg_summary = "(none)"
+found_top = false
+for h in $hits do
+  echo "  $h.tool_name  score=$h.score  ($h.description)"
+  echo "    args: $h.arg_summary"
+  if ! $found_top then
+    top_tool = $h.tool_name
+    top_arg_summary = $h.arg_summary
+    found_top = true
+  fi
+done
+
+echo ""
+echo "=== Consulting help for top hit ==="
+echo "Top tool: $top_tool"
+
+# REQ-093: help: true sentinel — the engine returns help-page body
+# without dispatching. Result is a CallToolResult-shaped envelope:
+#   { content: [{ type: "text", text: <body> }] }
+# The mock provides canned bodies; production reads from `.tool.md`
+# files via TOOL_META.
+help_response = fq.write_document({ help: true })
+# The macro language doesn't yet have list indexing; iterate-and-pick
+# is the idiomatic v0.3 pattern for reading content[0].text.
+help_body = ""
+for c in $help_response.content do
+  if $help_body == "" then
+    help_body = $c.text
+  fi
+done
+echo "Help body: $help_body"
+
+# === Search across brokered tools only ===
+echo ""
+echo "=== Search filtered to brokered server 'brave_search' ==="
+brokered_hits = fq.search_tools({ query: "search", server_filter: "brave_search" })
+for b in $brokered_hits do
+  echo "  $b.tool_name  score=$b.score"
+  # Note: brokered results omit has_help / help_hint per REQ-083.
+done
+
+brokered_hit_count = count $brokered_hits
+
+exit {
+  fq_hit_count: $hit_count,
+  top_tool: $top_tool,
+  top_arg_summary: $top_arg_summary,
+  brokered_hit_count: $brokered_hit_count
+}

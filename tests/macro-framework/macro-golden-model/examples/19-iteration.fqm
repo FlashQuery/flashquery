@@ -1,0 +1,111 @@
+# Three forms of iteration — compares the `..` range operator, the `range`
+# builtin, and the `while` loop.
+#
+# Demonstrates:
+#   - `..` range operator in for-loop iterable position (REQ-014): EXCLUSIVE
+#     of the end endpoint. `0..5` produces [0, 1, 2, 3, 4].
+#   - `range` builtin (REQ-038): exclusive of the upper endpoint, matching
+#     Python's range(). `range 3` -> [0, 1, 2]; `range 2 6` -> [2..5];
+#     `range 0 10 2` -> [0, 2, 4, 6, 8].
+#   - `while` loop (REQ-015): condition-driven; runs while truthy.
+#
+# Per REQ-014 ac4, `0..N` and `range N` MUST produce equivalent values —
+# both exclusive of the end. These three forms cover the iteration shapes
+# most macros need. `..` is best for one-off literal ranges in source;
+# `range` is best when bounds are computed dynamically (it takes Value
+# args); `while` is best when the termination condition is something
+# other than "N iterations."
+
+# --- Form 1: for-loop over a `..` range literal (REQ-014) --------------
+# Exclusive of the end endpoint. Expected: 0 through 4 (five iterations).
+
+echo "Form 1: for i in 0..5 do  (exclusive end — REQ-014)"
+range_a = []
+for i in 0..5 do
+  range_a = append $range_a $i
+  echo "  iter $i"
+done
+n_a = count $range_a
+echo "  -> collected $n_a items (expected 5: [0,1,2,3,4] exclusive end)"
+
+# --- Form 2: for-loop over the result of the `range` builtin (REQ-038) -
+# Exclusive of the upper endpoint, like Python's range(). The grammar
+# requires a primary (var/literal/list/object) in the iterable position,
+# so the `range` builtin gets bound to a variable first (the bind-first
+# pattern called out in §3.3 item 4 of the spec).
+
+echo ""
+echo "Form 2a: nums = range 3 ; for j in \$nums  (single-arg form — REQ-038 ac1)"
+nums_b = range 3
+range_b = []
+for j in $nums_b do
+  range_b = append $range_b $j
+  echo "  iter $j"
+done
+n_b = count $range_b
+echo "  -> collected $n_b items (expected 3: [0, 1, 2])"
+
+echo ""
+echo "Form 2b: nums = range 2 6 ; for k in \$nums  (two-arg start/stop — REQ-038 ac1)"
+nums_c = range 2 6
+range_c = []
+for k in $nums_c do
+  range_c = append $range_c $k
+  echo "  iter $k"
+done
+n_c = count $range_c
+echo "  -> collected $n_c items (expected 4: [2, 3, 4, 5])"
+
+echo ""
+echo "Form 2c: nums = range 0 10 2 ; for m in \$nums  (three-arg start/stop/step — REQ-038 ac2)"
+nums_d = range 0 10 2
+range_d = []
+for m in $nums_d do
+  range_d = append $range_d $m
+  echo "  iter $m"
+done
+n_d = count $range_d
+echo "  -> collected $n_d items (expected 5: [0, 2, 4, 6, 8])"
+
+# --- Form 3: while loop with manual counter (REQ-015) ------------------
+# When the termination condition is something other than "N iterations,"
+# `while` is the right tool. Here we use a counter for direct comparison
+# with the for-loop forms; in practice `while` is most useful for things
+# like "while there are pending items in a queue."
+
+echo ""
+echo "Form 3: while \$counter < 3 do  (REQ-015)"
+range_e = []
+counter = 0
+while $counter < 3 do
+  range_e = append $range_e $counter
+  echo "  iter $counter"
+  counter = add $counter 1
+done
+n_e = count $range_e
+echo "  -> collected $n_e items (expected 3: [0, 1, 2])"
+
+# --- Verify the three counts and exit with a structured comparison -----
+
+echo ""
+echo "Summary:"
+echo "  0..5     -> $n_a items (exclusive end)"
+echo "  range 3  -> $n_b items (exclusive upper)"
+echo "  range 2 6 -> $n_c items"
+echo "  range 0 10 2 -> $n_d items (step=2)"
+echo "  while < 3 -> $n_e items"
+
+exit {
+  range_literal: $range_a,
+  range_builtin_1arg: $range_b,
+  range_builtin_2arg: $range_c,
+  range_builtin_3arg: $range_d,
+  while_loop: $range_e,
+  counts: {
+    range_literal: $n_a,
+    range_builtin_1arg: $n_b,
+    range_builtin_2arg: $n_c,
+    range_builtin_3arg: $n_d,
+    while_loop: $n_e
+  }
+}

@@ -1,0 +1,55 @@
+# Vault-jail wrapper demo (per OQ #25, resolved 2026-05-12).
+#
+# Inside a macro, the vault IS the filesystem. `/` means vault root, not
+# host root. Every shell-verb path argument is rewritten through the
+# vault-jail wrapper:
+#   - Leading `/` stripped, then joined onto the configured vault root.
+#   - Paths normalized (`..` segments resolved).
+#   - If the normalized result is outside the vault root, the verb fails
+#     with `forbidden_path` and the macro halts.
+#
+# This example demonstrates both halves of the contract: working
+# vault-rooted paths first (so the output reads top-to-bottom), then a
+# deliberate escape attempt at the end which surfaces the engine's
+# rejection envelope.
+#
+# Run from the macro-prototype/ directory:
+#   npm run script -- examples/15-vault-jail.fqm
+#
+# (the default --vault-root is sample-vault/, which contains:
+#  Macros/, Meta/, Sample-Skills/, Specs/, README.md)
+
+# --- Part 1: vault-rooted absolute paths work --------------------------
+
+echo "=== ls / — list vault top level ==="
+top = ls "/"
+for entry in $top do
+  echo "  $entry"
+done
+echo ""
+
+echo "=== ls /Macros — list contents of Macros folder ==="
+macros = ls "/Macros"
+for entry in $macros do
+  echo "  $entry"
+done
+echo ""
+
+echo "=== cat /Meta/Skills/using-macros-in-skills.md | head -n 5 ==="
+first_lines = cat "/Meta/Skills/using-macros-in-skills.md" | head -n 5
+echo $first_lines
+echo ""
+
+# --- Part 2: escape attempt — must fail with forbidden_path -----------
+#
+# This is the LAST thing the macro tries — the macro halts on the
+# rejection and the runner emits the canonical `forbidden_path` envelope.
+# (No statements after this line would execute, so the demo is structured
+# with the rejection as the final action.)
+
+echo "=== attempting ../etc/passwd — vault-jail must reject ==="
+forbidden = cat "/../etc/passwd"
+
+# These never run; included only to confirm the macro halts before them.
+echo "this should never print"
+exit "unexpected: escape succeeded"

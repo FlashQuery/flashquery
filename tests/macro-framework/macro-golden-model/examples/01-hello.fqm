@@ -1,0 +1,12 @@
+# Hello-world macro.
+# Demonstrates: assignment, string interpolation, echo.
+
+name = "FlashQuery"
+version = 1
+echo "hello from $name v$version"
+
+# Lists and the count operator:
+items = ["alpha", "beta", "gamma"]
+total = count $items
+echo "items:" $items
+echo "count:" $total

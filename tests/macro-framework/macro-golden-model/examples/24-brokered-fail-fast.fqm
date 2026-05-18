@@ -1,0 +1,28 @@
+# Brokered-tool fail-fast on isError (Tier 2 / REQ-107).
+#
+# When a brokered tool returns `CallToolResult { isError: true, ... }`, the
+# macro frame raises `fail` immediately via `formatToolError` — it does
+# NOT bind the error message as a value (POC Probe 10). This is the
+# default semantics for v1; a future `try`-form may opt into recoverable
+# behavior, but the vast majority of macros benefit from fail-fast.
+#
+# Run this example expecting exit code 1 with the canonical
+# `tool_call_failed` envelope from the runner (REQ-054 / REQ-024 ac5).
+#
+# Run:
+#   npx tsx src/run.ts examples/24-brokered-fail-fast.fqm
+#
+# Expected output:
+#   TOOL CALL FAILED:
+#   { "error": "tool_call_failed", "message": "brokered tool coerce_demo.is_error failed (is_error_result): synthetic upstream failure: demo isError path", ... }
+
+echo "Calling a brokered tool that returns isError:true …"
+echo "The macro frame should fail-fast — anything after this never runs."
+
+result = coerce_demo.is_error()
+
+# UNREACHABLE — REQ-107 raises MacroFailError on the isError path BEFORE
+# any value is bound.
+echo "ERROR: this line should never execute (isError didn't fail-fast)"
+echo "got: $result"
+exit { unreachable: true }

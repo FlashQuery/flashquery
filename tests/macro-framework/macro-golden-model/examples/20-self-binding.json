@@ -1,0 +1,11 @@
+{
+  "path": "Roadmap/Features/Self-Binding-Demo.md",
+  "fq_id": "doc_self_demo",
+  "title": "Self Binding Demo",
+  "tags": ["#feature", "#demo"],
+  "frontmatter": {
+    "status": "active",
+    "related_to": ["doc_a", "doc_b"],
+    "owner": "matt@planorama.design"
+  }
+}

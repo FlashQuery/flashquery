@@ -23,6 +23,7 @@
     "test": "vitest run --config tests/config/vitest.unit.config.ts",
     "test:watch": "vitest --config tests/config/vitest.unit.config.ts",
     "test:integration": "vitest run --config tests/config/vitest.integration.config.ts",
+    "test:macro-framework": "vitest run --config tests/config/vitest.macro-framework.config.ts",
     "test:e2e": "vitest run --config tests/config/vitest.e2e.config.ts",
     "test:benchmark": "vitest run --config tests/config/vitest.benchmark.config.ts",
     "bench:mcp-broker": "npm run test:benchmark -- --run tests/benchmark/**/*.bench.ts",

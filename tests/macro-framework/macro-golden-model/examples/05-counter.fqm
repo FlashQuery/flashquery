@@ -1,0 +1,44 @@
+# Iteration counters and running totals.
+#
+# Demonstrates that assignments inside a for body update the OUTER scope when
+# the variable was declared there. This matches how Bash works — `i = $i + 1`
+# style counters work the way you'd expect, as long as you initialize the
+# counter before the loop.
+#
+# Note: the macro language doesn't have an infix `+` operator (yet). Use the
+# math builtins `add`, `sub`, `mul`, `div`, `mod`. So instead of `$i + 1`,
+# write `add $i 1`. Same idea, different shape.
+
+# Initialize counter and total in the outer scope.
+i = 0
+total_lines = 0
+
+drafts = fq.search({ query: "tag:#draft" })
+
+for d in $drafts do
+  # Iteration counter: i++ in spirit.
+  i = add $i 1
+
+  # Pretend each doc has some line count we'd compute. We'll just use 10 here.
+  doc_lines = 10
+  total_lines = add $total_lines $doc_lines
+
+  echo "iteration $i: processing $d.fq_id ($doc_lines lines this doc, $total_lines total so far)"
+done
+
+echo ""
+echo "done. processed $i drafts, $total_lines total lines."
+
+# Quick math builtin tour. Each is a function call — no infix syntax (yet).
+echo ""
+echo "--- math builtins ---"
+sum     = add 2 3 5     # 10
+diff    = sub 10 3      # 7
+product = mul 4 5       # 20
+quot    = div 17 5      # 3 (integer)
+rem     = mod 17 5      # 2
+echo "add 2 3 5  = $sum"
+echo "sub 10 3   = $diff"
+echo "mul 4 5    = $product"
+echo "div 17 5   = $quot"
+echo "mod 17 5   = $rem"

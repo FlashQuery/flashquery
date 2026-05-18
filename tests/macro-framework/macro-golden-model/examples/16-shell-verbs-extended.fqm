@@ -1,0 +1,44 @@
+# Demonstrates the three v0 whitelist shell-verb additions (per OQ #25,
+# resolved 2026-05-12): head, tail, ls.
+#
+# All eight verbs in the v0 whitelist are read-only and jailed to the
+# vault root (see also examples/15-vault-jail.fqm for the boundary demo).
+#
+# Run from the macro-prototype/ directory:
+#   npm run script -- examples/16-shell-verbs-extended.fqm
+#
+# Default --vault-root is sample-vault/, which has Meta/, Macros/, Specs/, etc.
+
+# --- head: first N lines of a file ---------------------------------------
+
+echo "=== head -n 5 /Meta/Skills/using-macros-in-skills.md ==="
+first_lines = head -n 5 "/Meta/Skills/using-macros-in-skills.md"
+echo $first_lines
+echo ""
+
+# --- tail: last N lines of a file ----------------------------------------
+
+echo "=== tail -n 5 /Macros/research-batch.md ==="
+last_lines = tail -n 5 "/Macros/research-batch.md"
+echo $last_lines
+echo ""
+
+# --- ls: directory listing -----------------------------------------------
+
+echo "=== ls / — top-level vault contents ==="
+top = ls "/"
+for entry in $top do
+  echo "  $entry"
+done
+echo ""
+
+echo "=== ls -l /Macros — long-format listing with metadata ==="
+detailed = ls -l "/Macros"
+for entry in $detailed do
+  echo "  $entry.name (size=$entry.size, mtime=$entry.mtime)"
+done
+echo ""
+
+echo "=== head as pipeline stage: cat then head ==="
+top_of_readme = cat "/README.md" | head -n 3
+echo $top_of_readme

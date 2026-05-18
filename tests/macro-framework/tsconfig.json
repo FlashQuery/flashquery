@@ -1,0 +1,26 @@
+{
+  "//": "tsconfig for the macro-framework layer. Used for editor / standalone tsc --noEmit checks; vitest runs files directly through tsx so this file isn't on the test runtime path. Mirrors the production tsconfig's strict options.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "ignoreDeprecations": "6.0"
+  },
+  "include": [
+    "runner.ts",
+    "cases.test.ts",
+    "state-notes/**/*.ts",
+    "golden-bridge/**/*.ts",
+    "fixtures/**/*.ts"
+  ],
+  "exclude": [
+    "macro-golden-model",
+    "node_modules"
+  ]
+}

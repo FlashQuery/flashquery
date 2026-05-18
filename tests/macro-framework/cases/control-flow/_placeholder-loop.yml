@@ -1,0 +1,77 @@
+# Phase 2 placeholder test — the scaffolding gate per §10.
+#
+# A simple `for` loop summing 1..3 inclusive (the `..` range operator is
+# exclusive on the upper end per REQ-014 ac1, so `1..4` iterates over
+# [1,2,3]). The macro `exit`s with `{sum: 6}`.
+#
+# Purpose: exercise the runner end-to-end. Loads the YAML, parses through
+# the production parser, drives the production engine, compares the
+# structured result envelope to the embedded `expect:` block. The
+# `golden_snapshot:` block was captured by
+# `macro-golden-model/src/_phase2-placeholder-capture.ts` against
+# golden_version 0.3.0.
+#
+# This test is also the integrity-check witness for `expect_state_notes`:
+# one pattern is order-independent (matching the iter=2 loop event) and a
+# second is positional (asserting binding update at snapshot[6]).
+
+id: mtf-cf-placeholder-loop
+name: Phase 2 placeholder — for-loop with range operator
+description: |
+  Scaffolding gate test. A `for i in 1..4 do total = add $total $i done`
+  macro produces sum=6 after iterations on [1,2,3]. Exit envelope and
+  state_notes both verified.
+
+covers:
+  - MTF-C-001   # for-loop basic iteration
+  - MTF-S-001   # arithmetic builtin via add()
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T22:55:39.426Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  total = 0
+  for i in 1..4 do
+    total = add $total $i
+  done
+  exit { sum: $total }
+
+input_vars: {}
+vault: {}
+tools:
+  fq: real
+
+expect:
+  outcome: success
+  return_result:
+    sum: 6
+
+golden_snapshot:
+  state_notes:
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: total, value: 0, scope: local }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 0, var: i, value: 1 }
+    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 1, scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: update, name: total, value: 1, scope: outer }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 1, var: i, value: 2 }
+    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 2, scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: update, name: total, value: 3, scope: outer }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 2, var: i, value: 3 }
+    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 3, scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: update, name: total, value: 6, scope: outer }
+
+# Load-time integrity check witnesses for the state-notes module.
+# One order-independent (no `step:`) and one positional (with `step:`).
+expect_state_notes:
+  - { kind: loop, loop_kind: for, iter: 2, var: i, value: 3 }   # 3rd iteration
+  - { step: 7, kind: binding, op: update, name: total, value: 1, scope: outer }
