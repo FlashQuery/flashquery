@@ -10,7 +10,15 @@ import type {
 } from '../../src/macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../src/llm/tool-registry.js';
 import { evaluateProgram } from '../../src/macro/evaluator.js';
-import { NullBroker, SchemaDriftNeedsUserInputError, type Broker, type ConsumerContext } from '../../src/services/mcp-broker.js';
+import {
+  McpBroker,
+  NullBroker,
+  SchemaDriftNeedsUserInputError,
+  type Broker,
+  type BrokerAuditEvent,
+  type BrokeredTool,
+  type ConsumerContext,
+} from '../../src/services/mcp-broker.js';
 import {
   clearBrokeredToolCallTrace,
   getBrokeredToolCallTraceSnapshot,
@@ -94,6 +102,27 @@ function brokeredSearchTool(costPerCall = 0) {
     inputSchema: { type: 'object' },
     tofuHash: 'hash',
     costPerCall,
+  };
+}
+
+function brokeredSearchSnapshot(input: {
+  description: string;
+  hash: string;
+  required?: string[];
+}): BrokeredTool {
+  return {
+    serverId: 'brave_search',
+    toolName: 'web_search',
+    registryKey: 'brave_search__web_search',
+    description: input.description,
+    upstreamDescription: input.description,
+    inputSchema: {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: input.required ?? [],
+    },
+    tofuHash: input.hash,
+    costPerCall: 0.005,
   };
 }
 
@@ -425,5 +454,118 @@ describe('macro ToolRegistry construction', () => {
       error: 'invalid_tool_arguments',
     });
     expect(handler).toHaveBeenCalledTimes(0);
+  });
+
+  it('approves pending TOFU schema drift and restores registry plus index state', async () => {
+    const added: BrokeredTool[][] = [];
+    const removed: string[][] = [];
+    const auditEvents: BrokerAuditEvent[] = [];
+    const broker = new McpBroker({
+      host: { mcpServers: ['brave_search'] },
+      indexSink: {
+        addTools: (tools) => added.push(tools),
+        removeTools: (keys) => removed.push(keys),
+      },
+      onAudit: (event) => auditEvents.push(event),
+    });
+
+    await broker.applyToolListSnapshot('brave_search', [
+      brokeredSearchSnapshot({ description: 'old search', hash: 'old-hash' }),
+    ]);
+    await broker.applyToolListSnapshot('brave_search', [
+      brokeredSearchSnapshot({ description: 'new search', hash: 'new-hash', required: ['query'] }),
+    ]);
+
+    expect(await broker.listToolsForConsumer({ kind: 'host', traceId: 'trace-approve' })).toHaveLength(0);
+
+    const resolved = broker.resolveSchemaDrift(
+      [{ server: 'brave_search', tool: 'web_search', decision: 'approve' }],
+      { traceId: 'trace-approve' }
+    );
+
+    expect(resolved).toEqual([{ server: 'brave_search', tool: 'web_search', decision: 'approve' }]);
+    expect(await broker.listToolsForConsumer({ kind: 'host', traceId: 'trace-approve' })).toMatchObject([
+      { serverId: 'brave_search', toolName: 'web_search', description: 'new search' },
+    ]);
+    expect(added.at(-1)?.[0]).toMatchObject({ serverId: 'brave_search', toolName: 'web_search' });
+    expect(removed.flat()).toContain('brave_search__web_search');
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'mcp_broker_tofu_decision',
+        server: 'brave_search',
+        tool: 'web_search',
+        decision: 'approve',
+        old_hash: expect.any(String),
+        new_hash: expect.any(String),
+        trace_id: 'trace-approve',
+      })
+    );
+  });
+
+  it('rejects pending TOFU schema drift and keeps the changed tool blocked', async () => {
+    const added: BrokeredTool[][] = [];
+    const auditEvents: BrokerAuditEvent[] = [];
+    const broker = new McpBroker({
+      host: { mcpServers: ['brave_search'] },
+      indexSink: {
+        addTools: (tools) => added.push(tools),
+        removeTools: vi.fn(),
+      },
+      onAudit: (event) => auditEvents.push(event),
+    });
+
+    await broker.applyToolListSnapshot('brave_search', [
+      brokeredSearchSnapshot({ description: 'old search', hash: 'old-hash' }),
+    ]);
+    await broker.applyToolListSnapshot('brave_search', [
+      brokeredSearchSnapshot({ description: 'new search', hash: 'new-hash', required: ['query'] }),
+    ]);
+
+    broker.resolveSchemaDrift(
+      [{ server: 'brave_search', tool: 'web_search', decision: 'reject' }],
+      { traceId: 'trace-reject' }
+    );
+
+    expect(await broker.listToolsForConsumer({ kind: 'host', traceId: 'trace-reject' })).toHaveLength(0);
+    expect(added).toHaveLength(1);
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'mcp_broker_tofu_decision',
+        server: 'brave_search',
+        tool: 'web_search',
+        decision: 'reject',
+        trace_id: 'trace-reject',
+      })
+    );
+  });
+
+  it('records autonomous TOFU drift as blocked_on_user without emitting a prompt payload', async () => {
+    const driftCallback = vi.fn();
+    const auditEvents: BrokerAuditEvent[] = [];
+    const broker = new McpBroker({
+      host: { mcpServers: ['brave_search'] },
+      onTofuDrift: driftCallback,
+      onAudit: (event) => auditEvents.push(event),
+    });
+
+    await broker.applyToolListSnapshot('brave_search', [
+      brokeredSearchSnapshot({ description: 'old search', hash: 'old-hash' }),
+    ]);
+    await broker.applyToolListSnapshot(
+      'brave_search',
+      [brokeredSearchSnapshot({ description: 'new search', hash: 'new-hash', required: ['query'] })],
+      { interactive: false, traceId: 'trace-autonomous' }
+    );
+
+    expect(driftCallback).not.toHaveBeenCalled();
+    expect(auditEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'mcp_broker_tofu_blocked',
+        server: 'brave_search',
+        tool: 'web_search',
+        status: 'blocked_on_user',
+        trace_id: 'trace-autonomous',
+      })
+    );
   });
 });
