@@ -99,6 +99,15 @@ async function observeQuirkyListChanged(initialTools: Tool[], laterTools: Tool[]
   return { before, after };
 }
 
+async function waitForCondition(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for condition.');
+}
+
 describe('mcp broker client lifecycle integration', () => {
   it('T-I-001 lazily spawns on first reference and shuts down the child', async () => {
     const client = trackClient();
@@ -280,6 +289,29 @@ describe('mcp broker client lifecycle integration', () => {
 
     expect(before.map((tool) => tool.name)).toEqual(['kept', 'removed']);
     expect(after.map((tool) => tool.name)).toEqual(['kept']);
+  });
+
+  it('T-I-004 BrokerClient reports refreshed brokered tools after list_changed', async () => {
+    const changedSnapshots: Array<{ serverId: string; toolNames: string[] }> = [];
+    const client = trackClient({
+      serverId: 'quirky',
+      args: ['--import', 'tsx', quirkyServer],
+      env: {
+        QUIRK_INITIAL_TOOLS: JSON.stringify([toolSnapshot('before')]),
+        QUIRK_LATER_TOOLS: JSON.stringify([toolSnapshot('before'), toolSnapshot('after')]),
+        QUIRK_EMIT_LIST_CHANGED_MS: '25',
+      },
+      onToolListChanged: (serverId, tools) => {
+        changedSnapshots.push({ serverId, toolNames: tools.map((tool) => tool.toolName) });
+      },
+    });
+
+    await client.ensureConnected();
+    expect((await client.listTools()).map((tool) => tool.toolName)).toEqual(['before']);
+    await waitForCondition(() => changedSnapshots.length === 1);
+
+    expect(changedSnapshots).toEqual([{ serverId: 'quirky', toolNames: ['before', 'after'] }]);
+    expect((await client.listTools()).map((tool) => tool.toolName)).toEqual(['before', 'after']);
   });
 
   it('public broker creates lazy clients, filters registry tools, returns raw CallToolResult, and shuts down', async () => {
