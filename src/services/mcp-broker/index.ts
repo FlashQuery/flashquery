@@ -1,4 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { logger } from '../../logging/logger.js';
 import { BrokerClient } from './client.js';
 import { diffToolSnapshots } from './diff.js';
 import { formatToolError, toThrowableToolError } from './errors.js';
@@ -159,11 +160,12 @@ export class McpBroker implements Broker {
       const pendingKey = `${decision.server}__${decision.tool}`;
       const pendingTool = this.#pendingTools.get(pendingKey);
       const before = this.#tofuStore.get(decision.server, decision.tool);
-      if (pendingTool === undefined || before?.pendingHash === undefined) {
+      if (before?.pendingHash === undefined) {
         continue;
       }
 
       if (decision.decision === 'approve') {
+        if (pendingTool === undefined) continue;
         const approved = this.#tofuStore.approve(decision.server, decision.tool);
         const registered = this.#registry.registerTool({
           ...pendingTool,
@@ -244,6 +246,19 @@ export class McpBroker implements Broker {
   #emitAudit(event: BrokerAuditEvent): void {
     recordBrokerAuditEvent(event);
     this.#onAudit?.(event);
+    if (event.type === 'mcp_broker_tofu_decision') {
+      logger?.warn(
+        `mcp_broker_tofu_decision server=${event.server} tool=${event.tool} decision=${event.decision}${
+          event.trace_id === undefined ? '' : ` trace_id=${event.trace_id}`
+        }`
+      );
+    } else if (event.type === 'mcp_broker_tofu_blocked') {
+      logger?.warn(
+        `mcp_broker_tofu_blocked server=${event.server} tool=${event.tool} status=${event.status}${
+          event.trace_id === undefined ? '' : ` trace_id=${event.trace_id}`
+        }`
+      );
+    }
   }
 }
 
@@ -265,6 +280,13 @@ export class NullBroker implements Broker {
   }
 
   getPendingSchemaDrift(_ctx: SchemaDriftResolutionContext = {}): TofuDriftPayload[] {
+    return [];
+  }
+
+  resolveSchemaDrift(
+    _decisions: SchemaDriftDecisionInput[],
+    _ctx: SchemaDriftResolutionContext = {}
+  ): SchemaDriftResolution[] {
     return [];
   }
 

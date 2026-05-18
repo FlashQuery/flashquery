@@ -23,6 +23,7 @@ import type { MacroCallerContext } from '../../macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../llm/tool-registry.js';
 import type { BrokeredTool, McpBroker } from '../../services/mcp-broker.js';
 import { NullMcpBroker } from '../../services/mcp-broker.js';
+import type { SchemaDriftDecisionInput } from '../../services/mcp-broker.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, type ToolResult } from '../utils/response-formats.js';
 import {
@@ -470,6 +471,9 @@ export function registerMacroTools(
         const callerContext: MacroCallerContext = { origin: 'host' };
         const currentSessionId = options.sessionIdProvider?.(extra) ?? resolveSessionId(extra) ?? registrationSessionId;
         const consumerContext = { kind: 'host' as const, traceId: currentSessionId };
+        applyTofuDecisionsFromInputVars(broker, params.input_vars, currentSessionId);
+        await broker.listToolsForConsumer(consumerContext);
+        applyTofuDecisionsFromInputVars(broker, params.input_vars, currentSessionId);
         const visibleBrokerTools = await broker.listToolsForConsumer(consumerContext);
         const pendingBrokerTools = broker.getPendingSchemaDrift(consumerContext).map((drift) => ({
           serverId: drift.server,
@@ -534,6 +538,41 @@ function groupBrokerToolsForMacro(tools: Array<Pick<BrokeredTool, 'serverId' | '
     label: value.label,
     tools: value.tools,
   }));
+}
+
+function applyTofuDecisionsFromInputVars(
+  broker: McpBroker,
+  inputVars: unknown,
+  traceId: string
+): void {
+  const root = asRecord(inputVars);
+  const frontmatter = asRecord(root?.['frontmatter']);
+  const userDecisions = asRecord(frontmatter?.['user_decisions']);
+  if (userDecisions === undefined) return;
+
+  const decisions: SchemaDriftDecisionInput[] = [];
+  for (const [key, value] of Object.entries(userDecisions)) {
+    const decisionRecord = asRecord(value);
+    const decision = decisionRecord?.['tofu_decision'];
+    if (decision !== 'approve' && decision !== 'reject') continue;
+    const delimiter = key.indexOf('__');
+    if (delimiter <= 0 || delimiter === key.length - 2) continue;
+    decisions.push({
+      server: key.slice(0, delimiter),
+      tool: key.slice(delimiter + 2),
+      decision,
+    });
+  }
+
+  if (decisions.length > 0) {
+    broker.resolveSchemaDrift(decisions, { traceId });
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined;
 }
 
 function expectedMacroErrorResult(error: unknown): ToolResult {

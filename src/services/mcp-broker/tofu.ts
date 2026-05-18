@@ -82,9 +82,21 @@ export class InMemoryTofuStore {
         removed: false,
         pendingHash: undefined,
         pendingSchema: undefined,
+        rejectedHash: undefined,
+        rejectedSchema: undefined,
       };
       this.#entries.set(key, entry);
       return { status: 'trusted', key, entry: cloneEntry(entry) };
+    }
+
+    if (existing.rejectedHash === hash) {
+      const entry: TofuEntry = {
+        ...existing,
+        blocked: true,
+        removed: false,
+      };
+      this.#entries.set(key, entry);
+      return { status: 'blocked', key, entry: cloneEntry(entry) };
     }
 
     const entry: TofuEntry = {
@@ -128,6 +140,8 @@ export class InMemoryTofuStore {
     const entry = this.#requireEntry(key);
     const rejected: TofuEntry = {
       ...entry,
+      ...(entry.pendingHash === undefined ? {} : { rejectedHash: entry.pendingHash }),
+      ...(entry.pendingSchema === undefined ? {} : { rejectedSchema: entry.pendingSchema }),
       pendingHash: undefined,
       pendingSchema: undefined,
       blocked: true,
@@ -256,6 +270,7 @@ function cloneEntry(entry: TofuEntry): TofuEntry {
     ...entry,
     trustedSchema: cloneSnapshot(entry.trustedSchema),
     ...(entry.pendingSchema === undefined ? {} : { pendingSchema: cloneSnapshot(entry.pendingSchema) }),
+    ...(entry.rejectedSchema === undefined ? {} : { rejectedSchema: cloneSnapshot(entry.rejectedSchema) }),
   };
 }
 

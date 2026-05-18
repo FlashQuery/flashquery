@@ -354,12 +354,15 @@ describe('Phase B MCP broker E2E', () => {
       },
     });
 
-    brokers[0]?.resolveSchemaDrift([{ server: 'quirky', tool: 'stable', decision: 'approve' }], {
-      traceId: sessionId,
-    });
-
     const finalMessages = await callMacro(203, {
       trace: 'summary',
+      input_vars: {
+        frontmatter: {
+          user_decisions: {
+            quirky__stable: { tofu_decision: 'approve' },
+          },
+        },
+      },
       source: `
         echoed = quirky.stable({ value: "second", token: "approved" })
         exit $echoed

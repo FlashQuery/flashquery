@@ -85,11 +85,13 @@ export interface TofuEntry {
   trustedSchema: TofuToolSchemaSnapshot;
   pendingHash?: string;
   pendingSchema?: TofuToolSchemaSnapshot;
+  rejectedHash?: string;
+  rejectedSchema?: TofuToolSchemaSnapshot;
   blocked: boolean;
   removed: boolean;
 }
 
-export type TofuObservationStatus = 'trusted' | 'pending_re_approval';
+export type TofuObservationStatus = 'trusted' | 'pending_re_approval' | 'blocked';
 
 export interface TofuObservationResult {
   status: TofuObservationStatus;
@@ -159,6 +161,10 @@ export interface Broker {
   isConnected(serverId: string, opts?: BrokerConnectionOptions): Promise<boolean>;
   listToolsForConsumer(ctx: ConsumerContext): Promise<BrokeredTool[]>;
   getPendingSchemaDrift(ctx?: SchemaDriftResolutionContext): TofuDriftPayload[];
+  resolveSchemaDrift(
+    decisions: SchemaDriftDecisionInput[],
+    ctx?: SchemaDriftResolutionContext
+  ): SchemaDriftResolution[];
   shutdown(graceMs?: number): Promise<void>;
 }
 

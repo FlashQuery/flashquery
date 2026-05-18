@@ -243,6 +243,15 @@ Core CRUD operations on vault documents via MCP.
 | MCB-02 | Macro calls brokered tool that returns `isError:true`; macro fails-fast with `tool_call_failed` envelope normalized via `formatToolError`. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-18 |
 | MCB-18 | Rejected reverse request (sampling / elicitation) audit-logged with `status: 'rejected_unsupported'` without raw prompt payload. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-18 |
 
+## Phase 140 MCP Broker TOFU And List Changed
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| MCB-03 | Macro encounters TOFU schema drift and exits with `needs_user_input` payload containing old and new schema details. | test_macro_brokered_tofu_drift_exit | 2026-05-18 | 2026-05-18 |
+| MCB-04 | Chat-mediated TOFU approval is passed back through `call_macro` input vars and the macro re-invocation completes. | test_macro_tofu_reapproval_approve_resume | 2026-05-18 | 2026-05-18 |
+| MCB-05 | Chat-mediated TOFU rejection keeps the changed brokered tool blocked and does not continue silently. | test_macro_tofu_reapproval_reject_blocked | 2026-05-18 | 2026-05-18 |
+| MCB-17 | TOFU approval decisions are audit-logged in the managed server trace stream. | test_tofu_approval_audit_log | 2026-05-18 | 2026-05-18 |
+
 ## 2. Document Content Operations
 
 Surgical editing tools for modifying document content at specific locations.
