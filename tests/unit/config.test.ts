@@ -170,6 +170,213 @@ macro:
     }
   });
 
+  it('loads broker mcp_servers, host, and purpose visibility config in camelCase', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-broker-config-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "broker-config-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+mcp_servers:
+  basic:
+    transport: stdio
+    command: "node"
+    args: ["server.js"]
+    env:
+      BASIC_TOKEN: "\${BROKER_BASIC_TOKEN}"
+    cost_per_call: 0.25
+    per_call_timeout_ms: 1250
+    tool_overrides:
+      search:
+        cost_per_call: 0.5
+        description_override: "Search with the basic server"
+  defaults:
+    transport: stdio
+    command: "node"
+host:
+  mcp_servers: [basic]
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: main
+      provider_name: openai
+      model: gpt-test
+      type: language
+      cost_per_million:
+        input: 0
+        output: 0
+  purposes:
+    - name: research
+      description: Research purpose
+      models: [main]
+      mcp_servers: [basic, defaults]
+`);
+    try {
+      const config = loadConfig(tmpFile);
+
+      expect(config.mcpServers.basic).toEqual({
+        transport: 'stdio',
+        command: 'node',
+        args: ['server.js'],
+        env: { BASIC_TOKEN: '${BROKER_BASIC_TOKEN}' },
+        costPerCall: 0.25,
+        perCallTimeoutMs: 1250,
+        toolOverrides: {
+          search: {
+            costPerCall: 0.5,
+            descriptionOverride: 'Search with the basic server',
+          },
+        },
+      });
+      expect(config.mcpServers.defaults.costPerCall).toBe(0);
+      expect(config.mcpServers.defaults.perCallTimeoutMs).toBe(30000);
+      expect(config.mcpServers.defaults.toolOverrides).toEqual({});
+      expect(config.host).toEqual({ mcpServers: ['basic'], toolSearch: 'disabled' });
+      expect(config.llm?.purposes[0]).toMatchObject({
+        name: 'research',
+        mcpServers: ['basic', 'defaults'],
+        toolSearch: 'disabled',
+      });
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('accepts empty host config as disabled broker host visibility', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-broker-empty-host-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "broker-empty-host-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+host: {}
+`);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.host).toEqual({ mcpServers: [], toolSearch: 'disabled' });
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('rejects unsupported broker transports with a stdio-only config error', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-broker-transport-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "broker-transport-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+mcp_servers:
+  basic:
+    transport: streamable-http
+    command: "node"
+`);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/mcp_servers\.basic\.transport/);
+      expect(() => loadConfig(tmpFile)).toThrow(/stdio/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('rejects unknown host broker server references with the missing ID', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-broker-host-ref-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "broker-host-ref-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+mcp_servers:
+  basic:
+    transport: stdio
+    command: "node"
+host:
+  mcp_servers: [missing]
+`);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/host/);
+      expect(() => loadConfig(tmpFile)).toThrow(/missing/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('rejects unknown purpose broker server references with the purpose name and missing ID', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-broker-purpose-ref-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "broker-purpose-ref-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+mcp_servers:
+  basic:
+    transport: stdio
+    command: "node"
+llm:
+  providers:
+    - name: openai
+      type: openai-compatible
+      endpoint: https://api.openai.com
+  models:
+    - name: main
+      provider_name: openai
+      model: gpt-test
+      type: language
+      cost_per_million:
+        input: 0
+        output: 0
+  purposes:
+    - name: research
+      description: Research purpose
+      models: [main]
+      mcp_servers: [missing]
+`);
+    try {
+      expect(() => loadConfig(tmpFile)).toThrow(/research/);
+      expect(() => loadConfig(tmpFile)).toThrow(/missing/);
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
   it('rejects unsupported trash_folder collision_strategy values', () => {
     const tmpFile = join(tmpdir(), `fqc-test-trash-folder-invalid-${Date.now()}.yaml`);
     writeFileSync(tmpFile, `
