@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import type { CallToolResult, Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { FlashQueryConfig } from '../../../src/config/loader.js';
 import {
   createMcpServer,
@@ -14,6 +16,7 @@ import { ToolSearchService } from '../../../src/services/tool-search/tool-search
 
 const fixtureDir = resolve(fileURLToPath(new URL('../../fixtures/mcp-servers', import.meta.url)));
 const basicServer = resolve(fixtureDir, 'server-basic.ts');
+const quirkyServer = resolve(fixtureDir, 'server-quirky.ts');
 
 const brokers: McpBroker[] = [];
 
@@ -59,6 +62,24 @@ function basicBrokerConfig(overrides: Partial<BrokerClientConfig> = {}): BrokerC
   };
 }
 
+function quirkyBrokerConfig(initialTools: Tool[], laterTools: Tool[], overrides: Partial<BrokerClientConfig> = {}): BrokerClientConfig {
+  return {
+    serverId: 'quirky',
+    transport: 'stdio',
+    command: process.execPath,
+    args: ['--import', 'tsx', quirkyServer],
+    env: {
+      QUIRK_INITIAL_TOOLS: JSON.stringify(initialTools),
+      QUIRK_LATER_TOOLS: JSON.stringify(laterTools),
+      QUIRK_EMIT_LIST_CHANGED_MS: '25',
+    },
+    costPerCall: 0,
+    perCallTimeoutMs: 30000,
+    toolOverrides: {},
+    ...overrides,
+  };
+}
+
 function toolSnapshot(name: string, description: string): Tool {
   return {
     name,
@@ -92,6 +113,12 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 1000): Pro
   throw new Error('Timed out waiting for condition.');
 }
 
+function textOf(result: CallToolResult): string {
+  const first = result.content[0];
+  if (first?.type !== 'text') throw new Error('Expected text result.');
+  return first.text;
+}
+
 describe('host tool-search index lifecycle', () => {
   it('T-I-038 builds a host index with host-visible native and brokered tools when enabled', async () => {
     const config = makeConfig({
@@ -123,6 +150,51 @@ describe('host tool-search index lifecycle', () => {
         has_help: false,
       })
     );
+  });
+
+  it('T-I-038 returns host-native and host-visible brokered results through public search_tools when enabled', async () => {
+    const config = makeConfig({
+      mcpServers: { basic: basicBrokerConfig() },
+      host: { mcpServers: ['basic'], toolSearch: 'enabled' },
+    });
+    const broker = createBroker({
+      mcpServers: { basic: basicBrokerConfig() },
+      host: { mcpServers: ['basic'] },
+      llm: { purposes: [{ name: 'research', mcpServers: [] }] },
+    });
+    brokers.push(broker);
+    const server = createMcpServer(config, 'test', { broker });
+    await initializeHostToolSearchForServer(server);
+    const client = new Client({ name: 'host-search-test', version: '1.0.0' });
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    try {
+      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+
+      const brokeredResult = await client.callTool({
+        name: 'search_tools',
+        arguments: { query: 'repeat diagnostics payloads', limit: 5 },
+      }) as CallToolResult;
+      const nativeResult = await client.callTool({
+        name: 'search_tools',
+        arguments: { query: 'read vault document', limit: 5 },
+      }) as CallToolResult;
+
+      expect(JSON.parse(textOf(brokeredResult))).toContainEqual(
+        expect.objectContaining({
+          server: 'basic',
+          tool: 'echo',
+          registry_key: 'basic__echo',
+          description: 'Repeat diagnostics payloads for host search.',
+          has_help: false,
+        })
+      );
+      expect(JSON.parse(textOf(nativeResult))).toContainEqual(
+        expect.objectContaining({ server: 'flashquery', has_help: true })
+      );
+    } finally {
+      await client.close().catch(() => undefined);
+      await serverTransport.close().catch(() => undefined);
+    }
   });
 
   it('T-I-038 builds native-only host search when brokered host tool_search is disabled', async () => {
@@ -175,5 +247,43 @@ describe('host tool-search index lifecycle', () => {
 
     await broker.applyToolListSnapshot('hidden', [brokeredTool('hidden', toolSnapshot('secret', 'Hidden purpose-only description'))]);
     expect(service.search('hidden purpose-only', 5)).toEqual([]);
+  });
+
+  it('T-I-039 updates host search from a host-visible server notifications/tools/list_changed by removing old tools and adding new tools', async () => {
+    const removed = toolSnapshot('removed_tool', 'Removed host-visible diagnostic description');
+    const added = toolSnapshot('added_tool', 'Newly added host-visible diagnostic description');
+    const service = ToolSearchService.createEmpty();
+    const indexedBroker = createBroker({
+      mcpServers: {
+        quirky: quirkyBrokerConfig([removed], [added]),
+      },
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [] },
+      indexSink: service.createHostIndexSink(['quirky']),
+    });
+    brokers.push(indexedBroker);
+
+    await service.buildForHost({
+      nativeToolCatalog: [],
+      nativeToolNames: [],
+      broker: indexedBroker,
+    });
+
+    expect(service.search('removed host-visible diagnostic', 5)).toContainEqual(
+      expect.objectContaining({ registry_key: 'quirky__removed_tool' })
+    );
+    await waitForCondition(
+      () =>
+        service.search('newly added host-visible diagnostic', 5).some((result) => result.registry_key === 'quirky__added_tool') &&
+        service.search('removed host-visible diagnostic', 5).every((result) => result.registry_key !== 'quirky__removed_tool'),
+      1500
+    );
+
+    expect(service.search('newly added host-visible diagnostic', 5)).toContainEqual(
+      expect.objectContaining({ registry_key: 'quirky__added_tool' })
+    );
+    expect(service.search('removed host-visible diagnostic', 5)).not.toContainEqual(
+      expect.objectContaining({ registry_key: 'quirky__removed_tool' })
+    );
   });
 });
