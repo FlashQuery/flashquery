@@ -44,6 +44,51 @@ export interface BrokeredTool {
   costPerCall: number;
 }
 
+export type TofuDecision = 'approve' | 'reject';
+
+export interface TofuToolSchemaSnapshot {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+}
+
+export interface TofuDriftPayload {
+  event: 'schema_drift_detected';
+  server: string;
+  tool: string;
+  question: string;
+  old_schema: TofuToolSchemaSnapshot;
+  new_schema: TofuToolSchemaSnapshot;
+  diff_summary: string;
+  options: ['approve', 'reject'];
+  answer_shape: string;
+}
+
+export interface TofuEntry {
+  serverId: string;
+  toolName: string;
+  trustedHash: string;
+  trustedSchema: TofuToolSchemaSnapshot;
+  pendingHash?: string;
+  pendingSchema?: TofuToolSchemaSnapshot;
+  blocked: boolean;
+  removed: boolean;
+}
+
+export type TofuObservationStatus = 'trusted' | 'pending_re_approval';
+
+export interface TofuObservationResult {
+  status: TofuObservationStatus;
+  key: string;
+  entry: TofuEntry;
+  drift?: TofuDriftPayload;
+}
+
+export interface ToolIndexSink {
+  addTools(tools: BrokeredTool[]): void;
+  removeTools(keys: RegistryKey[]): void;
+}
+
 export interface BrokerConnectionOptions {
   deepProbe?: boolean;
   timeoutMs?: number;
