@@ -23,6 +23,7 @@ export { formatToolError, stripRawFromToolError, toThrowableToolError } from './
 export { ToolRegistry, isRegistryKey, makeRegistryKey, parseMacroRef, parseRegistryKey } from './registry.js';
 export { clearBrokeredToolCallTrace, getBrokeredToolCallTraceSnapshot, recordBrokeredToolCall } from './trace.js';
 export { InMemoryTofuStore, canonicalJson, hashToolSchema } from './tofu.js';
+export { SchemaDriftNeedsUserInputError } from './types.js';
 export type * from './types.js';
 
 export interface BrokerConfig extends ToolRegistryConfig {

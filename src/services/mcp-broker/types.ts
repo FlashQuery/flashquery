@@ -71,6 +71,13 @@ export interface TofuDriftBundle {
   changes: TofuDriftPayload[];
 }
 
+export class SchemaDriftNeedsUserInputError extends Error {
+  constructor(public readonly payload: TofuDriftPayload | TofuDriftBundle) {
+    super('Brokered tool schema drift requires user input.');
+    this.name = 'SchemaDriftNeedsUserInputError';
+  }
+}
+
 export interface TofuEntry {
   serverId: string;
   toolName: string;

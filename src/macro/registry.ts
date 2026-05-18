@@ -4,6 +4,7 @@ import { resolveHostToolExposure } from '../mcp/tool-exposure.js';
 import {
   formatToolError,
   recordBrokeredToolCall,
+  SchemaDriftNeedsUserInputError,
   type Broker,
   type ConsumerContext,
 } from '../services/mcp-broker.js';
@@ -13,7 +14,12 @@ import {
   type NativeToolDispatchContext,
   type NativeToolResponse,
 } from '../llm/tool-registry.js';
-import { MacroExpectedError, type MacroInvocationContext, type MacroValue } from './evaluator.js';
+import {
+  MacroExpectedError,
+  MacroNeedsUserInputError,
+  type MacroInvocationContext,
+  type MacroValue,
+} from './evaluator.js';
 import { coerceBrokerToolArguments, coerceCallToolResult, isCallToolErrorResult } from './coerce.js';
 import type { MacroCallerContext, ToolFn, ToolRegistry } from './types.js';
 
@@ -166,6 +172,9 @@ function wrapBrokerTool(input: {
       return coerceCallToolResult(result);
     } catch (error: unknown) {
       if (error instanceof MacroExpectedError) throw error;
+      if (error instanceof SchemaDriftNeedsUserInputError) {
+        throw new MacroNeedsUserInputError(error.payload);
+      }
       const normalized = formatToolError(error, ref);
       throw new MacroExpectedError('tool_call_failed', normalized.message, normalized);
     }
