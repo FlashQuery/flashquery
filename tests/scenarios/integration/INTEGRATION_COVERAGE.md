@@ -102,6 +102,17 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 | INT-MCB-08 | `description_override` is visible to delegated flat brokered dispatch and to `fq.search_tools` result text in managed YAML mode. | description_override_substitution | 2026-05-18   | 2026-05-18   |
 | INT-MCB-13 | A `tool_search: enabled` purpose searches visible brokered and FQ-native tools, then dispatches the discovered brokered result tool in managed YAML mode. | search_tools_workflow        | 2026-05-18   | 2026-05-18   |
 
+## Phase 142 MCP Broker Host Surface And ConsumerContext
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| INT-MCB-02 | T-Y-002 `host.mcp_servers` exposes a brokered tool on the host surface and direct host dispatch succeeds. | brokered_host_dispatch       | 2026-05-18   | 2026-05-18   |
+| INT-MCB-03 | T-Y-003 `host.tool_search: enabled` indexes host-visible brokered tools with the host search surface. | host_tool_search_with_brokered | 2026-05-18   | 2026-05-18   |
+| INT-MCB-06 | T-Y-006 empty `host: {}` is valid and equivalent to absent brokered host visibility. | host_empty_section           | 2026-05-18   | 2026-05-18   |
+| INT-MCB-09 | T-Y-009 existing `host_mcp_tools` native filtering coexists with new `host.mcp_servers` brokered visibility. | host_mcp_tools_with_brokered | 2026-05-18   | 2026-05-18   |
+| INT-MCB-10 | T-Y-010 brokered host registration appears in `tools/list` by registry-key name with `description_override` applied through `BrokeredTool.description`. | brokered_host_registration   | 2026-05-18   | 2026-05-18   |
+| INT-MCB-11 | T-Y-011 brokered tools have no broker-side tier classification; visibility is governed by `mcp_servers` membership. | brokered_no_tier_classification | 2026-05-18   | 2026-05-18   |
+
 ---
 
 ## IS — Search Coherence

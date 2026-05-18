@@ -867,11 +867,10 @@ def _list_tools(client: FQCClient) -> ToolResult:
         )
 
     tools = (raw.get("result") or {}).get("tools") or []
-    names = [tool.get("name") for tool in tools if isinstance(tool, dict)]
     return ToolResult(
         tool="mcp.list_tools",
         ok=True,
-        text=json.dumps({"tools": names}, sort_keys=True),
+        text=json.dumps({"tools": tools}, sort_keys=True),
         timing_ms=elapsed,
         arguments={},
         raw_response=raw,

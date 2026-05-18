@@ -1,0 +1,27 @@
+name: host_mcp_tools_with_brokered
+description: >
+  T-Y-009 / INT-MCB-09: native host_mcp_tools filtering coexists additively
+  with brokered host.mcp_servers visibility.
+coverage: [INT-MCB-09]
+server_modes: [managed]
+
+extra_config:
+  host_mcp_tools:
+    tools: [tier:read-only]
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+  host:
+    mcp_servers: [basic]
+    tool_search: disabled
+
+steps:
+  - label: "INT-MCB-09 / T-Y-009: host listTools includes native read-only and brokered surfaces"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "get_document"
+      expect_not_contains: "write_document"

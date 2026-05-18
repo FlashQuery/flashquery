@@ -1,0 +1,32 @@
+name: brokered_host_dispatch
+description: >
+  T-Y-002 / INT-MCB-02: managed host.mcp_servers config exposes basic__echo
+  on the host MCP surface and direct host tools/call dispatch succeeds.
+coverage: [INT-MCB-02]
+server_modes: [managed]
+
+extra_config:
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+      tool_overrides:
+        echo:
+          cost_per_call: 0.25
+  host:
+    mcp_servers: [basic]
+    tool_search: disabled
+
+steps:
+  - label: "INT-MCB-02 / T-Y-002: host dispatches brokered basic__echo"
+    assert:
+      op: basic__echo
+      args:
+        value:
+          marker: "host-dispatch-${run.id}"
+          ok: true
+      expect_contains: "host-dispatch-${run.id}"
+

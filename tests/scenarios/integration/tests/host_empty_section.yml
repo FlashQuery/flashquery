@@ -1,0 +1,23 @@
+name: host_empty_section
+description: >
+  T-Y-006 / INT-MCB-06: empty host config is valid and equivalent to absent
+  brokered host visibility.
+coverage: [INT-MCB-06]
+server_modes: [managed]
+
+extra_config:
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+  host: {}
+
+steps:
+  - label: "INT-MCB-06 / T-Y-006: empty host exposes no brokered tools"
+    assert:
+      op: mcp.list_tools
+      expect_not_contains: "basic__echo"
+

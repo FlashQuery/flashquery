@@ -1,0 +1,35 @@
+name: brokered_host_registration
+description: >
+  T-Y-010 / INT-MCB-10: brokered host registration appears in tools/list using
+  the registry-key name and BrokeredTool.description after description_override.
+coverage: [INT-MCB-10]
+server_modes: [managed]
+
+extra_config:
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+      tool_overrides:
+        echo:
+          description_override: "X"
+  host:
+    mcp_servers: [basic]
+    tool_search: disabled
+
+steps:
+  - label: "INT-MCB-10 / T-Y-010: host tools/list includes brokered registry key"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "basic__echo"
+
+  - label: "INT-MCB-10 / T-Y-010: host tools/list shows override description from BrokeredTool.description"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "\"description\": \"X\""
+      expect_not_contains: "Echoes the provided value without mutation."
+      expect_json_path:
+        - tools[0].description

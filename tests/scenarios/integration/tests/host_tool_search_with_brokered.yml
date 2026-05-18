@@ -1,0 +1,33 @@
+name: host_tool_search_with_brokered
+description: >
+  T-Y-003 / INT-MCB-03: host.tool_search enabled indexes host-visible brokered
+  tools and FQ-native tools together.
+coverage: [INT-MCB-03]
+server_modes: [managed]
+
+extra_config:
+  host_mcp_tools:
+    tools: [search_tools, get_document]
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+      tool_overrides:
+        echo:
+          description_override: "Host search override echo searchable target."
+  host:
+    mcp_servers: [basic]
+    tool_search: enabled
+
+steps:
+  - label: "INT-MCB-03 / T-Y-003: host search_tools finds brokered and native tools"
+    assert:
+      op: search_tools
+      args:
+        query: "host search override echo searchable document"
+        limit: 8
+      expect_contains: "basic__echo"
+      expect_not_contains: "invalid_tool_arguments"

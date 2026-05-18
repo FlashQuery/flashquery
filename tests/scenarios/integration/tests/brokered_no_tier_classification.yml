@@ -1,0 +1,134 @@
+name: brokered_no_tier_classification
+description: >
+  T-Y-011 / INT-MCB-11: brokered tools have no broker-side tier classification;
+  visibility is governed only by mcp_servers membership.
+coverage: [INT-MCB-11]
+server_modes: [managed]
+
+mock_openai:
+  responses:
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
+              - id: call_hidden_basic_echo
+                type: function
+                function:
+                  name: basic__echo
+                  arguments:
+                    value:
+                      marker: "tier-hidden-${run.id}"
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 11
+        completion_tokens: 3
+    - choices:
+        - message:
+            role: assistant
+            content: "INT-MCB-11 hidden tier complete"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 12
+        completion_tokens: 4
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
+              - id: call_visible_basic_echo
+                type: function
+                function:
+                  name: basic__echo
+                  arguments:
+                    value:
+                      marker: "membership-visible-${run.id}"
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 11
+        completion_tokens: 3
+    - choices:
+        - message:
+            role: assistant
+            content: "INT-MCB-11 membership visible complete"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 12
+        completion_tokens: 4
+
+extra_config:
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+  llm:
+    providers:
+      - name: mock
+        type: openai-compatible
+        endpoint: "${mock_openai.endpoint}"
+        api_key: sk-test
+    models:
+      - name: broker-agent
+        provider_name: mock
+        model: broker-agent
+        type: language
+        cost_per_million:
+          input: 0
+          output: 0
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+          strict_tools: true
+          parallel_tool_calls: true
+    purposes:
+      - name: tier_only
+        description: Tier-only purpose should not receive brokered tools
+        models: [broker-agent]
+        tools: [tier:read-only]
+        defaults:
+          max_iterations: 2
+          timeout_ms: 30000
+      - name: membership_visible
+        description: Membership purpose receives brokered tools by server membership
+        models: [broker-agent]
+        tools: []
+        mcp_servers: [basic]
+        defaults:
+          max_iterations: 3
+          timeout_ms: 30000
+
+steps:
+  - label: "INT-MCB-11 / T-Y-011: native read-only tier does not add brokered tools"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: tier_only
+        trace_id: "int-mcb-11-hidden-${run.id}"
+        return_messages: true
+        messages:
+          - role: user
+            content: "Try calling basic__echo."
+      expect_contains: "tool_not_in_registry"
+      expect_json_array_length:
+        path: metadata.tool_calls
+        equals: 0
+
+  - label: "INT-MCB-11 / T-Y-011: mcp_servers membership makes brokered tool visible"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: membership_visible
+        trace_id: "int-mcb-11-visible-${run.id}"
+        return_messages: true
+        messages:
+          - role: user
+            content: "Call basic__echo with marker membership-visible-${run.id}."
+      expect_contains: "INT-MCB-11 membership visible complete"
+      expect_json_equals:
+        path: metadata.tool_calls[0].tool
+        value: echo
