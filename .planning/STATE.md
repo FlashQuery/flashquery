@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
-status: verifying
-stopped_at: Completed 142-06-PLAN.md
-last_updated: "2026-05-18T21:23:54.806Z"
+status: ready_to_plan
+stopped_at: Phase 142 complete (6/6) — ready to discuss Phase 143
+last_updated: 2026-05-18T22:48:00.063Z
 last_activity: 2026-05-18
 progress:
   total_phases: 5
@@ -21,20 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 142 — host-surface-and-consumer-context
+**Current focus:** Phase 143 — diagnostic cli and remaining macro extensions
 
 ## Current Position
 
-Phase: 142 (host-surface-and-consumer-context) — EXECUTING
-Plan: 6 of 6
-Status: Phase complete — ready for verification
+Phase: 143
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-18
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 51 (this milestone)
+- Total plans completed: 57 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -61,6 +61,7 @@ Last activity: 2026-05-18
 | 137 | 5 | - | - |
 | 138 | 4 | - | - |
 | 141 | 11 | - | - |
+| 142 | 6 | - | - |
 
 *Updated after each plan completion*
 | Phase 107 P04 | 15m | 2 tasks | 9 files |
