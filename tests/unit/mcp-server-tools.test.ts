@@ -3,8 +3,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, vi } from 'vitest';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { createMcpServer } from '../../src/mcp/server.js';
+import { registerHostBrokeredTools } from '../../src/mcp/host-brokered-tools.js';
 import { registerMemoryTools } from '../../src/mcp/tools/memory.js';
 import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
 import { registerPluginTools } from '../../src/mcp/tools/plugins.js';
@@ -22,6 +24,18 @@ import {
   requireToolMetadata,
 } from '../../src/mcp/tool-metadata.js';
 import { resolveHostToolExposure } from '../../src/mcp/tool-exposure.js';
+import {
+  clearBrokeredToolCallTrace,
+  getBrokeredToolCallTraceSnapshot,
+  type Broker,
+  type BrokeredTool,
+  type BrokerToolRef,
+  type ConsumerContext,
+  type SchemaDriftDecisionInput,
+  type SchemaDriftResolution,
+  type TofuDriftPayload,
+  type ToolListSnapshotOptions,
+} from '../../src/services/mcp-broker.js';
 
 const mockConfig: FlashQueryConfig = {
   instance: { id: 'test', vault: { path: '/tmp/vault' } },
@@ -52,6 +66,67 @@ function registerAllCurrentTools(server: McpServer): void {
   registerLlmTools(server, mockConfig);
   registerLlmUsageTools(server, mockConfig);
   registerMacroTools(server, mockConfig);
+}
+
+function makeBrokeredTool(input: Partial<BrokeredTool> = {}): BrokeredTool {
+  return {
+    serverId: 'basic',
+    toolName: 'echo',
+    registryKey: 'basic__echo',
+    description: 'Override echo description',
+    upstreamDescription: 'Original echo description',
+    inputSchema: {},
+    tofuHash: 'hash-basic-echo',
+    costPerCall: 0.25,
+    ...input,
+  };
+}
+
+function makeDrift(tool: string): TofuDriftPayload {
+  return {
+    event: 'schema_drift_detected',
+    server: 'basic',
+    tool,
+    question: `Approve ${tool}?`,
+    old_schema: { name: tool, inputSchema: {} },
+    new_schema: { name: tool, inputSchema: { type: 'object' } },
+    diff_summary: `${tool} changed`,
+    options: ['approve', 'reject'],
+    answer_shape: 'approve|reject',
+  };
+}
+
+function makeMockBroker(options: {
+  visibleTools?: BrokeredTool[];
+  callResult?: CallToolResult;
+  callError?: unknown;
+  pendingDrifts?: TofuDriftPayload[];
+} = {}): Broker & {
+  listToolsForConsumer: ReturnType<typeof vi.fn>;
+  callTool: ReturnType<typeof vi.fn>;
+  getPendingSchemaDrift: ReturnType<typeof vi.fn>;
+} {
+  const visibleTools = options.visibleTools ?? [];
+  return {
+    ensureConnected: vi.fn(async (_serverId: string, _options?: ToolListSnapshotOptions) => undefined),
+    listToolsForConsumer: vi.fn(async (_ctx: ConsumerContext) => visibleTools),
+    callTool: vi.fn(async (_ref: BrokerToolRef, _args: unknown, _ctx: ConsumerContext) => {
+      if (options.callError !== undefined) throw options.callError;
+      return options.callResult ?? { content: [{ type: 'text' as const, text: 'ok' }] };
+    }),
+    isConnected: vi.fn(async () => true),
+    getPendingSchemaDrift: vi.fn((_ctx?: { traceId?: string; purposeId?: string }) => options.pendingDrifts ?? []),
+    resolveSchemaDrift: vi.fn((_decisions: SchemaDriftDecisionInput[]) => [] as SchemaDriftResolution[]),
+    shutdown: vi.fn(async () => undefined),
+  };
+}
+
+function makeCapturingServer(): McpServer & {
+  registerTool: ReturnType<typeof vi.fn>;
+} {
+  return {
+    registerTool: vi.fn(),
+  } as unknown as McpServer & { registerTool: ReturnType<typeof vi.fn> };
 }
 
 describe('MCP tool registration metadata', () => {
@@ -239,5 +314,135 @@ describe('MCP tool registration metadata', () => {
       expect(tool.description, `${tool.name} registered description`).toContain('Do not use when:');
       expect(tool.description, `${tool.name} registered description`).toContain('Example:');
     }
+  });
+});
+
+describe('host brokered tool registration', () => {
+  it('registers zero brokered tools when host config has no mcp servers', async () => {
+    const server = makeCapturingServer();
+    const broker = makeMockBroker({ visibleTools: [makeBrokeredTool()] });
+
+    await registerHostBrokeredTools(server, {
+      broker,
+      hostConfig: { mcpServers: [], toolSearch: 'disabled' },
+      traceIdProvider: () => 'trace-empty-host',
+    });
+
+    expect(broker.listToolsForConsumer).not.toHaveBeenCalled();
+    expect(server.registerTool).not.toHaveBeenCalled();
+  });
+
+  it('rejects a hidden guessed registry key without calling the brokered tool', async () => {
+    const server = makeCapturingServer();
+    const broker = makeMockBroker({ visibleTools: [makeBrokeredTool()] });
+    await registerHostBrokeredTools(server, {
+      broker,
+      hostConfig: { mcpServers: ['basic'], toolSearch: 'disabled' },
+      traceIdProvider: () => 'trace-hidden',
+    });
+    broker.listToolsForConsumer.mockResolvedValueOnce([]);
+
+    const handler = server.registerTool.mock.calls[0]?.[2] as (args: unknown, extra: unknown) => Promise<CallToolResult>;
+    const result = await handler({ text: 'hello' }, {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.type).toBe('text');
+    expect(result.content[0]?.text).toContain("Tool 'basic__echo' is not available.");
+    expect(broker.callTool).not.toHaveBeenCalled();
+  });
+
+  it('records one trace entry after returned brokered results, including upstream error results', async () => {
+    clearBrokeredToolCallTrace('trace-returned-error');
+    const server = makeCapturingServer();
+    const broker = makeMockBroker({
+      visibleTools: [makeBrokeredTool()],
+      callResult: { content: [{ type: 'text' as const, text: 'upstream failed' }], isError: true },
+    });
+    await registerHostBrokeredTools(server, {
+      broker,
+      hostConfig: { mcpServers: ['basic'], toolSearch: 'disabled' },
+      traceIdProvider: () => 'trace-returned-error',
+    });
+
+    const handler = server.registerTool.mock.calls[0]?.[2] as (args: unknown, extra: unknown) => Promise<CallToolResult>;
+    const result = await handler({ text: 'hello' }, {});
+
+    expect(result.isError).toBe(true);
+    expect(broker.callTool).toHaveBeenCalledTimes(1);
+    expect(getBrokeredToolCallTraceSnapshot('trace-returned-error')).toEqual([
+      { server: 'basic', tool: 'echo', count: 1, cost: 0.25 },
+    ]);
+  });
+
+  it('returns sanitized errors for thrown broker failures without recording tool-call cost', async () => {
+    clearBrokeredToolCallTrace('trace-thrown');
+    const server = makeCapturingServer();
+    const broker = makeMockBroker({
+      visibleTools: [makeBrokeredTool()],
+      callError: Object.assign(new Error('spawn ENOENT secret-stderr-buffer'), {
+        raw: { stderr: 'do-not-leak' },
+      }),
+    });
+    await registerHostBrokeredTools(server, {
+      broker,
+      hostConfig: { mcpServers: ['basic'], toolSearch: 'disabled' },
+      traceIdProvider: () => 'trace-thrown',
+    });
+
+    const handler = server.registerTool.mock.calls[0]?.[2] as (args: unknown, extra: unknown) => Promise<CallToolResult>;
+    const result = await handler({ text: 'hello' }, {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('secret-stderr-buffer');
+    expect(result.content[0]?.text).not.toContain('do-not-leak');
+    expect(getBrokeredToolCallTraceSnapshot('trace-thrown')).toEqual([]);
+  });
+
+  it('returns one bundled schema_drift_detected payload for multiple same-server pending drifts', async () => {
+    const server = makeCapturingServer();
+    const broker = makeMockBroker({
+      visibleTools: [makeBrokeredTool()],
+      pendingDrifts: [makeDrift('echo'), makeDrift('reverse'), { ...makeDrift('other'), server: 'other' }],
+    });
+    await registerHostBrokeredTools(server, {
+      broker,
+      hostConfig: { mcpServers: ['basic'], toolSearch: 'disabled' },
+      traceIdProvider: () => 'trace-drift',
+    });
+    broker.listToolsForConsumer.mockResolvedValueOnce([]);
+
+    const handler = server.registerTool.mock.calls[0]?.[2] as (args: unknown, extra: unknown) => Promise<CallToolResult>;
+    const result = await handler({ text: 'hello' }, {});
+    const payload = JSON.parse(result.content[0]?.text ?? '{}') as { event?: string; changes?: unknown[] };
+
+    expect(result.isError).toBe(true);
+    expect(payload.event).toBe('schema_drift_detected');
+    expect(payload.changes).toHaveLength(2);
+    expect(broker.callTool).not.toHaveBeenCalled();
+  });
+
+  it('registers the brokered description override and never the upstream description', async () => {
+    const server = makeCapturingServer();
+    const broker = makeMockBroker({
+      visibleTools: [
+        makeBrokeredTool({
+          description: 'Override description from config',
+          upstreamDescription: 'Original upstream description',
+        }),
+      ],
+    });
+
+    await registerHostBrokeredTools(server, {
+      broker,
+      hostConfig: { mcpServers: ['basic'], toolSearch: 'disabled' },
+      traceIdProvider: () => 'trace-description',
+    });
+
+    expect(server.registerTool).toHaveBeenCalledWith(
+      'basic__echo',
+      expect.objectContaining({ description: 'Override description from config' }),
+      expect.any(Function)
+    );
+    expect(JSON.stringify(server.registerTool.mock.calls)).not.toContain('Original upstream description');
   });
 });
