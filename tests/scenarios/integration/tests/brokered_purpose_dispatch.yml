@@ -1,0 +1,91 @@
+name: brokered_purpose_dispatch
+description: >
+  T-Y-001 / INT-MCB-01: managed broker config exposes server-basic to a
+  purpose and call_model dispatches the brokered basic__echo tool through the
+  agent loop.
+coverage: [INT-MCB-01]
+server_modes: [managed]
+
+mock_openai:
+  responses:
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
+              - id: call_basic_echo
+                type: function
+                function:
+                  name: basic__echo
+                  arguments:
+                    value:
+                      marker: "purpose-dispatch-${run.id}"
+                      count: 1
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 11
+        completion_tokens: 3
+    - choices:
+        - message:
+            role: assistant
+            content: "INT-MCB-01 brokered purpose dispatch complete"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 13
+        completion_tokens: 5
+
+extra_config:
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+  llm:
+    providers:
+      - name: mock
+        type: openai-compatible
+        endpoint: "${mock_openai.endpoint}"
+        api_key: sk-test
+    models:
+      - name: broker-agent
+        provider_name: mock
+        model: broker-agent
+        type: language
+        cost_per_million:
+          input: 0
+          output: 0
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+          strict_tools: true
+          parallel_tool_calls: true
+    purposes:
+      - name: broker_researcher
+        description: Broker purpose dispatch YAML fixture
+        models: [broker-agent]
+        mcp_servers: [basic]
+        defaults:
+          max_iterations: 3
+          timeout_ms: 30000
+
+steps:
+  - label: "INT-MCB-01: purpose call_model dispatches basic__echo through broker"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: broker_researcher
+        trace_id: "int-mcb-01-${run.id}"
+        return_messages: true
+        messages:
+          - role: user
+            content: "Call basic__echo exactly once with marker purpose-dispatch-${run.id}, then provide the final response."
+      expect_contains: "INT-MCB-01 brokered purpose dispatch complete"
+      expect_json_equals:
+        path: metadata.tools.calls_log[0].tool_calls[0].kind
+        value: brokered
+      expect_json_path:
+        - metadata.tools.calls_log[0].tool_calls[0].tool_name
+        - messages[2].content

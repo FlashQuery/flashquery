@@ -1,0 +1,114 @@
+name: cost_per_call_resolution
+description: >
+  T-Y-007 / INT-MCB-07: brokered tool_calls trace entries expose resolved cost
+  for server-default and per-tool override costs, with the per-tool override
+  beating the server default.
+coverage: [INT-MCB-07]
+server_modes: [managed]
+
+mock_openai:
+  responses:
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
+              - id: call_basic_slow
+                type: function
+                function:
+                  name: basic__slow
+                  arguments:
+                    ms: 0
+              - id: call_basic_echo
+                type: function
+                function:
+                  name: basic__echo
+                  arguments:
+                    value:
+                      marker: "cost-override-${run.id}"
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 12
+        completion_tokens: 4
+    - choices:
+        - message:
+            role: assistant
+            content: "INT-MCB-07 brokered cost resolution complete"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 14
+        completion_tokens: 6
+
+extra_config:
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+      tool_overrides:
+        echo:
+          cost_per_call: 0.25
+  llm:
+    providers:
+      - name: mock
+        type: openai-compatible
+        endpoint: "${mock_openai.endpoint}"
+        api_key: sk-test
+    models:
+      - name: broker-agent
+        provider_name: mock
+        model: broker-agent
+        type: language
+        cost_per_million:
+          input: 0
+          output: 0
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+          strict_tools: true
+          parallel_tool_calls: true
+    purposes:
+      - name: broker_costs
+        description: Broker cost resolution YAML fixture
+        models: [broker-agent]
+        mcp_servers: [basic]
+        defaults:
+          max_iterations: 3
+          timeout_ms: 30000
+
+steps:
+  - label: "INT-MCB-07: brokered calls record server default and per-tool override costs"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: broker_costs
+        trace_id: "int-mcb-07-${run.id}"
+        return_messages: true
+        messages:
+          - role: user
+            content: "Call basic__slow with ms 0 and basic__echo with marker cost-override-${run.id}, then provide the final response."
+      expect_contains: "INT-MCB-07 brokered cost resolution complete"
+      expect_json_equals:
+        path: metadata.tool_calls[0].cost
+        value: 0.125
+      expect_json_path:
+        - metadata.tool_calls[0].count
+        - metadata.tool_calls[1].count
+
+  - label: "INT-MCB-07: per-tool echo override beats server default in observable trace"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: broker_costs
+        trace_id: "int-mcb-07b-${run.id}"
+        return_messages: true
+        messages:
+          - role: user
+            content: "Call basic__slow with ms 0 and basic__echo with marker cost-override-${run.id}, then provide the final response."
+      expect_json_equals:
+        path: metadata.tool_calls[1].cost
+        value: 0.25

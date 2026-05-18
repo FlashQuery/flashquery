@@ -1,0 +1,39 @@
+name: purpose_unknown_server_fail_loud
+description: >
+  T-Y-005 / INT-MCB-05: managed startup fails loudly when a purpose's
+  mcp_servers references a server ID absent from top-level mcp_servers.
+coverage: [INT-MCB-05]
+server_modes: [managed]
+
+steps:
+  - label: "INT-MCB-05: unknown purpose broker server fails startup with purpose and ID"
+    startup_error:
+      extra_config:
+        mcp_servers:
+          basic:
+            transport: stdio
+            command: node
+        llm:
+          providers:
+            - name: mock
+              type: openai-compatible
+              endpoint: http://127.0.0.1:9
+              api_key: sk-test
+          models:
+            - name: broker-agent
+              provider_name: mock
+              model: broker-agent
+              type: language
+              cost_per_million:
+                input: 0
+                output: 0
+          purposes:
+            - name: broker_researcher
+              description: Broker purpose validation YAML fixture
+              models: [broker-agent]
+              mcp_servers: [missing_purpose_server]
+      expect_contains:
+        - "purposes.broker_researcher.mcp_servers"
+        - "broker_researcher"
+        - "missing_purpose_server"
+        - "unknown MCP server"

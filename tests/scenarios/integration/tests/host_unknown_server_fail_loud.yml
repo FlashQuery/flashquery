@@ -1,0 +1,21 @@
+name: host_unknown_server_fail_loud
+description: >
+  T-Y-004 / INT-MCB-04: managed startup fails loudly when host.mcp_servers
+  references a server ID absent from top-level mcp_servers.
+coverage: [INT-MCB-04]
+server_modes: [managed]
+
+steps:
+  - label: "INT-MCB-04: unknown host broker server fails startup with host and ID"
+    startup_error:
+      extra_config:
+        mcp_servers:
+          basic:
+            transport: stdio
+            command: node
+        host:
+          mcp_servers: [missing_host_server]
+      expect_contains:
+        - "host.mcp_servers"
+        - "missing_host_server"
+        - "unknown MCP server"

@@ -282,6 +282,19 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 | IL-43  | POST-01 / §3.11.1.1 delegated purpose workflow with `tools: ["tier:read-write"]` exposes corrected tier-derived tools through `call_model` metadata, then composes that surface with the corrected `insert_in_doc` final path and read-back. Deterministic delegated dispatch is covered by the directed mock-provider and E2E layers. | delegated_tier_eligibility   | 2026-05-15   | 2026-05-15   |
 | IL-44  | §3.11.1.1 I-tier-5 split: explicit `maintain_vault` remains rejected through hard-exclusion diagnostics, while an explicit admin-style fixture without hard exclusion remains reachable through delegated registry assembly. | tests/integration/tool-registry.test.ts (`I-tier-5`, `I-tier-5b`) | 2026-05-13   | 2026-05-13   |
 
+## INT-MCB — MCP Broker Phase A
+
+Phase 139 broker foundation YAML coverage for managed stdio fixture servers,
+consumer visibility validation, delegated broker dispatch, and resolved
+brokered tool-call cost tracing.
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| INT-MCB-01 | Configure `mcp_servers` plus `purposes.broker_researcher.mcp_servers`, invoke `call_model`, and dispatch `basic__echo` through the brokered purpose tool surface. | brokered_purpose_dispatch | 2026-05-18 |  |
+| INT-MCB-04 | Unknown `host.mcp_servers` entry fails managed startup with the named host context and missing server ID. | host_unknown_server_fail_loud | 2026-05-18 |  |
+| INT-MCB-05 | Unknown `purposes.<name>.mcp_servers` entry fails managed startup with the named purpose and missing server ID. | purpose_unknown_server_fail_loud | 2026-05-18 |  |
+| INT-MCB-07 | Server-default and per-tool override `cost_per_call` values surface in observable brokered `tool_calls` trace entries; per-tool override beats server default. | cost_per_call_resolution | 2026-05-18 |  |
+
 ---
 
 ## Behavior - Testcase Validation
