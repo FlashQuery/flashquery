@@ -6,7 +6,14 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ToolListChangedNotificationSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { BrokerClientConfig, BrokeredTool, ConsumerContext } from '../../../src/services/mcp-broker/types.js';
-import { BrokerClient, McpBroker, NullBroker, createBroker, hashToolSchema } from '../../../src/services/mcp-broker/index.js';
+import {
+  BrokerClient,
+  McpBroker,
+  NullBroker,
+  SchemaDriftNeedsUserInputError,
+  createBroker,
+  hashToolSchema,
+} from '../../../src/services/mcp-broker/index.js';
 import { formatToolError } from '../../../src/services/mcp-broker/errors.js';
 
 const fixtureDir = resolve(fileURLToPath(new URL('../../fixtures/mcp-servers', import.meta.url)));
@@ -387,6 +394,25 @@ describe('mcp broker client lifecycle integration', () => {
     expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual([]);
   });
 
+  it('T-I-006b blocks call-time dispatch after refresh detects schema drift', async () => {
+    const broker = createBroker({
+      mcpServers: {
+        quirky: quirkyServerConfig([toolSnapshot('mutable', ['value'])], [toolSnapshot('mutable', ['value', 'token'])]),
+      },
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [] },
+    });
+    brokers.push(broker);
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual(['quirky__mutable']);
+    await waitForCondition(() => broker.getPendingSchemaDrift({ traceId: ctx.traceId }).length === 1);
+
+    await expect(
+      broker.callTool({ serverId: 'quirky', toolName: 'mutable' }, { value: 'unsafe-after-drift' }, ctx)
+    ).rejects.toBeInstanceOf(SchemaDriftNeedsUserInputError);
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual([]);
+  });
+
   it('T-I-007 removes a removed tool from registry and index sink while keeping unchanged tools callable', async () => {
     const removedKeys: string[][] = [];
     const broker = createBroker({
@@ -449,7 +475,7 @@ describe('mcp broker client lifecycle integration', () => {
     expect(broker).toBeInstanceOf(McpBroker);
     expect(await broker.isConnected('basic', { deepProbe: false })).toBe(false);
 
-    const result = await broker.callTool({ serverId: 'basic', toolName: 'echo' }, { value: 'broker' }, ctx);
+    const result = await broker.callTool({ serverId: 'basic', toolName: 'echo' }, { value: 'broker' }, purposeCtx);
     const hostTools = await broker.listToolsForConsumer(ctx);
     const purposeTools = await broker.listToolsForConsumer({
       kind: 'purpose',

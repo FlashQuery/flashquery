@@ -83,7 +83,14 @@ function zodSchemaForJsonSchema(schema: unknown): z.ZodTypeAny {
   if (type === 'integer') return z.number().int();
   if (type === 'boolean') return z.boolean();
   if (type === 'array') return z.array(zodSchemaForJsonSchema(schema['items']));
-  if (type === 'object') return z.object(zodRawShapeForJsonSchema(schema));
+  if (type === 'object') {
+    const shape = zodRawShapeForJsonSchema(schema);
+    const objectSchema = z.object(shape);
+    if (schema['additionalProperties'] === true || !isRecord(schema['properties'])) {
+      return objectSchema.catchall(z.unknown());
+    }
+    return objectSchema;
+  }
   return z.unknown();
 }
 
@@ -113,7 +120,7 @@ export async function registerHostBrokeredTools(
       tool.registryKey,
       {
         ...(tool.description === undefined ? {} : { description: tool.description }),
-        inputSchema: zodRawShapeForJsonSchema(tool.inputSchema),
+        inputSchema: zodSchemaForJsonSchema(tool.inputSchema),
       },
       async (args: unknown, extra: unknown) => {
         const ctx = hostContext(options.traceIdProvider?.(extra) ?? resolveSessionId(extra));

@@ -25,3 +25,8 @@ steps:
       op: mcp.list_tools
       expect_contains: "get_document"
       expect_not_contains: "write_document"
+
+  - label: "INT-MCB-09 / T-Y-009: brokered host tool is present alongside native filter"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "basic__echo"

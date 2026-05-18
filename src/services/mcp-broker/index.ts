@@ -6,6 +6,7 @@ import { formatToolError, toThrowableToolError } from './errors.js';
 import { ToolRegistry, type ToolRegistryConfig } from './registry.js';
 import { recordBrokerAuditEvent } from './trace.js';
 import { InMemoryTofuStore } from './tofu.js';
+import { SchemaDriftNeedsUserInputError } from './types.js';
 import type {
   Broker,
   BrokerAuditEvent,
@@ -197,6 +198,19 @@ export class McpBroker implements Broker {
 
   async callTool(ref: BrokerToolRef, args: unknown, ctx: ConsumerContext): Promise<CallToolResult> {
     await this.ensureConnected(ref.serverId, snapshotOptionsFromConsumerContext(ctx));
+    const visible = this.#registry
+      .listToolsForConsumer(ctx)
+      .some((tool) => tool.serverId === ref.serverId && tool.toolName === ref.toolName);
+    if (!visible) {
+      const pendingDrift = this.getPendingSchemaDrift(schemaDriftContextFromConsumerContext(ctx))
+        .find((drift) => drift.server === ref.serverId && drift.tool === ref.toolName);
+      if (pendingDrift !== undefined) {
+        throw new SchemaDriftNeedsUserInputError(pendingDrift);
+      }
+      throw toThrowableToolError(
+        formatToolError(new Error(`Tool '${ref.serverId}.${ref.toolName}' is not available.`), ref)
+      );
+    }
     return this.#client(ref.serverId).callTool(ref.toolName, args, ctx);
   }
 
@@ -319,6 +333,13 @@ export function createBroker(config: BrokerConfig): McpBroker {
 function snapshotOptionsFromConsumerContext(ctx: ConsumerContext): ToolListSnapshotOptions {
   return {
     ...(ctx.interactive === undefined ? {} : { interactive: ctx.interactive }),
+    traceId: ctx.traceId,
+    ...(ctx.kind === 'purpose' ? { purposeId: ctx.purposeId } : {}),
+  };
+}
+
+function schemaDriftContextFromConsumerContext(ctx: ConsumerContext): SchemaDriftResolutionContext {
+  return {
     traceId: ctx.traceId,
     ...(ctx.kind === 'purpose' ? { purposeId: ctx.purposeId } : {}),
   };
