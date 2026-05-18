@@ -139,7 +139,15 @@ describe('mcp broker dispatch seam integration', () => {
     const toolPayload = JSON.parse(toolMessage?.content ?? '{}');
     expect(JSON.parse(toolPayload.result.content[0].text)).toEqual(rawArgs);
     expect(getBrokeredToolCallTraceSnapshot('trace-dispatch-integration')).toEqual([
-      { server: 'basic', tool: 'echo', count: 1, cost: 0.01 },
+      {
+        trace_id: 'trace-dispatch-integration',
+        consumer_kind: 'purpose',
+        purpose_id: 'research',
+        server: 'basic',
+        tool: 'echo',
+        count: 1,
+        cost: 0.01,
+      },
     ]);
   });
 
@@ -165,7 +173,14 @@ describe('mcp broker dispatch seam integration', () => {
     ).resolves.toEqual({ value });
 
     expect(getBrokeredToolCallTraceSnapshot('trace-macro-integration')).toEqual([
-      { server: 'basic', tool: 'echo', count: 1, cost: 0.01 },
+      {
+        trace_id: 'trace-macro-integration',
+        consumer_kind: 'host',
+        server: 'basic',
+        tool: 'echo',
+        count: 1,
+        cost: 0.01,
+      },
     ]);
   });
 });
