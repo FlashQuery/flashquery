@@ -9,7 +9,7 @@ import type {
   ToolRegistry,
 } from '../../src/macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../src/llm/tool-registry.js';
-import { NullMcpBroker } from '../../src/services/mcp-broker.js';
+import { NullBroker, type Broker, type ConsumerContext } from '../../src/services/mcp-broker.js';
 
 function makeConfig(overrides: Partial<FlashQueryConfig> = {}): FlashQueryConfig {
   return {
@@ -85,7 +85,7 @@ describe('macro ToolRegistry construction', () => {
     const result = await buildToolRegistry({
       config: makeConfig(),
       callerContext,
-      broker: new NullMcpBroker(),
+      broker: new NullBroker(),
       catalog,
       nativeDispatchContext: nativeDispatchContext(),
     });
@@ -105,7 +105,7 @@ describe('macro ToolRegistry construction', () => {
     const result = await buildToolRegistry({
       config: makeConfig({ hostMcpTools: { tools: ['search'] } }),
       callerContext: { origin: 'host' },
-      broker: new NullMcpBroker(),
+      broker: new NullBroker(),
       catalog: [nativeTool('search'), nativeTool('archive_document'), nativeTool('call_macro')],
       nativeDispatchContext: nativeDispatchContext(),
     });
@@ -118,7 +118,7 @@ describe('macro ToolRegistry construction', () => {
     const result = await buildToolRegistry({
       config: makeConfig(),
       callerContext: { origin: 'delegated', purposeName: 'research' },
-      broker: new NullMcpBroker(),
+      broker: new NullBroker(),
       catalog,
       nativeDispatchContext: nativeDispatchContext(),
     });
@@ -136,7 +136,7 @@ describe('macro ToolRegistry construction', () => {
     const result = await buildToolRegistry({
       config: makeConfig(),
       callerContext: { origin: 'host' },
-      broker: new NullMcpBroker(),
+      broker: new NullBroker(),
       catalog,
       nativeDispatchContext: nativeDispatchContext(),
       templateReverseMap,
@@ -147,13 +147,16 @@ describe('macro ToolRegistry construction', () => {
     expect(result.allowedToolNames).not.toContain('fq.call_macro');
   });
 
-  it('can include a mocked broker server without changing dispatcher code', async () => {
-    const brokerHandler = vi.fn().mockResolvedValue({ hits: ['flashquery'] });
-    const broker = {
+  it('dispatches brokered macro tools through raw Broker.callTool and coerces successful CallToolResult values', async () => {
+    const callTool = vi.fn(async () => ({
+      content: [{ type: 'text' as const, text: JSON.stringify({ hits: ['flashquery'] }) }],
+    }));
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
       isConnected: vi.fn(async (serverId: string) => serverId === 'brave_search'),
-      getToolHandler: vi.fn((serverId: string, toolName: string) =>
-        serverId === 'brave_search' && toolName === 'web_search' ? brokerHandler : null
-      ),
+      callTool,
+      listToolsForConsumer: vi.fn(async (_ctx: ConsumerContext) => []),
+      shutdown: vi.fn(),
     };
 
     const result = await buildToolRegistry({
@@ -166,10 +169,102 @@ describe('macro ToolRegistry construction', () => {
     });
 
     expect(result.registry.brave_search.tools.web_search).toEqual(expect.any(Function));
+    await expect(
+      result.registry.brave_search.tools.web_search({ query: 'FlashQuery', limit: 3 }, {} as Parameters<ToolFn>[1])
+    ).resolves.toEqual({ hits: ['flashquery'] });
+    expect(callTool).toHaveBeenCalledWith(
+      { serverId: 'brave_search', toolName: 'web_search' },
+      { query: 'FlashQuery', limit: 3 },
+      { kind: 'host', traceId: 'trace-registry' }
+    );
+  });
+
+  it('raises tool_call_failed for brokered isError results before coercion', async () => {
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool: vi.fn(async () => ({
+        content: [{ type: 'text' as const, text: 'upstream rejected' }],
+        isError: true,
+      })),
+      listToolsForConsumer: vi.fn(async () => []),
+      shutdown: vi.fn(),
+    };
+
+    const result = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'delegated', purposeName: 'research' },
+      broker,
+      catalog,
+      nativeDispatchContext: nativeDispatchContext(),
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    await expect(
+      result.registry.brave_search.tools.web_search({ query: 'FlashQuery' }, {} as Parameters<ToolFn>[1])
+    ).rejects.toMatchObject({
+      error: 'tool_call_failed',
+      details: expect.objectContaining({ kind: 'is_error_result' }),
+    });
+  });
+
+  it('registers configured broker tools without probing getToolHandler', async () => {
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool: vi.fn(async () => ({
+        structuredContent: { ok: true },
+        content: [{ type: 'text' as const, text: '{"ok":true}' }],
+      })),
+      listToolsForConsumer: vi.fn(async () => []),
+      shutdown: vi.fn(),
+    };
+    const brokerWithExplodingLegacyProbe = Object.assign(broker, {
+      getToolHandler: vi.fn(() => {
+        throw new Error('legacy probe should not run');
+      }),
+    });
+
+    const result = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'host' },
+      broker: brokerWithExplodingLegacyProbe,
+      catalog,
+      nativeDispatchContext: nativeDispatchContext(),
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    expect(result.allowedToolNames).toContain('brave_search.web_search');
+    expect(brokerWithExplodingLegacyProbe.getToolHandler).not.toHaveBeenCalled();
+  });
+
+  it('passes delegated purpose consumer context to brokered macro calls', async () => {
+    const callTool = vi.fn(async () => ({
+      structuredContent: { ok: true },
+      content: [{ type: 'text' as const, text: '{"ok":true}' }],
+    }));
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool,
+      listToolsForConsumer: vi.fn(async () => []),
+      shutdown: vi.fn(),
+    };
+    const context = nativeDispatchContext();
+    const result = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'delegated', purposeName: 'research' },
+      broker,
+      catalog,
+      nativeDispatchContext: context,
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
     await result.registry.brave_search.tools.web_search({ query: 'FlashQuery' }, {} as Parameters<ToolFn>[1]);
-    expect(brokerHandler).toHaveBeenCalledWith(
+    expect(callTool).toHaveBeenCalledWith(
+      { serverId: 'brave_search', toolName: 'web_search' },
       { query: 'FlashQuery' },
-      expect.objectContaining({ server: 'brave_search', tool: 'web_search' })
+      { kind: 'purpose', purposeId: 'research', traceId: 'trace-registry' }
     );
   });
 
@@ -178,7 +273,7 @@ describe('macro ToolRegistry construction', () => {
     const result = await buildToolRegistry({
       config: makeConfig({ hostMcpTools: { tools: ['search'] } }),
       callerContext: { origin: 'host' },
-      broker: new NullMcpBroker(),
+      broker: new NullBroker(),
       catalog: [nativeTool('search', handler, z.object({ query: z.string() }))],
       nativeDispatchContext: nativeDispatchContext(),
     });
