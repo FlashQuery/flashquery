@@ -5,7 +5,9 @@ import type { FlashQueryConfig } from '../config/loader.js';
 import type { LlmUsageRecord } from './cost-tracker.js';
 import type { LlmChatMessage, LlmChatResult, LlmChatToolCall, CallModelEnvelope, AgentLoopCallLogEntry, AgentLoopToolCallLogEntry } from './types.js';
 import type { DispatchToolCallsOptions, NativeToolDispatchContext } from './tool-dispatcher.js';
+import type { Broker, ConsumerContext } from '../services/mcp-broker/index.js';
 import type { NativeToolDefinition, OpenAiToolDefinition, ToolRegistryAssembly } from './tool-registry.js';
+import { toOpenAiBrokeredToolDefinition } from './tool-registry.js';
 import type { TemplateToolReverseMap } from './template-tools.js';
 
 export const DEFAULT_OUTPUT_TOKEN_ESTIMATE = 2048;
@@ -30,6 +32,8 @@ type ToolDispatcher = (options: {
   templateReverseMap?: TemplateToolReverseMap;
   templateDispatchContext?: ExecuteAgentLoopOptions['templateDispatchContext'];
   dispatchContext: NativeToolDispatchContext;
+  broker?: Broker;
+  consumerContext?: ConsumerContext;
   dispatchPolicy?: 'Promise.allSettled';
 }) => Promise<{ messages: LlmChatMessage[]; logEntries: AgentLoopToolCallLogEntry[] }>;
 
@@ -56,6 +60,7 @@ export interface ExecuteAgentLoopOptions {
   nativeToolCatalog?: NativeToolDefinition[] | Map<string, NativeToolDefinition>;
   nativeToolNames?: string[];
   providerTools?: OpenAiToolDefinition[] | Array<Record<string, unknown>>;
+  broker?: Broker;
   chatByPurpose?: ChatByPurpose;
   chat?: LegacyChat;
   toolDispatcher?: ToolDispatcher;
@@ -109,6 +114,14 @@ function getNativeToolNames(options: ExecuteAgentLoopOptions): string[] {
 
 function getProviderTools(options: ExecuteAgentLoopOptions): Array<Record<string, unknown>> {
   return (options.toolRegistry?.providerTools ?? options.providerTools ?? []) as Array<Record<string, unknown>>;
+}
+
+function makePurposeConsumerContext(options: ExecuteAgentLoopOptions): ConsumerContext {
+  return {
+    kind: 'purpose',
+    purposeId: options.purposeName,
+    traceId: options.traceId ?? '',
+  };
 }
 
 function messageChars(messages: LlmChatMessage[]): number {
@@ -317,7 +330,14 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
   }
 
   const nativeToolNames = getNativeToolNames(options);
-  const providerTools = getProviderTools(options);
+  const consumerContext = makePurposeConsumerContext(options);
+  const brokeredTools = options.broker === undefined
+    ? []
+    : await options.broker.listToolsForConsumer(consumerContext);
+  const providerTools = [
+    ...getProviderTools(options),
+    ...brokeredTools.map(toOpenAiBrokeredToolDefinition),
+  ];
   if (!hasVisibleTools(options, nativeToolNames, providerTools)) {
     return {
       mode: 'mode_1',
@@ -461,6 +481,8 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
         instanceId: options.instanceId ?? '',
         logger: options.logger,
       },
+      broker: options.broker,
+      consumerContext,
       dispatchPolicy: 'Promise.allSettled',
     });
     messages.push(...dispatchResult.messages.map((message) => (

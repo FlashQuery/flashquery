@@ -126,7 +126,7 @@ describe('ATL-U-13 loop executor state machine contract', () => {
       purposeId: 'research',
       traceId: 'trace-broker-visible',
     });
-    expect(chat).toHaveBeenCalledWith('research', expect.any(Array), expect.objectContaining({
+    expect(chat).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({
       tools: expect.arrayContaining([
         expect.objectContaining({
           type: 'function',

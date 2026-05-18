@@ -6,6 +6,7 @@ import type {
   TemplateToolRegistryAssembly,
   TemplateToolReverseMap,
 } from './template-tools.js';
+import type { BrokeredTool } from '../services/mcp-broker/index.js';
 import {
   getDelegatedHardExcludedTools,
   getToolNamesByTier,
@@ -187,6 +188,18 @@ export function toOpenAiToolDefinition(
       description: tool.description,
       parameters,
       ...(options.strict ? { strict: true as const } : {}),
+    },
+  };
+}
+
+export function toOpenAiBrokeredToolDefinition(tool: BrokeredTool): OpenAiToolDefinition {
+  const parameters = isRecord(tool.inputSchema) ? tool.inputSchema : {};
+  return {
+    type: 'function',
+    function: {
+      name: tool.registryKey,
+      description: tool.description ?? '',
+      parameters,
     },
   };
 }
