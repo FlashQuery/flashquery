@@ -129,6 +129,8 @@ Phase 141 should be planned as a surface-composition phase: add a pure local ind
 
 The current codebase already has the Phase 140 handoff needed by this phase: `ToolIndexSink` exists, `McpBroker.applyToolListSnapshot` calls `removeTools` for removed/changed tools and `addTools` for trusted tools synchronously, `BrokerClient` handles `ToolListChangedNotificationSchema`, and `ToolRegistry` stores overridden downstream `description` separately from `upstreamDescription`. [VERIFIED: codebase grep] The planner should not rebuild that foundation; it should provide a real search index manager behind the sink and ensure every search/index consumer uses registered downstream descriptions while TOFU keeps upstream hash inputs. [VERIFIED: codebase grep] [CITED: MCP Broker Requirements §7.14]
 
+Phase 140 gap-fix commit `9020acc` tightened several contracts that Phase 141 must preserve: `ConsumerContext.interactive` controls prompt-vs-`blocked_on_user` TOFU behavior, `Broker.ensureConnected` accepts `ToolListSnapshotOptions`, audit emission uses `BrokerAuditEventInput` and returns timestamped `BrokerAuditEvent` records, and `hashToolSchema` canonicalizes `undefined` as `null`. Phase 141 should integrate with these contracts directly rather than reintroducing pre-gap assumptions. [VERIFIED: git show 9020acc]
+
 **Primary recommendation:** implement `src/services/tool-search/` with a ported/fixed POC BM25 indexer, a per-consumer index manager, a `TOOL_META` loader/validator, and `fq.search_tools`; then update `call_model`/agent-loop native tool assembly so enabled purposes receive only `fq.search_tools` while disabled purposes keep the existing flat list. [VERIFIED: codebase grep] [CITED: MCP Broker Requirements §10 Phase C]
 
 ## Architectural Responsibility Map
@@ -405,6 +407,34 @@ const removedKeys = this.#removeTools([...diff.removed, ...diff.changed]);
 if (removedKeys.length > 0) this.#indexSink.removeTools(removedKeys);
 if (toolsToAdd.length > 0) this.#indexSink.addTools(toolsToAdd);
 ```
+
+### Gap-Fixed Consumer Snapshot Options
+
+```typescript
+// Source: src/services/mcp-broker/index.ts after 9020acc
+function snapshotOptionsFromConsumerContext(ctx: ConsumerContext): ToolListSnapshotOptions {
+  return {
+    ...(ctx.interactive === undefined ? {} : { interactive: ctx.interactive }),
+    traceId: ctx.traceId,
+    ...(ctx.kind === 'purpose' ? { purposeId: ctx.purposeId } : {}),
+  };
+}
+```
+
+Phase 141 index creation should call `Broker.listToolsForConsumer(ctx)` with a complete host or purpose `ConsumerContext`; it should not manually call `ensureConnected(serverId)` without snapshot options. [VERIFIED: git show 9020acc]
+
+### Timestamped Broker Audit Events
+
+```typescript
+// Source: src/services/mcp-broker/trace.ts after 9020acc
+export function recordBrokerAuditEvent(event: BrokerAuditEventInput): BrokerAuditEvent {
+  const timestamped = { ...event, ts: event.ts ?? new Date().toISOString() };
+  _brokerAuditEvents.push(structuredClone(timestamped));
+  return timestamped;
+}
+```
+
+Any Phase 141 search audit extension in the broker trace module should follow the same input-vs-timestamped return convention and assert `ts` in tests. [VERIFIED: git show 9020acc]
 
 ### Gray Matter Loader Shape
 
