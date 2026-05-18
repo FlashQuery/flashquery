@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { buildToolRegistry } from '../../src/macro/registry.js';
+import { runMacroSource } from '../../src/mcp/tools/macro.js';
 import type {
   MacroCallerContext,
   ServerEntry,
@@ -176,7 +177,14 @@ describe('macro ToolRegistry construction', () => {
     await result.registry.brave_search.tools.web_search({ query: 'arg-secret' }, {} as Parameters<ToolFn>[1]);
 
     expect(getBrokeredToolCallTraceSnapshot('trace-registry')).toEqual([
-      { server: 'brave_search', tool: 'web_search', count: 1, cost: 0.005 },
+      {
+        server: 'brave_search',
+        tool: 'web_search',
+        count: 1,
+        cost: 0.005,
+        consumer_kind: 'host',
+        trace_id: 'trace-registry',
+      },
     ]);
     expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-registry'))).not.toContain('arg-secret');
     expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-registry'))).not.toContain('payload-secret');
@@ -642,5 +650,100 @@ describe('macro ToolRegistry construction', () => {
       name: 'MacroExpectedError',
       error: 'tool_unavailable_pending_user_decision',
     });
+  });
+
+  it('preserves host trace scope across nested fq.call_macro re-entry', async () => {
+    const callTool = vi.fn(async () => ({
+      content: [{ type: 'text' as const, text: '{"ok":true}' }],
+      structuredContent: { ok: true },
+    }));
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool,
+      listToolsForConsumer: vi.fn(async () => [brokeredSearchTool()]),
+      getPendingSchemaDrift: vi.fn(() => []),
+      resolveSchemaDrift: vi.fn(() => []),
+      shutdown: vi.fn(),
+    };
+    const config = makeConfig();
+    let nestedCallMacro!: NativeToolDefinition;
+    nestedCallMacro = nativeTool('call_macro', async (args, context) => {
+      const callerContext = (context as NativeToolDispatchContext & { macroCallerContext?: MacroCallerContext }).macroCallerContext;
+      const nested = await runMacroSource({
+        source: String(args.source ?? ''),
+        callerContext,
+        config,
+        catalog: [nestedCallMacro],
+        broker,
+        nativeDispatchContext: context,
+        brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+      });
+      return nested.result;
+    }, z.object({ source: z.string() }));
+
+    const result = await runMacroSource({
+      source: 'exit fq.call_macro({ source: "brave_search.web_search({ query: \\"FlashQuery\\" })" })',
+      callerContext: { origin: 'host' },
+      config,
+      catalog: [nestedCallMacro],
+      broker,
+      nativeDispatchContext: { ...nativeDispatchContext(), traceId: 'outer-host-trace' },
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    expect(result.result.isError).toBe(false);
+    expect(callTool).toHaveBeenCalledWith(
+      { serverId: 'brave_search', toolName: 'web_search' },
+      { query: 'FlashQuery' },
+      { kind: 'host', traceId: 'outer-host-trace', interactive: true }
+    );
+  });
+
+  it('preserves delegated autonomous interactive false across nested fq.call_macro pending drift', async () => {
+    const pending = [driftPayload('web_search')];
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool: vi.fn(),
+      listToolsForConsumer: vi.fn(async () => []),
+      getPendingSchemaDrift: vi.fn(() => pending),
+      resolveSchemaDrift: vi.fn(() => []),
+      shutdown: vi.fn(),
+    };
+    const config = makeConfig();
+    let nestedCallMacro!: NativeToolDefinition;
+    nestedCallMacro = nativeTool('call_macro', async (args, context) => {
+      const callerContext = (context as NativeToolDispatchContext & { macroCallerContext?: MacroCallerContext }).macroCallerContext;
+      const nested = await runMacroSource({
+        source: String(args.source ?? ''),
+        callerContext,
+        config,
+        catalog: [nestedCallMacro],
+        broker,
+        nativeDispatchContext: context,
+        brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+      });
+      return nested.result;
+    }, z.object({ source: z.string() }));
+
+    const result = await runMacroSource({
+      source: 'exit fq.call_macro({ source: "brave_search.web_search({ query: \\"x\\" })" })',
+      callerContext: { origin: 'delegated', purposeName: 'scheduled', interactive: false },
+      config,
+      catalog: [nestedCallMacro],
+      broker,
+      nativeDispatchContext: { ...nativeDispatchContext(), traceId: 'delegated-autonomous-trace' },
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    expect(result.result.isError).toBe(true);
+    expect(parseToolPayload(result.result)).toMatchObject({
+      error: 'macro_aborted',
+      details: {
+        error: 'tool_unavailable_pending_user_decision',
+      },
+    });
+    expect(JSON.stringify(parseToolPayload(result.result))).not.toContain('needs_user_input');
   });
 });
