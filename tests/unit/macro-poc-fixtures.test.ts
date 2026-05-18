@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../src/llm/tool-registry.js';
 import { runMacroSource } from '../../src/mcp/tools/macro.js';
-import type { McpBroker } from '../../src/services/mcp-broker.js';
+import type { BrokeredTool, McpBroker } from '../../src/services/mcp-broker.js';
 import { parseToolPayload } from './macro-test-helpers.js';
 
 const FIXTURE_DIR = join(process.cwd(), 'tests/fixtures/macro/poc-examples');
@@ -70,6 +70,18 @@ function jsonResponse(value: unknown) {
   };
 }
 
+function brokeredTool(serverId: string, toolName: string): BrokeredTool {
+  return {
+    serverId,
+    toolName,
+    registryKey: `__${serverId}__${toolName}`,
+    description: `${serverId}.${toolName} fixture stub`,
+    inputSchema: {},
+    tofuHash: `${serverId}-${toolName}-hash`,
+    costPerCall: 0,
+  };
+}
+
 function makeTool(name: string, value: unknown): NativeToolDefinition {
   return {
     name,
@@ -123,32 +135,35 @@ function nativeDispatchContext(): NativeToolDispatchContext {
 
 function makeBroker(): McpBroker {
   return {
+    ensureConnected: vi.fn(),
     isConnected: vi.fn(async (serverId: string) => ['brave_search', 'web_fetch'].includes(serverId)),
-    getToolHandler: vi.fn((serverId: string, toolName: string) => {
-      if (serverId === 'brave_search' && toolName === 'web_search') {
-        return vi.fn(async () =>
-          jsonResponse([
+    callTool: vi.fn(async (ref) => {
+      if (ref.serverId === 'brave_search' && ref.toolName === 'web_search') {
+        return jsonResponse([
             {
               title: 'FlashQuery',
               url: 'https://example.test',
               description: 'Fixture search result',
             },
-          ])
-        );
+        ]);
       }
-      if (serverId === 'web_fetch' && toolName === 'fetch') {
-        return vi.fn(async () =>
-          jsonResponse({
+      if (ref.serverId === 'web_fetch' && ref.toolName === 'fetch') {
+        return jsonResponse({
             content: '# Fixture page\nFlashQuery fixture content.',
             markdown: '# Fixture page\nFlashQuery fixture content.',
-          })
-        );
+        });
       }
-      if (serverId === 'pretend_search' && toolName === 'web_search') {
-        return vi.fn(async () => jsonResponse([]));
+      if (ref.serverId === 'pretend_search' && ref.toolName === 'web_search') {
+        return jsonResponse([]);
       }
-      return null;
+      return { isError: true, content: [{ type: 'text' as const, text: 'unknown fixture broker tool' }] };
     }),
+    listToolsForConsumer: vi.fn(async () => [
+      brokeredTool('brave_search', 'web_search'),
+      brokeredTool('web_fetch', 'fetch'),
+      brokeredTool('pretend_search', 'web_search'),
+    ]),
+    shutdown: vi.fn(),
   };
 }
 
@@ -172,10 +187,10 @@ describe('migrated macro POC fixtures', () => {
         catalog: makeCatalog(),
         broker: makeBroker(),
         brokerTools: [
-        { server: 'brave_search', label: 'Brave Search', tools: ['web_search'] },
-        { server: 'web_fetch', label: 'Web Fetch', tools: ['fetch'] },
-        { server: 'pretend_search', label: 'Pretend Search', tools: ['web_search'] },
-      ],
+          { server: 'brave_search', label: 'Brave Search', tools: ['web_search'] },
+          { server: 'web_fetch', label: 'Web Fetch', tools: ['fetch'] },
+          { server: 'pretend_search', label: 'Pretend Search', tools: ['web_search'] },
+        ],
         nativeDispatchContext: nativeDispatchContext(),
         input_vars: FIXTURE_INPUTS[fixture] ?? { topic: 'FlashQuery', name: 'Ada', limit: 2 },
       });

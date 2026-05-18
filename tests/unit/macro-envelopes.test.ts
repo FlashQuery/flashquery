@@ -16,8 +16,11 @@ import type {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const broker: McpBroker = {
+  ensureConnected: async () => undefined,
   isConnected: async () => true,
-  getToolHandler: () => async () => ({ content: [{ type: 'text', text: '{}' }] }),
+  callTool: async () => ({ content: [{ type: 'text', text: '{}' }] }),
+  listToolsForConsumer: async () => [],
+  shutdown: async () => undefined,
 };
 
 function config(): FlashQueryConfig {

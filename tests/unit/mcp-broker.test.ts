@@ -9,10 +9,9 @@ describe('NullMcpBroker', () => {
     await expect(broker.isConnected('anything')).resolves.toBe(false);
   });
 
-  it('T-U-232 never exposes a brokered tool handler', () => {
+  it('T-U-232 never exposes brokered tools to consumers', async () => {
     const broker = new NullMcpBroker();
 
-    expect(broker.getToolHandler('brave_search', 'web_search')).toBeNull();
-    expect(broker.getToolHandler('anything', 'anything')).toBeNull();
+    await expect(broker.listToolsForConsumer({ kind: 'host', traceId: 'trace-null-broker' })).resolves.toEqual([]);
   });
 });

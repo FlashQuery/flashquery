@@ -5,6 +5,7 @@ import type { MacroCallerContext } from '../../src/macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../src/llm/tool-registry.js';
 import type { McpBroker } from '../../src/services/mcp-broker.js';
 import { NullMcpBroker } from '../../src/services/mcp-broker.js';
+import type { BrokeredTool } from '../../src/services/mcp-broker.js';
 
 function makeConfig(): FlashQueryConfig {
   return {
@@ -47,6 +48,18 @@ const catalog: NativeToolDefinition[] = [
   { name: 'archive_document', description: 'archive', inputSchema: {}, handler: vi.fn() },
   { name: 'call_model', description: 'model', inputSchema: {}, handler: vi.fn() },
 ];
+
+function brokeredSearchTool(): BrokeredTool {
+  return {
+    serverId: 'brave_search',
+    toolName: 'web_search',
+    registryKey: '__brave_search__web_search',
+    description: 'Brokered web search',
+    inputSchema: {},
+    tofuHash: 'fixture-hash',
+    costPerCall: 0,
+  };
+}
 
 function nativeDispatchContext(): NativeToolDispatchContext {
   return {
@@ -116,10 +129,11 @@ describe('macro caller identity', () => {
       content: [{ type: 'text', text: JSON.stringify({ results: ['FlashQuery'] }) }],
     });
     const broker = {
+      ensureConnected: vi.fn(),
       isConnected: vi.fn(async (serverId: string) => serverId === 'brave_search'),
-      getToolHandler: vi.fn((serverId: string, toolName: string) =>
-        serverId === 'brave_search' && toolName === 'web_search' ? brokerHandler : null
-      ),
+      callTool: brokerHandler,
+      listToolsForConsumer: vi.fn(async () => [brokeredSearchTool()]),
+      shutdown: vi.fn(),
     } satisfies McpBroker;
 
     const result = await runMacroSource({
@@ -135,8 +149,9 @@ describe('macro caller identity', () => {
     expect(payload.result).toEqual({ results: ['FlashQuery'] });
     expect(result.registryBuild.allowedToolNames).toContain('brave_search.web_search');
     expect(brokerHandler).toHaveBeenCalledWith(
+      { serverId: 'brave_search', toolName: 'web_search' },
       { query: 'FlashQuery' },
-      expect.objectContaining({ server: 'brave_search', tool: 'web_search' })
+      expect.objectContaining({ kind: 'host', traceId: 'trace-caller-identity' })
     );
   });
 });
