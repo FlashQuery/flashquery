@@ -2,13 +2,17 @@ import { computeCost, recordLlmUsage as writeLlmUsage } from './cost-tracker.js'
 import { dispatchToolCalls } from './tool-dispatcher.js';
 import type { AgentLoopStopReason } from '../constants/llm.js';
 import type { FlashQueryConfig } from '../config/loader.js';
+import { z } from 'zod';
 import type { LlmUsageRecord } from './cost-tracker.js';
 import type { LlmChatMessage, LlmChatResult, LlmChatToolCall, CallModelEnvelope, AgentLoopCallLogEntry, AgentLoopToolCallLogEntry } from './types.js';
 import type { DispatchToolCallsOptions, NativeToolDispatchContext } from './tool-dispatcher.js';
 import type { Broker, ConsumerContext } from '../services/mcp-broker/index.js';
 import type { NativeToolDefinition, OpenAiToolDefinition, ToolRegistryAssembly } from './tool-registry.js';
-import { toOpenAiBrokeredToolDefinition } from './tool-registry.js';
+import { toOpenAiBrokeredToolDefinition, toOpenAiToolDefinition } from './tool-registry.js';
 import type { TemplateToolReverseMap } from './template-tools.js';
+import { createSearchToolsHandler } from '../services/tool-search/search-tools-handler.js';
+import { ToolSearchService } from '../services/tool-search/tool-search-service.js';
+import { loadToolMeta } from '../services/tool-search/tool-meta.js';
 
 export const DEFAULT_OUTPUT_TOKEN_ESTIMATE = 2048;
 
@@ -60,6 +64,7 @@ export interface ExecuteAgentLoopOptions {
   nativeToolCatalog?: NativeToolDefinition[] | Map<string, NativeToolDefinition>;
   nativeToolNames?: string[];
   providerTools?: OpenAiToolDefinition[] | Array<Record<string, unknown>>;
+  toolSearch?: 'enabled' | 'disabled';
   broker?: Broker;
   chatByPurpose?: ChatByPurpose;
   chat?: LegacyChat;
@@ -116,12 +121,45 @@ function getProviderTools(options: ExecuteAgentLoopOptions): Array<Record<string
   return (options.toolRegistry?.providerTools ?? options.providerTools ?? []) as Array<Record<string, unknown>>;
 }
 
+function getNativeToolCatalog(options: ExecuteAgentLoopOptions): NativeToolDefinition[] | Map<string, NativeToolDefinition> {
+  return options.nativeToolCatalog ?? [];
+}
+
+function catalogToArray(catalog: NativeToolDefinition[] | Map<string, NativeToolDefinition>): NativeToolDefinition[] {
+  return catalog instanceof Map ? [...catalog.values()] : catalog;
+}
+
 function makePurposeConsumerContext(options: ExecuteAgentLoopOptions): ConsumerContext {
   return {
     kind: 'purpose',
     purposeId: options.purposeName,
     traceId: options.traceId ?? '',
     interactive: options.chatByPurpose !== undefined || options.chat !== undefined,
+  };
+}
+
+async function buildSearchToolDefinition(
+  options: ExecuteAgentLoopOptions,
+  consumerContext: ConsumerContext,
+  nativeToolNames: string[]
+): Promise<NativeToolDefinition> {
+  const toolMeta = await loadToolMeta();
+  const service = await ToolSearchService.buildForConsumer({
+    nativeToolCatalog: getNativeToolCatalog(options),
+    nativeToolNames,
+    broker: options.broker,
+    consumerContext,
+    toolMeta,
+  });
+  const searchToolsMeta = toolMeta.get('search_tools');
+  return {
+    name: 'search_tools',
+    description: searchToolsMeta?.description ?? 'Search visible FlashQuery-native and brokered tools.',
+    inputSchema: {
+      query: z.string(),
+      limit: z.number().int().positive().max(50).optional(),
+    },
+    handler: createSearchToolsHandler({ service, consumerContext }),
   };
 }
 
@@ -332,13 +370,25 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
 
   const nativeToolNames = getNativeToolNames(options);
   const consumerContext = makePurposeConsumerContext(options);
-  const brokeredTools = options.broker === undefined
-    ? []
-    : await options.broker.listToolsForConsumer(consumerContext);
-  const providerTools = [
-    ...getProviderTools(options),
-    ...brokeredTools.map(toOpenAiBrokeredToolDefinition),
-  ];
+  const toolSearchEnabled = options.toolSearch === 'enabled';
+  const searchTool = toolSearchEnabled
+    ? await buildSearchToolDefinition(options, consumerContext, nativeToolNames)
+    : null;
+  const brokeredTools = !toolSearchEnabled && options.broker !== undefined
+    ? await options.broker.listToolsForConsumer(consumerContext)
+    : [];
+  const providerTools = searchTool === null
+    ? [
+        ...getProviderTools(options),
+        ...brokeredTools.map(toOpenAiBrokeredToolDefinition),
+      ]
+    : [toOpenAiToolDefinition(searchTool, { strict: false })];
+  const dispatchNativeToolNames = searchTool === null
+    ? nativeToolNames
+    : [...nativeToolNames, searchTool.name];
+  const dispatchCatalog = searchTool === null
+    ? getNativeToolCatalog(options)
+    : [...catalogToArray(getNativeToolCatalog(options)), searchTool];
   if (!hasVisibleTools(options, nativeToolNames, providerTools)) {
     return {
       mode: 'mode_1',
@@ -472,8 +522,8 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
 
     const dispatchResult = await dispatcher({
       toolCalls,
-      catalog: options.nativeToolCatalog ?? [],
-      nativeToolNames,
+      catalog: dispatchCatalog,
+      nativeToolNames: dispatchNativeToolNames,
       templateReverseMap: options.toolRegistry?.templateReverseMap,
       templateDispatchContext: options.templateDispatchContext,
       dispatchContext: {

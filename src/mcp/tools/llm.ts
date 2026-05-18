@@ -300,6 +300,24 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
   const nativeToolCatalog = getNativeToolCatalog(server);
 
   server.registerTool(
+    'search_tools',
+    {
+      description: 'Search the visible FlashQuery-native and brokered tool index.',
+      inputSchema: {
+        query: z.string().describe('Natural-language tool search query.'),
+        limit: z.number().int().positive().max(50).optional().describe('Maximum ranked results to return. Defaults to 8.'),
+      },
+    },
+    async () => ({
+      content: [{
+        type: 'text' as const,
+        text: 'search_tools is available inside call_model tool_search-enabled delegated purpose calls. Host search index support is initialized by the host tool-search lifecycle.',
+      }],
+      isError: true,
+    })
+  );
+
+  server.registerTool(
     'call_model',
     {
       description:
@@ -695,6 +713,7 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
             toolRegistry,
             templateDispatchContext: { config, logger },
             broker: options.broker,
+            toolSearch: purpose?.toolSearch ?? 'disabled',
             traceId: params.trace_id ?? null,
             chatByPurpose: client.chatByPurposeUnrecorded.bind(client),
             modelCostLookup: (modelName) => config.llm?.models.find((model) => model.name === modelName),
