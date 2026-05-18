@@ -19,6 +19,7 @@ export default defineConfig({
       'tests/integration/macro-source-ref.integration.test.ts',
       'tests/integration/macro-write-lock.integration.test.ts',
       'tests/integration/mcp-broker/client-lifecycle.test.ts',
+      'tests/integration/mcp-broker/dispatch.test.ts',
     ],
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],
     globals: true,
