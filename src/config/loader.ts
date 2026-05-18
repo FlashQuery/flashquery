@@ -185,6 +185,8 @@ const PurposeSchema = z
     tools: z.array(z.string()).optional(),
     excluded_tools: z.array(z.string()).optional(),
     templates: z.array(z.string()).optional(),
+    mcp_servers: z.array(z.string()).optional(),
+    tool_search: z.enum(['enabled', 'disabled']).default('disabled'),
   })
   .strict();
 
@@ -230,6 +232,33 @@ const HostMcpToolsSchema = z
   })
   .strict();
 
+const BrokerToolOverrideSchema = z
+  .object({
+    cost_per_call: z.number().min(0).default(0),
+    description_override: z.string().optional(),
+  })
+  .strict();
+
+const BrokerServerSchema = z
+  .object({
+    transport: z.enum(['stdio']).default('stdio'),
+    command: z.string().min(1),
+    args: z.array(z.string()).default([]),
+    env: z.record(z.string(), z.string()).default({}),
+    cost_per_call: z.number().min(0).default(0),
+    per_call_timeout_ms: z.number().int().positive().default(30000),
+    tool_overrides: z.record(z.string(), BrokerToolOverrideSchema).default({}),
+  })
+  .strict();
+
+const HostSchema = z
+  .object({
+    mcp_servers: z.array(z.string()).default([]),
+    tool_search: z.enum(['enabled', 'disabled']).default('disabled'),
+  })
+  .strict()
+  .prefault({});
+
 const MacroSchema = z
   .object({
     default_timeout_ms: z.number().int().positive().default(60000),
@@ -247,6 +276,8 @@ const ConfigSchema = z
     supabase: SupabaseSchema,
     git: GitSchema,
     mcp: McpSchema,
+    mcp_servers: z.record(z.string(), BrokerServerSchema).default({}),
+    host: HostSchema,
     llm: LlmSchema,
     host_mcp_tools: HostMcpToolsSchema.optional(),
     templates: TemplatesSchema,
@@ -278,6 +309,19 @@ export interface FlashQueryConfig {
   locking: { enabled: boolean; ttlSeconds: number };
   trashFolder: { enabled: boolean; path: string; collisionStrategy: 'suffix' | 'timestamp' };
   hostMcpTools?: { tools?: string[]; excludedTools?: string[] };
+  mcpServers: Record<string, {
+    transport: 'stdio';
+    command: string;
+    args: string[];
+    env: Record<string, string>;
+    costPerCall: number;
+    perCallTimeoutMs: number;
+    toolOverrides: Record<string, {
+      costPerCall: number;
+      descriptionOverride?: string;
+    }>;
+  }>;
+  host: { mcpServers: string[]; toolSearch: 'enabled' | 'disabled' };
   templates?: { defaultAccess: 'permissive' | 'restrictive' };
   macro: { defaultTimeoutMs: number };
   llm?: {
@@ -308,6 +352,8 @@ export interface FlashQueryConfig {
       tools?: string[];
       excludedTools?: string[];
       templates?: string[];
+      mcpServers?: string[];
+      toolSearch: 'enabled' | 'disabled';
     }>;
   };
   embedding?: {
@@ -474,8 +520,11 @@ type RawLlmPurpose = {
   tools?: string[];
   excluded_tools?: string[];
   templates?: string[];
+  mcp_servers?: string[];
+  tool_search: 'enabled' | 'disabled';
 };
 type RawLlm = { providers: RawLlmProvider[]; models: RawLlmModel[]; purposes: RawLlmPurpose[] };
+type RawBrokerConfig = z.infer<typeof ConfigSchema>;
 
 /**
  * Normalizes all provider/model/purpose names and cross-references to lowercase.
@@ -614,6 +663,31 @@ function warnHardExcludedPurposeTools(llm: RawLlm): void {
         `Config: purpose '${pu.name}' lists hard-excluded native tool '${tool}'; it will be removed from the model-visible registry.`
       );
     }
+  }
+}
+
+function validateBrokerServerReferences(config: RawBrokerConfig): void {
+  const serverIds = new Set(Object.keys(config.mcp_servers));
+  const errors: string[] = [];
+
+  for (const serverId of config.host.mcp_servers) {
+    if (!serverIds.has(serverId)) {
+      errors.push(`Config error: [host] host.mcp_servers references unknown MCP server '${serverId}'`);
+    }
+  }
+
+  for (const purpose of config.llm?.purposes ?? []) {
+    for (const serverId of purpose.mcp_servers ?? []) {
+      if (!serverIds.has(serverId)) {
+        errors.push(
+          `Config error: [purpose:${purpose.name}] purposes.${purpose.name}.mcp_servers references unknown MCP server '${serverId}'`
+        );
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    throw new Error(errors.join('\n'));
   }
 }
 
@@ -811,6 +885,8 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     const message = formatZodErrors(result.error.issues as ZodIssue[]);
     throw new Error(message);
   }
+
+  validateBrokerServerReferences(result.data);
 
   // 7a. LLM v3.0 — normalize names to lowercase, then run validation that depends on
   // post-normalization name comparisons (CONF-01..CONF-04, CONF-07).
