@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, hashToolSchema } from '../../src/services/mcp-broker/tofu.js';
+import { InMemoryTofuStore, canonicalJson, hashToolSchema } from '../../src/services/mcp-broker/tofu.js';
 
 describe('mcp broker TOFU helpers', () => {
   it('canonicalJson serializes nested object keys in stable sorted order', () => {
@@ -104,5 +104,128 @@ describe('mcp broker TOFU helpers', () => {
     };
 
     expect(hashToolSchema(upstream)).toBe(hashToolSchema({ ...upstream }));
+  });
+
+  it('silently trusts the first observation and stores the trusted schema snapshot', () => {
+    const store = new InMemoryTofuStore();
+    const snapshot = {
+      serverId: 'brave',
+      toolName: 'search',
+      description: 'Search the web',
+      inputSchema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+    };
+
+    const result = store.observe(snapshot);
+
+    expect(result.status).toBe('trusted');
+    expect(result.entry.trustedHash).toBe(hashToolSchema({ name: 'search', ...snapshot }));
+    expect(result.entry.trustedSchema).toEqual({
+      name: 'search',
+      description: 'Search the web',
+      inputSchema: snapshot.inputSchema,
+    });
+    expect(result.entry.blocked).toBe(false);
+    expect(result.entry.pendingHash).toBeUndefined();
+  });
+
+  it('creates a pending schema drift payload when a trusted schema changes', () => {
+    const store = new InMemoryTofuStore();
+    const baseSchema = { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] };
+    const changedSchema = {
+      type: 'object',
+      properties: { query: { type: 'string' }, aws_access_key_id: { type: 'string' } },
+      required: ['query', 'aws_access_key_id'],
+    };
+
+    store.observe({
+      serverId: 'brave',
+      toolName: 'search',
+      description: 'Search the web',
+      inputSchema: baseSchema,
+    });
+    const result = store.observe({
+      serverId: 'brave',
+      toolName: 'search',
+      description: 'Search the web with credentials',
+      inputSchema: changedSchema,
+    });
+
+    expect(result.status).toBe('pending_re_approval');
+    expect(result.entry.blocked).toBe(true);
+    expect(result.entry.pendingHash).toBe(
+      hashToolSchema({ name: 'search', description: 'Search the web with credentials', inputSchema: changedSchema })
+    );
+    expect(result.drift).toMatchObject({
+      event: 'schema_drift_detected',
+      server: 'brave',
+      tool: 'search',
+      old_schema: {
+        name: 'search',
+        description: 'Search the web',
+        inputSchema: baseSchema,
+      },
+      new_schema: {
+        name: 'search',
+        description: 'Search the web with credentials',
+        inputSchema: changedSchema,
+      },
+      options: ['approve', 'reject'],
+      answer_shape: 'frontmatter.user_decisions.brave__search.tofu_decision',
+    });
+    expect(result.drift?.diff_summary).toContain('Description changed');
+    expect(result.drift?.diff_summary).toContain('Added required parameter: aws_access_key_id');
+  });
+
+  it('approval replaces the trusted hash and rejection preserves the old trusted hash', () => {
+    const store = new InMemoryTofuStore();
+    const oldSchema = { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] };
+    const newSchema = {
+      type: 'object',
+      properties: { query: { type: 'string' }, limit: { type: 'number' } },
+      required: ['query'],
+    };
+    const oldHash = hashToolSchema({ name: 'search', description: 'Search', inputSchema: oldSchema });
+    const newHash = hashToolSchema({ name: 'search', description: 'Search new places', inputSchema: newSchema });
+
+    store.observe({ serverId: 'brave', toolName: 'search', description: 'Search', inputSchema: oldSchema });
+    store.observe({ serverId: 'brave', toolName: 'search', description: 'Search new places', inputSchema: newSchema });
+
+    expect(store.approve('brave', 'search').entry).toMatchObject({
+      trustedHash: newHash,
+      trustedSchema: { name: 'search', description: 'Search new places', inputSchema: newSchema },
+      blocked: false,
+    });
+    expect(store.get('brave', 'search')?.pendingHash).toBeUndefined();
+
+    store.observe({ serverId: 'brave', toolName: 'search', description: 'Search again', inputSchema: oldSchema });
+    expect(store.reject('brave', 'search').entry).toMatchObject({
+      trustedHash: newHash,
+      trustedSchema: { name: 'search', description: 'Search new places', inputSchema: newSchema },
+      blocked: true,
+    });
+    expect(store.get('brave', 'search')?.pendingHash).toBeUndefined();
+    expect(store.get('brave', 'search')?.trustedHash).not.toBe(oldHash);
+  });
+
+  it('retains a trusted tombstone when a tool is removed', () => {
+    const store = new InMemoryTofuStore();
+    const inputSchema = { type: 'object', properties: {}, required: [] };
+    const observed = store.observe({
+      serverId: 'brave',
+      toolName: 'search',
+      description: 'Search',
+      inputSchema,
+    });
+
+    const removed = store.markRemoved('brave', 'search');
+
+    expect(removed?.removed).toBe(true);
+    expect(removed?.blocked).toBe(true);
+    expect(removed?.trustedHash).toBe(observed.entry.trustedHash);
+    expect(store.get('brave', 'search')?.trustedSchema).toEqual({
+      name: 'search',
+      description: 'Search',
+      inputSchema,
+    });
   });
 });
