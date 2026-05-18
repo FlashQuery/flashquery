@@ -1,3 +1,5 @@
+import type { BrokerAuditEvent } from './types.js';
+
 export interface BrokeredToolCallTraceEntry {
   server: string;
   tool: string;
@@ -13,6 +15,7 @@ interface RecordBrokeredToolCallInput {
 }
 
 const _brokeredToolCalls = new Map<string, Map<string, BrokeredToolCallTraceEntry>>();
+const _brokerAuditEvents: BrokerAuditEvent[] = [];
 
 function traceKey(serverId: string, toolName: string): string {
   return `${serverId}\u0000${toolName}`;
@@ -44,4 +47,16 @@ export function clearBrokeredToolCallTrace(traceId?: string): void {
     return;
   }
   _brokeredToolCalls.delete(traceId);
+}
+
+export function recordBrokerAuditEvent(event: BrokerAuditEvent): void {
+  _brokerAuditEvents.push(structuredClone(event));
+}
+
+export function getBrokerAuditTraceSnapshot(): BrokerAuditEvent[] {
+  return _brokerAuditEvents.map((event) => structuredClone(event));
+}
+
+export function clearBrokerAuditTrace(): void {
+  _brokerAuditEvents.length = 0;
 }

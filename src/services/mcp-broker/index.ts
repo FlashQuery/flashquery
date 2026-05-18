@@ -3,17 +3,23 @@ import { BrokerClient } from './client.js';
 import { diffToolSnapshots } from './diff.js';
 import { formatToolError, toThrowableToolError } from './errors.js';
 import { ToolRegistry, type ToolRegistryConfig } from './registry.js';
+import { recordBrokerAuditEvent } from './trace.js';
 import { InMemoryTofuStore } from './tofu.js';
 import type {
   Broker,
+  BrokerAuditEvent,
   BrokerClientConfig,
   BrokerConnectionOptions,
   BrokeredTool,
   BrokerToolRef,
   ConsumerContext,
   RegistryKey,
+  SchemaDriftDecisionInput,
+  SchemaDriftResolution,
+  SchemaDriftResolutionContext,
   TofuDriftBundle,
   TofuDriftPayload,
+  ToolListSnapshotOptions,
   ToolIndexSink,
 } from './types.js';
 
@@ -21,7 +27,14 @@ export { BrokerClient } from './client.js';
 export { diffToolSnapshots } from './diff.js';
 export { formatToolError, stripRawFromToolError, toThrowableToolError } from './errors.js';
 export { ToolRegistry, isRegistryKey, makeRegistryKey, parseMacroRef, parseRegistryKey } from './registry.js';
-export { clearBrokeredToolCallTrace, getBrokeredToolCallTraceSnapshot, recordBrokeredToolCall } from './trace.js';
+export {
+  clearBrokerAuditTrace,
+  clearBrokeredToolCallTrace,
+  getBrokerAuditTraceSnapshot,
+  getBrokeredToolCallTraceSnapshot,
+  recordBrokerAuditEvent,
+  recordBrokeredToolCall,
+} from './trace.js';
 export { InMemoryTofuStore, canonicalJson, hashToolSchema } from './tofu.js';
 export { SchemaDriftNeedsUserInputError } from './types.js';
 export type * from './types.js';
@@ -30,6 +43,7 @@ export interface BrokerConfig extends ToolRegistryConfig {
   mcpServers?: Record<string, BrokerClientConfig>;
   indexSink?: ToolIndexSink;
   onTofuDrift?: (bundle: TofuDriftBundle) => void | Promise<void>;
+  onAudit?: (event: BrokerAuditEvent) => void;
 }
 
 const NOOP_INDEX_SINK: ToolIndexSink = {
@@ -43,10 +57,14 @@ export class McpBroker implements Broker {
   readonly #tofuStore = new InMemoryTofuStore();
   readonly #indexSink: ToolIndexSink;
   readonly #onTofuDrift?: (bundle: TofuDriftBundle) => void | Promise<void>;
+  readonly #onAudit?: (event: BrokerAuditEvent) => void;
+  readonly #pendingTools = new Map<RegistryKey, BrokeredTool>();
+  readonly #pendingDrifts = new Map<RegistryKey, TofuDriftPayload>();
 
   constructor(config: BrokerConfig) {
     this.#indexSink = config.indexSink ?? NOOP_INDEX_SINK;
     this.#onTofuDrift = config.onTofuDrift;
+    this.#onAudit = config.onAudit;
     this.#clients = new Map(
       Object.entries(config.mcpServers ?? {}).map(([serverId, serverConfig]) => [
         serverId,
@@ -69,7 +87,12 @@ export class McpBroker implements Broker {
     await this.applyToolListSnapshot(serverId, await client.listTools());
   }
 
-  async applyToolListSnapshot(serverId: string, refreshedTools: BrokeredTool[]): Promise<void> {
+  async applyToolListSnapshot(
+    serverId: string,
+    refreshedTools: BrokeredTool[],
+    options: ToolListSnapshotOptions = {}
+  ): Promise<void> {
+    const interactive = options.interactive ?? true;
     const previousTools = this.#registry.listAll().filter((tool) => tool.serverId === serverId);
     const diff = diffToolSnapshots(previousTools, refreshedTools);
     const removedKeys = this.#removeTools([...diff.removed, ...diff.changed]);
@@ -87,22 +110,80 @@ export class McpBroker implements Broker {
         inputSchema: tool.inputSchema,
       });
       if (observation.status === 'trusted') {
+        this.#pendingTools.delete(tool.registryKey);
+        this.#pendingDrifts.delete(tool.registryKey);
         toolsToAdd.push(this.#registry.registerTool(tool));
       } else if (observation.drift !== undefined) {
+        this.#pendingTools.set(tool.registryKey, tool);
+        this.#pendingDrifts.set(tool.registryKey, observation.drift);
         drifts.push(observation.drift);
+        if (!interactive) {
+          this.#emitAudit({
+            type: 'mcp_broker_tofu_blocked',
+            server: serverId,
+            tool: tool.toolName,
+            status: 'blocked_on_user',
+            old_hash: observation.entry.trustedHash,
+            new_hash: observation.entry.pendingHash ?? tool.tofuHash,
+            ...(options.traceId === undefined ? {} : { trace_id: options.traceId }),
+            ...(options.purposeId === undefined ? {} : { purpose_id: options.purposeId }),
+          });
+        }
       }
     }
 
     for (const tool of diff.removed) {
       this.#tofuStore.markRemoved(serverId, tool.toolName);
+      this.#pendingTools.delete(tool.registryKey);
+      this.#pendingDrifts.delete(tool.registryKey);
     }
 
     if (toolsToAdd.length > 0) {
       this.#indexSink.addTools(toolsToAdd);
     }
-    if (drifts.length > 0) {
+    if (interactive && drifts.length > 0) {
       await this.#onTofuDrift?.({ event: 'schema_drift_detected', server: serverId, changes: drifts });
     }
+  }
+
+  getPendingSchemaDrift(_ctx: SchemaDriftResolutionContext = {}): TofuDriftPayload[] {
+    return [...this.#pendingDrifts.values()].map((payload) => structuredClone(payload));
+  }
+
+  resolveSchemaDrift(
+    decisions: SchemaDriftDecisionInput[],
+    ctx: SchemaDriftResolutionContext = {}
+  ): SchemaDriftResolution[] {
+    const resolved: SchemaDriftResolution[] = [];
+    for (const decision of decisions) {
+      const pendingKey = `${decision.server}__${decision.tool}`;
+      const pendingTool = this.#pendingTools.get(pendingKey);
+      const before = this.#tofuStore.get(decision.server, decision.tool);
+      if (pendingTool === undefined || before?.pendingHash === undefined) {
+        continue;
+      }
+
+      if (decision.decision === 'approve') {
+        const approved = this.#tofuStore.approve(decision.server, decision.tool);
+        const registered = this.#registry.registerTool({
+          ...pendingTool,
+          tofuHash: approved.entry.trustedHash,
+        });
+        this.#indexSink.addTools([registered]);
+        this.#pendingTools.delete(pendingKey);
+        this.#pendingDrifts.delete(pendingKey);
+        this.#emitDecisionAudit(decision, before.trustedHash, before.pendingHash, ctx);
+        resolved.push({ server: decision.server, tool: decision.tool, decision: 'approve' });
+        continue;
+      }
+
+      this.#tofuStore.reject(decision.server, decision.tool);
+      this.#pendingTools.delete(pendingKey);
+      this.#pendingDrifts.delete(pendingKey);
+      this.#emitDecisionAudit(decision, before.trustedHash, before.pendingHash, ctx);
+      resolved.push({ server: decision.server, tool: decision.tool, decision: 'reject' });
+    }
+    return resolved;
   }
 
   async callTool(ref: BrokerToolRef, args: unknown, ctx: ConsumerContext): Promise<CallToolResult> {
@@ -140,6 +221,29 @@ export class McpBroker implements Broker {
 
   #removeTools(tools: BrokeredTool[]): RegistryKey[] {
     return this.#registry.unregisterTools(tools.map((tool) => tool.registryKey));
+  }
+
+  #emitDecisionAudit(
+    decision: SchemaDriftDecisionInput,
+    oldHash: string,
+    newHash: string,
+    ctx: SchemaDriftResolutionContext
+  ): void {
+    this.#emitAudit({
+      type: 'mcp_broker_tofu_decision',
+      server: decision.server,
+      tool: decision.tool,
+      decision: decision.decision,
+      old_hash: oldHash,
+      new_hash: newHash,
+      ...(ctx.traceId === undefined ? {} : { trace_id: ctx.traceId }),
+      ...(ctx.purposeId === undefined ? {} : { purpose_id: ctx.purposeId }),
+    });
+  }
+
+  #emitAudit(event: BrokerAuditEvent): void {
+    recordBrokerAuditEvent(event);
+    this.#onAudit?.(event);
   }
 }
 

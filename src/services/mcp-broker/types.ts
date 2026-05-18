@@ -31,8 +31,8 @@ export interface BrokerToolRef {
 }
 
 export type ConsumerContext =
-  | { kind: 'host'; traceId: string }
-  | { kind: 'purpose'; purposeId: string; traceId: string };
+  | { kind: 'host'; traceId: string; interactive?: boolean }
+  | { kind: 'purpose'; purposeId: string; traceId: string; interactive?: boolean };
 
 export interface BrokeredTool {
   serverId: string;
@@ -103,6 +103,29 @@ export interface ToolIndexSink {
   removeTools(keys: RegistryKey[]): void;
 }
 
+export interface SchemaDriftDecisionInput {
+  server: string;
+  tool: string;
+  decision: TofuDecision;
+}
+
+export interface SchemaDriftResolution {
+  server: string;
+  tool: string;
+  decision: TofuDecision;
+}
+
+export interface SchemaDriftResolutionContext {
+  traceId?: string;
+  purposeId?: string;
+}
+
+export interface ToolListSnapshotOptions {
+  interactive?: boolean;
+  traceId?: string;
+  purposeId?: string;
+}
+
 export interface BrokerConnectionOptions {
   deepProbe?: boolean;
   timeoutMs?: number;
@@ -138,11 +161,32 @@ export interface Broker {
   shutdown(graceMs?: number): Promise<void>;
 }
 
-export interface BrokerAuditEvent {
-  type: 'mcp_broker_reverse_request_rejected';
-  serverId: string;
-  method: string;
-  status: 'rejected_unsupported';
-  traceId?: string;
-  purposeId?: string;
-}
+export type BrokerAuditEvent =
+  | {
+      type: 'mcp_broker_reverse_request_rejected';
+      serverId: string;
+      method: string;
+      status: 'rejected_unsupported';
+      traceId?: string;
+      purposeId?: string;
+    }
+  | {
+      type: 'mcp_broker_tofu_decision';
+      server: string;
+      tool: string;
+      decision: TofuDecision;
+      old_hash: string;
+      new_hash: string;
+      trace_id?: string;
+      purpose_id?: string;
+    }
+  | {
+      type: 'mcp_broker_tofu_blocked';
+      server: string;
+      tool: string;
+      status: 'blocked_on_user';
+      old_hash: string;
+      new_hash: string;
+      trace_id?: string;
+      purpose_id?: string;
+    };
