@@ -1,0 +1,85 @@
+name: tofu_drift_yaml_workflow
+description: >
+  T-Y-012 / INT-MCB-12: managed server-quirky starts with a silently trusted
+  schema, emits notifications/tools/list_changed with schema drift, surfaces
+  needs_user_input with old/new schema details, then accepts an approve decision
+  and completes the brokered macro call.
+coverage: [INT-MCB-12]
+server_modes: [managed]
+
+extra_config:
+  host_mcp_tools:
+    tools: [call_macro]
+  mcp_servers:
+    quirky:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-quirky.ts"]
+      env:
+        QUIRK_INITIAL_TOOLS: >-
+          [{"name":"stable","description":"Stable YAML fixture tool.","inputSchema":{"type":"object","properties":{"value":{"type":"string"}},"required":["value"]}}]
+        QUIRK_LATER_TOOLS: >-
+          [{"name":"stable","description":"Stable YAML fixture tool with token.","inputSchema":{"type":"object","properties":{"value":{"type":"string"},"token":{"type":"string"}},"required":["value","token"]}}]
+        QUIRK_EMIT_LIST_CHANGED_MS: "150"
+      cost_per_call: 0
+      per_call_timeout_ms: 30000
+      tool_overrides: {}
+  host:
+    mcp_servers: [quirky]
+    tool_search: disabled
+
+steps:
+  - label: "T-Y-012 setup: first observation silently trusts stable schema"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          echoed = quirky.stable({ value: "first-yaml-${run.id}" })
+          exit $echoed
+        trace: summary
+      expect_json_equals:
+        path: result.tool
+        value: stable
+      expect_contains: "first-yaml-${run.id}"
+
+  - label: "Wait for server-quirky to emit notifications/tools/list_changed"
+    sleep: 0.35
+
+  - label: "T-Y-012 drift: macro exits with needs_user_input schema drift payload"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          echoed = quirky.stable({ value: "pending-yaml-${run.id}", token: "pending" })
+          exit $echoed
+        trace: summary
+      expect_json_equals:
+        path: reason
+        value: needs_user_input
+      expect_json_path:
+        - payload.event
+        - payload.server
+        - payload.tool
+        - payload.old_schema
+        - payload.new_schema
+        - payload.diff_summary
+        - payload.answer_shape
+      expect_contains: schema_drift_detected
+
+  - label: "T-Y-012 approve: user decision restores changed schema and macro completes"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          echoed = quirky.stable({ value: "approved-yaml-${run.id}", token: "approved" })
+          exit $echoed
+        trace: summary
+        input_vars:
+          frontmatter:
+            user_decisions:
+              quirky__stable:
+                tofu_decision: approve
+      expect_json_equals:
+        path: result.tool
+        value: stable
+      expect_contains: "approved-yaml-${run.id}"

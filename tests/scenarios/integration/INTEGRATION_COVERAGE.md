@@ -294,6 +294,7 @@ brokered tool-call cost tracing.
 | INT-MCB-04 | Unknown `host.mcp_servers` entry fails managed startup with the named host context and missing server ID. | host_unknown_server_fail_loud | 2026-05-18   | 2026-05-18   |
 | INT-MCB-05 | Unknown `purposes.<name>.mcp_servers` entry fails managed startup with the named purpose and missing server ID. | purpose_unknown_server_fail_loud | 2026-05-18   | 2026-05-18   |
 | INT-MCB-07 | Server-default and per-tool override `cost_per_call` values surface in observable brokered `tool_calls` trace entries; per-tool override beats server default. | cost_per_call_resolution     | 2026-05-18   | 2026-05-18   |
+| INT-MCB-12 | T-Y-012 managed YAML workflow pins the first TOFU schema, observes schema drift through `notifications/tools/list_changed`, returns `needs_user_input` with old/new schema and diff summary, then approves and resumes successfully. | tofu_drift_yaml_workflow.yml | 2026-05-18   | 2026-05-18   |
 
 ---
 
