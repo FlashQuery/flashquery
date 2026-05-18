@@ -95,6 +95,30 @@ Executed on 2026-05-18 from the FlashQuery repo root with `.env.test` credential
 |---------------|--------|----------|
 | REQ-100b / Gap 6: host MCP surface uses `BrokeredTool.description`, including `description_override`, for brokered host `tools/list` registration. | CLOSED | `brokered_host_registration.yml` passed under `python3 tests/scenarios/integration/run_integration.py --managed ...`; Step 2 asserted `description: "X"` on host `tools/list` and excluded the upstream original description. Coverage row: `INT-MCB-10`; source test: `T-Y-010`. |
 
+## Final Requirement Evidence
+
+| Requirement | Status | Evidence |
+|-------------|--------|----------|
+| REQ-005 | Complete | `tests/unit/config.test.ts`; `host_empty_section.yml`; final unit and YAML Phase D gates passed. |
+| REQ-006 | Complete | `tests/unit/config.test.ts`; `host_empty_section.yml`; final unit and YAML Phase D gates passed. |
+| REQ-007 | Complete | `tests/unit/config.test.ts`; final focused unit gate passed. |
+| REQ-008 | Complete | `tests/unit/config.test.ts`; final focused unit gate passed. |
+| REQ-009 | Complete | `tests/unit/config.test.ts`; `host_empty_section.yml`; final unit and YAML Phase D gates passed. |
+| REQ-010 | Complete | `tests/unit/config.test.ts`; `tests/integration/tool-search/host-index.integration.test.ts`; `host_tool_search_with_brokered.yml`; final integration and YAML Phase D gates passed. |
+| REQ-031 | Complete | `tests/unit/mcp-broker-registry.test.ts`; `tests/integration/mcp-broker/host-surface.test.ts`; `test_mcp_broker_phase_d.py`; final unit, integration, and directed gates passed. |
+| REQ-035 | Complete | `tests/integration/mcp-broker/host-surface.test.ts`; `test_mcp_broker_phase_d.py`; final integration and directed gates passed. |
+| REQ-065 | Complete | `tests/unit/llm-tool-dispatcher.test.ts`; `tests/unit/macro-registry.test.ts`; `test_mcp_broker_phase_d.py` MCB-15/MCB-16; final unit and directed gates passed. |
+| REQ-066 | Complete | `tests/integration/mcp-broker/host-surface.test.ts`; `test_mcp_broker_phase_d.py` MCB-15/MCB-16; final integration and directed gates passed. |
+| REQ-067 | Complete | `tests/e2e/mcp-broker.e2e.test.ts`; `test_mcp_broker_phase_d.py` MCB-14/MCB-16; final E2E and directed gates passed. |
+| REQ-113 | Complete | `tests/unit/config.test.ts`; `brokered_host_dispatch.yml`; `host_mcp_tools_with_brokered.yml`; final unit and YAML Phase D gates passed. |
+| REQ-114 | Complete | `tests/unit/macro-registry.test.ts`; `test_mcp_broker_phase_d.py` MCB-13/MCB-14; final unit and directed gates passed. |
+| REQ-115 | Complete | `tests/unit/macro-registry.test.ts`; `test_mcp_broker_phase_d.py` MCB-13/MCB-14; final unit and directed gates passed. |
+| REQ-116 | Complete | `tests/unit/mcp-broker-registry.test.ts`; `tests/integration/mcp-broker/host-surface.test.ts`; final unit and integration gates passed. |
+| REQ-117 | Complete | `tests/integration/mcp-broker/client-lifecycle.test.ts`; `tests/e2e/mcp-broker.e2e.test.ts`; final integration and E2E gates passed. |
+| REQ-118 | Complete | `tests/integration/mcp-broker/client-lifecycle.test.ts`; `tests/e2e/mcp-broker.e2e.test.ts`; final integration and E2E gates passed. |
+
+Deferred requirements `REQ-071..073`, `REQ-103..104`, and `REQ-109..110` remain unchecked in `.planning/REQUIREMENTS.md` and are owned by Phase 143.
+
 ## Threat Review
 
 | Threat | Mitigation Result |

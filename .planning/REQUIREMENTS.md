@@ -187,7 +187,7 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 | REQ-001..037, REQ-050..060, REQ-106..108 | Phase 139 | Pending |
 | REQ-038..049, REQ-061..064, REQ-068, REQ-070, REQ-105 | Phase 140 | Pending |
 | REQ-074..102, REQ-011, REQ-085..087 | Phase 141 | Pending |
-| REQ-005..010, REQ-031, REQ-035, REQ-065..067, REQ-113..118 | Phase 142 | Pending |
+| REQ-005..010, REQ-031, REQ-035, REQ-065..067, REQ-113..118 | Phase 142 | Complete |
 | REQ-071..073, REQ-103..104, REQ-109..110 | Phase 143 | Pending |
 
 **Coverage:**
@@ -197,4 +197,4 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 ---
 *Requirements defined: 2026-05-17*
-*Last updated: 2026-05-17 after milestone initialization*
+*Last updated: 2026-05-18 after Phase 142 validation closure*
