@@ -127,4 +127,99 @@ describe('mcp broker registry utilities', () => {
     hostTools[0].description = 'mutated copy';
     expect(registry.get('brave_search', 'web_search')?.description).toBe('Search with Brave');
   });
+
+  it('removes a blocked tool from host and purpose consumer views', () => {
+    const registry = new ToolRegistry({
+      mcpServers: {
+        brave_search: { costPerCall: 0 },
+      },
+      host: { mcpServers: ['brave_search'] },
+      llm: {
+        purposes: [{ name: 'research', mcpServers: ['brave_search'] }],
+      },
+    });
+    registry.registerTool({
+      serverId: 'brave_search',
+      toolName: 'web_search',
+      description: 'Search',
+      inputSchema: { type: 'object' },
+      tofuHash: 'hash-old',
+    });
+
+    expect(registry.hasTool('brave_search', 'web_search')).toBe(true);
+    expect(registry.unregisterTool('brave_search', 'web_search')).toBe(true);
+
+    expect(registry.hasTool('brave_search', 'web_search')).toBe(false);
+    expect(registry.get('brave_search', 'web_search')).toBeUndefined();
+    expect(registry.listToolsForConsumer({ kind: 'host', traceId: 'trace-host' })).toEqual([]);
+    expect(
+      registry.listToolsForConsumer({ kind: 'purpose', purposeId: 'research', traceId: 'trace-research' })
+    ).toEqual([]);
+  });
+
+  it('re-registering an approved tool restores consumer visibility', () => {
+    const registry = new ToolRegistry({
+      mcpServers: {
+        brave_search: { costPerCall: 0 },
+      },
+      host: { mcpServers: ['brave_search'] },
+    });
+    registry.registerTool({
+      serverId: 'brave_search',
+      toolName: 'web_search',
+      description: 'Search',
+      inputSchema: { type: 'object' },
+      tofuHash: 'hash-old',
+    });
+    registry.unregisterTool('brave_search', 'web_search');
+
+    registry.registerTool({
+      serverId: 'brave_search',
+      toolName: 'web_search',
+      description: 'Search approved schema',
+      inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+      tofuHash: 'hash-new',
+    });
+
+    expect(registry.hasTool('brave_search', 'web_search')).toBe(true);
+    expect(registry.listToolsForConsumer({ kind: 'host', traceId: 'trace-host' })).toMatchObject([
+      {
+        serverId: 'brave_search',
+        toolName: 'web_search',
+        description: 'Search approved schema',
+        tofuHash: 'hash-new',
+      },
+    ]);
+  });
+
+  it('unregisterTools removes multiple server/tool refs and tolerates missing entries', () => {
+    const registry = new ToolRegistry({
+      mcpServers: {
+        brave_search: { costPerCall: 0 },
+        github: { costPerCall: 0 },
+      },
+      host: { mcpServers: ['brave_search', 'github'] },
+    });
+    registry.registerTool({
+      serverId: 'brave_search',
+      toolName: 'web_search',
+      inputSchema: { type: 'object' },
+      tofuHash: 'hash-brave',
+    });
+    registry.registerTool({
+      serverId: 'github',
+      toolName: 'search',
+      inputSchema: { type: 'object' },
+      tofuHash: 'hash-github',
+    });
+
+    const removed = registry.unregisterTools([
+      { serverId: 'brave_search', toolName: 'web_search' },
+      { serverId: 'missing', toolName: 'tool' },
+      makeRegistryKey('github', 'search'),
+    ]);
+
+    expect(removed).toEqual(['brave_search__web_search', 'github__search']);
+    expect(registry.listToolsForConsumer({ kind: 'host', traceId: 'trace-host' })).toEqual([]);
+  });
 });
