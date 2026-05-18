@@ -8,6 +8,7 @@ export default defineConfig({
     setupFiles: ['tests/helpers/setup-env.ts'],
     globals: true,
     testTimeout: 120_000, // 2 minutes per test (vault generation + benchmark)
+    passWithNoTests: true,
     maxWorkers: 1,
     minWorkers: 1,
   },
