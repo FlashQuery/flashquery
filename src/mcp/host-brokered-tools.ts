@@ -87,7 +87,7 @@ function zodSchemaForJsonSchema(schema: unknown): z.ZodTypeAny {
     const shape = zodRawShapeForJsonSchema(schema);
     const objectSchema = z.object(shape);
     if (schema['additionalProperties'] === false) {
-      return objectSchema;
+      return objectSchema.strict();
     }
     return objectSchema.catchall(z.unknown());
   }

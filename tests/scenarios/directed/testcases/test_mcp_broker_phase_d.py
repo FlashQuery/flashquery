@@ -206,6 +206,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     port_range = tuple(args.port_range) if args.port_range else None
     script = [
+        _tool_call_response(
+            "call_nested_purpose_echo",
+            "basic__echo",
+            {"value": {"nested": "purpose"}},
+        ),
+        _final_response("MCB-13 delegated brokered tool complete"),
         _final_response("Phase 140 carry-forward autonomous context complete"),
         _tool_call_response(
             "call_basic_echo_cost",
@@ -247,17 +253,33 @@ def run_test(args: argparse.Namespace) -> TestRun:
             if run.exit_code:
                 return run
 
-            nested_purpose = _call_macro(
-                client,
-                'inner = fq.call_macro({ source: "exit basic.echo({ value: { nested: \\"purpose\\" } })" })\nexit $inner',
+            nested_purpose = client.call_tool(
+                "call_model",
+                resolver="purpose",
+                name="phase_d_research",
+                trace_id="trace-mcb-13",
+                return_messages=True,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": "Call basic__echo with nested purpose context.",
+                    }
+                ],
             )
             nested_purpose_payload = _json_payload(nested_purpose)
+            nested_purpose_tool_calls = nested_purpose_payload.get("metadata", {}).get("tool_calls", [])
+            nested_purpose_first_call = nested_purpose_tool_calls[0] if nested_purpose_tool_calls else {}
+            nested_purpose_content = _content_text(nested_purpose_payload, "call_nested_purpose_echo")
             run.step(
-                label="MCB-13 / T-S-013 nested macro invocation inherits purpose-rooted context",
+                label="MCB-13 / T-S-013 delegated brokered invocation inherits purpose-rooted context",
                 passed=(
                     nested_purpose.ok
-                    and '"nested":"purpose"' in json.dumps(nested_purpose_payload, sort_keys=True).replace(" ", "")
-                    and nested_purpose_payload.get("result", {}).get("external_tool_calls") == 1
+                    and nested_purpose_payload.get("response") == "MCB-13 delegated brokered tool complete"
+                    and '"nested":"purpose"' in nested_purpose_content.replace(" ", "")
+                    and nested_purpose_first_call.get("server") == "basic"
+                    and nested_purpose_first_call.get("tool") == "echo"
+                    and nested_purpose_first_call.get("consumer_kind") == "purpose"
+                    and nested_purpose_first_call.get("purpose_id") == "phase_d_research"
                 ),
                 detail=json.dumps(nested_purpose_payload, sort_keys=True)[:1600],
                 timing_ms=nested_purpose.timing_ms,
