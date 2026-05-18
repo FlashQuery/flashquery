@@ -1,4 +1,6 @@
 import type { NativeToolHandler } from '../llm/tool-registry.js';
+export { BrokerClient, NullBroker, createBroker } from './mcp-broker/index.js';
+export type { Broker, BrokeredTool, BrokerToolRef, ConsumerContext } from './mcp-broker/index.js';
 
 export interface McpBroker {
   isConnected(serverId: string): Promise<boolean>;

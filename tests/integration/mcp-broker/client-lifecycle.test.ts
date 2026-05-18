@@ -206,7 +206,7 @@ describe('mcp broker client lifecycle integration', () => {
       mcpServers: {
         basic: config(),
       },
-      host: { mcpServers: ['basic'] },
+      host: { mcpServers: [] },
       llm: { purposes: [{ name: 'research', mcpServers: ['basic'] }] },
     });
     brokers.push(broker);
@@ -216,9 +216,15 @@ describe('mcp broker client lifecycle integration', () => {
 
     const result = await broker.callTool({ serverId: 'basic', toolName: 'echo' }, { value: 'broker' }, ctx);
     const hostTools = await broker.listToolsForConsumer(ctx);
+    const purposeTools = await broker.listToolsForConsumer({
+      kind: 'purpose',
+      purposeId: 'research',
+      traceId: 'trace-purpose',
+    });
 
     expect(result).toHaveProperty('content');
-    expect(hostTools.map((tool) => tool.registryKey)).toContain('basic__echo');
+    expect(hostTools).toEqual([]);
+    expect(purposeTools.map((tool) => tool.registryKey)).toContain('basic__echo');
     await expect(broker.shutdown(100)).resolves.toBeUndefined();
   });
 
