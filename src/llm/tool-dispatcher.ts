@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { LlmChatToolCall, LlmToolMessage } from './types.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { dispatchTemplateToolCall, type TemplateToolReverseMap } from './template-tools.js';
+import { formatToolError, parseRegistryKey, type Broker, type ConsumerContext } from '../services/mcp-broker/index.js';
 import type {
   NativeToolDefinition,
   NativeToolDispatchContext,
@@ -11,7 +12,7 @@ import type {
 export type { NativeToolDispatchContext } from './tool-registry.js';
 
 export interface NativeToolCallLogEntry {
-  kind: 'native';
+  kind: 'native' | 'brokered';
   id: string;
   name: string;
   ok: boolean;
@@ -34,6 +35,8 @@ export interface DispatchNativeToolCallOptions {
   nativeToolNames: readonly string[];
   dispatchContext?: NativeToolDispatchContext;
   context?: NativeToolDispatchContext;
+  broker?: Broker;
+  consumerContext?: ConsumerContext;
 }
 
 export interface DispatchToolCallsOptions {
@@ -53,6 +56,8 @@ export interface DispatchToolCallsOptions {
   templateTools?: Parameters<typeof dispatchTemplateToolCall>[0]['templateDocuments'];
   dispatchContext?: NativeToolDispatchContext;
   context?: NativeToolDispatchContext;
+  broker?: Broker;
+  consumerContext?: ConsumerContext;
 }
 
 export interface DispatchToolCallsResult {
@@ -121,12 +126,13 @@ function makeLogEntry(
   toolCall: LlmChatToolCall,
   args: Record<string, unknown>,
   payload: ToolSuccessPayload | ToolErrorPayload,
-  content: string
+  content: string,
+  kind: NativeToolCallLogEntry['kind'] = 'native'
 ): NativeToolCallLogEntry {
   const ok = payload.ok;
   const errorCode = ok ? undefined : payload.error.code;
   return {
-    kind: 'native',
+    kind,
     id: toolCall.id,
     name: toolCall.function.name,
     ok,
@@ -160,12 +166,68 @@ async function dispatchOneToolCall(
       templateDocuments: options.templateDispatchContext?.templateDocuments ?? options.templateDocuments ?? options.templateTools,
     });
   }
+  const brokeredResult = await dispatchBrokeredToolCall(options, toolCall);
+  if (brokeredResult !== null) return brokeredResult;
   return await dispatchNativeToolCall({
     toolCall,
     catalog: options.catalog,
     nativeToolNames: options.nativeToolNames,
     dispatchContext: resolveContext(options),
   });
+}
+
+async function dispatchBrokeredToolCall(
+  options: DispatchToolCallsOptions,
+  toolCall: LlmChatToolCall
+): Promise<NativeToolDispatchResult | null> {
+  let ref: { serverId: string; toolName: string };
+  try {
+    ref = parseRegistryKey(toolCall.function.name);
+  } catch {
+    return null;
+  }
+
+  const args = toolCall.function.arguments;
+  if (options.broker === undefined || options.consumerContext === undefined) {
+    return dispatchError(
+      toolCall,
+      args,
+      'tool_not_in_registry',
+      `Tool '${toolCall.function.name}' is not available in the immutable native tool registry snapshot.`,
+      undefined,
+      'brokered'
+    );
+  }
+
+  const visibleTools = await options.broker.listToolsForConsumer(options.consumerContext);
+  if (!visibleTools.some((tool) => tool.registryKey === toolCall.function.name)) {
+    return dispatchError(
+      toolCall,
+      args,
+      'tool_not_in_registry',
+      `Tool '${toolCall.function.name}' is not available in the immutable native tool registry snapshot.`,
+      undefined,
+      'brokered'
+    );
+  }
+
+  try {
+    const result = await options.broker.callTool(ref, args, options.consumerContext);
+    if (result.isError === true) {
+      const normalized = formatToolError(result, ref);
+      return dispatchError(toolCall, args, normalized.kind, normalized.message, undefined, 'brokered');
+    }
+
+    const payload: ToolSuccessPayload = { ok: true, result: { content: result.content } };
+    const content = stringifyPayload(payload);
+    return {
+      message: makeToolMessage(toolCall, content),
+      logEntry: makeLogEntry(toolCall, args, payload, content, 'brokered'),
+    };
+  } catch (error: unknown) {
+    const normalized = formatToolError(error, ref);
+    return dispatchError(toolCall, args, normalized.kind, normalized.message, undefined, 'brokered');
+  }
 }
 
 function errorPayload(code: string, message: string, details?: unknown): ToolErrorPayload {
@@ -185,13 +247,14 @@ function dispatchError(
   args: Record<string, unknown>,
   code: string,
   message: string,
-  details?: unknown
+  details?: unknown,
+  kind: NativeToolCallLogEntry['kind'] = 'native'
 ): NativeToolDispatchResult {
   const payload = errorPayload(code, message, details);
   const content = stringifyPayload(payload);
   return {
     message: makeToolMessage(toolCall, content),
-    logEntry: makeLogEntry(toolCall, args, payload, content),
+    logEntry: makeLogEntry(toolCall, args, payload, content, kind),
   };
 }
 
