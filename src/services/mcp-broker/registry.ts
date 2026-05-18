@@ -150,6 +150,10 @@ export class ToolRegistry {
       .map(cloneTool);
   }
 
+  listVisibleServerIds(ctx: ConsumerContext): string[] {
+    return [...this.#visibleServerIds(ctx)];
+  }
+
   #visibleServerIds(ctx: ConsumerContext): Set<string> {
     if (ctx.kind === 'host') return this.#hostServerIds;
     return this.#purposeServerIds.get(ctx.purposeId) ?? new Set();

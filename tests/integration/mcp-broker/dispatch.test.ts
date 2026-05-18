@@ -55,7 +55,6 @@ function makeConfig(): FlashQueryConfig {
     mcp: { transport: 'stdio', tokenLifetime: 24 },
     locking: { enabled: false, ttlSeconds: 30 },
     trashFolder: { enabled: false, path: '.flashquery/removed', collisionStrategy: 'suffix' },
-    hostMcpTools: { tools: [] },
     mcpServers: { basic: basicConfig() },
     host: { mcpServers: ['basic'], toolSearch: 'disabled' },
     llm: {
@@ -101,19 +100,21 @@ describe('mcp broker dispatch seam integration', () => {
     });
     brokers.push(broker);
     const rawArgs = { value: { stringNumber: '42', number: 42, bool: true, nullish: null, array: [1, 'two'] } };
-    const chat = vi.fn(async (_messages: LlmChatMessage[], parameters?: Record<string, unknown>) => {
-      expect(parameters?.tools).toEqual(expect.arrayContaining([
-        expect.objectContaining({ function: expect.objectContaining({ name: 'basic__echo' }) }),
-      ]));
-      return chatResult({
-        message: {
-          role: 'assistant',
-          content: null,
-          tool_calls: [{ id: 'call_basic_echo', type: 'function', function: { name: 'basic__echo', arguments: rawArgs } }],
-        },
-        finishReason: 'tool_calls',
-      });
-    }).mockResolvedValueOnce(chatResult({ message: { role: 'assistant', content: 'final' }, finishReason: 'stop' }));
+    const chat = vi.fn()
+      .mockImplementationOnce(async (_messages: LlmChatMessage[], parameters?: Record<string, unknown>) => {
+        expect(parameters?.tools).toEqual(expect.arrayContaining([
+          expect.objectContaining({ function: expect.objectContaining({ name: 'basic__echo' }) }),
+        ]));
+        return chatResult({
+          message: {
+            role: 'assistant',
+            content: null,
+            tool_calls: [{ id: 'call_basic_echo', type: 'function', function: { name: 'basic__echo', arguments: rawArgs } }],
+          },
+          finishReason: 'tool_calls',
+        });
+      })
+      .mockResolvedValueOnce(chatResult({ message: { role: 'assistant', content: 'final' }, finishReason: 'stop' }));
 
     const result = await executeAgentLoop({
       purposeName: 'research',
@@ -123,6 +124,7 @@ describe('mcp broker dispatch seam integration', () => {
       nativeToolCatalog: [],
       broker,
       chat,
+      recordUsage: vi.fn(),
       traceId: 'trace-dispatch-integration',
       parameters: { max_iterations: 2 },
     });
@@ -133,13 +135,9 @@ describe('mcp broker dispatch seam integration', () => {
       tool_name: 'basic__echo',
       status: 'success',
     });
-    expect(result.messages).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        role: 'tool',
-        tool_call_id: 'call_basic_echo',
-        content: expect.stringContaining(JSON.stringify(rawArgs.value)),
-      }),
-    ]));
+    const toolMessage = result.messages.find((message) => message.role === 'tool' && message.tool_call_id === 'call_basic_echo');
+    const toolPayload = JSON.parse(toolMessage?.content ?? '{}');
+    expect(JSON.parse(toolPayload.result.content[0].text)).toEqual(rawArgs);
     expect(getBrokeredToolCallTraceSnapshot('trace-dispatch-integration')).toEqual([
       { server: 'basic', tool: 'echo', count: 1, cost: 0.01 },
     ]);
