@@ -64,14 +64,17 @@ def _json_payload(result) -> dict:
     return parsed if isinstance(parsed, dict) else {"payload": parsed}
 
 
-def _log_contains_rejection(logs: list[str], *, server: str, method: str) -> bool:
-    return any(
+def _rejection_logs(logs: list[str], *, server: str, method: str) -> list[str]:
+    return [
+        line
+        for line in logs
+        if (
         "mcp_broker_reverse_request_rejected" in line
         and f"server={server}" in line
         and f"method={method}" in line
         and "status=rejected_unsupported" in line
-        for line in logs
-    )
+        )
+    ]
 
 
 def run_test(args: argparse.Namespace) -> TestRun:
@@ -133,20 +136,19 @@ def run_test(args: argparse.Namespace) -> TestRun:
 
         logs = ctx.server.captured_logs if ctx.server else []
         log_text = "\n".join(logs)
+        rejection_logs = _rejection_logs(logs, server="quirky", method="sampling/createMessage")
         run.step(
             label="MCB-18 / T-S-018 rejected reverse request is audit-logged without raw prompt payload",
             passed=(
-                _log_contains_rejection(logs, server="quirky", method="sampling/createMessage")
+                len(rejection_logs) == 1
                 and secret_prompt not in log_text
                 and "needs_user_input" not in failure_text
             ),
             detail=json.dumps(
                 {
-                    "audit_log_found": _log_contains_rejection(logs, server="quirky", method="sampling/createMessage"),
+                    "audit_log_count": len(rejection_logs),
                     "prompt_leaked": secret_prompt in log_text,
-                    "matching_logs": [
-                        line for line in logs if "mcp_broker_reverse_request_rejected" in line
-                    ][-3:],
+                    "matching_logs": rejection_logs[-3:],
                     "payload": failure_payload,
                 },
                 sort_keys=True,

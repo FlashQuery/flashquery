@@ -10,6 +10,26 @@ export interface FormatToolErrorContext {
 
 export type SerializedToolError = Omit<NormalizedToolError, 'raw'>;
 
+export class NormalizedToolErrorObject extends Error implements NormalizedToolError {
+  readonly kind: ToolErrorKind;
+  readonly serverId?: string;
+  readonly toolName?: string;
+  readonly code?: number | string;
+  readonly subkind?: string;
+  readonly raw?: unknown;
+
+  constructor(error: NormalizedToolError) {
+    super(error.message);
+    this.name = 'NormalizedToolError';
+    this.kind = error.kind;
+    this.serverId = error.serverId;
+    this.toolName = error.toolName;
+    this.code = error.code;
+    this.subkind = error.subkind;
+    this.raw = error.raw;
+  }
+}
+
 export function formatToolError(input: unknown, context: FormatToolErrorContext = {}): NormalizedToolError {
   if (isNormalizedToolError(input)) {
     return withContext(input, context);
@@ -60,6 +80,10 @@ export function formatToolError(input: unknown, context: FormatToolErrorContext 
   );
 }
 
+export function toThrowableToolError(error: NormalizedToolError): NormalizedToolErrorObject {
+  return new NormalizedToolErrorObject(error);
+}
+
 function isNormalizedToolError(value: unknown): value is NormalizedToolError {
   return (
     typeof value === 'object' &&
@@ -108,10 +132,11 @@ function isMcpErrorLike(value: unknown): value is McpError {
 }
 
 function mapMcpErrorKind(error: Pick<McpError, 'code'>): ToolErrorKind {
-  if (error.code === ErrorCode.MethodNotFound) return 'unsupported_method';
-  if (error.code === ErrorCode.InvalidParams) return 'bad_args';
-  if (error.code === ErrorCode.ConnectionClosed) return 'transport_closed';
-  if (error.code === ErrorCode.RequestTimeout) return 'server_timeout';
+  const code = Number(error.code);
+  if (code === Number(ErrorCode.MethodNotFound)) return 'unsupported_method';
+  if (code === Number(ErrorCode.InvalidParams)) return 'bad_args';
+  if (code === Number(ErrorCode.ConnectionClosed)) return 'transport_closed';
+  if (code === Number(ErrorCode.RequestTimeout)) return 'server_timeout';
   return 'unknown';
 }
 
@@ -135,8 +160,8 @@ function stringifyUnknown(value: unknown): string {
   if (value === null) return 'Unknown broker error: null';
   if (value === undefined) return 'Unknown broker error: undefined';
   try {
-    return JSON.stringify(value);
+    return JSON.stringify(value) ?? Object.prototype.toString.call(value);
   } catch {
-    return String(value);
+    return Object.prototype.toString.call(value);
   }
 }

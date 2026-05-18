@@ -166,12 +166,6 @@ function wrapBrokerTool(input: {
       return coerceCallToolResult(result);
     } catch (error: unknown) {
       if (error instanceof MacroExpectedError) throw error;
-      recordBrokeredToolCall({
-        traceId: consumerContext.traceId,
-        serverId: input.server,
-        toolName: input.tool,
-        costPerCall: visibleTool.costPerCall,
-      });
       const normalized = formatToolError(error, ref);
       throw new MacroExpectedError('tool_call_failed', normalized.message, normalized);
     }

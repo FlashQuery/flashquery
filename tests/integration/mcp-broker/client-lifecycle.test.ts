@@ -152,14 +152,15 @@ describe('mcp broker client lifecycle integration', () => {
       text: expect.stringContaining('sampling/createMessage rejected_unsupported'),
     });
 
-    expect(auditEvents).toContainEqual(
-      expect.objectContaining({
-        serverId: 'quirky',
-        method: 'sampling/createMessage',
-        status: 'rejected_unsupported',
-        traceId: 'trace-test',
-      })
+    const matchingAuditEvents = auditEvents.filter((event) =>
+      typeof event === 'object' &&
+      event !== null &&
+      (event as Record<string, unknown>).serverId === 'quirky' &&
+      (event as Record<string, unknown>).method === 'sampling/createMessage' &&
+      (event as Record<string, unknown>).status === 'rejected_unsupported' &&
+      (event as Record<string, unknown>).traceId === 'trace-test'
     );
+    expect(matchingAuditEvents).toHaveLength(1);
     expect(JSON.stringify(auditEvents)).not.toContain('secret prompt');
   });
 

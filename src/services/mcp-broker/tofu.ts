@@ -4,7 +4,6 @@ export interface ToolSchemaHashInput {
   name: string;
   description?: string;
   inputSchema?: unknown;
-  descriptionOverride?: string;
 }
 
 function canonicalize(value: unknown): unknown {

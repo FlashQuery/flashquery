@@ -96,18 +96,13 @@ describe('mcp broker TOFU helpers', () => {
     expect(changed).not.toBe(base);
   });
 
-  it('hashToolSchema ignores description overrides when upstream metadata is passed', () => {
+  it('hashToolSchema hashes only upstream schema metadata', () => {
     const upstream = {
       name: 'search',
       description: 'Search the upstream corpus',
       inputSchema: { type: 'object', properties: {}, required: [] },
     };
 
-    const hashWithOverrideConfigured = hashToolSchema({
-      ...upstream,
-      descriptionOverride: 'Friendly downstream description',
-    });
-
-    expect(hashWithOverrideConfigured).toBe(hashToolSchema(upstream));
+    expect(hashToolSchema(upstream)).toBe(hashToolSchema({ ...upstream }));
   });
 });

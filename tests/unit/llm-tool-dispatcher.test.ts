@@ -130,6 +130,30 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
     ]);
   });
 
+  it('does not record brokered dispatcher tool_calls cost when broker dispatch throws before an upstream result', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    clearBrokeredToolCallTrace('trace-dispatch-timeout');
+    const consumerContext: ConsumerContext = { kind: 'purpose', purposeId: 'research', traceId: 'trace-dispatch-timeout' };
+    const broker = makeBroker([
+      brokeredTool({ costPerCall: 0.01 }),
+    ], vi.fn(async () => {
+      throw { kind: 'server_timeout', message: 'Tool call timed out.', serverId: 'basic', toolName: 'echo' };
+    }));
+
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [toolCall('basic__echo', { value: 'too-slow' }, 'call_timeout')],
+      nativeToolNames: [],
+      broker,
+      consumerContext,
+    }));
+
+    expect(JSON.parse(result.messages[0].content ?? '{}')).toMatchObject({
+      ok: false,
+      error: { code: 'server_timeout' },
+    });
+    expect(getBrokeredToolCallTraceSnapshot('trace-dispatch-timeout')).toEqual([]);
+  });
+
   it('routes registry-key tool calls to Broker.callTool after consumer visibility passes', async () => {
     const { dispatchToolCalls } = await loadDispatcher();
     const args = { value: { stringNumber: '42', number: 42, nullish: null, array: [1, 'two'] } };

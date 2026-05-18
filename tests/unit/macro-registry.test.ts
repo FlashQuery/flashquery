@@ -136,6 +136,40 @@ describe('macro ToolRegistry construction', () => {
     expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-registry'))).not.toContain('payload-secret');
   });
 
+  it('does not record brokered macro tool_calls cost when broker dispatch throws before an upstream result', async () => {
+    clearBrokeredToolCallTrace('trace-registry');
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool: vi.fn(async () => {
+        throw {
+          kind: 'server_timeout',
+          message: 'Tool call timed out.',
+          serverId: 'brave_search',
+          toolName: 'web_search',
+        };
+      }),
+      listToolsForConsumer: vi.fn(async () => [brokeredSearchTool(0.005)]),
+      shutdown: vi.fn(),
+    };
+    const result = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'host' },
+      broker,
+      catalog,
+      nativeDispatchContext: nativeDispatchContext(),
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    await expect(
+      result.registry.brave_search.tools.web_search({ query: 'timeout' }, {} as Parameters<ToolFn>[1])
+    ).rejects.toMatchObject({
+      error: 'tool_call_failed',
+      details: expect.objectContaining({ kind: 'server_timeout' }),
+    });
+    expect(getBrokeredToolCallTraceSnapshot('trace-registry')).toEqual([]);
+  });
+
   it('builds fq registry entries from host exposure using resolveHostToolExposure for origin: host', async () => {
     const callerContext: MacroCallerContext = { origin: 'host' };
     const result = await buildToolRegistry({

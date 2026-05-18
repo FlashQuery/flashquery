@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { ErrorCode, McpError, type CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { logger } from '../../logging/logger.js';
-import { formatToolError, type FormatToolErrorContext } from './errors.js';
+import { formatToolError, toThrowableToolError, type FormatToolErrorContext } from './errors.js';
 import { hashToolSchema } from './tofu.js';
 import type { BrokerAuditEvent, BrokerClientConfig, BrokerConnectionOptions, BrokeredTool, ConsumerContext } from './types.js';
 
@@ -85,18 +85,15 @@ export class BrokerClient {
         undefined,
         { timeout: this.#config.perCallTimeoutMs }
       );
-      if (result.isError === true) {
-        this.#emitReverseRequestAudit(JSON.stringify(result.content));
-      }
       return result;
     } catch (error) {
       const normalized = formatToolError(error, this.#errorContext(toolName));
       if (this.#closed || this.#client === null || this.#transport === null) {
-        throw {
+        throw toThrowableToolError({
           ...normalized,
           kind: 'transport_closed',
           message: normalized.message === '' ? 'transport closed during broker shutdown' : normalized.message,
-        };
+        });
       }
       if (normalized.kind === 'transport_closed' && !this.#restartAttempted && !this.#closed) {
         this.#restartAttempted = true;
@@ -109,10 +106,7 @@ export class BrokerClient {
           { timeout: this.#config.perCallTimeoutMs }
         );
       }
-      if (normalized.kind === 'unsupported_method') {
-        this.#emitReverseRequestAudit(normalized.message);
-      }
-      throw normalized;
+      throw toThrowableToolError(normalized);
     }
   }
 
@@ -155,7 +149,7 @@ export class BrokerClient {
     try {
       await Promise.race([client.close(), timeout]);
     } catch (error) {
-      throw formatToolError(error, { serverId: this.#config.serverId });
+      throw toThrowableToolError(formatToolError(error, { serverId: this.#config.serverId }));
     }
   }
 
@@ -195,11 +189,11 @@ export class BrokerClient {
         // Failed connects can also fail close; the original error is more useful.
       }
       const normalized = formatToolError(error, { serverId: this.#config.serverId });
-      throw {
+      throw toThrowableToolError({
         ...normalized,
         kind: normalized.kind === 'unknown' || normalized.kind === 'transport_closed' ? 'server_crashed' : normalized.kind,
         message: this.#stderr === '' ? normalized.message : `${normalized.message}\nServer stderr: "${this.#stderr.trim()}"`,
-      };
+      });
     }
   }
 
@@ -248,7 +242,7 @@ export class BrokerClient {
   }
 
   #bindUnsupportedRequestAudit(client: SdkClient): void {
-    client.fallbackRequestHandler = async (request) => {
+    client.fallbackRequestHandler = (request) => {
       this.#emitAudit({
         type: 'mcp_broker_reverse_request_rejected',
         serverId: this.#config.serverId,
@@ -257,21 +251,8 @@ export class BrokerClient {
         ...(this.#lastContext?.traceId === undefined ? {} : { traceId: this.#lastContext.traceId }),
         ...(this.#lastContext?.kind === 'purpose' ? { purposeId: this.#lastContext.purposeId } : {}),
       });
-      throw new McpError(ErrorCode.MethodNotFound, `${request.method} rejected_unsupported`);
+      return Promise.reject(new McpError(ErrorCode.MethodNotFound, `${request.method} rejected_unsupported`));
     };
-  }
-
-  #emitReverseRequestAudit(message: string): void {
-    const method = message.match(/(sampling\/createMessage|elicitation\/create)/)?.[1];
-    if (method === undefined) return;
-    this.#emitAudit({
-      type: 'mcp_broker_reverse_request_rejected',
-      serverId: this.#config.serverId,
-      method,
-      status: 'rejected_unsupported',
-      ...(this.#lastContext?.traceId === undefined ? {} : { traceId: this.#lastContext.traceId }),
-      ...(this.#lastContext?.kind === 'purpose' ? { purposeId: this.#lastContext.purposeId } : {}),
-    });
   }
 
   #emitAudit(event: BrokerAuditEvent): void {
@@ -293,11 +274,11 @@ export class BrokerClient {
 
   #requireClient(): Client {
     if (this.#client === null) {
-      throw {
+      throw toThrowableToolError({
         kind: this.#closed ? 'transport_closed' : 'unknown',
         message: this.#closed ? 'transport closed during broker shutdown' : 'Broker client is not connected.',
         serverId: this.#config.serverId,
-      };
+      });
     }
     return this.#client;
   }

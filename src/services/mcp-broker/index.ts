@@ -1,11 +1,11 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { BrokerClient } from './client.js';
-import { formatToolError } from './errors.js';
+import { formatToolError, toThrowableToolError } from './errors.js';
 import { ToolRegistry, type ToolRegistryConfig } from './registry.js';
 import type { Broker, BrokerClientConfig, BrokerConnectionOptions, BrokeredTool, BrokerToolRef, ConsumerContext } from './types.js';
 
 export { BrokerClient } from './client.js';
-export { formatToolError, stripRawFromToolError } from './errors.js';
+export { formatToolError, stripRawFromToolError, toThrowableToolError } from './errors.js';
 export { ToolRegistry, isRegistryKey, makeRegistryKey, parseMacroRef, parseRegistryKey } from './registry.js';
 export { clearBrokeredToolCallTrace, getBrokeredToolCallTraceSnapshot, recordBrokeredToolCall } from './trace.js';
 export { canonicalJson, hashToolSchema } from './tofu.js';
@@ -62,14 +62,16 @@ export class McpBroker implements Broker {
 
   #client(serverId: string): BrokerClient {
     const client = this.#clients.get(serverId);
-    if (client === undefined) throw formatToolError(new Error(`Unknown MCP broker server '${serverId}'.`), { serverId });
+    if (client === undefined) {
+      throw toThrowableToolError(formatToolError(new Error(`Unknown MCP broker server '${serverId}'.`), { serverId }));
+    }
     return client;
   }
 }
 
 export class NullBroker implements Broker {
   ensureConnected(serverId: string): Promise<void> {
-    return Promise.reject(formatToolError(new Error('No MCP broker is configured.'), { serverId }));
+    return Promise.reject(toThrowableToolError(formatToolError(new Error('No MCP broker is configured.'), { serverId })));
   }
 
   isConnected(_serverId: string, _opts?: BrokerConnectionOptions): Promise<boolean> {
@@ -77,7 +79,7 @@ export class NullBroker implements Broker {
   }
 
   callTool(ref: BrokerToolRef, _args: unknown, _ctx: ConsumerContext): Promise<CallToolResult> {
-    return Promise.reject(formatToolError(new Error('No MCP broker is configured.'), ref));
+    return Promise.reject(toThrowableToolError(formatToolError(new Error('No MCP broker is configured.'), ref)));
   }
 
   listToolsForConsumer(_ctx: ConsumerContext): Promise<BrokeredTool[]> {

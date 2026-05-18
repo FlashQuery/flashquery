@@ -238,12 +238,6 @@ async function dispatchBrokeredToolCall(
       logEntry: makeLogEntry(toolCall, args, payload, content, 'brokered'),
     };
   } catch (error: unknown) {
-    recordBrokeredToolCall({
-      traceId: options.consumerContext.traceId,
-      serverId: ref.serverId,
-      toolName: ref.toolName,
-      costPerCall: visibleTool.costPerCall,
-    });
     const normalized = formatToolError(error, ref);
     return dispatchError(toolCall, args, normalized.kind, normalized.message, undefined, 'brokered');
   }

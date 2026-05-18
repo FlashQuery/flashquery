@@ -122,6 +122,7 @@ describe('mcp broker registry utilities', () => {
       description: 'Search with Brave',
       upstreamDescription: 'Upstream Brave description',
       costPerCall: 0.5,
+      tofuHash: 'hash-brave',
     });
     hostTools[0].description = 'mutated copy';
     expect(registry.get('brave_search', 'web_search')?.description).toBe('Search with Brave');
