@@ -78,7 +78,7 @@ Executed on 2026-05-18 from the FlashQuery repo root with `.env.test` credential
 | T-I-039 | integration | `tests/integration/tool-search/host-index.integration.test.ts` |
 | T-E-D1 | E2E | `tests/e2e/mcp-broker.e2e.test.ts` |
 | T-S-012 | MCB-12 | `test_macro_brokered_tool_not_in_context` in `tests/scenarios/directed/testcases/test_mcp_broker_phase_d.py`; ledger row in `tests/scenarios/directed/DIRECTED_COVERAGE.md` |
-| T-S-013 | MCB-13 | `test_macro_nested_purpose_context` in `tests/scenarios/directed/testcases/test_mcp_broker_phase_d.py`; ledger row in `tests/scenarios/directed/DIRECTED_COVERAGE.md` |
+| T-S-013 | MCB-13 | Public delegated brokered context scenario in `tests/scenarios/directed/testcases/test_mcp_broker_phase_d.py`; nested delegated `fq.call_macro` inheritance in `tests/unit/macro-registry.test.ts`; ledger row in `tests/scenarios/directed/DIRECTED_COVERAGE.md` |
 | T-S-014 | MCB-14 | `test_macro_nested_host_context` in `tests/scenarios/directed/testcases/test_mcp_broker_phase_d.py`; ledger row in `tests/scenarios/directed/DIRECTED_COVERAGE.md` |
 | T-S-015 | MCB-15 | `test_brokered_call_cost_in_trace` in `tests/scenarios/directed/testcases/test_mcp_broker_phase_d.py`; ledger row in `tests/scenarios/directed/DIRECTED_COVERAGE.md` |
 | T-S-016 | MCB-16 | `test_host_brokered_call_trace_scope` in `tests/scenarios/directed/testcases/test_mcp_broker_phase_d.py`; ledger row in `tests/scenarios/directed/DIRECTED_COVERAGE.md` |
@@ -111,8 +111,8 @@ Executed on 2026-05-18 from the FlashQuery repo root with `.env.test` credential
 | REQ-066 | Complete | `tests/integration/mcp-broker/host-surface.test.ts`; `test_mcp_broker_phase_d.py` MCB-15/MCB-16; final integration and directed gates passed. |
 | REQ-067 | Complete | `tests/e2e/mcp-broker.e2e.test.ts`; `test_mcp_broker_phase_d.py` MCB-14/MCB-16; final E2E and directed gates passed. |
 | REQ-113 | Complete | `tests/unit/config.test.ts`; `brokered_host_dispatch.yml`; `host_mcp_tools_with_brokered.yml`; final unit and YAML Phase D gates passed. |
-| REQ-114 | Complete | `tests/unit/macro-registry.test.ts`; `test_mcp_broker_phase_d.py` MCB-13/MCB-14; final unit and directed gates passed. |
-| REQ-115 | Complete | `tests/unit/macro-registry.test.ts`; `test_mcp_broker_phase_d.py` MCB-13/MCB-14; final unit and directed gates passed. |
+| REQ-114 | Complete | `tests/unit/macro-registry.test.ts` covers nested delegated macro inheritance; `test_mcp_broker_phase_d.py` MCB-13 covers public delegated brokered context and MCB-14 covers host nested macro; final unit and directed gates passed. |
+| REQ-115 | Complete | `tests/unit/macro-registry.test.ts` covers nested delegated macro inheritance; `test_mcp_broker_phase_d.py` MCB-13 covers public delegated brokered context and MCB-14 covers host nested macro; final unit and directed gates passed. |
 | REQ-116 | Complete | `tests/unit/mcp-broker-registry.test.ts`; `tests/integration/mcp-broker/host-surface.test.ts`; final unit and integration gates passed. |
 | REQ-117 | Complete | `tests/integration/mcp-broker/client-lifecycle.test.ts`; `tests/e2e/mcp-broker.e2e.test.ts`; final integration and E2E gates passed. |
 | REQ-118 | Complete | `tests/integration/mcp-broker/client-lifecycle.test.ts`; `tests/e2e/mcp-broker.e2e.test.ts`; final integration and E2E gates passed. |

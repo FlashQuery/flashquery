@@ -271,7 +271,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             nested_purpose_first_call = nested_purpose_tool_calls[0] if nested_purpose_tool_calls else {}
             nested_purpose_content = _content_text(nested_purpose_payload, "call_nested_purpose_echo")
             run.step(
-                label="MCB-13 / T-S-013 delegated brokered invocation inherits purpose-rooted context",
+                label="MCB-13 / T-S-013 public delegated brokered invocation inherits purpose-rooted context",
                 passed=(
                     nested_purpose.ok
                     and nested_purpose_payload.get("response") == "MCB-13 delegated brokered tool complete"
