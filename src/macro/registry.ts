@@ -152,6 +152,12 @@ function wrapBrokerTool(input: {
     const visibleTools = await input.broker.listToolsForConsumer(consumerContext);
     const visibleTool = visibleTools.find((tool) => tool.serverId === input.server && tool.toolName === input.tool);
     if (visibleTool === undefined) {
+      const pendingDrift = input.broker
+        .getPendingSchemaDrift(consumerContext)
+        .find((drift) => drift.server === input.server && drift.tool === input.tool);
+      if (pendingDrift !== undefined) {
+        throw new MacroNeedsUserInputError(pendingDrift);
+      }
       throw new MacroExpectedError('unknown_tool', `Brokered tool '${input.server}.${input.tool}' is not available.`, {
         server: input.server,
         tool: input.tool,

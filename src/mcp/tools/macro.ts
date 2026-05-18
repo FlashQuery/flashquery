@@ -471,6 +471,10 @@ export function registerMacroTools(
         const currentSessionId = options.sessionIdProvider?.(extra) ?? resolveSessionId(extra) ?? registrationSessionId;
         const consumerContext = { kind: 'host' as const, traceId: currentSessionId };
         const visibleBrokerTools = await broker.listToolsForConsumer(consumerContext);
+        const pendingBrokerTools = broker.getPendingSchemaDrift(consumerContext).map((drift) => ({
+          serverId: drift.server,
+          toolName: drift.tool,
+        }));
         const { getNativeToolCatalog } = await import('../tool-catalog.js');
         const catalog = getNativeToolCatalog(server);
         const templateMetadata = await assembleMacroTemplateMetadata({
@@ -489,7 +493,7 @@ export function registerMacroTools(
           taskRegistry,
           sessionId: currentSessionId,
           nativeDispatchContext: createNativeDispatchContext(config, extra?.signal, currentSessionId),
-          brokerTools: options.brokerTools ?? groupBrokerToolsForMacro(visibleBrokerTools),
+          brokerTools: options.brokerTools ?? groupBrokerToolsForMacro([...visibleBrokerTools, ...pendingBrokerTools]),
           templateReverseMap: templateMetadata.templateReverseMap,
           templateToolNames: templateMetadata.templateToolNames,
           budget: params.budget,
@@ -518,7 +522,7 @@ export function registerMacroTools(
   return { registrationSessionId };
 }
 
-function groupBrokerToolsForMacro(tools: BrokeredTool[]): BrokerToolServerConfig[] {
+function groupBrokerToolsForMacro(tools: Array<Pick<BrokeredTool, 'serverId' | 'toolName'>>): BrokerToolServerConfig[] {
   const byServer = new Map<string, { label: string; tools: string[] }>();
   for (const tool of tools) {
     const existing = byServer.get(tool.serverId) ?? { label: tool.serverId, tools: [] };

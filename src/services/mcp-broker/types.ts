@@ -158,6 +158,7 @@ export interface Broker {
   callTool(ref: BrokerToolRef, args: unknown, ctx: ConsumerContext): Promise<CallToolResult>;
   isConnected(serverId: string, opts?: BrokerConnectionOptions): Promise<boolean>;
   listToolsForConsumer(ctx: ConsumerContext): Promise<BrokeredTool[]>;
+  getPendingSchemaDrift(ctx?: SchemaDriftResolutionContext): TofuDriftPayload[];
   shutdown(graceMs?: number): Promise<void>;
 }
 

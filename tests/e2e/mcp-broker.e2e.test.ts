@@ -13,15 +13,36 @@ import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { createMcpServer } from '../../src/mcp/server.js';
 import {
+  clearBrokerAuditTrace,
   clearBrokeredToolCallTrace,
+  getBrokerAuditTraceSnapshot,
   getBrokeredToolCallTraceSnapshot,
 } from '../../src/services/mcp-broker/trace.js';
-import { createBroker, type Broker } from '../../src/services/mcp-broker.js';
+import { createBroker } from '../../src/services/mcp-broker.js';
 
 const MCP_ACCEPT = 'application/json, text/event-stream';
 const INSTANCE_ID = `mcp-broker-e2e-${randomUUID().slice(0, 8)}`;
 const fixtureDir = resolve(fileURLToPath(new URL('../fixtures/mcp-servers', import.meta.url)));
 const basicServer = resolve(fixtureDir, 'server-basic.ts');
+const quirkyServer = resolve(fixtureDir, 'server-quirky.ts');
+const stableToolV1 = {
+  name: 'stable',
+  description: 'Stable test fixture tool.',
+  inputSchema: {
+    type: 'object',
+    properties: { value: { type: 'string' } },
+    required: ['value'],
+  },
+};
+const stableToolV2 = {
+  name: 'stable',
+  description: 'Stable test fixture tool with token.',
+  inputSchema: {
+    type: 'object',
+    properties: { value: { type: 'string' }, token: { type: 'string' } },
+    required: ['value', 'token'],
+  },
+};
 
 const MCP_INITIALIZE_REQUEST = {
   jsonrpc: '2.0',
@@ -38,7 +59,7 @@ let server: Server;
 let port: number;
 let vaultPath: string;
 let sessionId: string | undefined;
-const brokers: Broker[] = [];
+const brokers: Array<ReturnType<typeof createBroker>> = [];
 
 function makeConfig(): FlashQueryConfig {
   return {
@@ -74,8 +95,21 @@ function makeConfig(): FlashQueryConfig {
           echo: { costPerCall: 0.25 },
         },
       },
+      quirky: {
+        transport: 'stdio',
+        command: process.execPath,
+        args: ['--import', 'tsx', quirkyServer],
+        env: {
+          QUIRK_INITIAL_TOOLS: JSON.stringify([stableToolV1]),
+          QUIRK_LATER_TOOLS: JSON.stringify([stableToolV2]),
+          QUIRK_EMIT_LIST_CHANGED_MS: '150',
+        },
+        costPerCall: 0,
+        perCallTimeoutMs: 30000,
+        toolOverrides: {},
+      },
     },
-    host: { mcpServers: ['basic'], toolSearch: 'disabled' },
+    host: { mcpServers: ['basic', 'quirky'], toolSearch: 'disabled' },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'error', output: 'stderr' },
     macro: { defaultTimeoutMs: 60000 },
@@ -177,6 +211,16 @@ function responseById(messages: Array<Record<string, unknown>>, id: number): Rec
   return response as Record<string, unknown>;
 }
 
+async function waitForCondition(predicate: () => boolean, timeoutMs = 3000): Promise<void> {
+  const started = Date.now();
+  while (!predicate()) {
+    if (Date.now() - started > timeoutMs) {
+      throw new Error('Timed out waiting for E2E condition.');
+    }
+    await new Promise((resolveWait) => setTimeout(resolveWait, 25));
+  }
+}
+
 beforeAll(async () => {
   vaultPath = await mkdtemp(join(tmpdir(), 'fq-mcp-broker-e2e-'));
   const config = makeConfig();
@@ -234,6 +278,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  clearBrokerAuditTrace();
   clearBrokeredToolCallTrace();
   await Promise.allSettled(brokers.splice(0).map((broker) => broker.shutdown(50)));
   await new Promise<void>((resolveServer, reject) => {
@@ -267,5 +312,71 @@ describe('Phase A MCP broker E2E', () => {
     expect(getBrokeredToolCallTraceSnapshot(sessionId ?? '')).toEqual([
       { server: 'basic', tool: 'echo', count: 1, cost: 0.25 },
     ]);
+  });
+});
+
+describe('Phase B MCP broker E2E', () => {
+  it('T-E-B1 surfaces TOFU drift through public call_macro and completes after approval', async () => {
+    clearBrokerAuditTrace();
+
+    const firstMessages = await callMacro(201, {
+      trace: 'summary',
+      source: `
+        echoed = quirky.stable({ value: "first" })
+        exit $echoed
+      `,
+    });
+    const firstPayload = parseToolPayload(responseById(firstMessages, 201));
+    expect(firstPayload).toMatchObject({
+      result: { tool: 'stable', arguments: { value: 'first' } },
+      external_tool_calls: 1,
+    });
+
+    await waitForCondition(() => brokers[0]?.getPendingSchemaDrift().length === 1);
+
+    const driftMessages = await callMacro(202, {
+      trace: 'summary',
+      source: `
+        echoed = quirky.stable({ value: "second", token: "approved" })
+        exit $echoed
+      `,
+    });
+    const driftPayload = parseToolPayload(responseById(driftMessages, 202));
+
+    expect(driftPayload).toMatchObject({
+      reason: 'needs_user_input',
+      payload: {
+        event: 'schema_drift_detected',
+        server: 'quirky',
+        tool: 'stable',
+        old_schema: expect.objectContaining({ name: 'stable' }),
+        new_schema: expect.objectContaining({ name: 'stable' }),
+      },
+    });
+
+    brokers[0]?.resolveSchemaDrift([{ server: 'quirky', tool: 'stable', decision: 'approve' }], {
+      traceId: sessionId,
+    });
+
+    const finalMessages = await callMacro(203, {
+      trace: 'summary',
+      source: `
+        echoed = quirky.stable({ value: "second", token: "approved" })
+        exit $echoed
+      `,
+    });
+    const finalPayload = parseToolPayload(responseById(finalMessages, 203));
+    expect(finalPayload).toMatchObject({
+      result: { tool: 'stable', arguments: { value: 'second', token: 'approved' } },
+      external_tool_calls: 1,
+    });
+    expect(getBrokerAuditTraceSnapshot()).toContainEqual(
+      expect.objectContaining({
+        type: 'mcp_broker_tofu_decision',
+        server: 'quirky',
+        tool: 'stable',
+        decision: 'approve',
+      })
+    );
   });
 });

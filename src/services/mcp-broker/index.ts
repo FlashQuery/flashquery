@@ -264,6 +264,10 @@ export class NullBroker implements Broker {
     return Promise.resolve([]);
   }
 
+  getPendingSchemaDrift(_ctx: SchemaDriftResolutionContext = {}): TofuDriftPayload[] {
+    return [];
+  }
+
   shutdown(_graceMs?: number): Promise<void> {
     return Promise.resolve();
   }
