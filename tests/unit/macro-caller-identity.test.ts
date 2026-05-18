@@ -73,7 +73,15 @@ function nativeDispatchContext(): NativeToolDispatchContext {
 
 describe('macro caller identity', () => {
   it('T-U-169 constructs internal origin: host context for inbound MCP calls and uses host exposure', async () => {
-    const expectedCallerContext: MacroCallerContext = { origin: 'host' };
+    const expectedCallerContext: MacroCallerContext = {
+      origin: 'host',
+      interactive: true,
+      consumerContext: {
+        kind: 'host',
+        interactive: true,
+        traceId: 'trace-caller-identity',
+      },
+    };
     const result = await runMacroSource({
       source: 'exit fq.call_model({ resolver: "purpose", name: "research" })',
       config: makeConfig(),
@@ -88,7 +96,15 @@ describe('macro caller identity', () => {
   });
 
   it('T-U-170 constructs internal origin: delegated context for agentic-originated calls and uses purpose allowlist', async () => {
-    const expectedCallerContext: MacroCallerContext = { origin: 'delegated', purposeName: 'research' };
+    const expectedCallerContext: MacroCallerContext = {
+      origin: 'delegated',
+      purposeName: 'research',
+      consumerContext: {
+        kind: 'purpose',
+        purposeId: 'research',
+        traceId: 'trace-caller-identity',
+      },
+    };
     const result = await runMacroSource({
       source: 'exit fq.archive_document({ identifier: "ok.md" })',
       callerContext: expectedCallerContext,

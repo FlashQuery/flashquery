@@ -370,7 +370,14 @@ describe('host brokered tool registration', () => {
     expect(result.isError).toBe(true);
     expect(broker.callTool).toHaveBeenCalledTimes(1);
     expect(getBrokeredToolCallTraceSnapshot('trace-returned-error')).toEqual([
-      { server: 'basic', tool: 'echo', count: 1, cost: 0.25 },
+      {
+        trace_id: 'trace-returned-error',
+        consumer_kind: 'host',
+        server: 'basic',
+        tool: 'echo',
+        count: 1,
+        cost: 0.25,
+      },
     ]);
   });
 
