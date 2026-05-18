@@ -48,6 +48,12 @@ export interface BrokerConfig extends ToolRegistryConfig {
   onAudit?: (event: BrokerAuditEvent) => void;
 }
 
+export interface BrokerClientDebugSnapshot {
+  pid: number | null;
+  spawnCount: number;
+  restartCount: number;
+}
+
 const NOOP_INDEX_SINK: ToolIndexSink = {
   addTools: () => undefined,
   removeTools: () => undefined,
@@ -198,6 +204,16 @@ export class McpBroker implements Broker {
     const client = this.#clients.get(serverId);
     if (client === undefined) return false;
     return client.isConnected(opts);
+  }
+
+  getClientDebugSnapshot(serverId: string): BrokerClientDebugSnapshot | null {
+    const client = this.#clients.get(serverId);
+    if (client === undefined) return null;
+    return {
+      pid: client.pid,
+      spawnCount: client.spawnCount,
+      restartCount: client.restartCount,
+    };
   }
 
   async listToolsForConsumer(ctx: ConsumerContext): Promise<BrokeredTool[]> {
