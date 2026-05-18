@@ -76,6 +76,16 @@ Plans:
 
 **Requirements:** REQ-038..049, REQ-061..064, REQ-068, REQ-070, REQ-105
 
+**Plans:** 6 plans
+
+Plans:
+- [ ] 140-01-PLAN.md — TOFU state machine, diff utility, and registry blocking APIs
+- [ ] 140-02-PLAN.md — `notifications/tools/list_changed` subscription and synchronous broker routing
+- [ ] 140-03-PLAN.md — Macro `needs_user_input`, approve/reject resolution, autonomous block, and audit events
+- [ ] 140-04-PLAN.md — Phase B broker integration coverage
+- [ ] 140-05-PLAN.md — Phase B E2E and directed scenario coverage
+- [ ] 140-06-PLAN.md — Phase B YAML workflow and validation record
+
 **Success criteria:**
 1. First-observed schemas are pinned by canonical JSON hash over `{name, description, inputSchema}`.
 2. Changed schemas are removed from callable/indexed surfaces until approval; rejections preserve old pins.
