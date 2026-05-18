@@ -152,7 +152,7 @@ function wrapBrokerTool(input: {
     const ref = { serverId: input.server, toolName: input.tool };
     const consumerContext = makeBrokerConsumerContext(input.callerContext, input.nativeDispatchContext);
     const visibleTools = await input.broker.listToolsForConsumer(consumerContext);
-    let visibleTool = visibleTools.find((tool) => tool.serverId === input.server && tool.toolName === input.tool);
+    const visibleTool = visibleTools.find((tool) => tool.serverId === input.server && tool.toolName === input.tool);
     if (visibleTool === undefined) {
       const pendingDrifts = input.broker
         .getPendingSchemaDrift(consumerContext)
@@ -172,21 +172,10 @@ function wrapBrokerTool(input: {
             : pendingDrift
         );
       }
-      if (input.callerContext.consumerContext !== undefined) {
-        visibleTool = {
-          serverId: input.server,
-          toolName: input.tool,
-          registryKey: `${input.server}__${input.tool}`,
-          inputSchema: {},
-          tofuHash: '',
-          costPerCall: input.costPerCall ?? 0,
-        };
-      } else {
       throw new MacroExpectedError('unknown_tool', `Brokered tool '${input.server}.${input.tool}' is not available.`, {
         server: input.server,
         tool: input.tool,
       });
-      }
     }
     try {
       const result = await input.broker.callTool(ref, coerceBrokerToolArguments(arg), consumerContext);

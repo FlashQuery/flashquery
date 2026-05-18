@@ -579,18 +579,14 @@ function inferBrokerToolsFromSource(
   config: FlashQueryConfig,
   callerContext: MacroCallerContext
 ): Array<Pick<BrokeredTool, 'serverId' | 'toolName' | 'costPerCall'>> {
-  const consumerContext = callerContext.consumerContext;
-  const visibleServers = consumerContext?.kind === 'purpose'
-    ? new Set(config.llm?.purposes.find((purpose) =>
-      purpose.name.toLowerCase() === consumerContext.purposeId.toLowerCase()
-    )?.mcpServers ?? [])
-    : new Set(config.host?.mcpServers ?? []);
+  void callerContext;
   const refs: Array<Pick<BrokeredTool, 'serverId' | 'toolName' | 'costPerCall'>> = [];
   for (const match of source.matchAll(/\b([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)\s*\(/g)) {
     const serverId = match[1] ?? '';
     const toolName = match[2] ?? '';
-    if (serverId === 'fq' || !visibleServers.has(serverId)) continue;
+    if (serverId === 'fq') continue;
     const serverConfig = config.mcpServers?.[serverId];
+    if (serverConfig === undefined) continue;
     refs.push({
       serverId,
       toolName,

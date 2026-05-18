@@ -525,12 +525,40 @@ describe('host brokered tool registration', () => {
 
     const handler = server.registerTool.mock.calls[0]?.[2] as (args: unknown, extra: unknown) => Promise<CallToolResult>;
     const result = await handler({ text: 'hello' }, {});
-    const payload = JSON.parse(result.content[0]?.text ?? '{}') as { event?: string; changes?: unknown[] };
+    const payload = JSON.parse(result.content[0]?.text ?? '{}') as {
+      status?: string;
+      payload?: { event?: string; changes?: unknown[] };
+    };
 
     expect(result.isError).toBe(true);
-    expect(payload.event).toBe('schema_drift_detected');
-    expect(payload.changes).toHaveLength(2);
+    expect(payload.status).toBe('needs_user_input');
+    expect(payload.payload?.event).toBe('schema_drift_detected');
+    expect(payload.payload?.changes).toHaveLength(2);
     expect(broker.callTool).not.toHaveBeenCalled();
+  });
+
+  it('records host brokered calls under a default host trace when no session id is available', async () => {
+    clearBrokeredToolCallTrace('host:default');
+    const server = makeCapturingServer();
+    const broker = makeMockBroker({ visibleTools: [makeBrokeredTool()] });
+    await registerHostBrokeredTools(server, {
+      broker,
+      hostConfig: { mcpServers: ['basic'], toolSearch: 'disabled' },
+    });
+
+    const handler = server.registerTool.mock.calls[0]?.[2] as (args: unknown, extra: unknown) => Promise<CallToolResult>;
+    await handler({ text: 'hello' }, {});
+
+    expect(getBrokeredToolCallTraceSnapshot('host:default')).toEqual([
+      {
+        trace_id: 'host:default',
+        consumer_kind: 'host',
+        server: 'basic',
+        tool: 'echo',
+        count: 1,
+        cost: 0.25,
+      },
+    ]);
   });
 
   it('registers the brokered description override and never the upstream description', async () => {

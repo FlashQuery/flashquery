@@ -22,6 +22,8 @@ import type {
   SchemaDriftResolutionContext,
   TofuDriftBundle,
   TofuDriftPayload,
+  ToolSurfaceChange,
+  ToolSurfaceChangeListener,
   ToolListSnapshotOptions,
   ToolIndexSink,
 } from './types.js';
@@ -69,6 +71,7 @@ export class McpBroker implements Broker {
   readonly #onAudit?: (event: BrokerAuditEvent) => void;
   readonly #pendingTools = new Map<RegistryKey, BrokeredTool>();
   readonly #pendingDrifts = new Map<RegistryKey, TofuDriftPayload>();
+  readonly #toolSurfaceListeners = new Set<ToolSurfaceChangeListener>();
 
   constructor(config: BrokerConfig) {
     this.#indexSink = config.indexSink ?? NOOP_INDEX_SINK;
@@ -150,6 +153,7 @@ export class McpBroker implements Broker {
     if (toolsToAdd.length > 0) {
       this.#indexSink.addTools(toolsToAdd);
     }
+    this.#emitToolSurfaceChange({ added: toolsToAdd, removed: removedKeys });
     if (interactive && drifts.length > 0) {
       await this.#onTofuDrift?.({ event: 'schema_drift_detected', server: serverId, changes: drifts });
     }
@@ -180,6 +184,7 @@ export class McpBroker implements Broker {
           tofuHash: approved.entry.trustedHash,
         });
         this.#indexSink.addTools([registered]);
+        this.#emitToolSurfaceChange({ added: [registered], removed: [] });
         this.#pendingTools.delete(pendingKey);
         this.#pendingDrifts.delete(pendingKey);
         this.#emitDecisionAudit(decision, before.trustedHash, before.pendingHash, ctx);
@@ -240,6 +245,13 @@ export class McpBroker implements Broker {
     return this.#registry.listToolsForConsumer(ctx);
   }
 
+  subscribeToolSurfaceChanges(listener: ToolSurfaceChangeListener): () => void {
+    this.#toolSurfaceListeners.add(listener);
+    return () => {
+      this.#toolSurfaceListeners.delete(listener);
+    };
+  }
+
   async shutdown(graceMs?: number): Promise<void> {
     await Promise.all([...this.#clients.values()].map((client) => client.shutdown(graceMs)));
   }
@@ -272,6 +284,19 @@ export class McpBroker implements Broker {
       ...(ctx.traceId === undefined ? {} : { trace_id: ctx.traceId }),
       ...(ctx.purposeId === undefined ? {} : { purpose_id: ctx.purposeId }),
     });
+  }
+
+  #emitToolSurfaceChange(change: ToolSurfaceChange): void {
+    if (change.added.length === 0 && change.removed.length === 0) return;
+    for (const listener of this.#toolSurfaceListeners) {
+      void Promise.resolve(listener(change)).catch((error: unknown) => {
+        logger?.warn(
+          `mcp_broker_tool_surface_listener_failed message=${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      });
+    }
   }
 
   #emitAudit(event: BrokerAuditEventInput): void {
@@ -308,6 +333,10 @@ export class NullBroker implements Broker {
 
   listToolsForConsumer(_ctx: ConsumerContext): Promise<BrokeredTool[]> {
     return Promise.resolve([]);
+  }
+
+  subscribeToolSurfaceChanges(_listener: ToolSurfaceChangeListener): () => void {
+    return () => undefined;
   }
 
   getPendingSchemaDrift(_ctx: SchemaDriftResolutionContext = {}): TofuDriftPayload[] {

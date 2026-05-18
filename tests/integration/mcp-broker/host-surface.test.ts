@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ToolListChangedNotificationSchema, type CallToolResult, type Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { FlashQueryConfig } from '../../../src/config/loader.js';
 import { createMcpServer, initializeHostToolSearchForServer } from '../../../src/mcp/server.js';
 import {
@@ -16,6 +16,7 @@ import {
 
 const fixtureDir = resolve(fileURLToPath(new URL('../../fixtures/mcp-servers', import.meta.url)));
 const basicServer = resolve(fixtureDir, 'server-basic.ts');
+const quirkyServer = resolve(fixtureDir, 'server-quirky.ts');
 const brokers: Broker[] = [];
 
 afterEach(async () => {
@@ -36,6 +37,34 @@ function basicConfig(overrides: Partial<BrokerClientConfig> = {}): BrokerClientC
       echo: { costPerCall: 0.75, descriptionOverride: 'X' },
     },
     ...overrides,
+  };
+}
+
+function toolSnapshot(name: string, description = `${name} description`): Tool {
+  return {
+    name,
+    description,
+    inputSchema: {
+      type: 'object',
+      properties: { value: {} },
+    },
+  };
+}
+
+function quirkyConfig(initialTools: Tool[], laterTools: Tool[]): BrokerClientConfig {
+  return {
+    serverId: 'quirky',
+    transport: 'stdio',
+    command: process.execPath,
+    args: ['--import', 'tsx', quirkyServer],
+    env: {
+      QUIRK_INITIAL_TOOLS: JSON.stringify(initialTools),
+      QUIRK_LATER_TOOLS: JSON.stringify(laterTools),
+      QUIRK_EMIT_LIST_CHANGED_MS: '200',
+    },
+    costPerCall: 0,
+    perCallTimeoutMs: 30000,
+    toolOverrides: {},
   };
 }
 
@@ -87,6 +116,15 @@ async function withHostClient<T>(
     await client.close().catch(() => undefined);
     await serverTransport.close().catch(() => undefined);
   }
+}
+
+async function waitForCondition(predicate: () => boolean | Promise<boolean>, timeoutMs = 1500): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Timed out waiting for condition.');
 }
 
 function textOf(result: CallToolResult): string {
@@ -163,6 +201,37 @@ describe('mcp broker host surface integration', () => {
         expect(result.isError).toBe(true);
         expect(textOf(result)).toMatch(/not found|Method not found|Unknown tool/i);
         expect(getBrokeredToolCallTraceSnapshot('trace-host-surface')).toEqual([]);
+      }
+    );
+  });
+
+  it('updates host tools/list when an upstream list_changed adds and removes brokered tools', async () => {
+    await withHostClient(
+      makeConfig({
+        mcpServers: {
+          quirky: quirkyConfig(
+            [toolSnapshot('first')],
+            [toolSnapshot('second')]
+          ),
+        },
+        host: { mcpServers: ['quirky'], toolSearch: 'enabled' },
+      }),
+      async (client) => {
+        const notifications: unknown[] = [];
+        client.setNotificationHandler(ToolListChangedNotificationSchema, (notification) => {
+          notifications.push(notification);
+        });
+
+        expect((await client.listTools()).tools.map((tool) => tool.name)).toContain('quirky__first');
+        await waitForCondition(async () => {
+          const names = (await client.listTools()).tools.map((tool) => tool.name);
+          return names.includes('quirky__second') && !names.includes('quirky__first');
+        });
+        const refreshedNames = (await client.listTools()).tools.map((tool) => tool.name);
+
+        expect(refreshedNames).toContain('quirky__second');
+        expect(refreshedNames).not.toContain('quirky__first');
+        expect(notifications.length).toBeGreaterThan(0);
       }
     );
   });

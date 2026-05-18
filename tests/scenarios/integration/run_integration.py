@@ -534,7 +534,14 @@ def _evaluate_assertions(
         try:
             actual = get_json_path(parse_mcp_json(result), path)
             if isinstance(actual, list):
-                passed = expected in actual
+                if isinstance(expected, dict):
+                    passed = any(
+                        isinstance(item, dict)
+                        and all(item.get(key) == value for key, value in expected.items())
+                        for item in actual
+                    )
+                else:
+                    passed = expected in actual
             elif isinstance(actual, str):
                 passed = str(expected) in actual
             elif isinstance(actual, dict):

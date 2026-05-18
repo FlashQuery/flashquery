@@ -652,6 +652,41 @@ describe('macro ToolRegistry construction', () => {
     });
   });
 
+  it('returns unknown_tool when a brokered macro ref is not visible and has no pending drift', async () => {
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool: vi.fn(),
+      listToolsForConsumer: vi.fn(async () => []),
+      getPendingSchemaDrift: vi.fn(() => []),
+      resolveSchemaDrift: vi.fn(() => []),
+      shutdown: vi.fn(),
+    };
+    const result = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: {
+        origin: 'host',
+        consumerContext: { kind: 'host', traceId: 'trace-hidden', interactive: true },
+      },
+      broker,
+      catalog,
+      nativeDispatchContext: nativeDispatchContext(),
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    await expect(
+      result.registry.brave_search.tools.web_search({ query: 'x' }, {} as Parameters<ToolFn>[1])
+    ).rejects.toMatchObject({
+      name: 'MacroExpectedError',
+      error: 'unknown_tool',
+      details: {
+        server: 'brave_search',
+        tool: 'web_search',
+      },
+    });
+    expect(broker.callTool).not.toHaveBeenCalled();
+  });
+
   it('preserves host trace scope across nested fq.call_macro re-entry', async () => {
     const callTool = vi.fn(async () => ({
       content: [{ type: 'text' as const, text: '{"ok":true}' }],

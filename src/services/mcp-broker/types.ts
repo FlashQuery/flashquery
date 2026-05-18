@@ -105,6 +105,13 @@ export interface ToolIndexSink {
   removeTools(keys: RegistryKey[]): void;
 }
 
+export interface ToolSurfaceChange {
+  added: BrokeredTool[];
+  removed: RegistryKey[];
+}
+
+export type ToolSurfaceChangeListener = (change: ToolSurfaceChange) => void | Promise<void>;
+
 export interface SchemaDriftDecisionInput {
   server: string;
   tool: string;
@@ -160,6 +167,7 @@ export interface Broker {
   callTool(ref: BrokerToolRef, args: unknown, ctx: ConsumerContext): Promise<CallToolResult>;
   isConnected(serverId: string, opts?: BrokerConnectionOptions): Promise<boolean>;
   listToolsForConsumer(ctx: ConsumerContext): Promise<BrokeredTool[]>;
+  subscribeToolSurfaceChanges?(listener: ToolSurfaceChangeListener): () => void;
   getPendingSchemaDrift(ctx?: SchemaDriftResolutionContext): TofuDriftPayload[];
   resolveSchemaDrift(
     decisions: SchemaDriftDecisionInput[],

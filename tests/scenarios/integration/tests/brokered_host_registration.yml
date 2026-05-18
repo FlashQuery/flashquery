@@ -31,5 +31,8 @@ steps:
       op: mcp.list_tools
       expect_contains: "\"description\": \"X\""
       expect_not_contains: "Echoes the provided value without mutation."
-      expect_json_path:
-        - tools[0].description
+      expect_json_contains:
+        path: tools
+        value:
+          name: basic__echo
+          description: "X"

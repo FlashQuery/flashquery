@@ -265,6 +265,7 @@ Core CRUD operations on vault documents via MCP.
 |----|----------|------------|--------------|--------------|
 | MCB-12 | T-S-012 macro references a brokered tool outside its consumer context and receives an unknown-tool style envelope without dispatching hidden input. | test_macro_brokered_tool_not_in_context | 2026-05-18 | 2026-05-18 |
 | MCB-13 | T-S-013 public delegated purpose invocation preserves purpose consumer context for purpose-visible brokered tools; nested delegated macro inheritance is covered by `tests/unit/macro-registry.test.ts` because `call_macro` is intentionally hard-excluded from delegated model-visible native tools. | test_macro_nested_purpose_context | 2026-05-18 | 2026-05-18 |
+| MCB-13b | Phase 140 carry-forward: autonomous delegated macro context preserves `interactive:false` across `fq.call_macro` and returns `tool_unavailable_pending_user_decision` for pending broker drift rather than `needs_user_input`. | test_mcp_broker_phase_d | 2026-05-18 | 2026-05-18 |
 | MCB-14 | T-S-014 nested macro invocation from a host-invoked macro preserves host context and host brokered visibility. | test_macro_nested_host_context | 2026-05-18 | 2026-05-18 |
 | MCB-15 | T-S-015 brokered `tool_calls` trace entries include resolved cost and sanitized consumer scope. | test_brokered_call_cost_in_trace | 2026-05-18 | 2026-05-18 |
 | MCB-16 | T-S-016 host-initiated brokered calls stay scoped to the host session rather than a fresh `call_model` trace. | test_host_brokered_call_trace_scope | 2026-05-18 | 2026-05-18 |

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """
 Phase D MCP Broker: host surface and ConsumerContext public scenarios.
-Coverage: MCB-12, MCB-13, MCB-14, MCB-15, MCB-16
+Coverage: MCB-12, MCB-13, MCB-13b, MCB-14, MCB-15, MCB-16
 """
 from __future__ import annotations
 
-COVERAGE = ["MCB-12", "MCB-13", "MCB-14", "MCB-15", "MCB-16"]
+COVERAGE = ["MCB-12", "MCB-13", "MCB-13b", "MCB-14", "MCB-15", "MCB-16"]
 
 import argparse
 import json
 import shutil
 import socket
+import subprocess
 import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -205,6 +206,7 @@ def _call_macro(client: FQCClient, source: str) -> Any:
 def run_test(args: argparse.Namespace) -> TestRun:
     run = TestRun(TEST_NAME)
     port_range = tuple(args.port_range) if args.port_range else None
+    node = shutil.which("node") or "node"
     script = [
         _tool_call_response(
             "call_nested_purpose_echo",
@@ -212,7 +214,6 @@ def run_test(args: argparse.Namespace) -> TestRun:
             {"value": {"nested": "purpose"}},
         ),
         _final_response("MCB-13 delegated brokered tool complete"),
-        _final_response("Phase 140 carry-forward autonomous context complete"),
         _tool_call_response(
             "call_basic_echo_cost",
             "basic__echo",
@@ -243,7 +244,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             run.step(
                 label="MCB-12 / T-S-012 macro brokered tool not in consumer context fails with unknown_tool",
                 passed=(
-                    hidden_payload.get("error") in {"unknown_tool", "unknown_server"}
+                    hidden_payload.get("error") == "unknown_tool"
                     and "blocked" not in hidden_text
                 ),
                 detail=hidden_text[:1200],
@@ -307,26 +308,27 @@ def run_test(args: argparse.Namespace) -> TestRun:
             if run.exit_code:
                 return run
 
-            delegated_autonomous = client.call_tool(
-                "call_model",
-                resolver="purpose",
-                name="phase_d_research",
-                trace_id="trace-mcb-13b",
-                return_messages=True,
-                max_iterations=1,
-                messages=[{"role": "user", "content": "Do not call tools; final answer only."}],
+            helper = subprocess.run(
+                [node, "--import", "tsx", "tests/scenarios/directed/helpers/run_phase_d_autonomous_drift.mjs"],
+                cwd=str(_project_root(args)),
+                capture_output=True,
+                text=True,
+                timeout=15,
             )
-            delegated_payload = _json_payload(delegated_autonomous)
+            try:
+                delegated_payload = json.loads(helper.stdout or "{}")
+            except json.JSONDecodeError:
+                delegated_payload = {"stdout": helper.stdout, "stderr": helper.stderr}
+            delegated_text = json.dumps(delegated_payload, sort_keys=True)
             run.step(
                 label="Phase 140 carry-forward nested autonomous delegated macro preserves interactive:false",
                 passed=(
-                    delegated_autonomous.ok
-                    and delegated_payload.get("response") == "Phase 140 carry-forward autonomous context complete"
-                    and delegated_payload.get("metadata", {}).get("tool_calls", []) == []
+                    helper.returncode == 0
+                    and "tool_unavailable_pending_user_decision" in delegated_text
+                    and "needs_user_input" not in delegated_text
                 ),
-                detail=json.dumps(delegated_payload, sort_keys=True)[:1200],
-                timing_ms=delegated_autonomous.timing_ms,
-                tool_result=delegated_autonomous,
+                detail=delegated_text[:1200] + (helper.stderr[:400] if helper.stderr else ""),
+                timing_ms=0,
             )
             if run.exit_code:
                 return run

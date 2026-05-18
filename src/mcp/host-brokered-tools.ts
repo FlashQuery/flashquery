@@ -1,4 +1,4 @@
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer, RegisteredTool } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type { FlashQueryConfig } from '../config/loader.js';
@@ -14,6 +14,7 @@ import {
 } from '../services/mcp-broker.js';
 
 type HostConfig = NonNullable<FlashQueryConfig['host']>;
+const HOST_DEFAULT_TRACE_ID = 'host:default';
 
 export interface RegisterHostBrokeredToolsOptions {
   broker: Broker;
@@ -28,10 +29,18 @@ function textResult(text: string, isError = false): CallToolResult {
   };
 }
 
+function structuredTextResult(payload: unknown, isError = false): CallToolResult {
+  return {
+    content: [{ type: 'text', text: JSON.stringify(payload) }],
+    structuredContent: payload as Record<string, unknown>,
+    ...(isError ? { isError: true } : {}),
+  };
+}
+
 function hostContext(traceId: string | undefined): ConsumerContext {
   return {
     kind: 'host',
-    traceId: traceId ?? '',
+    traceId: traceId ?? HOST_DEFAULT_TRACE_ID,
     interactive: true,
   };
 }
@@ -67,7 +76,7 @@ function driftResponse(drifts: TofuDriftPayload[], serverId: string, toolName: s
     serverDrifts.length > 1
       ? { event: 'schema_drift_detected' as const, server: serverId, changes: serverDrifts }
       : requestedDrift;
-  return textResult(JSON.stringify(payload), true);
+  return structuredTextResult({ status: 'needs_user_input', payload }, true);
 }
 
 function findVisibleTool(tools: BrokeredTool[], registryKey: string): BrokeredTool | undefined {
@@ -105,6 +114,56 @@ function zodRawShapeForJsonSchema(schema: unknown): z.ZodRawShape {
   );
 }
 
+function registerHostBrokeredTool(
+  server: McpServer,
+  options: RegisterHostBrokeredToolsOptions,
+  tool: BrokeredTool
+): RegisteredTool {
+  return registerUncatalogedTool(
+    server,
+    tool.registryKey,
+    {
+      ...(tool.description === undefined ? {} : { description: tool.description }),
+      inputSchema: zodSchemaForJsonSchema(tool.inputSchema),
+    },
+    async (args: unknown, extra: unknown) => {
+      const ctx = hostContext(options.traceIdProvider?.(extra) ?? resolveSessionId(extra));
+      const visibleTools = await options.broker.listToolsForConsumer(ctx);
+      const visibleTool = findVisibleTool(visibleTools, tool.registryKey);
+      if (visibleTool === undefined) {
+        const drift = driftResponse(
+          options.broker.getPendingSchemaDrift(ctx),
+          tool.serverId,
+          tool.toolName
+        );
+        if (drift !== undefined) return drift;
+        return textResult(`Tool '${tool.registryKey}' is not available.`, true);
+      }
+
+      try {
+        const result = await options.broker.callTool(
+          { serverId: tool.serverId, toolName: tool.toolName },
+          args,
+          ctx
+        );
+        recordBrokeredToolCall({
+          traceId: ctx.traceId,
+          serverId: tool.serverId,
+          toolName: tool.toolName,
+          costPerCall: visibleTool.costPerCall,
+          consumerContext: ctx,
+        });
+        return result;
+      } catch (error: unknown) {
+        const normalized = stripRawFromToolError(
+          formatToolError(error, { serverId: tool.serverId, toolName: tool.toolName })
+        );
+        return textResult(normalized.message, true);
+      }
+    }
+  ) as RegisteredTool;
+}
+
 export async function registerHostBrokeredTools(
   server: McpServer,
   options: RegisterHostBrokeredToolsOptions
@@ -113,50 +172,28 @@ export async function registerHostBrokeredTools(
 
   const initialContext = hostContext(options.traceIdProvider?.(undefined));
   const tools = await options.broker.listToolsForConsumer(initialContext);
+  const registered = new Map<string, RegisteredTool>();
 
   for (const tool of tools) {
-    registerUncatalogedTool(
-      server,
-      tool.registryKey,
-      {
-        ...(tool.description === undefined ? {} : { description: tool.description }),
-        inputSchema: zodSchemaForJsonSchema(tool.inputSchema),
-      },
-      async (args: unknown, extra: unknown) => {
-        const ctx = hostContext(options.traceIdProvider?.(extra) ?? resolveSessionId(extra));
-        const visibleTools = await options.broker.listToolsForConsumer(ctx);
-        const visibleTool = findVisibleTool(visibleTools, tool.registryKey);
-        if (visibleTool === undefined) {
-          const drift = driftResponse(
-            options.broker.getPendingSchemaDrift(ctx),
-            tool.serverId,
-            tool.toolName
-          );
-          if (drift !== undefined) return drift;
-          return textResult(`Tool '${tool.registryKey}' is not available.`, true);
-        }
-
-        try {
-          const result = await options.broker.callTool(
-            { serverId: tool.serverId, toolName: tool.toolName },
-            args,
-            ctx
-          );
-          recordBrokeredToolCall({
-            traceId: ctx.traceId,
-            serverId: tool.serverId,
-            toolName: tool.toolName,
-            costPerCall: visibleTool.costPerCall,
-            consumerContext: ctx,
-          });
-          return result;
-        } catch (error: unknown) {
-          const normalized = stripRawFromToolError(
-            formatToolError(error, { serverId: tool.serverId, toolName: tool.toolName })
-          );
-          return textResult(normalized.message, true);
-        }
-      }
-    );
+    registered.set(tool.registryKey, registerHostBrokeredTool(server, options, tool));
   }
+
+  options.broker.subscribeToolSurfaceChanges?.(async (change) => {
+    for (const key of change.removed) {
+      const handle = registered.get(key);
+      if (handle === undefined) continue;
+      handle.remove();
+      registered.delete(key);
+    }
+
+    if (change.added.length === 0) return;
+    const ctx = hostContext(options.traceIdProvider?.(undefined));
+    const visible = new Map((await options.broker.listToolsForConsumer(ctx)).map((tool) => [tool.registryKey, tool]));
+    for (const tool of change.added) {
+      const visibleTool = visible.get(tool.registryKey);
+      if (visibleTool === undefined) continue;
+      registered.get(tool.registryKey)?.remove();
+      registered.set(tool.registryKey, registerHostBrokeredTool(server, options, visibleTool));
+    }
+  });
 }
