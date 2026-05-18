@@ -35,7 +35,6 @@ export function createSearchToolsHandler(options: CreateSearchToolsHandlerOption
     const results = options.service.search(parsed.data.query, parsed.data.limit);
     recordBrokerAuditEvent({
       type: 'mcp_broker_search_tools',
-      consumer: options.consumerContext.kind === 'host' ? 'host' : `purpose:${options.consumerContext.purposeId}`,
       ...(options.consumerContext.kind === 'purpose' ? { purpose_id: options.consumerContext.purposeId } : {}),
       query: parsed.data.query,
       result_count: results.length,

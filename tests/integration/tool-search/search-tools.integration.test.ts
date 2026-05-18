@@ -492,9 +492,11 @@ describe('Phase C fq.search_tools integration', () => {
       traceId: 'trace-audit-explicit',
     });
 
-    expect(getBrokerAuditTraceSnapshot()).toContainEqual(expect.objectContaining({
+    const auditEvent = getBrokerAuditTraceSnapshot().find(
+      (event) => event.type === 'mcp_broker_search_tools',
+    );
+    expect(auditEvent).toEqual(expect.objectContaining({
       type: 'mcp_broker_search_tools',
-      consumer: 'purpose:research',
       purpose_id: 'research',
       query: 'echo diagnostic',
       result_count: 1,
@@ -502,6 +504,7 @@ describe('Phase C fq.search_tools integration', () => {
       trace_id: 'trace-audit-explicit',
       ts: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     }));
+    expect(auditEvent).not.toHaveProperty('consumer');
   });
 
   it('T-I-047 returns every FQ-native .tool.md body through help:true dispatch', async () => {

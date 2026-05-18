@@ -60,7 +60,7 @@ The phase goal from ROADMAP.md is locked:
 
 ### Help Convention
 - Add one `.tool.md` file per FlashQuery-native tool at `src/mcp/tools/<tool_name>.tool.md`.
-- Each `.tool.md` file must include frontmatter with `name`, `description`, `help_hint`, `tier`, and `args`, and the `description` must end with a sentence containing both "help" and "true" or `{help: true}`.
+- Each `.tool.md` file must include frontmatter with `name` and `description`, and the `description` must end with a sentence containing both "help" and "true" or `{help: true}`. Optional `help_hint`, `tier`, and `args` fields may be recognized when present, but missing `tier` or `args` is warning-level only.
 - Build or startup validation must fail clearly on missing `name`, name/filename mismatch, missing required fields, invalid description suffix, duplicate names, or YAML/frontmatter parse failure.
 - Short descriptions under 40 chars warn but do not fail.
 - Build a `TOOL_META` registry from `.tool.md` files and use it for MCP registration descriptions, `search_tools` help hints, and `help: true` dispatch.

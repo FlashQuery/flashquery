@@ -126,7 +126,7 @@ Run date: 2026-05-18.
 | T-E-C1 | PASS | E2E gate, `tests/e2e/mcp-broker.e2e.test.ts`. |
 | T-S-021 | PASS | Directed Phase C gate, `tests/scenarios/directed/testcases/test_mcp_broker_phase_c.py`, MCB-21. |
 | T-S-022 | PASS | Directed Phase C gate, `tests/scenarios/directed/testcases/test_mcp_broker_phase_c.py`, MCB-22. |
-| T-Y-008 | PASS | YAML Phase C gate, `tests/scenarios/integration/tests/description_override_substitution.yml`, INT-MCB-08. |
+| T-Y-008 | PASS | YAML Phase C gate, `tests/scenarios/integration/tests/description_override_substitution.yml`, INT-MCB-08. Covers REQ-100a (Phase 141) only; REQ-100b host MCP `tools/list` counterpart deferred to T-Y-010 in Phase 142. |
 | T-Y-013 | PASS | YAML Phase C gate, `tests/scenarios/integration/tests/search_tools_workflow.yml`, INT-MCB-13. |
 
 ## Blocking Issues

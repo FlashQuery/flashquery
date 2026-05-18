@@ -201,7 +201,6 @@ describe('fq.search_tools handler', () => {
       expect.objectContaining({
         ts: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         type: 'mcp_broker_search_tools',
-        consumer: 'purpose:research',
         purpose_id: 'research',
         query: 'anything',
         result_count: 0,
@@ -209,6 +208,7 @@ describe('fq.search_tools handler', () => {
         trace_id: 'trace-empty',
       }),
     ]);
+    expect(getBrokerAuditTraceSnapshot()[0]).not.toHaveProperty('consumer');
     expect(JSON.stringify(getBrokerAuditTraceSnapshot())).not.toMatch(/arguments|result_payload|content/);
   });
 
