@@ -9,11 +9,13 @@ import type {
   ToolRegistry,
 } from '../../src/macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../src/llm/tool-registry.js';
-import { NullBroker, type Broker, type ConsumerContext } from '../../src/services/mcp-broker.js';
+import { evaluateProgram } from '../../src/macro/evaluator.js';
+import { NullBroker, SchemaDriftNeedsUserInputError, type Broker, type ConsumerContext } from '../../src/services/mcp-broker.js';
 import {
   clearBrokeredToolCallTrace,
   getBrokeredToolCallTraceSnapshot,
 } from '../../src/services/mcp-broker/trace.js';
+import { parseProgram, parseToolPayload } from './macro-test-helpers.js';
 
 function makeConfig(overrides: Partial<FlashQueryConfig> = {}): FlashQueryConfig {
   return {
@@ -295,6 +297,57 @@ describe('macro ToolRegistry construction', () => {
     ).rejects.toMatchObject({
       error: 'tool_call_failed',
       details: expect.objectContaining({ kind: 'is_error_result' }),
+    });
+  });
+
+  it('propagates broker schema drift as a needs_user_input macro result', async () => {
+    const driftPayload = {
+      event: 'schema_drift_detected',
+      server: 'brave_search',
+      tool: 'web_search',
+      question: 'Review changed schema.',
+      old_schema: { name: 'web_search', inputSchema: { type: 'object' } },
+      new_schema: {
+        name: 'web_search',
+        inputSchema: { type: 'object', required: ['query'] },
+      },
+      diff_summary: 'Added required parameter: query (string)',
+      options: ['approve', 'reject'],
+      answer_shape: 'frontmatter.user_decisions.brave_search__web_search.tofu_decision',
+    } as const;
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool: vi.fn(async () => {
+        throw new SchemaDriftNeedsUserInputError(driftPayload);
+      }),
+      listToolsForConsumer: vi.fn(async () => [brokeredSearchTool()]),
+      shutdown: vi.fn(),
+    };
+    const registry = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'host' },
+      broker,
+      catalog,
+      nativeDispatchContext: nativeDispatchContext(),
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    const result = await evaluateProgram(parseProgram('brave_search.web_search({ query: "FlashQuery" })'), {
+      toolRegistry: registry.registry,
+      allowedToolNames: registry.allowedToolNames,
+    });
+
+    expect(result.isError).toBe(false);
+    expect(parseToolPayload(result)).toMatchObject({
+      reason: 'needs_user_input',
+      payload: {
+        event: 'schema_drift_detected',
+        server: 'brave_search',
+        tool: 'web_search',
+        old_schema: driftPayload.old_schema,
+        new_schema: driftPayload.new_schema,
+      },
     });
   });
 
