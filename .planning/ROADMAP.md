@@ -127,7 +127,7 @@ Plans:
 
 **Requirements:** REQ-005..010, REQ-031, REQ-035, REQ-065..067, REQ-113..118
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 - [x] 142-01-PLAN.md — Host config defaults and shared registry filtering tests
@@ -135,7 +135,7 @@ Plans:
 - [x] 142-03-PLAN.md — Brokered trace metadata and nested ConsumerContext inheritance
 - [x] 142-04-PLAN.md — Host search plus shared lazy-spawn and TOFU integration
 - [x] 142-05-PLAN.md — Phase D directed and YAML scenario gates
-- [ ] 142-06-PLAN.md — Phase D validation record and requirements checklist closure
+- [x] 142-06-PLAN.md — Phase D validation record and requirements checklist closure
 
 **Success criteria:**
 1. `host:` config is parsed, validated, and plumbed independently of existing `host_mcp_tools`.
