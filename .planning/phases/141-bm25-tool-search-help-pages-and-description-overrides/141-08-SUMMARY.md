@@ -96,7 +96,7 @@ completed: 2026-05-18T18:05:00Z
 
 1. **Task 1-3 scenario and validation artifacts** - `b18f527` (`test(141-08)`)
 2. **Initial blocked summary metadata** - `bb27850` (`docs(141-08)`)
-3. **Scenario blocker and validation closure** - pending commit
+3. **Scenario blocker and validation closure** - `8edc88f` (`fix(141-08)`)
 
 ## Files Created/Modified
 
@@ -161,7 +161,7 @@ None.
 ## Self-Check: PASSED
 
 - Created/modified files exist.
-- Scenario/validation commits exist: `b18f527`, `bb27850`, and the pending closure commit.
+- Scenario/validation commits exist: `b18f527`, `bb27850`, and `8edc88f`.
 - Full phase gate passes after blocker fixes.
 
 ## Next Phase Readiness
