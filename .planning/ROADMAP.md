@@ -53,14 +53,14 @@ Archive: [milestones/v3.4-ROADMAP.md](milestones/v3.4-ROADMAP.md)
 
 **Requirements:** REQ-001..037, REQ-050..060, REQ-106..108
 
-**Plans:** 4/6 plans executed
+**Plans:** 5/6 plans executed
 
 Plans:
 - [x] 139-01-PLAN.md — Config schema, broker public types, and TOFU hash helpers
 - [x] 139-02-PLAN.md — Registry utilities, error taxonomy, and macro CallToolResult coercion
 - [x] 139-03-PLAN.md — Stdio BrokerClient lifecycle and public broker orchestration
 - [x] 139-04-PLAN.md — Agent-loop and macro broker dispatch seams
-- [ ] 139-05-PLAN.md — Phase A E2E and directed scenario coverage
+- [x] 139-05-PLAN.md — Phase A E2E and directed scenario coverage
 - [ ] 139-06-PLAN.md — Phase A YAML scenarios and validation record
 
 **Success criteria:**

@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: in_progress
-stopped_at: Completed 139-04-PLAN.md
-last_updated: "2026-05-18T02:01:27.839Z"
-last_activity: 2026-05-18 — Completed 139-04 agent-loop and macro broker dispatch seams
+stopped_at: Completed 139-05-PLAN.md
+last_updated: "2026-05-18T02:19:44.118Z"
+last_activity: 2026-05-18 — Completed 139-05 Phase A E2E and directed broker coverage
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
-  percent: 67
+  completed_plans: 5
+  percent: 83
 ---
 
 # FlashQuery Core — State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 ## Current Position
 
 Phase: 139 — Broker Foundation, Registry, And Dispatch
-Plan: 04 — Agent-loop and macro broker dispatch seams
-Status: Phase 139 in progress; 139-04 complete
-Last activity: 2026-05-18 — Completed 139-04 agent-loop and macro broker dispatch seams
+Plan: 05 — Phase A E2E and directed scenario coverage
+Status: Phase 139 in progress; 139-05 complete
+Last activity: 2026-05-18 — Completed 139-05 Phase A E2E and directed broker coverage
 
 ## Performance Metrics
 
@@ -131,6 +131,7 @@ Last activity: 2026-05-18 — Completed 139-04 agent-loop and macro broker dispa
 | Phase 139 P02 | 5m23s | 3 tasks | 6 files |
 | Phase 139 P03 | 28m43s | 3 tasks | 10 files |
 | Phase 139 P04 | 13m34s | 5 tasks | 14 files |
+| Phase 139 P05 | 14m12s | 2 tasks | 5 files |
 
 ## Decisions
 
@@ -244,6 +245,8 @@ Last activity: 2026-05-18 — Completed 139-04 agent-loop and macro broker dispa
 - [Phase 139]: 139-04 McpBroker.listToolsForConsumer connects only consumer-visible servers before returning brokered tool definitions.
 - [Phase 139]: 139-04 Brokered dispatch seams adapt raw CallToolResult at the consumer boundary: LLM wraps content, macro coerces success values.
 - [Phase 139]: 139-04 Brokered tool_calls trace entries store only server, tool, count, and resolved cost.
+- [Phase 139]: 139-05 Public call_macro broker dispatch uses the MCP session ID as trace ID so brokered tool_calls cost snapshots are observable.
+- [Phase 139]: 139-05 Directed Phase A broker scenarios force a dedicated managed server to inject stdio fixture mcp_servers config.
 
 ## Accumulated Context
 
@@ -357,8 +360,8 @@ Last activity: 2026-05-18 — Completed 139-04 agent-loop and macro broker dispa
 
 ## Session Continuity
 
-Last session: 2026-05-18T02:01:27.813Z
-Stopped at: Completed 139-04-PLAN.md
+Last session: 2026-05-18T02:19:44.087Z
+Stopped at: Completed 139-05-PLAN.md
 Resume: None
 
 ## Deferred Items
