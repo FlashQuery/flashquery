@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: verifying
-stopped_at: Completed 140-04-PLAN.md
+stopped_at: Completed 140-06-PLAN.md
 last_updated: "2026-05-18T14:48:41.329Z"
 last_activity: 2026-05-18
 progress:
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 
 ## Current Position
 
-Phase: 140 (tofu-schema-pinning-and-tool-list-change-handling) — EXECUTING
+Phase: 140 (tofu-schema-pinning-and-tool-list-change-handling) — VERIFYING
 Plan: 6 of 6
 Status: Phase complete — ready for verification
 Last activity: 2026-05-18
@@ -382,7 +382,7 @@ Last activity: 2026-05-18
 ## Session Continuity
 
 Last session: 2026-05-18T14:47:55.622Z
-Stopped at: Completed 140-04-PLAN.md
+Stopped at: Completed 140-06-PLAN.md
 Resume: None
 
 ## Deferred Items

@@ -25,8 +25,8 @@ All commands were run from the FlashQuery repo root on 2026-05-18 with
 | Unit | `npm test -- --run tests/unit/mcp-broker-diff.test.ts tests/unit/mcp-broker-tofu.test.ts tests/unit/mcp-broker-registry.test.ts tests/unit/macro-termination.test.ts tests/unit/macro-registry.test.ts tests/unit/macro-coerce.test.ts` | PASS | 6 files, 53 tests passed. |
 | Integration | `npm run test:integration -- --run tests/integration/mcp-broker/client-lifecycle.test.ts tests/integration/mcp-broker/tofu-list-changed.test.ts tests/integration/mcp-broker/dispatch.test.ts` | PASS | 3 files, 37 tests passed. |
 | E2E | `npm run test:e2e -- --run tests/e2e/mcp-broker.e2e.test.ts` | PASS | 1 file, 2 tests passed. |
-| Directed | `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_mcp_broker_phase_b` | PASS | 1 test, 4/4 steps, `RESIDUE: 0`; report `tests/scenarios/directed/reports/scenario-report-2026-05-18-114324.md`. The shared DB cleanup helper timed out before and after the run, matching the known 140-05 behavior, but the scenario passed and left no residue. |
-| YAML | `python3 tests/scenarios/integration/run_integration.py --managed tofu_drift_yaml_workflow` | PASS | 1/1 YAML tests passed, 4/4 steps; report `tests/scenarios/integration/reports/integration-report-2026-05-18-114447.md`. |
+| Directed | `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_mcp_broker_phase_b` | PASS | 1 test, 4/4 steps, `RESIDUE: 0`; report `tests/scenarios/directed/reports/scenario-report-2026-05-18-115230.md`. The shared DB cleanup helper timed out before and after the run, matching the known 140-05 behavior, but the scenario passed and left no residue. |
+| YAML | `python3 tests/scenarios/integration/run_integration.py --managed tofu_drift_yaml_workflow` | PASS | 1/1 YAML tests passed, 4/4 steps; report `tests/scenarios/integration/reports/integration-report-2026-05-18-115356.md`. |
 | Build | `npm run build` | PASS | `tsup` ESM and DTS builds completed successfully. |
 
 No integration or E2E gate skipped. Supabase credentials were present in
@@ -93,7 +93,7 @@ No integration or E2E gate skipped. Supabase credentials were present in
 | `tests/e2e/mcp-broker.e2e.test.ts` | Covers T-E-B1. |
 | `tests/scenarios/directed/testcases/test_mcp_broker_phase_b.py` | Covers T-S-003, T-S-004, T-S-005, and T-S-017 through MCB-03, MCB-04, MCB-05, and MCB-17. |
 | `tests/scenarios/integration/tests/tofu_drift_yaml_workflow.yml` | Covers T-Y-012 / INT-MCB-12. |
-| `tests/scenarios/integration/INTEGRATION_COVERAGE.md` | Registers INT-MCB-12. |
+| `tests/scenarios/integration/INTEGRATION_COVERAGE.md` | Registers INT-MCB-12 with `tofu_drift_yaml_workflow`. |
 
 ## Validation Sign-Off
 
