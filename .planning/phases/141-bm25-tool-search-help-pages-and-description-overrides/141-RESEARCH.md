@@ -437,17 +437,23 @@ const helpPageBody = file.content;
 | A3 | Production `build` should clear/swap internal state to satisfy idempotence. | Common Pitfalls | Alternative implementation can still pass if it deduplicates all existing keys correctly. |
 | A4 | Native output server should be mapped to `flashquery` exactly. | Common Pitfalls | If canonical docs later choose another value, tests/envelopes must change. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should Phase 141 implement host index lifecycle now or only expose the API for Phase 142?**
    - What we know: REQ-087 is listed in Phase 141, while ROADMAP Phase 142 also includes host surface work. [CITED: ROADMAP.md] [CITED: MCP Broker Requirements §7.12]
    - What's unclear: whether host `fq.search_tools` should be externally callable before Phase 142 brokered host registration lands. [ASSUMED]
-   - Recommendation: implement host-capable index manager and test FQ-native-only host search now; leave brokered host exposure assertions that require host broker tools to Phase 142 unless canonical docs demand otherwise. [ASSUMED]
+   - RESOLVED: Phase 141 plans now implement concrete host index lifecycle for REQ-087. Plan 141-06 builds a host index when `host.tool_search: enabled`, includes FQ-native plus host-visible brokered tools, and tests host-visible `list_changed` updates through T-I-038, T-I-039, and T-I-040. Phase 142 can still own broader host brokered registration work, but host search indexing is not deferred.
 
 2. **Should `.tool.md` cover removed-status legacy metadata entries?**
    - What we know: actual registered native catalog has 29 tools and excludes removed legacy names; metadata file still lists removed names for migration evidence. [VERIFIED: command output] [VERIFIED: codebase grep]
    - What's unclear: REQ-089 says every FQ-native tool, which should mean registered tools rather than historical removed metadata. [CITED: MCP Broker Requirements §7.13]
-   - Recommendation: require `.tool.md` for registered native catalog entries plus `search_tools`; do not write pages for removed, unregistered legacy names. [ASSUMED]
+   - RESOLVED: Phase 141 requires `.tool.md` pages for every registered FQ-native tool plus `search_tools`. Removed-status legacy metadata entries that are not registered native tools are excluded.
+
+3. **When should startup enforcement run relative to help-page creation?**
+   - RESOLVED: Plan 141-02 is loader/validator-only. Plans 141-04, 141-09, and 141-10 author the help-page corpus in focused batches. Plan 141-11 runs startup/catalog enforcement only after those page batches complete, preventing premature `createMcpServer` failures.
+
+4. **How should canonical MCP Broker docs be prioritized during execution?**
+   - RESOLVED: Every implementation/test plan task includes both MCP Broker canonical docs in `<read_first>`. Executors must treat those docs as higher priority than generated plan text and mention conflicts in SUMMARY.md.
 
 ## Environment Availability
 
