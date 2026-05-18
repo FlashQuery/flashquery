@@ -64,14 +64,14 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [x] **REQ-039**: TOFU storage is in-memory and FlashQuery-process-scoped.
 - [x] **REQ-040**: First observation of a `(server, tool)` pair is silently trusted.
 - [x] **REQ-041**: Hash mismatch on subsequent observation triggers re-approval.
-- [ ] **REQ-042**: Re-approval payload carries old schema, new schema, and diff summary.
-- [ ] **REQ-043**: Approval replaces the hash and re-adds the tool to the indexer.
-- [ ] **REQ-044**: Rejection preserves the old hash and removes the tool from the registry.
+- [x] **REQ-042**: Re-approval payload carries old schema, new schema, and diff summary.
+- [x] **REQ-043**: Approval replaces the hash and re-adds the tool to the indexer.
+- [x] **REQ-044**: Rejection preserves the old hash and removes the tool from the registry.
 - [x] **REQ-045**: `notifications/tools/list_changed` supports bulk re-approval.
-- [ ] **REQ-046**: Every TOFU approval or rejection is audit-logged.
+- [x] **REQ-046**: Every TOFU approval or rejection is audit-logged.
 - [x] **REQ-047**: TOFU map entries are retained when tools are removed.
 - [x] **REQ-048**: No re-approval prompt rate limiting exists in v1.
-- [ ] **REQ-049**: If no interactive chat session exists, schema drift records an event, blocks the tool, and does not prompt.
+- [x] **REQ-049**: If no interactive chat session exists, schema drift records an event, blocks the tool, and does not prompt.
 - [x] **REQ-058**: Sampling capability is not advertised or handled.
 - [x] **REQ-059**: Elicitation capability is not advertised or handled.
 - [x] **REQ-060**: Brokered tools cannot trigger `needs_user_input` in v1.
@@ -95,7 +95,7 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [ ] **REQ-067**: Host-invoked macros inherit the host trace scope.
 - [x] **REQ-068**: Rejected reverse requests are audit-logged.
 - [ ] **REQ-069**: `search_tools` invocations are audit-logged.
-- [ ] **REQ-070**: TOFU approvals and rejections are audit-logged.
+- [x] **REQ-070**: TOFU approvals and rejections are audit-logged.
 
 ### Diagnostic CLI
 
@@ -142,7 +142,7 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 - [ ] **REQ-103**: `_self` engine binding is available for `source_ref` macros.
 - [ ] **REQ-104**: `continue` and `break` loop-control statements are supported.
-- [ ] **REQ-105**: `needs_user_input` macro exit reason is supported.
+- [x] **REQ-105**: `needs_user_input` macro exit reason is supported.
 - [x] **REQ-106**: `CallToolResult` coercion rule includes the `isError` carve-out.
 - [x] **REQ-107**: Brokered-tool errors propagate fail-fast by default.
 - [x] **REQ-108**: Macro object arguments pass through without coercion.
