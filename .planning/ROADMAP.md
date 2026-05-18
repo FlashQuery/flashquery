@@ -127,11 +127,11 @@ Plans:
 
 **Requirements:** REQ-005..010, REQ-031, REQ-035, REQ-065..067, REQ-113..118
 
-**Plans:** 1/6 plans executed
+**Plans:** 2/6 plans executed
 
 Plans:
 - [x] 142-01-PLAN.md — Host config defaults and shared registry filtering tests
-- [ ] 142-02-PLAN.md — Host brokered tool registration, dispatch, and drift bundling
+- [x] 142-02-PLAN.md — Host brokered tool registration, dispatch, and drift bundling
 - [ ] 142-03-PLAN.md — Brokered trace metadata and nested ConsumerContext inheritance
 - [ ] 142-04-PLAN.md — Host search plus shared lazy-spawn and TOFU integration
 - [ ] 142-05-PLAN.md — Phase D directed and YAML scenario gates

@@ -91,7 +91,7 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [x] **REQ-063**: Indexer updates from `list_changed` are synchronous in the notification handler.
 - [x] **REQ-064**: Diff classification utility is reusable.
 - [ ] **REQ-065**: Per-`call_model` trace records gain a `tool_calls` array.
-- [ ] **REQ-066**: Host-initiated brokered calls also produce `tool_calls` entries.
+- [x] **REQ-066**: Host-initiated brokered calls also produce `tool_calls` entries.
 - [ ] **REQ-067**: Host-invoked macros inherit the host trace scope.
 - [x] **REQ-068**: Rejected reverse requests are audit-logged.
 - [ ] **REQ-069**: `search_tools` invocations are audit-logged.

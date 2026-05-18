@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: executing
-stopped_at: Completed 142-01-PLAN.md
-last_updated: "2026-05-18T19:49:05.287Z"
+stopped_at: Completed 142-02-PLAN.md
+last_updated: "2026-05-18T20:01:08.278Z"
 last_activity: 2026-05-18
 progress:
   total_phases: 5
   completed_phases: 3
   total_plans: 29
-  completed_plans: 24
+  completed_plans: 25
   percent: 60
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 ## Current Position
 
 Phase: 142 (host-surface-and-consumer-context) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-05-18
 
@@ -141,11 +141,15 @@ Last activity: 2026-05-18
 | Phase 140 P05 | 26m13s | 2 tasks | 8 files |
 | Phase 140 P06 | 9m12s | 2 tasks | 3 files |
 | Phase 142 P01 | 3m02s | 2 tasks | 4 files |
+| Phase 142 P02 | 8m | 2 tasks | 7 files |
 
 ## Decisions
 
 - [Phase 142]: 142-01 treated task-level tdd markers as contract-pin coverage because the config and registry behavior already existed; no production implementation was needed.
 - [Phase 142]: 142-01 kept host.mcp_servers and host_mcp_tools assertions separate to preserve the source spec's additive host-surface model.
+- [Phase 142]: 142-02 host brokered tools register through an uncataloged SDK path so they appear on host tools/list without becoming FQ-native catalog entries or requiring .tool.md metadata.
+- [Phase 142]: 142-02 host registration converts broker JSON Schema into SDK-compatible Zod raw shapes at the MCP boundary while preserving BrokeredTool input schemas in broker state.
+- [Phase 142]: 142-02 host brokered trace cost is recorded only after Broker.callTool returns, including upstream isError results, and not for thrown broker failures.
 - [Phase 136]: 136-01 Wave 0 tests intentionally remain RED until `src/macro/task-registry.ts` and dedicated cancellation behavior land.
 - [Phase 136]: 136-01 existing T-U-125 `list_tasks` coverage was extended with a real `MacroTaskRegistry` provider contract.
 - Kept template rendering inside src/llm/reference-resolver.ts and reused resolveAndBuildDocument for document params.
@@ -385,8 +389,8 @@ Last activity: 2026-05-18
 
 ## Session Continuity
 
-Last session: 2026-05-18T19:49:05.249Z
-Stopped at: Completed 142-01-PLAN.md
+Last session: 2026-05-18T20:01:08.255Z
+Stopped at: Completed 142-02-PLAN.md
 Resume: None
 
 ## Deferred Items
