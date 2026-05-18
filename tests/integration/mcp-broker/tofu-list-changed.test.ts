@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Tool } from '@modelcontextprotocol/sdk/types.js';
@@ -416,6 +417,9 @@ describe('mcp broker TOFU list_changed integration', () => {
     });
     expect(firstTool?.tofuHash).toBe(hashToolSchema({ name: upstream.name, description: upstream.description, inputSchema: upstream.inputSchema }));
     expect(secondTool?.tofuHash).toBe(firstTool?.tofuHash);
+    expect(hashToolSchema({ name: upstream.name, description: undefined, inputSchema: upstream.inputSchema })).toBe(
+      hashToolSchema({ name: upstream.name, description: null as unknown as undefined, inputSchema: upstream.inputSchema })
+    );
     expect(first.broker.getPendingSchemaDrift()).toEqual([]);
     expect(second.broker.getPendingSchemaDrift()).toEqual([]);
   });
@@ -450,6 +454,15 @@ describe('mcp broker TOFU list_changed integration', () => {
     });
     expect(plainTool?.tofuHash).toBe(overriddenTool?.tofuHash);
     expect(withoutOverride.broker.getPendingSchemaDrift()).toEqual([]);
+  });
+
+  it('REQ-101 and REQ-102 keep TOFU hash call sites pinned to upstream schema fields', () => {
+    const brokerIndexSource = readFileSync(resolve('src/services/mcp-broker/index.ts'), 'utf8');
+    const registrySource = readFileSync(resolve('src/services/mcp-broker/registry.ts'), 'utf8');
+
+    expect(brokerIndexSource).toContain('description: tool.upstreamDescription ?? tool.description');
+    expect(brokerIndexSource).not.toContain('description: registered.description');
+    expect(registrySource).toContain('upstreamDescription');
   });
 
   it('T-I-032b autonomous drift records blocked_on_user and emits no needs_user_input prompt', async () => {
