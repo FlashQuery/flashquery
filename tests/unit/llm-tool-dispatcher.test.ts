@@ -180,7 +180,15 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
     }));
 
     expect(getBrokeredToolCallTraceSnapshot('trace-dispatch-cost')).toEqual([
-      { server: 'basic', tool: 'echo', count: 2, cost: 0.02 },
+      {
+        server: 'basic',
+        tool: 'echo',
+        count: 2,
+        cost: 0.02,
+        consumer_kind: 'purpose',
+        purpose_id: 'research',
+        trace_id: 'trace-dispatch-cost',
+      },
     ]);
     expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-dispatch-cost'))).not.toContain('arg-secret');
     expect(JSON.stringify(getBrokeredToolCallTraceSnapshot('trace-dispatch-cost'))).not.toContain('result-payload');
@@ -195,7 +203,15 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
       consumerContext: { kind: 'purpose', purposeId: 'research', traceId: 'trace-dispatch-zero-cost' } satisfies ConsumerContext,
     }));
     expect(getBrokeredToolCallTraceSnapshot('trace-dispatch-zero-cost')).toEqual([
-      { server: 'basic', tool: 'echo', count: 1, cost: 0 },
+      {
+        server: 'basic',
+        tool: 'echo',
+        count: 1,
+        cost: 0,
+        consumer_kind: 'purpose',
+        purpose_id: 'research',
+        trace_id: 'trace-dispatch-zero-cost',
+      },
     ]);
   });
 

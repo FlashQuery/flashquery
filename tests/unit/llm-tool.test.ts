@@ -1660,6 +1660,56 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     }
   });
 
+  it('[REQ-065] Mode 2 trace metadata includes empty tool_calls when no brokered tools ran', async () => {
+    vi.mocked(executeAgentLoop).mockResolvedValue({
+      response: 'final loop answer',
+      messages: [],
+      metadata: {
+        resolver: 'purpose',
+        name: 'documented',
+        resolved_model_name: 'fast',
+        provider_name: 'openai',
+        fallback_position: 1,
+        tokens: { input: 12, output: 8 },
+        cost_usd: 0.0000066,
+        latency_ms: 90,
+        tools: {
+          native_tool_names: ['get_document'],
+          diagnostics: {},
+          stop_reason: 'final_response',
+          iterations: 1,
+          calls_log: [],
+          aggregate_usage: { tokens: { input: 12, output: 8 }, cost_usd: 0.0000066, latency_ms: 90 },
+        },
+      },
+    });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      chatByPurpose: vi.fn(),
+      chatByPurposeUnrecorded: vi.fn(),
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'documented',
+      messages: [{ role: 'user', content: 'Read the document.' }],
+      trace_id: 'trace-loop-empty-tools',
+    });
+
+    expect(result.isError).toBeUndefined();
+    const envelope = JSON.parse(result.content[0].text) as { metadata: { tool_calls?: unknown[] } };
+    expect(envelope.metadata.tool_calls).toEqual([]);
+  });
+
   it('[LOOP-07] Mode 2 return_messages true prepends hydrated host messages and removes tool message names', async () => {
     vi.mocked(executeAgentLoop).mockResolvedValue({
       response: 'final loop answer',
