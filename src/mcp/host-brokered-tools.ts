@@ -1,6 +1,8 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { z } from 'zod';
 import type { FlashQueryConfig } from '../config/loader.js';
+import { registerUncatalogedTool } from './tool-catalog.js';
 import {
   formatToolError,
   recordBrokeredToolCall,
@@ -34,6 +36,25 @@ function hostContext(traceId: string | undefined): ConsumerContext {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function resolveSessionId(extra: unknown): string | undefined {
+  if (!isRecord(extra)) return undefined;
+  for (const key of ['sessionId', 'session_id', 'transportSessionId']) {
+    const value = extra[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  for (const key of ['session', 'transport', 'requestInfo']) {
+    const nested = extra[key];
+    if (!isRecord(nested)) continue;
+    const value = nested['id'] ?? nested['sessionId'] ?? nested['session_id'];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return undefined;
+}
+
 function sameServerDrifts(drifts: TofuDriftPayload[], serverId: string): TofuDriftPayload[] {
   return drifts.filter((drift) => drift.server === serverId);
 }
@@ -53,6 +74,30 @@ function findVisibleTool(tools: BrokeredTool[], registryKey: string): BrokeredTo
   return tools.find((tool) => tool.registryKey === registryKey);
 }
 
+function zodSchemaForJsonSchema(schema: unknown): z.ZodTypeAny {
+  if (!isRecord(schema)) return z.unknown();
+  const type = schema['type'];
+  if (Array.isArray(type)) return z.unknown();
+  if (type === 'string') return z.string();
+  if (type === 'number') return z.number();
+  if (type === 'integer') return z.number().int();
+  if (type === 'boolean') return z.boolean();
+  if (type === 'array') return z.array(zodSchemaForJsonSchema(schema['items']));
+  if (type === 'object') return z.object(zodRawShapeForJsonSchema(schema));
+  return z.unknown();
+}
+
+function zodRawShapeForJsonSchema(schema: unknown): z.ZodRawShape {
+  if (!isRecord(schema) || !isRecord(schema['properties'])) return {};
+  const required = new Set(Array.isArray(schema['required']) ? schema['required'].filter((item) => typeof item === 'string') : []);
+  return Object.fromEntries(
+    Object.entries(schema['properties']).map(([key, value]) => {
+      const propertySchema = zodSchemaForJsonSchema(value);
+      return [key, required.has(key) ? propertySchema : propertySchema.optional()];
+    })
+  );
+}
+
 export async function registerHostBrokeredTools(
   server: McpServer,
   options: RegisterHostBrokeredToolsOptions
@@ -63,14 +108,15 @@ export async function registerHostBrokeredTools(
   const tools = await options.broker.listToolsForConsumer(initialContext);
 
   for (const tool of tools) {
-    server.registerTool(
+    registerUncatalogedTool(
+      server,
       tool.registryKey,
       {
         ...(tool.description === undefined ? {} : { description: tool.description }),
-        inputSchema: tool.inputSchema,
-      } as never,
+        inputSchema: zodRawShapeForJsonSchema(tool.inputSchema),
+      },
       (async (args: unknown, extra: unknown) => {
-        const ctx = hostContext(options.traceIdProvider?.(extra));
+        const ctx = hostContext(options.traceIdProvider?.(extra) ?? resolveSessionId(extra));
         const visibleTools = await options.broker.listToolsForConsumer(ctx);
         const visibleTool = findVisibleTool(visibleTools, tool.registryKey);
         if (visibleTool === undefined) {

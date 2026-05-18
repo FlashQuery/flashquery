@@ -16,6 +16,7 @@ type ToolCatalogOptions = {
 
 const toolCatalogs = new WeakMap<McpServer, NativeToolDefinition[]>();
 const wrappedServers = new WeakSet<McpServer>();
+const uncatalogedRegisterTool = new WeakMap<McpServer, RegisterToolFunction>();
 
 export function createNativeToolCatalog(): NativeToolDefinition[] {
   return [];
@@ -34,6 +35,7 @@ export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalo
 
   const catalog = getNativeToolCatalog(server);
   const originalRegisterTool = server.registerTool.bind(server);
+  uncatalogedRegisterTool.set(server, originalRegisterTool as RegisterToolFunction);
 
   // Preserve the SDK call surface exactly while recording the full native
   // catalog. Host exposure filters SDK registration, not macro/agent dispatch
@@ -60,4 +62,14 @@ export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalo
 
   wrappedServers.add(server);
   return server;
+}
+
+export function registerUncatalogedTool(
+  server: McpServer,
+  name: string,
+  config: ToolRegistrationConfig,
+  cb: unknown
+): unknown {
+  const registerTool = uncatalogedRegisterTool.get(server) ?? server.registerTool.bind(server);
+  return registerTool(name, config as never, cb as never);
 }

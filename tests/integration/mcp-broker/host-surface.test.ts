@@ -149,9 +149,12 @@ describe('mcp broker host surface integration', () => {
         host: { mcpServers: ['basic'], toolSearch: 'disabled' },
       }),
       async (client) => {
-        await expect(
-          client.callTool({ name: 'hidden__echo', arguments: { value: 'blocked' } })
-        ).rejects.toThrow(/not found|Method not found|Unknown tool/i);
+        const result = await client.callTool({
+          name: 'hidden__echo',
+          arguments: { value: 'blocked' },
+        }) as CallToolResult;
+        expect(result.isError).toBe(true);
+        expect(textOf(result)).toMatch(/not found|Method not found|Unknown tool/i);
         expect(getBrokeredToolCallTraceSnapshot('trace-host-surface')).toEqual([]);
       }
     );

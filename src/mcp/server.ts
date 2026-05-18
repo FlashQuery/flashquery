@@ -22,6 +22,7 @@ import { registerLlmTools } from './tools/llm.js';
 import { registerLlmUsageTools } from './tools/llm-usage.js';
 import { registerMacroTools } from './tools/macro.js';
 import { createBroker, type Broker } from '../services/mcp-broker.js';
+import { registerHostBrokeredTools } from './host-brokered-tools.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from './tool-catalog.js';
 import { validateAndCacheNativeToolSchemas } from '../llm/tool-registry.js';
 import { getResolvedHostToolExposure, type FlashQueryConfig } from '../config/loader.js';
@@ -467,6 +468,7 @@ export function createAuthorizeHandler(config: FlashQueryConfig) {
  */
 export interface CreateMcpServerOptions {
   broker?: Broker;
+  hostTraceIdProvider?: (extra: unknown) => string | undefined;
 }
 
 const hostToolSearchServices = new WeakMap<McpServer, ToolSearchService>();
@@ -535,12 +537,19 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   hostToolSearchServices.set(server, hostToolSearchService);
   hostToolSearchInitializers.set(
     server,
-    hostToolSearchService.buildForHost({
-      nativeToolCatalog: catalog,
-      nativeToolNames: [...hostEnabledToolNames],
-      ...(hostBrokerToolSearchEnabled ? { broker } : {}),
-      toolMeta,
-    })
+    (async () => {
+      await hostToolSearchService.buildForHost({
+        nativeToolCatalog: catalog,
+        nativeToolNames: [...hostEnabledToolNames],
+        ...(hostBrokerToolSearchEnabled ? { broker } : {}),
+        toolMeta,
+      });
+      await registerHostBrokeredTools(server, {
+        broker,
+        hostConfig,
+        traceIdProvider: options.hostTraceIdProvider,
+      });
+    })()
   );
   return server;
 }
