@@ -35,7 +35,7 @@ export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalo
 
   const catalog = getNativeToolCatalog(server);
   const originalRegisterTool = server.registerTool.bind(server);
-  uncatalogedRegisterTool.set(server, originalRegisterTool as RegisterToolFunction);
+  uncatalogedRegisterTool.set(server, originalRegisterTool);
 
   // Preserve the SDK call surface exactly while recording the full native
   // catalog. Host exposure filters SDK registration, not macro/agent dispatch

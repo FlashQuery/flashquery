@@ -130,7 +130,14 @@ describe('mcp broker host surface integration', () => {
 
       expect(JSON.parse(textOf(result))).toEqual({ value: { phrase: 'host-ok', count: 2 } });
       expect(getBrokeredToolCallTraceSnapshot('trace-host-surface')).toEqual([
-        { server: 'basic', tool: 'echo', count: 1, cost: 0.75 },
+        {
+          server: 'basic',
+          tool: 'echo',
+          count: 1,
+          cost: 0.75,
+          consumer_kind: 'host',
+          trace_id: 'trace-host-surface',
+        },
       ]);
     });
   });

@@ -115,7 +115,7 @@ export async function registerHostBrokeredTools(
         ...(tool.description === undefined ? {} : { description: tool.description }),
         inputSchema: zodRawShapeForJsonSchema(tool.inputSchema),
       },
-      (async (args: unknown, extra: unknown) => {
+      async (args: unknown, extra: unknown) => {
         const ctx = hostContext(options.traceIdProvider?.(extra) ?? resolveSessionId(extra));
         const visibleTools = await options.broker.listToolsForConsumer(ctx);
         const visibleTool = findVisibleTool(visibleTools, tool.registryKey);
@@ -149,7 +149,7 @@ export async function registerHostBrokeredTools(
           );
           return textResult(normalized.message, true);
         }
-      }) as never
+      }
     );
   }
 }
