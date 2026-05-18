@@ -108,6 +108,18 @@ async function waitForCondition(predicate: () => boolean, timeoutMs = 1000): Pro
   throw new Error('Timed out waiting for condition.');
 }
 
+function quirkyServerConfig(initialTools: Tool[], laterTools: Tool[]): BrokerClientConfig {
+  return config({
+    serverId: 'quirky',
+    args: ['--import', 'tsx', quirkyServer],
+    env: {
+      QUIRK_INITIAL_TOOLS: JSON.stringify(initialTools),
+      QUIRK_LATER_TOOLS: JSON.stringify(laterTools),
+      QUIRK_EMIT_LIST_CHANGED_MS: '25',
+    },
+  });
+}
+
 describe('mcp broker client lifecycle integration', () => {
   it('T-I-001 lazily spawns on first reference and shuts down the child', async () => {
     const client = trackClient();
@@ -312,6 +324,102 @@ describe('mcp broker client lifecycle integration', () => {
 
     expect(changedSnapshots).toEqual([{ serverId: 'quirky', toolNames: ['before', 'after'] }]);
     expect((await client.listTools()).map((tool) => tool.toolName)).toEqual(['before', 'after']);
+  });
+
+  it('T-I-005 registers and indexes a new tool from list_changed synchronously', async () => {
+    const addedTools: string[][] = [];
+    const removedKeys: string[][] = [];
+    const broker = createBroker({
+      mcpServers: {
+        quirky: quirkyServerConfig([toolSnapshot('first')], [toolSnapshot('first'), toolSnapshot('second')]),
+      },
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [] },
+      indexSink: {
+        addTools: (tools) => addedTools.push(tools.map((tool) => tool.registryKey)),
+        removeTools: (keys) => removedKeys.push(keys),
+      },
+    });
+    brokers.push(broker);
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual(['quirky__first']);
+    await waitForCondition(() => addedTools.some((keys) => keys.includes('quirky__second')));
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey).sort()).toEqual([
+      'quirky__first',
+      'quirky__second',
+    ]);
+    expect(removedKeys.flat()).not.toContain('quirky__second');
+  });
+
+  it('T-I-006 removes a changed tool from registry and index sink immediately', async () => {
+    const removedKeys: string[][] = [];
+    const broker = createBroker({
+      mcpServers: {
+        quirky: quirkyServerConfig([toolSnapshot('mutable', ['value'])], [toolSnapshot('mutable', ['value', 'token'])]),
+      },
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [] },
+      indexSink: {
+        addTools: () => undefined,
+        removeTools: (keys) => removedKeys.push(keys),
+      },
+    });
+    brokers.push(broker);
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual(['quirky__mutable']);
+    await waitForCondition(() => removedKeys.some((keys) => keys.includes('quirky__mutable')));
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual([]);
+  });
+
+  it('T-I-007 removes a removed tool from registry and index sink while keeping unchanged tools callable', async () => {
+    const removedKeys: string[][] = [];
+    const broker = createBroker({
+      mcpServers: {
+        quirky: quirkyServerConfig([toolSnapshot('kept'), toolSnapshot('removed')], [toolSnapshot('kept')]),
+      },
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [] },
+      indexSink: {
+        addTools: () => undefined,
+        removeTools: (keys) => removedKeys.push(keys),
+      },
+    });
+    brokers.push(broker);
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey).sort()).toEqual([
+      'quirky__kept',
+      'quirky__removed',
+    ]);
+    await waitForCondition(() => removedKeys.some((keys) => keys.includes('quirky__removed')));
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual(['quirky__kept']);
+  });
+
+  it('T-I-018 stores multiple changed tools from one refresh as one bundled drift event', async () => {
+    const driftBundles: string[][] = [];
+    const broker = createBroker({
+      mcpServers: {
+        quirky: quirkyServerConfig(
+          [toolSnapshot('first', ['value']), toolSnapshot('second', ['value'])],
+          [toolSnapshot('first', ['value', 'token']), toolSnapshot('second', ['value', 'token'])]
+        ),
+      },
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [] },
+      onTofuDrift: (bundle) => driftBundles.push(bundle.changes.map((change) => change.tool).sort()),
+    });
+    brokers.push(broker);
+
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey).sort()).toEqual([
+      'quirky__first',
+      'quirky__second',
+    ]);
+    await waitForCondition(() => driftBundles.length === 1);
+
+    expect(driftBundles).toEqual([['first', 'second']]);
+    expect((await broker.listToolsForConsumer(ctx)).map((tool) => tool.registryKey)).toEqual([]);
   });
 
   it('public broker creates lazy clients, filters registry tools, returns raw CallToolResult, and shuts down', async () => {
