@@ -7,6 +7,24 @@ import {
   getBrokeredToolCallTraceSnapshot,
 } from '../../src/services/mcp-broker/trace.js';
 
+const toolMetaMock = vi.hoisted(() => ({
+  loadToolMeta: vi.fn(async () => new Map([
+    ['get_document', {
+      name: 'get_document',
+      description: 'Get a document. Pass {help: true}.',
+      helpHint: 'Get document help hint',
+      helpPageBody: 'GET_DOCUMENT_RAW_HELP_BODY',
+      tier: 'read-only',
+      args: { identifier: { type: 'string', required: true } },
+      filePath: 'src/mcp/tools/get_document.tool.md',
+    }],
+  ])),
+}));
+
+vi.mock('../../src/services/tool-search/tool-meta.js', () => ({
+  loadToolMeta: toolMetaMock.loadToolMeta,
+}));
+
 type ToolDispatcherModule = {
   dispatchToolCalls: (options: Record<string, unknown>) => Promise<{
     messages: Array<{ role: 'tool'; tool_call_id: string; content?: string; name?: never }>;
@@ -88,7 +106,58 @@ function makeBroker(tools: BrokeredTool[], callTool = vi.fn()): Broker {
   };
 }
 
+function countOccurrences(value: string, needle: string): number {
+  return value.split(needle).length - 1;
+}
+
 describe('TOOL-05 internal native tool dispatch contract', () => {
+  it('T-I-047 returns raw native help before schema validation and ignores other args', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const handler = vi.fn();
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [toolCall('get_document', { help: true, identifier: 123 })],
+      catalog: new Map([
+        ['get_document', { name: 'get_document', inputSchema: z.object({ identifier: z.string() }), handler }],
+      ]),
+    }));
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(result.messages[0].content).toBe(JSON.stringify({
+      ok: true,
+      result: { content: [{ type: 'text', text: 'GET_DOCUMENT_RAW_HELP_BODY' }] },
+    }));
+    expect(result.logEntries[0]).toMatchObject({
+      kind: 'native',
+      status: 'success',
+      arguments: { help: true, identifier: 123 },
+    });
+  });
+
+  it('T-I-047 rejects unknown or unexposed native names before native help lookup', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const beforeCalls = toolMetaMock.loadToolMeta.mock.calls.length;
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [
+        toolCall('get_document', { help: true }, 'call_hidden_help'),
+        toolCall('unknown_native', { help: true }, 'call_unknown_help'),
+      ],
+      nativeToolNames: ['unknown_native'],
+      catalog: new Map([
+        ['get_document', {
+          name: 'get_document',
+          inputSchema: z.object({ identifier: z.string() }),
+          handler: vi.fn(),
+        }],
+      ]),
+    }));
+
+    expect(toolMetaMock.loadToolMeta).toHaveBeenCalledTimes(beforeCalls);
+    expect(result.messages.map((message) => JSON.parse(message.content ?? '{}'))).toEqual([
+      expect.objectContaining({ ok: false, error: expect.objectContaining({ code: 'tool_not_in_registry' }) }),
+      expect.objectContaining({ ok: false, error: expect.objectContaining({ code: 'tool_not_in_registry' }) }),
+    ]);
+  });
+
   it('records brokered dispatcher tool_calls trace entries with resolved per-tool cost and no payload data', async () => {
     const { dispatchToolCalls } = await loadDispatcher();
     clearBrokeredToolCallTrace('trace-dispatch-cost');
@@ -225,6 +294,24 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
     expect(payload.error.message).not.toContain('help');
   });
 
+  it('T-I-029 forwards brokered help:true arguments unchanged', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const args = { help: true, value: 'ignored-by-upstream' };
+    const callTool = vi.fn(async () => ({
+      content: [{ type: 'text' as const, text: 'upstream help handling' }],
+    }));
+    const consumerContext: ConsumerContext = { kind: 'purpose', purposeId: 'research', traceId: 'trace-broker-help' };
+
+    await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [toolCall('basic__echo', args)],
+      nativeToolNames: [],
+      broker: makeBroker([brokeredTool()], callTool),
+      consumerContext,
+    }));
+
+    expect(callTool).toHaveBeenCalledWith({ serverId: 'basic', toolName: 'echo' }, args, consumerContext);
+  });
+
   it('TOOL-05 dispatches only tools in the immutable nativeToolNames snapshot', async () => {
     const { dispatchToolCalls } = await loadDispatcher();
     const result = await dispatchToolCalls(buildDispatcherOptions({
@@ -282,6 +369,18 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
     });
   });
 
+  it('T-I-048 appends the native help footer exactly once to validation errors', async () => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      toolCalls: [toolCall('get_document', { identifier: 123 })],
+    }));
+
+    const message = JSON.parse(result.messages[0].content ?? '{}').error.message as string;
+    const footer = 'For full documentation, examples, and parameter details, call `get_document` with `help: true`.';
+    expect(message).toContain(footer);
+    expect(countOccurrences(message, footer)).toBe(1);
+  });
+
   it('TOOL-05 passes NativeToolDispatchContext with AbortSignal, traceId, instanceId, logger, and log context to handlers', async () => {
     const { dispatchToolCalls } = await loadDispatcher();
     const controller = new AbortController();
@@ -331,6 +430,26 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
       ok: false,
       error: { code: expectedCode, recoverable: true },
     });
+  });
+
+  it.each([
+    ['handler isError true', { content: [{ type: 'text', text: 'bad input' }], isError: true }],
+    ['thrown error', new Error('boom')],
+  ])('T-I-048 appends the native help footer exactly once when %s', async (_label, handlerOutcome) => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const handler = handlerOutcome instanceof Error
+      ? vi.fn().mockRejectedValue(handlerOutcome)
+      : vi.fn().mockResolvedValue(handlerOutcome);
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      catalog: new Map([
+        ['get_document', { name: 'get_document', inputSchema: z.object({ identifier: z.string() }), handler }],
+      ]),
+    }));
+
+    const message = JSON.parse(result.messages[0].content ?? '{}').error.message as string;
+    const footer = 'For full documentation, examples, and parameter details, call `get_document` with `help: true`.';
+    expect(message).toContain(footer);
+    expect(countOccurrences(message, footer)).toBe(1);
   });
 
   it('TOOL-05 preserves successful sibling tool results when another sibling handler fails', async () => {
@@ -383,6 +502,26 @@ describe('TOOL-05 internal native tool dispatch contract', () => {
       ok: false,
       error: { code: reason, recoverable: true },
     });
+  });
+
+  it.each(['timeout', 'shutdown'])('T-I-048 appends the native help footer exactly once to %s abort errors', async (reason) => {
+    const { dispatchToolCalls } = await loadDispatcher();
+    const controller = new AbortController();
+    controller.abort(reason);
+    const result = await dispatchToolCalls(buildDispatcherOptions({
+      context: {
+        signal: controller.signal,
+        traceId: 'trace-abort',
+        instanceId: 'instance-abort',
+        logger: { debug: vi.fn() },
+        logContext: {},
+      } satisfies NativeToolDispatchContext,
+    }));
+
+    const message = JSON.parse(result.messages[0].content ?? '{}').error.message as string;
+    const footer = 'For full documentation, examples, and parameter details, call `get_document` with `help: true`.';
+    expect(message).toContain(footer);
+    expect(countOccurrences(message, footer)).toBe(1);
   });
 });
 

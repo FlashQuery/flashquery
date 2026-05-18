@@ -9,6 +9,7 @@ import {
   type Broker,
   type ConsumerContext,
 } from '../services/mcp-broker/index.js';
+import { loadToolMeta, type ToolMeta } from '../services/tool-search/tool-meta.js';
 import type {
   NativeToolDefinition,
   NativeToolDispatchContext,
@@ -86,6 +87,8 @@ interface ToolSuccessPayload {
   result: NativeToolResponse;
 }
 
+let toolMetaCache: Promise<Map<string, ToolMeta>> | null = null;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -153,6 +156,25 @@ function makeLogEntry(
 
 function makeTemplateReverseMap(options: DispatchToolCallsOptions): TemplateToolReverseMap {
   return options.templateReverseMap ?? new Map<string, string>();
+}
+
+async function getLoadedToolMeta(): Promise<Map<string, ToolMeta>> {
+  toolMetaCache ??= loadToolMeta();
+  return await toolMetaCache;
+}
+
+function isNativeHelpRequest(args: Record<string, unknown>): boolean {
+  return args.help === true;
+}
+
+function nativeHelpFooter(toolName: string): string {
+  return `For full documentation, examples, and parameter details, call \`${toolName}\` with \`help: true\`.`;
+}
+
+function appendNativeHelpFooter(message: string, toolName: string): string {
+  const footer = nativeHelpFooter(toolName);
+  if (message.includes(footer)) return message;
+  return `${message}\n\n${footer}`;
 }
 
 async function dispatchOneToolCall(
@@ -263,7 +285,11 @@ function dispatchError(
   details?: unknown,
   kind: NativeToolCallLogEntry['kind'] = 'native'
 ): NativeToolDispatchResult {
-  const payload = errorPayload(code, message, details);
+  const payload = errorPayload(
+    code,
+    kind === 'native' ? appendNativeHelpFooter(message, toolCall.function.name) : message,
+    details
+  );
   const content = stringifyPayload(payload);
   return {
     message: makeToolMessage(toolCall, content),
@@ -303,6 +329,20 @@ export async function dispatchNativeToolCall(options: DispatchNativeToolCallOpti
   const tool = catalogByName.get(toolName);
   if (!tool) {
     return dispatchError(options.toolCall, args, 'tool_not_in_registry', `Tool '${toolName}' is not in the native catalog.`);
+  }
+
+  if (isNativeHelpRequest(args)) {
+    const toolMeta = await getLoadedToolMeta();
+    const meta = toolMeta.get(toolName);
+    if (meta) {
+      const result: NativeToolResponse = { content: [{ type: 'text', text: meta.helpPageBody }] };
+      const payload: ToolSuccessPayload = { ok: true, result };
+      const content = stringifyPayload(payload);
+      return {
+        message: makeToolMessage(options.toolCall, content),
+        logEntry: makeLogEntry(options.toolCall, args, payload, content),
+      };
+    }
   }
 
   let parsedArgs: Record<string, unknown>;
