@@ -29,20 +29,20 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 ### Broker Foundation
 
-- [ ] **REQ-013**: Lazy spawn per server on first reference.
-- [ ] **REQ-014**: Per-server promise-lock prevents cold-spawn races.
-- [ ] **REQ-015**: Stdio transport is the only v1 transport.
-- [ ] **REQ-016**: `env` substitution from `process.env` is supported.
-- [ ] **REQ-017**: `tools/list` discovery runs on connect.
-- [ ] **REQ-018**: Per-call timeout defaults to 30 seconds and is configurable per server.
-- [ ] **REQ-019**: Shutdown grace timeout defaults to 5 seconds, then SIGKILL.
-- [ ] **REQ-020**: Process-death detection performs one restart attempt.
-- [ ] **REQ-021**: Client capabilities are `{}` with no advertised reverse-request capabilities.
-- [ ] **REQ-022**: Stderr is captured and surfaced on connect failure.
-- [ ] **REQ-023**: Stderr lines are not interleaved into responses.
-- [ ] **REQ-024**: Connection lifetime is session-scoped.
-- [ ] **REQ-025**: Reconnect within the same FlashQuery session preserves TOFU map state.
-- [ ] **REQ-026**: Server config change between FlashQuery starts resets TOFU for that server.
+- [x] **REQ-013**: Lazy spawn per server on first reference.
+- [x] **REQ-014**: Per-server promise-lock prevents cold-spawn races.
+- [x] **REQ-015**: Stdio transport is the only v1 transport.
+- [x] **REQ-016**: `env` substitution from `process.env` is supported.
+- [x] **REQ-017**: `tools/list` discovery runs on connect.
+- [x] **REQ-018**: Per-call timeout defaults to 30 seconds and is configurable per server.
+- [x] **REQ-019**: Shutdown grace timeout defaults to 5 seconds, then SIGKILL.
+- [x] **REQ-020**: Process-death detection performs one restart attempt.
+- [x] **REQ-021**: Client capabilities are `{}` with no advertised reverse-request capabilities.
+- [x] **REQ-022**: Stderr is captured and surfaced on connect failure.
+- [x] **REQ-023**: Stderr lines are not interleaved into responses.
+- [x] **REQ-024**: Connection lifetime is session-scoped.
+- [x] **REQ-025**: Reconnect within the same FlashQuery session preserves TOFU map state.
+- [x] **REQ-026**: Server config change between FlashQuery starts resets TOFU for that server.
 
 ### Registry And Dispatch
 
@@ -55,7 +55,7 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [ ] **REQ-033**: `tool-dispatcher.ts` routes brokered registry keys to `Broker.callTool`.
 - [ ] **REQ-034**: Brokered `CallToolResult` values are wrapped as `NativeToolResponse` for the agent loop.
 - [ ] **REQ-035**: Dispatch routing respects consumer visibility.
-- [ ] **REQ-036**: Concurrent brokered calls to the same server are safe.
+- [x] **REQ-036**: Concurrent brokered calls to the same server are safe.
 - [ ] **REQ-037**: Arguments pass through without engine-side type coercion.
 
 ### TOFU And Safety
@@ -72,9 +72,9 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [ ] **REQ-047**: TOFU map entries are retained when tools are removed.
 - [ ] **REQ-048**: No re-approval prompt rate limiting exists in v1.
 - [ ] **REQ-049**: If no interactive chat session exists, schema drift records an event, blocks the tool, and does not prompt.
-- [ ] **REQ-058**: Sampling capability is not advertised or handled.
-- [ ] **REQ-059**: Elicitation capability is not advertised or handled.
-- [ ] **REQ-060**: Brokered tools cannot trigger `needs_user_input` in v1.
+- [x] **REQ-058**: Sampling capability is not advertised or handled.
+- [x] **REQ-059**: Elicitation capability is not advertised or handled.
+- [x] **REQ-060**: Brokered tools cannot trigger `needs_user_input` in v1.
 
 ### Errors, Health, Notifications, And Observability
 
@@ -82,10 +82,10 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [x] **REQ-051**: `ToolErrorKind` discriminated union is the canonical taxonomy.
 - [x] **REQ-052**: `experimental_tasks_required` subkind is emitted when the SDK error matches the required regex.
 - [x] **REQ-053**: `raw` is stripped before any process-boundary egress.
-- [ ] **REQ-054**: `Broker.isConnected(serverId, opts)` is a live probe.
-- [ ] **REQ-055**: Default connection-health mode is deep probe.
-- [ ] **REQ-056**: Shallow probe is opt-in.
-- [ ] **REQ-057**: Future HTTP brokers use protocol-level `tools/list` no-op probing.
+- [x] **REQ-054**: `Broker.isConnected(serverId, opts)` is a live probe.
+- [x] **REQ-055**: Default connection-health mode is deep probe.
+- [x] **REQ-056**: Shallow probe is opt-in.
+- [x] **REQ-057**: Future HTTP brokers use protocol-level `tools/list` no-op probing.
 - [ ] **REQ-061**: Subscribe to `notifications/tools/list_changed` at every brokered server connect.
 - [ ] **REQ-062**: Diff routing handles new, changed, and removed tools.
 - [ ] **REQ-063**: Indexer updates from `list_changed` are synchronous in the notification handler.

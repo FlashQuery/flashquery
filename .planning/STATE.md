@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: in_progress
-stopped_at: Completed 139-02-PLAN.md
-last_updated: "2026-05-18T01:28:25.551Z"
-last_activity: 2026-05-18 — Completed 139-02 registry/errors/macro coercion foundation
+stopped_at: Completed 139-03-PLAN.md
+last_updated: "2026-05-18T01:43:23.583Z"
+last_activity: 2026-05-18 — Completed 139-03 stdio BrokerClient lifecycle and public broker orchestration
 progress:
   total_phases: 5
   completed_phases: 0
   total_plans: 6
-  completed_plans: 2
-  percent: 33
+  completed_plans: 3
+  percent: 50
 ---
 
 # FlashQuery Core — State
@@ -26,15 +26,15 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 ## Current Position
 
 Phase: 139 — Broker Foundation, Registry, And Dispatch
-Plan: 03 — Stdio BrokerClient lifecycle and public broker orchestration
-Status: Phase 139 in progress; 139-02 complete
-Last activity: 2026-05-18 — Completed 139-02 registry/errors/macro coercion foundation
+Plan: 04 — Agent-loop and macro broker dispatch seams
+Status: Phase 139 in progress; 139-03 complete
+Last activity: 2026-05-18 — Completed 139-03 stdio BrokerClient lifecycle and public broker orchestration
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 38 (this milestone)
+- Total plans completed: 39 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -129,6 +129,7 @@ Last activity: 2026-05-18 — Completed 139-02 registry/errors/macro coercion fo
 | Phase 138 P04 | 51m | 3 tasks | 35 files |
 | Phase 139 P01 | 5m05s | 2 tasks | 5 files |
 | Phase 139 P02 | 5m23s | 3 tasks | 6 files |
+| Phase 139 P03 | 28m43s | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -236,6 +237,9 @@ Last activity: 2026-05-18 — Completed 139-02 registry/errors/macro coercion fo
 - [Phase 139]: 139-02 ToolRegistry accepts structural config-shaped input and returns copy-on-read consumer-filtered views.
 - [Phase 139]: 139-02 McpError normalization uses structural code detection in addition to instanceof for SDK/runtime compatibility.
 - [Phase 139]: 139-02 Brokered macro CallToolResult coercion lives in src/macro/coerce.ts and checks isError before value binding.
+- [Phase 139]: 139-03 BrokerClient returns raw CallToolResult for protocol responses while lifecycle failures reject with NormalizedToolError.
+- [Phase 139]: 139-03 Unsupported reverse requests are audited with server ID, method, status, and trace context only; raw payloads are not logged.
+- [Phase 139]: 139-03 Existing src/services/mcp-broker.ts remains compatible for Plan 139-04 while re-exporting the production broker factory.
 
 ## Accumulated Context
 
@@ -349,8 +353,8 @@ Last activity: 2026-05-18 — Completed 139-02 registry/errors/macro coercion fo
 
 ## Session Continuity
 
-Last session: 2026-05-18T01:28:25.528Z
-Stopped at: Completed 139-02-PLAN.md
+Last session: 2026-05-18T01:43:23.558Z
+Stopped at: Completed 139-03-PLAN.md
 Resume: None
 
 ## Deferred Items
