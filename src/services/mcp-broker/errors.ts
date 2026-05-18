@@ -11,6 +11,10 @@ export interface FormatToolErrorContext {
 export type SerializedToolError = Omit<NormalizedToolError, 'raw'>;
 
 export function formatToolError(input: unknown, context: FormatToolErrorContext = {}): NormalizedToolError {
+  if (isNormalizedToolError(input)) {
+    return withContext(input, context);
+  }
+
   if (isCallToolErrorResult(input)) {
     return withContext(
       {
@@ -53,6 +57,15 @@ export function formatToolError(input: unknown, context: FormatToolErrorContext 
       raw: input,
     },
     context
+  );
+}
+
+function isNormalizedToolError(value: unknown): value is NormalizedToolError {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { kind?: unknown }).kind === 'string' &&
+    typeof (value as { message?: unknown }).message === 'string'
   );
 }
 

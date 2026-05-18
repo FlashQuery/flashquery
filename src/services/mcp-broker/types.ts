@@ -19,6 +19,7 @@ export interface BrokerServerConfig {
 
 export interface BrokerClientConfig extends BrokerServerConfig {
   serverId: string;
+  onAudit?: (event: BrokerAuditEvent) => void;
 }
 
 export type RegistryKey = string;
@@ -71,8 +72,18 @@ export interface NormalizedToolError {
 }
 
 export interface Broker {
+  ensureConnected(serverId: string): Promise<void>;
   callTool(ref: BrokerToolRef, args: unknown, ctx: ConsumerContext): Promise<CallToolResult>;
   isConnected(serverId: string, opts?: BrokerConnectionOptions): Promise<boolean>;
   listToolsForConsumer(ctx: ConsumerContext): Promise<BrokeredTool[]>;
   shutdown(graceMs?: number): Promise<void>;
+}
+
+export interface BrokerAuditEvent {
+  type: 'mcp_broker_reverse_request_rejected';
+  serverId: string;
+  method: string;
+  status: 'rejected_unsupported';
+  traceId?: string;
+  purposeId?: string;
 }

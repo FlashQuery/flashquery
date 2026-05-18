@@ -6,6 +6,12 @@ import { z } from 'zod';
 
 const server = new McpServer({ name: 'fq-basic-fixture', version: '1.0.0' });
 
+if (process.env.BASIC_HANG_LIST === 'after-first') {
+  setTimeout(() => {
+    process.kill(process.pid, 'SIGSTOP');
+  }, 250);
+}
+
 server.registerTool(
   'echo',
   {

@@ -39,6 +39,16 @@ function trackClient(overrides: Partial<BrokerClientConfig> = {}): BrokerClient 
   return client;
 }
 
+function isAlive(pid: number | null): boolean {
+  if (pid === null) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 describe('mcp broker client lifecycle integration', () => {
   it('T-I-001 lazily spawns on first reference and shuts down the child', async () => {
     const client = trackClient();
@@ -50,7 +60,7 @@ describe('mcp broker client lifecycle integration', () => {
     expect(result.content[0]).toMatchObject({ type: 'text', text: JSON.stringify({ value: 'hi' }) });
     const pid = client.pid;
     await client.shutdown(100);
-    expect(pid === null ? false : process.kill(pid, 0)).toBe(false);
+    expect(isAlive(pid)).toBe(false);
   });
 
   it('T-I-002 shares one cold-start promise for concurrent ensureConnected calls', async () => {
@@ -76,14 +86,15 @@ describe('mcp broker client lifecycle integration', () => {
 
   it('T-I-009 shutdown kills an in-flight slow server within the grace timeout', async () => {
     const client = trackClient({ perCallTimeoutMs: 2000 });
-    const call = client.callTool('slow', { ms: 5000 }, ctx);
     await client.ensureConnected();
+    const call = client.callTool('slow', { ms: 5000 }, ctx);
     const pid = client.pid;
+    const callError = call.catch((error: unknown) => error);
 
     await client.shutdown(50);
 
-    await expect(call).rejects.toMatchObject({ kind: 'transport_closed' });
-    expect(pid === null ? false : process.kill(pid, 0)).toBe(false);
+    expect(await callError).toMatchObject({ kind: 'transport_closed' });
+    expect(isAlive(pid)).toBe(false);
   });
 
   it('T-I-010 surfaces deterministic stderr on connect failure with env substitution', async () => {
@@ -133,8 +144,12 @@ describe('mcp broker client lifecycle integration', () => {
 
     await client.ensureConnected();
     expect(client.clientCapabilities).toEqual({});
-    await expect(client.callTool('trigger_reverse_request', { prompt: 'secret prompt' }, ctx)).rejects.toMatchObject({
-      kind: 'unsupported_method',
+    const result = await client.callTool('trigger_reverse_request', { prompt: 'secret prompt' }, ctx);
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]).toMatchObject({
+      type: 'text',
+      text: expect.stringContaining('sampling/createMessage rejected_unsupported'),
     });
 
     expect(auditEvents).toContainEqual(
@@ -163,6 +178,7 @@ describe('mcp broker client lifecycle integration', () => {
   it('T-I-023 deep probes are live and return false for hung tools/list while T-I-024 shallow probe remains true', async () => {
     const client = trackClient({ env: { BASIC_HANG_LIST: 'after-first' } });
     await client.ensureConnected();
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     await expect(client.isConnected({ deepProbe: true, timeoutMs: 75 })).resolves.toBe(false);
     await expect(client.isConnected({ deepProbe: true, timeoutMs: 75 })).resolves.toBe(false);
