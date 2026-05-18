@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: executing
-stopped_at: Completed 140-03-PLAN.md
-last_updated: "2026-05-18T13:48:45.633Z"
+stopped_at: Completed 140-04-PLAN.md
+last_updated: "2026-05-18T14:03:31.963Z"
 last_activity: 2026-05-18
 progress:
   total_phases: 5
   completed_phases: 1
   total_plans: 12
-  completed_plans: 9
+  completed_plans: 10
   percent: 20
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 ## Current Position
 
 Phase: 140 (tofu-schema-pinning-and-tool-list-change-handling) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-18
 
@@ -136,6 +136,7 @@ Last activity: 2026-05-18
 | Phase 140 P01 | 5m45s | 3 tasks | 7 files |
 | Phase 140 P02 | 12m09s | 3 tasks | 5 files |
 | Phase 140 P03 | 7m23s | 3 tasks | 8 files |
+| Phase 140 P04 | 9m26s | 3 tasks | 2 files |
 
 ## Decisions
 
@@ -260,6 +261,7 @@ Last activity: 2026-05-18
 - [Phase 140]: 140-03: Only typed SchemaDriftNeedsUserInputError broker signals are converted to macro needs_user_input; ordinary broker isError results still fail as tool_call_failed.
 - [Phase 140]: 140-03: Macro needs_user_input is a non-runtime envelope with reason: needs_user_input and an opaque payload.
 - [Phase 140]: 140-03: Non-interactive list refreshes audit blocked_on_user and suppress prompt payload callbacks.
+- [Phase 140]: 140-04 kept Phase B TOFU/list_changed integration coverage in a dedicated tofu-list-changed suite, using live fixtures for notification routing and manual broker snapshots for deterministic state-machine assertions.
 
 ## Accumulated Context
 
@@ -373,8 +375,8 @@ Last activity: 2026-05-18
 
 ## Session Continuity
 
-Last session: 2026-05-18T13:48:45.603Z
-Stopped at: Completed 140-03-PLAN.md
+Last session: 2026-05-18T14:03:31.936Z
+Stopped at: Completed 140-04-PLAN.md
 Resume: None
 
 ## Deferred Items

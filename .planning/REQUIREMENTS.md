@@ -60,7 +60,7 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 ### TOFU And Safety
 
-- [ ] **REQ-038**: TOFU hash is SHA-256 over canonical JSON of `{name, description, inputSchema}`.
+- [x] **REQ-038**: TOFU hash is SHA-256 over canonical JSON of `{name, description, inputSchema}`.
 - [x] **REQ-039**: TOFU storage is in-memory and FlashQuery-process-scoped.
 - [x] **REQ-040**: First observation of a `(server, tool)` pair is silently trusted.
 - [x] **REQ-041**: Hash mismatch on subsequent observation triggers re-approval.
