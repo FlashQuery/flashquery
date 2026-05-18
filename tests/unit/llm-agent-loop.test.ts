@@ -144,6 +144,77 @@ describe('ATL-U-13 loop executor state machine contract', () => {
     expect(result.metadata.tools.native_tool_names).toEqual(['get_document']);
   });
 
+  it('injects only search_tools up front for tool_search enabled purposes while preserving direct dispatch visibility', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const broker = makeBroker([brokeredTool()]);
+    const chat: ScriptedChat = vi.fn()
+      .mockResolvedValueOnce(chatResult({
+        message: { role: 'assistant', content: null, tool_calls: [MODE_2_TOOL] },
+        finishReason: 'tool_calls',
+      }))
+      .mockResolvedValueOnce(chatResult());
+    const toolDispatcher = vi.fn().mockResolvedValue({
+      messages: [{ role: 'tool', tool_call_id: 'call_get_document_1', content: JSON.stringify({ ok: true }) }],
+      logEntries: [{ tool_name: 'get_document', tool_call_id: 'call_get_document_1', status: 'success' }],
+    });
+
+    await executeAgentLoop(buildOptions({
+      broker,
+      chat,
+      toolDispatcher,
+      traceId: 'trace-search-enabled',
+      toolSearch: 'enabled',
+      nativeToolNames: ['get_document'],
+      providerTools: [{ type: 'function', function: { name: 'get_document', description: 'Get document', parameters: {} } }],
+    }));
+
+    expect(chat).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({
+      tools: [
+        expect.objectContaining({
+          type: 'function',
+          function: expect.objectContaining({ name: 'search_tools' }),
+        }),
+      ],
+    }));
+    expect(chat).not.toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({
+      tools: expect.arrayContaining([
+        expect.objectContaining({ function: expect.objectContaining({ name: 'get_document' }) }),
+        expect.objectContaining({ function: expect.objectContaining({ name: 'basic__echo' }) }),
+      ]),
+    }));
+    expect(toolDispatcher).toHaveBeenCalledWith(expect.objectContaining({
+      nativeToolNames: ['get_document', 'search_tools'],
+      broker,
+      consumerContext: {
+        kind: 'purpose',
+        purposeId: 'research',
+        traceId: 'trace-search-enabled',
+        interactive: true,
+      },
+    }));
+  });
+
+  it('preserves non-interactive consumer context during enabled search index build', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const broker = makeBroker([brokeredTool()]);
+
+    await executeAgentLoop(buildOptions({
+      broker,
+      chat: undefined,
+      chatByPurpose: undefined,
+      traceId: 'trace-search-autonomous',
+      toolSearch: 'enabled',
+      forceStopBeforeFirstCall: 'max_tokens',
+    }));
+
+    expect(broker.listToolsForConsumer).toHaveBeenCalledWith({
+      kind: 'purpose',
+      purposeId: 'research',
+      traceId: 'trace-search-autonomous',
+      interactive: false,
+    });
+  });
+
   it('does not enter delegated tool mode when the purpose has no native or brokered tools', async () => {
     const { executeAgentLoop } = await loadAgentLoop();
     const broker = makeBroker([]);
