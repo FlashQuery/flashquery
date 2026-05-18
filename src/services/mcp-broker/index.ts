@@ -9,6 +9,7 @@ import { InMemoryTofuStore } from './tofu.js';
 import type {
   Broker,
   BrokerAuditEvent,
+  BrokerAuditEventInput,
   BrokerClientConfig,
   BrokerConnectionOptions,
   BrokeredTool,
@@ -82,10 +83,10 @@ export class McpBroker implements Broker {
     this.#registry = new ToolRegistry(config);
   }
 
-  async ensureConnected(serverId: string): Promise<void> {
+  async ensureConnected(serverId: string, options: ToolListSnapshotOptions = {}): Promise<void> {
     const client = this.#client(serverId);
     await client.ensureConnected();
-    await this.applyToolListSnapshot(serverId, await client.listTools());
+    await this.applyToolListSnapshot(serverId, await client.listTools(), options);
   }
 
   async applyToolListSnapshot(
@@ -189,7 +190,7 @@ export class McpBroker implements Broker {
   }
 
   async callTool(ref: BrokerToolRef, args: unknown, ctx: ConsumerContext): Promise<CallToolResult> {
-    await this.ensureConnected(ref.serverId);
+    await this.ensureConnected(ref.serverId, snapshotOptionsFromConsumerContext(ctx));
     return this.#client(ref.serverId).callTool(ref.toolName, args, ctx);
   }
 
@@ -204,7 +205,7 @@ export class McpBroker implements Broker {
       this.#registry
         .listVisibleServerIds(ctx)
         .filter((serverId) => this.#clients.has(serverId))
-        .map((serverId) => this.ensureConnected(serverId))
+        .map((serverId) => this.ensureConnected(serverId, snapshotOptionsFromConsumerContext(ctx)))
     );
     return this.#registry.listToolsForConsumer(ctx);
   }
@@ -243,19 +244,19 @@ export class McpBroker implements Broker {
     });
   }
 
-  #emitAudit(event: BrokerAuditEvent): void {
-    recordBrokerAuditEvent(event);
-    this.#onAudit?.(event);
-    if (event.type === 'mcp_broker_tofu_decision') {
+  #emitAudit(event: BrokerAuditEventInput): void {
+    const timestamped = recordBrokerAuditEvent(event);
+    this.#onAudit?.(timestamped);
+    if (timestamped.type === 'mcp_broker_tofu_decision') {
       logger?.warn(
-        `mcp_broker_tofu_decision server=${event.server} tool=${event.tool} decision=${event.decision}${
-          event.trace_id === undefined ? '' : ` trace_id=${event.trace_id}`
+        `mcp_broker_tofu_decision ts=${timestamped.ts} server=${timestamped.server} tool=${timestamped.tool} decision=${timestamped.decision}${
+          timestamped.trace_id === undefined ? '' : ` trace_id=${timestamped.trace_id}`
         }`
       );
-    } else if (event.type === 'mcp_broker_tofu_blocked') {
+    } else if (timestamped.type === 'mcp_broker_tofu_blocked') {
       logger?.warn(
-        `mcp_broker_tofu_blocked server=${event.server} tool=${event.tool} status=${event.status}${
-          event.trace_id === undefined ? '' : ` trace_id=${event.trace_id}`
+        `mcp_broker_tofu_blocked ts=${timestamped.ts} server=${timestamped.server} tool=${timestamped.tool} status=${timestamped.status}${
+          timestamped.trace_id === undefined ? '' : ` trace_id=${timestamped.trace_id}`
         }`
       );
     }
@@ -263,7 +264,7 @@ export class McpBroker implements Broker {
 }
 
 export class NullBroker implements Broker {
-  ensureConnected(serverId: string): Promise<void> {
+  ensureConnected(serverId: string, _options: ToolListSnapshotOptions = {}): Promise<void> {
     return Promise.reject(toThrowableToolError(formatToolError(new Error('No MCP broker is configured.'), { serverId })));
   }
 
@@ -297,4 +298,12 @@ export class NullBroker implements Broker {
 
 export function createBroker(config: BrokerConfig): McpBroker {
   return new McpBroker(config);
+}
+
+function snapshotOptionsFromConsumerContext(ctx: ConsumerContext): ToolListSnapshotOptions {
+  return {
+    ...(ctx.interactive === undefined ? {} : { interactive: ctx.interactive }),
+    traceId: ctx.traceId,
+    ...(ctx.kind === 'purpose' ? { purposeId: ctx.purposeId } : {}),
+  };
 }

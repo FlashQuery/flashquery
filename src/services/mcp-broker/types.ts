@@ -156,7 +156,7 @@ export interface NormalizedToolError {
 }
 
 export interface Broker {
-  ensureConnected(serverId: string): Promise<void>;
+  ensureConnected(serverId: string, options?: ToolListSnapshotOptions): Promise<void>;
   callTool(ref: BrokerToolRef, args: unknown, ctx: ConsumerContext): Promise<CallToolResult>;
   isConnected(serverId: string, opts?: BrokerConnectionOptions): Promise<boolean>;
   listToolsForConsumer(ctx: ConsumerContext): Promise<BrokeredTool[]>;
@@ -170,6 +170,7 @@ export interface Broker {
 
 export type BrokerAuditEvent =
   | {
+      ts: string;
       type: 'mcp_broker_reverse_request_rejected';
       serverId: string;
       method: string;
@@ -178,6 +179,7 @@ export type BrokerAuditEvent =
       purposeId?: string;
     }
   | {
+      ts: string;
       type: 'mcp_broker_tofu_decision';
       server: string;
       tool: string;
@@ -188,6 +190,7 @@ export type BrokerAuditEvent =
       purpose_id?: string;
     }
   | {
+      ts: string;
       type: 'mcp_broker_tofu_blocked';
       server: string;
       tool: string;
@@ -197,3 +200,8 @@ export type BrokerAuditEvent =
       trace_id?: string;
       purpose_id?: string;
     };
+
+export type BrokerAuditEventInput =
+  | (Omit<Extract<BrokerAuditEvent, { type: 'mcp_broker_reverse_request_rejected' }>, 'ts'> & { ts?: string })
+  | (Omit<Extract<BrokerAuditEvent, { type: 'mcp_broker_tofu_decision' }>, 'ts'> & { ts?: string })
+  | (Omit<Extract<BrokerAuditEvent, { type: 'mcp_broker_tofu_blocked' }>, 'ts'> & { ts?: string });

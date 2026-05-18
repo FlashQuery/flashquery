@@ -152,11 +152,23 @@ function wrapBrokerTool(input: {
     const visibleTools = await input.broker.listToolsForConsumer(consumerContext);
     const visibleTool = visibleTools.find((tool) => tool.serverId === input.server && tool.toolName === input.tool);
     if (visibleTool === undefined) {
-      const pendingDrift = input.broker
+      const pendingDrifts = input.broker
         .getPendingSchemaDrift(consumerContext)
-        .find((drift) => drift.server === input.server && drift.tool === input.tool);
+        .filter((drift) => drift.server === input.server);
+      const pendingDrift = pendingDrifts.find((drift) => drift.tool === input.tool);
       if (pendingDrift !== undefined) {
-        throw new MacroNeedsUserInputError(pendingDrift);
+        if (consumerContext.interactive === false) {
+          throw new MacroExpectedError(
+            'tool_unavailable_pending_user_decision',
+            `Brokered tool '${input.server}.${input.tool}' is blocked pending user approval of a schema change.`,
+            { server: input.server, tool: input.tool, drift: pendingDrift }
+          );
+        }
+        throw new MacroNeedsUserInputError(
+          pendingDrifts.length > 1
+            ? { event: 'schema_drift_detected', server: input.server, changes: pendingDrifts }
+            : pendingDrift
+        );
       }
       throw new MacroExpectedError('unknown_tool', `Brokered tool '${input.server}.${input.tool}' is not available.`, {
         server: input.server,
@@ -193,9 +205,18 @@ function makeBrokerConsumerContext(
 ): ConsumerContext {
   const traceId = dispatchContext.traceId ?? '';
   if (callerContext.origin === 'delegated') {
-    return { kind: 'purpose', purposeId: callerContext.purposeName ?? '', traceId };
+    return {
+      kind: 'purpose',
+      purposeId: callerContext.purposeName ?? '',
+      traceId,
+      ...(callerContext.interactive === undefined ? {} : { interactive: callerContext.interactive }),
+    };
   }
-  return { kind: 'host', traceId };
+  return {
+    kind: 'host',
+    traceId,
+    ...(callerContext.interactive === undefined ? {} : { interactive: callerContext.interactive }),
+  };
 }
 
 function deriveNativeToolNames(options: BuildToolRegistryOptions): {

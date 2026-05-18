@@ -22,6 +22,19 @@ describe('mcp broker TOFU helpers', () => {
     expect(canonicalJson(a)).toBe('{"a":{"alpha":[{"x":"one","y":"two"}],"beta":true},"z":1}');
   });
 
+  it('canonicalJson preserves undefined object keys as null to match the reference implementation', () => {
+    expect(canonicalJson({ a: undefined, b: null })).toBe('{"a":null,"b":null}');
+    expect(
+      hashToolSchema({ name: 'missing_description', description: undefined, inputSchema: { type: 'object' } })
+    ).toBe(
+      hashToolSchema({
+        name: 'missing_description',
+        description: null as unknown as undefined,
+        inputSchema: { type: 'object' },
+      })
+    );
+  });
+
   it('hashToolSchema is stable for semantically identical schema key order', () => {
     const first = hashToolSchema({
       name: 'search',
@@ -205,6 +218,39 @@ describe('mcp broker TOFU helpers', () => {
     });
     expect(store.get('brave', 'search')?.pendingHash).toBeUndefined();
     expect(store.get('brave', 'search')?.trustedHash).not.toBe(oldHash);
+  });
+
+  it('fires re-approval again when a rejected tool mutates to a third schema', () => {
+    const store = new InMemoryTofuStore();
+    const v1 = { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] };
+    const v2 = {
+      type: 'object',
+      properties: { query: { type: 'string' }, token: { type: 'string' } },
+      required: ['query', 'token'],
+    };
+    const v3 = {
+      type: 'object',
+      properties: { query: { type: 'string' }, region: { type: 'string' } },
+      required: ['query', 'region'],
+    };
+
+    store.observe({ serverId: 'brave', toolName: 'search', description: 'Search', inputSchema: v1 });
+    store.observe({ serverId: 'brave', toolName: 'search', description: 'Search with token', inputSchema: v2 });
+    store.reject('brave', 'search');
+
+    const third = store.observe({
+      serverId: 'brave',
+      toolName: 'search',
+      description: 'Search with region',
+      inputSchema: v3,
+    });
+
+    expect(third.status).toBe('pending_re_approval');
+    expect(third.drift?.new_schema).toEqual({
+      name: 'search',
+      description: 'Search with region',
+      inputSchema: v3,
+    });
   });
 
   it('retains a trusted tombstone when a tool is removed', () => {

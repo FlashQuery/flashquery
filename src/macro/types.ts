@@ -19,6 +19,7 @@ export interface ToolReference {
 export interface MacroCallerContext {
   origin: 'host' | 'delegated';
   purposeName?: string;
+  interactive?: boolean;
 }
 
 export interface MacroNeedsUserInputPayload {

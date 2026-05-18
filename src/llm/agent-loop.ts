@@ -121,6 +121,7 @@ function makePurposeConsumerContext(options: ExecuteAgentLoopOptions): ConsumerC
     kind: 'purpose',
     purposeId: options.purposeName,
     traceId: options.traceId ?? '',
+    interactive: options.chatByPurpose !== undefined || options.chat !== undefined,
   };
 }
 

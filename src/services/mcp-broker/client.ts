@@ -11,7 +11,8 @@ import {
 import { logger } from '../../logging/logger.js';
 import { formatToolError, toThrowableToolError, type FormatToolErrorContext } from './errors.js';
 import { hashToolSchema } from './tofu.js';
-import type { BrokerAuditEvent, BrokerClientConfig, BrokerConnectionOptions, BrokeredTool, ConsumerContext } from './types.js';
+import { recordBrokerAuditEvent } from './trace.js';
+import type { BrokerAuditEventInput, BrokerClientConfig, BrokerConnectionOptions, BrokeredTool, ConsumerContext } from './types.js';
 
 const DEFAULT_CONNECT_TIMEOUT_MS = 30_000;
 const DEFAULT_HEALTH_TIMEOUT_MS = 250;
@@ -275,11 +276,12 @@ export class BrokerClient {
     });
   }
 
-  #emitAudit(event: BrokerAuditEvent): void {
-    this.#config.onAudit?.(event);
+  #emitAudit(event: BrokerAuditEventInput): void {
+    const timestamped = recordBrokerAuditEvent(event);
+    this.#config.onAudit?.(timestamped);
     logger?.warn(
-      `mcp_broker_reverse_request_rejected server=${event.serverId} method=${event.method} status=${event.status}${
-        event.traceId === undefined ? '' : ` trace_id=${event.traceId}`
+      `mcp_broker_reverse_request_rejected ts=${timestamped.ts} server=${timestamped.serverId} method=${timestamped.method} status=${timestamped.status}${
+        timestamped.traceId === undefined ? '' : ` trace_id=${timestamped.traceId}`
       }`
     );
   }

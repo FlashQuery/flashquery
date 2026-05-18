@@ -24,6 +24,7 @@ import {
   getBrokeredToolCallTraceSnapshot,
 } from '../../src/services/mcp-broker/trace.js';
 import { parseProgram, parseToolPayload } from './macro-test-helpers.js';
+import type { TofuDriftPayload } from '../../src/services/mcp-broker/types.js';
 
 function makeConfig(overrides: Partial<FlashQueryConfig> = {}): FlashQueryConfig {
   return {
@@ -123,6 +124,20 @@ function brokeredSearchSnapshot(input: {
     },
     tofuHash: input.hash,
     costPerCall: 0.005,
+  };
+}
+
+function driftPayload(tool: string): TofuDriftPayload {
+  return {
+    event: 'schema_drift_detected',
+    server: 'brave_search',
+    tool,
+    question: 'Review schema drift.',
+    old_schema: { name: tool, description: 'old', inputSchema: { type: 'object' } },
+    new_schema: { name: tool, description: 'new', inputSchema: { type: 'object', required: ['query'] } },
+    diff_summary: 'Added required parameter: query',
+    options: ['approve', 'reject'],
+    answer_shape: `frontmatter.user_decisions.brave_search__${tool}.tofu_decision`,
   };
 }
 
@@ -567,5 +582,65 @@ describe('macro ToolRegistry construction', () => {
         trace_id: 'trace-autonomous',
       })
     );
+  });
+
+  it('surfaces all same-server pending drifts as one bundled needs_user_input payload', async () => {
+    const pending = [driftPayload('web_search'), driftPayload('image_search')];
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool: vi.fn(),
+      listToolsForConsumer: vi.fn(async () => []),
+      getPendingSchemaDrift: vi.fn(() => pending),
+      resolveSchemaDrift: vi.fn(() => []),
+      shutdown: vi.fn(),
+    };
+    const result = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'host' },
+      broker,
+      catalog,
+      nativeDispatchContext: nativeDispatchContext(),
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search', 'image_search'] }],
+    });
+
+    await expect(
+      result.registry.brave_search.tools.web_search({ query: 'x' }, {} as Parameters<ToolFn>[1])
+    ).rejects.toMatchObject({
+      name: 'MacroNeedsUserInputError',
+      payload: {
+        event: 'schema_drift_detected',
+        server: 'brave_search',
+        changes: pending,
+      },
+    });
+  });
+
+  it('does not emit needs_user_input for pending drift in a non-interactive delegated macro context', async () => {
+    const pending = [driftPayload('web_search')];
+    const broker: Broker = {
+      ensureConnected: vi.fn(),
+      isConnected: vi.fn(),
+      callTool: vi.fn(),
+      listToolsForConsumer: vi.fn(async () => []),
+      getPendingSchemaDrift: vi.fn(() => pending),
+      resolveSchemaDrift: vi.fn(() => []),
+      shutdown: vi.fn(),
+    };
+    const result = await buildToolRegistry({
+      config: makeConfig(),
+      callerContext: { origin: 'delegated', purposeName: 'scheduled', interactive: false },
+      broker,
+      catalog,
+      nativeDispatchContext: nativeDispatchContext(),
+      brokerTools: [{ server: 'brave_search', label: 'Brave Search', tools: ['web_search'] }],
+    });
+
+    await expect(
+      result.registry.brave_search.tools.web_search({ query: 'x' }, {} as Parameters<ToolFn>[1])
+    ).rejects.toMatchObject({
+      name: 'MacroExpectedError',
+      error: 'tool_unavailable_pending_user_decision',
+    });
   });
 });

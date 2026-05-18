@@ -99,6 +99,8 @@ function makeBroker(tools: BrokeredTool[]): Broker {
     callTool: vi.fn(),
     isConnected: vi.fn(async () => false),
     listToolsForConsumer: vi.fn(async (_ctx: ConsumerContext) => tools),
+    getPendingSchemaDrift: vi.fn(() => []),
+    resolveSchemaDrift: vi.fn(() => []),
     shutdown: vi.fn(),
   };
 }
@@ -125,6 +127,7 @@ describe('ATL-U-13 loop executor state machine contract', () => {
       kind: 'purpose',
       purposeId: 'research',
       traceId: 'trace-broker-visible',
+      interactive: true,
     });
     expect(chat).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({
       tools: expect.arrayContaining([
@@ -429,6 +432,26 @@ describe('ATL-U-14 cost, budget, and usage aggregation contract', () => {
       inputTokens: expect.any(Number),
       outputTokens: expect.any(Number),
     }));
+  });
+
+  it('marks broker consumer context non-interactive when no chat adapter is attached', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const broker = makeBroker([brokeredTool()]);
+
+    await executeAgentLoop(buildOptions({
+      broker,
+      chat: undefined,
+      chatByPurpose: undefined,
+      traceId: 'trace-autonomous',
+      forceStopBeforeFirstCall: 'max_tokens',
+    }));
+
+    expect(broker.listToolsForConsumer).toHaveBeenCalledWith({
+      kind: 'purpose',
+      purposeId: 'research',
+      traceId: 'trace-autonomous',
+      interactive: false,
+    });
   });
 
   it('ATL-U-14 records zero public usage when a pre-iteration stop happens before any provider response completes', async () => {

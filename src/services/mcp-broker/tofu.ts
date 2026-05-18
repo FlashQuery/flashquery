@@ -8,6 +8,10 @@ export interface ToolSchemaHashInput {
 }
 
 function canonicalize(value: unknown): unknown {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
   if (Array.isArray(value)) {
     return value.map(canonicalize);
   }
@@ -16,10 +20,7 @@ function canonicalize(value: unknown): unknown {
     const objectValue = value as Record<string, unknown>;
     const result: Record<string, unknown> = {};
     for (const key of Object.keys(objectValue).sort()) {
-      const child = objectValue[key];
-      if (child !== undefined) {
-        result[key] = canonicalize(child);
-      }
+      result[key] = canonicalize(objectValue[key]);
     }
     return result;
   }

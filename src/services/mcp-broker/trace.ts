@@ -1,4 +1,4 @@
-import type { BrokerAuditEvent } from './types.js';
+import type { BrokerAuditEvent, BrokerAuditEventInput } from './types.js';
 
 export interface BrokeredToolCallTraceEntry {
   server: string;
@@ -49,8 +49,13 @@ export function clearBrokeredToolCallTrace(traceId?: string): void {
   _brokeredToolCalls.delete(traceId);
 }
 
-export function recordBrokerAuditEvent(event: BrokerAuditEvent): void {
-  _brokerAuditEvents.push(structuredClone(event));
+export function recordBrokerAuditEvent(event: BrokerAuditEventInput): BrokerAuditEvent {
+  const timestamped: BrokerAuditEvent = {
+    ...event,
+    ts: event.ts ?? new Date().toISOString(),
+  };
+  _brokerAuditEvents.push(structuredClone(timestamped));
+  return timestamped;
 }
 
 export function getBrokerAuditTraceSnapshot(): BrokerAuditEvent[] {

@@ -322,7 +322,7 @@ describe('mcp broker TOFU list_changed integration', () => {
     expect(await visibleKeys(broker)).toEqual([]);
   });
 
-  it('T-I-019 a fresh broker object resets in-memory TOFU and silently trusts the changed server shape', async () => {
+  it('T-I-019 a fresh broker with a changed command resets in-memory TOFU and silently trusts the changed server shape', async () => {
     const firstDrifts: TofuDriftBundle[] = [];
     const changed = toolSnapshot('restart_reset', ['value', 'token']);
     const first = createTrackedBroker({
@@ -341,6 +341,10 @@ describe('mcp broker TOFU list_changed integration', () => {
       initialTools: [changed],
       laterTools: [changed],
       onTofuDrift: (bundle) => secondDrifts.push(bundle),
+      serverConfig: {
+        command: '/usr/bin/env',
+        args: [process.execPath, '--import', 'tsx', quirkyServer],
+      },
     });
 
     const [trustedAfterRestart] = await second.broker.listToolsForConsumer(ctx);
@@ -470,6 +474,7 @@ describe('mcp broker TOFU list_changed integration', () => {
     expect(auditEvents).toContainEqual(
       expect.objectContaining({
         type: 'mcp_broker_tofu_blocked',
+        ts: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         server: 'quirky',
         tool: 'autonomous',
         status: 'blocked_on_user',
