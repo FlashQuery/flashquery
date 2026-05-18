@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { evaluateProgram, MacroExitError, MacroFailError } from '../../src/macro/evaluator.js';
+import {
+  evaluateProgram,
+  MacroExitError,
+  MacroFailError,
+  MacroNeedsUserInputError,
+} from '../../src/macro/evaluator.js';
 import type { ToolResult } from '../../src/mcp/utils/response-formats.js';
 import { basicBuiltins, parseProgram, parseToolPayload, resultOf } from './macro-test-helpers.js';
 
@@ -128,8 +133,48 @@ describe('macro evaluator termination envelopes', () => {
     });
   });
 
+  it('REQ-105 terminates with needs_user_input and preserves schema drift payload fields', async () => {
+    const payload = {
+      event: 'schema_drift_detected',
+      server: 'brave_search',
+      tool: 'web_search',
+      question: 'Review changed schema.',
+      old_schema: { name: 'web_search', inputSchema: { type: 'object' } },
+      new_schema: {
+        name: 'web_search',
+        inputSchema: { type: 'object', required: ['query'] },
+      },
+      diff_summary: 'Added required parameter: query (string)',
+      options: ['approve', 'reject'],
+      answer_shape: 'frontmatter.user_decisions.brave_search__web_search.tofu_decision',
+      resume_hint: 'approve or reject the new schema',
+    } as const;
+
+    const result = await evaluateProgram(parseProgram('broker_drift'), {
+      builtins: basicBuiltins({
+        broker_drift: () => {
+          throw new MacroNeedsUserInputError(payload);
+        },
+      }),
+    });
+
+    expect(result.isError).toBe(false);
+    expect(parseToolPayload(result)).toMatchObject({
+      reason: 'needs_user_input',
+      payload: {
+        event: 'schema_drift_detected',
+        server: 'brave_search',
+        tool: 'web_search',
+        old_schema: payload.old_schema,
+        new_schema: payload.new_schema,
+        diff_summary: 'Added required parameter: query (string)',
+      },
+    });
+  });
+
   it('exports terminal control errors', () => {
     expect(new MacroExitError('x').value).toBe('x');
     expect(new MacroFailError('nope')).toBeInstanceOf(Error);
+    expect(new MacroNeedsUserInputError({ question: 'Continue?' })).toBeInstanceOf(Error);
   });
 });
