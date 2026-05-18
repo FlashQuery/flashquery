@@ -99,6 +99,15 @@ Plans:
 
 **Requirements:** REQ-074..102, REQ-011, REQ-085..087
 
+**Plans:** 5 plans
+
+Plans:
+- [ ] 141-01-PLAN.md — Pure TypeScript BM25 indexer and POC fixture graduation
+- [ ] 141-02-PLAN.md — FQ-native `.tool.md` metadata, help sentinel, and native error hints
+- [ ] 141-03-PLAN.md — `fq.search_tools`, search index service, audit events, and delegated tool injection
+- [ ] 141-04-PLAN.md — Phase C integration, performance, override, TOFU, and E2E coverage
+- [ ] 141-05-PLAN.md — Directed/YAML scenario closure and validation record
+
 **Success criteria:**
 1. BM25 indexer implements the pinned parameters and invariants from the POC without external dependencies.
 2. `fq.search_tools` returns ranked `SearchResult` envelopes and handles empty corpus/query states cleanly.
