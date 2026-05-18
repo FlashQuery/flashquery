@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { ToolListChangedNotificationSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
 import type { BrokerClientConfig, ConsumerContext } from '../../../src/services/mcp-broker/types.js';
 import { BrokerClient, McpBroker, NullBroker, createBroker } from '../../../src/services/mcp-broker/index.js';
 import { formatToolError } from '../../../src/services/mcp-broker/errors.js';
@@ -13,10 +16,12 @@ const ctx: ConsumerContext = { kind: 'host', traceId: 'trace-test' };
 
 const clients: BrokerClient[] = [];
 const brokers: Array<{ shutdown(graceMs?: number): Promise<void> }> = [];
+const sdkClients: Client[] = [];
 
 afterEach(async () => {
   await Promise.allSettled(clients.splice(0).map((client) => client.shutdown(50)));
   await Promise.allSettled(brokers.splice(0).map((broker) => broker.shutdown(50)));
+  await Promise.allSettled(sdkClients.splice(0).map((client) => client.close()));
 });
 
 function config(overrides: Partial<BrokerClientConfig> = {}): BrokerClientConfig {
@@ -47,6 +52,51 @@ function isAlive(pid: number | null): boolean {
   } catch {
     return false;
   }
+}
+
+async function connectQuirkySdkClient(env: Record<string, string>): Promise<Client> {
+  const client = new Client({ name: 'fixture-list-changed-test', version: '1.0.0' }, { capabilities: {} });
+  sdkClients.push(client);
+  await client.connect(
+    new StdioClientTransport({
+      command: process.execPath,
+      args: ['--import', 'tsx', quirkyServer],
+      env: { ...process.env, ...env },
+      stderr: 'pipe',
+    })
+  );
+  return client;
+}
+
+function toolSnapshot(name: string, required: string[] = []): Tool {
+  return {
+    name,
+    description: `${name} description`,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        value: { type: 'string' },
+        token: { type: 'string' },
+      },
+      required,
+    },
+  };
+}
+
+async function observeQuirkyListChanged(initialTools: Tool[], laterTools: Tool[]): Promise<{ before: Tool[]; after: Tool[] }> {
+  const client = await connectQuirkySdkClient({
+    QUIRK_INITIAL_TOOLS: JSON.stringify(initialTools),
+    QUIRK_LATER_TOOLS: JSON.stringify(laterTools),
+    QUIRK_EMIT_LIST_CHANGED_MS: '25',
+  });
+  const notification = new Promise<void>((resolve) => {
+    client.setNotificationHandler(ToolListChangedNotificationSchema, () => resolve());
+  });
+
+  const before = (await client.listTools()).tools;
+  await notification;
+  const after = (await client.listTools()).tools;
+  return { before, after };
 }
 
 describe('mcp broker client lifecycle integration', () => {
@@ -200,6 +250,36 @@ describe('mcp broker client lifecycle integration', () => {
     const result = await client.callTool('echo', { value }, ctx);
 
     expect(JSON.parse(result.content[0]?.type === 'text' ? result.content[0].text : '{}')).toEqual({ value });
+  });
+
+  it('T-I-004 and T-I-005 observes list_changed then sees an added tool in the later snapshot', async () => {
+    const initial = [toolSnapshot('first')];
+    const later = [toolSnapshot('first'), toolSnapshot('second')];
+
+    const { before, after } = await observeQuirkyListChanged(initial, later);
+
+    expect(before.map((tool) => tool.name)).toEqual(['first']);
+    expect(after.map((tool) => tool.name)).toEqual(['first', 'second']);
+  });
+
+  it('T-I-004 and T-I-006 observes list_changed then sees a changed tool schema in the later snapshot', async () => {
+    const initial = [toolSnapshot('mutable', ['value'])];
+    const later = [toolSnapshot('mutable', ['value', 'token'])];
+
+    const { before, after } = await observeQuirkyListChanged(initial, later);
+
+    expect(before[0]?.inputSchema).toMatchObject({ required: ['value'] });
+    expect(after[0]?.inputSchema).toMatchObject({ required: ['value', 'token'] });
+  });
+
+  it('T-I-004 and T-I-007 observes list_changed then sees a removed tool absent from the later snapshot', async () => {
+    const initial = [toolSnapshot('kept'), toolSnapshot('removed')];
+    const later = [toolSnapshot('kept')];
+
+    const { before, after } = await observeQuirkyListChanged(initial, later);
+
+    expect(before.map((tool) => tool.name)).toEqual(['kept', 'removed']);
+    expect(after.map((tool) => tool.name)).toEqual(['kept']);
   });
 
   it('public broker creates lazy clients, filters registry tools, returns raw CallToolResult, and shuts down', async () => {
