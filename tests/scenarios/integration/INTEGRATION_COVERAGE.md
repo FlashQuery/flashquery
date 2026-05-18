@@ -95,6 +95,13 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 | IA-09 | MACRO-INT-02 / T-Y-004: concurrent public `call_macro` write workflows for different documents both complete through the existing write-lock layer. | macro_concurrent_write_lock  | 2026-05-15   | 2026-05-15   |
 | IA-10 | MACRO-INT-02: sequential macro-dispatched document writes complete with the existing write-lock layer enabled. | macro_sequential_write_lock  | 2026-05-15   | 2026-05-15   |
 
+## Phase 141 MCP Broker Tool Search And Overrides
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| INT-MCB-08 | `description_override` is visible to delegated flat brokered dispatch and to `fq.search_tools` result text in managed YAML mode. | description_override_substitution | 2026-05-18   |  |
+| INT-MCB-13 | A `tool_search: enabled` purpose searches visible brokered and FQ-native tools, then dispatches the discovered brokered result tool in managed YAML mode. | search_tools_workflow        | 2026-05-18   |  |
+
 ---
 
 ## IS — Search Coherence

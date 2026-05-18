@@ -1,0 +1,143 @@
+name: description_override_substitution
+description: >
+  T-Y-008 / INT-MCB-08: managed broker config applies description_override to
+  a delegated model-visible brokered tool list and to fq.search_tools results.
+coverage: [INT-MCB-08]
+server_modes: [managed]
+
+mock_openai:
+  responses:
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
+              - id: call_basic_echo_override
+                type: function
+                function:
+                  name: basic__echo
+                  arguments:
+                    value:
+                      marker: "override-flat-${run.id}"
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 12
+        completion_tokens: 4
+    - choices:
+        - message:
+            role: assistant
+            content: "INT-MCB-08 flat override complete"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 14
+        completion_tokens: 5
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
+              - id: call_search_tools_override
+                type: function
+                function:
+                  name: search_tools
+                  arguments:
+                    query: "override yaml echo searchable target"
+                    limit: 5
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 12
+        completion_tokens: 4
+    - choices:
+        - message:
+            role: assistant
+            content: "INT-MCB-08 search override complete"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 14
+        completion_tokens: 5
+
+extra_config:
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+      tool_overrides:
+        echo:
+          cost_per_call: 0.25
+          description_override: "Override YAML echo searchable target."
+  llm:
+    providers:
+      - name: mock
+        type: openai-compatible
+        endpoint: "${mock_openai.endpoint}"
+        api_key: sk-test
+    models:
+      - name: broker-agent
+        provider_name: mock
+        model: broker-agent
+        type: language
+        cost_per_million:
+          input: 0
+          output: 0
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+          strict_tools: true
+          parallel_tool_calls: true
+    purposes:
+      - name: override_flat
+        description: Description override flat-list fixture
+        models: [broker-agent]
+        mcp_servers: [basic]
+        defaults:
+          max_iterations: 3
+          timeout_ms: 30000
+      - name: override_search
+        description: Description override search fixture
+        models: [broker-agent]
+        mcp_servers: [basic]
+        tool_search: enabled
+        defaults:
+          max_iterations: 3
+          timeout_ms: 30000
+
+steps:
+  - label: "INT-MCB-08: delegated flat brokered dispatch uses override-visible tool surface"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: override_flat
+        trace_id: "int-mcb-08-flat-${run.id}"
+        return_messages: true
+        messages:
+          - role: user
+            content: "Call basic__echo with marker override-flat-${run.id}, then provide the final response."
+      expect_contains: "INT-MCB-08 flat override complete"
+      expect_json_equals:
+        path: metadata.tools.calls_log[0].tool_calls[0].tool_name
+        value: basic__echo
+      expect_json_path:
+        - metadata.tool_calls[0].tool
+        - messages[2].content
+
+  - label: "INT-MCB-08: fq.search_tools returns brokered result with description_override"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: override_search
+        trace_id: "int-mcb-08-search-${run.id}"
+        return_messages: true
+        messages:
+          - role: user
+            content: "Search for the override YAML echo tool and report the search result."
+      expect_contains: "Override YAML echo searchable target."
+      expect_json_equals:
+        path: metadata.tools.calls_log[0].tool_calls[0].tool_name
+        value: search_tools
+      expect_json_path:
+        - messages[2].content

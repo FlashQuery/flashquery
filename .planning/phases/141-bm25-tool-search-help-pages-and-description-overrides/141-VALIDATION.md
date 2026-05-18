@@ -54,15 +54,79 @@ created: 2026-05-18
 
 ## Wave 0 Requirements
 
-- [ ] `tests/unit/tool-search/indexer.test.ts` - covers T-U-022..027 and REQ-074..081.
-- [ ] `tests/unit/tool-search/tool-meta.test.ts` - covers T-U-028..034 and T-U-044.
-- [ ] `tests/unit/tool-search/search-tools-handler.test.ts` - covers `SearchResult` envelope, empty states, and help discrimination.
-- [ ] `tests/integration/tool-search/search-tools.integration.test.ts` - covers T-I-033..049 and POC fixture regressions.
-- [ ] `tests/integration/tool-search/host-index.integration.test.ts` - covers T-I-038, T-I-039, and T-I-040 explicitly.
-- [ ] `tests/fixtures/tool-search/` - copy POC corpora and query JSON from the MCP Broker product folder.
-- [ ] `tests/scenarios/directed/testcases/test_mcp_broker_phase_c.py` - covers MCB-21 and MCB-22.
-- [ ] `tests/scenarios/integration/tests/description_override_substitution.yml` - covers INT-MCB-08.
-- [ ] `tests/scenarios/integration/tests/search_tools_workflow.yml` - covers INT-MCB-13.
+- [x] `tests/unit/tool-search/indexer.test.ts` - covers T-U-022..027 and REQ-074..081.
+- [x] `tests/unit/tool-search/tool-meta.test.ts` - covers T-U-028..034 and T-U-044.
+- [x] `tests/unit/tool-search/search-tools-handler.test.ts` - covers `SearchResult` envelope, empty states, and help discrimination.
+- [x] `tests/integration/tool-search/search-tools.integration.test.ts` - covers T-I-033..049 and POC fixture regressions.
+- [x] `tests/integration/tool-search/host-index.integration.test.ts` - covers T-I-038, T-I-039, and T-I-040 explicitly.
+- [x] `tests/fixtures/tool-search/` - copy POC corpora and query JSON from the MCP Broker product folder.
+- [x] `tests/scenarios/directed/testcases/test_mcp_broker_phase_c.py` - covers MCB-21 and MCB-22.
+- [x] `tests/scenarios/integration/tests/description_override_substitution.yml` - covers INT-MCB-08.
+- [x] `tests/scenarios/integration/tests/search_tools_workflow.yml` - covers INT-MCB-13.
+
+## Executed Phase Gate Results
+
+Run date: 2026-05-18.
+
+| Gate | Command | Outcome | Evidence |
+|------|---------|---------|----------|
+| Focused unit | `npm test -- --run tests/unit/tool-search/*.test.ts tests/unit/llm-agent-loop.test.ts tests/unit/llm-tool-dispatcher.test.ts` | PASS | 5 files passed, 85 tests passed, duration 1.36s. |
+| Focused integration, host-index, TOFU | `npm run test:integration -- --run tests/integration/tool-search/search-tools.integration.test.ts tests/integration/tool-search/host-index.integration.test.ts tests/integration/mcp-broker/tofu-list-changed.test.ts` | PASS | 3 files passed, 31 tests passed, duration 31.95s. |
+| E2E | `npm run test:e2e -- --run tests/e2e/mcp-broker.e2e.test.ts` | PASS | 1 file passed, 3 tests passed, duration 11.59s. |
+| Directed Phase C | `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_mcp_broker_phase_c` | FAIL - existing blocker | `call_model` returned `call_model failed: purpose is not defined` before T-S-021 could complete. Report: `tests/scenarios/directed/reports/scenario-report-2026-05-18-144424.md`. Initial and final DB cleanup also timed out at 30s, but residue was 0. |
+| YAML Phase C | `python3 tests/scenarios/integration/run_integration.py --managed description_override_substitution search_tools_workflow` | FAIL - existing blocker | Both YAML workflows failed on `call_model failed: purpose is not defined`. Report: `tests/scenarios/integration/reports/integration-report-2026-05-18-144714.md`. |
+| Build | `npm run build` | PASS | `tsup` ESM and DTS build succeeded; final explicit run completed successfully. |
+| Lint | `npm run lint` | FAIL - existing source lint errors | 8 ESLint errors in `src/mcp/tools/llm.ts`, `src/services/mcp-broker/trace.ts`, `src/services/tool-search/indexer.ts`, `src/services/tool-search/search-tools-handler.ts`, and `src/services/tool-search/tool-meta.ts`. The blocking runtime issue is also represented by lint at `src/mcp/tools/llm.ts:716` (`purpose.toolSearch` unsafe unresolved member access). |
+
+## Phase C Test ID Audit
+
+| Test ID | Status | Evidence |
+|---------|--------|----------|
+| T-U-022 | PASS | Focused unit gate, `tests/unit/tool-search/indexer.test.ts`. |
+| T-U-023 | PASS | Focused unit gate, `tests/unit/tool-search/indexer.test.ts`. |
+| T-U-024 | PASS | Focused unit gate, `tests/unit/tool-search/indexer.test.ts`. |
+| T-U-025 | PASS | Focused unit gate, `tests/unit/tool-search/indexer.test.ts`. |
+| T-U-026 | PASS | Focused unit gate, `tests/unit/tool-search/indexer.test.ts`. |
+| T-U-027 | PASS | Focused unit gate, `tests/unit/tool-search/indexer.test.ts`. |
+| T-U-028 | PASS | Focused unit gate, `tests/unit/tool-search/tool-meta.test.ts`. |
+| T-U-029 | PASS | Focused unit gate, `tests/unit/tool-search/tool-meta.test.ts`. |
+| T-U-030 | PASS | Focused unit gate, `tests/unit/tool-search/tool-meta.test.ts`. |
+| T-U-031 | PASS | Focused unit gate, `tests/unit/tool-search/tool-meta.test.ts`. |
+| T-U-032 | PASS | Focused unit gate, `tests/unit/tool-search/tool-meta.test.ts`. |
+| T-U-033 | PASS | Focused unit gate, `tests/unit/tool-search/tool-meta.test.ts`. |
+| T-U-034 | PASS | Focused unit gate, `tests/unit/tool-search/tool-meta.test.ts`. |
+| T-U-044 | PASS | Focused unit gate, `tests/unit/tool-search/tool-meta.test.ts`. |
+| T-I-026 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-028 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-029 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-033 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-034 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-035 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-035a | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-036 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-037 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-038 | PASS | Focused integration gate, `tests/integration/tool-search/host-index.integration.test.ts`. |
+| T-I-039 | PASS | Focused integration gate, `tests/integration/tool-search/host-index.integration.test.ts`. |
+| T-I-040 | PASS | Focused integration gate, `tests/integration/tool-search/host-index.integration.test.ts`. |
+| T-I-041 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-042 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-043 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-044 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-045 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-046 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-047 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-048 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-I-049 | PASS | Focused integration gate, `tests/integration/tool-search/search-tools.integration.test.ts`. |
+| T-E-C1 | PASS | E2E gate, `tests/e2e/mcp-broker.e2e.test.ts`. |
+| T-S-021 | BLOCKED | New directed scenario exists, but `call_model` purpose agent-loop path fails first with `purpose is not defined`. |
+| T-S-022 | BLOCKED | New directed scenario exists, but same `call_model` purpose agent-loop blocker prevents execution. |
+| T-Y-008 | BLOCKED | New YAML workflow exists, but `call_model` purpose path fails with `purpose is not defined`. |
+| T-Y-013 | BLOCKED | New YAML workflow exists, but `call_model` purpose path fails with `purpose is not defined`. |
+
+## Blocking Issues
+
+1. Existing production runtime blocker: `call_model` purpose-mode agent-loop references `purpose?.toolSearch` outside the lexical scope where `purpose` is declared. Observed through the public MCP response as `call_model failed: purpose is not defined` in both directed and YAML Phase C scenarios. The source location is `src/mcp/tools/llm.ts:716`, outside the allowed write scope for Plan 141-08.
+2. Existing lint blocker: `npm run lint` fails on 8 source lint errors outside the allowed write scope. The lint output includes the same unresolved `purpose.toolSearch` issue plus unrelated errors in tool-search and broker trace source files.
 
 ## Manual-Only Verifications
 
@@ -75,7 +139,7 @@ All phase behaviors should have automated verification. Manual review may still 
 - [x] Wave 0 covers all missing references from research.
 - [x] No watch-mode flags.
 - [x] `nyquist_compliant: true` set in frontmatter.
-- [ ] Wave 0 files created.
+- [x] Wave 0 files created.
 - [ ] Phase C unit, integration, E2E, directed, YAML, and build gates passed.
 
-**Approval:** pending
+**Approval:** blocked by existing production/lint issues outside Plan 141-08 write scope.

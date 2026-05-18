@@ -1,0 +1,117 @@
+name: search_tools_workflow
+description: >
+  T-Y-013 / INT-MCB-13: a tool_search-enabled purpose starts with fq.search_tools,
+  indexes brokered and FQ-native tools together, then dispatches a discovered
+  brokered result tool.
+coverage: [INT-MCB-13]
+server_modes: [managed]
+
+mock_openai:
+  responses:
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
+              - id: call_search_tools_workflow
+                type: function
+                function:
+                  name: search_tools
+                  arguments:
+                    query: "workflow override echo brokered diagnostic read document"
+                    limit: 8
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 12
+        completion_tokens: 4
+    - choices:
+        - message:
+            role: assistant
+            content: null
+            tool_calls:
+              - id: call_basic_echo_workflow
+                type: function
+                function:
+                  name: basic__echo
+                  arguments:
+                    value:
+                      marker: "search-workflow-${run.id}"
+                      ok: true
+          finish_reason: tool_calls
+      usage:
+        prompt_tokens: 12
+        completion_tokens: 4
+    - choices:
+        - message:
+            role: assistant
+            content: "INT-MCB-13 search workflow complete"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 14
+        completion_tokens: 5
+
+extra_config:
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+      tool_overrides:
+        echo:
+          cost_per_call: 0.25
+          description_override: "Workflow override echo brokered diagnostic target."
+  llm:
+    providers:
+      - name: mock
+        type: openai-compatible
+        endpoint: "${mock_openai.endpoint}"
+        api_key: sk-test
+    models:
+      - name: broker-agent
+        provider_name: mock
+        model: broker-agent
+        type: language
+        cost_per_million:
+          input: 0
+          output: 0
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+          strict_tools: true
+          parallel_tool_calls: true
+    purposes:
+      - name: search_workflow
+        description: Search tools workflow YAML fixture
+        models: [broker-agent]
+        tools: [get_document]
+        mcp_servers: [basic]
+        tool_search: enabled
+        defaults:
+          max_iterations: 4
+          timeout_ms: 30000
+
+steps:
+  - label: "INT-MCB-13: search-enabled purpose searches then dispatches discovered basic__echo"
+    assert:
+      op: call_model
+      args:
+        resolver: purpose
+        name: search_workflow
+        trace_id: "int-mcb-13-${run.id}"
+        return_messages: true
+        messages:
+          - role: user
+            content: "Use search_tools to find the brokered echo tool, then call it with marker search-workflow-${run.id}."
+      expect_contains: "INT-MCB-13 search workflow complete"
+      expect_json_equals:
+        path: metadata.tools.calls_log[0].tool_calls[0].tool_name
+        value: search_tools
+      expect_json_contains:
+        path: messages[2].content
+        value: '"has_help":true'
+      expect_json_path:
+        - metadata.tools.calls_log[1].tool_calls[0].tool_name
+        - messages[2].content
+        - messages[4].content

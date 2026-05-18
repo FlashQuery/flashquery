@@ -252,6 +252,13 @@ Core CRUD operations on vault documents via MCP.
 | MCB-05 | Chat-mediated TOFU rejection keeps the changed brokered tool blocked and does not continue silently. | test_macro_tofu_reapproval_reject_blocked | 2026-05-18 | 2026-05-18 |
 | MCB-17 | TOFU approval decisions are audit-logged in the managed server trace stream. | test_tofu_approval_audit_log | 2026-05-18 | 2026-05-18 |
 
+## Phase 141 BM25 Tool Search Help Pages And Description Overrides
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| MCB-21 | `help: true` against an FQ-native tool returns its `.tool.md` body through `call_model` before native schema validation rejects invalid required arguments. | test_fq_native_help_true_through_call_model | 2026-05-18 |  |
+| MCB-22 | A `tool_search: enabled` purpose initially exposes only `fq.search_tools`, returns native/brokered help discrimination in search results, and dispatches a discovered brokered tool. | test_search_tools_purpose_roundtrip | 2026-05-18 |  |
+
 ## 2. Document Content Operations
 
 Surgical editing tools for modifying document content at specific locations.
