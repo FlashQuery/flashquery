@@ -18,6 +18,17 @@ const CORE_HELP_PAGE_BATCH = [
   'write_memory',
 ] as const;
 
+const RECORD_PLUGIN_HELP_PAGE_BATCH = [
+  'archive_record',
+  'clear_pending_reviews',
+  'get_plugin_info',
+  'get_record',
+  'register_plugin',
+  'search_records',
+  'unregister_plugin',
+  'write_record',
+] as const;
+
 const REQUIRED_HELP_SECTIONS = [
   'purpose',
   'params',
@@ -174,28 +185,36 @@ args: {}
   });
 
   it('validates the first core memory document search help-page batch', () => {
-    const sources = CORE_HELP_PAGE_BATCH.map((name) => ({
-      filePath: `src/mcp/tools/${name}.tool.md`,
-      raw: readFileSync(`src/mcp/tools/${name}.tool.md`, 'utf8'),
-    }));
+    expectHelpPageBatch(CORE_HELP_PAGE_BATCH);
+  });
 
-    const result = validateToolMeta(sources);
-
-    expect(result.ok).toBe(true);
-    expect([...result.meta.keys()].sort()).toEqual([...CORE_HELP_PAGE_BATCH].sort());
-
-    for (const name of CORE_HELP_PAGE_BATCH) {
-      const meta = result.meta.get(name);
-      expect(meta).toBeDefined();
-      expect(meta?.description).toMatch(/help\s*[`:{]?\s*true[`}]?[^.]*\.\s*$/i);
-      expect(meta?.helpHint).toEqual(expect.any(String));
-      expect(meta?.helpHint.length).toBeGreaterThan(0);
-      expect(meta?.helpPageBody.trim().length).toBeGreaterThan(0);
-
-      const body = meta?.helpPageBody ?? '';
-      for (const section of REQUIRED_HELP_SECTIONS) {
-        expect(body).toMatch(new RegExp(`^## ${section}$`, 'im'));
-      }
-    }
+  it('validates the records plugin and pending-review help-page batch', () => {
+    expectHelpPageBatch(RECORD_PLUGIN_HELP_PAGE_BATCH);
   });
 });
+
+function expectHelpPageBatch(names: readonly string[]): void {
+  const sources = names.map((name) => ({
+    filePath: `src/mcp/tools/${name}.tool.md`,
+    raw: readFileSync(`src/mcp/tools/${name}.tool.md`, 'utf8'),
+  }));
+
+  const result = validateToolMeta(sources);
+
+  expect(result.ok).toBe(true);
+  expect([...result.meta.keys()].sort()).toEqual([...names].sort());
+
+  for (const name of names) {
+    const meta = result.meta.get(name);
+    expect(meta).toBeDefined();
+    expect(meta?.description).toMatch(/help\s*[`:{]?\s*true[`}]?[^.]*\.\s*$/i);
+    expect(meta?.helpHint).toEqual(expect.any(String));
+    expect(meta?.helpHint.length).toBeGreaterThan(0);
+    expect(meta?.helpPageBody.trim().length).toBeGreaterThan(0);
+
+    const body = meta?.helpPageBody ?? '';
+    for (const section of REQUIRED_HELP_SECTIONS) {
+      expect(body).toMatch(new RegExp(`^## ${section}$`, 'im'));
+    }
+  }
+}
