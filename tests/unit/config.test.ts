@@ -170,7 +170,7 @@ macro:
     }
   });
 
-  it('loads broker mcp_servers, host, and purpose visibility config in camelCase', () => {
+  it('REQ-010 REQ-113 loads host.tool_search enabled with broker visibility distinct from host_mcp_tools', () => {
     const tmpFile = join(tmpdir(), `fqc-test-broker-config-${Date.now()}.yaml`);
     writeFileSync(tmpFile, `
 instance:
@@ -202,6 +202,10 @@ mcp_servers:
     command: "node"
 host:
   mcp_servers: [basic]
+  tool_search: enabled
+host_mcp_tools:
+  tools:
+    - get_document
 llm:
   providers:
     - name: openai
@@ -241,7 +245,10 @@ llm:
       expect(config.mcpServers.defaults.costPerCall).toBe(0);
       expect(config.mcpServers.defaults.perCallTimeoutMs).toBe(30000);
       expect(config.mcpServers.defaults.toolOverrides).toEqual({});
-      expect(config.host).toEqual({ mcpServers: ['basic'], toolSearch: 'disabled' });
+      expect(config.host).toEqual({ mcpServers: ['basic'], toolSearch: 'enabled' });
+      expect(config.hostMcpTools).toEqual({ tools: ['get_document'] });
+      expect(config.host.mcpServers).toEqual(['basic']);
+      expect(config.hostMcpTools?.tools).toEqual(['get_document']);
       expect(config.llm?.purposes[0]).toMatchObject({
         name: 'research',
         mcpServers: ['basic', 'defaults'],
@@ -252,7 +259,36 @@ llm:
     }
   });
 
-  it('accepts empty host config as disabled broker host visibility', () => {
+  it('REQ-005 REQ-009 defaults omitted host to no broker visibility and disabled host search', () => {
+    const tmpFile = join(tmpdir(), `fqc-test-broker-omitted-host-${Date.now()}.yaml`);
+    writeFileSync(tmpFile, `
+instance:
+  id: "broker-omitted-host-test"
+  vault:
+    path: "./vault"
+supabase:
+  url: "https://test.supabase.co"
+  service_role_key: "key"
+  database_url: "postgresql://localhost/db"
+embedding:
+  provider: "none"
+  model: ""
+mcp_servers:
+  basic:
+    transport: stdio
+    command: "node"
+`);
+    try {
+      const config = loadConfig(tmpFile);
+      expect(config.host).toEqual({ mcpServers: [], toolSearch: 'disabled' });
+      expect(config.mcpServers).toHaveProperty('basic');
+      expect(config.hostMcpTools).toBeUndefined();
+    } finally {
+      unlinkSync(tmpFile);
+    }
+  });
+
+  it('REQ-006 accepts empty host config as disabled broker host visibility', () => {
     const tmpFile = join(tmpdir(), `fqc-test-broker-empty-host-${Date.now()}.yaml`);
     writeFileSync(tmpFile, `
 instance:
@@ -303,7 +339,7 @@ mcp_servers:
     }
   });
 
-  it('rejects unknown host broker server references with the missing ID', () => {
+  it('REQ-007 rejects unknown host broker server references with [host] scope and the missing ID', () => {
     const tmpFile = join(tmpdir(), `fqc-test-broker-host-ref-${Date.now()}.yaml`);
     writeFileSync(tmpFile, `
 instance:
@@ -325,14 +361,15 @@ host:
   mcp_servers: [missing]
 `);
     try {
-      expect(() => loadConfig(tmpFile)).toThrow(/host/);
-      expect(() => loadConfig(tmpFile)).toThrow(/missing/);
+      expect(() => loadConfig(tmpFile)).toThrow(
+        "Config error: [host] host.mcp_servers references unknown MCP server 'missing'"
+      );
     } finally {
       unlinkSync(tmpFile);
     }
   });
 
-  it('rejects unknown purpose broker server references with the purpose name and missing ID', () => {
+  it('REQ-008 rejects unknown purpose broker server references with [purpose:<name>] scope and the missing ID', () => {
     const tmpFile = join(tmpdir(), `fqc-test-broker-purpose-ref-${Date.now()}.yaml`);
     writeFileSync(tmpFile, `
 instance:
@@ -370,8 +407,9 @@ llm:
       mcp_servers: [missing]
 `);
     try {
-      expect(() => loadConfig(tmpFile)).toThrow(/research/);
-      expect(() => loadConfig(tmpFile)).toThrow(/missing/);
+      expect(() => loadConfig(tmpFile)).toThrow(
+        "Config error: [purpose:research] purposes.research.mcp_servers references unknown MCP server 'missing'"
+      );
     } finally {
       unlinkSync(tmpFile);
     }
