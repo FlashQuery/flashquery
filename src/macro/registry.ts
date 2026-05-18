@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { resolveHostToolExposure } from '../mcp/tool-exposure.js';
-import type { McpBroker } from '../services/mcp-broker.js';
+import { formatToolError, type Broker, type ConsumerContext } from '../services/mcp-broker.js';
 import {
   assembleNativeToolRegistry,
   type NativeToolDefinition,
@@ -9,6 +9,7 @@ import {
   type NativeToolResponse,
 } from '../llm/tool-registry.js';
 import { MacroExpectedError, type MacroInvocationContext, type MacroValue } from './evaluator.js';
+import { coerceBrokerToolArguments, coerceCallToolResult, isCallToolErrorResult } from './coerce.js';
 import type { MacroCallerContext, ToolFn, ToolRegistry } from './types.js';
 
 const FQ_SERVER = 'fq';
@@ -23,7 +24,7 @@ export interface BrokerToolServerConfig {
 export interface BuildToolRegistryOptions {
   config: FlashQueryConfig;
   callerContext: MacroCallerContext;
-  broker: McpBroker;
+  broker: Broker;
   catalog: NativeToolDefinition[];
   nativeDispatchContext: NativeToolDispatchContext;
   brokerTools?: BrokerToolServerConfig[];
@@ -127,28 +128,40 @@ function wrapNativeTool(tool: NativeToolDefinition, dispatchContext: NativeToolD
 }
 
 function wrapBrokerTool(input: {
-  broker: McpBroker;
+  broker: Broker;
   server: string;
   tool: string;
   nativeDispatchContext: NativeToolDispatchContext;
+  callerContext: MacroCallerContext;
 }): ToolFn {
   return async (arg: Record<string, MacroValue>, context: MacroInvocationContext) => {
-    const handler = input.broker.getToolHandler(input.server, input.tool);
-    if (!handler) {
-      throw new MacroExpectedError('unknown_tool', `Brokered tool '${input.server}.${input.tool}' is not connected.`, {
-        server: input.server,
-        tool: input.tool,
-      });
+    void context;
+    const ref = { serverId: input.server, toolName: input.tool };
+    const consumerContext = makeBrokerConsumerContext(input.callerContext, input.nativeDispatchContext);
+    try {
+      const result = await input.broker.callTool(ref, coerceBrokerToolArguments(arg), consumerContext);
+      if (isCallToolErrorResult(result)) {
+        const normalized = formatToolError(result, ref);
+        throw new MacroExpectedError('tool_call_failed', normalized.message, normalized);
+      }
+      return coerceCallToolResult(result);
+    } catch (error: unknown) {
+      if (error instanceof MacroExpectedError) throw error;
+      const normalized = formatToolError(error, ref);
+      throw new MacroExpectedError('tool_call_failed', normalized.message, normalized);
     }
-
-    const response = await handler(arg, {
-      ...input.nativeDispatchContext,
-      server: input.server,
-      tool: input.tool,
-      macroContext: context,
-    } as NativeToolDispatchContext);
-    return parseNativeToolResponse(response);
   };
+}
+
+function makeBrokerConsumerContext(
+  callerContext: MacroCallerContext,
+  dispatchContext: NativeToolDispatchContext
+): ConsumerContext {
+  const traceId = dispatchContext.traceId ?? '';
+  if (callerContext.origin === 'delegated') {
+    return { kind: 'purpose', purposeId: callerContext.purposeName ?? '', traceId };
+  }
+  return { kind: 'host', traceId };
 }
 
 function deriveNativeToolNames(options: BuildToolRegistryOptions): {
@@ -213,13 +226,12 @@ export function buildToolRegistry(options: BuildToolRegistryOptions): BuildToolR
   for (const brokerServer of options.brokerTools ?? []) {
     const tools: Record<string, ToolFn> = {};
     for (const tool of brokerServer.tools) {
-      const handler = options.broker.getToolHandler(brokerServer.server, tool);
-      if (!handler) continue;
       tools[tool] = wrapBrokerTool({
         broker: options.broker,
         server: brokerServer.server,
         tool,
         nativeDispatchContext: options.nativeDispatchContext,
+        callerContext: options.callerContext,
       });
       allowedToolNames.push(`${brokerServer.server}.${tool}`);
     }
