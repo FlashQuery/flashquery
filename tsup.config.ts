@@ -66,4 +66,5 @@ export default defineConfig({
   ],
   noExternal: [],
   esbuildPlugins: [externalPluginImports],
+  onSuccess: 'mkdir -p dist/mcp/tools && cp src/mcp/tools/*.tool.md dist/mcp/tools/',
 });

@@ -482,14 +482,16 @@ export async function initializeHostToolSearchForServer(server: McpServer): Prom
 
 export function createMcpServer(config: FlashQueryConfig, version: string, options: CreateMcpServerOptions = {}): McpServer {
   const server = new McpServer({ name: 'flashquery', version });
-  const hostToolSearchService = config.host.toolSearch === 'enabled'
-    ? ToolSearchService.createEmpty()
-    : undefined;
+  const maybeLegacyConfig = config as FlashQueryConfig & { host?: FlashQueryConfig['host'] };
+  const hostConfig = maybeLegacyConfig.host ?? { mcpServers: [], toolSearch: 'disabled' as const };
+  const hostToolSearchService = ToolSearchService.createEmpty();
+  const hostBrokerToolSearchEnabled = hostConfig.toolSearch === 'enabled';
   const broker = options.broker ?? createBroker({
     ...config,
-    ...(hostToolSearchService === undefined
-      ? {}
-      : { indexSink: hostToolSearchService.createHostIndexSink(config.host.mcpServers) }),
+    host: hostConfig,
+    ...(hostBrokerToolSearchEnabled
+      ? { indexSink: hostToolSearchService.createHostIndexSink(hostConfig.mcpServers) }
+      : {}),
   });
   const toolMeta = loadToolMetaSync();
   // Apply correlation ID wrapping BEFORE tool registration so all 26 tools
@@ -497,27 +499,25 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   wrapServerWithCorrelationIds(server);
   const hostEnabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
   wrapServerWithToolCatalog(server, { hostEnabledToolNames, toolMeta });
-  if (hostToolSearchService !== undefined) {
-    const registerTool = server.registerTool.bind(server);
-    const hostConsumerContext = {
-      kind: 'host' as const,
-      traceId: 'host-tool-search',
-      interactive: true,
-    };
-    server.registerTool = ((name: string, toolConfig: unknown, cb: unknown) => {
-      if (name !== 'search_tools') {
-        return registerTool(name, toolConfig as never, cb as never);
-      }
-      return registerTool(
-        name,
-        toolConfig as never,
-        createSearchToolsHandler({
-          service: hostToolSearchService,
-          consumerContext: hostConsumerContext,
-        }) as never
-      );
-    }) as McpServer['registerTool'];
-  }
+  const registerTool = server.registerTool.bind(server);
+  const hostConsumerContext = {
+    kind: 'host' as const,
+    traceId: 'host-tool-search',
+    interactive: true,
+  };
+  server.registerTool = ((name: string, toolConfig: unknown, cb: unknown) => {
+    if (name !== 'search_tools') {
+      return registerTool(name, toolConfig as never, cb as never);
+    }
+    return registerTool(
+      name,
+      toolConfig as never,
+      createSearchToolsHandler({
+        service: hostToolSearchService,
+        consumerContext: hostConsumerContext,
+      }) as never
+    );
+  }) as McpServer['registerTool'];
   registerMemoryTools(server, config);
   registerDocumentTools(server, config);
   registerPluginTools(server, config);
@@ -532,18 +532,16 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   const catalog = getNativeToolCatalog(server);
   assertRegisteredToolsHaveToolMeta(catalog, toolMeta);
   validateAndCacheNativeToolSchemas(catalog);
-  if (hostToolSearchService !== undefined) {
-    hostToolSearchServices.set(server, hostToolSearchService);
-    hostToolSearchInitializers.set(
-      server,
-      hostToolSearchService.buildForHost({
-        nativeToolCatalog: catalog,
-        nativeToolNames: [...hostEnabledToolNames],
-        broker,
-        toolMeta,
-      })
-    );
-  }
+  hostToolSearchServices.set(server, hostToolSearchService);
+  hostToolSearchInitializers.set(
+    server,
+    hostToolSearchService.buildForHost({
+      nativeToolCatalog: catalog,
+      nativeToolNames: [...hostEnabledToolNames],
+      ...(hostBrokerToolSearchEnabled ? { broker } : {}),
+      toolMeta,
+    })
+  );
   return server;
 }
 

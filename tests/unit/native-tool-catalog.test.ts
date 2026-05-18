@@ -33,6 +33,11 @@ function makeConfig(): FlashQueryConfig {
       remote: 'origin',
       branch: 'main',
     },
+    trashFolder: {
+      enabled: false,
+      path: '.flashquery/removed',
+      collisionStrategy: 'suffix',
+    },
     embedding: {
       provider: 'none',
       model: '',
@@ -41,6 +46,14 @@ function makeConfig(): FlashQueryConfig {
     logging: {
       level: 'info',
       output: 'stderr',
+    },
+    mcpServers: {},
+    host: {
+      mcpServers: [],
+      toolSearch: 'disabled',
+    },
+    macro: {
+      defaultTimeoutMs: 60000,
     },
     llm: {
       providers: [],

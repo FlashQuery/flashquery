@@ -181,6 +181,12 @@ const D = {
     'Do not use as a delegated native tool or to recursively call tools from a model without an explicit purpose; use direct MCP tools for local data operations.',
     'call_model({ "purpose": "summarize", "prompt": "Summarize {{ref:Notes/Plan.md}}" })'
   ),
+  searchTools: description(
+    'Search the visible FlashQuery-native and brokered tool index by intent and return ranked tool discovery results.',
+    'Use when the available tool surface is large or a tool_search-enabled host or purpose needs to discover the right callable tool before composing a direct call.',
+    'Do not use to execute tools or fetch document content; call the returned tool directly after selecting a result.',
+    'search_tools({ "query": "read a vault document with frontmatter", "limit": 5 })'
+  ),
   callMacro: description(
     'Run a FlashQuery macro as one structured orchestration request.',
     'Use when you need deterministic multi-step FlashQuery orchestration through call_macro.',
@@ -264,6 +270,7 @@ export const TOOL_METADATA = [
   current('clear_pending_reviews', ['plugin'], 'admin', D.clearPendingReviews, SYSTEM_ADMIN_REASON),
 
   current('call_model', ['llm'], 'admin', D.callModel, RECURSIVE_MODEL_REASON),
+  current('search_tools', ['llm'], 'read-only', D.searchTools),
   current('call_macro', ['llm'], 'admin', D.callMacro, RECURSIVE_MODEL_REASON),
   current('get_llm_usage', ['llm'], 'read-only', D.getLlmUsage),
 

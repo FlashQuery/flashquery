@@ -30,6 +30,10 @@ const mockConfig: FlashQueryConfig = {
   embedding: { provider: 'openai', dimensions: 1536, openaiApiKey: 'test-key' },
   logging: { level: 'info', output: 'stderr' },
   locking: { enabled: false },
+  trashFolder: { enabled: false, path: '.flashquery/removed', collisionStrategy: 'suffix' },
+  mcpServers: {},
+  host: { mcpServers: [], toolSearch: 'disabled' },
+  macro: { defaultTimeoutMs: 60000 },
 };
 
 function makeCatalogServer(): McpServer {

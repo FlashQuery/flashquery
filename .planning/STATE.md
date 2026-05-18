@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
-status: verifying
-stopped_at: Completed 140-06-PLAN.md
-last_updated: "2026-05-18T14:48:41.329Z"
-last_activity: 2026-05-18
+status: ready_to_plan
+stopped_at: Phase 141 complete (11/11) — ready to discuss Phase 142
+last_updated: 2026-05-18T18:41:07.462Z
+last_activity: 2026-05-18 -- Phase 141 complete
 progress:
   total_phases: 5
-  completed_phases: 2
-  total_plans: 12
-  completed_plans: 12
-  percent: 40
+  completed_phases: 3
+  total_plans: 23
+  completed_plans: 23
+  percent: 60
 ---
 
 # FlashQuery Core — State
@@ -21,20 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 140 — tofu-schema-pinning-and-tool-list-change-handling
+**Current focus:** Phase 142 — host surface and consumer context
 
 ## Current Position
 
-Phase: 140 (tofu-schema-pinning-and-tool-list-change-handling) — VERIFYING
-Plan: 6 of 6
-Status: Phase complete — ready for verification
+Phase: 142
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-18
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 40 (this milestone)
+- Total plans completed: 51 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -60,6 +60,7 @@ Last activity: 2026-05-18
 | 136 | 4 | - | - |
 | 137 | 5 | - | - |
 | 138 | 4 | - | - |
+| 141 | 11 | - | - |
 
 *Updated after each plan completion*
 | Phase 107 P04 | 15m | 2 tasks | 9 files |

@@ -125,15 +125,23 @@ describe('host tool-search index lifecycle', () => {
     );
   });
 
-  it('T-I-038 does not create or build a host index when host tool_search is disabled', () => {
+  it('T-I-038 builds native-only host search when brokered host tool_search is disabled', async () => {
     const config = makeConfig({
       mcpServers: { basic: basicBrokerConfig() },
       host: { mcpServers: ['basic'], toolSearch: 'disabled' },
     });
 
     const server = createMcpServer(config, 'test');
+    await initializeHostToolSearchForServer(server);
+    const service = getHostToolSearchServiceForServer(server);
 
-    expect(getHostToolSearchServiceForServer(server)).toBeUndefined();
+    expect(service?.isBuilt()).toBe(true);
+    expect(service?.search('read vault document', 5)).toContainEqual(
+      expect.objectContaining({ server: 'flashquery', has_help: true })
+    );
+    expect(service?.search('repeat diagnostics payloads', 5)).not.toContainEqual(
+      expect.objectContaining({ server: 'basic', tool: 'echo' })
+    );
   });
 
   it('T-I-039 and T-I-040 update host-visible list_changed tools through the existing sink path within 1 second', async () => {

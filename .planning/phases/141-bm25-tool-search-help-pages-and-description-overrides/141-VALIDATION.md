@@ -77,6 +77,12 @@ Run date: 2026-05-18.
 | YAML Phase C | `python3 tests/scenarios/integration/run_integration.py --managed description_override_substitution search_tools_workflow` | PASS | 2/2 workflows passed. Report: `tests/scenarios/integration/reports/integration-report-2026-05-18-150353.md`. |
 | Build | `npm run build` | PASS | `tsup` ESM and DTS build succeeded; final explicit run completed successfully. |
 | Lint | `npm run lint` | PASS | ESLint completed with zero warnings and zero errors. |
+| Full unit suite | `npm test` | PASS | 132 files passed, 1878 tests passed, duration 20.35s. |
+| Full integration suite | `npm run test:integration` | PASS | 18 files passed, 88 tests passed, 1 skipped, duration 340.90s. |
+| Full E2E suite | `npm run test:e2e` | PASS | 9 files passed, 73 tests passed, duration 212.73s. |
+| Package dry-run | `npm pack --dry-run --json` | PASS | Package includes `dist/mcp/tools/*.tool.md`, including `dist/mcp/tools/search_tools.tool.md`. |
+| Post-review Directed Phase C | `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_mcp_broker_phase_c` | PASS | 1 testcase passed, 2/2 steps passed. Report: `tests/scenarios/directed/reports/scenario-report-2026-05-18-154007.md`. Cleanup timed out at 30s but residue was 0. |
+| Post-review YAML Phase C | `python3 tests/scenarios/integration/run_integration.py --managed description_override_substitution search_tools_workflow` | PASS | 2/2 workflows passed. Report: `tests/scenarios/integration/reports/integration-report-2026-05-18-154046.md`. |
 
 ## Phase C Test ID Audit
 

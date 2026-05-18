@@ -1,10 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fg from 'fast-glob';
 import matter from 'gray-matter';
 
 export const TOOL_META_GLOB = 'src/mcp/tools/*.tool.md';
+const DIST_TOOL_META_GLOB = 'dist/mcp/tools/*.tool.md';
 export const DEFAULT_HELP_HINT =
   "FlashQuery-native tool. Pass `{help: true}` for full documentation, examples, and common patterns before composing your call if you're uncertain about parameters.";
 
@@ -41,8 +43,24 @@ export interface ToolMetaValidationResult {
   diagnostics: ToolMetaDiagnostic[];
 }
 
+export async function resolveToolMetaFilePaths(): Promise<string[]> {
+  for (const pattern of toolMetaCandidateGlobs()) {
+    const filePaths = await fg(pattern, { onlyFiles: true, unique: true, absolute: false });
+    if (filePaths.length > 0) return filePaths.sort();
+  }
+  return [];
+}
+
+export function resolveToolMetaFilePathsSync(): string[] {
+  for (const pattern of toolMetaCandidateGlobs()) {
+    const filePaths = fg.sync(pattern, { onlyFiles: true, unique: true, absolute: false });
+    if (filePaths.length > 0) return filePaths.sort();
+  }
+  return [];
+}
+
 export async function loadToolMeta(): Promise<Map<string, ToolMeta>> {
-  const filePaths = await fg(TOOL_META_GLOB, { onlyFiles: true, unique: true });
+  const filePaths = await resolveToolMetaFilePaths();
   const sources = await Promise.all(filePaths.sort().map(async (filePath) => ({
     filePath,
     raw: await readFile(filePath, 'utf8'),
@@ -61,7 +79,7 @@ export async function loadToolMeta(): Promise<Map<string, ToolMeta>> {
 }
 
 export function loadToolMetaSync(): Map<string, ToolMeta> {
-  const filePaths = fg.sync(TOOL_META_GLOB, { onlyFiles: true, unique: true });
+  const filePaths = resolveToolMetaFilePathsSync();
   const sources = filePaths.sort().map((filePath) => ({
     filePath,
     raw: readFileSync(filePath, 'utf8'),
@@ -77,6 +95,20 @@ export function loadToolMetaSync(): Map<string, ToolMeta> {
   }
 
   return result.meta;
+}
+
+function toolMetaCandidateGlobs(): string[] {
+  const moduleDir = dirname(fileURLToPath(import.meta.url));
+  return uniqueStrings([
+    resolve(moduleDir, 'mcp/tools/*.tool.md'),
+    resolve(moduleDir, '../../mcp/tools/*.tool.md'),
+    TOOL_META_GLOB,
+    DIST_TOOL_META_GLOB,
+  ]);
+}
+
+function uniqueStrings(values: readonly string[]): string[] {
+  return [...new Set(values)];
 }
 
 export function assertRegisteredToolsHaveToolMeta(

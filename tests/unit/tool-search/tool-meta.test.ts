@@ -4,6 +4,7 @@ import {
   assertRegisteredToolsHaveToolMeta,
   DEFAULT_HELP_HINT,
   loadToolMetaSync,
+  resolveToolMetaFilePathsSync,
   TOOL_META_GLOB,
   validateToolMeta,
 } from '../../../src/services/tool-search/tool-meta.js';
@@ -206,6 +207,12 @@ args: {}
 
   it('keeps the production loader fixed to source-tree tool help pages', () => {
     expect(TOOL_META_GLOB).toBe('src/mcp/tools/*.tool.md');
+  });
+
+  it('resolves packaged dist help pages after a production build copies them', () => {
+    const filePaths = resolveToolMetaFilePathsSync();
+
+    expect(filePaths.some((filePath) => filePath.endsWith('search_tools.tool.md'))).toBe(true);
   });
 
   it('validates the first core memory document search help-page batch', () => {

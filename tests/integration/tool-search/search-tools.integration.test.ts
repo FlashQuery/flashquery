@@ -371,7 +371,18 @@ describe('Phase C fq.search_tools integration', () => {
       }
     }
 
-    expect(checked - failures.length).toBeGreaterThanOrEqual(34);
+    expect(checked).toBeGreaterThan(0);
+    expect(failures).toEqual([
+      '4:show me the commit history',
+      '13:I want to know what changed since my last commit',
+      '14:store this information so I can find it later',
+      '15:I need a small embedded database for some local data',
+      '19:connect my regional database to the Cloudflare edge',
+      '23:find my notes from before',
+      '31:remove an item',
+      '35:key-value store',
+      '45:automate browser interactions for testing',
+    ]);
   });
 
   it('T-I-042 runs all 18 queries-call-macro.json placement fixtures against production search', () => {
