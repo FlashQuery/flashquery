@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.5
 milestone_name: MCP Broker
 status: executing
-stopped_at: Completed 142-02-PLAN.md
-last_updated: "2026-05-18T20:01:08.278Z"
+stopped_at: Completed 142-03-PLAN.md
+last_updated: "2026-05-18T20:22:04.000Z"
 last_activity: 2026-05-18
 progress:
   total_phases: 5
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-17)
 ## Current Position
 
 Phase: 142 (host-surface-and-consumer-context) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-05-18
 
@@ -142,6 +142,7 @@ Last activity: 2026-05-18
 | Phase 140 P06 | 9m12s | 2 tasks | 3 files |
 | Phase 142 P01 | 3m02s | 2 tasks | 4 files |
 | Phase 142 P02 | 8m | 2 tasks | 7 files |
+| Phase 142 P03 | 18m48s | 2 tasks | 13 files |
 
 ## Decisions
 
@@ -150,6 +151,9 @@ Last activity: 2026-05-18
 - [Phase 142]: 142-02 host brokered tools register through an uncataloged SDK path so they appear on host tools/list without becoming FQ-native catalog entries or requiring .tool.md metadata.
 - [Phase 142]: 142-02 host registration converts broker JSON Schema into SDK-compatible Zod raw shapes at the MCP boundary while preserving BrokeredTool input schemas in broker state.
 - [Phase 142]: 142-02 host brokered trace cost is recorded only after Broker.callTool returns, including upstream isError results, and not for thrown broker failures.
+- [Phase 142]: 142-03 `tool_calls` metadata is always present for traced `call_model` responses, using an empty array when no brokered calls occurred.
+- [Phase 142]: 142-03 nested macro execution preserves the exact outer ConsumerContext via MacroCallerContext rather than reconstructing host defaults.
+- [Phase 142]: 142-03 `fq.call_macro` is callable from macro frames while `fq.call_model` remains delegated-hard-excluded.
 - [Phase 136]: 136-01 Wave 0 tests intentionally remain RED until `src/macro/task-registry.ts` and dedicated cancellation behavior land.
 - [Phase 136]: 136-01 existing T-U-125 `list_tasks` coverage was extended with a real `MacroTaskRegistry` provider contract.
 - Kept template rendering inside src/llm/reference-resolver.ts and reused resolveAndBuildDocument for document params.
@@ -389,8 +393,8 @@ Last activity: 2026-05-18
 
 ## Session Continuity
 
-Last session: 2026-05-18T20:01:08.255Z
-Stopped at: Completed 142-02-PLAN.md
+Last session: 2026-05-18T20:22:04.000Z
+Stopped at: Completed 142-03-PLAN.md
 Resume: None
 
 ## Deferred Items

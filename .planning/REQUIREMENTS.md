@@ -90,9 +90,9 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [x] **REQ-062**: Diff routing handles new, changed, and removed tools.
 - [x] **REQ-063**: Indexer updates from `list_changed` are synchronous in the notification handler.
 - [x] **REQ-064**: Diff classification utility is reusable.
-- [ ] **REQ-065**: Per-`call_model` trace records gain a `tool_calls` array.
+- [x] **REQ-065**: Per-`call_model` trace records gain a `tool_calls` array.
 - [x] **REQ-066**: Host-initiated brokered calls also produce `tool_calls` entries.
-- [ ] **REQ-067**: Host-invoked macros inherit the host trace scope.
+- [x] **REQ-067**: Host-invoked macros inherit the host trace scope.
 - [x] **REQ-068**: Rejected reverse requests are audit-logged.
 - [ ] **REQ-069**: `search_tools` invocations are audit-logged.
 - [x] **REQ-070**: TOFU approvals and rejections are audit-logged.
@@ -151,8 +151,8 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [ ] **REQ-111**: Brokered tools have no broker-side tier classification.
 - [ ] **REQ-112**: Macro pre-scan continues to use the agent-loop native-tool tier system unchanged.
 - [x] **REQ-113**: `host:` section design follows source spec §6.6.
-- [ ] **REQ-114**: Consumer context is inherited across nested macro frames.
-- [ ] **REQ-115**: `ConsumerContext` is established once at the outermost frame.
+- [x] **REQ-114**: Consumer context is inherited across nested macro frames.
+- [x] **REQ-115**: `ConsumerContext` is established once at the outermost frame.
 - [x] **REQ-116**: `Broker.listToolsForConsumer(ctx)` returns the filtered view.
 - [ ] **REQ-117**: Lazy spawn is unified across host and delegated consumers.
 - [ ] **REQ-118**: TOFU pins are shared across consumers.
