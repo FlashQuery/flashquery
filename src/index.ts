@@ -27,6 +27,7 @@ import { Command } from 'commander';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { loadConfig, resolveConfigPath, getDeprecationWarnings, getStartupWarnings } from './config/loader.js';
+import { listToolsCommand } from './cli/commands/list-tools.js';
 import { unlockCommand } from './cli/commands/unlock.js';
 import { initLogger, logger } from './logging/logger.js';
 import { checkPortAvailable } from './server/port-checker.js';
@@ -354,6 +355,7 @@ if (isMain) {
       await runDoctorCommand(configPath);
     });
 
+  program.addCommand(listToolsCommand);
   program.addCommand(unlockCommand);
 
   program.parseAsync(process.argv).catch((err: unknown) => {
