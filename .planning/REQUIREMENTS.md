@@ -99,9 +99,9 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 ### Diagnostic CLI
 
-- [ ] **REQ-071**: `flashquery list-tools <server>` connects to the configured server, calls `tools/list`, and exits.
-- [ ] **REQ-072**: CLI output is paste-ready YAML under `mcp_servers.<server>.tool_overrides:`.
-- [ ] **REQ-073**: CLI failures surface stderr.
+- [x] **REQ-071**: `flashquery list-tools <server>` connects to the configured server, calls `tools/list`, and exits.
+- [x] **REQ-072**: CLI output is paste-ready YAML under `mcp_servers.<server>.tool_overrides:`.
+- [x] **REQ-073**: CLI failures surface stderr.
 
 ### BM25 Tool Search
 
@@ -140,14 +140,14 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 ### Macro Extensions And Host Surface
 
-- [ ] **REQ-103**: `_self` engine binding is available for `source_ref` macros.
-- [ ] **REQ-104**: `continue` and `break` loop-control statements are supported.
+- [x] **REQ-103**: `_self` engine binding is available for `source_ref` macros.
+- [x] **REQ-104**: `continue` and `break` loop-control statements are supported.
 - [x] **REQ-105**: `needs_user_input` macro exit reason is supported.
 - [x] **REQ-106**: `CallToolResult` coercion rule includes the `isError` carve-out.
 - [x] **REQ-107**: Brokered-tool errors propagate fail-fast by default.
 - [x] **REQ-108**: Macro object arguments pass through without coercion.
-- [ ] **REQ-109**: `<server>._exists()` uses deep probe.
-- [ ] **REQ-110**: Concurrent macro execution against shared brokered servers is safe.
+- [x] **REQ-109**: `<server>._exists()` uses deep probe.
+- [x] **REQ-110**: Concurrent macro execution against shared brokered servers is safe.
 - [ ] **REQ-111**: Brokered tools have no broker-side tier classification.
 - [ ] **REQ-112**: Macro pre-scan continues to use the agent-loop native-tool tier system unchanged.
 - [x] **REQ-113**: `host:` section design follows source spec §6.6.
@@ -188,7 +188,7 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 | REQ-038..049, REQ-061..064, REQ-068, REQ-070, REQ-105 | Phase 140 | Pending |
 | REQ-074..102, REQ-011, REQ-085..087 | Phase 141 | Pending |
 | REQ-005..010, REQ-031, REQ-035, REQ-065..067, REQ-113..118 | Phase 142 | Complete |
-| REQ-071..073, REQ-103..104, REQ-109..110 | Phase 143 | Pending |
+| REQ-071..073, REQ-103..104, REQ-109..110 | Phase 143 | Complete |
 
 **Coverage:**
 - v3.5 requirements: 118 total
@@ -197,4 +197,4 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 ---
 *Requirements defined: 2026-05-17*
-*Last updated: 2026-05-18 after Phase 142 validation closure*
+*Last updated: 2026-05-19 after Phase 143 validation closure*
