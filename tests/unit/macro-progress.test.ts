@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ProgressEmitter } from '../../src/macro/progress-emitter.js';
 import { evaluateProgram } from '../../src/macro/evaluator.js';
-import { parseProgram, parseToolPayload } from './macro-test-helpers.js';
+import { dispatchRegistry, parseProgram, parseToolPayload } from './macro-test-helpers.js';
 
 describe('macro progress modes', () => {
   it.each([
@@ -14,6 +14,7 @@ describe('macro progress modes', () => {
       const result = await evaluateProgram(
         parseProgram('for item in [1,2,3] do\necho $item\ndone\nfq.call_model({})\nbrave.web({})\nexit "ok"'),
         {
+          ...dispatchRegistry(['fq.call_model', 'brave.web']),
           progressMode,
           traceMode: 'full',
           dispatchTool: async () => ({ content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }),
@@ -32,6 +33,7 @@ describe('macro progress modes', () => {
   it('T-U-194 progress full emits explicit status, for-loop, model, and tool notifications', async () => {
     const notifications: unknown[] = [];
     const result = await evaluateProgram(parseProgram('status "ready"\nfor item in [1] do\nbrave.web({})\ndone\nfq.call_model({})'), {
+      ...dispatchRegistry(['brave.web', 'fq.call_model']),
       progressMode: 'full',
       progressToken: 'tok',
       progressNotificationSink: async (entry) => notifications.push(entry),

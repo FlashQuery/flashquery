@@ -1,0 +1,114 @@
+# Pilot — SMOKE TEST #1 (both unreachable → fail).
+# Same generated macro as 910; this variant has NEITHER primary nor
+# backup registered.
+#
+# IMPORTANT — surfaced PRODUCTION_GAPS.md PG-001 on 2026-05-19:
+# Per REQ-028 ac1+ac5 and INV-07, the spec requires permission
+# pre-scan to refuse with `unknown_server` BEFORE any statement
+# executes. PG-001 fixed the production evaluator to run that pre-scan
+# even when a caller omits the registry/allowlist, so this pilot now
+# asserts the golden/spec-correct pre-scan envelope.
+
+id: mtf-d-912-smoke-failover-both-unreachable
+name: Smoke — failover macro fails when neither server is reachable
+intent: |
+  Same intent as pilots 910/911 — a macro that tries primary, then
+  backup, and fails cleanly if neither is reachable. This pilot
+  was originally written to exercise the "neither reachable → fail"
+  termination path, but reconciliation against the golden surfaced a
+  spec deviation: per REQ-028 ac1+ac5 and INV-07, the engine must
+  refuse at pre-scan with `unknown_server` before any statement
+  executes, since neither server is in the registry. The golden does
+  this; production now defaults missing registry/allowlist inputs to
+  empty collections and refuses the unknown servers before execution.
+  Tracked as PRODUCTION_GAPS.md PG-001.
+description: |
+  Same macro source as pilots 910/911. With both `primary_srv` and
+  `backup_srv` absent from the tool registry, the spec (REQ-028)
+  requires pre-scan to refuse with `unknown_server`; the macro must
+  not reach the runtime fail branch — see PRODUCTION_GAPS.md PG-001.
+
+covers:
+  - MTF-L-101
+  - MTF-S-101
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T17:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  data = null
+  path_taken = "none"
+  backup_needed = false
+
+  if primary_srv._exists() then
+    data = primary_srv.fetch({})
+    path_taken = "primary"
+  else
+    if backup_srv._exists() then
+      data = backup_srv.fetch({})
+      path_taken = "backup"
+      backup_needed = true
+    else
+      fail "Neither primary_srv nor backup_srv is reachable."
+    fi
+  fi
+
+  exit { path: $path_taken, data: $data, backup_needed: $backup_needed }
+
+input_vars: {}
+vault: {}
+
+# AI-predicted expect updated after PG-001. Per REQ-028 ac1+ac5 and
+# INV-07, the spec-correct behavior is the golden's `unknown_server`
+# pre-scan refusal.
+predicted_expect:
+  outcome: error
+  error:
+    code: unknown_server
+    message_contains: "primary_srv"
+  side_effects:
+    tool_call_count: 0
+
+# Reconciliation: resolved by PG-001 production fix. Production now
+# matches the golden/spec-correct pre-scan refusal.
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T19:07:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: resolved_production_gap
+  spec_reference:
+    - "FlashQuery Macro Language Requirements REQ-028 ac1"
+    - "FlashQuery Macro Language Requirements REQ-028 ac5"
+    - "FlashQuery Macro Language Requirements INV-07"
+  production_gap_id: PG-001
+  production_gap_doc: ../../PRODUCTION_GAPS.md
+  golden_captured:
+    outcome: error
+    error:
+      code: unknown_server
+      message: "macro pre-scan rejected: unknown server(s): primary_srv, backup_srv"
+  notes: |
+    Per REQ-028 ac5 ("MUST run after parse but before any statement
+    executes") and INV-07 ("MUST NOT execute any tool call when the
+    permission pre-scan finds a denied or unknown tool reference"),
+    the pre-scan is mandatory and unconditional. Production's
+    PG-001 removed the evaluator guard that skipped pre-scan when
+    `toolRegistry` or `allowedToolNames` was undefined.
+
+    The golden is spec-correct: it always pre-scans against
+    defaultToolRegistry, so `primary_srv` and `backup_srv` (unknown
+    servers) trigger the spec's `unknown_server` envelope.
+
+# Test-runtime expect — golden/spec-correct envelope after PG-001.
+expect:
+  outcome: error
+  error:
+    code: unknown_server
+    message_contains: "primary_srv"
+  side_effects:
+    tool_call_count: 0

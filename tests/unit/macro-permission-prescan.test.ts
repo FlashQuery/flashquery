@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { evaluateProgram } from '../../src/macro/evaluator.js';
 import { preScanToolReferences } from '../../src/macro/permission-prescan.js';
 import { buildToolRegistry } from '../../src/macro/registry.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
@@ -249,5 +250,23 @@ describe('preScanToolReferences', () => {
         available: ['archive_document', 'get_document', 'search', 'write_document'],
       },
     });
+  });
+
+  it('PG-001 runs pre-scan against an empty registry when evaluateProgram is invoked without registry options', async () => {
+    const dispatchTool = vi.fn(async () => ({ content: [{ type: 'text', text: '{}' }] }));
+
+    const result = await evaluateProgram(
+      parseProgram('brave_search.web_search({ query: "must not dispatch" })'),
+      { dispatchTool }
+    );
+
+    expect(parseEnvelope(result)).toMatchObject({
+      error: 'unknown_server',
+      details: {
+        server: 'brave_search',
+        unknown: ['brave_search.web_search'],
+      },
+    });
+    expect(dispatchTool).not.toHaveBeenCalled();
   });
 });

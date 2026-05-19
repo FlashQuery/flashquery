@@ -6,7 +6,7 @@ import { NullMcpBroker } from '../../src/services/mcp-broker.js';
 import type { McpBroker } from '../../src/services/mcp-broker.js';
 import { runMacroSource } from '../../src/mcp/tools/macro.js';
 import { evaluateProgram } from '../../src/macro/evaluator.js';
-import { parseProgram } from './macro-test-helpers.js';
+import { dispatchRegistry, parseProgram } from './macro-test-helpers.js';
 import { macroResult } from '../../src/mcp/utils/response-formats.js';
 import type {
   MacroDryRunResult,
@@ -61,6 +61,7 @@ describe('macro envelope response contracts', () => {
 
   it('T-U-199b evaluateProgram returns execution counters on successful macro payloads', async () => {
     const result = await evaluateProgram(parseProgram('fq.call_model({})'), {
+      ...dispatchRegistry(['fq.call_model']),
       dispatchTool: async () => ({
         content: [{ type: 'text', text: JSON.stringify({ metadata: { tokens: { input: 3, output: 4 } } }) }],
       }),
@@ -78,6 +79,7 @@ describe('macro envelope response contracts', () => {
 
   it('T-U-199c evaluateProgram returns external_tool_calls only after brokered tool calls', async () => {
     const result = await evaluateProgram(parseProgram('brave.web({})'), {
+      ...dispatchRegistry(['brave.web']),
       dispatchTool: async () => ({ content: [{ type: 'text', text: '{}' }] }),
     });
 

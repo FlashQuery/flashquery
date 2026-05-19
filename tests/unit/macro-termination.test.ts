@@ -6,7 +6,7 @@ import {
   MacroNeedsUserInputError,
 } from '../../src/macro/evaluator.js';
 import type { ToolResult } from '../../src/mcp/utils/response-formats.js';
-import { basicBuiltins, parseProgram, parseToolPayload, resultOf } from './macro-test-helpers.js';
+import { basicBuiltins, dispatchRegistry, parseProgram, parseToolPayload, resultOf } from './macro-test-helpers.js';
 
 describe('macro evaluator termination envelopes', () => {
   it('T-U-084 returns result null on fall-off with no isError flag', async () => {
@@ -72,6 +72,7 @@ describe('macro evaluator termination envelopes', () => {
         exit "unhandled"
       `),
       {
+        ...dispatchRegistry(['fq.missing']),
         builtins: basicBuiltins(),
         dispatchTool: async () => ({
           content: [{ type: 'text', text: JSON.stringify({ isError: false, error: 'not_found' }) }],
@@ -84,6 +85,7 @@ describe('macro evaluator termination envelopes', () => {
 
   it('T-U-089 maps thrown tools and isError true tool results to tool_call_failed runtime errors', async () => {
     const thrown = await evaluateProgram(parseProgram('fq.boom({})'), {
+      ...dispatchRegistry(['fq.boom']),
       builtins: basicBuiltins(),
       dispatchTool: async () => {
         throw new Error('boom');
@@ -96,6 +98,7 @@ describe('macro evaluator termination envelopes', () => {
     });
 
     const fatal = await evaluateProgram(parseProgram('fq.boom({})'), {
+      ...dispatchRegistry(['fq.boom']),
       builtins: basicBuiltins(),
       dispatchTool: async () =>
         ({

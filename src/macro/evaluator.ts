@@ -100,8 +100,8 @@ export interface MacroInvocationContext {
   vaultRoot?: string;
   stdin?: MacroValue;
   broker: McpBroker;
-  toolRegistry?: ToolRegistry;
-  allowedToolNames?: Set<string>;
+  toolRegistry: ToolRegistry;
+  allowedToolNames: Set<string>;
   templateToolNames?: Set<string>;
   hardExcludedReasons?: Map<string, string>;
   callerContext?: MacroCallerContext;
@@ -326,10 +326,8 @@ export function createInvocationContext(
     vaultRoot: options.vaultRoot,
     stdin: options.stdin,
     broker: options.broker ?? new NullMcpBroker(),
-    toolRegistry: options.toolRegistry,
-    allowedToolNames: options.allowedToolNames === undefined && options.allowlist === undefined
-      ? undefined
-      : new Set(options.allowedToolNames ?? options.allowlist),
+    toolRegistry: options.toolRegistry ?? {},
+    allowedToolNames: new Set(options.allowedToolNames ?? options.allowlist ?? []),
     templateToolNames: options.templateToolNames === undefined
       ? undefined
       : new Set(options.templateToolNames),
@@ -366,18 +364,16 @@ export async function evaluateProgram(
     preflightProgram(program);
     const inputVarContract = collectInputVarContract(program);
     validateInputVars(inputVarContract, context.inputVars);
-    if (context.toolRegistry && context.allowedToolNames) {
-      const permissionError = preScanToolReferences({
-        program,
-        registry: context.toolRegistry,
-        allowlist: context.allowedToolNames,
-        ...(context.templateToolNames === undefined ? {} : { templateToolNames: context.templateToolNames }),
-        ...(context.hardExcludedReasons === undefined ? {} : { hardExcludedReasons: context.hardExcludedReasons }),
-        ...(context.callerContext === undefined ? {} : { callerContext: context.callerContext }),
-      });
-      if (permissionError) {
-        throwExpectedToolResult(permissionError);
-      }
+    const permissionError = preScanToolReferences({
+      program,
+      registry: context.toolRegistry,
+      allowlist: context.allowedToolNames,
+      ...(context.templateToolNames === undefined ? {} : { templateToolNames: context.templateToolNames }),
+      ...(context.hardExcludedReasons === undefined ? {} : { hardExcludedReasons: context.hardExcludedReasons }),
+      ...(context.callerContext === undefined ? {} : { callerContext: context.callerContext }),
+    });
+    if (permissionError) {
+      throwExpectedToolResult(permissionError);
     }
     await execBlock(program.statements, env, context);
     return macroResult(buildSuccessPayload(context, null));
@@ -831,7 +827,7 @@ async function evalToolCall(
     if (isExternalToolCall) context.budgetTracker.beforeExternalToolCall();
     await context.progressEmitter.emitToolCallStart(toolName);
   }
-  if (!context.toolRegistry && !context.dispatchTool) {
+  if (Object.keys(context.toolRegistry).length === 0 && !context.dispatchTool) {
     throw new MacroRuntimeError(
       `No tool dispatcher configured for ${call.server}.${call.tool}.`,
       call.line,
@@ -844,7 +840,7 @@ async function evalToolCall(
     );
   }
 
-  if (context.toolRegistry && context.allowedToolNames) {
+  if (Object.keys(context.toolRegistry).length > 0 && !context.dispatchTool) {
     const dispatched = await dispatchMacroTool({
       registry: context.toolRegistry,
       allowlist: context.allowedToolNames,
@@ -868,6 +864,40 @@ async function evalToolCall(
       result: dispatched,
     });
     return dispatched;
+  }
+
+  if (Object.keys(context.toolRegistry).length > 0) {
+    const serverEntry = context.toolRegistry[call.server];
+    if (!serverEntry) {
+      throwExpectedToolResult(jsonExpectedError({
+        error: 'unknown_server',
+        message: `Unknown tool server '${call.server}'.`,
+        details: { server: call.server },
+      }));
+    }
+    const toolFn = serverEntry.tools[call.tool];
+    if (!toolFn) {
+      throwExpectedToolResult(jsonExpectedError({
+        error: 'unknown_tool',
+        message: `Unknown tool '${call.server}.${call.tool}'.`,
+        details: {
+          server: call.server,
+          tool: call.tool,
+          available: Object.keys(serverEntry.tools).sort(),
+        },
+      }));
+    }
+    const toolReference = `${call.server}.${call.tool}`;
+    if (!context.allowedToolNames.has(toolReference)) {
+      throwExpectedToolResult(jsonExpectedError({
+        error: 'forbidden_tools',
+        message: `Tool '${toolReference}' is not allowed for this macro invocation.`,
+        details: {
+          forbidden: [toolReference],
+          allowed: [...context.allowedToolNames].sort(),
+        },
+      }));
+    }
   }
 
   let result: ToolResult;

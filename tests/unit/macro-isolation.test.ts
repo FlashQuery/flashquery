@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { createInvocationContext, evaluateProgram } from '../../src/macro/evaluator.js';
-import { basicBuiltins, parseProgram, parseToolPayload, resultOf } from './macro-test-helpers.js';
+import { basicBuiltins, dispatchRegistry, parseProgram, parseToolPayload, resultOf } from './macro-test-helpers.js';
 
 describe('macro evaluator invocation isolation', () => {
   it('T-U-092 does not leak variables across sequential invocations', async () => {
@@ -66,6 +66,7 @@ describe('macro evaluator invocation isolation', () => {
         exit $i
       `),
       {
+        ...dispatchRegistry(['fq.ping']),
         builtins: basicBuiltins(),
         dispatchTool: async () => ({ content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }),
         checkCancelled: (where) => {

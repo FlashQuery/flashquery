@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { TraceStep } from '../../src/mcp/utils/response-formats.js';
 import { evaluateProgram } from '../../src/macro/evaluator.js';
-import { parseProgram, parseToolPayload } from './macro-test-helpers.js';
+import { dispatchRegistry, parseProgram, parseToolPayload } from './macro-test-helpers.js';
 
 describe('macro trace response contracts', () => {
   it('T-U-187 trace full includes args and result for tool and model calls', async () => {
     const result = await evaluateProgram(parseProgram('fq.call_model({ prompt: "hi" })\nbrave.web({ q: "x" })'), {
+      ...dispatchRegistry(['fq.call_model', 'brave.web']),
       traceMode: 'full',
       dispatchTool: async (server, tool) => ({
         content: [{ type: 'text', text: JSON.stringify({ ok: `${server}.${tool}` }) }],
@@ -21,6 +22,7 @@ describe('macro trace response contracts', () => {
 
   it('T-U-188 trace summary omits only args and result from retained steps', async () => {
     const result = await evaluateProgram(parseProgram('fq.call_model({ prompt: "hi" })'), {
+      ...dispatchRegistry(['fq.call_model']),
       traceMode: 'summary',
       dispatchTool: async () => ({ content: [{ type: 'text', text: JSON.stringify({ ok: true }) }] }),
     });
@@ -41,6 +43,7 @@ describe('macro trace response contracts', () => {
   it('T-U-190 large trace values are capped to the documented byte sentinel', async () => {
     const large = 'x'.repeat(2050);
     const result = await evaluateProgram(parseProgram('brave.web({ q: "large" })'), {
+      ...dispatchRegistry(['brave.web']),
       traceMode: 'full',
       dispatchTool: async () => ({ content: [{ type: 'text', text: JSON.stringify({ large }) }] }),
     });
@@ -53,6 +56,7 @@ describe('macro trace response contracts', () => {
 
   it('T-U-193 applies trace mode while writing and does not retain omitted values', async () => {
     const result = await evaluateProgram(parseProgram('brave.web({ secret: "value" })'), {
+      ...dispatchRegistry(['brave.web']),
       traceMode: 'summary',
       dispatchTool: async () => ({ content: [{ type: 'text', text: JSON.stringify({ secret: 'result' }) }] }),
     });

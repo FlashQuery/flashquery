@@ -4,7 +4,7 @@ import { evaluateProgram } from '../../src/macro/evaluator.js';
 import { MacroTaskRegistry } from '../../src/macro/task-registry.js';
 import { NullMcpBroker } from '../../src/services/mcp-broker.js';
 import { runMacroSource } from '../../src/mcp/tools/macro.js';
-import { parseProgram, parseToolPayload } from './macro-test-helpers.js';
+import { dispatchRegistry, parseProgram, parseToolPayload } from './macro-test-helpers.js';
 
 describe('macro runtime budgets', () => {
   it('T-U-211 timeout_ms halts at the next safe point after in-flight work completes', async () => {
@@ -20,6 +20,7 @@ describe('macro runtime budgets', () => {
     const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
     try {
       const result = await evaluateProgram(parseProgram('brave.web({})\necho "after"'), {
+        ...dispatchRegistry(['brave.web']),
         budgetLimits: { timeout_ms: 5 },
         dispatchTool: async () => {
           await Promise.resolve();
@@ -40,6 +41,7 @@ describe('macro runtime budgets', () => {
 
   it('T-U-212 max_total_tokens halts after the offending model call returns', async () => {
     const result = await evaluateProgram(parseProgram('fq.call_model({})'), {
+      ...dispatchRegistry(['fq.call_model']),
       budgetLimits: { max_total_tokens: 3 },
       dispatchTool: async () => ({
         content: [{ type: 'text', text: JSON.stringify({ metadata: { tokens: { input: 2, output: 2 } } }) }],
@@ -53,6 +55,7 @@ describe('macro runtime budgets', () => {
 
   it('T-U-213 max_model_calls halts before dispatch', async () => {
     const result = await evaluateProgram(parseProgram('fq.call_model({})'), {
+      ...dispatchRegistry(['fq.call_model']),
       budgetLimits: { max_model_calls: 0 },
       dispatchTool: async () => ({ content: [{ type: 'text', text: '{}' }] }),
     });
@@ -64,6 +67,7 @@ describe('macro runtime budgets', () => {
 
   it('T-U-214 max_external_tool_calls counts only brokered external tools', async () => {
     const result = await evaluateProgram(parseProgram('brave.web({})'), {
+      ...dispatchRegistry(['brave.web']),
       budgetLimits: { max_external_tool_calls: 0 },
       dispatchTool: async () => ({ content: [{ type: 'text', text: '{}' }] }),
     });
@@ -76,6 +80,7 @@ describe('macro runtime budgets', () => {
   it('blocks nested call_macro when outer external tool budgets cannot be shared', async () => {
     let dispatched = false;
     const result = await evaluateProgram(parseProgram('fq.call_macro({ source: "brave.web({})" })'), {
+      ...dispatchRegistry(['fq.call_macro']),
       budgetLimits: { max_external_tool_calls: 0 },
       dispatchTool: async () => {
         dispatched = true;
@@ -96,6 +101,7 @@ describe('macro runtime budgets', () => {
   it('blocks nested call_macro when outer token budgets cannot be shared', async () => {
     let dispatched = false;
     const result = await evaluateProgram(parseProgram('fq.call_macro({ source: "fq.call_model({})" })'), {
+      ...dispatchRegistry(['fq.call_macro']),
       budgetLimits: { max_total_tokens: 1 },
       dispatchTool: async () => {
         dispatched = true;
@@ -115,10 +121,12 @@ describe('macro runtime budgets', () => {
 
   it('T-U-215 budget counters are isolated per invocation', async () => {
     const first = await evaluateProgram(parseProgram('fq.call_model({})'), {
+      ...dispatchRegistry(['fq.call_model']),
       budgetLimits: { max_model_calls: 1 },
       dispatchTool: async () => ({ content: [{ type: 'text', text: '{}' }] }),
     });
     const second = await evaluateProgram(parseProgram('fq.call_model({})'), {
+      ...dispatchRegistry(['fq.call_model']),
       budgetLimits: { max_model_calls: 1 },
       dispatchTool: async () => ({ content: [{ type: 'text', text: '{}' }] }),
     });

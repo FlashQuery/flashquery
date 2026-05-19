@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { NullMcpBroker } from '../../src/services/mcp-broker.js';
 import { evaluateProgram } from '../../src/macro/evaluator.js';
-import { parseProgram, parseToolPayload } from './macro-test-helpers.js';
+import { dispatchRegistry, parseProgram, parseToolPayload } from './macro-test-helpers.js';
 
 describe('macro warning propagation', () => {
   it('T-U-209 returns trace_value_truncated warnings on successful macro payloads', async () => {
     const result = await evaluateProgram(parseProgram('brave.web({ q: "x" })'), {
+      ...dispatchRegistry(['brave.web']),
       traceMode: 'full',
       dispatchTool: async () => ({
         content: [{ type: 'text', text: JSON.stringify({ text: 'x'.repeat(2050) }) }],

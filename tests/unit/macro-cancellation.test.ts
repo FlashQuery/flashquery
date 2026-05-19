@@ -5,7 +5,7 @@ import {
   type MacroBuiltin,
   type MacroValue,
 } from '../../src/macro/evaluator.js';
-import { parseProgram, parseToolPayload } from './macro-test-helpers.js';
+import { dispatchRegistry, parseProgram, parseToolPayload } from './macro-test-helpers.js';
 
 function cancellationAt(taskId: string, atSafePoint: string): never {
   throw new MacroCancellationError(taskId, atSafePoint);
@@ -88,6 +88,7 @@ describe('macro cooperative cancellation safe points', () => {
     const toolCalls: string[] = [];
 
     const result = await evaluateProgram(parseProgram('fq.write({ value: value "arg-side-effect" })'), {
+      ...dispatchRegistry(['fq.write']),
       taskId: 'task-cancel-tool',
       builtins: cancellationBuiltins(markers),
       dispatchTool: async (_server, tool) => {
@@ -238,6 +239,7 @@ describe('macro cooperative cancellation safe points', () => {
     let cancelAfterTool = false;
 
     const result = await evaluateProgram(parseProgram('fq.slow({})\nmark "after"'), {
+      ...dispatchRegistry(['fq.slow']),
       taskId: 'task-cancel-inflight-tool',
       builtins: cancellationBuiltins(markers),
       dispatchTool: async (): Promise<{ content: [{ type: 'text'; text: string }] }> => {

@@ -1,7 +1,7 @@
 import { expect } from 'vitest';
 import { parseMacroSource } from '../../src/macro/parser.js';
 import type { MacroBuiltin, MacroValue } from '../../src/macro/evaluator.js';
-import type { Program } from '../../src/macro/types.js';
+import type { Program, ToolRegistry } from '../../src/macro/types.js';
 import type { ToolResult } from '../../src/mcp/utils/response-formats.js';
 
 export function parseProgram(source: string): Program {
@@ -42,4 +42,32 @@ export function basicBuiltins(extra: Record<string, MacroBuiltin> = {}): Record<
 
 export function resultOf(payload: Record<string, unknown>): MacroValue {
   return payload['result'] as MacroValue;
+}
+
+export function dispatchRegistry(toolRefs: string[]): {
+  toolRegistry: ToolRegistry;
+  allowedToolNames: string[];
+} {
+  const registry: ToolRegistry = {};
+  for (const ref of toolRefs) {
+    const [server, tool] = ref.split('.');
+    if (!server || !tool) throw new Error(`Invalid tool reference '${ref}'`);
+    registry[server] ??= { label: server, tools: {} };
+    registry[server].tools[tool] = async (arg, context) => {
+      if (!context.dispatchTool) {
+        throw new Error(`No dispatchTool configured for '${ref}'`);
+      }
+      const result = await context.dispatchTool(server, tool, arg, context);
+      const text = result.content[0]?.text ?? '';
+      try {
+        return JSON.parse(text) as MacroValue;
+      } catch {
+        return text;
+      }
+    };
+  }
+  return {
+    toolRegistry: registry,
+    allowedToolNames: toolRefs,
+  };
 }
