@@ -168,6 +168,67 @@ describe('macro parser', () => {
     expect(parseError('while $cond\necho "x"\ndone').details.reason).toBe('missing_do');
   });
 
+  it('T-U-040 rejects continue outside a loop at parse time', () => {
+    expect(parseError('continue').details).toMatchObject({
+      reason: 'loop_control_outside_loop',
+      at_line: 1,
+      near_token: 'continue',
+    });
+  });
+
+  it('T-U-041 rejects break outside a loop at parse time', () => {
+    expect(parseError('break').details).toMatchObject({
+      reason: 'loop_control_outside_loop',
+      at_line: 1,
+      near_token: 'break',
+    });
+  });
+
+  it('parses continue and break inside loop bodies', () => {
+    const [forLoop, whileLoop] = parse(`
+      for item in [1,2] do
+        continue
+        break
+      done
+      while $keep_going do
+        continue
+        break
+      done
+    `).statements;
+
+    expect(forLoop).toMatchObject({
+      kind: 'ForLoop',
+      body: [{ kind: 'ContinueStmt' }, { kind: 'BreakStmt' }],
+    });
+    expect(whileLoop).toMatchObject({
+      kind: 'WhileLoop',
+      body: [{ kind: 'ContinueStmt' }, { kind: 'BreakStmt' }],
+    });
+  });
+
+  it('parses loop control inside nested if bodies within loops', () => {
+    const [forLoop] = parse(`
+      for item in [1,2] do
+        if $item == 1 then
+          continue
+        else
+          break
+        fi
+      done
+    `).statements;
+
+    expect(forLoop).toMatchObject({
+      kind: 'ForLoop',
+      body: [
+        {
+          kind: 'IfStmt',
+          thenBody: [{ kind: 'ContinueStmt' }],
+          elseBody: [{ kind: 'BreakStmt' }],
+        },
+      ],
+    });
+  });
+
   it('T-U-059 parses normal tool calls as statements and assignment RHS', () => {
     const [statement, binding] = parse(
       'fq.search({query: "x"})\nresult = fq.search({query: "x"})'
