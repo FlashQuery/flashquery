@@ -150,14 +150,14 @@ Plans:
 
 **Requirements:** REQ-071..073, REQ-103..104, REQ-109..110
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 
 Plans:
 - [x] 143-01-PLAN.md — Diagnostic `list-tools` CLI and focused unit coverage
 - [x] 143-02-PLAN.md — `_self` source_ref binding and parser/runtime tests
 - [x] 143-03-PLAN.md — `continue`/`break` parser and evaluator support
 - [x] 143-04-PLAN.md — Deep `_exists()` and shared broker concurrency coverage
-- [ ] 143-05-PLAN.md — Phase E directed, YAML, E2E, and validation closure
+- [x] 143-05-PLAN.md — Phase E directed, YAML, E2E, and validation closure
 
 **Success criteria:**
 1. `flashquery list-tools <server>` emits paste-ready YAML and surfaces server stderr on failures.
