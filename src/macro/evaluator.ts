@@ -12,6 +12,7 @@ import type {
   ToolRegistry,
   MacroCallerContext,
   MacroNeedsUserInputPayload,
+  MacroSelfSnapshot,
 } from './types.js';
 import {
   jsonExpectedError,
@@ -151,6 +152,7 @@ export interface EvaluateProgramOptions {
   listTasks?: MacroInvocationContext['listTasks'];
   vaultRoot?: string;
   stdin?: MacroValue;
+  self?: MacroSelfSnapshot;
   checkCancelled?: (atSafePoint: string) => void | Promise<void>;
 }
 
@@ -227,6 +229,13 @@ class Env {
     }
     if (this.parent) {
       return this.parent.get(name);
+    }
+    if (name === '_self') {
+      throw new MacroRuntimeError(
+        '`_self` is only available when the macro was loaded via source_ref.',
+        undefined,
+        { reason: 'self_requires_source_ref' }
+      );
     }
     throw new MacroRuntimeError(`Unknown variable: $${name}`, undefined, {
       reason: 'unknown_variable',
@@ -333,6 +342,9 @@ export async function evaluateProgram(
 ): Promise<ToolResult> {
   const context = createInvocationContext(options);
   const env = new Env();
+  if (options.self !== undefined) {
+    env.setLocal('_self', cloneMacroValue(options.self));
+  }
 
   try {
     preScanForbiddenShellFlags(program);
@@ -1017,7 +1029,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function cloneMacroObject(input: Record<string, MacroValue>): Record<string, MacroValue> {
-  return coerceMacroValue(structuredClone(input)) as Record<string, MacroValue>;
+  return cloneMacroValue(input) as Record<string, MacroValue>;
+}
+
+function cloneMacroValue(input: MacroValue): MacroValue {
+  return coerceMacroValue(structuredClone(input));
 }
 
 function deepEqual(left: MacroValue, right: MacroValue): boolean {

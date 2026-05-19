@@ -89,7 +89,8 @@ type ParseReason =
   | 'reserved_keyword_assignment'
   | 'builtin_name_shadowing'
   | 'invalid_literal'
-  | 'input_var_key_must_be_literal';
+  | 'input_var_key_must_be_literal'
+  | 'readonly_self_assignment';
 
 class MacroSyntaxFailure extends Error {
   constructor(
@@ -127,7 +128,7 @@ export function parseMacroSource(source: string, identifier?: string): MacroPars
       ok: false,
       error: macroParseError(
         {
-          reason: parsed.failure.reason,
+          reason: parsed.failure.reason as never,
           at_line: parsed.failure.token?.startLine ?? 1,
           near_token: parsed.failure.token?.image,
         },
@@ -178,6 +179,13 @@ class TokenStreamParser {
 
   private parseStatement(): Statement {
     const token = this.peek();
+    if (this.looksLikeSelfAssignment()) {
+      this.fail(
+        'readonly_self_assignment',
+        token,
+        '_self is read-only; update the source document through a tool call instead.'
+      );
+    }
     if (this.isReservedAssignment()) {
       this.fail(
         'reserved_keyword_assignment',
@@ -316,6 +324,7 @@ class TokenStreamParser {
   }
 
   private parsePrimary(): Expr {
+    if (this.matches(Identifier) && this.peek()?.image === '_self') return this.parseBareSelfOrField();
     if (this.looksLikeToolCall()) return this.parseToolLike();
     if (this.matches(Identifier)) return this.parseCall();
     if (this.matches(DoubleQuotedString)) {
@@ -502,6 +511,17 @@ class TokenStreamParser {
     return expr;
   }
 
+  private parseBareSelfOrField(): VarRef | FieldAccess {
+    const variable = this.consume(Identifier, 'Expected _self reference.');
+    let expr: VarRef | FieldAccess = { kind: 'VarRef', name: variable.image };
+    while (this.matches(Dot)) {
+      this.advance();
+      const field = this.consume(Identifier, 'Expected field name.');
+      expr = { kind: 'FieldAccess', target: expr, field: field.image };
+    }
+    return expr;
+  }
+
   private binary(left: Expr, op: BinaryExpr['op'], right: Expr): BinaryExpr {
     return { kind: 'BinaryExpr', op, left, right };
   }
@@ -543,6 +563,23 @@ class TokenStreamParser {
 
   private looksLikeToolCall(): boolean {
     return this.matches(Identifier) && this.matchesAt(1, Dot) && this.matchesAt(2, Identifier);
+  }
+
+  private looksLikeSelfAssignment(): boolean {
+    if (!this.matches(Identifier) || this.peek()?.image !== '_self' || !this.matchesAt(1, Dot)) {
+      return false;
+    }
+    let offset = 2;
+    while (
+      this.matchesToken(this.tokens[this.index + offset], Identifier) &&
+      this.matchesToken(this.tokens[this.index + offset + 1], Dot)
+    ) {
+      offset += 2;
+    }
+    return (
+      this.matchesToken(this.tokens[this.index + offset], Identifier) &&
+      this.matchesToken(this.tokens[this.index + offset + 1], Equals)
+    );
   }
 
   private isReservedAssignment(): boolean {

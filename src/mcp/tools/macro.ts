@@ -19,7 +19,7 @@ import { runDryRun } from '../../macro/dry-run.js';
 import { buildToolRegistry, type BrokerToolServerConfig, type BuildToolRegistryResult } from '../../macro/registry.js';
 import { extractMacroFences } from '../../macro/fence-extractor.js';
 import { selectMacroSourceBlock, splitMacroSourceRef } from '../../macro/source-ref.js';
-import type { MacroCallerContext } from '../../macro/types.js';
+import type { MacroCallerContext, MacroSelfSnapshot } from '../../macro/types.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../llm/tool-registry.js';
 import type { BrokeredTool, McpBroker } from '../../services/mcp-broker.js';
 import { NullMcpBroker } from '../../services/mcp-broker.js';
@@ -59,6 +59,7 @@ export const callMacroInputSchema = z.object({
 export interface RunMacroSourceOptions {
   source: string;
   sourceIdentifier?: string;
+  self?: MacroSelfSnapshot;
   inputVars?: Record<string, MacroValue>;
   input_vars?: Record<string, MacroValue>;
   callerContext?: MacroCallerContext;
@@ -114,7 +115,7 @@ export interface RunMacroSourceResult {
 }
 
 export type ResolveMacroSourceForRequestResult =
-  | { ok: true; source: string; identifier: string }
+  | { ok: true; source: string; identifier: string; self?: MacroSelfSnapshot }
   | { ok: false; result: ToolResult };
 
 export interface ResolveMacroSourceForRequestOptions {
@@ -223,6 +224,11 @@ export async function resolveMacroSourceForRequest(
       ok: true,
       source: selected.block.source,
       identifier: sourceRefValue,
+      self: buildMacroSelfSnapshot({
+        path: resolved.relativePath,
+        frontmatter: parsed.data,
+        fqcId: resolved.fqcId,
+      }),
     };
   } catch (error) {
     if (error instanceof DocumentNotFoundError) {
@@ -272,6 +278,62 @@ export async function resolveMacroSourceForRequest(
       }),
     };
   }
+}
+
+function buildMacroSelfSnapshot(input: {
+  path: string;
+  frontmatter: Record<string, unknown>;
+  fqcId: string | null;
+}): MacroSelfSnapshot {
+  const frontmatter = coerceMacroRecord(input.frontmatter);
+  const title = stringFrontmatterValue(frontmatter[FM.TITLE]) ?? stringFrontmatterValue(frontmatter['title']) ?? '';
+  const tags = listFrontmatterValue(frontmatter[FM.TAGS] ?? frontmatter['tags']);
+  const fqId = stringFrontmatterValue(frontmatter[FM.ID]) ?? input.fqcId ?? '';
+
+  return {
+    path: input.path,
+    frontmatter,
+    title,
+    tags,
+    fq_id: fqId,
+  };
+}
+
+function stringFrontmatterValue(value: MacroValue | undefined): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function listFrontmatterValue(value: MacroValue | undefined): MacroValue[] {
+  return Array.isArray(value) ? [...value] : [];
+}
+
+function coerceMacroRecord(input: Record<string, unknown>): Record<string, MacroValue> {
+  const output: Record<string, MacroValue> = {};
+  for (const [key, value] of Object.entries(input)) {
+    output[key] = coerceMacroValue(value);
+  }
+  return output;
+}
+
+function coerceMacroValue(value: unknown): MacroValue {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  ) {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (Array.isArray(value)) {
+    return value.map(coerceMacroValue);
+  }
+  if (typeof value === 'object') {
+    return coerceMacroRecord(value as Record<string, unknown>);
+  }
+  return String(value);
 }
 
 export async function runMacroSource(options: RunMacroSourceOptions): Promise<RunMacroSourceResult> {
@@ -369,6 +431,7 @@ export async function runMacroSource(options: RunMacroSourceOptions): Promise<Ru
       templateToolNames: toolRegistry.templateToolNames,
       hardExcludedReasons: toolRegistry.hardExcludedReasons,
       callerContext,
+      self: options.self,
       traceMode: options.trace ?? 'summary',
       progressMode: options.progress ?? 'milestones',
       progressToken: options.progressToken,
@@ -533,6 +596,7 @@ export function registerMacroTools(
         const { result } = await runMacroSource({
           source: resolvedSource.source,
           sourceIdentifier: resolvedSource.identifier,
+          self: resolvedSource.self,
           input_vars: params.input_vars as Record<string, MacroValue> | undefined,
           callerContext,
           config,

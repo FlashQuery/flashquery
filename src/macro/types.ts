@@ -38,6 +38,14 @@ export interface MacroNeedsUserInputPayload {
   changes?: unknown;
 }
 
+export interface MacroSelfSnapshot {
+  path: string;
+  frontmatter: Record<string, MacroValue>;
+  title: string;
+  tags: MacroValue[];
+  fq_id: string;
+}
+
 export interface Program {
   kind: 'Program';
   statements: Statement[];
