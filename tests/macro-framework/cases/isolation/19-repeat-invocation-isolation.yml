@@ -1,0 +1,167 @@
+# Generated pilot — mtf-i-19-repeat-invocation-isolation
+#
+# Generator: flashquery-macro-testgen (Phase 5 skill).
+# Targeted cells: MTF-I-003
+# Grounding: Macro Language Requirements REQ-058; Macro Language Requirements REQ-059
+#
+# This file was emitted by the generator after running the macro through
+# the macro-golden-model (v0.3.0) and embedding the snapshot.
+# Do NOT hand-edit `expect:` or `golden_snapshot:` — re-run the
+# generator (or its --mode=refresh) to update.
+id: mtf-i-19-repeat-invocation-isolation
+name: Isolation — per-invocation bindings don't leak across runs
+description: >-
+  Macro reads `input_var "seed"` and computes a derived counter. Implicit invariant: every macro evaluation starts with
+  a fresh scope frame — there is no module-level binding survival. Verifying success against a clean input_var contract
+  validates REQ-058 / REQ-059 isolation guarantees.
+covers:
+  - MTF-I-003
+  - MTF-I-001
+  - MTF-S-001
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: flashquery-macro-testgen-cli
+  generated_at: '2026-05-19T01:36:19.019Z'
+  targeted_cells:
+    - MTF-I-003
+  grounding_refs:
+    - Macro Language Requirements REQ-058
+    - Macro Language Requirements REQ-059
+golden_version: 0.3.0
+golden_run_at: '2026-05-19T01:36:19.019Z'
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  seed = input_var "seed"
+  acc = $seed
+  for n in 1..5 do
+    acc = add $acc $n
+  done
+  exit { seed_in: $seed, acc_out: $acc }
+input_vars:
+  seed: 10
+vault: {}
+tools: {}
+expect:
+  outcome: success
+  return_result:
+    seed_in: 10
+    acc_out: 20
+golden_snapshot:
+  state_notes:
+    - kind: ast
+      node_kind: assignment
+      line: 1
+      column: 0
+    - kind: binding
+      op: set
+      name: seed
+      value: 10
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 2
+      column: 0
+    - kind: binding
+      op: set
+      name: acc
+      value: 10
+      scope: local
+    - kind: loop
+      loop_kind: for
+      loop_id: for_loop_2
+      iter: 0
+      var: 'n'
+      value: 1
+    - kind: ast
+      node_kind: for_iter
+      line: 3
+      column: 0
+    - kind: binding
+      op: shadow
+      name: 'n'
+      value: 1
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 4
+      column: 0
+    - kind: binding
+      op: update
+      name: acc
+      value: 11
+      scope: outer
+    - kind: loop
+      loop_kind: for
+      loop_id: for_loop_2
+      iter: 1
+      var: 'n'
+      value: 2
+    - kind: ast
+      node_kind: for_iter
+      line: 3
+      column: 0
+    - kind: binding
+      op: shadow
+      name: 'n'
+      value: 2
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 4
+      column: 0
+    - kind: binding
+      op: update
+      name: acc
+      value: 13
+      scope: outer
+    - kind: loop
+      loop_kind: for
+      loop_id: for_loop_2
+      iter: 2
+      var: 'n'
+      value: 3
+    - kind: ast
+      node_kind: for_iter
+      line: 3
+      column: 0
+    - kind: binding
+      op: shadow
+      name: 'n'
+      value: 3
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 4
+      column: 0
+    - kind: binding
+      op: update
+      name: acc
+      value: 16
+      scope: outer
+    - kind: loop
+      loop_kind: for
+      loop_id: for_loop_2
+      iter: 3
+      var: 'n'
+      value: 4
+    - kind: ast
+      node_kind: for_iter
+      line: 3
+      column: 0
+    - kind: binding
+      op: shadow
+      name: 'n'
+      value: 4
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 4
+      column: 0
+    - kind: binding
+      op: update
+      name: acc
+      value: 20
+      scope: outer

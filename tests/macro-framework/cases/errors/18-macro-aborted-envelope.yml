@@ -1,0 +1,57 @@
+# Generated pilot — mtf-e-18-macro-aborted-envelope
+#
+# Generator: flashquery-macro-testgen (Phase 5 skill).
+# Targeted cells: MTF-E-004
+# Grounding: Macro Language Requirements REQ-016; Macro Language Requirements REQ-024; Macro Language Requirements REQ-054
+#
+# This file was emitted by the generator after running the macro through
+# the macro-golden-model (v0.3.0) and embedding the snapshot.
+# Do NOT hand-edit `expect:` or `golden_snapshot:` — re-run the
+# generator (or its --mode=refresh) to update.
+id: mtf-e-18-macro-aborted-envelope
+name: Errors — macro_aborted envelope from direct fail()
+description: >-
+  Macro calls `fail "..."` directly; verifies the engine produces the canonical macro_aborted envelope with the
+  operator-supplied message intact (REQ-016 + REQ-024 + REQ-054 envelope shape).
+covers:
+  - MTF-E-004
+  - MTF-C-004
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: flashquery-macro-testgen-cli
+  generated_at: '2026-05-19T01:36:18.998Z'
+  targeted_cells:
+    - MTF-E-004
+  grounding_refs:
+    - Macro Language Requirements REQ-016
+    - Macro Language Requirements REQ-024
+    - Macro Language Requirements REQ-054
+golden_version: 0.3.0
+golden_run_at: '2026-05-19T01:36:18.998Z'
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  x = 1
+  fail "boom: operator-supplied message"
+  echo "unreachable"
+input_vars: {}
+vault: {}
+tools: {}
+expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: 'boom: operator-supplied message'
+golden_snapshot:
+  state_notes:
+    - kind: ast
+      node_kind: assignment
+      line: 1
+      column: 0
+    - kind: binding
+      op: set
+      name: x
+      value: 1
+      scope: local

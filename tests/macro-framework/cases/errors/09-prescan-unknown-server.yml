@@ -1,0 +1,44 @@
+# Pilot 09 — MTF-E error taxonomy: prescan rejects unknown server
+#
+# The macro references `no_such_server.something`. The `tools:` block
+# declares only the `fq` server (no broker entries), so prescan
+# encounters an unknown server and emits the structured `unknown_server`
+# envelope per REQ-028. The macro never reaches execution.
+
+id: mtf-e-09-prescan-unknown-server
+name: Errors — prescan rejects unknown server
+description: |
+  Pre-scan inspects all tool references and rejects any that point at
+  a server not in the registry. The macro envelope reports outcome=fail
+  with error=unknown_server.
+
+covers:
+  - MTF-E-001   # error code unknown_server
+  - MTF-E-002   # prescan reject path (REQ-028)
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T23:36:01.752Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = no_such_server.something({ q: "test" })
+  exit $x
+
+input_vars: {}
+vault: {}
+
+tools:
+  fq: real
+
+expect:
+  outcome: fail
+  error:
+    code: unknown_server
+    message_contains: "no_such_server"
+
+golden_snapshot:
+  state_notes:
+    - { kind: permission, tool: "no_such_server.something", decision: denied, reason: unknown_server }

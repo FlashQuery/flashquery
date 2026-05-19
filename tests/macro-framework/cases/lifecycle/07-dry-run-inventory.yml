@@ -1,0 +1,84 @@
+# Pilot 07 — MTF-L lifecycle: dry-run inventory
+#
+# `dry_run: true` causes the runner to dispatch through `runDryRun()`
+# instead of `evaluateProgram()`. The dry-run envelope (REQ-053)
+# carries `parsed_ok: true`, an `input_var_contract`, deduplicated
+# `tool_references`, and `server_references`. No tools are actually
+# invoked.
+#
+# Satisfies the brief's "at least one dry-run mode" diversity
+# requirement (§9.5 constraint 5).
+
+id: mtf-l-07-dry-run-inventory
+name: Lifecycle — dry-run inventory
+description: |
+  Dry-run dispatches through runDryRun() and returns the static
+  inventory envelope per REQ-053.
+
+covers:
+  - MTF-L-001   # dry-run envelope shape (REQ-053)
+  - MTF-L-002   # input_var_contract collection (required + optional)
+  - MTF-L-003   # tool/server reference deduplication
+  - MTF-L-004   # dry-run never invokes the broker
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T23:36:01.752Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  topic = input_var "topic"
+  n_lim = input_var "n_lim" --default 10
+  docs = inventory_srv.list({ q: $topic, n: $n_lim })
+  for d in $docs do
+    out = inventory_srv.process({ id: $d, topic: $topic })
+  done
+  exit { ok: true }
+
+input_vars:
+  topic: "demo"
+vault: {}
+
+# Multi-tool YAML shape: declare both `list` and `process` under one
+# server in this single test (runner's framework-registry recognizes
+# the `tools:` sub-object).
+tools:
+  inventory_srv:
+    tools:
+      list:
+        archetype: ReadOnlyTool
+        returns: []
+      process:
+        archetype: ReadOnlyTool
+        returns: { done: true }
+
+dry_run: true
+
+expect:
+  outcome: success
+  dry_run_inventory:
+    input_var_contract:
+      required: ["topic"]
+      optional: [{ key: "n_lim", default: 10 }]
+    tool_references:
+      - "inventory_srv.list"
+      - "inventory_srv.process"
+    server_references:
+      - "inventory_srv"
+  side_effects:
+    tool_call_count: 0
+
+golden_snapshot:
+  state_notes:
+    - { kind: permission, tool: "inventory_srv.list", decision: allowed }
+    - { kind: permission, tool: "inventory_srv.process", decision: allowed }
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: topic, value: "demo", scope: local }
+    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
+    - { kind: binding, op: set, name: n_lim, value: 3, scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: coerce, path: passthrough, raw_summary: "inventory_srv.list returned list (native, no coercion)" }
+    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 1, elapsed_ms: 0 }
+    - { kind: binding, op: set, name: docs, value: ["a", "b", "c"], scope: local }

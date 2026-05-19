@@ -1,0 +1,87 @@
+# Pilot 10 — MTF-E + INTENTIONAL MISMATCH (self-test under match_some)
+#
+# Designed as a SELF-TEST of the comparator's divergence-detection path.
+# The macro produces sum=10. The `expect:` block declares two assertions:
+#
+#   - outcome: success         ← MATCHES production
+#   - return_result: sum=999   ← deliberately WRONG; production says sum=10
+#
+# Under `comparison: match_some` the test passes when ≥1 declared expect
+# matches production. Here `outcome` matches and `return_result` does not,
+# so the comparator detects the intentional divergence, the test PASSES,
+# and NO failure-triage record is written (per §9.6 — records are only
+# emitted on true FAILures, never on author-declared divergences).
+#
+# This proves three things in one pilot:
+#   1. Comparator correctly identifies the wrong-result finding.
+#   2. `comparison: match_some` permits the divergence as a PASS.
+#   3. Failure-record writer is gated behind real FAILures, not findings.
+#
+# Satisfies the brief's "at least one intentional snapshot mismatch"
+# diversity requirement (§9.5 constraint 4) without polluting the
+# failures/ directory on every run.
+
+id: mtf-e-10-intentional-mismatch
+name: Errors — INTENTIONAL MISMATCH (self-test under match_some)
+description: |
+  Self-test of the comparator's divergence-detection path. Macro produces
+  sum=10; expect.return_result claims sum=999 (deliberately wrong) but
+  expect.outcome=success matches. Under comparison: match_some, ≥1 match
+  is enough to PASS — no failure-triage record is written.
+
+covers:
+  - MTF-E-003           # intentional mismatch path
+  - MTF-FW-001          # failure-record writer integration
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T23:36:01.752Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  total = 0
+  for i in 1..5 do
+    total = add $total $i
+  done
+  exit { sum: $total }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+# Two declared expects:
+#   - outcome: success      → MATCHES (production succeeds)
+#   - return_result: sum=999 → MISMATCHES (production has sum=10)
+# Under match_some, ≥1 match means PASS.
+expect:
+  comparison: match_some
+  outcome: success
+  return_result:
+    sum: 999
+
+golden_snapshot:
+  state_notes:
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: total, value: 0, scope: local }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_5, iter: 0, var: i, value: 1 }
+    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 1, scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: update, name: total, value: 1, scope: outer }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_5, iter: 1, var: i, value: 2 }
+    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 2, scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: update, name: total, value: 3, scope: outer }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_5, iter: 2, var: i, value: 3 }
+    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 3, scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: update, name: total, value: 6, scope: outer }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_5, iter: 3, var: i, value: 4 }
+    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 4, scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: update, name: total, value: 10, scope: outer }

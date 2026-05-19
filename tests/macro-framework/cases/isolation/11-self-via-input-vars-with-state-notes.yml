@@ -1,0 +1,83 @@
+# Pilot 11 — MTF-I isolation + expect_state_notes integrity check
+#
+# Honest deviation from the brief's suggested pilot:
+#
+# The brief calls for `_self` (MCP Broker REQ-103) — a Tier-2 macro
+# engine binding that exposes the source document's path/title/
+# frontmatter to the running macro. That binding exists in the
+# `macro-golden-model` but has NOT been ported into the production
+# `flashquery/src/macro/evaluator.ts` yet (no `_self` references found
+# in production tree as of golden_version 0.3.0). Per the brief's
+# allowance: "you may need to use a workaround (e.g., set `_self` as
+# input_vars and document the deviation). Honest report on what you
+# did."
+#
+# Workaround used here: simulate `_self.path`/`.title`/`.frontmatter.*`
+# by passing three input_vars and re-aggregating into a `self_view`
+# object. Downstream `binding` state_notes match what a real `_self`
+# walk would produce, modulo the assignment-vs-introspection distinction.
+#
+# The pilot still satisfies the architectural goals:
+#   (a) MTF-I cell: per-invocation isolation of input_vars contract.
+#   (b) expect_state_notes diversity requirement (§9.5 constraint 2):
+#       two patterns, one order-independent + one positional, both
+#       targeting the `binding` events.
+
+id: mtf-i-11-self-via-input-vars
+name: Isolation — _self workaround via input_vars + expect_state_notes
+description: |
+  Simulates _self.path/.title/.frontmatter.type by passing the three
+  fields as input_vars and re-aggregating them into a self_view
+  object. Validates per-invocation isolation of input_vars + the
+  expect_state_notes load-time integrity check.
+
+covers:
+  - MTF-I-001   # per-invocation input_var contract
+  - MTF-I-002   # _self surface (workaround; Tier 2 pending in production)
+  - MTF-FW-002  # expect_state_notes load-time integrity check
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T23:36:01.752Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  path = input_var "self_path"
+  title = input_var "self_title"
+  fm_type = input_var "self_type"
+  self_view = { path: $path, title: $title, type: $fm_type }
+  exit { self: $self_view }
+
+input_vars:
+  self_path: "/Macros/research-batch.md"
+  self_title: "Research Batch"
+  self_type: "macro"
+vault: {}
+tools: {}
+
+expect:
+  outcome: success
+  return_result:
+    self:
+      path: "/Macros/research-batch.md"
+      title: "Research Batch"
+      type: "macro"
+
+golden_snapshot:
+  state_notes:
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: path, value: "/Macros/research-batch.md", scope: local }
+    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
+    - { kind: binding, op: set, name: title, value: "Research Batch", scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: set, name: fm_type, value: "macro", scope: local }
+    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
+    - { kind: binding, op: set, name: self_view, value: { path: "/Macros/research-batch.md", title: "Research Batch", type: "macro" }, scope: local }
+
+# Two integrity-check witnesses — one order-independent (any matching
+# `binding` event anywhere) and one positional (snapshot[4] = `title`).
+expect_state_notes:
+  - { kind: binding, op: set, name: path, value: "/Macros/research-batch.md" }
+  - { step: 4, kind: binding, op: set, name: title, value: "Research Batch" }

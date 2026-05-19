@@ -1,0 +1,89 @@
+# Generated pilot — mtf-g-13-line-comments
+#
+# Generator: flashquery-macro-testgen (Phase 5 skill).
+# Targeted cells: MTF-G-006
+# Grounding: Macro Language Requirements REQ-007
+#
+# This file was emitted by the generator after running the macro through
+# the macro-golden-model (v0.3.0) and embedding the snapshot.
+# Do NOT hand-edit `expect:` or `golden_snapshot:` — re-run the
+# generator (or its --mode=refresh) to update.
+id: mtf-g-13-line-comments
+name: Grammar — line comments are skipped by the lexer
+description: >-
+  Macro source contains `#`-prefixed line comments interleaved with executable lines. The lexer skips them entirely; the
+  evaluator only sees the executable statements. Verifies REQ-007 (comment tokenization rule).
+covers:
+  - MTF-G-006
+  - MTF-G-001
+  - MTF-G-005
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: flashquery-macro-testgen-cli
+  generated_at: '2026-05-19T01:36:17.231Z'
+  targeted_cells:
+    - MTF-G-006
+  grounding_refs:
+    - Macro Language Requirements REQ-007
+golden_version: 0.3.0
+golden_run_at: '2026-05-19T01:36:17.231Z'
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  # top-of-file comment, no statements yet
+  greeting = "hello"   # trailing comment after a value
+  # blank-looking comment between statements
+  target = "world"
+  # multi-comment
+  # block 
+  msg = "$greeting, $target!"
+  ok_flag = 1
+  exit { msg: $msg, ok: $ok_flag }
+input_vars: {}
+vault: {}
+tools: {}
+expect:
+  outcome: success
+  return_result:
+    msg: hello, world!
+    ok: 1
+golden_snapshot:
+  state_notes:
+    - kind: ast
+      node_kind: assignment
+      line: 2
+      column: 0
+    - kind: binding
+      op: set
+      name: greeting
+      value: hello
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 4
+      column: 0
+    - kind: binding
+      op: set
+      name: target
+      value: world
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 7
+      column: 0
+    - kind: binding
+      op: set
+      name: msg
+      value: hello, world!
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 8
+      column: 0
+    - kind: binding
+      op: set
+      name: ok_flag
+      value: 1
+      scope: local

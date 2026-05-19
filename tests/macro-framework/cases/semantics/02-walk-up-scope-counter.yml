@@ -1,0 +1,89 @@
+# Pilot 02 — MTF-S semantics: walk-up scope counter pattern
+#
+# Per Macro Language Requirements REQ-019: a `for`-loop body executes
+# in a child environment; assignments to names declared in the OUTER
+# scope walk up the parent chain and update the outer binding rather
+# than shadowing it. The iterator variable itself shadows.
+
+id: mtf-s-02-walk-up-scope-counter
+name: Semantics — walk-up scope counter
+description: |
+  for-loop child env update of outer `total` + `n_iters` bindings.
+  Verifies REQ-019 walk-up semantics: outer-declared vars are written
+  through to the outer scope, while the loop variable shadows locally.
+
+covers:
+  - MTF-S-001   # walk-up scope on outer-declared var
+  - MTF-S-002   # iterator var shadows
+  - MTF-C-001   # for-loop over range
+  - MTF-S-003   # arithmetic via add()
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T23:36:01.752Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  total = 0
+  n_iters = 0
+  for i in 1..6 do
+    total = add $total $i
+    n_iters = add $n_iters 1
+  done
+  exit { total: $total, n_iters: $n_iters }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+expect:
+  outcome: success
+  return_result:
+    total: 15
+    n_iters: 5
+  trace_kinds_contain:
+    - exit
+
+golden_snapshot:
+  state_notes:
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: total, value: 0, scope: local }
+    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
+    - { kind: binding, op: set, name: n_iters, value: 0, scope: local }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 0, var: i, value: 1 }
+    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 1, scope: local }
+    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
+    - { kind: binding, op: update, name: total, value: 1, scope: outer }
+    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
+    - { kind: binding, op: update, name: n_iters, value: 1, scope: outer }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 1, var: i, value: 2 }
+    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 2, scope: local }
+    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
+    - { kind: binding, op: update, name: total, value: 3, scope: outer }
+    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
+    - { kind: binding, op: update, name: n_iters, value: 2, scope: outer }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 2, var: i, value: 3 }
+    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 3, scope: local }
+    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
+    - { kind: binding, op: update, name: total, value: 6, scope: outer }
+    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
+    - { kind: binding, op: update, name: n_iters, value: 3, scope: outer }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 3, var: i, value: 4 }
+    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 4, scope: local }
+    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
+    - { kind: binding, op: update, name: total, value: 10, scope: outer }
+    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
+    - { kind: binding, op: update, name: n_iters, value: 4, scope: outer }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 4, var: i, value: 5 }
+    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
+    - { kind: binding, op: shadow, name: i, value: 5, scope: local }
+    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
+    - { kind: binding, op: update, name: total, value: 15, scope: outer }
+    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
+    - { kind: binding, op: update, name: n_iters, value: 5, scope: outer }

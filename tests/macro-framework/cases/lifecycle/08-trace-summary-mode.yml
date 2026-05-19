@@ -1,0 +1,64 @@
+# Pilot 08 — MTF-L lifecycle: trace_mode=summary
+#
+# Drives the production engine with `trace_mode: summary`. Per REQ-047
+# ac2, summary-mode trace entries omit `args` and `result` fields.
+# Two brokered tool calls on a ScriptedTool are chained so the trace
+# would normally carry rich args + result payloads; summary mode
+# strips both.
+
+id: mtf-l-08-trace-summary-mode
+name: Lifecycle — trace_mode=summary omits args/result
+description: |
+  Runs two brokered tool calls under trace_mode=summary. Verifies that
+  the resulting trace contains tool_call entries with their `kind` and
+  `name` but no `args` or `result` (REQ-047 ac2).
+
+covers:
+  - MTF-L-005   # trace_mode=summary strips args/result
+  - MTF-L-006   # trace_mode passthrough to evaluator
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T23:36:01.752Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = trace_srv.shape({ q: "hello" })
+  b = trace_srv.shape({ data: $a })
+  exit { final: $b }
+
+input_vars: {}
+vault: {}
+
+tools:
+  trace_srv:
+    archetype: ScriptedTool
+    tool_name: shape
+    responses:
+      - { content: [{ type: text, text: '{"result":"fetched"}' }], structuredContent: { result: "fetched" } }
+      - { content: [{ type: text, text: '{"result":"transformed"}' }], structuredContent: { result: "transformed" } }
+
+trace_mode: summary
+
+expect:
+  outcome: success
+  return_result:
+    final: { result: "transformed" }
+  trace_has_no_args: true
+  trace_kinds_contain:
+    - tool_call
+    - exit
+
+golden_snapshot:
+  state_notes:
+    - { kind: permission, tool: "trace_srv.shape", decision: allowed }
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: coerce, path: structured_content, raw_summary: "trace_srv.shape bound via structured_content" }
+    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 1, elapsed_ms: 0 }
+    - { kind: binding, op: set, name: a, value: { result: "fetched" }, scope: local }
+    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
+    - { kind: coerce, path: structured_content, raw_summary: "trace_srv.shape bound via structured_content" }
+    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 2, elapsed_ms: 0 }
+    - { kind: binding, op: set, name: b, value: { result: "transformed" }, scope: local }

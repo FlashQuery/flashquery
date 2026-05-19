@@ -1,0 +1,79 @@
+# Pilot 05 — MTF-D dispatch: chained tool calls across three brokered servers
+#
+# Three brokered servers, one tool each, with results threaded by binding.
+# Tests REQ-027 dispatch + multi-server prescan + the §5.7 archetype lib
+# (ReadOnlyTool here).
+
+id: mtf-d-05-multi-server-dispatch-chain
+name: Dispatch — chained tool calls across three brokered servers
+description: |
+  Three brokered tool calls (svc_a.step, svc_b.transform, svc_c.finish)
+  feed each other via $variable binding; the macro exits with a `trail`
+  array of all three results.
+
+covers:
+  - MTF-D-001   # brokered-tool dispatch (basic)
+  - MTF-D-002   # multi-server dispatch in single macro
+  - MTF-D-003   # binding tool-call result into local var
+  - MTF-D-004   # passthrough coercion path (object via JSON-text)
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T23:36:01.752Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = svc_a.step({ x: 10 })
+  b = svc_b.transform({ payload: $a })
+  c = svc_c.finish({ data: $b })
+  exit { trail: [$a, $b, $c] }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc_a:
+    archetype: ReadOnlyTool
+    tool_name: step
+    returns: { stage: "a", value: 10 }
+  svc_b:
+    archetype: ReadOnlyTool
+    tool_name: transform
+    returns: { stage: "b", value: 20 }
+  svc_c:
+    archetype: ReadOnlyTool
+    tool_name: finish
+    returns: { stage: "c", value: 30 }
+
+expect:
+  outcome: success
+  return_result:
+    trail:
+      - { stage: "a", value: 10 }
+      - { stage: "b", value: 20 }
+      - { stage: "c", value: 30 }
+  side_effects:
+    tool_calls:
+      - { server: svc_a, tool: step, args_match: { x: 10 } }
+      - { server: svc_b, tool: transform, args_match: { payload: { stage: "a", value: 10 } } }
+      - { server: svc_c, tool: finish, args_match: { data: { stage: "b", value: 20 } } }
+
+golden_snapshot:
+  state_notes:
+    - { kind: permission, tool: "svc_a.step", decision: allowed }
+    - { kind: permission, tool: "svc_b.transform", decision: allowed }
+    - { kind: permission, tool: "svc_c.finish", decision: allowed }
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: coerce, path: passthrough, raw_summary: "svc_a.step returned object (native, no coercion)" }
+    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 1, elapsed_ms: 0 }
+    - { kind: binding, op: set, name: a, value: { stage: "a", value: 10 }, scope: local }
+    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
+    - { kind: coerce, path: passthrough, raw_summary: "svc_b.transform returned object (native, no coercion)" }
+    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 2, elapsed_ms: 0 }
+    - { kind: binding, op: set, name: b, value: { stage: "b", value: 20 }, scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: coerce, path: passthrough, raw_summary: "svc_c.finish returned object (native, no coercion)" }
+    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 3, elapsed_ms: 0 }
+    - { kind: binding, op: set, name: c, value: { stage: "c", value: 30 }, scope: local }

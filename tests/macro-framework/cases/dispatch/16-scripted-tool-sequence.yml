@@ -1,0 +1,143 @@
+# Generated pilot — mtf-d-16-scripted-tool-sequence
+#
+# Generator: flashquery-macro-testgen (Phase 5 skill).
+# Targeted cells: MTF-D-008
+# Grounding: Macro Language Requirements REQ-027; MTF Framework §5.7 ScriptedTool
+#
+# This file was emitted by the generator after running the macro through
+# the macro-golden-model (v0.3.0) and embedding the snapshot.
+# Do NOT hand-edit `expect:` or `golden_snapshot:` — re-run the
+# generator (or its --mode=refresh) to update.
+id: mtf-d-16-scripted-tool-sequence
+name: Dispatch — ScriptedTool returns indexed responses per call
+description: >-
+  A single brokered tool answered by `ScriptedTool` archetype returns three distinct responses across three calls.
+  Validates per §5.7 ScriptedTool semantics + REQ-027 brokered-tool dispatch + REQ-029 multi-call sequencing within one
+  macro.
+covers:
+  - MTF-D-008
+  - MTF-D-001
+  - MTF-D-003
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: flashquery-macro-testgen-cli
+  generated_at: '2026-05-19T01:36:18.950Z'
+  targeted_cells:
+    - MTF-D-008
+  grounding_refs:
+    - Macro Language Requirements REQ-027
+    - MTF Framework §5.7 ScriptedTool
+golden_version: 0.3.0
+golden_run_at: '2026-05-19T01:36:18.950Z'
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  a = seq_srv.step({ i: 1 })
+  b = seq_srv.step({ i: 2 })
+  c = seq_srv.step({ i: 3 })
+  exit { trail: [$a, $b, $c] }
+input_vars: {}
+vault: {}
+tools:
+  seq_srv:
+    archetype: ScriptedTool
+    tool_name: step
+    responses:
+      - content:
+          - type: text
+            text: '{"stage":"first","value":100}'
+      - content:
+          - type: text
+            text: '{"stage":"second","value":200}'
+      - content:
+          - type: text
+            text: '{"stage":"third","value":300}'
+expect:
+  outcome: success
+  return_result:
+    trail:
+      - stage: first
+        value: 100
+      - stage: second
+        value: 200
+      - stage: third
+        value: 300
+  side_effects:
+    tool_call_count: 3
+    tool_calls:
+      - server: seq_srv
+        tool: step
+        args_match:
+          i: 1
+      - server: seq_srv
+        tool: step
+        args_match:
+          i: 2
+      - server: seq_srv
+        tool: step
+        args_match:
+          i: 3
+golden_snapshot:
+  state_notes:
+    - kind: permission
+      tool: seq_srv.step
+      decision: allowed
+    - kind: ast
+      node_kind: assignment
+      line: 1
+      column: 0
+    - kind: coerce
+      path: json_text
+      raw_summary: seq_srv.step bound via json_text
+    - kind: budget
+      tokens: 0
+      model_calls: 0
+      external_tool_calls: 1
+      elapsed_ms: 1
+    - kind: binding
+      op: set
+      name: a
+      value:
+        stage: first
+        value: 100
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 2
+      column: 0
+    - kind: coerce
+      path: json_text
+      raw_summary: seq_srv.step bound via json_text
+    - kind: budget
+      tokens: 0
+      model_calls: 0
+      external_tool_calls: 2
+      elapsed_ms: 1
+    - kind: binding
+      op: set
+      name: b
+      value:
+        stage: second
+        value: 200
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 3
+      column: 0
+    - kind: coerce
+      path: json_text
+      raw_summary: seq_srv.step bound via json_text
+    - kind: budget
+      tokens: 0
+      model_calls: 0
+      external_tool_calls: 3
+      elapsed_ms: 1
+    - kind: binding
+      op: set
+      name: c
+      value:
+        stage: third
+        value: 300
+      scope: local

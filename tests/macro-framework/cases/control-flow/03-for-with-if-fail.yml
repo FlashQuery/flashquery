@@ -1,0 +1,69 @@
+# Pilot 03 — MTF-C control flow: for-loop with mid-iteration if-fail
+#
+# Honest deviation: the brief suggests for + continue + break. Those
+# are Tier 2 macro extensions (Broker REQ-104) and the production
+# engine doesn't yet support them. The production-compatible
+# substitute exercised here is for-loop + if + fail, which covers the
+# same architectural cell (MTF-C: control-flow with mid-iteration
+# abort).
+
+id: mtf-c-03-for-with-if-fail
+name: Control flow — for-loop with mid-iteration if-fail
+description: |
+  for-loop iterates 1..10; an `if $n == 5 then fail` aborts at iter 4.
+  Tests REQ-013 (for-loop) + REQ-016 (if/then/fi) + REQ-024 ac3 (fail
+  raises macro_aborted with message). The macro envelope reports
+  outcome=fail with code=macro_aborted and message "halt at 5".
+
+covers:
+  - MTF-C-002   # for-loop with mid-iteration abort
+  - MTF-C-003   # if/then/fi conditional
+  - MTF-C-004   # fail() builtin raises macro_aborted
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T23:36:01.752Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  for n in 1..10 do
+    if $n == 5 then
+      fail "halt at 5"
+    fi
+  done
+  echo "should not reach here"
+
+input_vars: {}
+vault: {}
+tools: {}
+
+expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "halt at 5"
+
+golden_snapshot:
+  state_notes:
+    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 0, var: n, value: 1 }
+    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
+    - { kind: binding, op: shadow, name: n, value: 1, scope: local }
+    - { kind: ast, node_kind: if, line: 3, column: 0 }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 1, var: n, value: 2 }
+    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
+    - { kind: binding, op: shadow, name: n, value: 2, scope: local }
+    - { kind: ast, node_kind: if, line: 3, column: 0 }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 2, var: n, value: 3 }
+    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
+    - { kind: binding, op: shadow, name: n, value: 3, scope: local }
+    - { kind: ast, node_kind: if, line: 3, column: 0 }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 3, var: n, value: 4 }
+    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
+    - { kind: binding, op: shadow, name: n, value: 4, scope: local }
+    - { kind: ast, node_kind: if, line: 3, column: 0 }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 4, var: n, value: 5 }
+    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
+    - { kind: binding, op: shadow, name: n, value: 5, scope: local }
+    - { kind: ast, node_kind: if, line: 3, column: 0 }

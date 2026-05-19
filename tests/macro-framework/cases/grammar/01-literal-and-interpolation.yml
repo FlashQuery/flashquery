@@ -1,0 +1,69 @@
+# Pilot 01 — MTF-G grammar: literals + interpolation
+#
+# Exercises the surface grammar's literal taxonomy (string, number,
+# list, object) and `$var` / `$var.field` interpolation. No tools, no
+# control flow — pure parse + eval.
+#
+# Per Macro Language Requirements REQ-001..008 (line-oriented tokens),
+# REQ-018 (string interpolation), REQ-020 (object literals).
+#
+# Embedded snapshot captured via `golden-bridge/capture-pilots.ts`
+# against macro-golden-model v0.3.0.
+
+id: mtf-g-01-literal-and-interpolation
+name: Grammar — literals and interpolation
+description: |
+  Builds a string with $-interpolation, a list, and an object literal;
+  exits with a structured object combining all three. Validates the
+  parser admits each literal shape and the evaluator interpolates
+  variables into double-quoted strings.
+
+covers:
+  - MTF-G-001   # string literal + $var interpolation
+  - MTF-G-002   # number literal
+  - MTF-G-003   # list literal
+  - MTF-G-004   # object literal
+  - MTF-G-005   # exit with object value
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-18T23:36:01.752Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  greeting = "hello"
+  target = "world"
+  msg = "$greeting, $target!"
+  items = [1, 2, 3]
+  obj = { msg: $msg, count: 3, items: $items }
+  exit $obj
+
+input_vars: {}
+vault: {}
+tools: {}
+
+expect:
+  outcome: success
+  return_result:
+    msg: "hello, world!"
+    count: 3
+    items: [1, 2, 3]
+
+golden_snapshot:
+  state_notes:
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: greeting, value: "hello", scope: local }
+    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
+    - { kind: binding, op: set, name: target, value: "world", scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: set, name: msg, value: "hello, world!", scope: local }
+    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
+    - { kind: binding, op: set, name: items, value: [1, 2, 3], scope: local }
+    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
+    - { kind: binding, op: set, name: obj, value: { msg: "hello, world!", count: 3, items: [1, 2, 3] }, scope: local }
+
+expect_state_notes:
+  - { kind: binding, op: set, name: greeting, value: "hello" }
+  - { step: 6, kind: binding, op: set, name: msg, value: "hello, world!" }

@@ -1,0 +1,115 @@
+# Generated pilot — mtf-c-15-if-else-branches
+#
+# Generator: flashquery-macro-testgen (Phase 5 skill).
+# Targeted cells: MTF-C-008
+# Grounding: Macro Language Requirements REQ-015
+#
+# This file was emitted by the generator after running the macro through
+# the macro-golden-model (v0.3.0) and embedding the snapshot.
+# Do NOT hand-edit `expect:` or `golden_snapshot:` — re-run the
+# generator (or its --mode=refresh) to update.
+id: mtf-c-15-if-else-branches
+name: Control flow — if/then/else/fi exercises both branches
+description: >-
+  Two if/else blocks select between branches via integer comparison; verifies REQ-015 (conditional with else-branch)
+  semantics. The macro accumulates which branch fired into a result object.
+covers:
+  - MTF-C-008
+  - MTF-C-003
+  - MTF-S-008
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: flashquery-macro-testgen-cli
+  generated_at: '2026-05-19T01:36:18.925Z'
+  targeted_cells:
+    - MTF-C-008
+  grounding_refs:
+    - Macro Language Requirements REQ-015
+golden_version: 0.3.0
+golden_run_at: '2026-05-19T01:36:18.925Z'
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  taken = []
+  a = 1
+  b = 2
+  if $a == 1 then
+    taken = append $taken "then-1"
+  else
+    taken = append $taken "else-1"
+  fi
+  if $b == 99 then
+    taken = append $taken "then-2"
+  else
+    taken = append $taken "else-2"
+  fi
+  exit { taken: $taken }
+input_vars: {}
+vault: {}
+tools: {}
+expect:
+  outcome: success
+  return_result:
+    taken:
+      - then-1
+      - else-2
+golden_snapshot:
+  state_notes:
+    - kind: ast
+      node_kind: assignment
+      line: 1
+      column: 0
+    - kind: binding
+      op: set
+      name: taken
+      value: []
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 2
+      column: 0
+    - kind: binding
+      op: set
+      name: a
+      value: 1
+      scope: local
+    - kind: ast
+      node_kind: assignment
+      line: 3
+      column: 0
+    - kind: binding
+      op: set
+      name: b
+      value: 2
+      scope: local
+    - kind: ast
+      node_kind: if
+      line: 4
+      column: 0
+    - kind: ast
+      node_kind: assignment
+      line: 5
+      column: 0
+    - kind: binding
+      op: update
+      name: taken
+      value:
+        - then-1
+      scope: outer
+    - kind: ast
+      node_kind: if
+      line: 9
+      column: 0
+    - kind: ast
+      node_kind: assignment
+      line: 12
+      column: 0
+    - kind: binding
+      op: update
+      name: taken
+      value:
+        - then-1
+        - else-2
+      scope: outer
