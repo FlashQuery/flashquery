@@ -399,7 +399,7 @@ This scaffold shape is specified by REQ-072. [CITED: MCP Broker Requirements.md]
 | REQ-103 | `_self` binding and snapshot semantics. [VERIFIED: .planning/REQUIREMENTS.md] | unit + directed + YAML + E2E | `npm test -- --run tests/unit/macro-self.test.ts` [CITED: MCP Broker Test Plan.md] | no; Wave 0 create |
 | REQ-104 | `continue`/`break` parse/runtime behavior. [VERIFIED: .planning/REQUIREMENTS.md] | unit + directed + YAML | `npm test -- --run tests/unit/macro-parser.test.ts tests/unit/macro-evaluator.test.ts` [CITED: MCP Broker Test Plan.md] | existing files to extend |
 | REQ-109 | `_exists()` deep probe. [VERIFIED: .planning/REQUIREMENTS.md] | unit + integration + directed + YAML | `npm test -- --run tests/unit/macro-introspection.test.ts && npm run test:integration -- --run tests/integration/mcp-broker/client-lifecycle.test.ts` [CITED: MCP Broker Test Plan.md] | existing files to extend |
-| REQ-110 | Shared-server concurrent macro safety. [VERIFIED: .planning/REQUIREMENTS.md] | integration + E2E | `npm run test:integration -- --run tests/integration/mcp-broker/macro-concurrency.test.ts` [CITED: MCP Broker Test Plan.md] | no; Wave 0 create or extend include list |
+| REQ-110 | Shared-server concurrent macro safety. [VERIFIED: .planning/REQUIREMENTS.md] | integration + E2E | `npm run test:integration -- --run tests/integration/macro-concurrency.test.ts` [CITED: MCP Broker Test Plan.md] | existing file to extend |
 
 ### Sampling Rate
 
@@ -412,7 +412,7 @@ This scaffold shape is specified by REQ-072. [CITED: MCP Broker Requirements.md]
 - [ ] `src/services/mcp-broker/cli.ts` or `src/cli/commands/list-tools.ts` - diagnostic CLI implementation surface. [CITED: MCP Broker Requirements.md]
 - [ ] `tests/unit/list-tools-command.test.ts` - CLI YAML and stderr behavior. [CITED: MCP Broker Test Plan.md]
 - [ ] `tests/unit/macro-self.test.ts` - T-U-038/T-U-039. [CITED: MCP Broker Test Plan.md]
-- [ ] `tests/integration/mcp-broker/macro-concurrency.test.ts` - T-I-050; add to explicit Vitest include if created. [VERIFIED: tests/config/vitest.integration.config.ts]
+- [ ] `tests/integration/macro-concurrency.test.ts` - T-I-050; add to explicit Vitest include if created. [VERIFIED: tests/config/vitest.integration.config.ts]
 - [ ] `tests/scenarios/directed/testcases/test_mcp_broker_phase_e.py` - MCB-06..011 and MCB-19..020. [CITED: MCP Broker Test Plan.md]
 - [ ] `tests/scenarios/integration/tests/cli_list_tools_paste_back.yml` - INT-MCB-14. [CITED: MCP Broker Test Plan.md]
 - [ ] `tests/scenarios/integration/tests/macro_extensions_compose_rundoc.yml` - INT-MCB-15. [CITED: MCP Broker Test Plan.md]
