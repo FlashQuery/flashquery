@@ -106,7 +106,6 @@ The codebase already has most broker infrastructure: `McpBroker`, `BrokerClient`
 |--------------|---------|---------|-------------|
 | `tsx` | 4.21.0 installed [VERIFIED: npm ls] | Run TypeScript fixture MCP servers in tests. [VERIFIED: tests/fixtures/mcp-servers] | Use in broker fixture config as prior phases do. [VERIFIED: tests/integration/mcp-broker/*.test.ts] |
 | Python 3 | 3.12.3 installed [VERIFIED: python3 --version] | Directed and YAML scenario runners. [VERIFIED: tests/scenarios/*/run_*.py] | Required for Phase E scenario closure. [VERIFIED: MCP Broker Test Plan.md] |
-| Macro Testing Framework | Available via `npm run test:macro-framework` | YAML-authored macro engine regression tier. [VERIFIED: package.json + tests/macro-framework/README.md] | Phase 142 gap fixes added framework pilots, including `_self` and `continue`/`break` workaround cases that Phase 143 should update or account for. [VERIFIED: current worktree] |
 | `gsd-sdk` | Installed in PATH [VERIFIED: command -v gsd-sdk] | GSD init/commit operations. [VERIFIED: gsd init.phase-op] | Use only for planning/doc workflow, not production code. [VERIFIED: gsd init.phase-op] |
 
 ### Alternatives Considered
@@ -340,7 +339,6 @@ This scaffold shape is specified by REQ-072. [CITED: MCP Broker Requirements.md]
 | Host/delegated context reconstructed per call | Outermost `MacroCallerContext.consumerContext` is preserved through nested macros | Phase 142 [VERIFIED: .planning/STATE.md] | Concurrency tests must assert trace/context isolation, not reimplement context threading. [VERIFIED: Phase 142 validation summary] |
 | `_exists()` 5-second wrapper without explicit probe opts | Required deep-probe `tools/list` with 250 ms timeout | Phase 143 target [CITED: MCP Broker Requirements.md] | Existing unit tests must be updated. [VERIFIED: tests/unit/macro-introspection.test.ts] |
 | No loop-control tokens | Required `continue` and `break` statements | Phase 143 target [CITED: MCP Broker Requirements.md] | Parser/type/evaluator tests are mandatory. [CITED: MCP Broker Test Plan.md] |
-| Macro-framework workaround pilots | Real `_self` and `continue`/`break` support should replace or supplement workaround cases | Phase 142 gap-fix worktree before Phase 143 execution [VERIFIED: tests/macro-framework/cases/isolation/11-self-via-input-vars-with-state-notes.yml + tests/macro-framework/cases/control-flow/*.yml] | Plan 02/03 should read/run `tests/macro-framework` and avoid leaving comments that say these features are still pending after implementation. |
 
 **Deprecated/outdated:**
 - Shallow `_exists()` health checks are insufficient for macro guard clauses. [CITED: MCP Broker Requirements.md]
@@ -398,10 +396,10 @@ This scaffold shape is specified by REQ-072. [CITED: MCP Broker Requirements.md]
 | REQ-071 | CLI connects, calls `tools/list`, exits. [VERIFIED: .planning/REQUIREMENTS.md] | unit + directed + YAML | `npm test -- --run tests/unit/list-tools-command.test.ts` and `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_mcp_broker_phase_e` [CITED: MCP Broker Test Plan.md] | no; Wave 0 create |
 | REQ-072 | CLI emits paste-ready YAML. [VERIFIED: .planning/REQUIREMENTS.md] | unit + YAML | `python3 tests/scenarios/integration/run_integration.py --managed cli_list_tools_paste_back` [CITED: MCP Broker Test Plan.md] | no; Wave 0 create |
 | REQ-073 | CLI failures surface stderr. [VERIFIED: .planning/REQUIREMENTS.md] | unit + directed | `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_mcp_broker_phase_e` [CITED: MCP Broker Test Plan.md] | no; Wave 0 create |
-| REQ-103 | `_self` binding and snapshot semantics. [VERIFIED: .planning/REQUIREMENTS.md] | unit + macro-framework + directed + YAML + E2E | `npm test -- --run tests/unit/macro-self.test.ts && npm run test:macro-framework` [CITED: MCP Broker Test Plan.md] | unit no; macro-framework workaround case exists |
-| REQ-104 | `continue`/`break` parse/runtime behavior. [VERIFIED: .planning/REQUIREMENTS.md] | unit + macro-framework + directed + YAML | `npm test -- --run tests/unit/macro-parser.test.ts tests/unit/macro-evaluator.test.ts && npm run test:macro-framework` [CITED: MCP Broker Test Plan.md] | existing files to extend; macro-framework workaround cases exist |
+| REQ-103 | `_self` binding and snapshot semantics. [VERIFIED: .planning/REQUIREMENTS.md] | unit + directed + YAML + E2E | `npm test -- --run tests/unit/macro-self.test.ts` [CITED: MCP Broker Test Plan.md] | no; Wave 0 create |
+| REQ-104 | `continue`/`break` parse/runtime behavior. [VERIFIED: .planning/REQUIREMENTS.md] | unit + directed + YAML | `npm test -- --run tests/unit/macro-parser.test.ts tests/unit/macro-evaluator.test.ts` [CITED: MCP Broker Test Plan.md] | existing files to extend |
 | REQ-109 | `_exists()` deep probe. [VERIFIED: .planning/REQUIREMENTS.md] | unit + integration + directed + YAML | `npm test -- --run tests/unit/macro-introspection.test.ts && npm run test:integration -- --run tests/integration/mcp-broker/client-lifecycle.test.ts` [CITED: MCP Broker Test Plan.md] | existing files to extend |
-| REQ-110 | Shared-server concurrent macro safety. [VERIFIED: .planning/REQUIREMENTS.md] | integration + E2E | `npm run test:integration -- --run tests/integration/macro-concurrency.test.ts` [CITED: MCP Broker Test Plan.md] | existing file to extend |
+| REQ-110 | Shared-server concurrent macro safety. [VERIFIED: .planning/REQUIREMENTS.md] | integration + E2E | `npm run test:integration -- --run tests/integration/mcp-broker/macro-concurrency.test.ts` [CITED: MCP Broker Test Plan.md] | no; Wave 0 create or extend include list |
 
 ### Sampling Rate
 
@@ -414,8 +412,7 @@ This scaffold shape is specified by REQ-072. [CITED: MCP Broker Requirements.md]
 - [ ] `src/services/mcp-broker/cli.ts` or `src/cli/commands/list-tools.ts` - diagnostic CLI implementation surface. [CITED: MCP Broker Requirements.md]
 - [ ] `tests/unit/list-tools-command.test.ts` - CLI YAML and stderr behavior. [CITED: MCP Broker Test Plan.md]
 - [ ] `tests/unit/macro-self.test.ts` - T-U-038/T-U-039. [CITED: MCP Broker Test Plan.md]
-- [ ] `tests/integration/macro-concurrency.test.ts` - T-I-050; add to explicit Vitest include if created. [VERIFIED: tests/config/vitest.integration.config.ts]
-- [ ] `tests/macro-framework/cases/isolation/*` and `tests/macro-framework/cases/control-flow/*` - update or add cases so the macro testing framework no longer documents `_self` / `continue` / `break` as production-pending after Phase 143. [VERIFIED: current worktree]
+- [ ] `tests/integration/mcp-broker/macro-concurrency.test.ts` - T-I-050; add to explicit Vitest include if created. [VERIFIED: tests/config/vitest.integration.config.ts]
 - [ ] `tests/scenarios/directed/testcases/test_mcp_broker_phase_e.py` - MCB-06..011 and MCB-19..020. [CITED: MCP Broker Test Plan.md]
 - [ ] `tests/scenarios/integration/tests/cli_list_tools_paste_back.yml` - INT-MCB-14. [CITED: MCP Broker Test Plan.md]
 - [ ] `tests/scenarios/integration/tests/macro_extensions_compose_rundoc.yml` - INT-MCB-15. [CITED: MCP Broker Test Plan.md]
