@@ -24,7 +24,7 @@
 - ✅ **v3.2 Agentic LLM Tools** — Phases 112-120 (shipped 2026-05-07)
 - ✅ **v3.3 MCP Tools Consolidation** — Phases 121-129 (shipped 2026-05-14)
 - ✅ **v3.4 macro-support** — Phases 130-138 (shipped 2026-05-17)
-- 🔄 **v3.5 MCP Broker** — Phases 139-143 (planning)
+- ✅ **v3.5 MCP Broker** — Phases 139-143 (shipped 2026-05-19)
 
 ## Phases
 
@@ -45,7 +45,7 @@ Archive: [milestones/v3.4-ROADMAP.md](milestones/v3.4-ROADMAP.md)
 
 </details>
 
-## v3.5 MCP Broker (Phases 139-143)
+## v3.5 MCP Broker (Phases 139-143) — SHIPPED 2026-05-19
 
 ### Phase 139: Broker Foundation, Registry, And Dispatch
 
@@ -170,7 +170,7 @@ Plans:
 
 | Milestone | Phases | Requirements | Status | Shipped |
 |-----------|--------|--------------|--------|---------|
-| v3.5 MCP Broker | 139-143 | 0/118 | Planning | — |
+| v3.5 MCP Broker | 139-143 | 118/118 | Complete | 2026-05-19 |
 | v3.4 macro-support | 130-138 | 63/63 | Complete | 2026-05-17 |
 | v3.3 MCP Tools Consolidation | 121-129 | 57/57 | Complete | 2026-05-14 |
 | v3.2 Agentic LLM Tools | 112-120 | — | Complete | 2026-05-07 |
@@ -180,17 +180,17 @@ Plans:
 
 ## Next Up
 
-Start Phase 139 with:
+v3.5 MCP Broker is complete. Archive the milestone or start the next milestone planning cycle with:
 
 ```bash
-$gsd-discuss-phase 139
+$gsd-complete-milestone v3.5
 ```
 
-Or skip discussion and plan directly:
+Or begin the next milestone:
 
 ```bash
-$gsd-plan-phase 139
+$gsd-new-milestone
 ```
 
 ---
-*Last updated: 2026-05-17 after creating v3.5 MCP Broker roadmap*
+*Last updated: 2026-05-19 after completing v3.5 MCP Broker Phase 143*
