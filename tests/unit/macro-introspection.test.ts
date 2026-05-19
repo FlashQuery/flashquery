@@ -52,9 +52,11 @@ describe('macro namespace introspection', () => {
     });
   });
 
-  it('T-U-155 calls broker.isConnected exactly once per brokered _exists evaluation', async () => {
+  it('T-U-155 calls broker.isConnected with the required deep probe per brokered _exists evaluation', async () => {
     const broker = {
-      isConnected: vi.fn(async (serverId: string) => serverId === 'brave_search'),
+      isConnected: vi.fn(async (serverId: string, opts?: { deepProbe?: boolean; timeoutMs?: number }) =>
+        serverId === 'brave_search' && opts?.deepProbe === true && opts.timeoutMs === 250
+      ),
       getToolHandler: vi.fn(() => null),
     } satisfies McpBroker;
     const dispatchTool = throwingDispatch();
@@ -71,12 +73,18 @@ describe('macro namespace introspection', () => {
     expect(resultOf(parseToolPayload(first))).toBe(true);
     expect(resultOf(parseToolPayload(second))).toBe(true);
     expect(broker.isConnected).toHaveBeenCalledTimes(2);
-    expect(broker.isConnected).toHaveBeenNthCalledWith(1, 'brave_search');
-    expect(broker.isConnected).toHaveBeenNthCalledWith(2, 'brave_search');
+    expect(broker.isConnected).toHaveBeenNthCalledWith(1, 'brave_search', {
+      deepProbe: true,
+      timeoutMs: 250,
+    });
+    expect(broker.isConnected).toHaveBeenNthCalledWith(2, 'brave_search', {
+      deepProbe: true,
+      timeoutMs: 250,
+    });
     expect(dispatchTool).not.toHaveBeenCalled();
   });
 
-  it('T-U-156 returns false when a brokered _exists probe exceeds the 5-second timeout', async () => {
+  it('T-U-156 returns false when a brokered _exists deep probe exceeds the 250 ms timeout', async () => {
     vi.useFakeTimers();
     const broker = {
       isConnected: vi.fn(() => new Promise<boolean>(() => {})),
@@ -88,12 +96,15 @@ describe('macro namespace introspection', () => {
       broker,
       dispatchTool,
     });
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(250);
     const result = await evaluation;
 
     expect(resultOf(parseToolPayload(result))).toBe(false);
     expect(broker.isConnected).toHaveBeenCalledTimes(1);
-    expect(broker.isConnected).toHaveBeenCalledWith('brave_search');
+    expect(broker.isConnected).toHaveBeenCalledWith('brave_search', {
+      deepProbe: true,
+      timeoutMs: 250,
+    });
     expect(dispatchTool).not.toHaveBeenCalled();
     vi.useRealTimers();
   });
