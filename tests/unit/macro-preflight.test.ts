@@ -116,16 +116,12 @@ describe('macro input_var preflight', () => {
     });
   });
 
-  it('T-U-103 rejects boolean-shaped input_var defaults before execution', async () => {
+  it('T-U-103 binds boolean input_var defaults', async () => {
     const result = await evaluateProgram(parseProgram('x = input_var "x" --default true\nexit $x'), {
       inputVars: {},
     });
 
-    expect(result.isError).toBe(false);
-    expect(parseToolPayload(result)).toMatchObject({
-      error: 'invalid_input',
-      details: { reason: 'input_var_default_must_be_literal' },
-    });
+    expect(resultOf(parseToolPayload(result))).toBe(true);
   });
 
   it('T-U-104 binds list defaults', async () => {

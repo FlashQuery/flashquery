@@ -18,7 +18,7 @@ describe('macro evaluator scope semantics', () => {
     expect(resultOf(parseToolPayload(result))).toBe(3);
   });
 
-  it('T-U-068 creates a new if-branch name in the innermost scope only', async () => {
+  it('T-U-068 persists new names assigned inside if branches', async () => {
     const observed: unknown[] = [];
     const result = await evaluateProgram(
       parseProgram(`
@@ -38,9 +38,8 @@ describe('macro evaluator scope semantics', () => {
       }
     );
 
-    expect(observed).toEqual(['branch']);
-    expect(result.isError).toBe(true);
-    expect(parseToolPayload(result)['error']).toBe('tool_call_failed');
+    expect(observed).toEqual(['branch', 'branch']);
+    expect(result.isError).not.toBe(true);
   });
 
   it('T-U-069 walk-up assignment applies inside if branches', async () => {

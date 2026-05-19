@@ -1,0 +1,29 @@
+# _self.frontmatter is present but empty; reading any field returns null under REQ-112d.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-114-self-empty-frontmatter
+name: "_self with empty frontmatter — missing access returns null"
+description: |
+  _self.frontmatter is present but empty; missing leaf access returns null.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T15:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = $_self.frontmatter.anything
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{},"title":"t","tags":[],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"v": null}

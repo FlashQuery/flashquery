@@ -67,6 +67,7 @@ function preflightExpr(expr: Expr): void {
   switch (expr.kind) {
     case 'StringLit':
     case 'NumLit':
+    case 'BoolLit':
     case 'NullLit':
     case 'VarRef':
     case 'ToolExistsCall':
@@ -155,6 +156,7 @@ export function collectInputVarContract(program: Program): InputVarContract {
     switch (expr.kind) {
       case 'StringLit':
       case 'NumLit':
+      case 'BoolLit':
       case 'NullLit':
       case 'VarRef':
       case 'ToolExistsCall':
@@ -284,6 +286,8 @@ function literalToMacroValue(expr: Expr, line: number): InputVarDefault {
     case 'StringLit':
       return expr.raw;
     case 'NumLit':
+      return expr.value;
+    case 'BoolLit':
       return expr.value;
     case 'NullLit':
       return null;

@@ -140,6 +140,7 @@ function collectExprToolReferences(expr: Expr, references: ToolReference[]): voi
   switch (expr.kind) {
     case 'StringLit':
     case 'NumLit':
+    case 'BoolLit':
     case 'NullLit':
     case 'VarRef':
     case 'ToolExistsCall':

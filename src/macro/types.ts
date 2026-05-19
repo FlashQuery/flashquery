@@ -132,6 +132,7 @@ export interface BreakStmt {
 export interface ToolCall {
   kind: 'ToolCall';
   server: string;
+  serverVarRef?: boolean;
   tool: string;
   arg: ObjectLit | VarRef | FieldAccess | undefined;
   line: number;
@@ -140,6 +141,7 @@ export interface ToolCall {
 export interface ToolExistsCall {
   kind: 'ToolExistsCall';
   server: string;
+  serverVarRef?: boolean;
   method: string;
   line: number;
 }
@@ -147,6 +149,7 @@ export interface ToolExistsCall {
 export type Expr =
   | StringLit
   | NumLit
+  | BoolLit
   | NullLit
   | VarRef
   | ListLit
@@ -169,6 +172,11 @@ export interface StringLit {
 export interface NumLit {
   kind: 'NumLit';
   value: number;
+}
+
+export interface BoolLit {
+  kind: 'BoolLit';
+  value: boolean;
 }
 
 export interface NullLit {

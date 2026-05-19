@@ -9,6 +9,7 @@ import type {
   Program,
   Statement,
   ToolCall,
+  ToolExistsCall,
   ToolRegistry,
   MacroCallerContext,
   MacroNeedsUserInputPayload,
@@ -509,7 +510,7 @@ async function execStatement(
       await evalToolCall(stmt, env, context);
       return;
     case 'ToolExistsCall':
-      await evalToolExists(stmt, context);
+      await evalToolExists(stmt, env, context);
       return;
     case 'ContinueStmt':
       throw new MacroContinueSignal(stmt.line);
@@ -563,7 +564,7 @@ async function execStatement(
       const branch = isTruthy(await evalExpr(stmt.condition, env, context))
         ? stmt.thenBody
         : (stmt.elseBody ?? []);
-      await execBlock(branch, new Env(env), context);
+      await execBlock(branch, env, context);
       return;
     }
   }
@@ -578,6 +579,8 @@ async function evalExpr(
     case 'StringLit':
       return expr.interpolated ? interpolate(expr.raw, env) : expr.raw;
     case 'NumLit':
+      return expr.value;
+    case 'BoolLit':
       return expr.value;
     case 'NullLit':
       return null;
@@ -602,7 +605,7 @@ async function evalExpr(
     case 'ToolCall':
       return evalToolCall(expr, env, context);
     case 'ToolExistsCall':
-      return evalToolExists(expr, context);
+      return evalToolExists(expr, env, context);
   }
 }
 
@@ -742,10 +745,7 @@ function stepField(target: MacroValue, field: string): MacroValue {
     });
   }
   if (!Object.prototype.hasOwnProperty.call(target, field)) {
-    throw new MacroRuntimeError(`Missing field .${field}.`, undefined, {
-      reason: 'missing_field',
-      field,
-    });
+    return null;
   }
   return target[field];
 }
@@ -929,15 +929,40 @@ async function evalToolArg(
 
 async function evalToolExists(
   expr: Extract<Expr | Statement, { kind: 'ToolExistsCall' }>,
+  env: Env,
   context: MacroInvocationContext
 ): Promise<MacroValue> {
-  const exists = await resolveNamespaceIntrospection(expr.server, expr.method, context.broker, {
+  const server = resolveToolServer(expr, env);
+  const exists = await resolveNamespaceIntrospection(server, expr.method, context.broker, {
     line: expr.line,
   });
-  if (expr.server !== 'fq' && exists === false && !context.warnings.includes('broker_unavailable')) {
+  if (server !== 'fq' && exists === false && !context.warnings.includes('broker_unavailable')) {
     context.warnings.push('broker_unavailable');
   }
   return exists;
+}
+
+function resolveToolServer(
+  expr: Pick<ToolCall | ToolExistsCall, 'server' | 'serverVarRef' | 'line'>,
+  env: Env
+): string {
+  if (expr.serverVarRef !== true) {
+    return expr.server;
+  }
+  const value = env.get(expr.server);
+  if (typeof value !== 'string') {
+    throw new MacroRuntimeError(
+      `Variable server reference $${expr.server} must evaluate to a string.`,
+      expr.line,
+      {
+        reason: 'introspection_subject_not_string',
+        server_variable: expr.server,
+        value_type: describeValue(value),
+        line: expr.line,
+      }
+    );
+  }
+  return value;
 }
 
 function interpolate(raw: string, env: Env): string {

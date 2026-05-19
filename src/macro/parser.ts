@@ -16,6 +16,7 @@ import {
   Else,
   EqEq,
   Equals,
+  FalseTok,
   Fi,
   For,
   GreaterEq,
@@ -42,6 +43,7 @@ import {
   ShortFlag,
   SingleQuotedString,
   Then,
+  TrueTok,
   VarRefTok,
   While,
   longFlagName,
@@ -57,6 +59,7 @@ import type {
   Arg,
   BinaryExpr,
   Binding,
+  BoolLit,
   Call,
   Expr,
   FieldAccess,
@@ -93,7 +96,8 @@ type ParseReason =
   | 'invalid_literal'
   | 'input_var_key_must_be_literal'
   | 'readonly_self_assignment'
-  | 'loop_control_outside_loop';
+  | 'loop_control_outside_loop'
+  | 'varref_server_non_introspection';
 
 class MacroSyntaxFailure extends Error {
   constructor(
@@ -383,6 +387,14 @@ class TokenStreamParser {
       this.advance();
       return { kind: 'NullLit' } satisfies NullLit;
     }
+    if (this.matches(TrueTok)) {
+      this.advance();
+      return { kind: 'BoolLit', value: true } satisfies BoolLit;
+    }
+    if (this.matches(FalseTok)) {
+      this.advance();
+      return { kind: 'BoolLit', value: false } satisfies BoolLit;
+    }
     if (this.matches(VarRefTok)) return this.parseVarOrField();
     if (this.matches(LBracket)) return this.parseListLit();
     if (this.matches(LBrace)) return this.parseObjectLit();
@@ -441,16 +453,28 @@ class TokenStreamParser {
   }
 
   private parseToolLike(): ToolCall | ToolExistsCall {
-    const server = this.consume(Identifier, 'Expected server name.');
+    const server = this.matches(VarRefTok)
+      ? this.consume(VarRefTok, 'Expected server name.')
+      : this.consume(Identifier, 'Expected server name.');
+    const serverVarRef = this.matchesToken(server, VarRefTok);
     this.consume(Dot, 'Expected "." after server name.');
     const tool = this.consume(Identifier, 'Expected tool name.');
+
+    if (serverVarRef && !tool.image.startsWith('_')) {
+      this.fail(
+        'varref_server_non_introspection',
+        server,
+        'Variable server references are allowed only for introspection methods.'
+      );
+    }
 
     if (tool.image.startsWith('_')) {
       this.consume(LParen, `Expected "(" after ${tool.image}.`);
       this.consume(RParen, `Expected ")" after ${tool.image}.`);
       return {
         kind: 'ToolExistsCall',
-        server: server.image,
+        server: serverVarRef ? varRefName(server.image) : server.image,
+        ...(serverVarRef ? { serverVarRef: true } : {}),
         method: tool.image,
         line: server.startLine ?? 1,
       };
@@ -585,6 +609,8 @@ class TokenStreamParser {
       SingleQuotedString,
       NumberLit,
       NullTok,
+      TrueTok,
+      FalseTok,
       VarRefTok,
       LBracket,
       LBrace,
@@ -593,7 +619,12 @@ class TokenStreamParser {
   }
 
   private looksLikeToolCall(): boolean {
-    return this.matches(Identifier) && this.matchesAt(1, Dot) && this.matchesAt(2, Identifier);
+    return (
+      (this.matches(Identifier) || this.matches(VarRefTok)) &&
+      this.matchesAt(1, Dot) &&
+      this.matchesAt(2, Identifier) &&
+      this.matchesAt(3, LParen)
+    );
   }
 
   private looksLikeSelfAssignment(): boolean {

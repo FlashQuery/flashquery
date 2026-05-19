@@ -42,6 +42,8 @@ export const While = createToken({ name: 'While', pattern: /while/, longer_alt: 
 export const Continue = createToken({ name: 'Continue', pattern: /continue/, longer_alt: Identifier });
 export const Break = createToken({ name: 'Break', pattern: /break/, longer_alt: Identifier });
 export const NullTok = createToken({ name: 'NullTok', pattern: /null/, longer_alt: Identifier });
+export const TrueTok = createToken({ name: 'TrueTok', pattern: /true/, longer_alt: Identifier });
+export const FalseTok = createToken({ name: 'FalseTok', pattern: /false/, longer_alt: Identifier });
 
 export const EqEq = createToken({ name: 'EqEq', pattern: /==/ });
 export const BangEq = createToken({ name: 'BangEq', pattern: /!=/ });
@@ -109,6 +111,8 @@ export const RESERVED_KEYWORDS = [
   'continue',
   'break',
   'null',
+  'true',
+  'false',
 ] as const;
 
 export const BUILTIN_NAMES = [
@@ -158,6 +162,8 @@ export const allTokens = [
   Continue,
   Break,
   NullTok,
+  TrueTok,
+  FalseTok,
   EqEq,
   BangEq,
   LessEq,

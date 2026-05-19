@@ -1,0 +1,52 @@
+# Pilot 32 — Macro grammar accepts boolean literals in object literals.
+#
+# REPURPOSED 2026-05-19. Previously this pilot tried to verify Broker
+# REQ-093 / REQ-098 (`help: true` sentinel forwarding) by calling a
+# brokered tool with `help: true` from inside a macro. That path was
+# never in scope for the macro test surface — REQ-098 explicitly scopes
+# the behavior to "a delegated or host model" calling the brokered tool,
+# not a macro frame. Verification of REQ-093 / REQ-098 belongs at the
+# broker layer (unit + delegated-call scenario).
+#
+# Updated 2026-05-19 for Broker REQ-112c: boolean literals (`true` /
+# `false`) are now first-class macro values. This pilot therefore verifies
+# that a boolean in an object literal reaches the brokered call instead of
+# being treated as an unknown builtin.
+
+id: mtf-g-32-boolean-literal-object-arg
+name: Grammar — `true` in object literal is accepted
+description: |
+  A macro that writes a boolean literal inside an object argument must
+  parse and dispatch successfully. Broker REQ-112c lifts the prior
+  boolean-literal deferral.
+
+covers:
+  - MTF-G-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T15:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  body = helper_srv.describe({ help: true })
+  exit $body
+
+input_vars: {}
+vault: {}
+
+tools:
+  helper_srv:
+    archetype: ReadOnlyTool
+    tool_name: describe
+    returns: "boolean accepted"
+
+expect:
+  outcome: success
+  return_result: "boolean accepted"
+
+golden_snapshot:
+  state_notes:
+    - { kind: grammar, note: "boolean literal accepted in object arg", spec_ref: "Broker REQ-112c" }

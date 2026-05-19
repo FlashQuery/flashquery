@@ -84,6 +84,50 @@ describe('macro namespace introspection', () => {
     expect(dispatchTool).not.toHaveBeenCalled();
   });
 
+  it('resolves variable-ref server subjects for _exists at runtime', async () => {
+    const broker = {
+      isConnected: vi.fn(async (serverId: string, opts?: { deepProbe?: boolean; timeoutMs?: number }) =>
+        serverId === 'brave_search' && opts?.deepProbe === true && opts.timeoutMs === 250
+      ),
+      getToolHandler: vi.fn(() => null),
+    } satisfies McpBroker;
+    const dispatchTool = throwingDispatch();
+
+    const result = await evaluateProgram(
+      parseProgram(`
+        server_name = "brave_search"
+        exit $server_name._exists()
+      `),
+      { broker, dispatchTool }
+    );
+
+    expect(resultOf(parseToolPayload(result))).toBe(true);
+    expect(broker.isConnected).toHaveBeenCalledWith('brave_search', {
+      deepProbe: true,
+      timeoutMs: 250,
+    });
+    expect(dispatchTool).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-string variable-ref server subjects at runtime', async () => {
+    const result = await evaluateProgram(
+      parseProgram(`
+        server_name = 42
+        exit $server_name._exists()
+      `),
+      { dispatchTool: throwingDispatch() }
+    );
+
+    expect(result.isError).toBe(true);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'tool_call_failed',
+      details: {
+        reason: 'introspection_subject_not_string',
+        server_variable: 'server_name',
+      },
+    });
+  });
+
   it('T-U-156 returns false when a brokered _exists deep probe exceeds the 250 ms timeout', async () => {
     vi.useFakeTimers();
     const broker = {

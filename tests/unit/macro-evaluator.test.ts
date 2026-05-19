@@ -69,6 +69,29 @@ describe('macro evaluator expression semantics', () => {
     expect(resultOf(parseToolPayload(falsy))).toBe(true);
   });
 
+  it('evaluates boolean literals and equality without coercion', async () => {
+    const result = await evaluateProgram(
+      parseProgram(`
+        exit {
+          a: true,
+          b: false,
+          c: true == true,
+          d: true == false,
+          e: true == 1
+        }
+      `),
+      { builtins: basicBuiltins() }
+    );
+
+    expect(resultOf(parseToolPayload(result))).toEqual({
+      a: true,
+      b: false,
+      c: true,
+      d: false,
+      e: false,
+    });
+  });
+
   it('T-U-044 evaluates 0..5 as an end-exclusive range', async () => {
     const result = await evaluateProgram(parseProgram('exit 0..5'), { builtins: basicBuiltins() });
     expect(resultOf(parseToolPayload(result))).toEqual([0, 1, 2, 3, 4]);
@@ -233,6 +256,82 @@ describe('macro evaluator expression semantics', () => {
       { builtins: basicBuiltins() }
     );
     expect(resultOf(parseToolPayload(result))).toBe('then');
+  });
+
+  it('persists variables newly assigned in if and else branches', async () => {
+    const thenOnly = await evaluateProgram(
+      parseProgram(`
+        if true then
+          result = "then"
+        fi
+        exit $result
+      `),
+      { builtins: basicBuiltins() }
+    );
+    const elseOnly = await evaluateProgram(
+      parseProgram(`
+        if false then
+          ignored = "then"
+        else
+          result = "else"
+        fi
+        exit $result
+      `),
+      { builtins: basicBuiltins() }
+    );
+
+    expect(resultOf(parseToolPayload(thenOnly))).toBe('then');
+    expect(resultOf(parseToolPayload(elseOnly))).toBe('else');
+  });
+
+  it('leaves variables from untaken branches undefined', async () => {
+    const result = await evaluateProgram(
+      parseProgram(`
+        if false then
+          result = "then"
+        fi
+        exit $result
+      `),
+      { builtins: basicBuiltins() }
+    );
+
+    expect(result.isError).toBe(true);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'tool_call_failed',
+      details: { reason: 'unknown_variable', name: 'result' },
+    });
+  });
+
+  it('returns null for missing leaf fields on present objects', async () => {
+    const result = await evaluateProgram(
+      parseProgram(`
+        obj = { present: 1 }
+        state = "unset"
+        if $obj.absent == null then
+          state = "absent"
+        fi
+        exit { missing: $obj.absent, state: $state }
+      `),
+      { builtins: basicBuiltins() }
+    );
+
+    expect(resultOf(parseToolPayload(result))).toEqual({ missing: null, state: 'absent' });
+  });
+
+  it('still rejects chained field access through null', async () => {
+    const result = await evaluateProgram(
+      parseProgram(`
+        obj = { present: 1 }
+        exit $obj.absent.child
+      `),
+      { builtins: basicBuiltins() }
+    );
+
+    expect(result.isError).toBe(true);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'tool_call_failed',
+      details: { reason: 'invalid_field_target', field: 'child' },
+    });
   });
 
   it('keeps direct isTruthy helper semantics aligned with truthiness consumers', () => {

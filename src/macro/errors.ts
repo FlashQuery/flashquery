@@ -10,7 +10,9 @@ export type MacroParseErrorReason =
   | 'reserved_keyword_assignment'
   | 'builtin_name_shadowing'
   | 'invalid_literal'
-  | 'input_var_key_must_be_literal';
+  | 'input_var_key_must_be_literal'
+  | 'loop_control_outside_loop'
+  | 'varref_server_non_introspection';
 
 export interface MacroParseErrorDetails {
   reason: MacroParseErrorReason;

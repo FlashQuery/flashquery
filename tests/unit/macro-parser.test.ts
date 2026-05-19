@@ -60,6 +60,8 @@ const V0_PARSE_REASONS = [
   'builtin_name_shadowing',
   'invalid_literal',
   'input_var_key_must_be_literal',
+  'loop_control_outside_loop',
+  'varref_server_non_introspection',
 ] as const satisfies readonly MacroParseErrorReason[];
 
 function describeParseReason(reason: MacroParseErrorReason): string {
@@ -84,6 +86,10 @@ function describeParseReason(reason: MacroParseErrorReason): string {
       return 'invalid literal';
     case 'input_var_key_must_be_literal':
       return 'input_var key must be literal';
+    case 'loop_control_outside_loop':
+      return 'loop control outside loop';
+    case 'varref_server_non_introspection':
+      return 'varref server non-introspection';
     default: {
       const exhaustive: never = reason;
       return exhaustive;
@@ -133,6 +139,20 @@ describe('macro parser', () => {
   it('T-U-032 parses null as a first-class value', () => {
     const [binding] = parse('x = null').statements as Binding[];
     expect(binding?.value).toEqual({ kind: 'NullLit' });
+  });
+
+  it('parses true and false as first-class values', () => {
+    const statements = parse('a = true\nb = false\nc = { help: true, verbose: false }')
+      .statements as Binding[];
+    expect(statements[0]?.value).toEqual({ kind: 'BoolLit', value: true });
+    expect(statements[1]?.value).toEqual({ kind: 'BoolLit', value: false });
+    expect(statements[2]?.value).toMatchObject({
+      kind: 'ObjectLit',
+      entries: [
+        { key: 'help', value: { kind: 'BoolLit', value: true } },
+        { key: 'verbose', value: { kind: 'BoolLit', value: false } },
+      ],
+    });
   });
 
   it('T-U-033 ignores comments and parses the next statement', () => {
@@ -264,6 +284,38 @@ describe('macro parser', () => {
       server: 'brave_search',
       method: '_exists',
       line: 1,
+    });
+  });
+
+  it('parses variable-ref server introspection subjects', () => {
+    const statements = parse(`
+      svc = "brave_search"
+      exists = $svc._exists()
+      if $svc._exists() then
+        echo "ok"
+      fi
+    `).statements as Binding[];
+
+    expect(statements[1]?.value).toEqual({
+      kind: 'ToolExistsCall',
+      server: 'svc',
+      serverVarRef: true,
+      method: '_exists',
+      line: 3,
+    });
+    expect((statements[2] as unknown as IfStmt).condition).toEqual({
+      kind: 'ToolExistsCall',
+      server: 'svc',
+      serverVarRef: true,
+      method: '_exists',
+      line: 4,
+    });
+  });
+
+  it('rejects variable-ref server subjects for non-introspection tools', () => {
+    expect(parseError('$svc.search({})').details).toMatchObject({
+      reason: 'varref_server_non_introspection',
+      near_token: '$svc',
     });
   });
 
