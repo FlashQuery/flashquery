@@ -597,9 +597,11 @@ class TokenStreamParser {
   }
 
   private looksLikeSelfAssignment(): boolean {
-    if (!this.matches(Identifier) || this.peek()?.image !== '_self' || !this.matchesAt(1, Dot)) {
+    if (!this.matches(Identifier) || this.peek()?.image !== '_self') {
       return false;
     }
+    if (this.matchesAt(1, Equals)) return true;
+    if (!this.matchesAt(1, Dot)) return false;
     let offset = 2;
     while (
       this.matchesToken(this.tokens[this.index + offset], Identifier) &&

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
+import { loadConfig } from '../../src/config/loader.js';
 import { runListToolsCommand, type ListToolsClientFactory } from '../../src/services/mcp-broker/cli.js';
 
 interface CapturedStreams {
@@ -103,6 +104,7 @@ describe('list-tools diagnostic CLI', () => {
     expect(captured.stdout).toContain('weather:');
     expect(captured.stdout).toContain('cost_per_call');
     expect(captured.stdout).toContain('description_override');
+    expect(captured.stdout).toContain('description_override: ""');
     expect(captured.stdout).toContain('# Echo a message back to the caller.');
     expect(captured.stdout).not.toMatch(/FlashQuery ready|STARTUP|Server stderr:/);
   });
@@ -142,6 +144,36 @@ describe('list-tools diagnostic CLI', () => {
       mcp_servers?: { basic?: { tool_overrides?: Record<string, unknown> } };
     };
     expect(parsed.mcp_servers?.basic?.tool_overrides).toHaveProperty('search');
+    expect(parsed.mcp_servers?.basic?.tool_overrides?.search).toMatchObject({
+      cost_per_call: 0.005,
+      description_override: '',
+    });
+
+    const root = await mkdtemp(join(tmpdir(), 'fq-list-tools-validated-'));
+    const pastedConfigPath = join(root, 'flashquery.yml');
+    await writeFile(
+      pastedConfigPath,
+      [
+        'instance:',
+        '  id: unit-test',
+        '  vault:',
+        '    path: ./vault',
+        'supabase:',
+        '  url: http://localhost:54321',
+        '  service_role_key: test-service-role',
+        '  database_url: postgres://postgres:postgres@localhost:54322/postgres',
+        'mcp_servers:',
+        '  basic:',
+        '    command: node',
+        '    args: ["server-basic.js"]',
+        indent(captured.stdout, 4),
+        '',
+      ].join('\n')
+    );
+    expect(loadConfig(pastedConfigPath).mcpServers.basic?.toolOverrides.search).toMatchObject({
+      costPerCall: 0.005,
+      descriptionOverride: '',
+    });
     expect(captured.stdout).not.toMatch(/FlashQuery ready|STARTUP|Server stderr:/);
     expect(captured.stderr).toBe('');
   });

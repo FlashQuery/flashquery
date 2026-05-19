@@ -71,8 +71,8 @@ function formatToolOverridesYaml(serverId: string, tools: BrokeredTool[]): strin
     for (const commentLine of formatDescriptionComment(tool.description ?? tool.upstreamDescription)) {
       lines.push(`    ${commentLine}`);
     }
-    lines.push(`    # cost_per_call: ${formatCost(tool.costPerCall)}             # uncomment + set`);
-    lines.push('    # description_override: "..."         # uncomment + set');
+    lines.push(`    cost_per_call: ${formatCost(tool.costPerCall)}`);
+    lines.push('    description_override: ""');
   }
   return `${lines.join('\n')}\n`;
 }

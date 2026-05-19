@@ -189,12 +189,12 @@ def run_test(args: argparse.Namespace) -> TestRun:
                     "```",
                     "",
                     "```fqm name=exists",
-                    "if missing_phase_e._exists() {",
+                    "if missing_phase_e._exists() then",
                     '  exit "unexpected-missing"',
-                    "}",
-                    "if stoppable._exists() {",
+                    "fi",
+                    "if stoppable._exists() then",
                     '  exit "stoppable-alive"',
-                    "}",
+                    "fi",
                     'exit "stoppable-not-alive"',
                     "```",
                     "",
@@ -258,19 +258,11 @@ def run_test(args: argparse.Namespace) -> TestRun:
         if run.exit_code:
             return run
 
-        missing_exists = _call_macro(
-            client,
-            source='''
-              if missing_phase_e._exists() then
-                exit "unexpected"
-              fi
-              exit "missing-server-false"
-            ''',
-        )
+        missing_exists = _call_macro(client, source_ref=f"{library_path}::exists")
         missing_payload = _json_payload(missing_exists)
         run.step(
             label="MCB-10 / T-S-010 _exists returns false for unconfigured server",
-            passed=missing_payload.get("result") == "missing-server-false",
+            passed=missing_payload.get("result") == "stoppable-alive",
             detail=json.dumps(missing_payload, sort_keys=True)[:1200],
             timing_ms=missing_exists.timing_ms,
             tool_result=missing_exists,

@@ -105,8 +105,8 @@ describe('macro _self source_ref binding', () => {
     }
   });
 
-  it('T-U-039 rejects assignments to _self.path and _self.frontmatter.x at parse time', () => {
-    for (const source of ['_self.path = "x"', '_self.frontmatter.x = 1']) {
+  it('T-U-039 rejects assignments to _self and _self fields at parse time', () => {
+    for (const source of ['_self = { path: "evil.md" }', '_self.path = "x"', '_self.frontmatter.x = 1']) {
       const parsed = parseMacroSource(source, 'macro-self-test.fqm');
       expect(parsed.ok).toBe(false);
       if (parsed.ok) throw new Error('expected parse failure');
