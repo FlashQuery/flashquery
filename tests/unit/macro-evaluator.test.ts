@@ -153,6 +153,60 @@ describe('macro evaluator expression semantics', () => {
     }
   });
 
+  it('T-U-042 continue inside a for loop skips to the next iteration', async () => {
+    const observed: unknown[] = [];
+    const result = await evaluateProgram(
+      parseProgram(`
+        for item in [1,2,3] do
+          if $item == 2 then
+            continue
+          fi
+          observe $item
+        done
+        exit "done"
+      `),
+      {
+        builtins: basicBuiltins({
+          observe: (args) => {
+            observed.push(args[0]);
+            return null;
+          },
+        }),
+      }
+    );
+
+    expect(resultOf(parseToolPayload(result))).toBe('done');
+    expect(observed).toEqual([1, 3]);
+  });
+
+  it('T-U-043 break inside a while loop exits past done and following statements run', async () => {
+    const observed: unknown[] = [];
+    const result = await evaluateProgram(
+      parseProgram(`
+        counter = 0
+        while $counter < 5 do
+          counter = add $counter 1
+          if $counter == 3 then
+            break
+          fi
+          observe $counter
+        done
+        exit { counter: $counter, observed: "after" }
+      `),
+      {
+        builtins: basicBuiltins({
+          observe: (args) => {
+            observed.push(args[0]);
+            return null;
+          },
+        }),
+      }
+    );
+
+    expect(resultOf(parseToolPayload(result))).toEqual({ counter: 3, observed: 'after' });
+    expect(observed).toEqual([1, 2]);
+  });
+
   it('T-U-073 treats null, 0, 0.0, "", [], and {} as falsy in if', async () => {
     for (const falsy of ['null', '0', '0.0', '""', '[]', '{}']) {
       const result = await evaluateProgram(
