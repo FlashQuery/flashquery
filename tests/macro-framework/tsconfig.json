@@ -15,9 +15,12 @@
   "include": [
     "runner.ts",
     "cases.test.ts",
+    "framework-registry.ts",
     "state-notes/**/*.ts",
     "golden-bridge/**/*.ts",
-    "fixtures/**/*.ts"
+    "fixtures/**/*.ts",
+    "coverage/**/*.ts",
+    "triage/**/*.ts"
   ],
   "exclude": [
     "macro-golden-model",

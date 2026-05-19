@@ -1,0 +1,40 @@
+# FlashQuery Macro Testing Framework — gitignore policy
+#
+# This framework's authoritative artifacts (test cases, coverage matrix,
+# failure-triage records, golden source) are checked in. Scaffolding artifacts
+# from agent-driven development and ephemeral run outputs are gitignored.
+#
+# See _Golden-Spec-Compliance-Audit.md + the framework requirements doc §9.4 / §9.6
+# for the rationale behind the committed surfaces.
+
+# ─── Negate parent gitignore rule for `coverage/` ──────────────────────────
+# The repo root .gitignore ignores `coverage/` (intended for nyc/istanbul
+# output). That unanchored rule would match our coverage matrix directory.
+# Per §9.4 the coverage matrix MUST be committed (manifest.ts, coverage.json,
+# MTF_COVERAGE.md, MTF_INTERACTIONS.md), so we re-include it here.
+!coverage/
+!coverage/**
+
+# ─── Fresh-cadence generated tests ──────────────────────────────────────────
+# Per §5.5 fresh mode: tests generated on each CI run, never committed.
+cases-fresh/
+
+# ─── Scaffolding / debugging artifacts ─────────────────────────────────────
+# Convention: anything prefixed `_` at the top level of the framework is a
+# scratch/debug file (smoke runners, probes, intermediate checks). Real
+# framework code uses descriptive names.
+_*.ts
+_*.js
+
+# ─── macOS / editor cruft ──────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# ─── Logs / temp ───────────────────────────────────────────────────────────
+*.log
+tmp/
+.cache/
