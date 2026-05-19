@@ -32,32 +32,36 @@ steps:
     title: "Phase E Rundoc ${run.id}"
     content: |
       ```fqm name=compose
-      kept = 0
-      for item in [1, 2, 3] do
-        if $item == 2 then
+      completed = []
+      skipped = []
+      for target in _self.frontmatter.targets do
+        if $target == "missing" then
+          if !missing_phase_e_yaml._exists() then
+            skipped = append $skipped $target
+            continue
+          fi
+        fi
+        if !basic._exists() then
           continue
         fi
-        kept = add $kept $item
-      done
-      loop_count = 0
-      while $loop_count < 5 do
-        loop_count = add $loop_count 1
-        if $loop_count == 2 then
+        if $target == "stop" then
           break
         fi
+        completed = append $completed $target
       done
-      if missing_phase_e_yaml._exists() then
-        exit "unexpected-missing"
-      fi
-      if !basic._exists() then
-        exit "unexpected-basic-missing"
-      fi
-      exit { path: _self.path, marker: _self.frontmatter.phase_e_marker, kept: $kept, count: $loop_count }
+      fq.write_document({
+        mode: "update",
+        identifier: _self.path,
+        frontmatter: { completed: $completed, skipped: $skipped }
+      })
+      exit { path: _self.path, marker: _self.frontmatter.phase_e_marker, completed: $completed, skipped: $skipped }
       ```
     tags: [phase-e, rundoc]
     frontmatter:
       type: macro_library
       phase_e_marker: "yaml-${run.id}"
+      targets: ["alpha", "missing", "beta", "stop", "late"]
+      completed: []
 
   - label: "INT-MCB-15 / T-Y-015: source_ref rundoc composes _self, continue, break, and _exists"
     assert:
@@ -69,8 +73,21 @@ steps:
         path: result.marker
         value: "yaml-${run.id}"
       expect_json_contains:
-        path: result.kept
-        value: 4
+        path: result.completed
+        value: alpha
       expect_json_path:
         - result.path
-        - result.count
+        - result.skipped
+
+  - label: "INT-MCB-15 / T-Y-015: rundoc write-back persisted completed frontmatter"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${phase_e_rundoc.path}"
+        include: ["frontmatter"]
+      expect_json_equals:
+        path: frontmatter.completed[1]
+        value: beta
+      expect_json_contains:
+        path: frontmatter.skipped
+        value: missing

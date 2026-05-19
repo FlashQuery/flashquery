@@ -102,9 +102,10 @@ describe('list-tools diagnostic CLI', () => {
     expect(captured.stdout).toContain('tool_overrides:');
     expect(captured.stdout).toContain('echo:');
     expect(captured.stdout).toContain('weather:');
-    expect(captured.stdout).toContain('cost_per_call');
-    expect(captured.stdout).toContain('description_override');
-    expect(captured.stdout).toContain('description_override: ""');
+    expect(captured.stdout).toContain('# cost_per_call: 0.005');
+    expect(captured.stdout).toContain('# description_override: "Echo a message back to the caller."');
+    expect(captured.stdout).not.toContain('\n    cost_per_call:');
+    expect(captured.stdout).not.toContain('\n    description_override:');
     expect(captured.stdout).toContain('# Echo a message back to the caller.');
     expect(captured.stdout).not.toMatch(/FlashQuery ready|STARTUP|Server stderr:/);
   });
@@ -144,10 +145,7 @@ describe('list-tools diagnostic CLI', () => {
       mcp_servers?: { basic?: { tool_overrides?: Record<string, unknown> } };
     };
     expect(parsed.mcp_servers?.basic?.tool_overrides).toHaveProperty('search');
-    expect(parsed.mcp_servers?.basic?.tool_overrides?.search).toMatchObject({
-      cost_per_call: 0.005,
-      description_override: '',
-    });
+    expect(parsed.mcp_servers?.basic?.tool_overrides?.search).toBeNull();
 
     const root = await mkdtemp(join(tmpdir(), 'fq-list-tools-validated-'));
     const pastedConfigPath = join(root, 'flashquery.yml');
@@ -170,12 +168,43 @@ describe('list-tools diagnostic CLI', () => {
         '',
       ].join('\n')
     );
-    expect(loadConfig(pastedConfigPath).mcpServers.basic?.toolOverrides.search).toMatchObject({
-      costPerCall: 0.005,
-      descriptionOverride: '',
-    });
+    expect(loadConfig(pastedConfigPath).mcpServers.basic?.toolOverrides.search).toEqual({});
     expect(captured.stdout).not.toMatch(/FlashQuery ready|STARTUP|Server stderr:/);
     expect(captured.stderr).toBe('');
+  });
+
+  it('T-U-143-CLI-072 keeps commented paste-back overrides semantically inert', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'fq-list-tools-inert-'));
+    const configPath = join(root, 'flashquery.yml');
+    await writeFile(
+      configPath,
+      [
+        'instance:',
+        '  id: unit-test',
+        '  vault:',
+        '    path: ./vault',
+        'supabase:',
+        '  url: http://localhost:54321',
+        '  service_role_key: test-service-role',
+        '  database_url: postgres://postgres:postgres@localhost:54322/postgres',
+        'mcp_servers:',
+        '  basic:',
+        '    command: node',
+        '    args: ["server-basic.js"]',
+        '    cost_per_call: 0.25',
+        '    tool_overrides:',
+        '      echo:',
+        '        # Echoes the provided value without mutation.',
+        '        # cost_per_call: 0.005             # uncomment + set',
+        '        # description_override: "Echoes the provided value without mutation." # uncomment + set',
+        '',
+      ].join('\n')
+    );
+
+    const config = loadConfig(configPath);
+
+    expect(config.mcpServers.basic?.costPerCall).toBe(0.25);
+    expect(config.mcpServers.basic?.toolOverrides.echo).toEqual({});
   });
 
   it('T-U-143-CLI-073 returns non-zero, surfaces captured server stderr, and emits no YAML on discovery failure', async () => {

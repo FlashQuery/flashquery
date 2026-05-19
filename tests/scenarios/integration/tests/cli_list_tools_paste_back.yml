@@ -27,6 +27,27 @@ steps:
       expect_contains: "tool_overrides:"
       expect_not_contains: "Server stderr:"
       expect_json_equals:
+        path: checks.server_tool_override_is_inert
+        value: true
+      expect_json_contains:
+        path: stdout
+        value: "# cost_per_call:"
+
+  - label: "INT-MCB-14 / T-Y-014: paste-back config keeps commented override fields inert"
+    assert:
+      op: cli.list_tools_paste_back
+      args:
+        server_id: basic
+      expect_json_equals:
+        path: checks.override_fields_are_comments
+        value: true
+
+  - label: "INT-MCB-14 / T-Y-014: pasted commented scaffolding loads as valid config"
+    assert:
+      op: cli.list_tools_paste_back
+      args:
+        server_id: basic
+      expect_json_equals:
         path: checks.load_config_exit_code
         value: 0
 

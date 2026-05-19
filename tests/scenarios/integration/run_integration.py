@@ -930,7 +930,8 @@ def _cli_list_tools_paste_back(ctx: TestContext, args: dict[str, Any]) -> ToolRe
         fragment = yaml.safe_load(stdout) or {}
         parsed_overrides = fragment.get("tool_overrides") or {}
         checks["tool_overrides_is_object"] = isinstance(parsed_overrides, dict)
-        checks["server_tool_override_is_object"] = isinstance(parsed_overrides.get("echo"), dict)
+        checks["server_tool_override_is_inert"] = parsed_overrides.get("echo") in (None, {})
+        checks["override_fields_are_comments"] = "# cost_per_call:" in stdout and "\n    cost_per_call:" not in stdout and "\n    description_override:" not in stdout
 
         with open(config_path, "r", encoding="utf-8") as f:
             pasted_config = yaml.safe_load(f) or {}
@@ -967,7 +968,8 @@ def _cli_list_tools_paste_back(ctx: TestContext, args: dict[str, Any]) -> ToolRe
         and checks.get("stdout_clean") is True
         and checks.get("stderr_empty") is True
         and checks.get("tool_overrides_is_object") is True
-        and checks.get("server_tool_override_is_object") is True
+        and checks.get("server_tool_override_is_inert") is True
+        and checks.get("override_fields_are_comments") is True
         and checks.get("load_config_exit_code") == 0
     )
     payload = {

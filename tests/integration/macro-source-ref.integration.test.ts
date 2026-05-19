@@ -1,15 +1,18 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { initEmbedding } from '../../src/embedding/provider.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { registerMacroTools } from '../../src/mcp/tools/macro.js';
+import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
 import { wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
+import { createBroker, type McpBroker } from '../../src/services/mcp-broker.js';
 import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
 import { initVault } from '../../src/storage/vault.js';
 import {
@@ -20,6 +23,8 @@ import {
 } from '../helpers/test-env.js';
 
 const TEST_INSTANCE_ID = `macro-source-ref-${randomUUID().slice(0, 8)}`;
+const fixtureDir = join(process.cwd(), 'tests', 'fixtures', 'mcp-servers');
+const quirkyServer = join(fixtureDir, 'server-quirky.ts');
 
 function makeConfig(vaultPath: string): FlashQueryConfig {
   return {
@@ -42,6 +47,8 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
     plugins: {},
     locking: { enabled: false, ttlSeconds: 30 },
     hostMcpTools: { tools: ['call_macro'], excludedTools: [] },
+    mcpServers: {},
+    host: { mcpServers: [], toolSearch: 'disabled' },
     macro: { defaultTimeoutMs: 60000 },
   } as unknown as FlashQueryConfig;
 }
@@ -52,12 +59,13 @@ function parseToolText(result: unknown): Record<string, unknown> {
   ) as Record<string, unknown>;
 }
 
-async function callMacro(config: FlashQueryConfig, args: Record<string, unknown>): Promise<{
+async function callMacro(config: FlashQueryConfig, args: Record<string, unknown>, broker?: McpBroker): Promise<{
   isError?: boolean;
   payload: Record<string, unknown>;
 }> {
   const server = wrapServerWithToolCatalog(new McpServer({ name: 'macro-source-ref-test', version: '1.0.0' }));
-  registerMacroTools(server, config);
+  registerDocumentTools(server, config);
+  registerMacroTools(server, config, broker === undefined ? {} : { broker });
   const client = new Client({ name: 'macro-source-ref-test', version: '1.0.0' });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
 
@@ -67,6 +75,16 @@ async function callMacro(config: FlashQueryConfig, args: Record<string, unknown>
     return { isError: result.isError, payload: parseToolText(result) };
   } finally {
     await client.close();
+  }
+}
+
+async function waitForCondition(predicate: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const started = Date.now();
+  while (!predicate()) {
+    if (Date.now() - started > timeoutMs) {
+      throw new Error('Timed out waiting for condition.');
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }
 
@@ -80,6 +98,7 @@ describe.skipIf(!HAS_SUPABASE)('call_macro source_ref integration', () => {
     initLogger(config);
     await initSupabase(config);
     await initVault(config);
+    initEmbedding(config);
     await mkdir(join(vaultPath, 'Macros'), { recursive: true });
   }, 60_000);
 
@@ -162,6 +181,127 @@ describe.skipIf(!HAS_SUPABASE)('call_macro source_ref integration', () => {
       result: 'from-source-ref',
     });
   });
+
+  it('T-E-001 analogue resumes a source_ref rundoc after TOFU drift and writes back to _self.frontmatter', async () => {
+    const broker = createBroker({
+      mcpServers: {
+        quirky: {
+          serverId: 'quirky',
+          transport: 'stdio',
+          command: process.execPath,
+          args: ['--import', 'tsx', quirkyServer],
+          env: {
+            QUIRK_INITIAL_TOOLS: JSON.stringify([{
+              name: 'stable',
+              description: 'Stable test fixture tool.',
+              inputSchema: {
+                type: 'object',
+                properties: { value: { type: 'string' } },
+                required: ['value'],
+              },
+            }]),
+            QUIRK_LATER_TOOLS: JSON.stringify([{
+              name: 'stable',
+              description: 'Stable test fixture tool with token.',
+              inputSchema: {
+                type: 'object',
+                properties: { value: { type: 'string' }, token: { type: 'string' } },
+                required: ['value', 'token'],
+              },
+            }]),
+            QUIRK_EMIT_LIST_CHANGED_MS: '50',
+          },
+          costPerCall: 0,
+          perCallTimeoutMs: 30_000,
+          toolOverrides: {},
+        },
+      },
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [] },
+    });
+    config = {
+      ...config,
+      hostMcpTools: { tools: ['call_macro', 'write_document'], excludedTools: [] },
+      mcpServers: {
+        quirky: {
+          transport: 'stdio',
+          command: process.execPath,
+          args: ['--import', 'tsx', quirkyServer],
+          env: {},
+          costPerCall: 0,
+          perCallTimeoutMs: 30_000,
+          toolOverrides: {},
+        },
+      },
+      host: { mcpServers: ['quirky'], toolSearch: 'disabled' },
+    };
+
+    try {
+      await writeFile(
+        join(vaultPath, 'Macros', 'drift-rundoc.md'),
+        [
+          '---',
+          'fq_status: active',
+          'fq_created: "2026-05-19T00:00:00.000Z"',
+          'fq_title: Drift Rundoc',
+          'type: macro_library',
+          'completed: false',
+          '---',
+          '',
+          '```fqm name=run',
+          'broker_result = quirky.stable({ value: "second", token: "approved" })',
+          'fq.write_document({',
+          '  mode: "update",',
+          '  identifier: _self.path,',
+          '  frontmatter: { completed: "yes" }',
+          '})',
+          'exit { completed: "yes", broker_result: $broker_result }',
+          '```',
+          '',
+        ].join('\n')
+      );
+
+      await broker.listToolsForConsumer({ kind: 'host', traceId: 'trace-rundoc-drift' });
+      await waitForCondition(() => broker.getPendingSchemaDrift().length === 1);
+
+      const drift = await callMacro(config, { source_ref: 'Macros/drift-rundoc.md::run', trace: 'summary' }, broker);
+      expect(drift.payload).toMatchObject({
+        reason: 'needs_user_input',
+        payload: expect.objectContaining({
+          event: 'schema_drift_detected',
+          server: 'quirky',
+          tool: 'stable',
+        }),
+      });
+
+      const approved = await callMacro(
+        config,
+        {
+          source_ref: 'Macros/drift-rundoc.md::run',
+          trace: 'summary',
+          input_vars: {
+            frontmatter: {
+              user_decisions: {
+                quirky__stable: { tofu_decision: 'approve' },
+              },
+            },
+          },
+        },
+        broker
+      );
+      expect(approved.payload).toMatchObject({
+        result: {
+          completed: 'yes',
+          broker_result: { tool: 'stable', arguments: { value: 'second', token: 'approved' } },
+        },
+      });
+
+      const raw = await readFile(join(vaultPath, 'Macros', 'drift-rundoc.md'), 'utf-8');
+      expect(raw).toContain('completed: "yes"');
+    } finally {
+      await broker.shutdown(50);
+    }
+  }, 60_000);
 
   it('T-I-008a returns named-block errors for invalid multi-block selectors', async () => {
     await writeFile(

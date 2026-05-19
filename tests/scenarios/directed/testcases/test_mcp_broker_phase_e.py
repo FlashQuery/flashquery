@@ -302,17 +302,22 @@ def run_test(args: argparse.Namespace) -> TestRun:
         assert ctx.server is not None
         cli_ok = _run_cli(root, ctx.server.config_path, "basic")
         try:
-            parsed = yaml.safe_load("mcp_servers:\n  basic:\n" + "\n".join(f"    {line}" for line in cli_ok.stdout.splitlines() if not line.startswith("#")))
+            parsed = yaml.safe_load("mcp_servers:\n  basic:\n" + "\n".join(f"    {line}" for line in cli_ok.stdout.splitlines()))
         except Exception as exc:
             parsed = {"parse_error": str(exc)}
+        echo_override = parsed.get("mcp_servers", {}).get("basic", {}).get("tool_overrides", {}).get("echo")
         run.step(
             label="MCB-19 / T-S-019 flashquery list-tools emits expected paste-ready YAML fragment",
             passed=(
                 cli_ok.returncode == 0
                 and "tool_overrides:" in cli_ok.stdout
                 and "echo:" in cli_ok.stdout
-                and ("[STARTUP] DNS result order" in cli_ok.stderr or cli_ok.stderr.strip() == "")
+                and "# cost_per_call:" in cli_ok.stdout
+                and "\n    cost_per_call:" not in cli_ok.stdout
+                and "\n    description_override:" not in cli_ok.stdout
+                and cli_ok.stderr.strip() == ""
                 and isinstance(parsed.get("mcp_servers", {}).get("basic", {}).get("tool_overrides"), dict)
+                and echo_override is None
             ),
             detail=json.dumps({"stdout": cli_ok.stdout, "stderr": cli_ok.stderr, "parsed": parsed}, sort_keys=True)[:1400],
             timing_ms=0,

@@ -232,12 +232,15 @@ const HostMcpToolsSchema = z
   })
   .strict();
 
-const BrokerToolOverrideSchema = z
-  .object({
-    cost_per_call: z.number().min(0).default(0),
-    description_override: z.string().optional(),
-  })
-  .strict();
+const BrokerToolOverrideSchema = z.preprocess(
+  (raw) => (raw === null ? {} : raw),
+  z
+    .object({
+      cost_per_call: z.number().min(0).optional(),
+      description_override: z.string().optional(),
+    })
+    .strict()
+);
 
 const BrokerServerSchema = z
   .object({
@@ -317,7 +320,7 @@ export interface FlashQueryConfig {
     costPerCall: number;
     perCallTimeoutMs: number;
     toolOverrides: Record<string, {
-      costPerCall: number;
+      costPerCall?: number;
       descriptionOverride?: string;
     }>;
   }>;

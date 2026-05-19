@@ -71,8 +71,8 @@ function formatToolOverridesYaml(serverId: string, tools: BrokeredTool[]): strin
     for (const commentLine of formatDescriptionComment(tool.description ?? tool.upstreamDescription)) {
       lines.push(`    ${commentLine}`);
     }
-    lines.push(`    cost_per_call: ${formatCost(tool.costPerCall)}`);
-    lines.push('    description_override: ""');
+    lines.push(`    # cost_per_call: ${formatCost(tool.costPerCall)}             # uncomment + set`);
+    lines.push(`    # description_override: ${formatYamlString(tool.description ?? tool.upstreamDescription ?? '')} # uncomment + set`);
   }
   return `${lines.join('\n')}\n`;
 }
@@ -95,4 +95,8 @@ function formatYamlKey(key: string): string {
 function formatCost(cost: number): string {
   if (!Number.isFinite(cost) || cost < 0) return '0';
   return Number.isInteger(cost) ? String(cost) : String(cost);
+}
+
+function formatYamlString(value: string): string {
+  return JSON.stringify(value);
 }

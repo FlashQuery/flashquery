@@ -11,6 +11,7 @@ import type { BrokerClientConfig } from '../../src/services/mcp-broker/types.js'
 
 const fixtureDir = resolve(fileURLToPath(new URL('../fixtures/mcp-servers', import.meta.url)));
 const basicServer = resolve(fixtureDir, 'server-basic.ts');
+const quirkyServer = resolve(fixtureDir, 'server-quirky.ts');
 const brokers: McpBroker[] = [];
 
 afterEach(async () => {
@@ -50,6 +51,46 @@ function basicConfig(): BrokerClientConfig {
   };
 }
 
+function quirkyListChangedConfig(): BrokerClientConfig {
+  const mutableV1 = {
+    name: 'mutable',
+    description: 'Mutable concurrent fixture tool.',
+    inputSchema: {
+      type: 'object',
+      properties: { value: { type: 'string' } },
+      required: ['value'],
+    },
+  };
+  const mutableV2 = {
+    name: 'mutable',
+    description: 'Mutable concurrent fixture tool with token.',
+    inputSchema: {
+      type: 'object',
+      properties: { value: { type: 'string' }, token: { type: 'string' } },
+      required: ['value', 'token'],
+    },
+  };
+  const added = {
+    name: 'added',
+    description: 'Added concurrent fixture tool.',
+    inputSchema: { type: 'object', properties: {} },
+  };
+  return {
+    serverId: 'quirky',
+    transport: 'stdio',
+    command: process.execPath,
+    args: ['--import', 'tsx', quirkyServer],
+    env: {
+      QUIRK_INITIAL_TOOLS: JSON.stringify([mutableV1]),
+      QUIRK_LATER_TOOLS: JSON.stringify([mutableV2, added]),
+      QUIRK_EMIT_LIST_CHANGED_MS: '25',
+    },
+    costPerCall: 0,
+    perCallTimeoutMs: 30_000,
+    toolOverrides: {},
+  };
+}
+
 function parseToolText(result: Awaited<ReturnType<typeof runMacroSource>>['result']): Record<string, unknown> {
   return JSON.parse(result.content[0]?.text ?? '{}') as Record<string, unknown>;
 }
@@ -65,6 +106,53 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe('macro concurrency integration', () => {
+  it('T-E-002 analogue keeps host and delegated calls isolated across mid-flight list_changed', async () => {
+    const driftEvents: unknown[] = [];
+    const broker = createBroker({
+      mcpServers: { quirky: quirkyListChangedConfig() },
+      host: { mcpServers: ['quirky'] },
+      llm: { purposes: [{ name: 'researcher', description: 'Researcher', models: [], mcpServers: ['quirky'], toolSearch: 'disabled' }] },
+      onTofuDrift: (bundle) => driftEvents.push(bundle),
+    });
+    brokers.push(broker);
+    const hostCtx = { kind: 'host' as const, traceId: 'trace-host-list-changed' };
+    const brokerTools = [{ server: 'quirky', label: 'Quirky Fixture', tools: ['mutable'] }];
+
+    await broker.listToolsForConsumer(hostCtx);
+    const [hostResult, purposeRun] = await Promise.all([
+      broker.callTool({ serverId: 'quirky', toolName: 'mutable' }, { value: 'host' }, hostCtx),
+      runMacroSource({
+        source: 'result = quirky.mutable({ value: "purpose" })\nexit $result',
+        sessionId: 'macro-list-changed-purpose',
+        config: testConfig(),
+        catalog: [],
+        broker,
+        brokerTools,
+        nativeDispatchContext: nativeDispatchContext(),
+        trace: 'summary',
+        callerContext: { origin: 'delegated', purposeName: 'researcher' },
+      }),
+    ]);
+
+    expect(JSON.parse(hostResult.content[0]?.text ?? '{}')).toEqual({
+      tool: 'mutable',
+      arguments: { value: 'host' },
+    });
+    expect(parseToolText(purposeRun.result)).toMatchObject({
+      result: { tool: 'mutable', arguments: { value: 'purpose' } },
+      external_tool_calls: 1,
+    });
+
+    await waitFor(() => driftEvents.length > 0);
+    expect(broker.getClientDebugSnapshot('quirky')).toMatchObject({
+      spawnCount: 1,
+      restartCount: 0,
+    });
+    expect(await broker.listToolsForConsumer(hostCtx)).toEqual([
+      expect.objectContaining({ registryKey: 'quirky__added' }),
+    ]);
+  });
+
   it('T-I-050 keeps concurrent macros isolated while sharing one brokered server process', async () => {
     const broker = createBroker({
       mcpServers: { basic: basicConfig() },

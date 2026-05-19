@@ -3,7 +3,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 export type BrokerTransport = 'stdio';
 
 export interface BrokerToolOverrideConfig {
-  costPerCall: number;
+  costPerCall?: number;
   descriptionOverride?: string;
 }
 
