@@ -29,3 +29,11 @@ Thumbs.db
 # Test scratch
 tmp/
 *.tmp
+
+# Scaffolding / debugging artifacts (convention: `_` prefix at module level)
+# Real golden source uses descriptive names. Scratch probes / placeholder
+# capture helpers / phase-specific intermediates go under this pattern.
+src/_*.ts
+src/_*.js
+_*.ts
+_*.js
