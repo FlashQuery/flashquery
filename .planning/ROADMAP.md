@@ -150,11 +150,11 @@ Plans:
 
 **Requirements:** REQ-071..073, REQ-103..104, REQ-109..110
 
-**Plans:** 5 plans
+**Plans:** 2/5 plans executed
 
 Plans:
-- [ ] 143-01-PLAN.md — Diagnostic `list-tools` CLI and focused unit coverage
-- [ ] 143-02-PLAN.md — `_self` source_ref binding and parser/runtime tests
+- [x] 143-01-PLAN.md — Diagnostic `list-tools` CLI and focused unit coverage
+- [x] 143-02-PLAN.md — `_self` source_ref binding and parser/runtime tests
 - [ ] 143-03-PLAN.md — `continue`/`break` parser and evaluator support
 - [ ] 143-04-PLAN.md — Deep `_exists()` and shared broker concurrency coverage
 - [ ] 143-05-PLAN.md — Phase E directed, YAML, E2E, and validation closure
