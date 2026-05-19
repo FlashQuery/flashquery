@@ -1,10 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import type { NativeToolDefinition, NativeToolDispatchContext } from '../../src/llm/tool-registry.js';
 import { MacroTaskRegistry } from '../../src/macro/task-registry.js';
 import { runMacroSource } from '../../src/mcp/tools/macro.js';
-import { NullMcpBroker } from '../../src/services/mcp-broker.js';
+import { createBroker, NullMcpBroker, type McpBroker } from '../../src/services/mcp-broker.js';
+import type { BrokerClientConfig } from '../../src/services/mcp-broker/types.js';
+
+const fixtureDir = resolve(fileURLToPath(new URL('../fixtures/mcp-servers', import.meta.url)));
+const basicServer = resolve(fixtureDir, 'server-basic.ts');
+const brokers: McpBroker[] = [];
+
+afterEach(async () => {
+  await Promise.allSettled(brokers.splice(0).map((broker) => broker.shutdown(50)));
+});
 
 function testConfig(): FlashQueryConfig {
   return {
@@ -21,7 +32,21 @@ function nativeDispatchContext(): NativeToolDispatchContext {
   return {
     signal: new AbortController().signal,
     instanceId: 'macro-concurrency-integration',
+    traceId: 'trace-macro-concurrency',
     logContext: { tool: 'call_macro' },
+  };
+}
+
+function basicConfig(): BrokerClientConfig {
+  return {
+    serverId: 'basic',
+    transport: 'stdio',
+    command: process.execPath,
+    args: ['--import', 'tsx', basicServer],
+    env: {},
+    costPerCall: 0,
+    perCallTimeoutMs: 30_000,
+    toolOverrides: {},
   };
 }
 
@@ -40,6 +65,120 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe('macro concurrency integration', () => {
+  it('T-I-050 keeps concurrent macros isolated while sharing one brokered server process', async () => {
+    const broker = createBroker({
+      mcpServers: { basic: basicConfig() },
+      host: { mcpServers: ['basic'] },
+      llm: { purposes: [] },
+    });
+    brokers.push(broker);
+    const taskRegistry = new MacroTaskRegistry();
+    const brokerTools = [{ server: 'basic', label: 'Basic Fixture', tools: ['slow', 'echo'] }];
+    await broker.listToolsForConsumer({ kind: 'host', traceId: 'trace-macro-concurrency' });
+    expect(broker.getClientDebugSnapshot('basic')).toMatchObject({
+      spawnCount: 1,
+      restartCount: 0,
+    });
+
+    const slowSource = `
+      slow_result = basic.slow({ ms: 200 })
+      status --progress 1 --total 1 "m1-slow-complete"
+      exit {
+        label: "m1",
+        slow_result: $slow_result,
+        task_id: task_id
+      }
+    `;
+    const echoSource = `
+      echo_result = basic.echo({ value: { msg: "m2" } })
+      status --progress 1 --total 1 "m2-echo-complete"
+      exit {
+        label: "m2",
+        echo_result: $echo_result,
+        task_id: task_id
+      }
+    `;
+
+    const [slowRun, echoRun] = await Promise.all([
+      runMacroSource({
+        source: slowSource,
+        sessionId: 'macro-shared-server-m1',
+        taskRegistry,
+        config: testConfig(),
+        catalog: [],
+        broker,
+        brokerTools,
+        nativeDispatchContext: nativeDispatchContext(),
+        trace: 'full',
+      }),
+      runMacroSource({
+        source: echoSource,
+        sessionId: 'macro-shared-server-m2',
+        taskRegistry,
+        config: testConfig(),
+        catalog: [],
+        broker,
+        brokerTools,
+        nativeDispatchContext: nativeDispatchContext(),
+        trace: 'full',
+      }),
+    ]);
+
+    const slowPayload = parseToolText(slowRun.result);
+    const echoPayload = parseToolText(echoRun.result);
+    const slowValue = slowPayload['result'] as Record<string, unknown>;
+    const echoValue = echoPayload['result'] as Record<string, unknown>;
+    const slowTrace = slowPayload['trace'] as Array<Record<string, unknown>>;
+    const echoTrace = echoPayload['trace'] as Array<Record<string, unknown>>;
+
+    expect(slowValue).toMatchObject({
+      label: 'm1',
+      slow_result: 'waited:200',
+      task_id: slowPayload['task_id'],
+    });
+    expect(echoValue).toMatchObject({
+      label: 'm2',
+      echo_result: { value: { msg: 'm2' } },
+      task_id: echoPayload['task_id'],
+    });
+    expect(slowPayload['task_id']).not.toBe(echoPayload['task_id']);
+
+    expect(slowTrace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'tool_call',
+          name: 'basic.slow',
+          args: { ms: 200 },
+          result: 'waited:200',
+        }),
+        expect.objectContaining({ kind: 'progress', message: 'm1-slow-complete' }),
+        expect.objectContaining({ kind: 'exit' }),
+      ])
+    );
+    expect(echoTrace).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: 'tool_call',
+          name: 'basic.echo',
+          args: { value: { msg: 'm2' } },
+          result: { value: { msg: 'm2' } },
+        }),
+        expect.objectContaining({ kind: 'progress', message: 'm2-echo-complete' }),
+        expect.objectContaining({ kind: 'exit' }),
+      ])
+    );
+    expect(JSON.stringify(slowTrace)).not.toContain('m2-echo-complete');
+    expect(JSON.stringify(slowTrace)).not.toContain('basic.echo');
+    expect(JSON.stringify(echoTrace)).not.toContain('m1-slow-complete');
+    expect(JSON.stringify(echoTrace)).not.toContain('basic.slow');
+    expect(broker.getClientDebugSnapshot('basic')).toMatchObject({
+      spawnCount: 1,
+      restartCount: 0,
+    });
+    expect(taskRegistry.list('macro-shared-server-m1')).toEqual([]);
+    expect(taskRegistry.list('macro-shared-server-m2')).toEqual([]);
+  });
+
   it('T-I-002 isolates variables, trace, task_id, progress, budgets, and list_tasks across sessions', async () => {
     const taskRegistry = new MacroTaskRegistry();
     const activeAtBarrier = new Set<string>();
