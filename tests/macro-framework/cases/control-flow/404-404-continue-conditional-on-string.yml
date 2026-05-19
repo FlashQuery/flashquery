@@ -1,0 +1,35 @@
+# String-equality condition drives continue; only "keep" values appended.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-404-continue-conditional-on-string
+name: "continue based on string equality"
+description: |
+  String-equality condition drives continue; only "keep" values appended.
+
+covers:
+  - MTF-C-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  keep = []
+  items = ["keep", "drop", "keep", "drop", "keep"]
+  for x in $items do
+    if $x == "drop" then
+      continue
+    fi
+    keep = append $keep $x
+  done
+  exit { n: count $keep }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"n":3}

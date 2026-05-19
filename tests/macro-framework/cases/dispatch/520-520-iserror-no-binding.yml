@@ -1,0 +1,35 @@
+# After isError fail-fast, statements below are skipped (fail unwinds).
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-520-iserror-no-binding
+name: "isError fail-fast: subsequent statements not reached"
+description: |
+  After isError fail-fast, statements below are skipped (fail unwinds).
+
+covers:
+  - MTF-D-101
+  - MTF-D-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = bad.boom({})
+  side_effect = "should never set"
+  exit { side: $side_effect }
+
+input_vars: {}
+vault: {}
+
+tools:
+  bad:
+    archetype: "IsErrorTool"
+    tool_name: "boom"
+    message: "nope"
+
+expect:
+  outcome: fail

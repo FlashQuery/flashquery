@@ -1,0 +1,33 @@
+# When no question override is supplied, the archetype defaults provide a sane question.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-607-drift-payload-default-question
+name: "Drift payload with default question text"
+description: |
+  When no question override is supplied, the archetype defaults provide a sane question.
+
+covers:
+  - MTF-E-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  r = s.t({})
+  exit $r
+
+input_vars: {}
+vault: {}
+
+tools:
+  s:
+    archetype: "NeedsInputViaTofuDrift"
+    tool_name: "t"
+    drift_payload: {"server":"s","tool":"t"}
+
+expect:
+  outcome: needs_user_input

@@ -1,0 +1,113 @@
+# Pilot — SMOKE TEST #3a (published + not archived → index).
+# Generated 2026-05-19 via the `flashquery-macro-author` skill in
+# calibration mode (run #3, iter 1).
+
+id: mtf-d-930-smoke-conditional-index-happy-path
+name: Smoke — conditional indexing (happy path; published && !archived → index)
+intent: |
+  A macro that processes a single document from frontmatter. The
+  document path is at _self.frontmatter.target_doc. The macro calls
+  doc_srv.fetch({ path: $target_doc }) to get the document. It applies
+  this rule: process the document ONLY IF the document has a
+  'published' field that is true AND its 'archived' field is null. If
+  either condition fails, skip with { skipped: true, reason: <why> }
+  where <why> says which condition failed. If both conditions pass,
+  call index_srv.add({ doc: $doc }) to index it, then exit with
+  { indexed: true, doc_id: $doc.id }.
+description: |
+  Happy-path variant: target document is published and not archived.
+  Macro indexes it and exits with `indexed: true`.
+
+  Exercises:
+  - _self.frontmatter access (REQ-103)
+  - Brokered call with JSON-coerced result (REQ-106)
+  - Truthiness with `!` negation operator (REQ-022)
+  - `!= null` comparison guard (REQ-112d composability)
+  - Compound conditional logic via early-exit guards
+  - Two distinct brokered server references (§11.1)
+  - Object literal exit with non-reserved keys (REQ-024)
+
+covers:
+  - MTF-I-101   # _self.frontmatter
+  - MTF-D-101   # brokered coercion
+  - MTF-S-007   # field access
+  - MTF-C-009   # exit structured
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T19:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/conditional-index.md"
+  frontmatter:
+    target_doc: "/docs/article-001.md"
+  title: "Conditional Index"
+  tags: []
+  fq_id: "fq:doc:cond-index:001"
+
+macro: |
+  target_doc = $_self.frontmatter.target_doc
+  doc = doc_srv.fetch({ path: $target_doc })
+
+  if ! $doc.published then
+    exit { skipped: true, reason: "doc is not published" }
+  fi
+  if $doc.archived != null then
+    exit { skipped: true, reason: "doc is archived" }
+  fi
+
+  index_srv.add({ doc: $doc })
+  exit { indexed: true, doc_id: $doc.id }
+
+input_vars: {}
+vault: {}
+
+tools:
+  doc_srv:
+    archetype: JSONTextTool
+    tool_name: fetch
+    value:
+      id: "doc-001"
+      published: true
+      archived: null
+      title: "Article 001"
+  index_srv:
+    archetype: JSONTextTool
+    tool_name: add
+    value: { ok: true }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    indexed: true
+    doc_id: "doc-001"
+  side_effects:
+    tool_call_count: 2
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T19:07:00Z"
+  golden_version: "0.3.0"
+  notes: |
+    AI prediction and golden capture agreed exactly. Both expected
+    happy-path indexing with 2 dispatches (doc_srv.fetch +
+    index_srv.add) and return_result of {indexed: true, doc_id: "doc-001"}.
+
+expect:
+  outcome: success
+  return_result:
+    indexed: true
+    doc_id: "doc-001"
+  side_effects:
+    tool_call_count: 2
+
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "tool_call", "exit"]
+  captured_tool_calls:
+    - server: "doc_srv"
+      tool: "fetch"
+    - server: "index_srv"
+      tool: "add"

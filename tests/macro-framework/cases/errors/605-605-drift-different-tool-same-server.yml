@@ -1,0 +1,32 @@
+# A drift-flagged tool blocks; a different tool on the same server still dispatches normally.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-605-drift-different-tool-same-server
+name: "Drift on one tool — other tools on same server still callable"
+description: |
+  A drift-flagged tool blocks; a different tool on the same server still dispatches normally.
+
+covers:
+  - MTF-E-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = mixed_srv.ok({})
+  exit $v
+
+input_vars: {}
+vault: {}
+
+tools:
+  mixed_srv:
+    tools: {"ok":{"archetype":"JSONTextTool","value":{"fine":true}},"bad":{"archetype":"NeedsInputViaTofuDrift","drift_payload":{"server":"mixed_srv","tool":"bad"}}}
+
+expect:
+  outcome: success
+  return_result: {"fine":true}

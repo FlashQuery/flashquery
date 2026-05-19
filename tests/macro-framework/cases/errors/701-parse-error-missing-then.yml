@@ -1,0 +1,26 @@
+# Pilot — MTF-E-005: parse_error envelope for missing `then` after if-cond.
+id: mtf-e-701-parse-error-missing-then
+name: Errors — parse_error envelope (missing_then) (REQ-018)
+description: |
+  `if $x == 1` without `then` raises a parse error with the canonical
+  envelope: error="parse_error", details.reason="missing_then", at_line
+  populated.
+covers: [MTF-E-005]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  x = 1
+  if $x == 1
+    y = 2
+  fi
+input_vars: {}
+vault: {}
+expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+    details:
+      reason: missing_then

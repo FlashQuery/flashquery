@@ -1,0 +1,30 @@
+# A frontmatter field that is itself a list — _self.frontmatter.authors — passes through as a list value.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-108-self-fm-array-value
+name: "_self.frontmatter with array value"
+description: |
+  A frontmatter field that is itself a list — _self.frontmatter.authors — passes through as a list value.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  authors = $_self.frontmatter.authors
+  n = count $authors
+  exit { n: $n }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{"authors":["matt","sam","jordan"]},"title":"t","tags":[],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"n":3}

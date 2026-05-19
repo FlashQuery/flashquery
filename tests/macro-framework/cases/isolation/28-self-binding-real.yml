@@ -1,0 +1,62 @@
+# Pilot 28 — MTF-I-101: real `_self` binding via source_ref.
+#
+# Tier 2 (Broker REQ-103). Production engine has the `_self` binding —
+# the runner passes `selfBinding` to evaluateProgram via the new
+# `self_binding:` YAML key (added 2026-05-19). Macro accesses
+# _self.path, _self.title, _self.frontmatter.type, _self.fq_id.
+
+id: mtf-i-28-self-binding-real
+name: Isolation — _self.path/.title/.frontmatter/.fq_id via source_ref
+description: |
+  Macro accesses the source-document snapshot's path, title, frontmatter
+  field, and fq_id. Tests REQ-103 _self binding when the macro was
+  loaded via source_ref. Replaces the Tier 1 input_vars workaround from
+  pilot 11; pilot 11 is retained for the input_vars isolation surface.
+
+covers:
+  - MTF-I-101   # _self.path / .frontmatter / .title / .fq_id via source_ref
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T12:24:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+# Tier 2: bind _self via the new runner-level `self_binding:` key.
+self_binding:
+  path: "/Macros/research-batch.md"
+  frontmatter: { type: "macro", priority: 1 }
+  title: "Research Batch"
+  tags: ["research", "batch"]
+  fq_id: "fq:doc:research-batch:abc123"
+
+macro: |
+  p = $_self.path
+  t = $_self.title
+  ft = $_self.frontmatter.type
+  ident = $_self.fq_id
+  exit { path: $p, title: $t, type: $ft, fq_id: $ident }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+expect:
+  outcome: success
+  return_result:
+    path: "/Macros/research-batch.md"
+    title: "Research Batch"
+    type: "macro"
+    fq_id: "fq:doc:research-batch:abc123"
+
+golden_snapshot:
+  state_notes:
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: p, value: "/Macros/research-batch.md", scope: local }
+    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
+    - { kind: binding, op: set, name: t, value: "Research Batch", scope: local }
+    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
+    - { kind: binding, op: set, name: ft, value: "macro", scope: local }
+    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
+    - { kind: binding, op: set, name: ident, value: "fq:doc:research-batch:abc123", scope: local }

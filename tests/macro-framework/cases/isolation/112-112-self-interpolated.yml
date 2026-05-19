@@ -1,0 +1,28 @@
+# String interpolation of _self.title and _self.path verifies the interpolation surface accepts _self.* paths.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-112-self-interpolated
+name: "_self interpolated into string"
+description: |
+  String interpolation of _self.title and _self.path verifies the interpolation surface accepts _self.* paths.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit { s: "doc ${_self.title} at ${_self.path}" }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/Macros/x.md","frontmatter":{},"title":"Hello","tags":[],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"s":"doc Hello at /Macros/x.md"}

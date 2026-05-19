@@ -1,0 +1,35 @@
+# The tool_call_failed envelope details include server and tool.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-525-fail-fast-with-payload-shape
+name: "fail-fast error payload includes server/tool"
+description: |
+  The tool_call_failed envelope details include server and tool.
+
+covers:
+  - MTF-D-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = boomy.bang({})
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  boomy:
+    archetype: "IsErrorTool"
+    tool_name: "bang"
+    message: "oops"
+
+expect:
+  outcome: fail
+  error:
+    code: "tool_call_failed"

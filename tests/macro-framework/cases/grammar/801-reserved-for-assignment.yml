@@ -1,0 +1,22 @@
+# Pilot — MTF-G-007: `for` cannot be assigned to.
+id: mtf-g-801-reserved-for-assignment
+name: Grammar — `for` cannot be used as a variable name (REQ-039)
+description: |
+  Reserved keyword `for` shadowed by an assignment must raise
+  parse_error/reserved_keyword_assignment.
+covers: [MTF-G-007]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  for = 5
+input_vars: {}
+vault: {}
+expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+    details:
+      reason: reserved_keyword_assignment

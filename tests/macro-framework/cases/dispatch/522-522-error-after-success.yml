@@ -1,0 +1,41 @@
+# First call binds successfully; second hits isError fail-fast; macro fails.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-522-error-after-success
+name: "Two calls: first succeeds, second is isError"
+description: |
+  First call binds successfully; second hits isError fail-fast; macro fails.
+
+covers:
+  - MTF-D-101
+  - MTF-D-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = good.get({})
+  b = bad.boom({})
+  exit { a: $a, b: $b }
+
+input_vars: {}
+vault: {}
+
+tools:
+  good:
+    archetype: "JSONTextTool"
+    tool_name: "get"
+    value: {"ok":true}
+  bad:
+    archetype: "IsErrorTool"
+    tool_name: "boom"
+    message: "broken"
+
+expect:
+  outcome: fail
+  error:
+    code: "tool_call_failed"

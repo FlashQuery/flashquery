@@ -1,0 +1,20 @@
+# Pilot — MTF-E-005: parse_error envelope for an unexpected token.
+id: mtf-e-705-parse-error-unexpected-token
+name: Errors — parse_error envelope (unexpected_token) (REQ-018)
+description: |
+  Wild token at top-level (e.g. a stray `}`) raises parse_error.
+covers: [MTF-E-005]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  x = 1
+  }
+input_vars: {}
+vault: {}
+expect:
+  outcome: parse_error
+  error:
+    code: parse_error

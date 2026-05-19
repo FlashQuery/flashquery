@@ -1,0 +1,20 @@
+# Pilot — MTF-D-010: `wc` line-count on a vault file.
+id: mtf-d-803-shell-wc-line-count
+name: Dispatch — `wc` reports line count of a vault file
+description: |
+  Simple shell-verb composition: read line count of a multi-line file
+  in the vault.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  result = wc "/notes/lines.txt"
+  exit { wc: $result }
+input_vars: {}
+vault:
+  "/notes/lines.txt": "alpha\nbeta\ngamma\ndelta\n"
+expect:
+  outcome: success

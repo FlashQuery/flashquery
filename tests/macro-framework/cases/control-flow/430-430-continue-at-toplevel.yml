@@ -1,0 +1,28 @@
+# Bare `continue` outside any loop must be rejected at parse time (REQ-104 ac).
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-430-continue-at-toplevel
+name: "continue at macro top-level — parse error"
+description: |
+  Bare `continue` outside any loop must be rejected at parse time (REQ-104 ac).
+
+covers:
+  - MTF-C-104
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = 1
+  continue
+  exit { reached: false }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: parse_error

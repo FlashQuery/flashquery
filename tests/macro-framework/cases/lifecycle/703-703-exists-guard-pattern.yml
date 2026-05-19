@@ -1,0 +1,39 @@
+# The canonical guard pattern: assign _exists() to a var first, then branch on it. Boolean literal `true` deferred per Macro Lang §3.3, so the success signal is a string.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-l-703-exists-guard-pattern
+name: "_exists() guard skips dispatch when false"
+description: |
+  The canonical guard pattern: assign _exists() to a var first, then branch on it. Boolean literal `true` deferred per Macro Lang §3.3, so the success signal is a string.
+
+covers:
+  - MTF-L-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  e = svc._exists()
+  phase = "did_not_reach"
+  if ! $e then
+    fail "service offline"
+  fi
+  phase = "reached"
+  exit { v: $phase }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: "ReadOnlyTool"
+    tool_name: "noop"
+    returns: "x"
+
+expect:
+  outcome: success
+  return_result: {"v":"reached"}

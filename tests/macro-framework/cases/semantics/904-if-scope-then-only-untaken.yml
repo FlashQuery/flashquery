@@ -1,0 +1,36 @@
+# Pilot — MTF-S-101 / Broker REQ-112b ac3: var assigned only in then-branch
+# when the branch does NOT run → reading it after fi raises Unknown variable.
+#
+# REQ-112b ac3: the flattened scope does NOT introduce a phantom default
+# value. If the branch that defined `r` didn't run, `r` is genuinely
+# undefined and the canonical Unknown-variable runtime error fires.
+
+id: mtf-s-904-if-scope-then-only-untaken
+name: Semantics — untaken-branch assignment leaves variable undefined (REQ-112b ac3)
+description: |
+  `r` is assigned only in the then-branch, but the condition is falsy
+  so that branch never runs. Reading `$r` after `fi` MUST raise the
+  Unknown variable runtime error.
+
+covers:
+  - MTF-S-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:25:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  flag = 0
+  if $flag == 1 then
+    r = "never-set"
+  fi
+  exit { v: $r }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: fail

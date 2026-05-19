@@ -1,0 +1,48 @@
+# Pilot — MTF-L-101 / Broker REQ-112a: `$svc._exists()` (VarRef-prefixed server).
+# EXPECTED TO FAIL until production implements REQ-112a.
+#
+# REQ-112a ac2: the server slot accepts a VarRef whose string value is
+# the server name. Enables dynamic dispatch on a server name selected at
+# runtime. Per ac3 this is allowed for introspection methods only —
+# `tool` here is `_exists` which satisfies that constraint.
+
+id: mtf-l-804-exists-varref-server
+name: Lifecycle — `$svc._exists()` (VarRef-prefixed server, REQ-112a ac2)
+description: |
+  The variable `svc_name` holds the string `"alpha"`. Calling
+  `$svc_name._exists()` should resolve the variable to "alpha" at call
+  time and probe the broker for "alpha".
+
+covers:
+  - MTF-L-101
+  - MTF-L-103   # NEW cell: REQ-112a VarRef server-slot dispatch
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:10:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  svc_name = "alpha"
+  e = $svc_name._exists()
+  result = "absent"
+  if $e then
+    result = "present"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+tools:
+  alpha:
+    archetype: ReadOnlyTool
+    tool_name: ping
+    returns: ok
+
+expect:
+  outcome: success
+  return_result:
+    v: "present"

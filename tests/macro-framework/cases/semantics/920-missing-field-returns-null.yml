@@ -1,0 +1,32 @@
+# Pilot — MTF-S-102 / Broker REQ-112d: missing field on a present object
+# returns null (lenient leaf-access).
+
+id: mtf-s-920-missing-field-returns-null
+name: Semantics — missing field on present object returns null (REQ-112d ac1)
+description: |
+  Per REQ-112d, leaf-access on a missing key of a present object MUST
+  return null instead of raising a runtime error. This enables guard
+  patterns like `if $obj.maybe == null then ...`.
+
+covers:
+  - MTF-S-102   # NEW cell: REQ-112d missing-field-null
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:35:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  obj = { a: 1 }
+  v = $obj.does_not_exist
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    v: null

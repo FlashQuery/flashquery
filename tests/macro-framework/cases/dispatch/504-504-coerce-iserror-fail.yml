@@ -1,0 +1,36 @@
+# REQ-106 path 1 / REQ-107: isError=true short-circuits — no value binding, fail-fast as tool_call_failed.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-504-coerce-iserror-fail
+name: "IsErrorTool path: isError=true triggers fail-fast (no binding)"
+description: |
+  REQ-106 path 1 / REQ-107: isError=true short-circuits — no value binding, fail-fast as tool_call_failed.
+
+covers:
+  - MTF-D-101
+  - MTF-D-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = bad_srv.boom({})
+  exit { val: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  bad_srv:
+    archetype: "IsErrorTool"
+    tool_name: "boom"
+    message: "upstream refused the call"
+
+expect:
+  outcome: fail
+  error:
+    code: "tool_call_failed"

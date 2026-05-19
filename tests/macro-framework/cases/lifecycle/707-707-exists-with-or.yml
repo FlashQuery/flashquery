@@ -1,0 +1,38 @@
+# Assigned _exists() result drives a || expression; "yes" outcome reachable.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-l-707-exists-with-or
+name: "_exists() result combined with || (assigned first)"
+description: |
+  Assigned _exists() result drives a || expression; "yes" outcome reachable.
+
+covers:
+  - MTF-L-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  e = svc._exists()
+  result = "no"
+  if $e || 1 == 0 then
+    result = "yes"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: "ReadOnlyTool"
+    tool_name: "n"
+    returns: "r"
+
+expect:
+  outcome: success
+  return_result: {"v":"yes"}

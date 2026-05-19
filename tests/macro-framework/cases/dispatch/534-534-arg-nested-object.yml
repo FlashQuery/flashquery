@@ -1,0 +1,32 @@
+# Multi-level nested object arg with mixed types — preserved.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-534-arg-nested-object
+name: "Nested object argument passes through"
+description: |
+  Multi-level nested object arg with mixed types — preserved.
+
+covers:
+  - MTF-D-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = srv.run({ cfg: { mode: "fast", options: { retries: 3, timeout: 1000 } } })
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  srv:
+    archetype: "WriteTool"
+    tool_name: "run"
+
+expect:
+  outcome: success

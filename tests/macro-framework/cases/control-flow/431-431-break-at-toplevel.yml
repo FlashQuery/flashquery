@@ -1,0 +1,27 @@
+# Bare `break` outside any loop must be rejected at parse time.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-431-break-at-toplevel
+name: "break at macro top-level — parse error"
+description: |
+  Bare `break` outside any loop must be rejected at parse time.
+
+covers:
+  - MTF-C-104
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  break
+  exit { reached: false }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: parse_error

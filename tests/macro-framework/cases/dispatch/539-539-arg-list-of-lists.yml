@@ -1,0 +1,32 @@
+# Deeply nested list values preserved as lists at every level.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-539-arg-list-of-lists
+name: "Nested list-of-lists argument"
+description: |
+  Deeply nested list values preserved as lists at every level.
+
+covers:
+  - MTF-D-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = srv.run({ matrix: [[1, 2], [3, 4]] })
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  srv:
+    archetype: "WriteTool"
+    tool_name: "run"
+
+expect:
+  outcome: success

@@ -1,0 +1,52 @@
+# Pilot 30 — MTF-D-101 + MTF-D-102: brokered tool returns isError:true;
+# macro engine fail-fasts per REQ-107.
+#
+# Tier 2 (Broker REQ-106 step 1 + REQ-107). When CallToolResult.isError
+# is true, the engine MUST NOT coerce the value — it raises `fail` so the
+# bound variable is never assigned. The envelope code is
+# `tool_call_failed` (brokered failures route through the dedicated code,
+# not `macro_aborted`).
+
+id: mtf-d-30-brokered-iserror-failfast
+name: Dispatch — brokered isError:true triggers fail-fast → tool_call_failed
+description: |
+  A brokered tool returns CallToolResult.isError=true with a text body.
+  The macro engine surfaces this as `tool_call_failed` (REQ-107) without
+  binding any value to the LHS. Tests REQ-106 step 1 (isError carve-out)
+  + REQ-107 (envelope code).
+
+covers:
+  - MTF-D-101   # brokered isError → fail-fast
+  - MTF-D-102   # surfaces as tool_call_failed envelope code
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T12:24:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = bad_srv.boom({})
+  exit $x
+
+input_vars: {}
+vault: {}
+
+tools:
+  bad_srv:
+    archetype: IsErrorTool
+    tool_name: boom
+    message: "upstream said no"
+
+expect:
+  outcome: fail
+  error:
+    code: tool_call_failed
+    message_contains: "upstream said no"
+
+golden_snapshot:
+  state_notes:
+    - { kind: permission, tool: "bad_srv.boom", decision: allowed }
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: coerce, path: is_error, raw_summary: "bad_srv.boom isError: is_error_result — upstream said no" }

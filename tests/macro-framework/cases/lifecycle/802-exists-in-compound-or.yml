@@ -1,0 +1,40 @@
+# Pilot — MTF-L-101 / Broker REQ-112a: `_exists()` in compound `||` expression.
+# See pilot 801 for context. EXPECTED TO FAIL until production implements REQ-112a.
+
+id: mtf-l-802-exists-in-compound-or
+name: Lifecycle — `_exists()` usable inside `||` (REQ-112a ac1)
+description: |
+  `_exists()` in the left operand of `||` should evaluate without requiring
+  prior assignment.
+
+covers:
+  - MTF-L-101
+  - MTF-L-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:10:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  result = "no"
+  if svc._exists() || 1 == 0 then
+    result = "yes"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: ReadOnlyTool
+    tool_name: ping
+    returns: ok
+
+expect:
+  outcome: success
+  return_result:
+    v: "yes"

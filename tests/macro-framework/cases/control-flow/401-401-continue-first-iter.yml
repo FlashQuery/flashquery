@@ -1,0 +1,34 @@
+# continue fires on i==1; remaining iterations sum 2+3+4+5 = 14.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-401-continue-first-iter
+name: "continue on first iteration only"
+description: |
+  continue fires on i==1; remaining iterations sum 2+3+4+5 = 14.
+
+covers:
+  - MTF-C-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  t = 0
+  for i in 1..6 do
+    if $i == 1 then
+      continue
+    fi
+    t = add $t $i
+  done
+  exit { sum: $t }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"sum":14}

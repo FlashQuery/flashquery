@@ -1,0 +1,38 @@
+# Inner continue skips inner iterations; outer counter advances normally.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-420-nested-continue-inner
+name: "nested loops — continue affects only inner"
+description: |
+  Inner continue skips inner iterations; outer counter advances normally.
+
+covers:
+  - MTF-C-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  outer = 0
+  inner_total = 0
+  for i in 1..4 do
+    outer = add $outer 1
+    for j in 1..4 do
+      if $j == 2 then
+        continue
+      fi
+      inner_total = add $inner_total 1
+    done
+  done
+  exit { outer: $outer, inner: $inner_total }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"outer":3,"inner":6}

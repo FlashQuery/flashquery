@@ -1,0 +1,34 @@
+# Pilot — MTF-S-102 / Broker REQ-112d ac5: chained access through a
+# missing field still throws (because the intermediate is null and
+# REQ-023 ac2 raises on null-field-access). EXPECTED TO PASS today AND
+# after REQ-112d is implemented.
+#
+# This is regression coverage: typo-catching for the common
+# `$obj.usre.id` shape still works.
+
+id: mtf-s-922-chained-thru-missing-still-throws
+name: Semantics — chained access through missing field still throws (REQ-112d ac5)
+description: |
+  `$obj.missing.subfield` — leaf `missing` returns null (REQ-112d),
+  then `.subfield` on null raises per REQ-023 ac2.
+
+covers:
+  - MTF-S-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:35:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  obj = { a: 1 }
+  v = $obj.missing.subfield
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: fail

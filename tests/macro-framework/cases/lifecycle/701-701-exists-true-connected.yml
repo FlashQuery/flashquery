@@ -1,0 +1,34 @@
+# A FakeBroker with a server configured returns true for the _exists() probe.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-l-701-exists-true-connected
+name: "_exists() returns true for connected brokered server"
+description: |
+  A FakeBroker with a server configured returns true for the _exists() probe.
+
+covers:
+  - MTF-L-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  e = svc._exists()
+  exit { e: $e }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: "ReadOnlyTool"
+    tool_name: "noop"
+    returns: "ok"
+
+expect:
+  outcome: success
+  return_result: {"e":true}

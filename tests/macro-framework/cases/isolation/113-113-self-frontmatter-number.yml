@@ -1,0 +1,30 @@
+# _self.frontmatter.priority returns a number value usable in arithmetic.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-113-self-frontmatter-number
+name: "_self.frontmatter with numeric value"
+description: |
+  _self.frontmatter.priority returns a number value usable in arithmetic.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  p = $_self.frontmatter.priority
+  doubled = mul $p 2
+  exit { d: $doubled }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{"priority":5},"title":"t","tags":[],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"d":10}

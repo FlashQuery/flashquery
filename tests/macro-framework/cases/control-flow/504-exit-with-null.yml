@@ -1,0 +1,20 @@
+# Pilot — MTF-C-009: exit with null is valid; result.value is null.
+id: mtf-c-504-exit-with-null
+name: Control-flow — exit returns null
+description: |
+  Per macro-language semantics, `exit null` halts with `result: null`.
+  Distinct from fall-off-end (which also returns null but via a different
+  termination path).
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  exit null
+input_vars: {}
+vault: {}
+expect:
+  outcome: success
+  return_result: null

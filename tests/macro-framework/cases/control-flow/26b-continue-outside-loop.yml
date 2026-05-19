@@ -1,0 +1,42 @@
+# Pilot 26b — MTF-C-104: bare `continue` at top level raises
+# loop_control_outside_loop at parse time (REQ-104 ac).
+#
+# Tier 2. The golden's parser semantically rejects continue/break outside
+# any loop body with reason `loop_control_outside_loop` and code
+# `parse_error`.
+
+id: mtf-c-26b-continue-outside-loop
+name: Control flow — bare continue at top level → parse_error
+description: |
+  `continue` written outside any for/while body must be rejected at
+  parse time per REQ-104 acceptance criterion (loop_control_outside_loop).
+  The macro never executes.
+
+covers:
+  - MTF-C-104   # continue/break outside any loop
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T12:24:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = 1
+  continue
+  exit { reached: false }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+    details:
+      reason: loop_control_outside_loop
+
+golden_snapshot:
+  state_notes: []

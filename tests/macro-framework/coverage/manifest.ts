@@ -21,11 +21,14 @@
 //     load-bearing behaviors that warrant deeper coverage.
 //   - `added_in`: ISO date the cell entered the manifest.
 //
-// Tier 2 (Broker REQ-103..112) cells are deliberately EXCLUDED from this
-// initial v1 of the manifest. Production broker support is landing today
-// in parallel; Tier 2 cells will be added in a follow-up phase once the
-// engine's broker surface is stable to test against. The current 13
-// pilots exercise only Tier 1 patterns.
+// Tier 2 (Broker REQ-103..112) cells were deliberately EXCLUDED from the
+// initial v1 of this manifest. Production broker support landed in
+// parallel on 2026-05-19 (continue/break, _self, deep-probe _exists,
+// CallToolResult coercion, brokered fail-fast, _exists, fq.search_tools,
+// MacroNeedsUserInputError envelope). Tier 2 cells (MTF-*-1XX) were added
+// on 2026-05-19 per §6.4 extension lifecycle steps 3 + 7. The Tier 2 cell
+// numbers start at 100 to clearly distinguish them from Tier 1 cells
+// (which use 0XX numbering).
 
 export type CellStatus = "actionable" | "planned" | "blocked" | "deprecated";
 
@@ -55,6 +58,7 @@ export type Cell = {
 };
 
 const TODAY = "2026-05-18";
+const TIER2_DATE = "2026-05-19";
 
 export const CELLS: Cell[] = [
   // ─── MTF-G — Surface grammar ─────────────────────────────────────────
@@ -129,8 +133,35 @@ export const CELLS: Cell[] = [
     description: "Fence-attribute parsing (`fqm name=...`)",
     density_target: 5,
     source_citations: ["REQ-005", "REQ-006"],
-    status: "actionable",
+    status: "planned",
+    requires: {
+      notes:
+        "Fence parsing fires only when a macro is loaded via `source_ref` from a vault doc. The in-process macro framework loads from the YAML test's `macro:` field directly, so this surface isn't reachable here. Coverage belongs in directed/integration scenarios (e.g., T-Y-015's source_ref load path) and a small unit test against the fence-extractor module.",
+    },
     added_in: TODAY,
+  },
+  {
+    id: "MTF-G-009",
+    category: "MTF-G",
+    description:
+      "DEPRECATED 2026-05-19 — replaced by MTF-G-010 (REQ-112c). The deferral lifted; production should now accept `true` / `false` as boolean literal keywords. See MTF-G-010 for the new positive coverage.",
+    density_target: 0,
+    source_citations: ["Macro-Lang-§3.3", "Broker-REQ-112c"],
+    status: "deprecated",
+    requires: {
+      notes: "Cell retired when REQ-112c lifted the deferral. Coverage rolled into MTF-G-010.",
+    },
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-G-010",
+    category: "MTF-G",
+    description:
+      "REQ-112c: `true` / `false` boolean literals are first-class tokens. Parse in any position null parses (primary, object-literal value, comparison operand, if-condition, etc.). Internal boolean value identical to comparison-operator output. Lowercase only — matches null, JSON, Bash.",
+    density_target: 10,
+    source_citations: ["Broker-REQ-112c"],
+    status: "actionable",
+    added_in: "2026-05-19",
   },
 
   // ─── MTF-S — Evaluator semantics ─────────────────────────────────────
@@ -206,6 +237,26 @@ export const CELLS: Cell[] = [
     source_citations: ["REQ-015", "REQ-021"],
     status: "actionable",
     added_in: TODAY,
+  },
+  {
+    id: "MTF-S-101",
+    category: "MTF-S",
+    description:
+      "REQ-112b: `if`/`else` branches do NOT introduce a new variable scope. Variables newly-assigned inside a body that runs persist after `fi`. Untaken-branch assignments leave the name undefined (no phantom default). Overrides archived Macro Lang REQ-019 ac3.",
+    density_target: 10,
+    source_citations: ["Broker-REQ-112b"],
+    status: "actionable",
+    added_in: "2026-05-19",
+  },
+  {
+    id: "MTF-S-102",
+    category: "MTF-S",
+    description:
+      "REQ-112d: leaf-access on a missing key of a present object returns null (lenient). Chained access through the resulting null still throws per REQ-023 ac2. Composes with truthiness so authors can write `if $obj.maybe == null then ...` guards.",
+    density_target: 10,
+    source_citations: ["Broker-REQ-112d"],
+    status: "actionable",
+    added_in: "2026-05-19",
   },
 
   // ─── MTF-C — Control flow ────────────────────────────────────────────
@@ -372,7 +423,11 @@ export const CELLS: Cell[] = [
     description: "Native fq builtin invocation from macro",
     density_target: 5,
     source_citations: ["REQ-030"],
-    status: "actionable",
+    status: "planned",
+    requires: {
+      notes:
+        "Native fq dispatch (fq.write_document, fq.get_document, fq.search_tools etc.) needs real Supabase + handler wiring per the framework's §5.7 design. The framework currently stubs `fq` as an empty server. Coverage belongs in integration scenarios; MTF-D-104 already covers the search_tools shape via a brokered emulation.",
+    },
     added_in: TODAY,
   },
   {
@@ -465,7 +520,11 @@ export const CELLS: Cell[] = [
     description: "Cancellation between iterations propagates cleanly",
     density_target: 5,
     source_citations: ["REQ-049", "REQ-052"],
-    status: "actionable",
+    status: "planned",
+    requires: {
+      notes:
+        "Cancellation requires an external signal (e.g., a `cancel_task` call from a sibling MCP request) to interrupt the running macro. The framework runs macros to completion in-process; no cross-invocation cancellation harness exists. Coverage belongs in directed scenarios that wire two concurrent invocations + the cancel path, or a unit test against the cancellation-token plumbing.",
+    },
     added_in: TODAY,
   },
 
@@ -570,7 +629,11 @@ export const CELLS: Cell[] = [
     description: "Session-scoped task visibility (caller identity)",
     density_target: 5,
     source_citations: ["REQ-049", "REQ-060"],
-    status: "actionable",
+    status: "planned",
+    requires: {
+      notes:
+        "Session-scoped task visibility requires two distinct MCP sessions invoking `list_tasks` and verifying cross-session task records don't leak. The framework runs single-invocation in-process tests; multi-session isolation is a directed/integration scenario concern.",
+    },
     added_in: TODAY,
   },
 
@@ -594,6 +657,183 @@ export const CELLS: Cell[] = [
     source_citations: ["MTF Framework §5.4", "REQ-051"],
     status: "actionable",
     added_in: TODAY,
+  },
+
+  // ─── Tier 2 cells (MTF-*-1XX) — Broker REQ-103..112 + adjacent ───────
+  //
+  // Added 2026-05-19 per §6.4 lifecycle steps 3 + 7 when the production
+  // MCP Broker macro-engine extensions shipped. The golden has supported
+  // these since v0.3.0; production is catching up. Each cell carries
+  // Broker-REQ-NNN provenance.
+
+  // ─── MTF-C-1XX — Control-flow Tier 2 (continue / break) ─────────────
+  {
+    id: "MTF-C-101",
+    category: "MTF-C",
+    description: "for-loop with `continue` skipping selected iterations",
+    density_target: 10,
+    source_citations: ["Broker-REQ-104"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-C-102",
+    category: "MTF-C",
+    description: "while-loop with `break` on threshold condition",
+    density_target: 10,
+    source_citations: ["Broker-REQ-104"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-C-103",
+    category: "MTF-C",
+    description: "Nested loops with continue affecting only the inner loop",
+    density_target: 5,
+    source_citations: ["Broker-REQ-104"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-C-104",
+    category: "MTF-C",
+    description: "`continue` / `break` outside any loop raises loop_control_outside_loop",
+    density_target: 5,
+    source_citations: ["Broker-REQ-104"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+
+  // ─── MTF-D-1XX — Dispatch Tier 2 (broker coercion, fail-fast,
+  //                                  search_tools, help sentinel) ───────
+  {
+    id: "MTF-D-101",
+    category: "MTF-D",
+    description: "Brokered isError=true triggers fail-fast (REQ-107) — bound value never set",
+    density_target: 10,
+    source_citations: ["Broker-REQ-106", "Broker-REQ-107"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-D-102",
+    category: "MTF-D",
+    description: "Brokered fail-fast surfaces as tool_call_failed envelope (not macro_aborted)",
+    density_target: 5,
+    source_citations: ["Broker-REQ-107"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-D-103",
+    category: "MTF-D",
+    description: "Argument-passthrough invariant — primitive args bit-exact (REQ-108)",
+    density_target: 5,
+    source_citations: ["Broker-REQ-108"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-D-104",
+    category: "MTF-D",
+    description: "fq.search_tools invocation returns SearchResult envelopes (REQ-082..087)",
+    density_target: 10,
+    source_citations: ["Broker-REQ-082", "Broker-REQ-083", "Broker-REQ-085"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-D-105",
+    category: "MTF-D",
+    description:
+      "DEPRECATED — `help: true` sentinel forwarding (REQ-093/098) is scoped to delegated/host MCP callers, not macros. Verification belongs at the broker layer (unit + delegated-call scenario), not the macro test surface.",
+    density_target: 0,
+    source_citations: ["Broker-REQ-093", "Broker-REQ-098", "Broker-REQ-060"],
+    status: "deprecated",
+    requires: {
+      notes:
+        "Retired 2026-05-19. REQ-098 reads: 'When a delegated or host model calls a brokered tool with help: true ...' — the macro frame is not in scope. Replacement coverage lives at tests/unit/broker/ + an integration scenario.",
+    },
+    added_in: TIER2_DATE,
+  },
+
+  // ─── MTF-E-1XX — Error taxonomy Tier 2 (needs_user_input fifth) ─────
+  // Per REQ-060 there are EXACTLY two spec-valid emitters of
+  // needs_user_input: (a) FQ-native tools, (b) the broker layer itself
+  // on TOFU drift. Brokered tools returning event:needs_user_input in
+  // their CallToolResult are explicitly forbidden. These cells cover
+  // route (b) — TOFU-drift detection during a brokered dispatch
+  // propagating through the macro engine as the fifth termination.
+  {
+    id: "MTF-E-101",
+    category: "MTF-E",
+    description:
+      "Broker-emitted needs_user_input from TOFU drift during brokered dispatch propagates as macro-level fifth termination (REQ-105 nested propagation; REQ-041/042 + REQ-060)",
+    density_target: 10,
+    source_citations: ["Broker-REQ-105", "Broker-REQ-041", "Broker-REQ-042", "Broker-REQ-060"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-E-102",
+    category: "MTF-E",
+    description:
+      "TOFU-drift envelope carries spec-shape payload (event: schema_drift_detected, server, tool, old_schema, new_schema, diff_summary) per REQ-042",
+    density_target: 5,
+    source_citations: ["Broker-REQ-105", "Broker-REQ-042"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+
+  // ─── MTF-I-1XX — Isolation Tier 2 (_self binding via source_ref) ─────
+  {
+    id: "MTF-I-101",
+    category: "MTF-I",
+    description: "_self.path / .frontmatter / .title / .tags / .fq_id accessible when bound",
+    density_target: 10,
+    source_citations: ["Broker-REQ-103"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-I-102",
+    category: "MTF-I",
+    description: "_self access without binding raises spec-mandated runtime error",
+    density_target: 5,
+    source_citations: ["Broker-REQ-103"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+
+  // ─── MTF-L-1XX — Lifecycle Tier 2 (_exists() deep-probe + 250ms) ─────
+  {
+    id: "MTF-L-101",
+    category: "MTF-L",
+    description: "_exists() deep-probe with 250ms timeout returns boolean (REQ-110/112)",
+    density_target: 5,
+    source_citations: ["Broker-REQ-110", "Broker-REQ-112"],
+    status: "actionable",
+    added_in: TIER2_DATE,
+  },
+  {
+    id: "MTF-L-102",
+    category: "MTF-L",
+    description:
+      "REQ-112a ac1: `_exists()` (introspection methods) MUST be usable in any expression position — inside `&&` / `||` operands, after `!`, as object-literal value, etc. — without requiring an intermediate assignment.",
+    density_target: 5,
+    source_citations: ["Broker-REQ-112a"],
+    status: "actionable",
+    added_in: "2026-05-19",
+  },
+  {
+    id: "MTF-L-103",
+    category: "MTF-L",
+    description:
+      "REQ-112a ac2: VarRef-prefixed server slot (`$svc_name._exists()`) resolves the variable to a server-name string at call time and probes that server. Allowed for introspection methods only per ac3.",
+    density_target: 5,
+    source_citations: ["Broker-REQ-112a"],
+    status: "actionable",
+    added_in: "2026-05-19",
   },
 ];
 

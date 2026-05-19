@@ -1,0 +1,34 @@
+# Side effect (append) runs before break fires.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-413-break-after-side-effect
+name: "break after executing side effect"
+description: |
+  Side effect (append) runs before break fires.
+
+covers:
+  - MTF-C-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  acc = []
+  for x in [10, 20, 30, 40] do
+    acc = append $acc $x
+    if $x == 20 then
+      break
+    fi
+  done
+  exit { n: count $acc }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"n":2}

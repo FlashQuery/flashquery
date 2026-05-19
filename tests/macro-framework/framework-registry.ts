@@ -39,7 +39,7 @@ import {
   coerceCallToolResult,
   isCallToolErrorResult,
 } from '../../src/macro/coerce.js';
-import { MacroExpectedError } from '../../src/macro/evaluator.js';
+import { MacroExpectedError, MacroNeedsUserInputError } from '../../src/macro/evaluator.js';
 import type {
   MacroInvocationContext,
   MacroValue,
@@ -108,11 +108,21 @@ export function buildFrameworkRegistry(
 }
 
 /**
- * Lightweight analogue of `src/macro/registry.ts wrapBrokerTool`. We skip
- * the production wrapper's TOFU drift / `listToolsForConsumer` path
- * because the FakeBroker exposes a simple registry-from-config. The
- * coercion + isError fail-fast behavior MUST match production
- * (REQ-106 / REQ-107).
+ * Mirror of `src/macro/registry.ts wrapBrokerTool`. Replicates the pieces
+ * of production behavior the framework needs to exercise:
+ *
+ *   - Pre-dispatch visibility check via `listToolsForConsumer` — when the
+ *     tool isn't visible AND `getPendingSchemaDrift` reports a pending
+ *     drift, throw `MacroNeedsUserInputError` with the REQ-042 payload
+ *     so the macro engine surfaces the fifth termination
+ *     (Broker REQ-105 nested propagation, REQ-060 spec-valid route b).
+ *   - Pass-through `callTool` for visible tools.
+ *   - REQ-106 coercion + REQ-107 fail-fast on `isError`.
+ *
+ * We throw production's MacroNeedsUserInputError directly (not the
+ * broker-layer SchemaDriftNeedsUserInputError), which avoids the
+ * cross-module `instanceof` problem that bites the broker's catch path
+ * under Vitest's resolver.
  */
 function wrapBrokerToolForFramework(server: string, tool: string, broker: FakeBroker): ToolFn {
   return async (
@@ -120,16 +130,43 @@ function wrapBrokerToolForFramework(server: string, tool: string, broker: FakeBr
     _ctx: MacroInvocationContext,
   ): Promise<MacroValue> => {
     void _ctx;
+    const consumerContext = {
+      kind: 'host' as const,
+      traceId: 'framework-test',
+      interactive: true,
+    };
+
+    // Pre-dispatch visibility + pending-drift check (mirrors production
+    // `registry.ts:154-179`).
+    const visibleTools = await broker.listToolsForConsumer(consumerContext);
+    const visibleTool = visibleTools.find(
+      (t) => t.serverId === server && t.toolName === tool,
+    );
+    if (visibleTool === undefined) {
+      const pendingDrifts = broker
+        .getPendingSchemaDrift({})
+        .filter((d) => d.server === server);
+      const pendingDrift = pendingDrifts.find((d) => d.tool === tool);
+      if (pendingDrift !== undefined) {
+        throw new MacroNeedsUserInputError(
+          pendingDrifts.length > 1
+            ? { event: 'schema_drift_detected', server, changes: pendingDrifts }
+            : pendingDrift,
+        );
+      }
+      throw new MacroExpectedError(
+        'unknown_tool',
+        `Brokered tool '${server}.${tool}' is not available.`,
+        { server, tool },
+      );
+    }
+
     let result: CallToolResult;
     try {
       result = await broker.callTool(
         { serverId: server, toolName: tool },
         coerceBrokerToolArguments(arg),
-        // Minimal consumer context — the FakeBroker doesn't enforce
-        // shape, and the framework's tests don't assert on consumer-
-        // context propagation directly (that's a Tier 2 integration
-        // concern).
-        { kind: 'host', traceId: 'framework-test', interactive: true },
+        consumerContext,
       );
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

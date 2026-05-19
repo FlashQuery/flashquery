@@ -1,0 +1,34 @@
+# structuredContent that is itself a list binds as a list.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-506-coerce-structured-list
+name: "StructuredContentTool with list value"
+description: |
+  structuredContent that is itself a list binds as a list.
+
+covers:
+  - MTF-D-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = list_srv.get({})
+  exit { n: count $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  list_srv:
+    archetype: "StructuredContentTool"
+    tool_name: "get"
+    value: [1,2,3,4,5]
+
+expect:
+  outcome: success
+  return_result: {"n":5}

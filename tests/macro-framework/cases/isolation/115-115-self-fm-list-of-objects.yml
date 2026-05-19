@@ -1,0 +1,30 @@
+# Frontmatter field is a list of objects; element access drills down by index isn’t supported (deferred) but count works.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-115-self-fm-list-of-objects
+name: "_self.frontmatter with list-of-objects"
+description: |
+  Frontmatter field is a list of objects; element access drills down by index isn’t supported (deferred) but count works.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  items = $_self.frontmatter.items
+  n = count $items
+  exit { n: $n }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{"items":[{"a":1},{"a":2}]},"title":"t","tags":[],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"n":2}

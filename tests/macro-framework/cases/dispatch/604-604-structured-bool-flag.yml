@@ -1,0 +1,38 @@
+# structuredContent number 1/0 used as truthy/falsy in if. Outer-scope var pre-declared.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-604-structured-bool-flag
+name: "StructuredContentTool returning boolean-like flag (1/0)"
+description: |
+  structuredContent number 1/0 used as truthy/falsy in if. Outer-scope var pre-declared.
+
+covers:
+  - MTF-D-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  r = flag_srv.get({})
+  out = "no"
+  if $r == 1 then
+    out = "yes"
+  fi
+  exit { out: $out }
+
+input_vars: {}
+vault: {}
+
+tools:
+  flag_srv:
+    archetype: "StructuredContentTool"
+    tool_name: "get"
+    value: 1
+
+expect:
+  outcome: success
+  return_result: {"out":"yes"}

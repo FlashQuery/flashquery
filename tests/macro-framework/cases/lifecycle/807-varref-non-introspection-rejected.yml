@@ -1,0 +1,42 @@
+# Pilot — MTF-L-103 / REQ-112a ac3: VarRef-prefixed server slot is allowed
+# ONLY for introspection methods (leading underscore). `$svc.real_tool({})`
+# must be rejected at static-check time.
+#
+# EXPECTED TO FAIL against production (the form doesn't parse yet — same
+# missing_then error). After REQ-112a lands, the parse succeeds, and the
+# static-check rejects with `varref_server_non_introspection` (or analogous
+# reason code per the REQ).
+
+id: mtf-l-807-varref-non-introspection-rejected
+name: Lifecycle — `$svc.real_tool()` rejected at static check (REQ-112a ac3)
+description: |
+  Variable-ref server slot on a non-introspection tool name. Per REQ-112a
+  ac3 this is a parse-time error — VarRef-subject is only allowed for
+  introspection (leading-underscore) methods.
+
+covers:
+  - MTF-L-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T15:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  svc_name = "alpha"
+  v = $svc_name.do_something({})
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  alpha:
+    archetype: ReadOnlyTool
+    tool_name: do_something
+    returns: ok
+
+expect:
+  outcome: parse_error

@@ -1,0 +1,34 @@
+# break sits inside an if-then; only fires when the condition is true.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-415-break-from-conditional
+name: "break inside if branch — only fires when branch taken"
+description: |
+  break sits inside an if-then; only fires when the condition is true.
+
+covers:
+  - MTF-C-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  c = 0
+  for i in 1..5 do
+    c = add $c 1
+    if $i == 3 then
+      break
+    fi
+  done
+  exit { c: $c }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"c":3}

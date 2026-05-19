@@ -1,0 +1,36 @@
+# Pilot — MTF-G-010 / Broker REQ-112c ac3: boolean equality.
+
+id: mtf-g-913-bool-literal-equality
+name: Grammar — boolean literal equality (REQ-112c ac3)
+description: |
+  `true == true` and `false == false` evaluate to true. `true == false`
+  evaluates to false. Cross-type equality `true == 1` is false per
+  REQ-012 ac5.
+
+covers:
+  - MTF-G-010
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:35:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = true == true
+  b = false == false
+  c = true == false
+  d = true == 1
+  exit { a: $a, b: $b, c: $c, d: $d }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    a: true
+    b: true
+    c: false
+    d: false

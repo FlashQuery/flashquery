@@ -1,0 +1,32 @@
+# List values in args preserve element order and types.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-533-arg-array-passthrough
+name: "Array argument passes through"
+description: |
+  List values in args preserve element order and types.
+
+covers:
+  - MTF-D-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = srv.run({ items: ["a", "b", "c"] })
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  srv:
+    archetype: "WriteTool"
+    tool_name: "run"
+
+expect:
+  outcome: success

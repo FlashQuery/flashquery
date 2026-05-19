@@ -1,0 +1,32 @@
+# Number args (integer + float) preserved bit-exact.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-531-arg-number-passthrough
+name: "Number argument passes through bit-exact"
+description: |
+  Number args (integer + float) preserved bit-exact.
+
+covers:
+  - MTF-D-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = num_srv.calc({ i: 42, f: 3.14 })
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  num_srv:
+    archetype: "WriteTool"
+    tool_name: "calc"
+
+expect:
+  outcome: success

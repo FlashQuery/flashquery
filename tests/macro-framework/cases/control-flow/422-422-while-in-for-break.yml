@@ -1,0 +1,38 @@
+# Inner while with break leaves outer for intact.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-422-while-in-for-break
+name: "for containing while — inner break"
+description: |
+  Inner while with break leaves outer for intact.
+
+covers:
+  - MTF-C-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  tally = 0
+  for i in 1..4 do
+    c = 0
+    while $c < 10 do
+      c = add $c 1
+      if $c == 2 then
+        break
+      fi
+    done
+    tally = add $tally $c
+  done
+  exit { t: $tally }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"t":6}

@@ -1,0 +1,21 @@
+# Pilot — MTF-C-009: exit with a structured object return_result.
+id: mtf-c-501-exit-with-object
+name: Control-flow — exit returns a multi-field object value
+description: |
+  Most common exit pattern — return a structured object via `exit { ... }`.
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  exit { ok: true, count: 3, label: "done" }
+input_vars: {}
+vault: {}
+expect:
+  outcome: success
+  return_result:
+    ok: true
+    count: 3
+    label: "done"

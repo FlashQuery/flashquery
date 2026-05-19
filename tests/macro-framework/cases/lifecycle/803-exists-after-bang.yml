@@ -1,0 +1,40 @@
+# Pilot — MTF-L-101 / Broker REQ-112a: `!svc._exists()` directly negated.
+# EXPECTED TO FAIL until production implements REQ-112a.
+
+id: mtf-l-803-exists-after-bang
+name: Lifecycle — `! svc._exists()` directly negated (REQ-112a ac1)
+description: |
+  The `!` operator should accept an `_exists()` call as its operand
+  without requiring an intermediate variable.
+
+covers:
+  - MTF-L-101
+  - MTF-L-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:10:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  result = "online"
+  if ! svc._exists() then
+    result = "offline"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: ReadOnlyTool
+    tool_name: ping
+    returns: ok
+
+expect:
+  outcome: success
+  return_result:
+    v: "online"

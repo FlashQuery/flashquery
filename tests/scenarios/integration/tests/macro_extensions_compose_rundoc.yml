@@ -1,7 +1,9 @@
 name: macro_extensions_compose_rundoc
 description: >
   T-Y-015 / INT-MCB-15: source_ref rundoc execution composes _self metadata,
-  continue, break, and brokered _exists() in one macro workflow.
+  continue, break, brokered _exists() (REQ-103/104/109), AND the four
+  REQ-112a-d clarifiers (VarRef server, if-block scope flatten, boolean
+  literals, missing-field-null) in one macro workflow.
 coverage: [INT-MCB-15]
 server_modes: [managed]
 
@@ -25,7 +27,7 @@ extra_config:
     tool_search: disabled
 
 steps:
-  - label: "Create Phase E rundoc macro library"
+  - label: "Create Phase E rundoc macro library (extended for REQ-112a-d)"
     action: vault.write
     name: phase_e_rundoc
     path: "phase-e/rundoc-${run.id}.md"
@@ -34,7 +36,30 @@ steps:
       ```fqm name=compose
       completed = []
       skipped = []
+
+      # REQ-112d: missing optional frontmatter field returns null; default
+      # via null guard. `max_iterations` is intentionally NOT set in the
+      # document frontmatter so the lenient missing-field-null behavior
+      # fires here.
+      configured_max = $_self.frontmatter.max_iterations
+      if $configured_max == null then
+        configured_max = 100
+      fi
+
+      # REQ-112c: `true`/`false` boolean literals are first-class values.
+      # `should_continue` gates the loop's early-exit path.
+      should_continue = true
+
+      # REQ-112a: VarRef-prefixed introspection. `target_server` holds the
+      # server NAME as a string; `$target_server._exists()` resolves the
+      # variable to "basic" at call time and probes the basic broker.
+      target_server = $_self.frontmatter.target_server
+      target_server_alive = $target_server._exists()
+
       for target in _self.frontmatter.targets do
+        if ! $should_continue then
+          break
+        fi
         if $target == "missing" then
           if !missing_phase_e_yaml._exists() then
             skipped = append $skipped $target
@@ -45,25 +70,57 @@ steps:
           continue
         fi
         if $target == "stop" then
-          break
+          # REQ-112c: assign the `false` literal to the sentinel; the next
+          # iteration's `! $should_continue` check at the top of the body
+          # will then break the loop.
+          should_continue = false
+          continue
         fi
         completed = append $completed $target
       done
+
+      # REQ-112b: assign a NEW variable inside an if-body, then read it
+      # AFTER the closing `fi`. Pre-REQ-112b, `alive_signal` would have
+      # been confined to the if-body child Env and the read after `fi`
+      # would raise `Unknown variable: $alive_signal`. Post-fix, the
+      # binding persists to the enclosing scope.
+      if $target_server_alive then
+        alive_signal = "broker-reachable"
+      fi
+      loop_summary = $alive_signal
+
       fq.write_document({
         mode: "update",
         identifier: _self.path,
-        frontmatter: { completed: $completed, skipped: $skipped }
+        frontmatter: {
+          completed: $completed,
+          skipped: $skipped,
+          loop_summary: $loop_summary,
+          max_used: $configured_max,
+          target_server_was_alive: $target_server_alive
+        }
       })
-      exit { path: _self.path, marker: _self.frontmatter.phase_e_marker, completed: $completed, skipped: $skipped }
+      exit {
+        path: _self.path,
+        marker: _self.frontmatter.phase_e_marker,
+        completed: $completed,
+        skipped: $skipped,
+        loop_summary: $loop_summary,
+        target_server_alive: $target_server_alive,
+        max_used: $configured_max
+      }
       ```
     tags: [phase-e, rundoc]
     frontmatter:
       type: macro_library
       phase_e_marker: "yaml-${run.id}"
       targets: ["alpha", "missing", "beta", "stop", "late"]
+      target_server: "basic"
       completed: []
+      # NOTE: `max_iterations` deliberately omitted to exercise REQ-112d's
+      # missing-field-null lenient read + null-guard default.
 
-  - label: "INT-MCB-15 / T-Y-015: source_ref rundoc composes _self, continue, break, and _exists"
+  - label: "INT-MCB-15 / T-Y-015: rundoc composes _self, continue, break, _exists, REQ-112a-d"
     assert:
       op: call_macro
       args:
@@ -79,6 +136,50 @@ steps:
         - result.path
         - result.skipped
 
+  - label: "INT-MCB-15 / T-Y-015: REQ-112a — VarRef server probe resolved (target_server_alive=true)"
+    assert:
+      op: call_macro
+      args:
+        source_ref: "${phase_e_rundoc.path}::compose"
+        trace: summary
+      expect_json_equals:
+        path: result.target_server_alive
+        value: true
+
+  - label: "INT-MCB-15 / T-Y-015: REQ-112b — if-block assignment persists after fi (loop_summary set)"
+    assert:
+      op: call_macro
+      args:
+        source_ref: "${phase_e_rundoc.path}::compose"
+        trace: summary
+      expect_json_equals:
+        path: result.loop_summary
+        value: "broker-reachable"
+
+  - label: "INT-MCB-15 / T-Y-015: REQ-112c — false literal sentinel halted loop before 'late'"
+    assert:
+      op: call_macro
+      args:
+        source_ref: "${phase_e_rundoc.path}::compose"
+        trace: summary
+      expect_json_contains:
+        path: result.completed
+        value: beta
+    # Implicit: result.completed does NOT contain "late" because
+    # should_continue flipped to false on "stop" and the next iteration
+    # broke. The "contains beta" + the absence of "late" together
+    # demonstrate the sentinel halted the loop after beta was appended.
+
+  - label: "INT-MCB-15 / T-Y-015: REQ-112d — missing frontmatter.max_iterations defaulted to 100"
+    assert:
+      op: call_macro
+      args:
+        source_ref: "${phase_e_rundoc.path}::compose"
+        trace: summary
+      expect_json_equals:
+        path: result.max_used
+        value: 100
+
   - label: "INT-MCB-15 / T-Y-015: rundoc write-back persisted completed frontmatter"
     assert:
       op: get_document
@@ -91,3 +192,13 @@ steps:
       expect_json_contains:
         path: frontmatter.skipped
         value: missing
+
+  - label: "INT-MCB-15 / T-Y-015: rundoc write-back persisted new REQ-112a/b/d fields"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${phase_e_rundoc.path}"
+        include: ["frontmatter"]
+      expect_json_equals:
+        path: frontmatter.target_server_was_alive
+        value: true

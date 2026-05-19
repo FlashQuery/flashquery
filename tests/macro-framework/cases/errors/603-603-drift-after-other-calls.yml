@@ -1,0 +1,38 @@
+# First call succeeds; second tool is drift-flagged → macro fails over to fifth termination.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-603-drift-after-other-calls
+name: "Drift detected on second call after a successful first"
+description: |
+  First call succeeds; second tool is drift-flagged → macro fails over to fifth termination.
+
+covers:
+  - MTF-E-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = good_srv.go({})
+  b = drift_srv.go({})
+  exit { a: $a, b: $b }
+
+input_vars: {}
+vault: {}
+
+tools:
+  good_srv:
+    archetype: "JSONTextTool"
+    tool_name: "go"
+    value: {"ok":1}
+  drift_srv:
+    archetype: "NeedsInputViaTofuDrift"
+    tool_name: "go"
+    drift_payload: {"server":"drift_srv","tool":"go"}
+
+expect:
+  outcome: needs_user_input

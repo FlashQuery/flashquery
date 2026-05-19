@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated_at": "2026-05-19T02:27:55.462Z",
+  "generated_at": "2026-05-19T16:10:55.423Z",
   "cells": {
     "MTF-G-001": {
       "count": 2,
@@ -48,14 +48,39 @@
       ]
     },
     "MTF-G-007": {
-      "count": 0,
-      "last_verified": null,
-      "tests": []
+      "count": 5,
+      "last_verified": "2026-05-19T16:09:28.423Z",
+      "tests": [
+        "mtf-g-801-reserved-for-assignment",
+        "mtf-g-802-reserved-if-assignment",
+        "mtf-g-803-reserved-while-assignment",
+        "mtf-g-804-reserved-null-assignment",
+        "mtf-g-805-identifier-prefixed-with-keyword"
+      ]
     },
     "MTF-G-008": {
       "count": 0,
       "last_verified": null,
       "tests": []
+    },
+    "MTF-G-009": {
+      "count": 1,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-g-32-boolean-literal-object-arg"
+      ]
+    },
+    "MTF-G-010": {
+      "count": 6,
+      "last_verified": "2026-05-19T15:50:23.314Z",
+      "tests": [
+        "mtf-g-910-bool-literal-true",
+        "mtf-g-911-bool-literal-false",
+        "mtf-g-912-bool-literal-in-object",
+        "mtf-g-913-bool-literal-equality",
+        "mtf-g-914-bool-identifier-longer-alt",
+        "mtf-g-915-capital-true-false-as-identifier"
+      ]
     },
     "MTF-S-001": {
       "count": 3,
@@ -81,10 +106,11 @@
       ]
     },
     "MTF-S-004": {
-      "count": 1,
-      "last_verified": "2026-05-19T00:45:09.394Z",
+      "count": 2,
+      "last_verified": "2026-05-19T12:29:46.638Z",
       "tests": [
-        "mtf-c-04-while-with-fail"
+        "mtf-c-04-while-with-fail",
+        "mtf-c-27-break-on-threshold"
       ]
     },
     "MTF-S-005": {
@@ -115,6 +141,30 @@
         "mtf-c-15-if-else-branches"
       ]
     },
+    "MTF-S-101": {
+      "count": 5,
+      "last_verified": "2026-05-19T15:50:23.314Z",
+      "tests": [
+        "mtf-s-901-if-scope-then-only",
+        "mtf-s-902-if-scope-both-branches",
+        "mtf-s-903-if-scope-else-only",
+        "mtf-s-904-if-scope-then-only-untaken",
+        "mtf-s-905-if-scope-walk-up-still-works"
+      ]
+    },
+    "MTF-S-102": {
+      "count": 7,
+      "last_verified": "2026-05-19T15:50:23.314Z",
+      "tests": [
+        "mtf-s-920-missing-field-returns-null",
+        "mtf-s-921-missing-field-null-guard",
+        "mtf-s-922-chained-thru-missing-still-throws",
+        "mtf-s-923-missing-field-frontmatter",
+        "mtf-s-924-field-access-error-paths-preserved",
+        "mtf-s-925-field-access-non-object-throws",
+        "mtf-s-926-field-access-on-list-throws"
+      ]
+    },
     "MTF-C-001": {
       "count": 3,
       "last_verified": "2026-05-19T01:40:56.629Z",
@@ -125,10 +175,11 @@
       ]
     },
     "MTF-C-002": {
-      "count": 1,
-      "last_verified": "2026-05-19T00:45:09.394Z",
+      "count": 2,
+      "last_verified": "2026-05-19T12:29:46.638Z",
       "tests": [
-        "mtf-c-03-for-with-if-fail"
+        "mtf-c-03-for-with-if-fail",
+        "mtf-c-26-continue-skip-odds"
       ]
     },
     "MTF-C-003": {
@@ -176,9 +227,15 @@
       ]
     },
     "MTF-C-009": {
-      "count": 0,
-      "last_verified": null,
-      "tests": []
+      "count": 5,
+      "last_verified": "2026-05-19T16:09:28.423Z",
+      "tests": [
+        "mtf-c-501-exit-with-object",
+        "mtf-c-502-exit-with-list",
+        "mtf-c-503-exit-with-nested",
+        "mtf-c-504-exit-with-null",
+        "mtf-c-505-exit-from-variable"
+      ]
     },
     "MTF-D-001": {
       "count": 2,
@@ -245,9 +302,13 @@
       "tests": []
     },
     "MTF-D-010": {
-      "count": 0,
-      "last_verified": null,
-      "tests": []
+      "count": 3,
+      "last_verified": "2026-05-19T16:09:28.423Z",
+      "tests": [
+        "mtf-d-801-shell-cat-in-vault",
+        "mtf-d-802-shell-ls-in-vault",
+        "mtf-d-803-shell-wc-line-count"
+      ]
     },
     "MTF-L-001": {
       "count": 1,
@@ -339,19 +400,32 @@
       ]
     },
     "MTF-E-005": {
-      "count": 0,
-      "last_verified": null,
-      "tests": []
+      "count": 5,
+      "last_verified": "2026-05-19T16:09:28.423Z",
+      "tests": [
+        "mtf-e-701-parse-error-missing-then",
+        "mtf-e-702-parse-error-missing-do",
+        "mtf-e-703-parse-error-missing-fi",
+        "mtf-e-704-parse-error-missing-done",
+        "mtf-e-705-parse-error-unexpected-token"
+      ]
     },
     "MTF-E-006": {
-      "count": 0,
-      "last_verified": null,
-      "tests": []
+      "count": 3,
+      "last_verified": "2026-05-19T16:09:28.423Z",
+      "tests": [
+        "mtf-e-706-prescan-unknown-tool-on-known-server",
+        "mtf-e-707-prescan-unknown-tool-inside-loop",
+        "mtf-e-708-prescan-unknown-tool-inside-if"
+      ]
     },
     "MTF-E-007": {
-      "count": 0,
-      "last_verified": null,
-      "tests": []
+      "count": 2,
+      "last_verified": "2026-05-19T16:09:28.423Z",
+      "tests": [
+        "mtf-e-709-vault-jail-violation-cat",
+        "mtf-e-710-vault-jail-violation-ls"
+      ]
     },
     "MTF-I-001": {
       "count": 2,
@@ -392,6 +466,229 @@
       "last_verified": "2026-05-19T00:45:33.718Z",
       "tests": [
         "mtf-i-11-self-via-input-vars"
+      ]
+    },
+    "MTF-C-101": {
+      "count": 8,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-c-26-continue-skip-odds",
+        "mtf-c-401-continue-first-iter",
+        "mtf-c-402-continue-last-iter",
+        "mtf-c-403-continue-every-iter",
+        "mtf-c-404-continue-conditional-on-string",
+        "mtf-c-405-continue-with-and",
+        "mtf-c-406-continue-skip-pivot",
+        "mtf-c-407-continue-multiple-conditions"
+      ]
+    },
+    "MTF-C-102": {
+      "count": 7,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-c-27-break-on-threshold",
+        "mtf-c-410-break-first-iter",
+        "mtf-c-411-break-in-for",
+        "mtf-c-412-break-from-while-false-cond",
+        "mtf-c-413-break-after-side-effect",
+        "mtf-c-414-break-then-after-loop",
+        "mtf-c-415-break-from-conditional"
+      ]
+    },
+    "MTF-C-103": {
+      "count": 4,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-c-420-nested-continue-inner",
+        "mtf-c-421-nested-break-inner",
+        "mtf-c-422-while-in-for-break",
+        "mtf-c-423-nested-continue-outer-effect"
+      ]
+    },
+    "MTF-C-104": {
+      "count": 4,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-c-26b-continue-outside-loop",
+        "mtf-c-430-continue-at-toplevel",
+        "mtf-c-431-break-at-toplevel",
+        "mtf-c-432-continue-in-if-not-loop"
+      ]
+    },
+    "MTF-D-101": {
+      "count": 24,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-d-30-brokered-iserror-failfast",
+        "mtf-d-501-coerce-structured-content",
+        "mtf-d-502-coerce-json-text",
+        "mtf-d-503-coerce-readonly-string",
+        "mtf-d-504-coerce-iserror-fail",
+        "mtf-d-505-coerce-multiple-tools-in-macro",
+        "mtf-d-506-coerce-structured-list",
+        "mtf-d-507-coerce-json-text-list",
+        "mtf-d-508-coerce-json-text-null",
+        "mtf-d-509-coerce-json-text-string",
+        "mtf-d-510-coerce-json-text-number",
+        "mtf-d-511-coerce-nested-deep",
+        "mtf-d-512-coerce-empty-object",
+        "mtf-d-513-readonly-large-text",
+        "mtf-d-520-iserror-no-binding",
+        "mtf-d-521-thrown-error",
+        "mtf-d-522-error-after-success",
+        "mtf-d-523-fail-fast-in-loop",
+        "mtf-d-524-fail-fast-then-branch",
+        "mtf-d-601-coercion-chain",
+        "mtf-d-602-call-in-conditional",
+        "mtf-d-603-coerce-empty-string",
+        "mtf-d-604-structured-bool-flag",
+        "mtf-d-605-nested-loop-tool-calls"
+      ]
+    },
+    "MTF-D-102": {
+      "count": 8,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-d-30-brokered-iserror-failfast",
+        "mtf-d-504-coerce-iserror-fail",
+        "mtf-d-520-iserror-no-binding",
+        "mtf-d-521-thrown-error",
+        "mtf-d-522-error-after-success",
+        "mtf-d-523-fail-fast-in-loop",
+        "mtf-d-524-fail-fast-then-branch",
+        "mtf-d-525-fail-fast-with-payload-shape"
+      ]
+    },
+    "MTF-D-103": {
+      "count": 12,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-d-34-argument-passthrough",
+        "mtf-d-530-arg-string-passthrough",
+        "mtf-d-531-arg-number-passthrough",
+        "mtf-d-532-arg-null-passthrough",
+        "mtf-d-533-arg-array-passthrough",
+        "mtf-d-534-arg-nested-object",
+        "mtf-d-535-arg-empty-object",
+        "mtf-d-536-arg-with-interpolation",
+        "mtf-d-537-arg-from-variable",
+        "mtf-d-538-arg-numeric-string",
+        "mtf-d-539-arg-list-of-lists",
+        "mtf-d-540-arg-mixed-types"
+      ]
+    },
+    "MTF-D-104": {
+      "count": 1,
+      "last_verified": "2026-05-19T12:29:46.638Z",
+      "tests": [
+        "mtf-d-31-search-tools"
+      ]
+    },
+    "MTF-D-105": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-E-101": {
+      "count": 10,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-e-29-needs-user-input-via-broker",
+        "mtf-e-601-drift-on-first-call",
+        "mtf-e-602-drift-with-rich-payload",
+        "mtf-e-603-drift-after-other-calls",
+        "mtf-e-604-drift-in-loop",
+        "mtf-e-605-drift-different-tool-same-server",
+        "mtf-e-606-drift-tool-then-good-blocked",
+        "mtf-e-608-drift-after-assignment",
+        "mtf-e-609-drift-with-vault-context",
+        "mtf-e-610-drift-with-args"
+      ]
+    },
+    "MTF-E-102": {
+      "count": 3,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-e-29-needs-user-input-via-broker",
+        "mtf-e-602-drift-with-rich-payload",
+        "mtf-e-607-drift-payload-default-question"
+      ]
+    },
+    "MTF-I-101": {
+      "count": 17,
+      "last_verified": "2026-05-19T15:50:23.314Z",
+      "tests": [
+        "mtf-i-101-self-path-only",
+        "mtf-i-102-self-title-only",
+        "mtf-i-103-self-fq-id",
+        "mtf-i-104-self-tags-list",
+        "mtf-i-105-self-tags-empty",
+        "mtf-i-106-self-fm-deep-field",
+        "mtf-i-107-self-fm-missing-field",
+        "mtf-i-108-self-fm-array-value",
+        "mtf-i-109-self-multi-field-bundle",
+        "mtf-i-110-self-in-conditional",
+        "mtf-i-111-self-in-loop",
+        "mtf-i-112-self-interpolated",
+        "mtf-i-113-self-frontmatter-number",
+        "mtf-i-114-self-empty-frontmatter",
+        "mtf-i-115-self-fm-list-of-objects",
+        "mtf-i-28-self-binding-real",
+        "mtf-s-923-missing-field-frontmatter"
+      ]
+    },
+    "MTF-I-102": {
+      "count": 7,
+      "last_verified": "2026-05-19T13:48:51.406Z",
+      "tests": [
+        "mtf-i-120-self-unbound-path",
+        "mtf-i-121-self-unbound-fm",
+        "mtf-i-122-self-unbound-title",
+        "mtf-i-123-self-unbound-tags",
+        "mtf-i-124-self-unbound-fq-id",
+        "mtf-i-125-self-unbound-in-loop",
+        "mtf-i-28b-self-unbound-runtime-error"
+      ]
+    },
+    "MTF-L-101": {
+      "count": 15,
+      "last_verified": "2026-05-19T15:50:23.314Z",
+      "tests": [
+        "mtf-l-33-exists-deep-probe",
+        "mtf-l-701-exists-true-connected",
+        "mtf-l-702-exists-fq-true",
+        "mtf-l-703-exists-guard-pattern",
+        "mtf-l-704-exists-stored-in-var",
+        "mtf-l-705-exists-truthy-in-if",
+        "mtf-l-706-exists-combined-with-and",
+        "mtf-l-707-exists-with-or",
+        "mtf-l-708-exists-negation",
+        "mtf-l-801-exists-in-compound-and",
+        "mtf-l-802-exists-in-compound-or",
+        "mtf-l-803-exists-after-bang",
+        "mtf-l-804-exists-varref-server",
+        "mtf-l-805-exists-varref-in-if-direct",
+        "_probe-retired"
+      ]
+    },
+    "MTF-L-102": {
+      "count": 4,
+      "last_verified": "2026-05-19T15:50:23.314Z",
+      "tests": [
+        "mtf-l-801-exists-in-compound-and",
+        "mtf-l-802-exists-in-compound-or",
+        "mtf-l-803-exists-after-bang",
+        "mtf-l-805-exists-varref-in-if-direct"
+      ]
+    },
+    "MTF-L-103": {
+      "count": 4,
+      "last_verified": "2026-05-19T15:50:23.314Z",
+      "tests": [
+        "mtf-l-804-exists-varref-server",
+        "mtf-l-805-exists-varref-in-if-direct",
+        "mtf-l-806-exists-varref-non-string",
+        "mtf-l-807-varref-non-introspection-rejected"
       ]
     }
   },
@@ -448,6 +745,18 @@
       "count": 1,
       "tests": [
         "mtf-c-15-if-else-branches"
+      ]
+    },
+    "MTF-C-002+MTF-C-101": {
+      "count": 1,
+      "tests": [
+        "mtf-c-26-continue-skip-odds"
+      ]
+    },
+    "MTF-C-102+MTF-S-004": {
+      "count": 1,
+      "tests": [
+        "mtf-c-27-break-on-threshold"
       ]
     },
     "MTF-C-001+MTF-S-001": {
@@ -542,6 +851,18 @@
         "mtf-d-16-scripted-tool-sequence"
       ]
     },
+    "MTF-D-101+MTF-D-102": {
+      "count": 7,
+      "tests": [
+        "mtf-d-30-brokered-iserror-failfast",
+        "mtf-d-504-coerce-iserror-fail",
+        "mtf-d-520-iserror-no-binding",
+        "mtf-d-521-thrown-error",
+        "mtf-d-522-error-after-success",
+        "mtf-d-523-fail-fast-in-loop",
+        "mtf-d-524-fail-fast-then-branch"
+      ]
+    },
     "MTF-E-001+MTF-E-002": {
       "count": 1,
       "tests": [
@@ -552,6 +873,13 @@
       "count": 1,
       "tests": [
         "mtf-e-18-macro-aborted-envelope"
+      ]
+    },
+    "MTF-E-101+MTF-E-102": {
+      "count": 2,
+      "tests": [
+        "mtf-e-29-needs-user-input-via-broker",
+        "mtf-e-602-drift-with-rich-payload"
       ]
     },
     "MTF-E-003+MTF-FW-001": {
@@ -753,6 +1081,28 @@
         "mtf-l-17-progress-emission"
       ]
     },
+    "MTF-L-101+MTF-L-102": {
+      "count": 4,
+      "tests": [
+        "mtf-l-801-exists-in-compound-and",
+        "mtf-l-802-exists-in-compound-or",
+        "mtf-l-803-exists-after-bang",
+        "mtf-l-805-exists-varref-in-if-direct"
+      ]
+    },
+    "MTF-L-101+MTF-L-103": {
+      "count": 2,
+      "tests": [
+        "mtf-l-804-exists-varref-server",
+        "mtf-l-805-exists-varref-in-if-direct"
+      ]
+    },
+    "MTF-L-102+MTF-L-103": {
+      "count": 1,
+      "tests": [
+        "mtf-l-805-exists-varref-in-if-direct"
+      ]
+    },
     "MTF-C-001+MTF-S-002": {
       "count": 1,
       "tests": [
@@ -787,6 +1137,12 @@
       "count": 1,
       "tests": [
         "mtf-s-14-field-access"
+      ]
+    },
+    "MTF-I-101+MTF-S-102": {
+      "count": 1,
+      "tests": [
+        "mtf-s-923-missing-field-frontmatter"
       ]
     }
   }

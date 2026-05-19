@@ -1,0 +1,48 @@
+# Pilot — MTF-L-101 / Broker REQ-112a: `if $svc._exists() then` (VarRef in conditional).
+# EXPECTED TO FAIL until production implements REQ-112a.
+#
+# Combines ac1 (expression-position) + ac2 (VarRef server slot). This is
+# the exact form shown in the archived Macro Lang REQ-040 ac3 worked
+# example; production at v3.5 rejects it with parse_error/missing_then.
+
+id: mtf-l-805-exists-varref-in-if-direct
+name: Lifecycle — `if $svc._exists() then` (REQ-112a ac1+ac2 combined)
+description: |
+  Exercises the archived Macro Language REQ-040 ac3 worked example
+  syntax (`if $x._exists() then ...`) which the macro testing framework's
+  shipping pass identified as inconsistent with the implementation. Per
+  REQ-112a this form MUST work.
+
+covers:
+  - MTF-L-101
+  - MTF-L-102
+  - MTF-L-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:10:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  svc_name = "alpha"
+  result = "absent"
+  if $svc_name._exists() then
+    result = "present"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+tools:
+  alpha:
+    archetype: ReadOnlyTool
+    tool_name: ping
+    returns: ok
+
+expect:
+  outcome: success
+  return_result:
+    v: "present"

@@ -1,0 +1,28 @@
+# Verifies _self.fq_id is exposed as a plain string.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-103-self-fq-id
+name: "_self.fq_id is immutable identifier"
+description: |
+  Verifies _self.fq_id is exposed as a plain string.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit { id: $_self.fq_id }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{},"title":"t","tags":[],"fq_id":"fq:doc:x:identifier-abc-123"}
+
+expect:
+  outcome: success
+  return_result: {"id":"fq:doc:x:identifier-abc-123"}

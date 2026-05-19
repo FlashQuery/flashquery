@@ -1,0 +1,38 @@
+# isError fail-fast inside a for-loop unwinds — post-loop statements skipped.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-523-fail-fast-in-loop
+name: "fail-fast triggers loop unwind"
+description: |
+  isError fail-fast inside a for-loop unwinds — post-loop statements skipped.
+
+covers:
+  - MTF-D-101
+  - MTF-D-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  for i in 1..5 do
+    v = bad.boom({})
+  done
+  exit { reached: true }
+
+input_vars: {}
+vault: {}
+
+tools:
+  bad:
+    archetype: "IsErrorTool"
+    tool_name: "boom"
+    message: "no"
+
+expect:
+  outcome: fail
+  error:
+    code: "tool_call_failed"

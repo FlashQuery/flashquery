@@ -1,0 +1,35 @@
+# Pilot — MTF-S-101 / Broker REQ-112b ac2: var assigned only in else-branch
+# persists after `fi` when the else branch runs.
+
+id: mtf-s-903-if-scope-else-only
+name: Semantics — variable assigned in else-branch persists after fi (REQ-112b ac2)
+description: |
+  Single else-branch assignment. Condition is falsy so the else-branch
+  runs and `r` is set. After `fi`, `r` must be visible.
+
+covers:
+  - MTF-S-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:25:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  flag = 0
+  if $flag == 1 then
+    r = "should-not-run"
+  else
+    r = "from-else"
+  fi
+  exit { v: $r }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    v: "from-else"

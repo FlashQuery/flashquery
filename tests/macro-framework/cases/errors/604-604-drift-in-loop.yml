@@ -1,0 +1,35 @@
+# A brokered call inside a for-loop hits drift on the first iteration → loop body abandoned.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-604-drift-in-loop
+name: "Drift detected mid-loop"
+description: |
+  A brokered call inside a for-loop hits drift on the first iteration → loop body abandoned.
+
+covers:
+  - MTF-E-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  for i in 1..3 do
+    v = drift_srv.go({ i: $i })
+  done
+  exit { reached: false }
+
+input_vars: {}
+vault: {}
+
+tools:
+  drift_srv:
+    archetype: "NeedsInputViaTofuDrift"
+    tool_name: "go"
+    drift_payload: {"server":"drift_srv","tool":"go"}
+
+expect:
+  outcome: needs_user_input

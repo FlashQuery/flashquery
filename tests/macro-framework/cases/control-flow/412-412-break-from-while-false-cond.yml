@@ -1,0 +1,33 @@
+# while condition already false at top; break inside body unreachable. Loop simply does not enter.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-412-break-from-while-false-cond
+name: "break in while with always-false guard"
+description: |
+  while condition already false at top; break inside body unreachable. Loop simply does not enter.
+
+covers:
+  - MTF-C-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  c = 0
+  guard = 0
+  while $guard == 1 do
+    c = add $c 1
+    break
+  done
+  exit { final: $c }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"final":0}

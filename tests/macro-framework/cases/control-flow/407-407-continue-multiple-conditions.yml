@@ -1,0 +1,37 @@
+# Two separate `if continue` blocks before the body — both filters apply.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-407-continue-multiple-conditions
+name: "Multiple continue conditions"
+description: |
+  Two separate `if continue` blocks before the body — both filters apply.
+
+covers:
+  - MTF-C-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  acc = []
+  for x in [1, 2, 3, 4, 5, 6, 7, 8] do
+    if $x < 3 then
+      continue
+    fi
+    if $x > 6 then
+      continue
+    fi
+    acc = append $acc $x
+  done
+  exit { n: count $acc }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"n":4}

@@ -1,0 +1,38 @@
+# Pilot — MTF-S-101 / Broker REQ-112b: var assigned only in then-branch
+# persists after `fi`.
+#
+# EXPECTED TO FAIL against production at the time of authoring. Production
+# v3.5 creates a child Env for the `if` body, so `r` is discarded when the
+# branch exits. Per REQ-112b, `if` does NOT introduce a new scope and `r`
+# MUST survive to the `exit`.
+
+id: mtf-s-901-if-scope-then-only
+name: Semantics — variable assigned in then-branch persists after fi (REQ-112b ac1)
+description: |
+  Single then-branch assignment with no prior outer binding. Per REQ-112b
+  ac1, `r` is visible after `fi` with the value `"inner"`.
+
+covers:
+  - MTF-S-101   # NEW cell: REQ-112b — if/else does not introduce a new scope
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:25:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  flag = 1
+  if $flag == 1 then
+    r = "inner"
+  fi
+  exit { v: $r }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    v: "inner"

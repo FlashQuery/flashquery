@@ -1,0 +1,32 @@
+# Pilot — MTF-G-010 / Broker REQ-112c: `false` literal binds and is falsy.
+
+id: mtf-g-911-bool-literal-false
+name: Grammar — `false` literal parses and binds as a boolean (REQ-112c ac4)
+description: |
+  `false` literal is falsy per REQ-022. The then-branch must NOT run.
+
+covers:
+  - MTF-G-010
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:35:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  flag = false
+  result = "default"
+  if $flag then
+    result = "should-not-set"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    v: "default"

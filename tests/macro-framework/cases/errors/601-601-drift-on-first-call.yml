@@ -1,0 +1,33 @@
+# Single-tool drift caught at pre-dispatch; macro exits needs_user_input.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-601-drift-on-first-call
+name: "TOFU drift on first call surfaces fifth termination"
+description: |
+  Single-tool drift caught at pre-dispatch; macro exits needs_user_input.
+
+covers:
+  - MTF-E-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  r = svc.do_thing({})
+  exit $r
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: "NeedsInputViaTofuDrift"
+    tool_name: "do_thing"
+    drift_payload: {"server":"svc","tool":"do_thing"}
+
+expect:
+  outcome: needs_user_input

@@ -1,0 +1,30 @@
+# Pilot — MTF-E-006: macro references a tool that doesn't exist on a
+# KNOWN server (server is registered, tool is not). Prescan should
+# reject with `unknown_tool`.
+id: mtf-e-706-prescan-unknown-tool-on-known-server
+name: Errors — prescan rejects unknown tool on a known server (REQ-028)
+description: |
+  `basic` server is configured with the `echo` tool. The macro tries to
+  call `basic.does_not_exist`. Pre-scan must reject the call with
+  unknown_tool before any dispatch happens.
+covers: [MTF-E-006]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  x = basic.does_not_exist({})
+  exit $x
+input_vars: {}
+vault: {}
+tools:
+  basic:
+    archetype: ReadOnlyTool
+    tool_name: echo
+    returns: "ok"
+expect:
+  outcome: fail
+  error:
+    code: unknown_tool
+    message_contains: "does_not_exist"

@@ -1,0 +1,24 @@
+# Pilot — MTF-D-010: shell-verb `ls` lists files in a vault directory.
+id: mtf-d-802-shell-ls-in-vault
+name: Dispatch — `ls` lists vault directory contents
+description: |
+  `ls /notes` returns the list of entries under that vault directory.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  entries = ls "/notes"
+  n = count $entries
+  exit { count: $n }
+input_vars: {}
+vault:
+  "/notes/a.md": "alpha"
+  "/notes/b.md": "beta"
+  "/notes/c.md": "gamma"
+expect:
+  outcome: success
+  return_result:
+    count: 3

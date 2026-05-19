@@ -1,0 +1,22 @@
+# Pilot — MTF-D-010: shell-verb `cat` reads a file inside the vault.
+id: mtf-d-801-shell-cat-in-vault
+name: Dispatch — `cat` reads a vault-relative file
+description: |
+  `cat /notes/hello.txt` should resolve to the vault root + path and
+  return the file's contents.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  text = cat "/notes/hello.txt"
+  exit { contents: $text }
+input_vars: {}
+vault:
+  "/notes/hello.txt": "Hello, FlashQuery!"
+expect:
+  outcome: success
+  return_result:
+    contents: "Hello, FlashQuery!"

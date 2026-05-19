@@ -1,0 +1,38 @@
+# Inner break exits inner loop; outer continues to completion.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-421-nested-break-inner
+name: "nested loops — break exits only inner"
+description: |
+  Inner break exits inner loop; outer continues to completion.
+
+covers:
+  - MTF-C-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  outer = 0
+  inner_total = 0
+  for i in 1..4 do
+    outer = add $outer 1
+    for j in 1..10 do
+      inner_total = add $inner_total 1
+      if $j == 2 then
+        break
+      fi
+    done
+  done
+  exit { outer: $outer, inner: $inner_total }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"outer":3,"inner":6}

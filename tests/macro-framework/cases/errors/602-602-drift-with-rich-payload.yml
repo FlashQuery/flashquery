@@ -1,0 +1,34 @@
+# Verifies the canonical REQ-042 envelope: question + diff_summary present.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-602-drift-with-rich-payload
+name: "Drift payload exposes question + diff_summary"
+description: |
+  Verifies the canonical REQ-042 envelope: question + diff_summary present.
+
+covers:
+  - MTF-E-101
+  - MTF-E-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  r = svc.run({})
+  exit $r
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: "NeedsInputViaTofuDrift"
+    tool_name: "run"
+    drift_payload: {"server":"svc","tool":"run","question":"Approve the new schema?","diff_summary":"• Added required parameter: foo"}
+
+expect:
+  outcome: needs_user_input

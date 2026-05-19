@@ -1,0 +1,29 @@
+# continue inside if-then-else but NOT inside a loop is still outside-loop.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-432-continue-in-if-not-loop
+name: "continue in if-branch outside loop — parse error"
+description: |
+  continue inside if-then-else but NOT inside a loop is still outside-loop.
+
+covers:
+  - MTF-C-104
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  cond = 1
+  if $cond == 1 then
+    continue
+  fi
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: parse_error

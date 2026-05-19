@@ -1,0 +1,34 @@
+# WriteTool returns { ok, side_effect, args }; the macro nests that under `v`. We verify msg reached the broker by reading $v.args.msg back.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-530-arg-string-passthrough
+name: "String argument passes through bit-exact"
+description: |
+  WriteTool returns { ok, side_effect, args }; the macro nests that under `v`. We verify msg reached the broker by reading $v.args.msg back.
+
+covers:
+  - MTF-D-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = echo_srv.run({ msg: "hello world" })
+  exit { got: $v.args.msg }
+
+input_vars: {}
+vault: {}
+
+tools:
+  echo_srv:
+    archetype: "WriteTool"
+    tool_name: "run"
+    side_effect: "echo"
+
+expect:
+  outcome: success
+  return_result: {"got":"hello world"}

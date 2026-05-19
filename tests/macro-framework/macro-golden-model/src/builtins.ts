@@ -21,7 +21,6 @@ import {
   MacroCancellationError,
   MacroFailError,
   MacroExitError,
-  MacroNeedsUserInputError,
   MacroRuntimeError,
 } from "./evaluator.ts";
 import type { Value } from "./types.ts";
@@ -77,48 +76,26 @@ export const builtins: Builtins = {
     throw new MacroFailError(message, ctx.callLine);
   },
 
-  // Tier 2 / REQ-105: fifth termination class. Raises
-  // `MacroNeedsUserInputError` with the spec-required payload. The runner
-  // (run.ts) and snapshot capture (snapshot.ts) render the JSON envelope
-  // `{ error: "needs_user_input", details: { question, ... } }`.
+  // REMOVED 2026-05-19 — `needs_user_input` is NOT a spec-defined macro
+  // builtin. Per MCP Broker Requirements §7.8 REQ-060:
   //
-  // Calling pattern from macro source:
-  //   needs_user_input \
-  //     --question "Which workspace?" \
-  //     --answer_shape "frontmatter.workspace" \
-  //     --options ["personal", "team"] \
-  //     --context "We can't infer from the doc; need a manual call" \
-  //     --resume_hint "On answer, write to frontmatter.workspace and re-run"
+  //   "Brokered tools CANNOT trigger `needs_user_input` in v1. Only two
+  //    sources emit `needs_user_input` exits in v1: (a) a FlashQuery-
+  //    native tool, (b) the broker layer itself on TOFU drift (§7.5)."
   //
-  // `question` and `answer_shape` are REQUIRED per REQ-105; the runtime
-  // raises `MacroRuntimeError` if either is absent.
-  needs_user_input: (_positional, named, ctx) => {
-    const question = typeof named.question === "string" ? named.question : null;
-    const answer_shape = typeof named.answer_shape === "string" ? named.answer_shape : null;
-    if (!question) {
-      throw new MacroRuntimeError(
-        `needs_user_input: --question is required (REQ-105)`,
-      );
-    }
-    if (!answer_shape) {
-      throw new MacroRuntimeError(
-        `needs_user_input: --answer_shape is required (REQ-105)`,
-      );
-    }
-    const payload: ConstructorParameters<typeof MacroNeedsUserInputError>[0] = {
-      question,
-      answer_shape,
-    };
-    if (typeof named.context === "string") payload.context = named.context;
-    if (Array.isArray(named.options)) {
-      payload.options = named.options.filter((s): s is string => typeof s === "string");
-    }
-    if (typeof named.resume_hint === "string") payload.resume_hint = named.resume_hint;
-    ctx.exec?.taskRegistry.appendTrace({
-      kind: "exit",
-      message: `needs_user_input: ${question}`,
-    });
-    throw new MacroNeedsUserInputError(payload);
+  // A macro author wanting the fifth termination MUST call an FQ-native
+  // tool or trigger a brokered dispatch that hits TOFU drift. The
+  // previous builtin let macro authors raise the termination directly,
+  // which contradicted REQ-060 and caused the golden to mispredict
+  // production behavior. This stub remains in the registry so any
+  // straggler macro still calling `needs_user_input` fails cleanly with
+  // a spec-aligned error instead of an opaque "unknown builtin" mystery.
+  needs_user_input: (_positional, _named, _ctx) => {
+    throw new MacroRuntimeError(
+      `'needs_user_input' is not a macro builtin. Per MCP Broker REQ-060, ` +
+        `only (a) FQ-native tools and (b) the broker layer (TOFU drift) emit ` +
+        `the fifth termination. Call an fq.* tool or rely on broker TOFU drift.`,
+    );
   },
 
   exit: (positional, _named, ctx) => {

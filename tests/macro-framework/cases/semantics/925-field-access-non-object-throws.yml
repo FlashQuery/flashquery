@@ -1,0 +1,29 @@
+# Pilot — MTF-S-102 / REQ-112d ac7: field access on non-object value
+# (number) MUST still throw per REQ-023 ac3.
+
+id: mtf-s-925-field-access-non-object-throws
+name: Semantics — field access on non-object value still throws (REQ-112d ac7)
+description: |
+  Field access on a primitive (number) MUST raise per REQ-023 ac3. REQ-112d
+  only relaxes the missing-key case on present objects.
+
+covers:
+  - MTF-S-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T15:05:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  obj = 42
+  v = $obj.anything
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: fail

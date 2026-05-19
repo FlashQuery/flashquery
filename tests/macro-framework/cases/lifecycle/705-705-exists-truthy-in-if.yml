@@ -1,0 +1,38 @@
+# _exists() must be assigned to a variable before use in an expression (macro grammar). Variable then drives if-condition.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-l-705-exists-truthy-in-if
+name: "_exists() return value drives an if-condition (assigned first)"
+description: |
+  _exists() must be assigned to a variable before use in an expression (macro grammar). Variable then drives if-condition.
+
+covers:
+  - MTF-L-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  e = svc._exists()
+  result = "offline"
+  if $e then
+    result = "online"
+  fi
+  exit { r: $result }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: "ReadOnlyTool"
+    tool_name: "n"
+    returns: "x"
+
+expect:
+  outcome: success
+  return_result: {"r":"online"}

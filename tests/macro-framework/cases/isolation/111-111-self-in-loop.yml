@@ -1,0 +1,32 @@
+# Iterating over _self.tags collects the elements into an output list.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-111-self-in-loop
+name: "_self.tags used in a for-loop iterator"
+description: |
+  Iterating over _self.tags collects the elements into an output list.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  seen = []
+  for t in $_self.tags do
+    seen = append $seen $t
+  done
+  exit { n: count $seen }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{},"title":"t","tags":["alpha","beta","gamma","delta"],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"n":4}

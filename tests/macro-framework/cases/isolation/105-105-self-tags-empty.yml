@@ -1,0 +1,29 @@
+# When the document has no tags, _self.tags is an empty list (count=0).
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-105-self-tags-empty
+name: "_self.tags empty list"
+description: |
+  When the document has no tags, _self.tags is an empty list (count=0).
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  n = count $_self.tags
+  exit { n: $n }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{},"title":"t","tags":[],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"n":0}

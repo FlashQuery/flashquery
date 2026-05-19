@@ -1,0 +1,33 @@
+# Adding a vault to the test does not change the macro termination — drift still fires.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-609-drift-with-vault-context
+name: "Drift call with vault populated — exit kind unaffected by side state"
+description: |
+  Adding a vault to the test does not change the macro termination — drift still fires.
+
+covers:
+  - MTF-E-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  r = drift.go({})
+  exit $r
+
+input_vars: {}
+vault: {"/somefile.md":"irrelevant"}
+
+tools:
+  drift:
+    archetype: "NeedsInputViaTofuDrift"
+    tool_name: "go"
+    drift_payload: {"server":"drift","tool":"go"}
+
+expect:
+  outcome: needs_user_input

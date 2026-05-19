@@ -125,6 +125,14 @@ export interface GoldenSnapshotBlock {
 export interface TestCase {
   id: string;
   name?: string;
+  // Natural-language statement of WHAT the macro should do — the
+  // English request that drove generation (for AI-generated pilots)
+  // or the design intent (for hand-authored pilots). Distinct from
+  // `description:` (which describes the test mechanics + REQ citations).
+  // Optional but strongly recommended: makes it easy to find related
+  // scenarios by wording and to retrace why a particular macro shape
+  // emerged from a particular prompt.
+  intent?: string;
   description?: string;
   covers?: string[];
   golden_version?: string;
@@ -143,6 +151,16 @@ export interface TestCase {
   golden_snapshot?: GoldenSnapshotBlock;
   expect_state_notes?: StateNotePattern[];
   generator?: Record<string, unknown>;
+  // Tier 2 (Broker REQ-103): when present, drive the engine with this
+  // snapshot bound to `_self`. Required by pilots that exercise the
+  // source_ref-loaded macro surface (path/title/frontmatter/tags/fq_id).
+  self_binding?: {
+    path: string;
+    frontmatter?: Record<string, unknown>;
+    title: string;
+    tags?: unknown[];
+    fq_id: string;
+  };
   // category derived from directory (e.g. 'control-flow') -- attached at load
   __category?: string;
   __file?: string;
@@ -192,10 +210,25 @@ const ARCHETYPE_FACTORIES: Record<string, (cfg: ArchetypeConfig) => Archetypes.A
     Archetypes.ThrowingTool((c.error_kind as 'transport' | 'timeout' | 'protocol' | 'generic' | undefined) ?? 'generic'),
   IsErrorTool: (c) => Archetypes.IsErrorTool((c.message as string | undefined) ?? 'error'),
   SlowTool: (c) => Archetypes.SlowTool((c.ms as number | undefined) ?? 0, c.returns),
-  NeedsInputTool: (c) =>
-    Archetypes.NeedsInputTool(
-      (c.payload as Parameters<typeof Archetypes.NeedsInputTool>[0]) ?? { question: '?' },
-    ),
+  // Spec-valid route for REQ-105 nested propagation per REQ-060:
+  // broker-on-TOFU-drift, not brokered-tool-returns-event. Pilot configs
+  // pass a `drift_payload` object; sensible defaults fill the rest.
+  NeedsInputViaTofuDrift: (c) => {
+    const dp = (c.drift_payload as Record<string, unknown> | undefined) ?? {};
+    return Archetypes.NeedsInputViaTofuDrift({
+      server: (dp.server as string | undefined) ?? (c.server as string | undefined) ?? 'unknown',
+      tool: (dp.tool as string | undefined) ?? (c.tool as string | undefined) ?? 'unknown',
+      question: dp.question as string | undefined,
+      old_schema: dp.old_schema as
+        | { name?: string; description?: string; inputSchema?: unknown }
+        | undefined,
+      new_schema: dp.new_schema as
+        | { name?: string; description?: string; inputSchema?: unknown }
+        | undefined,
+      diff_summary: dp.diff_summary as string | undefined,
+      answer_shape: dp.answer_shape as string | undefined,
+    });
+  },
   StructuredContentTool: (c) => Archetypes.StructuredContentTool(c.value),
   JSONTextTool: (c) => Archetypes.JSONTextTool(c.value),
   MultimodalTool: (c) =>
@@ -347,6 +380,17 @@ export async function driveTest(tc: TestCase): Promise<DriveResult> {
     ...(reg ? { toolRegistry: reg.registry, allowedToolNames: reg.allowedToolNames } : {}),
     ...(tc.trace_mode ? { traceMode: tc.trace_mode } : {}),
     ...(tc.progress_mode ? { progressMode: tc.progress_mode } : {}),
+    ...(tc.self_binding
+      ? {
+          self: {
+            path: tc.self_binding.path,
+            frontmatter: (tc.self_binding.frontmatter ?? {}) as Record<string, MacroValue>,
+            title: tc.self_binding.title,
+            tags: (tc.self_binding.tags ?? []) as MacroValue[],
+            fq_id: tc.self_binding.fq_id,
+          },
+        }
+      : {}),
     progressSink: progress.sink,
   });
 

@@ -1,0 +1,44 @@
+# Single macro exercises ReadOnly, JSONText, StructuredContent in sequence.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-601-coercion-chain
+name: "Long brokered-call chain — every coercion path used"
+description: |
+  Single macro exercises ReadOnly, JSONText, StructuredContent in sequence.
+
+covers:
+  - MTF-D-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = ro.get({})
+  b = jt.get({})
+  c = sc.get({})
+  exit { a: $a, b: $b, c: $c.x }
+
+input_vars: {}
+vault: {}
+
+tools:
+  ro:
+    archetype: "ReadOnlyTool"
+    tool_name: "get"
+    returns: "plain"
+  jt:
+    archetype: "JSONTextTool"
+    tool_name: "get"
+    value: {"z":7}
+  sc:
+    archetype: "StructuredContentTool"
+    tool_name: "get"
+    value: {"x":999}
+
+expect:
+  outcome: success
+  return_result: {"a":"plain","b":{"z":7},"c":999}

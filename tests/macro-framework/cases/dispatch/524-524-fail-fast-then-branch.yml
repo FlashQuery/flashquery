@@ -1,0 +1,38 @@
+# isError inside if-then branch fires the macro failure.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-524-fail-fast-then-branch
+name: "fail-fast inside if-then"
+description: |
+  isError inside if-then branch fires the macro failure.
+
+covers:
+  - MTF-D-101
+  - MTF-D-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  if 1 == 1 then
+    v = bad.boom({})
+  fi
+  exit { reached: true }
+
+input_vars: {}
+vault: {}
+
+tools:
+  bad:
+    archetype: "IsErrorTool"
+    tool_name: "boom"
+    message: "x"
+
+expect:
+  outcome: fail
+  error:
+    code: "tool_call_failed"

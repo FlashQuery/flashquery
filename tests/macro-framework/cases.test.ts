@@ -25,9 +25,17 @@ import { checkExpectStateNotes } from './state-notes/assert.ts';
 import { GOLDEN_VERSION } from './golden-bridge/load.ts';
 import { classifyFailure } from './triage/classify.ts';
 import { writeTriageRecord, findRelatedFailures } from './triage/record.ts';
+import { checkFrameworkMirror } from './framework-mirror-check.ts';
 
 // Top-level await is supported in Vitest's ESM test modules.
 const cases = await loadCases();
+
+// Framework-vs-production drift tripwire. The framework's brokered-
+// dispatch wrapper mirrors production's wrapBrokerTool (which is module-
+// private and not importable). This hash check fails the suite fast if
+// production drifts — see tests/macro-framework/framework-mirror-check.ts
+// for the maintainer workflow.
+const mirrorCheck = await checkFrameworkMirror();
 
 // Group by category for readable output.
 const grouped = new Map<string, TestCase[]>();
@@ -36,6 +44,14 @@ for (const c of cases) {
   if (!grouped.has(cat)) grouped.set(cat, []);
   grouped.get(cat)!.push(c);
 }
+
+describe('macro-framework/framework-integrity', () => {
+  it('production registry.ts has not drifted from the framework mirror', () => {
+    if (!mirrorCheck.ok) {
+      expect.fail(mirrorCheck.message);
+    }
+  });
+});
 
 for (const [cat, cs] of grouped) {
   describe(`macro-framework/${cat}`, () => {

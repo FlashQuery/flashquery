@@ -1,0 +1,32 @@
+# Per REQ-108, arg "42" passes as string; engine does not coerce to number.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-538-arg-numeric-string
+name: "String \"42\" stays a string (no preemptive coercion)"
+description: |
+  Per REQ-108, arg "42" passes as string; engine does not coerce to number.
+
+covers:
+  - MTF-D-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = srv.run({ n: "42" })
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  srv:
+    archetype: "WriteTool"
+    tool_name: "run"
+
+expect:
+  outcome: success

@@ -1,0 +1,40 @@
+# Pilot — MTF-S-101 / Broker REQ-112b ac4: walk-up assignment from inside
+# an if-body still updates the outer-scope variable.
+#
+# Regression coverage: REQ-019 ac1 walk-up assignment behavior MUST NOT
+# change. This pilot is expected to PASS against production today AND
+# after the REQ-112b implementation lands (the walk-up path is the same
+# either way; only the new-variable case changes).
+
+id: mtf-s-905-if-scope-walk-up-still-works
+name: Semantics — walk-up assignment from if-body updates outer (REQ-112b ac4)
+description: |
+  Outer `x = "outer"` is declared at the top level. The if-body assigns
+  `x = "inner"`. Walk-up assignment (REQ-019 ac1) finds the existing
+  outer binding and updates it. After `fi`, `$x` equals `"inner"`.
+
+covers:
+  - MTF-S-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:25:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = "outer"
+  flag = 1
+  if $flag == 1 then
+    x = "inner"
+  fi
+  exit { v: $x }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    v: "inner"

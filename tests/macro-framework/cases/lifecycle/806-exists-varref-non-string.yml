@@ -1,0 +1,33 @@
+# Pilot — MTF-L-103 / REQ-112a ac2: VarRef-prefixed introspection where the
+# variable holds a non-string value MUST raise a runtime error.
+# EXPECTED TO FAIL against production (the form doesn't parse yet, so it'll
+# fail differently). After REQ-112a lands, the parse succeeds and the runtime
+# check fires.
+
+id: mtf-l-806-exists-varref-non-string
+name: Lifecycle — `$svc._exists()` with non-string subject raises (REQ-112a ac2)
+description: |
+  Variable `svc_name` holds a number, not a string. Per REQ-112a ac2 the
+  engine must raise a runtime error (suggested envelope:
+  `{error:"tool_call_failed", details:{reason:"introspection_subject_not_string"}}`).
+
+covers:
+  - MTF-L-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T15:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  svc_name = 42
+  e = $svc_name._exists()
+  exit { e: $e }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: fail

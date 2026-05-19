@@ -7,7 +7,7 @@ export {
   IsErrorTool,
   LyingTool,
   SlowTool,
-  NeedsInputTool,
+  NeedsInputViaTofuDrift,
   StructuredContentTool,
   JSONTextTool,
   MultimodalTool,

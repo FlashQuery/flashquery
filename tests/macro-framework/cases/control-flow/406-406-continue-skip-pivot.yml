@@ -1,0 +1,35 @@
+# Skip exactly one value (the pivot) and accumulate the rest.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-406-continue-skip-pivot
+name: "continue skips the pivot value in a sort-ish pass"
+description: |
+  Skip exactly one value (the pivot) and accumulate the rest.
+
+covers:
+  - MTF-C-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  t = 0
+  pivot = 4
+  for i in 1..8 do
+    if $i == $pivot then
+      continue
+    fi
+    t = add $t $i
+  done
+  exit { sum: $t }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"sum":24}

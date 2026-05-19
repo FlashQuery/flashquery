@@ -1,0 +1,36 @@
+# When the brokered tool throws, the engine wraps it as tool_call_failed.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-521-thrown-error
+name: "Brokered tool throws — surfaces as tool_call_failed"
+description: |
+  When the brokered tool throws, the engine wraps it as tool_call_failed.
+
+covers:
+  - MTF-D-101
+  - MTF-D-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = throwing.bomb({})
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  throwing:
+    archetype: "ThrowingTool"
+    tool_name: "bomb"
+    error_kind: "generic"
+
+expect:
+  outcome: fail
+  error:
+    code: "tool_call_failed"

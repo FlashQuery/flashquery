@@ -1,0 +1,55 @@
+# Pilot 26 — MTF-C-101: for-loop with `continue` skipping odd iterations.
+#
+# Tier 2 (Broker REQ-104). Production engine landed continue/break support
+# on 2026-05-19; this pilot replaces the for+if+fail Tier 1 substitute
+# from pilot 03 with the real surface.
+
+id: mtf-c-26-continue-skip-odds
+name: Control flow — for-loop with `continue` filtering odd iterations
+description: |
+  Iterates 1..10, uses `continue` to skip odd $i, sums even $i. Result
+  is 2+4+6+8+10 = 30. Tests REQ-104 continue semantics + nested if-body
+  control transfer to the enclosing for loop.
+
+covers:
+  - MTF-C-101   # continue inside for-loop
+  - MTF-C-002   # for-loop with mid-iteration control transfer (Tier 1 cell still applies)
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T12:24:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  total = 0
+  for i in 1..11 do
+    rem = mod $i 2
+    if $rem == 1 then
+      continue
+    fi
+    total = add $total $i
+  done
+  exit { sum_evens: $total }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+expect:
+  outcome: success
+  return_result:
+    sum_evens: 30
+
+golden_snapshot:
+  state_notes:
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: total, value: 0, scope: local }
+    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 0, var: i, value: 1 }
+    - { kind: binding, op: update, name: total, value: 30, scope: outer }
+
+# Spot-check witness: the final `total = 30` outer-scope update event
+# (the running sum reached 30 by the final iteration).
+expect_state_notes:
+  - { kind: binding, op: update, name: total, value: 30, scope: outer }

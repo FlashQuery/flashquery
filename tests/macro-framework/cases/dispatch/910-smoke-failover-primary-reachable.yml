@@ -1,0 +1,130 @@
+# Pilot — SMOKE TEST #1 (primary reachable path).
+#
+# First skill-calibration pilot. Generated 2026-05-19 via the
+# `flashquery-macro-author` skill (smoke run #1) and wrapped via
+# `flashquery-macro-testgen`.
+#
+# Description (user-facing intent that drove generation):
+#   "A macro that tries to fetch data from a primary brokered server.
+#    If the primary isn't reachable, fall back to a secondary server.
+#    Returns an object showing which path it took, the data, and whether
+#    the backup was needed. If neither is reachable, fail."
+#
+# This variant: primary IS reachable → path="primary", backup_needed=false.
+
+id: mtf-d-910-smoke-failover-primary-reachable
+name: Smoke — failover macro takes primary path when primary is reachable
+intent: |
+  A macro that tries to fetch data from a primary brokered server. If
+  the primary isn't reachable, fall back to a secondary server. Return
+  an object showing which path it took ("primary" or "backup"), the
+  data it got, and whether the backup was needed. If neither server is
+  reachable, fail the macro with a clear message.
+description: |
+  Generated via `flashquery-macro-author` from the `intent:` above.
+  Exercises:
+  - `_exists()` preflight (REQ-109) for connectivity probing.
+  - If-then-else branching with branch-local assignment that persists
+    after `fi` (REQ-112b).
+  - Brokered tool dispatch (REQ-106) on the reachable server.
+  - Structured `exit` value reporting which path was taken (REQ-024).
+  Bool literal `false` in macro source (REQ-112c).
+
+covers:
+  - MTF-L-101   # _exists() introspection
+  - MTF-S-101   # REQ-112b if-block scope flatten
+  - MTF-D-101   # brokered tool coercion
+  - MTF-C-009   # exit with structured return_result
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T17:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  data = null
+  path_taken = "none"
+  backup_needed = false
+
+  if primary_srv._exists() then
+    data = primary_srv.fetch({})
+    path_taken = "primary"
+  else
+    if backup_srv._exists() then
+      data = backup_srv.fetch({})
+      path_taken = "backup"
+      backup_needed = true
+    else
+      fail "Neither primary_srv nor backup_srv is reachable."
+    fi
+  fi
+
+  exit { path: $path_taken, data: $data, backup_needed: $backup_needed }
+
+input_vars: {}
+vault: {}
+
+tools:
+  primary_srv:
+    archetype: JSONTextTool
+    tool_name: fetch
+    value: { records: 42, status: "ok" }
+  # `backup_srv` is registered too even though this pilot's run path
+  # only dispatches `primary_srv`. Production's static pre-scan
+  # (REQ-028) walks every tool reference in the AST — including
+  # references in unreached if-branches — so both servers must be
+  # registered for the pre-scan to pass. The runtime `_exists()` probe
+  # on `primary_srv` returns true, so the else-branch with
+  # `backup_srv.fetch` never executes; backup_srv's archetype value
+  # is irrelevant to the assertion but its registration is load-bearing.
+  backup_srv:
+    archetype: JSONTextTool
+    tool_name: fetch
+    value: { unused: true }
+
+# AI-predicted expect at testgen time (calibration baseline; preserved
+# for skill-quality measurement). See reconciliation: below.
+predicted_expect:
+  outcome: success
+  return_result:
+    path: "primary"
+    data:
+      records: 42
+      status: "ok"
+    backup_needed: false
+  side_effects:
+    tool_call_count: 1
+
+# Reconciliation of AI prediction vs golden capture (2026-05-19).
+# Captured via tests/macro-framework/_backfill-smoke-capture.ts.
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T19:07:00Z"
+  golden_version: "0.3.0"
+  notes: |
+    AI prediction and golden capture agreed exactly. Return value
+    matched; tool dispatch count matched (1 = primary_srv.fetch only).
+
+# Golden-verified expect — source of truth for the comparator at test
+# runtime. Production output is compared against this.
+expect:
+  outcome: success
+  return_result:
+    path: "primary"
+    data:
+      records: 42
+      status: "ok"
+    backup_needed: false
+  side_effects:
+    tool_call_count: 1
+
+# Golden envelope summary for triage. Trace kinds + tool call list
+# captured from the golden run.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "primary_srv"
+      tool: "fetch"
+      arg: {}

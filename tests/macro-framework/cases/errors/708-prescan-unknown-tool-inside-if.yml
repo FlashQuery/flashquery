@@ -1,0 +1,31 @@
+# Pilot — MTF-E-006: prescan walks if-then-else branches.
+id: mtf-e-708-prescan-unknown-tool-inside-if
+name: Errors — prescan rejects unknown tool inside if-then branch (REQ-028)
+description: |
+  Pre-scan is static; it walks both branches of if-then-else. An unknown
+  tool reference in the then-branch is rejected even if the condition
+  would have been false at runtime.
+covers: [MTF-E-006]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  flag = 0
+  if $flag == 1 then
+    v = basic.never_called({})
+  fi
+  exit { reached: "yes" }
+input_vars: {}
+vault: {}
+tools:
+  basic:
+    archetype: ReadOnlyTool
+    tool_name: real_tool
+    returns: "ok"
+expect:
+  outcome: fail
+  error:
+    code: unknown_tool
+    message_contains: "never_called"

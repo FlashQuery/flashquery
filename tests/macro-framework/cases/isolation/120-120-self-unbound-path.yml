@@ -1,0 +1,26 @@
+# No self_binding provided; reading _self.path must raise a runtime error per REQ-103 inline-source clause.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-120-self-unbound-path
+name: "_self.path unbound raises runtime error"
+description: |
+  No self_binding provided; reading _self.path must raise a runtime error per REQ-103 inline-source clause.
+
+covers:
+  - MTF-I-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit { p: $_self.path }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: fail

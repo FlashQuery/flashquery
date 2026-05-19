@@ -1,0 +1,31 @@
+# Pilot — MTF-S-102 / REQ-112d ac6+7+8: existing REQ-023 error paths
+# (null target, non-object target, list target) MUST still throw.
+# Regression coverage that REQ-112d only changes the missing-key-on-object
+# case. Expected to PASS today AND after REQ-112d lands.
+
+id: mtf-s-924-field-access-error-paths-preserved
+name: Semantics — REQ-023 error paths preserved under REQ-112d (ac6/7/8)
+description: |
+  Field access on a null value MUST still throw (REQ-023 ac2 unchanged).
+  This pilot drives that specific path; ac7/ac8 paths get separate pilots.
+
+covers:
+  - MTF-S-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T15:05:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  obj = null
+  v = $obj.anything
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: fail

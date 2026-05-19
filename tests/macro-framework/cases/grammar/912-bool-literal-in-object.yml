@@ -1,0 +1,31 @@
+# Pilot — MTF-G-010 / Broker REQ-112c: `{help: true}` object literal — the
+# canonical REQ-093 sentinel form.
+
+id: mtf-g-912-bool-literal-in-object
+name: Grammar — boolean literal as object-literal value (REQ-112c ac2)
+description: |
+  Object literal `{help: true}` — the form REQ-093 specifies for the
+  brokered help sentinel. Per REQ-112c the value MUST parse as a boolean.
+
+covers:
+  - MTF-G-010
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:35:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  args = { help: true, verbose: false }
+  exit { h: $args.help, v: $args.verbose }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    h: true
+    v: false

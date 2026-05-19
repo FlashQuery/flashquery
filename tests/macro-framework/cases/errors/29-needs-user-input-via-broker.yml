@@ -1,0 +1,90 @@
+# Pilot 29 — MTF-E-101 + MTF-E-102: TOFU-drift mid-dispatch is propagated
+# as the macro's fifth termination per Broker REQ-105 nested propagation.
+#
+# SPEC ROUTE: This is the ONLY spec-valid path for brokered-call
+# needs_user_input per Broker REQ-060: "Brokered tools CANNOT trigger
+# needs_user_input in v1. Only two sources emit needs_user_input exits in
+# v1: (a) a FlashQuery-native tool, (b) the broker layer itself on TOFU
+# drift (§7.5)."
+#
+# We exercise route (b) via the NeedsInputViaTofuDrift fake-broker
+# archetype, which raises SchemaDriftNeedsUserInputError during callTool.
+# Production's brokered dispatch catches this at registry.ts:194-198 and
+# rethrows as MacroNeedsUserInputError, which evaluator.ts:396-415 turns
+# into the canonical { reason: "needs_user_input", payload } envelope.
+#
+# HISTORY: Earlier revisions of this pilot used the NeedsInputTool
+# archetype to simulate a brokered tool returning event:needs_user_input
+# in its CallToolResult payload. That path is forbidden by REQ-060 and
+# was a golden-model invention beyond spec. The framework was corrected
+# on 2026-05-19; see the Post-Implementation Verification note in
+# `MCP Broker Gap Analysis.md`.
+
+id: mtf-e-29-needs-user-input-via-broker
+name: Errors — TOFU-drift during brokered dispatch propagates as fifth termination
+description: |
+  A brokered tool dispatch detects TOFU schema drift mid-call. The broker
+  raises SchemaDriftNeedsUserInputError carrying a REQ-042 payload. The
+  macro engine MUST surface this as the fifth termination class with
+  `reason: "needs_user_input"` and a `payload.event = "schema_drift_detected"`.
+
+covers:
+  - MTF-E-101   # broker-emitted needs_user_input → macro-level fifth termination
+  - MTF-E-102   # envelope carries spec-shape payload (event, server, tool, schemas, diff_summary)
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T13:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  result = approval_srv.ask({ topic: "publish" })
+  exit $result
+
+input_vars: {}
+vault: {}
+
+tools:
+  approval_srv:
+    archetype: NeedsInputViaTofuDrift
+    tool_name: ask
+    drift_payload:
+      server: approval_srv
+      tool: ask
+      question: "The schema for approval_srv.ask changed since first approval. Review and decide."
+      old_schema:
+        name: ask
+        description: "Ask for approval on a topic."
+        inputSchema:
+          type: object
+          properties:
+            topic:
+              type: string
+      new_schema:
+        name: ask
+        description: "Ask for approval on a topic, with optional rationale."
+        inputSchema:
+          type: object
+          properties:
+            topic:
+              type: string
+            rationale:
+              type: string
+          required: ["topic", "rationale"]
+      diff_summary: "• Added required parameter: rationale (string)"
+      answer_shape: "frontmatter.user_decisions.approval_srv__ask.tofu_decision"
+
+expect:
+  outcome: needs_user_input
+
+golden_snapshot:
+  # The state_notes below represent the EXPECTED internal trace for the
+  # corrected TOFU-drift path. They are informational (triage aid only);
+  # the structured comparator drives pass/fail off `expect.outcome`.
+  state_notes:
+    - { kind: permission, tool: "approval_srv.ask", decision: allowed }
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: tofu_drift, server: "approval_srv", tool: "ask", phase: dispatch }
+    - { kind: termination, reason: "needs_user_input", event: "schema_drift_detected" }

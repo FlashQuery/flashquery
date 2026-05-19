@@ -1,0 +1,95 @@
+# Pilot — SMOKE TEST #3b (not published → skip with that reason).
+
+id: mtf-d-931-smoke-conditional-index-not-published
+name: Smoke — conditional indexing (published=false → skip with reason)
+intent: |
+  Same intent as pilot 930. This variant: target document is NOT
+  published. Macro must take the first early-exit guard and return
+  { skipped: true, reason: "doc is not published" }. The archived field
+  is irrelevant — the first guard fires before the second is reached.
+description: |
+  Same macro source as pilot 930. doc_srv.fetch returns a doc with
+  published=false. The first early-exit guard fires; index_srv.add
+  must NOT be dispatched.
+
+covers:
+  - MTF-I-101
+  - MTF-D-101
+  - MTF-S-007
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T19:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/conditional-index.md"
+  frontmatter:
+    target_doc: "/docs/draft.md"
+  title: "Conditional Index"
+  tags: []
+  fq_id: "fq:doc:cond-index:002"
+
+macro: |
+  target_doc = $_self.frontmatter.target_doc
+  doc = doc_srv.fetch({ path: $target_doc })
+
+  if ! $doc.published then
+    exit { skipped: true, reason: "doc is not published" }
+  fi
+  if $doc.archived != null then
+    exit { skipped: true, reason: "doc is archived" }
+  fi
+
+  index_srv.add({ doc: $doc })
+  exit { indexed: true, doc_id: $doc.id }
+
+input_vars: {}
+vault: {}
+
+tools:
+  doc_srv:
+    archetype: JSONTextTool
+    tool_name: fetch
+    value:
+      id: "doc-draft"
+      published: false
+      archived: null
+      title: "Draft article"
+  index_srv:
+    archetype: JSONTextTool
+    tool_name: add
+    value: { ok: true }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    skipped: true
+    reason: "doc is not published"
+  side_effects:
+    tool_call_count: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T19:07:00Z"
+  golden_version: "0.3.0"
+  notes: |
+    AI prediction and golden capture agreed exactly. Early-exit guard
+    fires on published=false; only doc_srv.fetch dispatched (count=1).
+
+expect:
+  outcome: success
+  return_result:
+    skipped: true
+    reason: "doc is not published"
+  side_effects:
+    tool_call_count: 1
+
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "doc_srv"
+      tool: "fetch"

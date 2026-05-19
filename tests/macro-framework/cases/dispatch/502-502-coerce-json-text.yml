@@ -1,0 +1,34 @@
+# REQ-106 path 3: text content that parses as JSON binds the parsed value.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-502-coerce-json-text
+name: "JSONTextTool path: text content parses as JSON"
+description: |
+  REQ-106 path 3: text content that parses as JSON binds the parsed value.
+
+covers:
+  - MTF-D-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = json_srv.fetch({})
+  exit { out: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  json_srv:
+    archetype: "JSONTextTool"
+    tool_name: "fetch"
+    value: {"hello":"world","count":7}
+
+expect:
+  outcome: success
+  return_result: {"out":{"hello":"world","count":7}}

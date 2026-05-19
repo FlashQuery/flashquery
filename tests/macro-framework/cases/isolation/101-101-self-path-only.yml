@@ -1,0 +1,28 @@
+# Single-field read of _self.path; verifies the snapshot binding without exercising other fields.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-101-self-path-only
+name: "_self.path read in isolation"
+description: |
+  Single-field read of _self.path; verifies the snapshot binding without exercising other fields.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit { p: $_self.path }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/Macros/example.md","frontmatter":{},"title":"Example","tags":[],"fq_id":"fq:doc:example:abc"}
+
+expect:
+  outcome: success
+  return_result: {"p":"/Macros/example.md"}

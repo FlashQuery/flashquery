@@ -1,0 +1,22 @@
+# Pilot — MTF-E-005: parse_error envelope when if-block is never closed.
+id: mtf-e-703-parse-error-missing-fi
+name: Errors — parse_error envelope (missing_fi) (REQ-018)
+description: |
+  if-block without closing `fi` should raise parse_error with reason
+  `missing_fi`.
+covers: [MTF-E-005]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  x = 1
+  if $x == 1 then
+    y = 2
+input_vars: {}
+vault: {}
+expect:
+  outcome: parse_error
+  error:
+    code: parse_error

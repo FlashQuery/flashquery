@@ -1,0 +1,36 @@
+# Pilot — MTF-G-010 / REQ-112c ac5: `True`, `False`, `None` are NOT keywords.
+# They remain valid identifier names. Regression coverage for AI authors
+# who may type Python-style casing — should NOT crash.
+
+id: mtf-g-915-capital-true-false-as-identifier
+name: Grammar — True/False/None remain valid identifier names (REQ-112c ac5)
+description: |
+  `True`, `False`, and `None` are valid variable names per REQ-112c ac5.
+  Only the lowercase forms are keywords. AI authors who type Python-style
+  casing accidentally must NOT have their macros break.
+
+covers:
+  - MTF-G-010
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T15:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  True = "a"
+  False = "b"
+  None = "c"
+  exit { t: $True, f: $False, n: $None }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    t: "a"
+    f: "b"
+    n: "c"

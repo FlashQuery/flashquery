@@ -1,0 +1,32 @@
+# Object combining string, number, null, list, nested object preserved end-to-end.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-540-arg-mixed-types
+name: "Mixed-types object argument"
+description: |
+  Object combining string, number, null, list, nested object preserved end-to-end.
+
+covers:
+  - MTF-D-103
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = srv.run({ s: "x", n: 1, z: null, list: [1, 2], obj: { y: "y" } })
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  srv:
+    archetype: "WriteTool"
+    tool_name: "run"
+
+expect:
+  outcome: success

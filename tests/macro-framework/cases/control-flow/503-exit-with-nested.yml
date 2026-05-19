@@ -1,0 +1,23 @@
+# Pilot — MTF-C-009: exit with deeply nested object value.
+id: mtf-c-503-exit-with-nested
+name: Control-flow — exit returns a nested object value
+description: |
+  Multi-level nested structure exits cleanly; the structure is preserved
+  in the return_result envelope.
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  exit { meta: { author: "matt", tags: ["a", "b"] }, count: 2 }
+input_vars: {}
+vault: {}
+expect:
+  outcome: success
+  return_result:
+    meta:
+      author: "matt"
+      tags: ["a", "b"]
+    count: 2

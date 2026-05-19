@@ -190,12 +190,21 @@ class MacroParser extends CstParser {
         GATE: () => this.LA(2).tokenType === Equals,
         ALT: () => this.SUBRULE(this.binding),
       },
-      // Statement-position tool call.
+      // Statement-position tool call. Server slot may be Identifier
+      // (literal) or VarRefTok (Broker REQ-112a — variable-stored
+      // server name; introspection methods only, enforced statically).
+      // LA(4) === LParen disambiguates toolCall from chained field
+      // access (`$obj.a.b` vs `$obj.tool(...)`). Without it, the gate
+      // would match VarRef.Identifier.Identifier (the start of a
+      // chained-field-access expression) and commit to toolCall, then
+      // fail when the next token is Dot instead of LParen.
       {
         GATE: () =>
-          this.LA(1).tokenType === Identifier &&
+          (this.LA(1).tokenType === Identifier ||
+            this.LA(1).tokenType === VarRefTok) &&
           this.LA(2).tokenType === Dot &&
-          this.LA(3).tokenType === Identifier,
+          this.LA(3).tokenType === Identifier &&
+          this.LA(4).tokenType === LParen,
         ALT: () => this.SUBRULE(this.toolCall),
       },
       { ALT: () => this.SUBRULE(this.pipeline) },
@@ -221,10 +230,14 @@ class MacroParser extends CstParser {
   private rhsExpr = this.RULE("rhsExpr", () => {
     this.OR([
       {
+        // Tool call (server.tool or $server.tool, per REQ-112a).
+        // LA(4) === LParen disambiguates from chained field access.
         GATE: () =>
-          this.LA(1).tokenType === Identifier &&
+          (this.LA(1).tokenType === Identifier ||
+            this.LA(1).tokenType === VarRefTok) &&
           this.LA(2).tokenType === Dot &&
-          this.LA(3).tokenType === Identifier,
+          this.LA(3).tokenType === Identifier &&
+          this.LA(4).tokenType === LParen,
         ALT: () => this.SUBRULE(this.toolCall),
       },
       {
@@ -283,13 +296,22 @@ class MacroParser extends CstParser {
   });
 
   // Tool call: namespace.tool({...}).
+  //
+  // Per Broker REQ-112a, the server slot accepts either an Identifier
+  // (literal server name) or a VarRefTok (variable holding the server
+  // name as a string). The VarRef form is grammatically permitted at
+  // parse time; the static-check pass (`enforceStaticChecks`) rejects
+  // it for non-introspection methods.
   private toolCall = this.RULE("toolCall", () => {
-    this.CONSUME(Identifier, { LABEL: "server" });
+    this.OR1([
+      { ALT: () => this.CONSUME(Identifier, { LABEL: "serverIdent" }) },
+      { ALT: () => this.CONSUME(VarRefTok, { LABEL: "serverVar" }) },
+    ]);
     this.CONSUME(Dot);
     this.CONSUME2(Identifier, { LABEL: "tool" });
     this.CONSUME(LParen);
     this.OPTION(() => {
-      this.OR([
+      this.OR2([
         { ALT: () => this.SUBRULE(this.objectLit) },
         { ALT: () => this.SUBRULE(this.varOrField) },
       ]);
@@ -322,7 +344,14 @@ class MacroParser extends CstParser {
       { ALT: () => this.CONSUME(SingleQuotedString) },
     ]);
     this.CONSUME(Colon);
-    this.SUBRULE(this.primary);
+    // Per REQ-011 ac4 "Values are any expression" — value position must
+    // accept the broadest expression form (pipelines, tool calls,
+    // comparisons, ranges, etc.), not just `primary`. Resolved as
+    // GOLDEN_GAPS.md GG-001 (2026-05-19). The matching conversion site
+    // in `convertObjectEntry` reads `rhsExpr` and delegates to
+    // `convertRhsExpr`, which already returns the broad `Expr` type
+    // that `ObjectEntry.value` accepts.
+    this.SUBRULE(this.rhsExpr);
   });
 
   // pipeline := call (Pipe call)*
@@ -433,10 +462,15 @@ class MacroParser extends CstParser {
       { ALT: () => this.CONSUME(TrueTok) },
       { ALT: () => this.CONSUME(FalseTok) },
       {
+        // Tool call in primary expression position. Server slot may be
+        // Identifier or VarRefTok per Broker REQ-112a. LA(4) === LParen
+        // disambiguates from chained field access (`$obj.a.b`).
         GATE: () =>
-          this.LA(1).tokenType === Identifier &&
+          (this.LA(1).tokenType === Identifier ||
+            this.LA(1).tokenType === VarRefTok) &&
           this.LA(2).tokenType === Dot &&
-          this.LA(3).tokenType === Identifier,
+          this.LA(3).tokenType === Identifier &&
+          this.LA(4).tokenType === LParen,
         ALT: () => this.SUBRULE(this.toolCall),
       },
       { ALT: () => this.SUBRULE(this.varOrField) },
@@ -599,11 +633,24 @@ function convertBreakStmt(node: CstNode): BreakStmt {
 }
 
 function convertToolCall(node: CstNode): ToolCall {
-  const serverTok = (node.children as Children).server?.[0] as IToken;
-  const toolTok = (node.children as Children).tool?.[0] as IToken;
-  if (!serverTok || !toolTok) {
-    throw new Error("Tool call missing server or tool identifier");
+  const children = node.children as Children;
+  const serverIdentTok = children.serverIdent?.[0] as IToken | undefined;
+  const serverVarTok = children.serverVar?.[0] as IToken | undefined;
+  const toolTok = children.tool?.[0] as IToken;
+  if (!toolTok) {
+    throw new Error("Tool call missing tool identifier");
   }
+  if (!serverIdentTok && !serverVarTok) {
+    throw new Error("Tool call missing server identifier");
+  }
+  // REQ-112a: server slot can be literal Identifier or VarRef. For the
+  // VarRef form, store the variable name in `server` and mark
+  // `serverVarRef: true`. The evaluator resolves the variable to a
+  // server name at call time.
+  const serverName = serverIdentTok
+    ? serverIdentTok.image
+    : varRefName(serverVarTok!.image);
+  const isVarRef = serverVarTok !== undefined;
   const objCst = getRule(node, "objectLit");
   const varCst = getRule(node, "varOrField");
   let arg: ObjectLit | VarRef | undefined;
@@ -620,12 +667,14 @@ function convertToolCall(node: CstNode): ToolCall {
   } else {
     arg = undefined;
   }
+  const line = (serverIdentTok ?? serverVarTok!).startLine ?? 0;
   return {
     kind: "ToolCall",
-    server: serverTok.image,
+    server: serverName,
+    ...(isVarRef ? { serverVarRef: true } : {}),
     tool: toolTok.image,
     arg,
-    line: serverTok.startLine ?? 0,
+    line,
   };
 }
 
@@ -649,8 +698,11 @@ function convertObjectEntry(node: CstNode): ObjectEntry {
   } else {
     throw new Error("Object entry missing key");
   }
-  const primaryCst = getRule(node, "primary")!;
-  return { key, value: convertPrimary(primaryCst) };
+  // Per GOLDEN_GAPS.md GG-001: value position is `rhsExpr` (REQ-011 ac4
+  // "Values are any expression"), not `primary`. `convertRhsExpr` already
+  // returns the broad `Expr` shape that `ObjectEntry.value` accepts.
+  const rhsCst = getRule(node, "rhsExpr")!;
+  return { key, value: convertRhsExpr(rhsCst) };
 }
 
 function convertBinding(node: CstNode): Binding {
@@ -924,6 +976,27 @@ function convertListLit(node: CstNode): ListLit {
 
 // ----- Static checks (run after AST conversion, before evaluation) -----
 
+// REQ-112a ac3: when the server slot is a VarRef ($svc.tool(...)), the
+// method MUST be an introspection method (leading underscore). Dynamic
+// dispatch on tool calls is deferred.
+function checkToolCallStatic(tc: ToolCall): void {
+  if (tc.serverVarRef === true && !tc.tool.startsWith("_")) {
+    const err: ParseErrorDetail = {
+      reason: "invalid_literal", // closest existing reason — dev agent
+                                  // may want to introduce a more specific
+                                  // `varref_server_non_introspection`
+                                  // taxonomy when implementing REQ-112a.
+      at_line: tc.line,
+      near_token: `$${tc.server}.${tc.tool}`,
+      message:
+        `VarRef-prefixed server slot ($${tc.server}.${tc.tool}) is allowed ` +
+        `only for introspection methods (leading-underscore convention). ` +
+        `Per Broker REQ-112a ac3.`,
+    };
+    throw new ParseError(err.message, [err]);
+  }
+}
+
 function enforceStaticChecks(program: Program): void {
   // Tier 2 (REQ-104): track loop-nesting depth so `continue` / `break`
   // outside any `for` / `while` body parse-fails. `if` does NOT count as a
@@ -970,6 +1043,7 @@ function enforceStaticChecks(program: Program): void {
         for (const stage of s.stages) visitCall(stage);
         return;
       case "ToolCall":
+        checkToolCallStatic(s);
         if (s.arg && s.arg.kind === "ObjectLit") visitExpr(s.arg);
         return;
       case "ForLoop":
@@ -1023,6 +1097,7 @@ function enforceStaticChecks(program: Program): void {
         for (const stage of e.stages) visitCall(stage);
         return;
       case "ToolCall":
+        checkToolCallStatic(e);
         if (e.arg && e.arg.kind === "ObjectLit") visitExpr(e.arg);
         return;
       case "Negation":

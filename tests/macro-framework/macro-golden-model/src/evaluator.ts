@@ -639,7 +639,11 @@ function collectToolReferences(program: Program): {
         visitExpr(stmt.value);
         return;
       case "ToolCall":
-        record(stmt.server, stmt.tool);
+        // REQ-112a: VarRef-prefixed server slot (`$x._exists()`) has a
+        // dynamic server name — not knowable statically. Skip the
+        // static reference inventory; pre-scan and dry-run only see
+        // literal-server tool calls.
+        if (stmt.serverVarRef !== true) record(stmt.server, stmt.tool);
         if (stmt.arg && stmt.arg.kind === "ObjectLit") visitExpr(stmt.arg);
         return;
       case "Pipeline":
@@ -665,7 +669,8 @@ function collectToolReferences(program: Program): {
   function visitExpr(e: Expr): void {
     switch (e.kind) {
       case "ToolCall":
-        record(e.server, e.tool);
+        // REQ-112a: skip VarRef tool calls in static inventory.
+        if (e.serverVarRef !== true) record(e.server, e.tool);
         if (e.arg && e.arg.kind === "ObjectLit") visitExpr(e.arg);
         return;
       case "ListLit":
@@ -901,7 +906,10 @@ function prescanPermissions(
       case "Pipeline":
         return;
       case "ToolCall":
-        decide(stmt.server, stmt.tool, stmt.line);
+        // REQ-112a: VarRef-prefixed server slot is always an
+        // introspection call (`_*`) per the static check; introspection
+        // calls don't go through tier-based permission pre-scan. Skip.
+        if (stmt.serverVarRef !== true) decide(stmt.server, stmt.tool, stmt.line);
         if (stmt.arg && stmt.arg.kind === "ObjectLit") visitExpr(stmt.arg);
         return;
       case "ForLoop":
@@ -926,7 +934,8 @@ function prescanPermissions(
   function visitExpr(e: Expr): void {
     switch (e.kind) {
       case "ToolCall":
-        decide(e.server, e.tool, e.line);
+        // REQ-112a: skip VarRef tool calls in pre-scan (see above).
+        if (e.serverVarRef !== true) decide(e.server, e.tool, e.line);
         if (e.arg && e.arg.kind === "ObjectLit") visitExpr(e.arg);
         return;
       case "ListLit":
@@ -1235,9 +1244,13 @@ async function execStatement(stmt: Statement, env: Env, builtins: Builtins, tool
       emitStateNote(ctx.exec, { kind: "ast", node_kind: "if", line: stmt.line, column: 0 });
       const cond = await evalExpr(stmt.cond, env, builtins, tools, ctx);
       const branch = isTruthy(cond) ? stmt.thenBody : (stmt.elseBody ?? []);
-      const child = new Env(env);
+      // REQ-112b: `if`/`else` branches do NOT introduce a new scope.
+      // Body statements execute directly in the enclosing env so any
+      // new variables they assign persist after `fi`. (Overrides the
+      // archived Macro Lang REQ-019 ac3 listing of if/else branches as
+      // scope-creating.)
       for (const s of branch) {
-        await execStatement(s, child, builtins, tools, ctx);
+        await execStatement(s, env, builtins, tools, ctx);
       }
       return;
     }
@@ -1284,16 +1297,22 @@ async function evalExpr(expr: Expr, env: Env, builtins: Builtins, tools: ToolReg
     }
     case "FieldAccess": {
       const target = await evalExpr(expr.target, env, builtins, tools, ctx);
+      // REQ-023 ac2-4 unchanged: null / non-object / list field-access
+      // still raises. Chained access through null surfaces here too
+      // (target === null when a prior step returned null).
       if (target === null || typeof target !== "object" || Array.isArray(target)) {
         throw new MacroRuntimeError(
           `Cannot access .${expr.field} on ${describe(target)}`,
         );
       }
+      // REQ-112d: missing key on a present object returns null
+      // (lenient leaf-access). Composes with truthiness so authors can
+      // write `if $obj.maybe == null then ...` guards. Chained access
+      // through the resulting null still throws per REQ-023 ac2 on the
+      // next step.
       const v = (target as Record<string, Value>)[expr.field];
       if (v === undefined) {
-        throw new MacroRuntimeError(
-          `Field .${expr.field} not present`,
-        );
+        return null;
       }
       return v;
     }
@@ -1413,6 +1432,24 @@ async function runToolCall(
   tools: ToolRegistry,
   ctx: CallContext,
 ): Promise<Value> {
+  // REQ-112a: resolve VarRef-prefixed server slot to a concrete server
+  // name. `call.serverVarRef === true` means the source wrote
+  // `$<varName>.tool(...)`; `call.server` is the variable name. We
+  // resolve it via env and use the resolved name for the remainder of
+  // dispatch. Static check has already enforced the introspection-only
+  // constraint, so this branch is reached only for `_*` tool names.
+  if (call.serverVarRef === true) {
+    const resolved = env.get(call.server);
+    if (typeof resolved !== "string") {
+      throw new MacroRuntimeError(
+        `VarRef-prefixed server slot ($${call.server}) resolved to a ` +
+          `non-string value (${describe(resolved)}). Per Broker REQ-112a ac2, ` +
+          `the variable must hold the server name as a string.`,
+        call.line,
+      );
+    }
+    call = { ...call, server: resolved, serverVarRef: false };
+  }
   checkCancelled(ctx.exec, `before tool call ${call.server}.${call.tool} (line ${call.line ?? "?"})`);
   checkBudget(ctx.exec);
   const startedAt = Date.now();

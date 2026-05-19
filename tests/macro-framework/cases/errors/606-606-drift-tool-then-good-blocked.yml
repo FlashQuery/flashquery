@@ -1,0 +1,31 @@
+# When the drift-flagged tool is actually invoked, drift fires (not the other tool).
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-606-drift-tool-then-good-blocked
+name: "Drift-flagged tool called — drift wins"
+description: |
+  When the drift-flagged tool is actually invoked, drift fires (not the other tool).
+
+covers:
+  - MTF-E-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = mixed_srv.bad({})
+  exit $v
+
+input_vars: {}
+vault: {}
+
+tools:
+  mixed_srv:
+    tools: {"ok":{"archetype":"JSONTextTool","value":{"fine":true}},"bad":{"archetype":"NeedsInputViaTofuDrift","drift_payload":{"server":"mixed_srv","tool":"bad"}}}
+
+expect:
+  outcome: needs_user_input

@@ -1,0 +1,49 @@
+# Pilot — MTF-L-101 / Broker REQ-112a: `_exists()` in compound `&&` expression.
+#
+# REQ-112a ac1: introspection methods MUST be usable in any expression
+# position, including inside `&&` / `||` operands. Production at v3.5
+# only accepts them as a stand-alone assignment RHS or as the single-call
+# if-condition, so this pilot exercises the new spec form.
+#
+# This pilot is EXPECTED TO FAIL against production at the time of
+# authoring; the failure surfaces the gap recorded in the MCP Broker
+# Gap Analysis doc. Once production is fixed, this pilot will pass.
+
+id: mtf-l-801-exists-in-compound-and
+name: Lifecycle — `_exists()` usable inside `&&` (REQ-112a ac1)
+description: |
+  An `&&`-compound condition combines `svc._exists()` with a comparison.
+  Per REQ-112a, the introspection call MUST be valid in the operand
+  position without requiring prior assignment.
+
+covers:
+  - MTF-L-101   # _exists() introspection
+  - MTF-L-102   # NEW cell: REQ-112a expression-position usability
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:10:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  result = "no"
+  if svc._exists() && 1 == 1 then
+    result = "yes"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: ReadOnlyTool
+    tool_name: ping
+    returns: ok
+
+expect:
+  outcome: success
+  return_result:
+    v: "yes"

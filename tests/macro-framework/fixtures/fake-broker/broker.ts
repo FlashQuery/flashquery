@@ -34,7 +34,13 @@ import type {
   TofuDriftPayload,
   ToolListSnapshotOptions,
 } from '../../../../src/services/mcp-broker/types.js';
-import type { ArchetypeContext, ArchetypeHandler } from './archetypes.ts';
+import type { ArchetypeContext, ArchetypeHandler, DriftMarkedHandler } from './archetypes.ts';
+
+function isDriftMarkedHandler(
+  h: ArchetypeHandler | DriftMarkedHandler,
+): h is DriftMarkedHandler {
+  return (h as DriftMarkedHandler).__tofuDriftPayload !== undefined;
+}
 
 export interface FakeServerConfig {
   /** Tool name -> archetype handler (factory output). */
@@ -129,7 +135,12 @@ export class FakeBroker implements Broker {
   async listToolsForConsumer(_ctx: ConsumerContext): Promise<BrokeredTool[]> {
     const out: BrokeredTool[] = [];
     for (const [serverId, cfg] of this.servers) {
-      for (const toolName of Object.keys(cfg.tools)) {
+      for (const [toolName, handler] of Object.entries(cfg.tools)) {
+        // Drift-marked tools are hidden from the visible list so
+        // production's pre-dispatch check at `registry.ts:156` sees
+        // `visibleTool === undefined` and falls into the pending-drift
+        // branch. See archetypes.ts NeedsInputViaTofuDrift comment.
+        if (isDriftMarkedHandler(handler)) continue;
         const registryKey: RegistryKey = `${serverId}.${toolName}`;
         out.push({
           serverId,
@@ -145,7 +156,19 @@ export class FakeBroker implements Broker {
   }
 
   getPendingSchemaDrift(_ctx: SchemaDriftResolutionContext = {}): TofuDriftPayload[] {
-    return [];
+    // Surface drift-marked tools as pending TOFU re-approvals so
+    // production's pre-dispatch check at `registry.ts:156-174` finds
+    // them and throws `MacroNeedsUserInputError` with the REQ-042
+    // payload.
+    const out: TofuDriftPayload[] = [];
+    for (const [, cfg] of this.servers) {
+      for (const handler of Object.values(cfg.tools)) {
+        if (isDriftMarkedHandler(handler)) {
+          out.push(handler.__tofuDriftPayload as TofuDriftPayload);
+        }
+      }
+    }
+    return out;
   }
 
   resolveSchemaDrift(

@@ -1,0 +1,24 @@
+# Pilot — MTF-E-005: parse_error envelope for missing `do` after for-clause.
+id: mtf-e-702-parse-error-missing-do
+name: Errors — parse_error envelope (missing_do) (REQ-018)
+description: |
+  `for x in [1,2,3]` without `do` raises parse_error with reason
+  `missing_do`.
+covers: [MTF-E-005]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  for x in [1, 2, 3]
+    y = $x
+  done
+input_vars: {}
+vault: {}
+expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+    details:
+      reason: missing_do

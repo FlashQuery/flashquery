@@ -1,0 +1,26 @@
+# No self_binding; reading _self.title must raise a runtime error.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-122-self-unbound-title
+name: "_self.title unbound raises runtime error"
+description: |
+  No self_binding; reading _self.title must raise a runtime error.
+
+covers:
+  - MTF-I-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit { t: $_self.title }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: fail

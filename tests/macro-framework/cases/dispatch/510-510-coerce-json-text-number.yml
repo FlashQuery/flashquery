@@ -1,0 +1,35 @@
+# JSON-encoded number "42" parses to 42.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-510-coerce-json-text-number
+name: "JSONTextTool returns JSON-number"
+description: |
+  JSON-encoded number "42" parses to 42.
+
+covers:
+  - MTF-D-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = n_srv.get({})
+  plus_one = add $v 1
+  exit { result: $plus_one }
+
+input_vars: {}
+vault: {}
+
+tools:
+  n_srv:
+    archetype: "JSONTextTool"
+    tool_name: "get"
+    value: 42
+
+expect:
+  outcome: success
+  return_result: {"result":43}

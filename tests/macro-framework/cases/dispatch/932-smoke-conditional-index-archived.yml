@@ -1,0 +1,97 @@
+# Pilot — SMOKE TEST #3c (published but archived → skip with archived reason).
+
+id: mtf-d-932-smoke-conditional-index-archived
+name: Smoke — conditional indexing (published=true, archived=<value> → skip)
+intent: |
+  Same intent as pilots 930/931. This variant: target document is
+  published but ALSO archived (archived field is a non-null value, e.g.,
+  a timestamp string). Macro must pass the first guard (published) but
+  fail the second guard (archived is not null), exiting with
+  { skipped: true, reason: "doc is archived" }.
+description: |
+  Same macro source as pilots 930/931. doc_srv.fetch returns a doc with
+  published=true and archived="2026-04-01T00:00:00Z". The first guard
+  passes; the second fires.
+
+covers:
+  - MTF-I-101
+  - MTF-D-101
+  - MTF-S-007
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T19:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/conditional-index.md"
+  frontmatter:
+    target_doc: "/docs/old-article.md"
+  title: "Conditional Index"
+  tags: []
+  fq_id: "fq:doc:cond-index:003"
+
+macro: |
+  target_doc = $_self.frontmatter.target_doc
+  doc = doc_srv.fetch({ path: $target_doc })
+
+  if ! $doc.published then
+    exit { skipped: true, reason: "doc is not published" }
+  fi
+  if $doc.archived != null then
+    exit { skipped: true, reason: "doc is archived" }
+  fi
+
+  index_srv.add({ doc: $doc })
+  exit { indexed: true, doc_id: $doc.id }
+
+input_vars: {}
+vault: {}
+
+tools:
+  doc_srv:
+    archetype: JSONTextTool
+    tool_name: fetch
+    value:
+      id: "doc-old"
+      published: true
+      archived: "2026-04-01T00:00:00Z"
+      title: "Old article"
+  index_srv:
+    archetype: JSONTextTool
+    tool_name: add
+    value: { ok: true }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    skipped: true
+    reason: "doc is archived"
+  side_effects:
+    tool_call_count: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T19:07:00Z"
+  golden_version: "0.3.0"
+  notes: |
+    AI prediction and golden capture agreed exactly. First guard passes
+    (published=true); second guard fires (archived != null); only
+    doc_srv.fetch dispatched (count=1).
+
+expect:
+  outcome: success
+  return_result:
+    skipped: true
+    reason: "doc is archived"
+  side_effects:
+    tool_call_count: 1
+
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "doc_srv"
+      tool: "fetch"

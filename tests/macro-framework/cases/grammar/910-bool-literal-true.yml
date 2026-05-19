@@ -1,0 +1,35 @@
+# Pilot — MTF-G-010 / Broker REQ-112c: `true` literal binds as a boolean value.
+# EXPECTED TO FAIL against production at the time of authoring.
+
+id: mtf-g-910-bool-literal-true
+name: Grammar — `true` literal parses and binds as a boolean value (REQ-112c)
+description: |
+  Bare `true` literal on the RHS of an assignment. Per REQ-112c, this is
+  a boolean keyword token producing the internal boolean value `true`.
+  Per REQ-022 truthiness, `true` is truthy.
+
+covers:
+  - MTF-G-010   # NEW cell: REQ-112c boolean literals
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:35:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  flag = true
+  result = "no"
+  if $flag then
+    result = "yes"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    v: "yes"

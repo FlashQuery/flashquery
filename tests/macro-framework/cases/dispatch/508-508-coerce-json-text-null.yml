@@ -1,0 +1,34 @@
+# JSON-text "null" parses to null.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-508-coerce-json-text-null
+name: "JSONTextTool returns null"
+description: |
+  JSON-text "null" parses to null.
+
+covers:
+  - MTF-D-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = n_srv.get({})
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  n_srv:
+    archetype: "JSONTextTool"
+    tool_name: "get"
+    value: null
+
+expect:
+  outcome: success
+  return_result: {"v":null}

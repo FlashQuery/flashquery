@@ -1,0 +1,19 @@
+id: mtf-g-804-reserved-null-assignment
+name: Grammar — `null` cannot be used as a variable name (REQ-039)
+description: Reserved keyword `null` rejected at parse time.
+covers: [MTF-G-007]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  null = 5
+input_vars: {}
+vault: {}
+expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+    details:
+      reason: reserved_keyword_assignment

@@ -1,0 +1,29 @@
+# Verifies _self.tags surfaces as a list value usable with `count`.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-104-self-tags-list
+name: "_self.tags exposes the tag list"
+description: |
+  Verifies _self.tags surfaces as a list value usable with `count`.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  n = count $_self.tags
+  exit { n: $n }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{},"title":"t","tags":["a","b","c"],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"n":3}

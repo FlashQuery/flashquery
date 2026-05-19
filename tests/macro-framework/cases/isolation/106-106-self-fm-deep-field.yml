@@ -1,0 +1,28 @@
+# Deep dotted access into nested frontmatter — _self.frontmatter.config.priority.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-106-self-fm-deep-field
+name: "_self.frontmatter deep-field access"
+description: |
+  Deep dotted access into nested frontmatter — _self.frontmatter.config.priority.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit { p: $_self.frontmatter.config.priority }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{"config":{"priority":"high","owner":"matt"}},"title":"t","tags":[],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"p":"high"}

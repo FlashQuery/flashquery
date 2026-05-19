@@ -79,16 +79,25 @@ The helper's `loadCellMetadata(cellId)` reads `manifest.ts`, follows `source_cit
 ### Step 3 — Synthesize the test inputs
 The CLI consults a built-in scenario library (`SCENARIOS` in `testgen-helper.ts`) keyed by cell ID. When invoking via an AI agent (rather than the autonomous CLI), supply a `SynthesizedTest` value directly via `synthesizeTestInputs(cell, exemplars, reqs, synth)`. The synthesis must include: macro source, input_vars, vault seed state, tool surface configuration (matching the framework's archetype library per §5.7), and an `expect_overrides` block declaring the author-intended pass condition.
 
+**Macro source synthesis is delegated to `flashquery-macro-author`** (sister skill, also in `.claude/skills/`). That skill takes the cell description + REQ-NNN grounding refs and produces the macro source via its generate workflow (with built-in verify + auto-correction loop). When this skill drives the synthesis, invoke `flashquery-macro-author`'s generate workflow with the cell description as input; `flashquery-macro-author` handles the macro source. THIS skill (`flashquery-macro-testgen`) handles everything around the macro: tool surface, expectations, vault, coverage tagging, golden snapshot capture, provenance block.
+
+The split exists because macro source synthesis is reusable beyond the test framework (end-user macro authoring also goes through `flashquery-macro-author`). When the spec for the macro language evolves, the shared `macro-spec.md` in that skill's folder is the single update point — both generation and verification track automatically.
+
 When working in agent mode, anchor the synthesis on:
 - **What the REQ says.** The REQ-NNN excerpts from `loadCellMetadata` describe the language behavior the cell exercises.
 - **What the cell description says.** It's the human-readable mission statement.
 - **What the exemplars look like.** Match comment density and YAML structure.
-- **Production-engine constraints.** The production engine (as of golden v0.3.0) doesn't have:
-  - Boolean literals (`true`/`false`) — use integer 1/0 as truthy sentinels.
-  - `continue` / `break` — Tier 2 only.
-  - `_self.*` direct binding — substitute with `input_var` workaround.
-  - `--flag=value` syntax — use `--flag value` instead.
+- **Production-engine surface (as of v3.5 + REQ-112a-d shipping, 2026-05-19).** Production now supports the full macro language surface; the synthesis should use idiomatic constructs rather than older workarounds. Positive guidance:
+  - **Boolean literals.** `true` and `false` are first-class lowercase keywords (REQ-112c). Use `flag = true` and `if $flag then ...`. Do NOT generate `True`/`False`/`None` — they parse as identifiers but the convention is lowercase. Integer-as-sentinel patterns (1/0) are still valid but discouraged when a true boolean is meant.
+  - **`continue` / `break` loop control.** Fully supported inside `for` / `while` bodies (REQ-104). Use them for skip / early-exit patterns. Parse-time error fires only when they appear outside a loop body.
+  - **`_self.*` direct binding.** When the macro is loaded via `source_ref`, `_self.path`, `_self.title`, `_self.frontmatter.*`, `_self.tags`, `_self.fq_id` are all directly readable (REQ-103). No `input_var` workaround needed.
+  - **`_exists()` introspection.** Bare-identifier form (`svc._exists()`) works in any expression position — if-condition, `&&`/`||` operands, after `!`, as a builtin arg, etc. VarRef-prefixed form (`$server_name._exists()`) is allowed too for dynamic dispatch on a variable-stored server name (REQ-112a, introspection methods only — not for regular tool dispatch).
+  - **`if`/`else` is NOT scope-creating** (REQ-112b). A new variable assigned only inside a branch persists after `fi`. No need to pre-declare outer-scope sentinels just to satisfy scoping. Untaken-branch assignments still leave the name undefined (no phantom default).
+  - **Missing-field access returns `null`** (REQ-112d). `$obj.maybe` on a present object whose key is absent yields `null` (not a runtime error). Use `if $obj.maybe == null then default = ... fi` for optional-field guards. Chained access through `null` (`$obj.missing.subfield`) still throws via REQ-023 ac2 — typo-protection preserved.
+  - **Flag argument syntax.** Use `--flag value` form (space-separated). The `--flag=value` form is not in the grammar.
 - **Range exclusivity.** `1..5` iterates [1, 2, 3, 4] — end-exclusive per `buildRange()` in `src/macro/builtins.ts`.
+- **Reserved keywords.** `for`, `in`, `do`, `done`, `if`, `then`, `else`, `fi`, `while`, `continue`, `break`, `null`, `true`, `false` cannot be assigned to. Identifiers BEGINNING with these prefixes (`forecast`, `truthy_check`) lex as bare identifiers — fine to use.
+- **Builtin names.** `echo`, `status`, `task_id`, `list_tasks`, `count`, `unique`, `append`, `concat`, `add`, `sub`, `mul`, `div`, `mod`, `sleep`, `slow_op`, `fail`, `exit`, `input_var`, `range`, `grep`, `find`, `sed`, `cat`, `wc`, `head`, `tail`, `ls` cannot be shadowed by user assignments. Prefer non-conflicting names (e.g., `phase` instead of `status`, `result_value` instead of `exit`).
 
 ### Step 4 — Run the synthesized macro through the current golden
 `captureAndEmbed(synth)` calls `captureSnapshot()` from `golden-bridge/load.ts`. The capture's return envelope, trace, side-effect manifest, progress events, and `state_notes` are all returned.
@@ -96,17 +105,180 @@ When working in agent mode, anchor the synthesis on:
 ### Step 5 — Embed those outputs into `expect:` and `golden_snapshot:`
 The helper merges author-declared `expect_overrides` over the captured baseline. The `golden_snapshot.state_notes` is taken verbatim from the capture.
 
+**Side-effect count convention (lesson from strengthen-workflow calibration, 2026-05-19).** When the macro has **>1 tool dispatch AND >1 exit path**, the `expect.side_effects.tool_call_count` field should be populated for each pilot variant — positive count on the happy path (all dispatches fire), bounded count on each skip/fail path (only the dispatches before the early exit fire). Without this, the pilot can pass on the right return shape while masking a regression that adds spurious dispatches before the guard. The strengthen workflow will flag this if it's missing, but baking the convention into the wrap step avoids the loop.
+
+Example pattern for a multi-dispatch + multi-exit macro:
+
+```yaml
+# Happy path pilot — all dispatches fire
+expect:
+  outcome: success
+  return_result: { indexed: true, ... }
+  side_effects:
+    tool_call_count: 2   # doc_srv.fetch + index_srv.add
+
+# Skip path pilot — only the pre-guard dispatch fires
+expect:
+  outcome: success
+  return_result: { skipped: true, reason: "..." }
+  side_effects:
+    tool_call_count: 1   # doc_srv.fetch only — index_srv.add MUST NOT fire
+```
+
 ### Step 6 — Stamp `golden_version` + `golden_run_at`
 `GOLDEN_VERSION` is read from `tests/macro-framework/macro-golden-model/src/version.ts`. The `golden_run_at` field is the ISO timestamp at capture time.
 
-### Step 7 — Add `generator:` provenance + `covers:`
+### Step 7 — Add `generator:` provenance + `covers:` + `intent:`
 The generator block carries the skill name, version (currently `1`), model identifier, timestamp, targeted cell list, and grounding refs (REQ-NNN strings the synthesis used). The `covers:` array enumerates all MTF-* cells the test contributes to, including incidental ones.
+
+**`intent:` field (required for AI-generated, strongly recommended for hand-authored).** This is the natural-language description that drove macro generation — the English prompt given to `flashquery-macro-author`, or for hand-authored pilots, the design intent statement. Distinct from `description:` (which describes the test mechanics + REQ citations). Emit it verbatim from the original prompt; this makes it possible to:
+
+- grep the pilot corpus by wording to find related scenarios;
+- retrace why a particular macro shape emerged from a particular phrasing;
+- re-run the generation against an updated skill to check for improvements;
+- aggregate the calibration eval log automatically from pilot files.
+
+When wrapping a macro this testgen produced from `flashquery-macro-author`, copy the original description into `intent:` verbatim. Do not paraphrase.
 
 ### Step 8 — Validate the emitted YAML
 `validateGeneratedTest(path)` re-loads the YAML through the runner, drives the production engine, and runs the comparator. Any divergence at this stage indicates a generator misread (per §5.8) and should be reported to the operator with the comparator findings.
 
 ### Step 9 — Write to `cases/<category>/` (committed) or `cases-fresh/` (fresh)
 `writeGeneratedTest(synth, yaml_text, opts)` handles destination paths. Committed-mode files land under `cases/<MTF-category>/<NN-descriptive-slug>.yml`; fresh-mode files land under `cases-fresh/<slug>.yml`.
+
+## Strengthen workflow — make the pilot rigorous
+
+After the wrap workflow (steps 1-9 above) produces a draft pilot, the **strengthen workflow** analyzes that draft for test-rigor gaps. It's a separately invokable workflow, run by default after wrap, that asks one question:
+
+> *Is this pilot exercising the macro thoroughly enough to catch defects the assertions would otherwise miss?*
+
+This is distinct from `flashquery-macro-author/verify`, which asks "is the macro what was asked for?" The author's verify checks the **macro source** against the **intent**. Strengthen checks the **test pilot** against the **macro + intent**. Different question, different findings surface.
+
+### Three modes (mirrors author skill)
+
+| Mode | `strengthen` | `auto_apply` | Behavior | Use case |
+|---|---|---|---|---|
+| **Wrap-only** | `false` | n/a | Just emit the draft pilot from steps 1-9. No rigor analysis. | Trivial cases or when caller wants raw wrap output. |
+| **Validated** (default) | `true` | `true` | Run rigor analysis, auto-apply suggestions classified as `required_assertion_missing`, surface `recommended_assertion` findings as warnings, emit polished pilot. | End-user testgen invocation. |
+| **Calibration** | `true` | `false` | Run rigor analysis, surface ALL findings, do NOT modify the draft pilot. Return draft + findings list. | Our skill-honing flow. We see what strengthen would suggest; decide; feed misses back into the workflow's prompt. |
+
+### Input contract
+
+The strengthen workflow takes:
+
+- `macro` (required) — the macro source (typically passed from the author skill's output).
+- `intent` (required) — the natural-language description that drove macro generation.
+- `draft_pilot` (required) — the YAML produced by the wrap workflow (steps 1-9). Contains `expect:`, `tools:`, `vault:`, `self_binding:`.
+- `pilot_variants` (optional) — when a single macro is wrapped into multiple pilots exercising different branches (like 930/931/932 for a multi-exit macro), passing the variant set lets the rigor analysis check branch-coverage across pilots.
+- `auto_apply` (optional, bool, default `true`) — controls whether `required_assertion_missing` findings are auto-applied to the pilot YAML.
+
+### Process
+
+1. Parse the macro source. Identify:
+   - **Exit paths.** Every `exit ...` and `fail ...` statement, with the conditions under which each fires.
+   - **Tool dispatches.** Every `<server>.<tool>(...)` call, with the conditions under which each fires.
+   - **State mutations.** Every `fq.write_document`, `fq.archive_document`, `fq.apply_tags`, vault write, frontmatter update.
+   - **Branches.** Every `if`, `else`, `for`, `while` body — what code paths are conditionally executed.
+2. Compare against the draft pilot's `expect:` block. For each axis below, generate rigor findings.
+3. Return the report (calibration) or auto-apply required findings and emit polished pilot (validated).
+
+### Rigor analysis axes
+
+#### Axis 1 — Multi-exit assertion specificity
+
+If the macro has multiple `exit` paths producing distinguishable values, the pilot's assertion must identify *which* path was taken. Two pathological scenarios:
+
+- **Different paths return same shape.** If exits 1 and 2 both return `{ status: "done" }`, the assertion can't tell which fired. Suggest adding a path-marker field to one of them, OR adding `trace_kinds_in_order` to verify the dispatch sequence.
+- **Path identified by return shape only, side effects unverified.** Pilot 930's case — `{ indexed: true, doc_id: ... }` uniquely identifies the happy path by return shape, but a buggy macro that takes the happy path AFTER also dispatching to a side-effect-laden tool (extra `index_srv.add` call) would still pass. Suggest adding `side_effects.tool_call_count`.
+
+#### Axis 2 — Side-effect coverage
+
+For each tool dispatch in the macro, the pilot's `expect.side_effects` should assert:
+
+- **Positive coverage:** when the macro's runtime path reaches a dispatch, the pilot asserts the dispatch happened (via `tool_call_count` increment or explicit `tool_calls[i]` entry).
+- **Negative coverage:** when the macro's runtime path SHOULD skip a dispatch (because of a guard, fail, or early exit), the pilot asserts the dispatch DIDN'T happen (via `tool_call_count` lower bound).
+
+Without negative coverage, a refactor that accidentally moves a side-effect dispatch *before* the guard could pass the return-shape assertion while still firing the unwanted dispatch.
+
+#### Axis 3 — Branch coverage across the pilot set
+
+If a macro has N branches, the pilot set should have N variants exercising each branch. The strengthen workflow checks across variants:
+
+- All exit paths represented? (One pilot per exit.)
+- All for-loop / while-loop edge cases? (Empty list, single item, multiple items, break/continue paths.)
+- All if-then-else branches? (then-only, else-only, both, neither.)
+
+A multi-branch macro shipped with only the happy-path pilot is a `required_assertion_missing` finding — the unhappy paths are untested.
+
+#### Axis 4 — State-assertion coverage
+
+If the macro writes back (`fq.write_document`, `fq.apply_tags`, etc.), the pilot should have a follow-up step that reads the affected state and asserts the write landed. In the directed/integration scenario layer this is straightforward (`op: get_document`); in the in-process macro framework it's limited because `fq.*` is stubbed, but vault writes via shell verbs can be verified by reading the vault fixture post-run.
+
+#### Axis 5 — Negative assertions on skip/fail paths
+
+For pilots exercising "this should skip / fail / not happen" paths, the rigor analysis flags missing negative assertions. Examples:
+
+- Skip path: `tool_call_count` should be lower than the happy path.
+- Fail path: `outcome: fail` is correct, but ALSO `tool_call_count` should be capped before the failing dispatch.
+- Untaken branch: variables assigned only in the untaken branch should NOT appear in the return value.
+
+### Finding taxonomy
+
+```json
+{
+  "axis": "multi_exit_specificity | side_effect_coverage | branch_coverage | state_assertion | negative_assertion",
+  "severity": "required_assertion_missing | recommended_assertion | style",
+  "finding": "<one-line description>",
+  "current_state": "<what the pilot currently asserts>",
+  "missing": "<what the pilot doesn't catch>",
+  "defect_class": "<what kind of bug would slip through without this assertion>",
+  "suggested_change": {
+    "block": "expect.side_effects | expect.return_result | expect.trace_kinds_in_order | tools | vault | <other>",
+    "diff": "<YAML snippet to add or modify>"
+  },
+  "rationale": "<why this matters>"
+}
+```
+
+Severity rules:
+
+- **`required_assertion_missing`** — the missing assertion would let a real defect class slip through. Auto-applied in validated mode.
+- **`recommended_assertion`** — would tighten the test but not strictly required. Surfaced as warning; not auto-applied.
+- **`style`** — YAML structure / naming / comment improvements. Surfaced as warning.
+
+### Output shape — strengthen workflow
+
+**Validated mode (auto_apply: true):**
+
+```json
+{
+  "mode": "validated",
+  "polished_pilot": "<final YAML with required findings auto-applied>",
+  "applied_findings": [ ... ],
+  "warnings": [ ... ]
+}
+```
+
+**Calibration mode (auto_apply: false):**
+
+```json
+{
+  "mode": "calibration",
+  "draft_pilot": "<unchanged YAML from the wrap step>",
+  "rigor_findings": [
+    { "axis": ..., "severity": ..., "finding": ..., "suggested_change": ..., "rationale": ... }
+  ],
+  "skill_improvement_signal": "<recurring patterns the wrap workflow should learn to handle upstream>"
+}
+```
+
+### Calibration usage (our workflow)
+
+For every smoke-test run from #4 onward, after the author skill produces the macro and testgen wraps it, run the strengthen workflow in calibration mode. Treat strengthen findings the same way we treat author/verify findings: spec-edit if recurring, accept if context-specific, log all of it. Over time the strengthen workflow's prompt converges toward producing already-rigorous pilots in the wrap step.
+
+### Convention going forward
+
+Default for testgen invocation: `strengthen: true, auto_apply: true` (validated mode). End-users invoking testgen receive polished pilots without needing to run strengthen separately. For our calibration runs we explicitly pass `auto_apply: false` and log the findings.
 
 ## After generating
 
@@ -122,6 +294,103 @@ After successful generation:
    ```
    (Or hand off to the `flashquery-macro-covgen` skill explicitly.)
 3. **Offer a git commit** bundling the new test file(s) + the regenerated coverage docs. Use a message like `test(macro-framework): generate pilot covering MTF-X-NNN`.
+
+## Five-step pipeline + reconciliation gate (canonical workflow)
+
+The full pilot-generation pipeline composes the author skill, the wrap workflow, the strengthen workflow, and a **golden-capture + reconciliation gate** that's mandatory before any pilot reaches the test suite. The reconciliation gate is the framework's enforcement of §5.6 (golden-as-snapshot): the golden is the independent oracle, AI predictions are checkpoints, production is the implementation being tested.
+
+### The pipeline
+
+```
+1. flashquery-macro-author / generate
+   description → macro source
+   (verify runs internally; auto-correction loop on misses)
+
+2. flashquery-macro-author / verify (already inside step 1)
+   description ↔ macro → "is the macro what was asked for?"
+
+3. testgen / wrap (steps 1-9 above)
+   macro + intent → DRAFT pilot YAML
+   includes predicted_expect: (AI's prediction of outcome)
+
+4. testgen / strengthen
+   macro + intent + draft → rigor findings
+   apply suggestions; macro may revise; settle to FINAL DRAFT
+
+5. testgen / golden_capture + reconciliation gate
+   run macro through captureSnapshot()
+   compare predicted_expect vs golden_expect:
+     • predicted ⊆ golden → MATCH (golden is richer than AI; OK)
+     • predicted == golden → MATCH (perfect alignment)
+     • predicted ⊥ golden → DIVERGENCE — HARD STOP
+       triage: AI wrong? golden wrong? intent ambiguous?
+     • predicted ⊇ golden → SUSPICIOUS — investigate
+       (AI predicted more than golden produces; either AI hallucinated
+       or golden is missing expectations it should have)
+   on MATCH: promote golden capture to expect: (source of truth)
+   embed golden_snapshot: for triage
+
+6. (only after gate passes) Run pilot
+   production output vs expect: (which is golden-verified)
+   any divergence → triage taxonomy (engine bug, golden drift, test bug)
+```
+
+### Reconciliation gate semantics
+
+The gate compares `predicted_expect` (from step 3) against the golden's captured envelope (step 5). Four possible outcomes:
+
+| Comparison | Resolution |
+|---|---|
+| **Exact match** | Promote captured to `expect:`. Log clean reconciliation. Proceed to step 6. |
+| **AI ⊆ Golden** (AI predicted a subset; golden produced more detail like trace/state_notes) | Acceptable. AI predicted the core fields; golden captures everything. Promote captured to `expect:`; log "AI prediction was a clean subset". |
+| **AI ⊥ Golden** (different values for the same fields) | **HARD STOP.** Resolve before proceeding: (a) AI prediction wrong → update `macro-spec.md` / SKILL.md; (b) golden wrong → fix golden, log as golden-bug; (c) intent ambiguous → revise description, regenerate. |
+| **AI ⊇ Golden** (AI predicted MORE than golden produces) | **SUSPICIOUS.** Either: (a) AI hallucinated fields the macro doesn't actually produce, or (b) golden is missing expectations it should produce. Investigate before proceeding. |
+
+### YAML fields emitted by the pipeline
+
+```yaml
+# Step 3 (wrap) output
+predicted_expect:
+  outcome: ...
+  return_result: ...
+  side_effects: ...
+
+# Step 5 (golden capture + reconciliation gate) output
+reconciliation:
+  predicted_matched_captured: true | false
+  captured_at: ISO-8601
+  golden_version: "..."
+  divergence_kind: <kind>  # only when not matched
+  golden_captured: { ... }  # only when not matched
+  notes: |
+    <reconciliation narrative>
+
+# Final source-of-truth (golden-verified, unless DIVERGENCE was
+# explicitly resolved with documented rationale)
+expect:
+  outcome: ...
+  return_result: ...
+  side_effects: ...
+
+# Step 5 (capture) output — for triage if production diverges
+golden_snapshot:
+  state_notes: [...]
+  captured_trace_kinds: [...]
+  captured_tool_calls: [...]
+```
+
+### Why the gate matters
+
+Without this gate, calibration runs would be relying on the AI as oracle. If AI prediction and production agreed but both were wrong, the test would pass silently. The golden provides an independent third opinion: production matches a value that the golden — implemented separately, with its own spec interpretation — also produced. If all three (AI prediction, golden, production) agree, the test is maximally trustworthy.
+
+### Calibration value of the gate
+
+Every reconciliation event produces calibration signal:
+
+- **Clean match** → skill's mental model is accurate for this scenario shape. Trust climbs.
+- **Divergence** → real signal: AI/golden/spec disagreement that needs resolving. Each one drives a spec edit, a golden patch, or a description refinement.
+
+The agreement rate across the pilot corpus is a top-line metric of skill quality (see `_skill-eval-log.md` for the running stats).
 
 ## Adding new scenarios to the library
 

@@ -1,0 +1,54 @@
+# Pilot 34 — MTF-D-103: argument-passthrough invariant. Macro values
+# pass through bit-exact when assembled into the JSON arg object — no
+# number-to-string, no smart conversion (Broker REQ-108).
+
+id: mtf-d-34-argument-passthrough
+name: Dispatch — argument-passthrough invariant (REQ-108)
+description: |
+  Macro passes a mixed-shape object (number, boolean, string, null,
+  array, nested object) to a brokered tool. The tool's recorded args
+  on the broker call log must equal what the macro emitted, bit-exact.
+  Tests REQ-108 — primitive types pass through without coercion.
+
+covers:
+  - MTF-D-103   # argument-passthrough invariant
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T12:24:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  result = echo_srv.echo({ n: 42, s: "hi", nullf: null, list: [1, 2, 3], nested: { x: "y" } })
+  exit { ok: 1 }
+
+input_vars: {}
+vault: {}
+
+tools:
+  echo_srv:
+    archetype: ReadOnlyTool
+    tool_name: echo
+    returns: { ok: true }
+
+expect:
+  outcome: success
+  return_result:
+    ok: 1
+  side_effects:
+    tool_calls:
+      - server: echo_srv
+        tool: echo
+        arg_equals:
+          n: 42
+          s: "hi"
+          nullf: null
+          list: [1, 2, 3]
+          nested: { x: "y" }
+
+golden_snapshot:
+  state_notes:
+    - { kind: permission, tool: "echo_srv.echo", decision: allowed }
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }

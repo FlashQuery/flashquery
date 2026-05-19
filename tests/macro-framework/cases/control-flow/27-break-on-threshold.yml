@@ -1,0 +1,52 @@
+# Pilot 27 — MTF-C-102: while-loop with `break` on a threshold condition.
+#
+# Tier 2 (Broker REQ-104). Production engine landed continue/break support
+# on 2026-05-19. This pilot replaces the while+if+fail Tier 1 substitute
+# from pilot 04 with a clean `break` exit (no `macro_aborted` envelope).
+
+id: mtf-c-27-break-on-threshold
+name: Control flow — while-loop with `break` on threshold
+description: |
+  while-loop increments a counter. When counter == 7, `break` exits the
+  loop cleanly. Macro exits with the final counter value. Tests REQ-104
+  break semantics + outer-scope counter walk-up under nested if.
+
+covers:
+  - MTF-C-102   # while-loop with break
+  - MTF-S-004   # outer-scope counter mutation inside while (still applies)
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T12:24:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  counter = 0
+  while $counter < 100 do
+    counter = add $counter 1
+    if $counter == 7 then
+      break
+    fi
+  done
+  exit { final: $counter }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+expect:
+  outcome: success
+  return_result:
+    final: 7
+
+golden_snapshot:
+  state_notes:
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: counter, value: 0, scope: local }
+    - { kind: loop, loop_kind: while, loop_id: while_loop_2, iter: 0 }
+    - { kind: binding, op: update, name: counter, value: 7, scope: outer }
+
+expect_state_notes:
+  - { kind: binding, op: update, name: counter, value: 7, scope: outer }

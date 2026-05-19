@@ -1,0 +1,31 @@
+# Pilot — MTF-S-102 / REQ-112d ac8: field access on a list value with a
+# non-integer key MUST still throw per REQ-023 ac4. REQ-112d explicitly
+# does NOT address list field access — list semantics are unchanged.
+
+id: mtf-s-926-field-access-on-list-throws
+name: Semantics — field access on list value with non-integer key still throws (REQ-112d ac8)
+description: |
+  Field access on a list with a name-style key MUST raise per REQ-023 ac4.
+  List indexing is deferred per Macro Lang §3.3; REQ-112d explicitly does
+  not relax this path.
+
+covers:
+  - MTF-S-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T15:05:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  obj = [1, 2, 3]
+  v = $obj.anykey
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: fail

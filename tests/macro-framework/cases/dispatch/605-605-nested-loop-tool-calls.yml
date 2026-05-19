@@ -1,0 +1,38 @@
+# Inner loop calls a brokered tool each iteration; verifies dispatch + binding under loop ctx. Range 1..3 = {1,2}, so 2 iterations × 10 = 20.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-d-605-nested-loop-tool-calls
+name: "Brokered call inside nested for-loop"
+description: |
+  Inner loop calls a brokered tool each iteration; verifies dispatch + binding under loop ctx. Range 1..3 = {1,2}, so 2 iterations × 10 = 20.
+
+covers:
+  - MTF-D-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  tally = 0
+  for i in 1..3 do
+    v = jt.get({})
+    tally = add $tally $v.n
+  done
+  exit { total: $tally }
+
+input_vars: {}
+vault: {}
+
+tools:
+  jt:
+    archetype: "JSONTextTool"
+    tool_name: "get"
+    value: {"n":10}
+
+expect:
+  outcome: success
+  return_result: {"total":20}

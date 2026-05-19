@@ -1,0 +1,143 @@
+# Pilot — SMOKE TEST #2 (multi-step composition: items pipeline).
+#
+# Generated 2026-05-19 via the `flashquery-macro-author` skill in
+# calibration mode (run #2, iteration 1, converged zero-shot).
+#
+# Description that drove generation:
+#   "I have a list of items in my frontmatter under `items`. For each
+#    item, call processor_srv.process({ item: $item }). The tool returns
+#    a structured value with a `status` field that's either 'done' or
+#    'deferred'. Collect items where status was 'done' into a list, and
+#    items where status was 'deferred' into another list. Return a
+#    summary object showing both lists and a count for each."
+#
+# Exercises: _self.frontmatter (REQ-103), for-loop iteration (REQ-013),
+# brokered tool dispatch with JSON-coerced result (REQ-106), field
+# access on result (REQ-023), if-then-else conditional (REQ-014),
+# walk-up assignment accumulator (REQ-019), object literal return
+# (REQ-024). Multi-step composition pattern.
+
+id: mtf-d-920-smoke-items-pipeline
+name: Smoke — items pipeline (multi-step composition with per-item dispatch + aggregation)
+intent: |
+  A macro that has a list of items in the document's frontmatter under
+  `items`. For each item, call processor_srv.process({ item: $item }).
+  The tool returns a structured value with a `status` field that's
+  either "done" or "deferred". Collect items where status was "done"
+  into a list, and items where status was "deferred" into another
+  list. Return a summary object showing both lists and a count for
+  each.
+description: |
+  Generated via `flashquery-macro-author` from the `intent:` above
+  (calibration mode, run #2 of the skill-eval log). Composes _self
+  frontmatter read, per-item brokered tool dispatch, field access on
+  the coerced result, conditional branching, walk-up accumulation,
+  and structured exit.
+
+covers:
+  - MTF-I-101   # _self.frontmatter access
+  - MTF-S-001   # walk-up scope assignment
+  - MTF-C-001   # for-loop iteration over a list
+  - MTF-D-101   # brokered tool coercion
+  - MTF-S-007   # field access on object value
+  - MTF-C-009   # exit with structured return_result
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T18:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/items-pipeline.md"
+  frontmatter:
+    items: ["alpha", "beta", "gamma"]
+  title: "Items Pipeline"
+  tags: []
+  fq_id: "fq:doc:items-pipeline:001"
+
+macro: |
+  done_items = []
+  deferred_items = []
+
+  for item in $_self.frontmatter.items do
+    result = processor_srv.process({ item: $item })
+    if $result.status == "done" then
+      done_items = append $done_items $item
+    else
+      deferred_items = append $deferred_items $item
+    fi
+  done
+
+  exit {
+    completed: $done_items,
+    deferred: $deferred_items,
+    completed_count: count $done_items,
+    deferred_count: count $deferred_items
+  }
+
+input_vars: {}
+vault: {}
+
+tools:
+  processor_srv:
+    archetype: ScriptedTool
+    tool_name: process
+    responses:
+      - { content: [{ type: "text", text: '{"status":"done"}' }] }
+      - { content: [{ type: "text", text: '{"status":"deferred"}' }] }
+      - { content: [{ type: "text", text: '{"status":"done"}' }] }
+
+# AI-predicted expect at testgen time (matches production runtime).
+predicted_expect:
+  outcome: success
+  return_result:
+    completed: ["alpha", "gamma"]
+    deferred: ["beta"]
+    completed_count: 2
+    deferred_count: 1
+  side_effects:
+    tool_call_count: 3
+
+# Reconciliation: DIVERGENT. The golden's parser rejected the macro
+# with `parse_error / missing_fi` near `count` on the line `completed_count: count $done_items`.
+# Root cause: the golden's `objectEntry` rule restricts the value
+# position to `primary` (which doesn't include pipeline / builtin
+# calls). Production's parser accepts builtin calls in object-value
+# position; the golden's parser doesn't.
+reconciliation:
+  predicted_matched_captured: false
+  captured_at: "2026-05-19T19:07:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: golden_parser_gap
+  golden_captured:
+    outcome: parse_error
+    error:
+      code: parse_error
+      details:
+        reason: unexpected_token
+  notes: |
+    Golden's `objectEntry` rule (macro-golden-model/src/parser.ts) only
+    accepts `primary` in the value position. `primary` covers literals,
+    varOrField, listLit, objectLit, and toolCall — but NOT pipelines
+    (i.e., builtin calls like `count $list`). Production's evaluator
+    accepts this form, so the pilot passes against production.
+
+    Resolution path: golden gap. Either (a) extend the golden's
+    objectEntry value rule to accept pipelines (proper fix), or
+    (b) update this pilot's macro to use a pre-computed pattern
+    (`completed_count = count $done_items; ...; exit { completed_count: $completed_count }`).
+    For now, the macro is kept as-is (production accepts it), and this
+    finding is logged for a future golden fix.
+
+# Test-runtime expect — matches production output.
+expect:
+  outcome: success
+  return_result:
+    completed: ["alpha", "gamma"]
+    deferred: ["beta"]
+    completed_count: 2
+    deferred_count: 1
+  side_effects:
+    tool_call_count: 3

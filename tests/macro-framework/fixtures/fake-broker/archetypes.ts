@@ -106,24 +106,96 @@ export function SlowTool(ms: number, returns: unknown = { ok: true }): Archetype
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// NeedsInputTool — emits a CallToolResult that surfaces as
-// needs_user_input (Tier 2, MCP Broker REQ-105).
+// NeedsInputViaTofuDrift — simulates a tool pending TOFU re-approval per
+// Broker REQ-041/042. The macro engine's pre-dispatch check at
+// `registry.ts:156-174` queries `getPendingSchemaDrift` and throws its
+// OWN `MacroNeedsUserInputError` with the drift payload. That class is
+// shared between production and test via the same module, so this route
+// avoids the cross-module `instanceof` pitfalls of throwing during
+// `callTool`.
+//
+// REQ-060 spec context: brokered tools CANNOT trigger needs_user_input
+// directly. Only (a) FQ-native tools and (b) the broker layer (TOFU
+// drift) emit the fifth termination. This archetype models route (b).
+//
+// Pilots register the tool with this archetype. The FakeBroker detects
+// the marker and:
+//   - EXCLUDES the tool from `listToolsForConsumer` (so production sees
+//     it as `visibleTool === undefined` and falls into the pending-drift
+//     check).
+//   - INCLUDES the drift entry in `getPendingSchemaDrift` (so production
+//     finds it and throws `MacroNeedsUserInputError` with the REQ-042
+//     payload).
+// The handler itself is never invoked (production short-circuits at
+// pre-dispatch), so its body returns a sentinel error if accidentally
+// reached.
 // ───────────────────────────────────────────────────────────────────────────
-export function NeedsInputTool(payload: {
+export interface TofuDriftMarkerPayload {
+  event: 'schema_drift_detected';
+  server: string;
+  tool: string;
   question: string;
+  old_schema: { name: string; description: string; inputSchema: unknown };
+  new_schema: { name: string; description: string; inputSchema: unknown };
+  diff_summary: string;
+  options: ['approve', 'reject'];
+  answer_shape: string;
+}
+
+export type DriftMarkedHandler = ArchetypeHandler & {
+  __tofuDriftPayload: TofuDriftMarkerPayload;
+};
+
+export function NeedsInputViaTofuDrift(driftPayload: {
+  server: string;
+  tool: string;
+  question?: string;
+  old_schema?: { name?: string; description?: string; inputSchema?: unknown };
+  new_schema?: { name?: string; description?: string; inputSchema?: unknown };
+  diff_summary?: string;
   answer_shape?: string;
-  context?: unknown;
-  options?: unknown[];
-  resume_hint?: string;
-}): ArchetypeHandler {
-  return () => ({
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify({ needs_user_input: payload }),
-      },
-    ],
-  });
+}): DriftMarkedHandler {
+  const payload: TofuDriftMarkerPayload = {
+    event: 'schema_drift_detected',
+    server: driftPayload.server,
+    tool: driftPayload.tool,
+    question:
+      driftPayload.question ??
+      'The schema for this tool changed since you first approved it. Review the differences and decide whether to accept the new version.',
+    old_schema: {
+      name: driftPayload.old_schema?.name ?? driftPayload.tool,
+      description: driftPayload.old_schema?.description ?? 'previous description',
+      inputSchema:
+        driftPayload.old_schema?.inputSchema ?? { type: 'object', properties: {} },
+    },
+    new_schema: {
+      name: driftPayload.new_schema?.name ?? driftPayload.tool,
+      description: driftPayload.new_schema?.description ?? 'new description',
+      inputSchema:
+        driftPayload.new_schema?.inputSchema ?? {
+          type: 'object',
+          properties: { topic: { type: 'string' } },
+          required: ['topic'],
+        },
+    },
+    diff_summary:
+      driftPayload.diff_summary ??
+      '• Added required parameter: topic (string)\n• Description changed.',
+    options: ['approve', 'reject'],
+    answer_shape:
+      driftPayload.answer_shape ??
+      `frontmatter.user_decisions.${driftPayload.server}__${driftPayload.tool}.tofu_decision`,
+  };
+  const handler = (() => {
+    // Production should short-circuit at pre-dispatch and never invoke
+    // this handler. If it does, surface a loud test failure rather than
+    // a silent success.
+    throw new Error(
+      'NeedsInputViaTofuDrift handler invoked — production should have short-circuited at the pre-dispatch pending-drift check.',
+    );
+  }) as DriftMarkedHandler;
+  handler.__tofuDriftPayload = payload;
+  return handler;
 }
 
 // ───────────────────────────────────────────────────────────────────────────

@@ -171,7 +171,15 @@ export type ObjectEntry = {
 // handler. They expose metadata about the server, not data from it.
 export type ToolCall = {
   kind: "ToolCall";
-  server: string; // e.g. "fq"
+  server: string; // resolved server name. For the bare-Identifier form
+                  // (`svc.tool(...)`), this is the literal name verbatim.
+                  // For the Broker REQ-112a VarRef form (`$svc._exists()`),
+                  // this is the variable name and `serverVarRef` is true.
+  serverVarRef?: boolean; // true when the source used `$server.tool(...)`
+                          // (variable-stored server name resolved at call
+                          // time). REQ-112a allows this form for
+                          // introspection methods only — enforced at
+                          // static-check.
   tool: string;   // e.g. "write_document"; if it starts with "_", treated as
                   // an engine-resolved introspection method
   arg: ObjectLit | VarRef | undefined;

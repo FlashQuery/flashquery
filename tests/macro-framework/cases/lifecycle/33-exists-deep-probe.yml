@@ -1,0 +1,51 @@
+# Pilot 33 — MTF-L-101: `<server>._exists()` deep-probe returns boolean
+# (Broker REQ-110 / REQ-112).
+#
+# Tier 2. Calls `bar_srv._exists()` for a configured fake broker server;
+# expects `true`. Calls `nonexistent._exists()`; expects `false`.
+
+id: mtf-l-33-exists-deep-probe
+name: Lifecycle — `_exists()` deep-probe returns booleans for known/unknown servers
+description: |
+  Two `_exists()` calls: one for a configured fake-broker server
+  (`bar_srv`), one for an unconfigured server name. The configured one
+  should return `true` via FakeBroker.isConnected; the unconfigured one
+  should return `false`. Tests REQ-110/REQ-112 deep-probe semantics
+  (the 250ms timeout is too coarse to observe in this synchronous fake).
+
+covers:
+  - MTF-L-101   # _exists() deep-probe + 250ms timeout
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T12:24:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  ok = bar_srv._exists()
+  missing = ghost_srv._exists()
+  exit { ok: $ok, missing: $missing }
+
+input_vars: {}
+vault: {}
+
+tools:
+  bar_srv:
+    archetype: ReadOnlyTool
+    tool_name: ping
+    returns: { ok: true }
+
+expect:
+  outcome: success
+  return_result:
+    ok: true
+    missing: false
+
+golden_snapshot:
+  state_notes:
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: binding, op: set, name: ok, value: true, scope: local }
+    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
+    - { kind: binding, op: set, name: missing, value: false, scope: local }

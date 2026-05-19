@@ -1,0 +1,38 @@
+# After assignment, the _exists() result feeds a compound && expression normally.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-l-706-exists-combined-with-and
+name: "_exists() result combined with && (assigned first)"
+description: |
+  After assignment, the _exists() result feeds a compound && expression normally.
+
+covers:
+  - MTF-L-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  e = svc._exists()
+  result = "no"
+  if $e && 1 == 1 then
+    result = "yes"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: "ReadOnlyTool"
+    tool_name: "n"
+    returns: "x"
+
+expect:
+  outcome: success
+  return_result: {"v":"yes"}

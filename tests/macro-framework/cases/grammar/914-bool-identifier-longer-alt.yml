@@ -1,0 +1,46 @@
+# Pilot — MTF-G-010 / REQ-112c ac1: keyword `longer_alt: Identifier`
+# behavior — identifiers that start with `true`/`false` still lex as
+# identifiers, not as bool-keyword + Identifier-suffix.
+#
+# EXPECTED TO FAIL against production today because `true` isn't a keyword
+# at all (so `trueish` already lexes as an identifier in production —
+# but the spec mandate is that AFTER `true` becomes a keyword, identifiers
+# starting with `true` STILL lex as identifiers, not as `true` + `ish`).
+# The failure mode on production today is the `Unknown builtin: trueish`
+# error path — wait, `trueish` is just an identifier here, so it would
+# actually... hmm.
+
+id: mtf-g-914-bool-identifier-longer-alt
+name: Grammar — identifiers prefixed with true/false still lex as identifiers (REQ-112c ac1)
+description: |
+  Variable names `trueish` and `falsy_check` must lex as bare identifiers,
+  not as `true`/`false` keyword tokens followed by an Identifier suffix.
+  This is the `longer_alt: Identifier` rule on the keyword tokens. Today
+  production has no `true`/`false` tokens, so identifiers lex as bare
+  identifiers trivially; this pilot is forward-compatibility regression
+  coverage that will catch a future regression if the dev agent forgets
+  the `longer_alt` clause on the new keyword tokens.
+
+covers:
+  - MTF-G-010
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T15:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  trueish = "string-value-A"
+  falsy_check = "string-value-B"
+  exit { a: $trueish, b: $falsy_check }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    a: "string-value-A"
+    b: "string-value-B"

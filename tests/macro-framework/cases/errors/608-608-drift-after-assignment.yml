@@ -1,0 +1,35 @@
+# Assignments and arithmetic before the drift call do not change the termination class.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-608-drift-after-assignment
+name: "Drift surfaces even after non-tool side-effects"
+description: |
+  Assignments and arithmetic before the drift call do not change the termination class.
+
+covers:
+  - MTF-E-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = 1
+  b = add $a 1
+  r = drift.go({})
+  exit $r
+
+input_vars: {}
+vault: {}
+
+tools:
+  drift:
+    archetype: "NeedsInputViaTofuDrift"
+    tool_name: "go"
+    drift_payload: {"server":"drift","tool":"go"}
+
+expect:
+  outcome: needs_user_input

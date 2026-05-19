@@ -1,0 +1,32 @@
+# Pilot — MTF-E-006: prescan walks loop bodies. An unknown tool reference
+# inside a for-loop body is still caught at prescan (before any iteration
+# runs).
+id: mtf-e-707-prescan-unknown-tool-inside-loop
+name: Errors — prescan rejects unknown tool inside a loop body (REQ-028)
+description: |
+  Pre-scan is static; it walks every code path including loop bodies.
+  An unknown tool reference inside `for ... do ... done` is rejected
+  before execution.
+covers: [MTF-E-006]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  for i in [1, 2, 3] do
+    v = basic.missing_tool({ n: $i })
+  done
+  exit { v: $v }
+input_vars: {}
+vault: {}
+tools:
+  basic:
+    archetype: ReadOnlyTool
+    tool_name: present_tool
+    returns: "x"
+expect:
+  outcome: fail
+  error:
+    code: unknown_tool
+    message_contains: "missing_tool"

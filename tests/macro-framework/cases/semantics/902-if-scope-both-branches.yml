@@ -1,0 +1,35 @@
+# Pilot — MTF-S-101 / Broker REQ-112b ac2: var assigned in both then and
+# else branches persists after `fi`.
+
+id: mtf-s-902-if-scope-both-branches
+name: Semantics — variable assigned in both branches persists after fi (REQ-112b ac2)
+description: |
+  Both then and else branches assign `r`. With a truthy condition, `r`
+  must equal the then-branch value after `fi`.
+
+covers:
+  - MTF-S-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:25:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  flag = 1
+  if $flag == 1 then
+    r = "from-then"
+  else
+    r = "from-else"
+  fi
+  exit { v: $r }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    v: "from-then"

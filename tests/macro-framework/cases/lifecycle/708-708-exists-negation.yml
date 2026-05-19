@@ -1,0 +1,38 @@
+# The ! operator flips the boolean from _exists(). Avoid boolean literal in expected by comparing the negation outcome via a downstream side-effect.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-l-708-exists-negation
+name: "_exists() negation with !"
+description: |
+  The ! operator flips the boolean from _exists(). Avoid boolean literal in expected by comparing the negation outcome via a downstream side-effect.
+
+covers:
+  - MTF-L-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  e = svc._exists()
+  result = "still-true"
+  if ! $e then
+    result = "neg-fired"
+  fi
+  exit { v: $result }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: "ReadOnlyTool"
+    tool_name: "n"
+    returns: "r"
+
+expect:
+  outcome: success
+  return_result: {"v":"still-true"}

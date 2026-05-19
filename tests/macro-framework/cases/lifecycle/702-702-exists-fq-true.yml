@@ -1,0 +1,32 @@
+# The native fq namespace surfaces _exists() as true even without explicit tools.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-l-702-exists-fq-true
+name: "_exists() for fq is unconditionally true"
+description: |
+  The native fq namespace surfaces _exists() as true even without explicit tools.
+
+covers:
+  - MTF-L-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  e = fq._exists()
+  exit { e: $e }
+
+input_vars: {}
+vault: {}
+
+tools:
+  fq:
+    archetype: "ReadOnlyTool"
+
+expect:
+  outcome: success
+  return_result: {"e":true}

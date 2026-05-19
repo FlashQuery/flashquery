@@ -1,0 +1,28 @@
+# Single-field read of _self.title.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-102-self-title-only
+name: "_self.title read in isolation"
+description: |
+  Single-field read of _self.title.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit { t: $_self.title }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/x.md","frontmatter":{},"title":"A Title","tags":[],"fq_id":"fq:doc:x:1"}
+
+expect:
+  outcome: success
+  return_result: {"t":"A Title"}

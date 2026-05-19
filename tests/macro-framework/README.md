@@ -191,7 +191,7 @@ The golden is read-only at framework runtime (INV-MTF-04). Only `golden-bridge/*
 - `state-notes/` — schema, assert, render
 - `triage/` — classify, record, run-cli, stale-check (Phase 6)
 - `macro-golden-model/{src/*.ts (except _*.ts), examples/, sample-vault/, package.json, package-lock.json, tsconfig.json, README.md}`
-- `runner.ts`, `cases.test.ts`, `framework-registry.ts`, `tsconfig.json`, this `README.md`, `.gitignore`
+- `runner.ts`, `cases.test.ts`, `framework-registry.ts`, `framework-mirror-check.ts`, `tsconfig.json`, this `README.md`, `.gitignore`
 
 **Gitignored**:
 
@@ -201,3 +201,39 @@ The golden is read-only at framework runtime (INV-MTF-04). Only `golden-bridge/*
 - `.DS_Store`, `*.swp`, `.idea/`, `.vscode/`, `*.log`, `tmp/`, `.cache/`
 
 **One gotcha** (resolved as of Phase 6): the repo root `.gitignore` ignores `coverage/` (intended for nyc/istanbul output). That unanchored rule matched `tests/macro-framework/coverage/` too. The framework's local `.gitignore` now negates it with `!coverage/` + `!coverage/**` so the coverage matrix is committed per §9.4.
+
+## 12. Framework-vs-production drift tripwire
+
+The framework's brokered-dispatch wrapper (`framework-registry.ts wrapBrokerToolForFramework`) is a hand-written mirror of production's `src/macro/registry.ts wrapBrokerTool`. Production keeps that function module-private — it isn't exported — so direct import isn't an option without modifying production code. The mirror is the practical alternative, but it invites silent drift if production changes.
+
+`framework-mirror-check.ts` is the tripwire. At suite startup it:
+
+1. Hashes the entire `src/macro/registry.ts` file (SHA-256).
+2. Extracts just the body of `function wrapBrokerTool(...)` via a brace-balanced scan and hashes that (SHA-256).
+3. Compares both to pinned constants. Either mismatch fires a `framework-integrity` test failure.
+
+The failure message prints the current hashes for one-line copy-paste, plus a remediation note indicating whether the change is inside `wrapBrokerTool` itself (mirror likely needs updating) or only in adjacent file content (mirror probably still accurate).
+
+**Maintainer workflow when the tripwire fires:**
+
+1. Look at the production diff at `src/macro/registry.ts:142+`.
+2. If `wrapBrokerTool`'s behavior changed, mirror the change in `framework-registry.ts wrapBrokerToolForFramework`.
+3. Paste the new hashes from the failure message into `PINNED_FILE_HASH` / `PINNED_FUNCTION_HASH` in `framework-mirror-check.ts`.
+4. Re-run; suite returns to green.
+
+Why two hashes (deliberately redundant): the file hash trips on any change to `registry.ts` (including comments / imports), so the maintainer at least glances. The function-body hash trips only on behavior-relevant changes inside `wrapBrokerTool`, so the maintainer knows whether the mirror itself needs updating.
+
+## 13. First end-to-end run vs. production v3.5 (2026-05-19)
+
+The framework's first end-to-end run against the just-shipped v3.5 broker was the inflection point for several corrections in this directory. Recording the conclusions here so future maintainers don't repeat the analysis.
+
+**Zero real production gaps were found** for the cells the framework exercises. The MCP Broker Gap Analysis doc was deliberately NOT extended with a "Post Implementation" section — that doc's audience is the broker dev agent looking for actionable fixes, and there were none from this surface.
+
+What the run did surface — corrected in-framework, not in production:
+
+- The `NeedsInputTool` archetype + pilot 29 originally exercised a brokered tool returning `{event: "needs_user_input", ...}` in its `CallToolResult` payload. MCP Broker Requirements §7.8 REQ-060 explicitly forbids this: *"Brokered tools CANNOT trigger needs_user_input in v1. Only two sources emit needs_user_input exits in v1: (a) a FlashQuery-native tool, (b) the broker layer itself on TOFU drift (§7.5)."* Production correctly does NOT propagate brokered-tool-returned events. The archetype was replaced with `NeedsInputViaTofuDrift`, which simulates spec-valid route (b) by surfacing the tool through `getPendingSchemaDrift` so the pre-dispatch check in production's `registry.ts:156-179` (and the framework mirror's equivalent) fires.
+- The golden model's `needs_user_input` macro builtin contradicted the same REQ-060 — a macro author cannot directly raise the fifth termination. The builtin was reduced to a stub that throws with a spec-aligned error message citing REQ-060; example 22 was retired.
+- Pilot 32 originally tried to drive Broker REQ-093/REQ-098 (`help: true` sentinel forwarding) through a macro. REQ-098 explicitly scopes the behavior to *"a delegated or host model"* calling the brokered tool — the macro frame is not in scope. The pilot was repurposed as a Macro Lang §3.3 boolean-literal rejection test (new coverage cell `MTF-G-009`). MTF-D-105 was marked `deprecated` in the manifest with a note redirecting REQ-093/098 verification to the broker layer (unit + delegated-call scenario).
+- The framework's `wrapBrokerToolForFramework` was a thinner mirror than production's `wrapBrokerTool` — it skipped the pre-dispatch visibility / `getPendingSchemaDrift` check entirely. That's been corrected; the framework now mirrors `registry.ts:154-179` so the REQ-105 nested-propagation path is actually exercised. The §12 tripwire enforces ongoing parity.
+
+The spec-valid REQ-105 nested-propagation route is correctly implemented in production at `registry.ts:156-179` and `:194-198`, with the canonical envelope surfacing at `evaluator.ts:396-415`. The framework's pilot 29 now drives that path via the TOFU-drift archetype and passes.

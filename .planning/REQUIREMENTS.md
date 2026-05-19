@@ -94,7 +94,7 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [x] **REQ-066**: Host-initiated brokered calls also produce `tool_calls` entries.
 - [x] **REQ-067**: Host-invoked macros inherit the host trace scope.
 - [x] **REQ-068**: Rejected reverse requests are audit-logged.
-- [ ] **REQ-069**: `search_tools` invocations are audit-logged.
+- [x] **REQ-069**: `search_tools` invocations are audit-logged.
 - [x] **REQ-070**: TOFU approvals and rejections are audit-logged.
 
 ### Diagnostic CLI
@@ -105,38 +105,38 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 ### BM25 Tool Search
 
-- [ ] **REQ-074**: Indexer interface is fixed and algorithm parameters are pinned.
-- [ ] **REQ-075**: Indexer is pure TypeScript with zero external dependency.
-- [ ] **REQ-076**: `build(tools)` is idempotent.
-- [ ] **REQ-077**: `addTools(tools)` is idempotent.
-- [ ] **REQ-078**: `removeTools(keys)` tolerates nonexistent keys.
-- [ ] **REQ-079**: `search(query, k)` returns up to `k` ranked results and empty query returns empty array.
-- [ ] **REQ-080**: `getStats()` reports live counts, not tombstones.
-- [ ] **REQ-081**: The four NTS correctness invariants are unit tests in production.
-- [ ] **REQ-082**: `fq.search_tools` MCP tool surface is implemented.
-- [ ] **REQ-083**: `has_help` and `help_hint` are populated only for FQ-native results.
-- [ ] **REQ-084**: `SearchResult.description` reflects `description_override` when set.
-- [ ] **REQ-085**: `tool_search: enabled` purposes inject only `fq.search_tools` up front.
-- [ ] **REQ-086**: `tool_search: disabled` purposes keep existing flat-list behavior.
-- [ ] **REQ-087**: Host index covers FQ-native and brokered tools visible to the host.
-- [ ] **REQ-088**: BM25 POC test-data fixtures graduate to production.
+- [x] **REQ-074**: Indexer interface is fixed and algorithm parameters are pinned.
+- [x] **REQ-075**: Indexer is pure TypeScript with zero external dependency.
+- [x] **REQ-076**: `build(tools)` is idempotent.
+- [x] **REQ-077**: `addTools(tools)` is idempotent.
+- [x] **REQ-078**: `removeTools(keys)` tolerates nonexistent keys.
+- [x] **REQ-079**: `search(query, k)` returns up to `k` ranked results and empty query returns empty array.
+- [x] **REQ-080**: `getStats()` reports live counts, not tombstones.
+- [x] **REQ-081**: The four NTS correctness invariants are unit tests in production.
+- [x] **REQ-082**: `fq.search_tools` MCP tool surface is implemented.
+- [x] **REQ-083**: `has_help` and `help_hint` are populated only for FQ-native results.
+- [x] **REQ-084**: `SearchResult.description` reflects `description_override` when set.
+- [x] **REQ-085**: `tool_search: enabled` purposes inject only `fq.search_tools` up front.
+- [x] **REQ-086**: `tool_search: disabled` purposes keep existing flat-list behavior.
+- [x] **REQ-087**: Host index covers FQ-native and brokered tools visible to the host.
+- [x] **REQ-088**: BM25 POC test-data fixtures graduate to production.
 
 ### Help Convention And Description Overrides
 
-- [ ] **REQ-089**: Each FQ-native tool has one `.tool.md` file at `src/mcp/tools/<tool_name>.tool.md`.
-- [ ] **REQ-090**: `.tool.md` frontmatter shape is enforced.
-- [ ] **REQ-091**: Help-page body structure follows the 500-1500 word soft guideline.
-- [ ] **REQ-092**: `TOOL_META` registry is built at startup from `*.tool.md`.
-- [ ] **REQ-093**: `help: true` sentinel handler returns help pages.
-- [ ] **REQ-094**: Canonical default `help_hint` string is used.
-- [ ] **REQ-095**: Build-time validation rules are blocking.
-- [ ] **REQ-096**: FQ-native errors include the Layer 2 help hint footer.
-- [ ] **REQ-097**: `call_macro` description and help hint use the required verbatim strings.
-- [ ] **REQ-098**: `help: true` against brokered tools forwards transparently upstream.
-- [ ] **REQ-099**: Hot-reload of `.tool.md` files is out of scope.
-- [ ] **REQ-100**: `description_override` is substituted before any downstream consumer.
-- [ ] **REQ-101**: TOFU hashes the upstream description, not the override.
-- [ ] **REQ-102**: Removing or changing `description_override` does not trigger TOFU re-approval.
+- [x] **REQ-089**: Each FQ-native tool has one `.tool.md` file at `src/mcp/tools/<tool_name>.tool.md`.
+- [x] **REQ-090**: `.tool.md` frontmatter shape is enforced.
+- [x] **REQ-091**: Help-page body structure follows the 500-1500 word soft guideline.
+- [x] **REQ-092**: `TOOL_META` registry is built at startup from `*.tool.md`.
+- [x] **REQ-093**: `help: true` sentinel handler returns help pages.
+- [x] **REQ-094**: Canonical default `help_hint` string is used.
+- [x] **REQ-095**: Build-time validation rules are blocking.
+- [x] **REQ-096**: FQ-native errors include the Layer 2 help hint footer.
+- [x] **REQ-097**: `call_macro` description and help hint use the required verbatim strings.
+- [x] **REQ-098**: `help: true` against brokered tools forwards transparently upstream.
+- [x] **REQ-099**: Hot-reload of `.tool.md` files is out of scope.
+- [x] **REQ-100**: `description_override` is substituted before any downstream consumer.
+- [x] **REQ-101**: TOFU hashes the upstream description, not the override.
+- [x] **REQ-102**: Removing or changing `description_override` does not trigger TOFU re-approval.
 
 ### Macro Extensions And Host Surface
 
@@ -148,8 +148,8 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 - [x] **REQ-108**: Macro object arguments pass through without coercion.
 - [x] **REQ-109**: `<server>._exists()` uses deep probe.
 - [x] **REQ-110**: Concurrent macro execution against shared brokered servers is safe.
-- [ ] **REQ-111**: Brokered tools have no broker-side tier classification.
-- [ ] **REQ-112**: Macro pre-scan continues to use the agent-loop native-tool tier system unchanged.
+- [x] **REQ-111**: Brokered tools have no broker-side tier classification.
+- [x] **REQ-112**: Macro pre-scan continues to use the agent-loop native-tool tier system unchanged.
 - [x] **REQ-113**: `host:` section design follows source spec §6.6.
 - [x] **REQ-114**: Consumer context is inherited across nested macro frames.
 - [x] **REQ-115**: `ConsumerContext` is established once at the outermost frame.
@@ -184,17 +184,20 @@ FlashQuery becomes a stdio MCP broker. Host LLM sessions and delegated `call_mod
 
 | Requirement Range | Phase | Status |
 |-------------------|-------|--------|
-| REQ-001..037, REQ-050..060, REQ-106..108 | Phase 139 | Pending |
-| REQ-038..049, REQ-061..064, REQ-068, REQ-070, REQ-105 | Phase 140 | Pending |
-| REQ-074..102, REQ-011, REQ-085..087 | Phase 141 | Pending |
+| REQ-001..037, REQ-050..060, REQ-106..108 | Phase 139 | Complete |
+| REQ-038..049, REQ-061..064, REQ-068, REQ-070, REQ-105 | Phase 140 | Complete |
+| REQ-074..102, REQ-011, REQ-085..087 | Phase 141 | Complete |
+| REQ-069 | Phase 141 | Complete |
 | REQ-005..010, REQ-031, REQ-035, REQ-065..067, REQ-113..118 | Phase 142 | Complete |
 | REQ-071..073, REQ-103..104, REQ-109..110 | Phase 143 | Complete |
 
 **Coverage:**
 - v3.5 requirements: 118 total
+- Complete: 118
+- Decision pending: 0
 - Mapped to phases: 118
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-17*
-*Last updated: 2026-05-19 after Phase 143 validation closure*
+*Last updated: 2026-05-19 after closing REQ-069 as trace-stream audit compliant*

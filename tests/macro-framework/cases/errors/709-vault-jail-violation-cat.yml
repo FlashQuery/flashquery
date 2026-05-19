@@ -1,0 +1,20 @@
+# Pilot — MTF-E-007: shell-verb path escape attempt → vault_jail_violation.
+id: mtf-e-709-vault-jail-violation-cat
+name: Errors — vault jail violation on `cat ../../etc/passwd`
+description: |
+  Shell verb path resolution is jailed to the vault root. An attempt to
+  escape the vault (`../../`) must raise vault_jail_violation.
+covers: [MTF-E-007]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  text = cat "../../etc/passwd"
+  exit { text: $text }
+input_vars: {}
+vault:
+  "/notes/decoy.txt": "in-vault content"
+expect:
+  outcome: fail

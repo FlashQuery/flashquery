@@ -1,0 +1,20 @@
+# Pilot — MTF-E-007: vault jail enforces on `ls` too.
+id: mtf-e-710-vault-jail-violation-ls
+name: Errors — vault jail violation on `ls /etc`
+description: |
+  Absolute-path shell verbs are reinterpreted vault-relatively; an
+  absolute system path outside the vault root is treated as a jail
+  violation. `ls /etc` → vault_jail_violation.
+covers: [MTF-E-007]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  entries = ls "/etc"
+  exit { n: count $entries }
+input_vars: {}
+vault: {}
+expect:
+  outcome: fail

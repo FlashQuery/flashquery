@@ -1,0 +1,34 @@
+# break fires immediately; counter never advances past 1.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-c-410-break-first-iter
+name: "break on first iteration"
+description: |
+  break fires immediately; counter never advances past 1.
+
+covers:
+  - MTF-C-102
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  c = 0
+  while $c < 100 do
+    c = add $c 1
+    if $c == 1 then
+      break
+    fi
+  done
+  exit { final: $c }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result: {"final":1}

@@ -1,0 +1,33 @@
+# Pre-dispatch drift fires regardless of the args being passed (drift is upstream of arg validation).
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-e-610-drift-with-args
+name: "Drift call with args — args ignored at pre-dispatch"
+description: |
+  Pre-dispatch drift fires regardless of the args being passed (drift is upstream of arg validation).
+
+covers:
+  - MTF-E-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  r = drift.go({ topic: "anything", count: 5 })
+  exit $r
+
+input_vars: {}
+vault: {}
+
+tools:
+  drift:
+    archetype: "NeedsInputViaTofuDrift"
+    tool_name: "go"
+    drift_payload: {"server":"drift","tool":"go"}
+
+expect:
+  outcome: needs_user_input

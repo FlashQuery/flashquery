@@ -1,0 +1,38 @@
+# Pilot 28b — MTF-I-102: _self access without binding raises the
+# spec-mandated runtime error (REQ-103 last paragraph).
+
+id: mtf-i-28b-self-unbound-runtime-error
+name: Isolation — `_self` access without source_ref binding raises runtime error
+description: |
+  When the macro was NOT loaded via source_ref, accessing `$_self.path`
+  raises a runtime error with the spec-mandated message. Tests REQ-103
+  unbound-_self error path.
+
+covers:
+  - MTF-I-102   # _self access without binding
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T12:24:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+# No self_binding — macro should fail at runtime.
+
+macro: |
+  p = $_self.path
+  exit { p: $p }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+expect:
+  outcome: fail
+  error:
+    code: tool_call_failed
+    message_contains: "_self"
+
+golden_snapshot:
+  state_notes: []

@@ -1,0 +1,28 @@
+# All four read-only fields surface in a single bundle expression.
+# Auto-generated 2026-05-19 by _tier2-batch-generator.ts. Hand edits OK.
+
+id: mtf-i-109-self-multi-field-bundle
+name: "_self multi-field bundle access"
+description: |
+  All four read-only fields surface in a single bundle expression.
+
+covers:
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit { p: $_self.path, t: $_self.title, ft: $_self.frontmatter.type, ident: $_self.fq_id }
+
+input_vars: {}
+vault: {}
+self_binding: {"path":"/Macros/research.md","frontmatter":{"type":"research"},"title":"Research Macro","tags":["research"],"fq_id":"fq:doc:research:xyz"}
+
+expect:
+  outcome: success
+  return_result: {"p":"/Macros/research.md","t":"Research Macro","ft":"research","ident":"fq:doc:research:xyz"}

@@ -1,0 +1,22 @@
+# Pilot — MTF-C-009: exit with a variable-referenced value.
+id: mtf-c-505-exit-from-variable
+name: Control-flow — exit returns the value bound to a variable
+description: |
+  Build a structure into a variable, then exit with the variable. Common
+  pattern in real macros.
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  results = { processed: 5, skipped: 1 }
+  exit $results
+input_vars: {}
+vault: {}
+expect:
+  outcome: success
+  return_result:
+    processed: 5
+    skipped: 1

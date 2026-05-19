@@ -1,0 +1,30 @@
+# Pilot — MTF-G-007 positive: identifiers that BEGIN with reserved
+# keywords (e.g. `forecast`, `inbox`, `donefile`) still lex as identifiers
+# per the `longer_alt: Identifier` rule on every keyword token.
+id: mtf-g-805-identifier-prefixed-with-keyword
+name: Grammar — keyword-prefixed identifiers parse as identifiers (longer_alt rule)
+description: |
+  Variable names beginning with reserved-keyword prefixes (`forecast`,
+  `inbox`, `donefile`, `iffy`) must lex as bare identifiers. Defends
+  against accidental keyword-greedy lexing.
+covers: [MTF-G-007]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T16:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  forecast = "sunny"
+  inbox = 42
+  donefile = "x"
+  iffy = "maybe"
+  exit { f: $forecast, i: $inbox, d: $donefile, y: $iffy }
+input_vars: {}
+vault: {}
+expect:
+  outcome: success
+  return_result:
+    f: "sunny"
+    i: 42
+    d: "x"
+    y: "maybe"

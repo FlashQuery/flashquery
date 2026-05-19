@@ -1,0 +1,34 @@
+# Pilot — MTF-S-102 / Broker REQ-112d: missing-field-null applies to
+# _self.frontmatter access (the most common author use case).
+
+id: mtf-s-923-missing-field-frontmatter
+name: Semantics — _self.frontmatter.missing returns null (REQ-112d)
+description: |
+  Reading an optional frontmatter field via _self should return null
+  when absent. Lets authors write `if $_self.frontmatter.workspace == null
+  then ...` to default-handle.
+
+covers:
+  - MTF-S-102
+  - MTF-I-101
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T14:35:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding: { "path": "/x.md", "frontmatter": { "type": "macro" }, "title": "t", "tags": [], "fq_id": "fq:doc:x:1" }
+
+macro: |
+  v = $_self.frontmatter.workspace
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+expect:
+  outcome: success
+  return_result:
+    v: null

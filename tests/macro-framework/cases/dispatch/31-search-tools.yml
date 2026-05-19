@@ -1,0 +1,82 @@
+# Pilot 31 — MTF-D-104: macro invokes a brokered tool returning the
+# canonical SearchResult shape that production's fq.search_tools would
+# return.
+#
+# Note: the production framework-registry stubs `fq` as an empty server
+# (no native handlers wired in), so the macro engine can't dispatch to a
+# REAL `fq.search_tools` here. The pilot uses a brokered ScriptedTool
+# that returns the canonical SearchResult envelope (per REQ-082..087) to
+# exercise the macro engine's call/bind/count path against that shape.
+
+id: mtf-d-31-search-tools
+name: Dispatch — search_tools-shaped brokered call returns ranked SearchResult list
+description: |
+  Brokered tool returns a JSON-text envelope containing three
+  SearchResult-shaped entries (server, tool, registry_key, description,
+  arg_summary, score, normalizedScore, has_help, help_hint per REQ-082
+  and REQ-085). Macro binds the list, counts entries, exits with count.
+
+covers:
+  - MTF-D-104   # search_tools-shape invocation + SearchResult envelope
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T12:24:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  hits = search_srv.search_tools({ query: "document", limit: 3 })
+  n = count $hits
+  exit { count: $n }
+
+input_vars: {}
+vault: {}
+
+tools:
+  search_srv:
+    archetype: JSONTextTool
+    tool_name: search_tools
+    value:
+      - server: "fq"
+        tool: "search"
+        registry_key: "fq.search"
+        description: "Free-text search over vault documents."
+        arg_summary: "query: string, entity_types?: string[], tags?: string[]"
+        score: 1
+        normalizedScore: 1
+        has_help: true
+        help_hint: "FlashQuery-native tool. Pass `{help: true}` for full documentation."
+      - server: "fq"
+        tool: "get_document"
+        registry_key: "fq.get_document"
+        description: "Read a single document by identifier or path."
+        arg_summary: "identifiers: string, include?: string[]"
+        score: 1
+        normalizedScore: 1
+        has_help: true
+        help_hint: "FlashQuery-native tool. Pass `{help: true}` for full documentation."
+      - server: "fq"
+        tool: "write_document"
+        registry_key: "fq.write_document"
+        description: "Create or update a document."
+        arg_summary: "mode: string, identifier?: string, path?: string"
+        score: 1
+        normalizedScore: 1
+        has_help: true
+        help_hint: "FlashQuery-native tool. Pass `{help: true}` for full documentation."
+
+expect:
+  outcome: success
+  return_result:
+    count: 3
+  side_effects:
+    tool_call_count: 1
+
+golden_snapshot:
+  state_notes:
+    - { kind: permission, tool: "search_srv.search_tools", decision: allowed }
+    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+    - { kind: coerce, path: json_text, raw_summary: "search_srv.search_tools bound via json_text" }
+    - { kind: binding, op: set, name: n, value: 3, scope: local }
