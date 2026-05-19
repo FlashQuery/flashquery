@@ -57,6 +57,8 @@ export type Statement =
   | ForLoop
   | WhileLoop
   | IfStmt
+  | ContinueStmt
+  | BreakStmt
   | ToolCall
   | ToolExistsCall;
 
@@ -114,6 +116,16 @@ export interface IfStmt {
   condition: Expr;
   thenBody: Statement[];
   elseBody: Statement[] | null;
+  line: number;
+}
+
+export interface ContinueStmt {
+  kind: 'ContinueStmt';
+  line: number;
+}
+
+export interface BreakStmt {
+  kind: 'BreakStmt';
   line: number;
 }
 

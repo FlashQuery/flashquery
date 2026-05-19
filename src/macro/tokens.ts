@@ -39,6 +39,8 @@ export const Then = createToken({ name: 'Then', pattern: /then/, longer_alt: Ide
 export const Else = createToken({ name: 'Else', pattern: /else/, longer_alt: Identifier });
 export const Fi = createToken({ name: 'Fi', pattern: /fi/, longer_alt: Identifier });
 export const While = createToken({ name: 'While', pattern: /while/, longer_alt: Identifier });
+export const Continue = createToken({ name: 'Continue', pattern: /continue/, longer_alt: Identifier });
+export const Break = createToken({ name: 'Break', pattern: /break/, longer_alt: Identifier });
 export const NullTok = createToken({ name: 'NullTok', pattern: /null/, longer_alt: Identifier });
 
 export const EqEq = createToken({ name: 'EqEq', pattern: /==/ });
@@ -104,6 +106,8 @@ export const RESERVED_KEYWORDS = [
   'else',
   'fi',
   'while',
+  'continue',
+  'break',
   'null',
 ] as const;
 
@@ -151,6 +155,8 @@ export const allTokens = [
   Else,
   Fi,
   While,
+  Continue,
+  Break,
   NullTok,
   EqEq,
   BangEq,

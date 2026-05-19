@@ -207,6 +207,20 @@ export class MacroNeedsUserInputError extends Error {
   }
 }
 
+class MacroContinueSignal extends Error {
+  constructor(public readonly line?: number) {
+    super('macro continue');
+    this.name = 'MacroContinueSignal';
+  }
+}
+
+class MacroBreakSignal extends Error {
+  constructor(public readonly line?: number) {
+    super('macro break');
+    this.name = 'MacroBreakSignal';
+  }
+}
+
 export class MacroExpectedError extends Error {
   constructor(
     public readonly error: string,
@@ -400,6 +414,16 @@ export async function evaluateProgram(
         isError: false,
       };
     }
+    if (error instanceof MacroContinueSignal || error instanceof MacroBreakSignal) {
+      return jsonRuntimeError({
+        error: 'tool_call_failed',
+        message: `${error.name} was used outside a loop.`,
+        details: {
+          reason: 'loop_control_outside_loop',
+          ...(error.line === undefined ? {} : { line: error.line }),
+        },
+      });
+    }
     if (error instanceof MacroExpectedError) {
       return jsonExpectedError({
         error: error.error,
@@ -487,6 +511,10 @@ async function execStatement(
     case 'ToolExistsCall':
       await evalToolExists(stmt, context);
       return;
+    case 'ContinueStmt':
+      throw new MacroContinueSignal(stmt.line);
+    case 'BreakStmt':
+      throw new MacroBreakSignal(stmt.line);
     case 'ForLoop': {
       const iterable = await evalExpr(stmt.iterable, env, context);
       if (!Array.isArray(iterable)) {
@@ -499,7 +527,17 @@ async function execStatement(
         await context.progressEmitter.emitForLoopIteration(`for ${stmt.varName}`);
         const child = new Env(env);
         child.setLocal(stmt.varName, itemValue);
-        await execBlock(stmt.body, child, context);
+        try {
+          await execBlock(stmt.body, child, context);
+        } catch (error) {
+          if (error instanceof MacroContinueSignal) {
+            continue;
+          }
+          if (error instanceof MacroBreakSignal) {
+            break;
+          }
+          throw error;
+        }
       }
       return;
     }
@@ -507,7 +545,17 @@ async function execStatement(
       const child = new Env(env);
       while (isTruthy(await evalExpr(stmt.condition, child, context))) {
         await context.checkCancelled(MACRO_SAFE_POINTS.whileLoopIteration);
-        await execBlock(stmt.body, child, context);
+        try {
+          await execBlock(stmt.body, child, context);
+        } catch (error) {
+          if (error instanceof MacroContinueSignal) {
+            continue;
+          }
+          if (error instanceof MacroBreakSignal) {
+            break;
+          }
+          throw error;
+        }
       }
       return;
     }

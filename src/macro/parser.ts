@@ -5,8 +5,10 @@ import {
   Bang,
   BangEq,
   BUILTIN_NAMES,
+  Break,
   Colon,
   Comma,
+  Continue,
   Do,
   Done,
   Dot,
@@ -90,7 +92,8 @@ type ParseReason =
   | 'builtin_name_shadowing'
   | 'invalid_literal'
   | 'input_var_key_must_be_literal'
-  | 'readonly_self_assignment';
+  | 'readonly_self_assignment'
+  | 'loop_control_outside_loop';
 
 class MacroSyntaxFailure extends Error {
   constructor(
@@ -148,7 +151,7 @@ class TokenStreamParser {
 
   parseProgram(): { ok: true; program: Program } | { ok: false; failure: MacroSyntaxFailure } {
     try {
-      const statements = this.parseStatements([]);
+      const statements = this.parseStatements([], 0);
       this.skipNewlines();
       if (!this.isAtEnd()) {
         this.fail(
@@ -163,11 +166,11 @@ class TokenStreamParser {
     }
   }
 
-  private parseStatements(terminators: TokenType[]): Statement[] {
+  private parseStatements(terminators: TokenType[], loopDepth: number): Statement[] {
     const statements: Statement[] = [];
     this.skipNewlines();
     while (!this.isAtEnd() && !this.matchesAny(this.peek(), terminators)) {
-      statements.push(this.parseStatement());
+      statements.push(this.parseStatement(loopDepth));
       if (this.matches(Newline)) {
         this.skipNewlines();
       } else if (!this.isAtEnd() && !this.matchesAny(this.peek(), terminators)) {
@@ -177,7 +180,7 @@ class TokenStreamParser {
     return statements;
   }
 
-  private parseStatement(): Statement {
+  private parseStatement(loopDepth: number): Statement {
     const token = this.peek();
     if (this.looksLikeSelfAssignment()) {
       this.fail(
@@ -193,9 +196,11 @@ class TokenStreamParser {
         `Cannot assign to reserved keyword "${token?.image}".`
       );
     }
-    if (this.matches(For)) return this.parseForLoop();
-    if (this.matches(While)) return this.parseWhileLoop();
-    if (this.matches(If)) return this.parseIfStmt();
+    if (this.matches(For)) return this.parseForLoop(loopDepth);
+    if (this.matches(While)) return this.parseWhileLoop(loopDepth);
+    if (this.matches(If)) return this.parseIfStmt(loopDepth);
+    if (this.matches(Continue)) return this.parseContinue(loopDepth);
+    if (this.matches(Break)) return this.parseBreak(loopDepth);
     if (this.matches(Identifier) && this.matchesAt(1, Equals)) return this.parseBinding();
     if (this.looksLikeToolCall()) return this.parseToolLike();
     return this.parsePipeline();
@@ -222,7 +227,7 @@ class TokenStreamParser {
     return this.parseExpression();
   }
 
-  private parseForLoop(): ForLoop {
+  private parseForLoop(loopDepth: number): ForLoop {
     const start = this.consume(For, 'Expected "for".');
     const variable = this.consume(Identifier, 'Expected loop variable.');
     if (this.matches(Equals)) {
@@ -234,45 +239,69 @@ class TokenStreamParser {
       this.fail('missing_do', this.peek(), 'Expected "do" before for-loop body.');
     this.consume(Do, 'Expected "do" before for-loop body.');
     this.requireStatementBoundary('Expected newline after "do".');
-    const body = this.parseStatements([Done]);
+    const body = this.parseStatements([Done], loopDepth + 1);
     if (!this.matches(Done))
       this.fail('missing_done', this.peekPrevious(), 'Expected "done" after for-loop body.');
     this.consume(Done, 'Expected "done" after for-loop body.');
     return { kind: 'ForLoop', varName: variable.image, iterable, body, line: start.startLine ?? 1 };
   }
 
-  private parseWhileLoop(): WhileLoop {
+  private parseWhileLoop(loopDepth: number): WhileLoop {
     const start = this.consume(While, 'Expected "while".');
     const condition = this.parseExpression();
     if (!this.matches(Do))
       this.fail('missing_do', this.peek(), 'Expected "do" before while-loop body.');
     this.consume(Do, 'Expected "do" before while-loop body.');
     this.requireStatementBoundary('Expected newline after "do".');
-    const body = this.parseStatements([Done]);
+    const body = this.parseStatements([Done], loopDepth + 1);
     if (!this.matches(Done))
       this.fail('missing_done', this.peekPrevious(), 'Expected "done" after while-loop body.');
     this.consume(Done, 'Expected "done" after while-loop body.');
     return { kind: 'WhileLoop', condition, body, line: start.startLine ?? 1 };
   }
 
-  private parseIfStmt(): IfStmt {
+  private parseIfStmt(loopDepth: number): IfStmt {
     const start = this.consume(If, 'Expected "if".');
     const condition = this.parseExpression();
     if (!this.matches(Then))
       this.fail('missing_then', this.peek(), 'Expected "then" after if condition.');
     this.consume(Then, 'Expected "then" after if condition.');
     this.requireStatementBoundary('Expected newline after "then".');
-    const thenBody = this.parseStatements([Else, Fi]);
+    const thenBody = this.parseStatements([Else, Fi], loopDepth);
     let elseBody: Statement[] | null = null;
     if (this.matches(Else)) {
       this.consume(Else, 'Expected "else".');
       this.requireStatementBoundary('Expected newline after "else".');
-      elseBody = this.parseStatements([Fi]);
+      elseBody = this.parseStatements([Fi], loopDepth);
     }
     if (!this.matches(Fi))
       this.fail('missing_fi', this.peekPrevious(), 'Expected "fi" after if statement.');
     this.consume(Fi, 'Expected "fi" after if statement.');
     return { kind: 'IfStmt', condition, thenBody, elseBody, line: start.startLine ?? 1 };
+  }
+
+  private parseContinue(loopDepth: number): Statement {
+    const token = this.consume(Continue, 'Expected "continue".');
+    if (loopDepth === 0) {
+      this.fail(
+        'loop_control_outside_loop',
+        token,
+        '`continue` can only be used inside a for or while loop.'
+      );
+    }
+    return { kind: 'ContinueStmt', line: token.startLine ?? 1 };
+  }
+
+  private parseBreak(loopDepth: number): Statement {
+    const token = this.consume(Break, 'Expected "break".');
+    if (loopDepth === 0) {
+      this.fail(
+        'loop_control_outside_loop',
+        token,
+        '`break` can only be used inside a for or while loop.'
+      );
+    }
+    return { kind: 'BreakStmt', line: token.startLine ?? 1 };
   }
 
   private parseExpression(): Expr {
@@ -534,6 +563,8 @@ class TokenStreamParser {
         Done,
         Else,
         Fi,
+        Continue,
+        Break,
         Do,
         Then,
         RBrace,
