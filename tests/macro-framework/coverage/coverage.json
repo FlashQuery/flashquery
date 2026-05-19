@@ -1,0 +1,793 @@
+{
+  "schema_version": "1",
+  "generated_at": "2026-05-19T02:27:55.462Z",
+  "cells": {
+    "MTF-G-001": {
+      "count": 2,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-g-01-literal-and-interpolation",
+        "mtf-g-13-line-comments"
+      ]
+    },
+    "MTF-G-002": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-003": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-004": {
+      "count": 2,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-g-01-literal-and-interpolation",
+        "mtf-s-14-field-access"
+      ]
+    },
+    "MTF-G-005": {
+      "count": 2,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-g-01-literal-and-interpolation",
+        "mtf-g-13-line-comments"
+      ]
+    },
+    "MTF-G-006": {
+      "count": 1,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-g-13-line-comments"
+      ]
+    },
+    "MTF-G-007": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-G-008": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-S-001": {
+      "count": 3,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-cf-placeholder-loop",
+        "mtf-i-19-repeat-invocation-isolation",
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-S-002": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-S-003": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-S-004": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-c-04-while-with-fail"
+      ]
+    },
+    "MTF-S-005": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-S-006": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-S-007": {
+      "count": 1,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-s-14-field-access"
+      ]
+    },
+    "MTF-S-008": {
+      "count": 1,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-c-15-if-else-branches"
+      ]
+    },
+    "MTF-C-001": {
+      "count": 3,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-cf-placeholder-loop",
+        "mtf-l-17-progress-emission",
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-C-002": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-c-03-for-with-if-fail"
+      ]
+    },
+    "MTF-C-003": {
+      "count": 2,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-c-03-for-with-if-fail",
+        "mtf-c-15-if-else-branches"
+      ]
+    },
+    "MTF-C-004": {
+      "count": 2,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-c-03-for-with-if-fail",
+        "mtf-e-18-macro-aborted-envelope"
+      ]
+    },
+    "MTF-C-005": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-c-04-while-with-fail"
+      ]
+    },
+    "MTF-C-006": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-c-04-while-with-fail"
+      ]
+    },
+    "MTF-C-007": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-C-008": {
+      "count": 1,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-c-15-if-else-branches"
+      ]
+    },
+    "MTF-C-009": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-D-001": {
+      "count": 2,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-16-scripted-tool-sequence"
+      ]
+    },
+    "MTF-D-002": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain"
+      ]
+    },
+    "MTF-D-003": {
+      "count": 2,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-16-scripted-tool-sequence"
+      ]
+    },
+    "MTF-D-004": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain"
+      ]
+    },
+    "MTF-D-005": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths"
+      ]
+    },
+    "MTF-D-006": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths"
+      ]
+    },
+    "MTF-D-007": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths"
+      ]
+    },
+    "MTF-D-008": {
+      "count": 2,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths",
+        "mtf-d-16-scripted-tool-sequence"
+      ]
+    },
+    "MTF-D-009": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-D-010": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-L-001": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-002": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-003": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-004": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-005": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-08-trace-summary-mode"
+      ]
+    },
+    "MTF-L-006": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-08-trace-summary-mode"
+      ]
+    },
+    "MTF-L-007": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-L-008": {
+      "count": 1,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-l-17-progress-emission"
+      ]
+    },
+    "MTF-L-009": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-E-001": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-e-09-prescan-unknown-server"
+      ]
+    },
+    "MTF-E-002": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-e-09-prescan-unknown-server"
+      ]
+    },
+    "MTF-E-003": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-e-10-intentional-mismatch"
+      ]
+    },
+    "MTF-E-004": {
+      "count": 1,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-e-18-macro-aborted-envelope"
+      ]
+    },
+    "MTF-E-005": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-E-006": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-E-007": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-I-001": {
+      "count": 2,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-i-11-self-via-input-vars",
+        "mtf-i-19-repeat-invocation-isolation"
+      ]
+    },
+    "MTF-I-002": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-i-11-self-via-input-vars"
+      ]
+    },
+    "MTF-I-003": {
+      "count": 1,
+      "last_verified": "2026-05-19T01:40:56.629Z",
+      "tests": [
+        "mtf-i-19-repeat-invocation-isolation"
+      ]
+    },
+    "MTF-I-004": {
+      "count": 0,
+      "last_verified": null,
+      "tests": []
+    },
+    "MTF-FW-001": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:09.394Z",
+      "tests": [
+        "mtf-e-10-intentional-mismatch"
+      ]
+    },
+    "MTF-FW-002": {
+      "count": 1,
+      "last_verified": "2026-05-19T00:45:33.718Z",
+      "tests": [
+        "mtf-i-11-self-via-input-vars"
+      ]
+    }
+  },
+  "interactions": {
+    "MTF-C-002+MTF-C-003": {
+      "count": 1,
+      "tests": [
+        "mtf-c-03-for-with-if-fail"
+      ]
+    },
+    "MTF-C-002+MTF-C-004": {
+      "count": 1,
+      "tests": [
+        "mtf-c-03-for-with-if-fail"
+      ]
+    },
+    "MTF-C-003+MTF-C-004": {
+      "count": 1,
+      "tests": [
+        "mtf-c-03-for-with-if-fail"
+      ]
+    },
+    "MTF-C-005+MTF-C-006": {
+      "count": 1,
+      "tests": [
+        "mtf-c-04-while-with-fail"
+      ]
+    },
+    "MTF-C-005+MTF-S-004": {
+      "count": 1,
+      "tests": [
+        "mtf-c-04-while-with-fail"
+      ]
+    },
+    "MTF-C-006+MTF-S-004": {
+      "count": 1,
+      "tests": [
+        "mtf-c-04-while-with-fail"
+      ]
+    },
+    "MTF-C-003+MTF-C-008": {
+      "count": 1,
+      "tests": [
+        "mtf-c-15-if-else-branches"
+      ]
+    },
+    "MTF-C-003+MTF-S-008": {
+      "count": 1,
+      "tests": [
+        "mtf-c-15-if-else-branches"
+      ]
+    },
+    "MTF-C-008+MTF-S-008": {
+      "count": 1,
+      "tests": [
+        "mtf-c-15-if-else-branches"
+      ]
+    },
+    "MTF-C-001+MTF-S-001": {
+      "count": 2,
+      "tests": [
+        "mtf-cf-placeholder-loop",
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-D-001+MTF-D-002": {
+      "count": 1,
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain"
+      ]
+    },
+    "MTF-D-001+MTF-D-003": {
+      "count": 2,
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-16-scripted-tool-sequence"
+      ]
+    },
+    "MTF-D-001+MTF-D-004": {
+      "count": 1,
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain"
+      ]
+    },
+    "MTF-D-002+MTF-D-003": {
+      "count": 1,
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain"
+      ]
+    },
+    "MTF-D-002+MTF-D-004": {
+      "count": 1,
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain"
+      ]
+    },
+    "MTF-D-003+MTF-D-004": {
+      "count": 1,
+      "tests": [
+        "mtf-d-05-multi-server-dispatch-chain"
+      ]
+    },
+    "MTF-D-005+MTF-D-006": {
+      "count": 1,
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths"
+      ]
+    },
+    "MTF-D-005+MTF-D-007": {
+      "count": 1,
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths"
+      ]
+    },
+    "MTF-D-005+MTF-D-008": {
+      "count": 1,
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths"
+      ]
+    },
+    "MTF-D-006+MTF-D-007": {
+      "count": 1,
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths"
+      ]
+    },
+    "MTF-D-006+MTF-D-008": {
+      "count": 1,
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths"
+      ]
+    },
+    "MTF-D-007+MTF-D-008": {
+      "count": 1,
+      "tests": [
+        "mtf-d-06-brokered-coercion-paths"
+      ]
+    },
+    "MTF-D-001+MTF-D-008": {
+      "count": 1,
+      "tests": [
+        "mtf-d-16-scripted-tool-sequence"
+      ]
+    },
+    "MTF-D-003+MTF-D-008": {
+      "count": 1,
+      "tests": [
+        "mtf-d-16-scripted-tool-sequence"
+      ]
+    },
+    "MTF-E-001+MTF-E-002": {
+      "count": 1,
+      "tests": [
+        "mtf-e-09-prescan-unknown-server"
+      ]
+    },
+    "MTF-C-004+MTF-E-004": {
+      "count": 1,
+      "tests": [
+        "mtf-e-18-macro-aborted-envelope"
+      ]
+    },
+    "MTF-E-003+MTF-FW-001": {
+      "count": 1,
+      "tests": [
+        "mtf-e-10-intentional-mismatch"
+      ]
+    },
+    "MTF-G-001+MTF-G-002": {
+      "count": 1,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-001+MTF-G-003": {
+      "count": 1,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-001+MTF-G-004": {
+      "count": 1,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-001+MTF-G-005": {
+      "count": 2,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation",
+        "mtf-g-13-line-comments"
+      ]
+    },
+    "MTF-G-002+MTF-G-003": {
+      "count": 1,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-002+MTF-G-004": {
+      "count": 1,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-002+MTF-G-005": {
+      "count": 1,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-003+MTF-G-004": {
+      "count": 1,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-003+MTF-G-005": {
+      "count": 1,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-004+MTF-G-005": {
+      "count": 1,
+      "tests": [
+        "mtf-g-01-literal-and-interpolation"
+      ]
+    },
+    "MTF-G-001+MTF-G-006": {
+      "count": 1,
+      "tests": [
+        "mtf-g-13-line-comments"
+      ]
+    },
+    "MTF-G-005+MTF-G-006": {
+      "count": 1,
+      "tests": [
+        "mtf-g-13-line-comments"
+      ]
+    },
+    "MTF-FW-002+MTF-I-001": {
+      "count": 1,
+      "tests": [
+        "mtf-i-11-self-via-input-vars"
+      ]
+    },
+    "MTF-FW-002+MTF-I-002": {
+      "count": 1,
+      "tests": [
+        "mtf-i-11-self-via-input-vars"
+      ]
+    },
+    "MTF-I-001+MTF-I-002": {
+      "count": 1,
+      "tests": [
+        "mtf-i-11-self-via-input-vars"
+      ]
+    },
+    "MTF-I-001+MTF-I-003": {
+      "count": 1,
+      "tests": [
+        "mtf-i-19-repeat-invocation-isolation"
+      ]
+    },
+    "MTF-I-001+MTF-S-001": {
+      "count": 1,
+      "tests": [
+        "mtf-i-19-repeat-invocation-isolation"
+      ]
+    },
+    "MTF-I-003+MTF-S-001": {
+      "count": 1,
+      "tests": [
+        "mtf-i-19-repeat-invocation-isolation"
+      ]
+    },
+    "MTF-L-001+MTF-L-002": {
+      "count": 1,
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-001+MTF-L-003": {
+      "count": 1,
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-001+MTF-L-004": {
+      "count": 1,
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-002+MTF-L-003": {
+      "count": 1,
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-002+MTF-L-004": {
+      "count": 1,
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-003+MTF-L-004": {
+      "count": 1,
+      "tests": [
+        "mtf-l-07-dry-run-inventory"
+      ]
+    },
+    "MTF-L-005+MTF-L-006": {
+      "count": 1,
+      "tests": [
+        "mtf-l-08-trace-summary-mode"
+      ]
+    },
+    "MTF-C-007+MTF-L-007": {
+      "count": 1,
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-C-007+MTF-S-005": {
+      "count": 1,
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-C-007+MTF-S-006": {
+      "count": 1,
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-L-007+MTF-S-005": {
+      "count": 1,
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-L-007+MTF-S-006": {
+      "count": 1,
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-S-005+MTF-S-006": {
+      "count": 1,
+      "tests": [
+        "mtf-l-12-elaborate-deep-nesting"
+      ]
+    },
+    "MTF-C-001+MTF-L-008": {
+      "count": 1,
+      "tests": [
+        "mtf-l-17-progress-emission"
+      ]
+    },
+    "MTF-C-001+MTF-S-002": {
+      "count": 1,
+      "tests": [
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-C-001+MTF-S-003": {
+      "count": 1,
+      "tests": [
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-S-001+MTF-S-002": {
+      "count": 1,
+      "tests": [
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-S-001+MTF-S-003": {
+      "count": 1,
+      "tests": [
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-S-002+MTF-S-003": {
+      "count": 1,
+      "tests": [
+        "mtf-s-02-walk-up-scope-counter"
+      ]
+    },
+    "MTF-G-004+MTF-S-007": {
+      "count": 1,
+      "tests": [
+        "mtf-s-14-field-access"
+      ]
+    }
+  }
+}
