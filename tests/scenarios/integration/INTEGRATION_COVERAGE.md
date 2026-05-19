@@ -113,6 +113,13 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 | INT-MCB-10 | T-Y-010 brokered host registration appears in `tools/list` by registry-key name with `description_override` applied through `BrokeredTool.description`. | brokered_host_registration   | 2026-05-18   | 2026-05-18   |
 | INT-MCB-11 | T-Y-011 brokered tools have no broker-side tier classification; visibility is governed by `mcp_servers` membership. | brokered_no_tier_classification | 2026-05-18   | 2026-05-18   |
 
+## Phase 143 MCP Broker Diagnostics And Macro Extensions
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| INT-MCB-14 | T-Y-014 `flashquery list-tools` CLI emits paste-ready broker override YAML that re-parses into a valid config block. | cli_list_tools_paste_back    | 2026-05-18   | 2026-05-18   |
+| INT-MCB-15 | T-Y-015 macro extensions `_self`, `continue`, `break`, and `_exists()` compose in a source_ref rundoc workflow. | macro_extensions_compose_rundoc | 2026-05-18   | 2026-05-18   |
+
 ---
 
 ## IS — Search Coherence

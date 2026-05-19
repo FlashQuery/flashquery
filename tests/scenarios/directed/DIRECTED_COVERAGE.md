@@ -259,6 +259,19 @@ Core CRUD operations on vault documents via MCP.
 | MCB-21 | `help: true` against an FQ-native tool returns its `.tool.md` body through `call_model` before native schema validation rejects invalid required arguments. | test_fq_native_help_true_through_call_model | 2026-05-18 |  |
 | MCB-22 | A `tool_search: enabled` purpose initially exposes only `fq.search_tools`, returns native/brokered help discrimination in search results, and dispatches a discovered brokered tool. | test_search_tools_purpose_roundtrip | 2026-05-18 |  |
 
+## Phase 143 MCP Broker Diagnostics And Macro Extensions
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| MCB-06 | T-S-006: `_self.path` and `_self.frontmatter.*` are populated when a macro is loaded via `source_ref`. | test_mcp_broker_phase_e | 2026-05-19 | 2026-05-19 |
+| MCB-07 | T-S-007: `_self.frontmatter` is a snapshot and does not auto-refresh after same-document `fq.write_document` write-through. | test_mcp_broker_phase_e | 2026-05-19 | 2026-05-19 |
+| MCB-08 | T-S-008: `continue` inside a `for` loop skips the current iteration and continues execution. | test_mcp_broker_phase_e | 2026-05-19 | 2026-05-19 |
+| MCB-09 | T-S-009: `break` inside a `while` loop exits the loop and execution continues after the loop. | test_mcp_broker_phase_e | 2026-05-19 | 2026-05-19 |
+| MCB-10 | T-S-010: brokered `_exists()` returns false for an unconfigured server so a macro guard clause can fire. | test_mcp_broker_phase_e | 2026-05-19 | 2026-05-19 |
+| MCB-11 | T-S-011: brokered `_exists()` uses a deep probe and returns false for a SIGSTOP'd server. | test_mcp_broker_phase_e | 2026-05-19 | 2026-05-19 |
+| MCB-19 | T-S-019: `flashquery list-tools` emits a paste-ready `tool_overrides` YAML fragment for a configured fixture server. | test_mcp_broker_phase_e | 2026-05-19 | 2026-05-19 |
+| MCB-20 | T-S-020: `flashquery list-tools` against a misconfigured server surfaces captured stderr and emits no partial YAML on stdout. | test_mcp_broker_phase_e | 2026-05-19 | 2026-05-19 |
+
 ## Phase 142 Host Surface And ConsumerContext
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |

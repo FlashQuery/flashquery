@@ -1,0 +1,76 @@
+name: macro_extensions_compose_rundoc
+description: >
+  T-Y-015 / INT-MCB-15: source_ref rundoc execution composes _self metadata,
+  continue, break, and brokered _exists() in one macro workflow.
+coverage: [INT-MCB-15]
+server_modes: [managed]
+
+extra_config:
+  host_mcp_tools:
+    tools:
+      - call_macro
+      - write_document
+      - get_document
+      - archive_document
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+      tool_overrides: {}
+  host:
+    mcp_servers: [basic]
+    tool_search: disabled
+
+steps:
+  - label: "Create Phase E rundoc macro library"
+    action: vault.write
+    name: phase_e_rundoc
+    path: "phase-e/rundoc-${run.id}.md"
+    title: "Phase E Rundoc ${run.id}"
+    content: |
+      ```fqm name=compose
+      kept = 0
+      for item in [1, 2, 3] do
+        if $item == 2 then
+          continue
+        fi
+        kept = add $kept $item
+      done
+      loop_count = 0
+      while $loop_count < 5 do
+        loop_count = add $loop_count 1
+        if $loop_count == 2 then
+          break
+        fi
+      done
+      if missing_phase_e_yaml._exists() then
+        exit "unexpected-missing"
+      fi
+      if !basic._exists() then
+        exit "unexpected-basic-missing"
+      fi
+      exit { path: _self.path, marker: _self.frontmatter.phase_e_marker, kept: $kept, count: $loop_count }
+      ```
+    tags: [phase-e, rundoc]
+    frontmatter:
+      type: macro_library
+      phase_e_marker: "yaml-${run.id}"
+
+  - label: "INT-MCB-15 / T-Y-015: source_ref rundoc composes _self, continue, break, and _exists"
+    assert:
+      op: call_macro
+      args:
+        source_ref: "${phase_e_rundoc.path}::compose"
+        trace: summary
+      expect_json_equals:
+        path: result.marker
+        value: "yaml-${run.id}"
+      expect_json_contains:
+        path: result.kept
+        value: 4
+      expect_json_path:
+        - result.path
+        - result.count

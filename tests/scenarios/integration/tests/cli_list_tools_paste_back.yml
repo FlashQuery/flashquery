@@ -1,0 +1,31 @@
+name: cli_list_tools_paste_back
+description: >
+  T-Y-014 / INT-MCB-14: diagnostic broker list-tools output is represented as
+  paste-ready tool_overrides YAML that can be re-parsed under mcp_servers.<server>.
+coverage: [INT-MCB-14]
+server_modes: [managed]
+
+extra_config:
+  mcp_servers:
+    basic:
+      transport: stdio
+      command: node
+      args: ["--import", "tsx", "tests/fixtures/mcp-servers/server-basic.ts"]
+      cost_per_call: 0.125
+      per_call_timeout_ms: 30000
+      tool_overrides: {}
+  host:
+    mcp_servers: [basic]
+    tool_search: disabled
+
+steps:
+  - label: "INT-MCB-14 / T-Y-014: host brokered fixture is discoverable for CLI paste-back source"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "basic__echo"
+      expect_not_contains: "phase-e-cli-stderr"
+
+  - label: "INT-MCB-14 / T-Y-014: brokered registration keeps override-ready echo metadata visible"
+    assert:
+      op: mcp.list_tools
+      expect_contains: "Echoes the provided value without mutation."
