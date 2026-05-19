@@ -1,7 +1,7 @@
 import type { McpBroker } from '../services/mcp-broker.js';
 import { MacroRuntimeError } from './evaluator.js';
 
-export const DEFAULT_BROKER_PROBE_TIMEOUT_MS = 5000;
+export const BROKER_EXISTS_DEEP_PROBE_TIMEOUT_MS = 250;
 
 export async function resolveNamespaceIntrospection(
   server: string,
@@ -21,11 +21,7 @@ export async function resolveNamespaceIntrospection(
     return true;
   }
 
-  return brokerIsConnectedWithTimeout(
-    broker,
-    server,
-    context.probeTimeoutMs ?? DEFAULT_BROKER_PROBE_TIMEOUT_MS
-  );
+  return brokerIsConnectedWithTimeout(broker, server, BROKER_EXISTS_DEEP_PROBE_TIMEOUT_MS);
 }
 
 async function brokerIsConnectedWithTimeout(
@@ -40,7 +36,7 @@ async function brokerIsConnectedWithTimeout(
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      broker.isConnected(server),
+      broker.isConnected(server, { deepProbe: true, timeoutMs }),
       new Promise<false>((resolve) => {
         timeout = setTimeout(() => resolve(false), timeoutMs);
       }),
