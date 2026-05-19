@@ -19,7 +19,9 @@ import net from 'node:net';
 // Together these ensure pg's raw TCP socket connects over IPv4 only.
 dns.setDefaultResultOrder('ipv4first');
 net.setDefaultAutoSelectFamily(false);
-console.error('[STARTUP] DNS result order set to: ipv4first, autoSelectFamily disabled (IPv4-only TCP)');
+if (process.argv[2] === 'start') {
+  console.error('[STARTUP] DNS result order set to: ipv4first, autoSelectFamily disabled (IPv4-only TCP)');
+}
 
 import 'dotenv/config'; // MUST be first — loads .env before any module evaluation (D-10)
 

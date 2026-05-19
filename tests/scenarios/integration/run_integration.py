@@ -143,6 +143,7 @@ import random
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -767,6 +768,8 @@ def _execute_assert(
 
     if op == "mcp.list_tools":
         result = _list_tools(ctx.client)
+    elif op == "cli.list_tools_paste_back":
+        result = _cli_list_tools_paste_back(ctx, args)
     else:
         result = ctx.client.call_tool(op, **args)
     return _evaluate_assertions(result, assert_spec, label, run)
@@ -883,6 +886,106 @@ def _list_tools(client: FQCClient) -> ToolResult:
         raw_response=raw,
         server_url=client.base_url,
         config_source=client.config_source,
+    )
+
+
+def _cli_list_tools_paste_back(ctx: TestContext, args: dict[str, Any]) -> ToolResult:
+    """Run the diagnostic CLI, paste stdout into config, and validate the result."""
+    server_id = str(args.get("server_id") or "basic")
+    if ctx.server is None:
+        return ToolResult(
+            tool="cli.list_tools_paste_back",
+            ok=False,
+            text="",
+            timing_ms=0,
+            arguments=args,
+            error="cli.list_tools_paste_back requires managed server mode",
+            config_source=ctx.client.config_source,
+        )
+
+    project_dir = Path(ctx.server.project_dir)
+    config_path = ctx.server.config_path
+    t0 = time.monotonic()
+    cli = subprocess.run(
+        ["node", "dist/index.js", "list-tools", server_id, "--config", config_path],
+        cwd=str(project_dir),
+        text=True,
+        capture_output=True,
+        timeout=30,
+    )
+    elapsed = int((time.monotonic() - t0) * 1000)
+
+    stdout = cli.stdout
+    stderr = cli.stderr
+    checks: dict[str, Any] = {
+        "exit_code": cli.returncode,
+        "stdout_contains_tool_overrides": "tool_overrides:" in stdout,
+        "stdout_clean": "Server stderr:" not in stdout and "FlashQuery ready" not in stdout,
+        "stderr_empty": stderr.strip() == "",
+    }
+
+    validation_error = ""
+    parsed_overrides: dict[str, Any] = {}
+    try:
+        fragment = yaml.safe_load(stdout) or {}
+        parsed_overrides = fragment.get("tool_overrides") or {}
+        checks["tool_overrides_is_object"] = isinstance(parsed_overrides, dict)
+        checks["server_tool_override_is_object"] = isinstance(parsed_overrides.get("echo"), dict)
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            pasted_config = yaml.safe_load(f) or {}
+        pasted_config.setdefault("mcp_servers", {}).setdefault(server_id, {})["tool_overrides"] = parsed_overrides
+        with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False, encoding="utf-8") as f:
+            yaml.safe_dump(pasted_config, f, sort_keys=False)
+            pasted_config_path = f.name
+        try:
+            validate = subprocess.run(
+                [
+                    "node",
+                    "--import",
+                    "tsx",
+                    "-e",
+                    "import { loadConfig } from './src/config/loader.ts'; loadConfig(process.argv[1]);",
+                    pasted_config_path,
+                ],
+                cwd=str(project_dir),
+                text=True,
+                capture_output=True,
+                timeout=30,
+            )
+            checks["load_config_exit_code"] = validate.returncode
+            if validate.returncode != 0:
+                validation_error = (validate.stderr or validate.stdout).strip()
+        finally:
+            Path(pasted_config_path).unlink(missing_ok=True)
+    except Exception as exc:
+        checks["exception"] = f"{type(exc).__name__}: {exc}"
+
+    ok = (
+        cli.returncode == 0
+        and checks.get("stdout_contains_tool_overrides") is True
+        and checks.get("stdout_clean") is True
+        and checks.get("stderr_empty") is True
+        and checks.get("tool_overrides_is_object") is True
+        and checks.get("server_tool_override_is_object") is True
+        and checks.get("load_config_exit_code") == 0
+    )
+    payload = {
+        "server_id": server_id,
+        "stdout": stdout,
+        "stderr": stderr,
+        "checks": checks,
+        "tool_override_keys": sorted(parsed_overrides.keys()),
+    }
+    return ToolResult(
+        tool="cli.list_tools_paste_back",
+        ok=ok,
+        text=json.dumps(payload, sort_keys=True),
+        timing_ms=elapsed,
+        arguments=args,
+        error=None if ok else validation_error or json.dumps(checks, sort_keys=True),
+        server_url=ctx.client.base_url,
+        config_source=config_path,
     )
 
 

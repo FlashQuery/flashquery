@@ -19,6 +19,17 @@ extra_config:
     tool_search: disabled
 
 steps:
+  - label: "INT-MCB-14 / T-Y-014: flashquery list-tools stdout is paste-ready config-valid YAML"
+    assert:
+      op: cli.list_tools_paste_back
+      args:
+        server_id: basic
+      expect_contains: "tool_overrides:"
+      expect_not_contains: "Server stderr:"
+      expect_json_equals:
+        path: checks.load_config_exit_code
+        value: 0
+
   - label: "INT-MCB-14 / T-Y-014: host brokered fixture is discoverable for CLI paste-back source"
     assert:
       op: mcp.list_tools
