@@ -76,7 +76,7 @@ function driftResponse(drifts: TofuDriftPayload[], serverId: string, toolName: s
     serverDrifts.length > 1
       ? { event: 'schema_drift_detected' as const, server: serverId, changes: serverDrifts }
       : requestedDrift;
-  return structuredTextResult({ status: 'needs_user_input', payload }, true);
+  return structuredTextResult({ reason: 'needs_user_input', payload }, true);
 }
 
 function findVisibleTool(tools: BrokeredTool[], registryKey: string): BrokeredTool | undefined {

@@ -106,7 +106,7 @@ async function waitFor(assertion: () => boolean): Promise<void> {
 }
 
 describe('macro concurrency integration', () => {
-  it('T-E-002 analogue keeps host and delegated calls isolated across mid-flight list_changed', async () => {
+  it('T-E-002 keeps host and delegated calls isolated across mid-flight list_changed', async () => {
     const driftEvents: unknown[] = [];
     const broker = createBroker({
       mcpServers: { quirky: quirkyListChangedConfig() },

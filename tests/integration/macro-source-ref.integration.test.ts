@@ -182,7 +182,7 @@ describe.skipIf(!HAS_SUPABASE)('call_macro source_ref integration', () => {
     });
   });
 
-  it('T-E-001 analogue resumes a source_ref rundoc after TOFU drift and writes back to _self.frontmatter', async () => {
+  it('T-E-001 resumes a source_ref rundoc after TOFU drift and writes back to _self.frontmatter', async () => {
     const broker = createBroker({
       mcpServers: {
         quirky: {

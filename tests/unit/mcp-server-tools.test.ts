@@ -526,12 +526,12 @@ describe('host brokered tool registration', () => {
     const handler = server.registerTool.mock.calls[0]?.[2] as (args: unknown, extra: unknown) => Promise<CallToolResult>;
     const result = await handler({ text: 'hello' }, {});
     const payload = JSON.parse(result.content[0]?.text ?? '{}') as {
-      status?: string;
+      reason?: string;
       payload?: { event?: string; changes?: unknown[] };
     };
 
     expect(result.isError).toBe(true);
-    expect(payload.status).toBe('needs_user_input');
+    expect(payload.reason).toBe('needs_user_input');
     expect(payload.payload?.event).toBe('schema_drift_detected');
     expect(payload.payload?.changes).toHaveLength(2);
     expect(broker.callTool).not.toHaveBeenCalled();
