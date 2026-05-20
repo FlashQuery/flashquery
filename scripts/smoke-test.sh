@@ -117,8 +117,25 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Testing MCP connectivity (max 120 seconds f
 INIT_PAYLOAD='{"jsonrpc":"2.0","method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke-test","version":"1.0"}},"id":1}'
 TOOL_PAYLOAD='{"jsonrpc":"2.0","method":"tools/call","params":{"name":"list_memories","arguments":{"tags":["smoke-test"]}},"id":2}'
 
-# Bearer token matches MCP_AUTH_SECRET in .env.docker.example / docker-compose.yml default.
-MCP_AUTH_SECRET="${MCP_AUTH_SECRET:-ci-smoke-test-secret}"
+# Bearer token should match the same env file used by docker compose.
+# Keep xtrace disabled while reading and using the secret so it is not printed.
+TRACE_ENABLED=0
+case "$-" in
+  *x*)
+    TRACE_ENABLED=1
+    set +x
+    ;;
+esac
+
+ENV_MCP_AUTH_SECRET="$(sed -n 's/^MCP_AUTH_SECRET=//p' "$ENV_FILE" | tail -n 1)"
+MCP_AUTH_SECRET="${MCP_AUTH_SECRET:-$ENV_MCP_AUTH_SECRET}"
+
+if [ -z "$MCP_AUTH_SECRET" ]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: MCP_AUTH_SECRET not set in environment or $ENV_FILE"
+  # shellcheck disable=SC2086
+  docker compose $COMPOSE_ARGS down -v >/dev/null 2>&1
+  exit 1
+fi
 
 MAX_WAIT=120
 ELAPSED=0
@@ -167,6 +184,10 @@ if [ "$MCP_PASSED" -eq 0 ]; then
   # shellcheck disable=SC2086
   docker compose $COMPOSE_ARGS down -v >/dev/null 2>&1
   exit 1
+fi
+
+if [ "$TRACE_ENABLED" -eq 1 ]; then
+  set -x
 fi
 
 #==============================================================================
