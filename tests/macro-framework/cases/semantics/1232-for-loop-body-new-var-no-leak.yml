@@ -1,0 +1,39 @@
+id: mtf-s-1232-for-loop-body-new-var-no-leak
+name: |-
+  REQ-021: loop-body new var doesn't leak
+intent: |
+  loop-local new var (not pre-declared) doesn't escape
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  outer_check = "not changed"
+  for i in [1] do
+    loop_local = "in-loop"
+  done
+  if $outer_check == "not changed" then
+    result = "ok"
+  fi
+  exit { result: $result }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { result: "ok" }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { result: "ok" }
+  side_effects:
+    tool_call_count: 0

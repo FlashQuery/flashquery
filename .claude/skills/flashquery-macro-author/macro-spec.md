@@ -25,7 +25,7 @@ A macro is a sequence of statements. Each statement is one of:
 - **Tool call (statement position).** `<server>.<tool>({ <args> })` — dispatches the call and discards the return value.
 - **For-loop.** `for <var> in <iterable> do <statements> done` — iterates the variable over the items in the iterable. Iterator variable is strictly local to the loop body.
 - **While-loop.** `while <condition> do <statements> done` — iterates while the condition is truthy. Condition re-evaluated each iteration.
-- **If-then-else.** `if <condition> then <statements> [ else <statements> ] fi` — branch on condition truthiness.
+- **If-then-else.** `if <condition> then <statements> [ else <statements> ] fi` — branch on condition truthiness. The `<condition>` accepts any value-producing expression: primaries (`$var`, literals), field access, comparisons (`$x == 5`), boolean combinators (`$a && $b`), `_exists()` introspection (§5.2), and pipelines / builtin calls (`input_var "flag" --default false`, `count $list`). The truthiness of the resulting value gates the branch. Same shape for `while <condition> do ... done`. **Note:** the §1.2 grammar boundary on pipelines-in-comparison-operands STILL applies — `if mod $n 2 == 0 then` doesn't parse because the pipeline is on the LHS of `==`; pre-compute first.
 - **Continue / Break.** `continue` skips to the next iteration of the enclosing loop. `break` exits the enclosing loop. Parse-time error if used outside a loop body.
 - **Exit.** `exit <expression>` — halts the macro immediately, returning the expression's value. Statements after `exit` do not run.
 - **Fail.** `fail "<message>"` — halts the macro with a `macro_aborted` error envelope carrying the message.
@@ -37,6 +37,25 @@ A macro is a sequence of statements. Each statement is one of:
 - **Field access.** `$obj.field` or `$obj.a.b.c` — read a field from an object value. Chained access through `.` traverses nested objects.
 - **String interpolation.** Inside `"..."`, sequences `$name` and `${name.path}` are substituted with the stringified variable value. Inside `'...'`, raw text — no interpolation.
 - **Comparison.** `==`, `!=`, `<`, `<=`, `>`, `>=`. Numeric operators require numeric operands. Cross-type equality (`"5" == 5`) returns `false`.
+
+  **Grammar boundary — pipelines are NOT valid operands of comparison operators.** The `compareExpr` rule chains over `rangeExpr`, which roots at `primary` (literals, varOrField, listLit, objectLit, parenthesized expr, toolCall in primary position). A pipeline expression (e.g., `count $list`, `mod $n 2`, `add $a $b`) cannot appear directly as a left or right operand of `==`, `!=`, `<`, etc. **Always pre-compute pipeline values into a named variable, then compare the variable.**
+
+  ```
+  # WRONG — pipeline as left operand of ==
+  if mod $n 2 == 0 then ...           # parse_error
+
+  # WRONG — pipeline as right operand of ==
+  if $n_reachable == count $candidates then ...  # parse_error
+
+  # CORRECT — pre-compute, then compare
+  remainder = mod $n 2
+  if $remainder == 0 then ...
+
+  total = count $candidates
+  if $n_reachable == $total then ...
+  ```
+
+  Pipelines DO compose freely in object-literal value positions (REQ-011 ac4: "Values are any expression" — `rhsExpr` accepts pipelines directly), in assignment RHS (`x = count $list`), and as `if`/`while` conditions when the pipeline result is itself truthy. The restriction is specifically on comparison-operator operands.
 - **Boolean combinators.** `&&`, `||`, `!`. `&&` and `||` short-circuit.
 - **Range.** `1..5` — iterates [1, 2, 3, 4]. **End-exclusive.** `range N` builtin produces [0, 1, ..., N-1].
 - **Tool call (expression position).** `<server>.<tool>({ <args> })` — same as statement form; the return value is the expression's value.
@@ -65,6 +84,31 @@ grep, find, sed, cat, wc, head, tail, ls
 ```
 
 When generating macros, prefer non-conflicting names: `phase` instead of `status`, `result_value` instead of `exit`, `summary` instead of `status`.
+
+**Common trap — `count` as a loop variable or input_var binding.** Three natural-English uses of `count` all trigger `builtin_name_shadowing`:
+
+```
+count = 0                              # WRONG — count is a builtin
+for i in $items do count = add $count 1 done   # WRONG — same
+count = input_var "count"              # WRONG — input_var binding to builtin name
+```
+
+The fix is to rename the variable (use `n`, `total`, `cnt`, `n_items`, etc.) while keeping any string keys (like `input_var "count"`) intact. Other commonly-natural names that hit the trap: `status`, `exit`, `range`, `concat`, `append`. Confirmed via the autonomous histogram run on 2026-05-19 — `count` shadowing recurred multiple times across loop accumulator and input_var scenarios.
+
+**Common trap — `do` as a tool name.** When designing broker scenarios, the natural English `svc.do(...)` is a parse error because `do` is the for/while loop keyword (lexes as `Do` token, not `Identifier`). Rename to `perform`, `run`, `execute`, etc. Confirmed via the autonomous run.
+
+**Original input_var-binding trap:** The natural temptation when reading `input_var "count"` is to bind the result to a variable also named `count`. **This is a parse error** because `count` is a builtin. The fix is to rename the VARIABLE while keeping the input_var KEY string unchanged:
+
+```
+# WRONG — count is a builtin, can't be a variable name
+count = input_var "count"
+
+# CORRECT — rename the variable, keep the key string
+n_items = input_var "count"
+total = input_var "count"
+```
+
+This trap occurs more often with input_var bindings than with regular assignments because the input_var key string is fixed by the caller's contract — the author has less freedom to rename it. Renaming only the LHS variable resolves the conflict. The builtins most commonly hit by this pattern are `count`, `status`, `exit`, `range`, `concat`, and `append` — any of these as natural-language data names need a renamed LHS binding.
 
 ### 1.5 Flag argument syntax
 

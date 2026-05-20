@@ -1,0 +1,46 @@
+id: mtf-e-1125-runtime-iter-non-list
+name: type_error — for over non-list
+intent: |
+  for-loop over non-iterable value.
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = 42
+  for i in $x do
+    echo $i
+  done
+  exit { ok: true }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+  side_effects:
+    tool_call_count: 0

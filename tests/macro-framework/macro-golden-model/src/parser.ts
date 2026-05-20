@@ -432,12 +432,17 @@ class MacroParser extends CstParser {
     });
   });
 
-  // condition := (boolean expression) — uses exprWithOps so `&&`/`||`/`==`
-  // can appear in `if` / `while` conditions. Optional leading `!` negation
-  // remains supported.
+  // condition := (boolean expression) — accepts the BROAD rhsExpr form
+  // (pipelines, tool calls, &&/||/== compositions). Per macro-spec
+  // §1.1+§5.2, any value-producing expression is valid in if/while
+  // condition position; the truthiness of the result gates the branch.
+  // Pipelines specifically were broadened from `primary`/`exprWithOps`
+  // to `rhsExpr` on 2026-05-19 as GOLDEN_GAPS.md GG-002 (production
+  // already accepted them; spec ratified). Optional leading `!`
+  // negation remains supported and applies to the resulting value.
   private condition = this.RULE("condition", () => {
     this.OPTION(() => this.CONSUME(Bang));
-    this.SUBRULE(this.exprWithOps);
+    this.SUBRULE(this.rhsExpr);
   });
 
   private arg = this.RULE("arg", () => {
@@ -874,8 +879,10 @@ function convertRangeOrPrimary(node: CstNode): Expr {
 }
 
 function convertCondition(node: CstNode): Expr {
-  const exprCst = getRule(node, "exprWithOps")!;
-  const inner = convertExprWithOps(exprCst);
+  // Per GG-002: condition rule reads rhsExpr (broad — pipelines + tool
+  // calls + comparisons), not just exprWithOps.
+  const rhsCst = getRule(node, "rhsExpr")!;
+  const inner = convertRhsExpr(rhsCst);
   const bangTok = getTok(node, "Bang");
   if (bangTok) {
     const neg: Negation = { kind: "Negation", expr: inner };

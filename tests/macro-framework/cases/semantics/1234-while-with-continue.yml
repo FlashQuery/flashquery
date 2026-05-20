@@ -1,0 +1,42 @@
+id: mtf-s-1234-while-with-continue
+name: |-
+  while + continue skip iteration
+intent: |
+  continue in while loop
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  i = 0
+  cnt = 0
+  while $i < 5 do
+    i = add $i 1
+    remainder = mod $i 2
+    if $remainder == 0 then
+      continue
+    fi
+    cnt = add $cnt 1
+  done
+  exit { i: $i, cnt: $cnt }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { i: 5, cnt: 3 }
+  side_effects:
+    tool_call_cnt: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { i: 5, cnt: 3 }
+  side_effects:
+    tool_call_cnt: 0

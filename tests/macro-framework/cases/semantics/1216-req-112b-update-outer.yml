@@ -1,0 +1,36 @@
+id: mtf-s-1216-req-112b-update-outer
+name: |-
+  REQ-019 + REQ-112b: walk-up assignment
+intent: |
+  outer var modified inside if
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  counter = 0
+  if true then
+    counter = add $counter 5
+  fi
+  exit { c: $counter }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { c: 5 }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { c: 5 }
+  side_effects:
+    tool_call_count: 0

@@ -1,0 +1,37 @@
+id: mtf-d-1273-arg-passthrough-null
+name: |-
+  REQ-108: null in arg
+intent: |
+  REQ-108: null in arg
+covers: [MTF-C-009, MTF-D-101]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = svc.perform({ optional: null })
+  exit { r: $r }
+input_vars: {}
+vault: {}
+tools:
+  svc:
+    archetype: JSONTextTool
+    tool_name: perform
+    value: { ok: true }
+predicted_expect:
+  outcome: success
+  return_result: { r: { ok: true } }
+  side_effects:
+    tool_call_count: 1
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { r: { ok: true } }
+  side_effects:
+    tool_call_count: 1

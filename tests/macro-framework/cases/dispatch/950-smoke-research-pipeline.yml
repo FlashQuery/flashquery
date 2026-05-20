@@ -1,0 +1,149 @@
+# Pilot — SMOKE TEST #5 (research pipeline; multi-tool composition with
+# error fan-out via return-value envelope inspection).
+#
+# Two servers (search + summary). The summary tool returns a structured
+# envelope `{ ok: bool, summary?: string, reason?: string }` per call —
+# this is the production-compatible pattern for "some calls failed,
+# keep going" since REQ-107 fail-fast forbids isError-based error
+# capture. The macro branches on `.ok` and accumulates summaries vs
+# failures into separate lists.
+#
+# Surfaces caught during calibration:
+# - Original description called for `isError: true` capture per call,
+#   which would have HALTED the macro at the first error per REQ-107
+#   (§7.2 of macro-spec). Author skill flagged this as an algorithmic
+#   miss and pivoted to the return-value-envelope idiom (§10 in
+#   macro-spec.md). Production-compatible.
+
+id: mtf-d-950-smoke-research-pipeline
+name: Smoke — research pipeline (search + summarize, fan-out error handling)
+intent: |
+  A research pipeline: call `search_srv.find_papers({query: $query})`
+  returning a list of paper IDs. For each paper, call
+  `summary_srv.summarize({paper: $paper})`. Each call returns an
+  object like either `{ ok: true, summary: '...' }` or
+  `{ ok: false, reason: '...' }` — the tool itself uses this envelope
+  shape (no isError flag). Collect summaries into one list, errored
+  papers into another, and exit with `{ summaries: [...],
+  failures: [...], success_count: <count>, failure_count: <count> }`.
+description: |
+  Multi-tool composition pilot. Tests REQ-027 dispatch through two
+  servers, REQ-106 coercion of structured JSON envelopes, branching
+  on a returned `.ok` field, list accumulation via `append` pipelines,
+  and pipeline-in-object-value summaries (`count $list` in exit shape).
+  This is the first smoke pilot with a 2-server FakeBroker setup and
+  a ScriptedTool returning mixed envelopes.
+
+covers:
+  - MTF-C-009  # exit shapes
+  - MTF-D-101  # dispatch (single dispatch path)
+  - MTF-D-102  # dispatch (per-item dispatch in for-loop)
+  - MTF-S-007  # field access on tool result
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T21:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/research-pipeline.md"
+  frontmatter:
+    query: "macro testing"
+  title: "Research Pipeline"
+  tags: []
+  fq_id: "fq:doc:research-pipe:001"
+
+macro: |
+  query = $_self.frontmatter.query
+  papers = search_srv.find_papers({ query: $query })
+  summaries = []
+  failures = []
+
+  for paper in $papers do
+    result = summary_srv.summarize({ paper: $paper })
+    if $result.ok then
+      summaries = append $summaries $result.summary
+    else
+      failures = append $failures $paper
+    fi
+  done
+
+  exit {
+    summaries: $summaries,
+    failures: $failures,
+    success_count: count $summaries,
+    failure_count: count $failures
+  }
+
+input_vars: {}
+vault: {}
+
+tools:
+  search_srv:
+    archetype: JSONTextTool
+    tool_name: find_papers
+    value: ["paper-1", "paper-2", "paper-3", "paper-4"]
+  summary_srv:
+    archetype: ScriptedTool
+    tool_name: summarize
+    responses:
+      - { content: [{ type: "text", text: '{"ok":true,"summary":"P1 summary"}' }] }
+      - { content: [{ type: "text", text: '{"ok":false,"reason":"unavailable"}' }] }
+      - { content: [{ type: "text", text: '{"ok":true,"summary":"P3 summary"}' }] }
+      - { content: [{ type: "text", text: '{"ok":false,"reason":"timeout"}' }] }
+
+# AI-predicted expect at testgen time. 1 search + 4 summarize = 5
+# dispatches total; strengthen-rule for multi-dispatch / multi-branch
+# applies, so tool_call_count is baked in.
+predicted_expect:
+  outcome: success
+  return_result:
+    summaries: ["P1 summary", "P3 summary"]
+    failures: ["paper-2", "paper-4"]
+    success_count: 2
+    failure_count: 2
+  side_effects:
+    tool_call_count: 5
+
+# Reconciliation: AI prediction and golden capture agreed exactly.
+# 5 tool calls captured (1 search + 4 summarize), all branching logic
+# resolved per-paper on the .ok field, summaries/failures lists
+# accumulated correctly.
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T21:03:39Z"
+  golden_version: "0.3.0"
+  notes: |
+    Clean reconciliation. AI prediction matched golden capture exactly:
+    summaries=[P1, P3], failures=[paper-2, paper-4], success_count=2,
+    failure_count=2, 5 dispatches total. The return-value-envelope
+    error pattern (tool returns { ok: bool, ... } instead of using
+    isError flag) composed cleanly with REQ-106 JSON coercion — every
+    summarize() result was bound as a structured object and `$result.ok`
+    branched correctly.
+
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "progress", "exit"]
+  captured_tool_calls:
+    - server: "search_srv"
+      tool: "find_papers"
+    - server: "summary_srv"
+      tool: "summarize"
+    - server: "summary_srv"
+      tool: "summarize"
+    - server: "summary_srv"
+      tool: "summarize"
+    - server: "summary_srv"
+      tool: "summarize"
+
+expect:
+  outcome: success
+  return_result:
+    summaries: ["P1 summary", "P3 summary"]
+    failures: ["paper-2", "paper-4"]
+    success_count: 2
+    failure_count: 2
+  side_effects:
+    tool_call_count: 5

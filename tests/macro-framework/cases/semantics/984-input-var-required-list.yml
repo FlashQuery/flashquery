@@ -1,0 +1,64 @@
+id: mtf-s-984-input-var-required-list
+name: input_var — required list, supplied + iterated
+intent: |
+  Required input_var of list type. Pilot supplies a list; macro
+  iterates via for-loop and accumulates an output list.
+description: |
+  REQ-007 ac1 + REQ-008 ac1 (list value type) + REQ-008 ac6
+  (list-typed input_vars iterable in for-loops).
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+  - MTF-D-103  # for-loop iteration
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  items = input_var "items"
+  processed = []
+  for item in $items do
+    processed = append $processed { name: $item }
+  done
+  exit { processed: $processed, total: count $items }
+
+input_vars:
+  items: ["alpha", "beta", "gamma"]
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    processed:
+      - { name: "alpha" }
+      - { name: "beta" }
+      - { name: "gamma" }
+    total: 3
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    processed:
+      - { name: "alpha" }
+      - { name: "beta" }
+      - { name: "gamma" }
+    total: 3
+  side_effects:
+    tool_call_count: 0

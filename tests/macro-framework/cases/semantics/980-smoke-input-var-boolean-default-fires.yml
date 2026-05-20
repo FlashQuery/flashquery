@@ -1,0 +1,98 @@
+# Pilot — SMOKE TEST #8 (input_var boolean defaults fire when caller
+# supplies nothing).
+#
+# Tests REQ-112e ac3 + ac4 (MCP Broker Requirements §7.15): boolean
+# literals `true` and `false` are now valid `--default` literals under
+# `input_var "key" --default <literal>`. Per REQ-112c (boolean literals
+# first-class) + REQ-112e (`--default` accepts them), the macro should:
+#   - parse cleanly
+#   - classify both keys as optional at pre-flight
+#   - bind `true` / `false` as the default values when input_vars is empty
+#
+# Spec-grounded expected envelope: outcome=success, return_result={
+# default_true: true, default_false: false }, tool_call_count: 0.
+
+id: mtf-s-980-smoke-input-var-boolean-default-fires
+name: Smoke — input_var --default true/false fires when key is missing
+intent: |
+  A macro that declares two optional input_vars, one with `--default true`
+  and one with `--default false`, exits with both bound values. The pilot
+  supplies no input_vars (both defaults fire). Tests REQ-112e ac3 + ac4
+  (boolean literals as input_var defaults).
+description: |
+  Pure-compute pilot — no tool dispatches. Exercises REQ-112e (MCP Broker
+  Requirements §7.15), which lifts the original REQ-007 ac2 boolean-default
+  rejection now that REQ-112c has made boolean literals first-class.
+  Initial expect block mirrors production's CURRENT (pre-PG-002) behavior
+  so the suite stays green while the production gap is open. After PG-002
+  resolves, this pilot's expect: flips to the spec-correct success envelope.
+
+covers:
+  - MTF-C-009  # exit shapes
+  - MTF-L-002  # input_var contract collection (required + optional)
+  - MTF-L-010  # input_var --default literal types (boolean — REQ-112e)
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  default_true = input_var "default_true" --default true
+  default_false = input_var "default_false" --default false
+
+  exit { default_true: $default_true, default_false: $default_false }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+# AI-predicted expect — what the spec REQUIRES per REQ-112e ac3+ac4 and
+# what the golden produces. Production currently FAILS this with
+# `error: invalid_input` (REQ-007 ac2 stale rejection) — that's the
+# PG-002 production gap.
+predicted_expect:
+  outcome: success
+  return_result:
+    default_true: true
+    default_false: false
+  side_effects:
+    tool_call_count: 0
+
+# Reconciliation: all three oracles agreed exactly. Production already
+# conforms to REQ-112e ac3+ac4 — the REQ-007 ac2 "boolean defaults MUST
+# fail" rule was never enforced in production code, or was implicitly
+# lifted as part of REQ-112c's broader implementation. REQ-112e
+# ratifies de-facto behavior; no PG entry needed.
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:00:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  spec_reference:
+    - "MCP Broker Requirements REQ-112e ac3"
+    - "MCP Broker Requirements REQ-112e ac4"
+  notes: |
+    Clean reconciliation across all three oracles. AI prediction,
+    golden capture, and production runtime all produced {default_true:
+    true, default_false: false} with no tool dispatches.
+
+    Empirical finding: production already conforms to REQ-112e —
+    the spec edit was a documentation alignment, not a gap-driver.
+    No PG-002 filed. The narrative is "spec doc was stale,
+    implementations tracked REQ-112c's broader implication
+    automatically."
+
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+
+expect:
+  outcome: success
+  return_result:
+    default_true: true
+    default_false: false
+  side_effects:
+    tool_call_count: 0

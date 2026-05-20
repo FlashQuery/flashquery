@@ -1,0 +1,44 @@
+id: mtf-e-1118-runtime-field-on-number
+name: type_error — field on primitive
+intent: |
+  Field access on non-object (REQ-023 ac3).
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  obj = 42
+  v = $obj.x
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+  side_effects:
+    tool_call_count: 0

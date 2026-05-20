@@ -1,0 +1,64 @@
+id: mtf-s-985-input-var-required-object
+name: input_var — required object, supplied + field-accessed
+intent: |
+  Required input_var of object type. Pilot supplies a nested object;
+  macro reads its fields and composes them in the exit.
+description: |
+  REQ-007 ac1 + REQ-008 ac1 (object value type, nested combinations
+  allowed) composed with field access (REQ-023 / REQ-112d).
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+  - MTF-S-007  # field access
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  config = input_var "config"
+  host = $config.host
+  port = $config.port
+  exit { host: $host, port: $port, raw: $config }
+
+input_vars:
+  config:
+    host: "api.example.com"
+    port: 443
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    host: "api.example.com"
+    port: 443
+    raw:
+      host: "api.example.com"
+      port: 443
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    host: "api.example.com"
+    port: 443
+    raw:
+      host: "api.example.com"
+      port: 443
+  side_effects:
+    tool_call_count: 0

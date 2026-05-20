@@ -1,0 +1,33 @@
+id: mtf-s-1205-object-key-quoted-special
+name: |-
+  object key with single-quote raw
+intent: |
+  single-quoted key remains raw
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  x = { 'raw key': 1 }
+  exit { x: $x }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { x: { "raw key": 1 } }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { x: { "raw key": 1 } }
+  side_effects:
+    tool_call_count: 0

@@ -1,0 +1,36 @@
+id: mtf-s-1206-if-true-then-only
+name: |-
+  if-true then-only branch
+intent: |
+  no else clause, true condition runs then
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = "before"
+  if true then
+    r = "after"
+  fi
+  exit { r: $r }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { r: "after" }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { r: "after" }
+  side_effects:
+    tool_call_count: 0

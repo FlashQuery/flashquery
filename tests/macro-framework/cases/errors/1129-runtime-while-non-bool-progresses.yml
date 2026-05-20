@@ -1,0 +1,46 @@
+id: mtf-e-1129-runtime-while-non-bool-progresses
+name: macro_aborted — while infinite-loop fail-fast
+intent: |
+  While that never terminates would time out — use cooperatively-cancellable while via flag.
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  flag = true
+  while $flag do
+    fail "intentional inside while"
+  done
+  exit { ok: true }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: macro_aborted
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: macro_aborted
+  side_effects:
+    tool_call_count: 0

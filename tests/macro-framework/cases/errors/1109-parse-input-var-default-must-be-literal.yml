@@ -1,0 +1,50 @@
+id: mtf-e-1109-parse-input-var-default-must-be-literal
+name: input_var_default_must_be_literal — VarRef default
+intent: |
+  Non-literal default value rejected.
+description: |
+  Non-literal default value rejected.
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  foo = 5
+  result = input_var "x" --default $foo
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: input_var_default_must_be_literal
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: input_var_default_must_be_literal
+  side_effects:
+    tool_call_count: 0

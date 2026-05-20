@@ -1,0 +1,38 @@
+id: mtf-s-1243-if-then-else-flat-both-branches
+name: |-
+  REQ-112b: both branches assign same var
+intent: |
+  v gets value from whichever branch ran
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  v = "?"
+  if false then
+    v = "then"
+  else
+    v = "else"
+  fi
+  exit { v: $v }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { v: "else" }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { v: "else" }
+  side_effects:
+    tool_call_count: 0

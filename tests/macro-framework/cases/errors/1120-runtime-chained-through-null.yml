@@ -1,0 +1,44 @@
+id: mtf-e-1120-runtime-chained-through-null
+name: type_error — chained through null
+intent: |
+  REQ-112d composes with REQ-023 ac2 — chained through null throws.
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  obj = { a: 1 }
+  v = $obj.missing.subfield
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+  side_effects:
+    tool_call_count: 0

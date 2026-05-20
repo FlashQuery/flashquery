@@ -1,0 +1,40 @@
+id: mtf-s-1225-nested-for-flat-counters
+name: |-
+  nested for-loops, walk-up counters
+intent: |
+  outer + inner counters both walk up
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  outer_count = 0
+  inner_count = 0
+  for i in [1, 2, 3] do
+    outer_count = add $outer_count 1
+    for j in [1, 2] do
+      inner_count = add $inner_count 1
+    done
+  done
+  exit { outer: $outer_count, inner: $inner_count }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { outer: 3, inner: 6 }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { outer: 3, inner: 6 }
+  side_effects:
+    tool_call_count: 0

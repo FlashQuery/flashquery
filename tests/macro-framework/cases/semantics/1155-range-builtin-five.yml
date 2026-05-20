@@ -1,0 +1,36 @@
+id: mtf-s-1155-range-builtin-five
+name: |-
+  range builtin 5
+intent: |
+  range 5 → [0..4]
+covers: [MTF-C-009, MTF-N-005]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  items = []
+  for i in range 5 do
+    items = append $items $i
+  done
+  exit { items: $items }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { items: [0, 1, 2, 3, 4] }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { items: [0, 1, 2, 3, 4] }
+  side_effects:
+    tool_call_count: 0

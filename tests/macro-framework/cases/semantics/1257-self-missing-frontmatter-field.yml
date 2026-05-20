@@ -1,0 +1,41 @@
+id: mtf-s-1257-self-missing-frontmatter-field
+name: |-
+  REQ-112d: missing frontmatter field → null
+intent: |
+  absent key returns null
+covers: [MTF-C-009, MTF-I-101]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+self_binding:
+  path: "/M.md"
+  frontmatter:
+    present: 1
+  title: "Test"
+  tags: []
+  fq_id: "fq:doc:test:001"
+
+macro: |
+  v = $_self.frontmatter.absent
+  exit { v: $v, is_null: $v == null }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { v: null, is_null: true }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { v: null, is_null: true }
+  side_effects:
+    tool_call_count: 0

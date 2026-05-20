@@ -1,0 +1,34 @@
+id: mtf-s-1156-numeric-nested-ops
+name: |-
+  nested arithmetic
+intent: |
+  mul (add 2 3) 4 = 20 via pre-compute
+covers: [MTF-C-009, MTF-N-005]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  s = add 2 3
+  n = mul $s 4
+  exit { n: $n }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { n: 20 }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { n: 20 }
+  side_effects:
+    tool_call_count: 0

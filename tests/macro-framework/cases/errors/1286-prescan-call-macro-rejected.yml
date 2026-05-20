@@ -1,0 +1,39 @@
+id: mtf-e-1286-prescan-call-macro-rejected
+name: |-
+  INV-08: fq.call_macro rejected with unknown_tool
+intent: |
+  INV-08: fq.call_macro rejected with unknown_tool
+covers: [MTF-E-006]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = fq.call_macro({ source: "exit { ok: true }" })
+  exit { ok: true }
+input_vars: {}
+vault: {}
+tools:
+  fq:
+    archetype: JSONTextTool
+    tool_name: ignored
+    value: null
+predicted_expect:
+  outcome: error
+  error:
+    code: unknown_tool
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: error
+  error:
+    code: unknown_tool
+  side_effects:
+    tool_call_count: 0

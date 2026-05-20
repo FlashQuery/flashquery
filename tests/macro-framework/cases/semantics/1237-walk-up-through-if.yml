@@ -1,0 +1,39 @@
+id: mtf-s-1237-walk-up-through-if
+name: |-
+  walk-up across if + for
+intent: |
+  walk-up via for body inside an if
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  total = 0
+  flag = true
+  if $flag then
+    for n in [10, 20] do
+      total = add $total $n
+    done
+  fi
+  exit { total: $total }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { total: 30 }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { total: 30 }
+  side_effects:
+    tool_call_count: 0

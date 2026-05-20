@@ -1,0 +1,49 @@
+id: mtf-e-1111-parse-bare-keyword-as-object-key
+name: unexpected_token — done as bare object key
+intent: |
+  Reserved keyword `done` as a bare object-literal key.
+description: |
+  Reserved keyword `done` as a bare object-literal key.
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  list = [1, 2, 3]
+  exit { done: $list }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: unexpected_token
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: unexpected_token
+  side_effects:
+    tool_call_count: 0

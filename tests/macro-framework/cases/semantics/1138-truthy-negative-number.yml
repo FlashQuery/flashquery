@@ -1,0 +1,46 @@
+id: mtf-s-1138-truthy-negative-number
+name: -1 is truthy
+intent: |
+  REQ-022: non-zero numbers are truthy regardless of sign.
+
+covers:
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = -1
+  if $x then
+    result = "truthy"
+  else
+    result = "falsy"
+  fi
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { result: "truthy" }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: success
+  return_result: { result: "truthy" }
+  side_effects:
+    tool_call_count: 0

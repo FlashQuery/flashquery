@@ -1,0 +1,66 @@
+id: mtf-s-993-input-var-in-tool-dispatch-arg
+name: input_var values composed into tool dispatch argument (REQ-108 passthrough)
+intent: |
+  Multiple input_vars composed into a single tool dispatch arg object.
+  Confirms REQ-108 argument passthrough — input_var values reach the
+  broker bit-exact.
+description: |
+  Tests use site: input_vars as tool-call arg fields. REQ-108 specifies
+  bit-exact argument passthrough — no engine-side coercion.
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+  - MTF-D-101  # dispatch
+  - MTF-D-104  # REQ-108 passthrough
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  query = input_var "query"
+  limit = input_var "limit" --default 10
+  mode = input_var "mode" --default "all"
+  result = search_srv.find({ query: $query, limit: $limit, mode: $mode })
+  exit { result: $result }
+
+input_vars:
+  query: "macros"
+vault: {}
+
+tools:
+  search_srv:
+    archetype: JSONTextTool
+    tool_name: find
+    value: { matched: ["a", "b"], next_page: null }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    result:
+      matched: ["a", "b"]
+      next_page: null
+  side_effects:
+    tool_call_count: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    result:
+      matched: ["a", "b"]
+      next_page: null
+  side_effects:
+    tool_call_count: 1

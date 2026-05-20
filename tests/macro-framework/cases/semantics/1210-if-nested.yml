@@ -1,0 +1,41 @@
+id: mtf-s-1210-if-nested
+name: |-
+  nested if
+intent: |
+  nested if-then-fi works
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = "?"
+  x = 5
+  if $x > 0 then
+    if $x > 3 then
+      r = "big"
+    else
+      r = "small"
+    fi
+  fi
+  exit { r: $r }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { r: "big" }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { r: "big" }
+  side_effects:
+    tool_call_count: 0

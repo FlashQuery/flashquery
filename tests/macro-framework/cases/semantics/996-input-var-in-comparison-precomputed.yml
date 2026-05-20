@@ -1,0 +1,61 @@
+id: mtf-s-996-input-var-in-comparison-precomputed
+name: input_var value in comparison (pre-computed pattern)
+intent: |
+  Read a numeric input_var, bind to a variable, then compare against
+  a literal. Tests the §1.2 grammar-boundary idiom — pipelines must
+  be pre-computed before composing with comparison operators.
+description: |
+  Exercises the pre-computation idiom landed in macro-spec.md §1.2
+  (Comparison grammar boundary). The input_var pipeline is bound to
+  a variable first, then the comparison uses the variable.
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+  - MTF-N-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  n = input_var "count" --default 0
+  if $n > 100 then
+    band = "high"
+  else
+    band = "low"
+  fi
+  exit { count: $n, band: $band }
+
+input_vars:
+  count: 250
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    count: 250
+    band: "high"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    count: 250
+    band: "high"
+  side_effects:
+    tool_call_count: 0

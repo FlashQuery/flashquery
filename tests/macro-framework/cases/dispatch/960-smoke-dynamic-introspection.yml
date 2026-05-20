@@ -1,0 +1,144 @@
+# Pilot — SMOKE TEST #6 (dynamic introspection via VarRef server slot).
+#
+# Tests REQ-112a (VarRef-prefixed introspection like `$candidate._exists()`)
+# composed with for-loop iteration over a frontmatter-provided list of
+# candidate server names. Mixed-reachable case is testable because
+# FakeBroker maps "registered" to "reachable" per §11.2 — registering
+# only alpha and gamma (not beta) makes their probes return true/false
+# respectively.
+#
+# This is also the first pilot where the variable in a server slot is
+# itself a loop iterator. Per REQ-112a ac4, VarRef-server introspection
+# references are skipped during permission pre-scan (server name is
+# dynamic, only known at runtime), so the macro doesn't require the
+# probed servers to be statically registered for pre-scan to pass —
+# only the runtime probe needs them for `isConnected()` to return true.
+
+id: mtf-d-960-smoke-dynamic-introspection
+name: Smoke — dynamic introspection (VarRef server in `$cand._exists()` loop)
+intent: |
+  I have `_self.frontmatter.candidates` — a list of server name
+  strings. Iterate through them, probe each with `$candidate._exists()`,
+  and return a list of the results plus the candidate names. Exit
+  with `{ probed: [{ name: <candidate>, reachable: <bool> }],
+  reachable_count: N, total: M, all_reachable: <bool> }`.
+description: |
+  REQ-112a stress test — VarRef-prefixed introspection in a for-loop.
+  Three candidates (alpha, beta, gamma) declared in frontmatter; the
+  tools: block registers alpha and gamma but NOT beta. FakeBroker's
+  `registered === reachable` mapping makes beta's _exists() return
+  false. The macro builds a per-candidate result list and an aggregate
+  reachable_count; the exit object exercises GG-001's pipeline-in-
+  object-value position (`total: count $candidates`).
+
+covers:
+  - MTF-I-101  # introspection (_exists)
+  - MTF-I-102  # VarRef-prefixed introspection (REQ-112a)
+  - MTF-C-009  # exit shapes
+  - MTF-D-103  # for-loop dispatch / iteration
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T21:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/dynamic-introspection.md"
+  frontmatter:
+    candidates: ["alpha", "beta", "gamma"]
+  title: "Dynamic Introspection"
+  tags: []
+  fq_id: "fq:doc:dyn-intro:001"
+
+macro: |
+  candidates = $_self.frontmatter.candidates
+  probed = []
+  n_reachable = 0
+
+  for cand in $candidates do
+    r = $cand._exists()
+    probed = append $probed { name: $cand, reachable: $r }
+    if $r then
+      n_reachable = add $n_reachable 1
+    fi
+  done
+
+  total = count $candidates
+
+  exit {
+    probed: $probed,
+    reachable_count: $n_reachable,
+    total: $total,
+    all_reachable: $n_reachable == $total
+  }
+
+input_vars: {}
+vault: {}
+
+# alpha and gamma are registered → _exists() returns true for both.
+# beta is intentionally omitted → _exists() returns false.
+# The placeholder tool inside each entry exists only because the
+# framework's archetype-driven registry needs at least one tool per
+# server; the macro doesn't dispatch to it.
+tools:
+  alpha:
+    archetype: JSONTextTool
+    tool_name: ping
+    value: { ok: true }
+  gamma:
+    archetype: JSONTextTool
+    tool_name: ping
+    value: { ok: true }
+
+# AI-predicted expect at testgen time. No tool dispatches (the
+# `_exists()` probes don't show up as tool_call trace events), so
+# tool_call_count: 0.
+predicted_expect:
+  outcome: success
+  return_result:
+    probed:
+      - { name: "alpha", reachable: true }
+      - { name: "beta", reachable: false }
+      - { name: "gamma", reachable: true }
+    reachable_count: 2
+    total: 3
+    all_reachable: false
+  side_effects:
+    tool_call_count: 0
+
+# Reconciliation: AI prediction and golden capture agreed exactly.
+# beta's _exists() returned false as expected (not in registry); alpha
+# and gamma returned true. The probed list was assembled in order with
+# the right reachable values per candidate.
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T21:03:39Z"
+  golden_version: "0.3.0"
+  notes: |
+    Clean reconciliation. AI prediction matched golden capture exactly:
+    probed=[{alpha,true},{beta,false},{gamma,true}], reachable_count=2,
+    total=3, all_reachable=false. The VarRef-prefixed introspection
+    (`$cand._exists()`) resolved correctly at runtime against
+    FakeBroker's registered=reachable mapping. Per REQ-112a ac4,
+    pre-scan did NOT validate the candidate server names as concrete
+    references — they're dynamic. No tool_call trace entries because
+    `_exists()` probes are introspection, not dispatch.
+
+golden_snapshot:
+  captured_trace_kinds: ["progress", "exit"]
+  captured_tool_calls: []
+
+expect:
+  outcome: success
+  return_result:
+    probed:
+      - { name: "alpha", reachable: true }
+      - { name: "beta", reachable: false }
+      - { name: "gamma", reachable: true }
+    reachable_count: 2
+    total: 3
+    all_reachable: false
+  side_effects:
+    tool_call_count: 0

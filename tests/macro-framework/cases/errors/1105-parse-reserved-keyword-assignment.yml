@@ -1,0 +1,49 @@
+id: mtf-e-1105-parse-reserved-keyword-assignment
+name: reserved_keyword_assignment — for = 5
+intent: |
+  Assignment to reserved keyword `for`.
+description: |
+  Assignment to reserved keyword `for`.
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  for = 5
+  exit { x: $for }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: reserved_keyword_assignment
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: reserved_keyword_assignment
+  side_effects:
+    tool_call_count: 0

@@ -1,0 +1,41 @@
+id: mtf-s-1227-nested-for-continue-inner
+name: |-
+  continue in inner loop
+intent: |
+  continue skips an inner-loop iteration only
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  cnt = 0
+  for i in [1, 2] do
+    for j in [10, 20, 30] do
+      if $j == 20 then
+        continue
+      fi
+      cnt = add $cnt 1
+    done
+  done
+  exit { cnt: $cnt }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { cnt: 4 }
+  side_effects:
+    tool_call_cnt: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { cnt: 4 }
+  side_effects:
+    tool_call_cnt: 0

@@ -606,10 +606,39 @@ function collectInputVarContract(program: Program): {
       // Parser has already verified this is a literal — we only need the key.
       if (first && first.value.kind === "StringLit") {
         const key = first.value.raw;
-        const hasDefault = call.args.some(
+        const defaultArg = call.args.find(
           (a) => a.kind === "NamedArg" && a.name === "default",
         );
-        if (hasDefault) {
+        if (defaultArg) {
+          // REQ-007 ac1 + ac2 (extended by REQ-112e): default MUST be a
+          // literal — string, number, null, boolean, list literal, or
+          // object literal. Reject non-literals (VarRef, FieldAccess,
+          // pipeline result, etc.) at pre-flight with
+          // input_var_default_must_be_literal. Resolves GOLDEN_GAPS.md
+          // GG-003 (2026-05-19) — golden was previously permissive here.
+          const v = defaultArg.value;
+          const literalKinds = new Set([
+            "StringLit",
+            "NumLit",
+            "NullLit",
+            "BoolLit",
+            "ListLit",
+            "ObjectLit",
+          ]);
+          if (!literalKinds.has(v.kind)) {
+            throw new MacroPreflightError(
+              `input_var "${key}" --default value must be a literal (got ${v.kind}).`,
+              {
+                required_inputs: required,
+                optional_inputs: optional,
+                provided_inputs: [],
+                missing_inputs: [],
+                reason: "input_var_default_must_be_literal",
+                key,
+                default_kind: v.kind,
+              },
+            );
+          }
           if (!optional.includes(key)) optional.push(key);
         } else {
           if (!required.includes(key)) required.push(key);

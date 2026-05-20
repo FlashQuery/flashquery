@@ -1,0 +1,55 @@
+id: mtf-s-983-input-var-required-number
+name: input_var — required number, supplied
+intent: |
+  Required input_var of integer type. Pilot supplies a number; macro
+  doubles it and exits.
+description: |
+  REQ-007 ac1 + REQ-008 ac1 (number value type). Exercises numeric
+  composition with input_var values.
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+  - MTF-N-005  # numeric ops
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  n = input_var "count"
+  doubled = mul $n 2
+  exit { count: $n, doubled: $doubled }
+
+input_vars:
+  count: 21
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    count: 21
+    doubled: 42
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    count: 21
+    doubled: 42
+  side_effects:
+    tool_call_count: 0

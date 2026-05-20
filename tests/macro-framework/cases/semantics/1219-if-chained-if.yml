@@ -1,0 +1,42 @@
+id: mtf-s-1219-if-chained-if
+name: |-
+  sequential if statements
+intent: |
+  multiple if-fi blocks in sequence
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  a = ""
+  b = ""
+  if true then
+    a = "A"
+  fi
+  if false then
+    b = "no"
+  else
+    b = "B"
+  fi
+  exit { a: $a, b: $b }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { a: "A", b: "B" }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { a: "A", b: "B" }
+  side_effects:
+    tool_call_count: 0

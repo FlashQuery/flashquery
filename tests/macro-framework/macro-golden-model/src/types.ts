@@ -193,8 +193,10 @@ export type BoolLit = {
 
 // `null` literal expression. Added 2026-05-12 for the OQ #23 `input_var`
 // default-value grammar (so `--default null` is valid syntax). Boolean
-// literals (true/false) remain deferred per §5 of the research doc — until
-// a use case surfaces.
+// literals (true/false) were initially deferred per §5 of the research
+// doc but shipped first-class on 2026-05-19 per REQ-112c (MCP Broker
+// Requirements §7.15) — see BoolLit above. REQ-112e (also §7.15)
+// confirms `--default true` and `--default false` are valid syntax.
 export type NullLit = {
   kind: "NullLit";
 };

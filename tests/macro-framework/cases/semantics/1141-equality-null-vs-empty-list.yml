@@ -1,0 +1,43 @@
+id: mtf-s-1141-equality-null-vs-empty-list
+name: null != []
+intent: |
+  Both falsy but distinct values.
+
+covers:
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = null
+  b = []
+  result = $a == $b
+  exit { eq: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { eq: false }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: success
+  return_result: { eq: false }
+  side_effects:
+    tool_call_count: 0

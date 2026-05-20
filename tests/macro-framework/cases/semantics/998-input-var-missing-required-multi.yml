@@ -1,0 +1,58 @@
+id: mtf-s-998-input-var-missing-required-multi
+name: input_var — multiple required, one missing → invalid_input lists ALL missing
+intent: |
+  Macro declares three required input_vars; pilot supplies only one.
+  Pre-flight must fail with all missing keys listed at once
+  (not just the first), per REQ-007 ac5.
+description: |
+  REQ-007 ac5 — "engine MUST emit invalid_input listing every forbidden
+  reference at once." This is the failure-envelope shape test.
+
+covers:
+  - MTF-L-002
+  - MTF-E-008  # invalid_input envelope
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  name = input_var "name"
+  email = input_var "email"
+  role = input_var "role"
+  exit { name: $name, email: $email, role: $role }
+
+input_vars:
+  name: "Matt"
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      missing_inputs: ["email", "role"]
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      missing_inputs: ["email", "role"]
+  side_effects:
+    tool_call_count: 0

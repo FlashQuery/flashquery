@@ -1,0 +1,54 @@
+id: mtf-s-994-input-var-in-string-interpolation
+name: input_var values used in string interpolation
+intent: |
+  Multiple input_vars bound to local variables, then interpolated into
+  an output string at exit.
+description: |
+  REQ-011 ac2 string interpolation form `${name}` composed with input_var
+  bindings.
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+  - MTF-S-007
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  name = input_var "name"
+  n = input_var "count"
+  exit { message: "User ${name} has ${n} items" }
+
+input_vars:
+  name: "Alice"
+  count: 7
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    message: "User Alice has 7 items"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    message: "User Alice has 7 items"
+  side_effects:
+    tool_call_count: 0

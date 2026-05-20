@@ -1,0 +1,50 @@
+id: mtf-e-1110-parse-varref-server-non-introspection
+name: varref_server_non_introspection — $svc.real_tool()
+intent: |
+  VarRef server slot rejected for non-introspection tool calls (REQ-112a).
+description: |
+  VarRef server slot rejected for non-introspection tool calls (REQ-112a).
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  svc = "alpha"
+  result = $svc.real_tool({})
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: varref_server_non_introspection
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: varref_server_non_introspection
+  side_effects:
+    tool_call_count: 0

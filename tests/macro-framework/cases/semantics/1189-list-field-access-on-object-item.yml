@@ -1,0 +1,36 @@
+id: mtf-s-1189-list-field-access-on-object-item
+name: |-
+  field access on list-item object
+intent: |
+  for over list-of-objects, read field
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  sum_a = 0
+  for obj in [{ a: 1 }, { a: 2 }, { a: 3 }] do
+    sum_a = add $sum_a $obj.a
+  done
+  exit { sum: $sum_a }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { sum: 6 }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { sum: 6 }
+  side_effects:
+    tool_call_count: 0

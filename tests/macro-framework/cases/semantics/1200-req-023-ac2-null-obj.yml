@@ -1,0 +1,36 @@
+id: mtf-s-1200-req-023-ac2-null-obj
+name: |-
+  REQ-023 ac2 null.field throws
+intent: |
+  field access on null raises
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  obj = null
+  v = $obj.x
+  exit { v: $v }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+  side_effects:
+    tool_call_count: 0

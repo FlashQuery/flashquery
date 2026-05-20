@@ -1,0 +1,36 @@
+id: mtf-s-1153-range-empty
+name: |-
+  range zero-length
+intent: |
+  0..0 → empty iteration
+covers: [MTF-C-009, MTF-N-005]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  count_iters = 0
+  for i in 0..0 do
+    count_iters = add $count_iters 1
+  done
+  exit { iters: $count_iters }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { iters: 0 }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { iters: 0 }
+  side_effects:
+    tool_call_count: 0

@@ -1,0 +1,40 @@
+id: mtf-s-1235-deep-nesting-three-levels
+name: |-
+  three-level nested loop
+intent: |
+  deep nesting accumulates
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  total = 0
+  for a in [1, 2] do
+    for b in [10, 20] do
+      for c in [100] do
+        total = add $total 1
+      done
+    done
+  done
+  exit { total: $total }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { total: 4 }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { total: 4 }
+  side_effects:
+    tool_call_count: 0

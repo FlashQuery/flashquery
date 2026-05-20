@@ -1,0 +1,40 @@
+id: mtf-s-1221-for-with-continue-skip-odd
+name: |-
+  for with continue skip odd
+intent: |
+  continue skips items, accumulator gets evens only
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  total = 0
+  for n in [1, 2, 3, 4, 5] do
+    remainder = mod $n 2
+    if $remainder != 0 then
+      continue
+    fi
+    total = add $total $n
+  done
+  exit { total: $total }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { total: 6 }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { total: 6 }
+  side_effects:
+    tool_call_count: 0

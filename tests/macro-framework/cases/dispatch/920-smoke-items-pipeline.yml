@@ -100,36 +100,42 @@ predicted_expect:
   side_effects:
     tool_call_count: 3
 
-# Reconciliation: DIVERGENT. The golden's parser rejected the macro
-# with `parse_error / missing_fi` near `count` on the line `completed_count: count $done_items`.
-# Root cause: the golden's `objectEntry` rule restricts the value
-# position to `primary` (which doesn't include pipeline / builtin
-# calls). Production's parser accepts builtin calls in object-value
-# position; the golden's parser doesn't.
+# Reconciliation: resolved by GOLDEN_GAPS.md GG-001 golden fix.
+#
+# Originally classified as `golden_parser_gap` — the golden's
+# `objectEntry` rule restricted the value position to `primary`, which
+# excluded pipelines (`count $list`). Per REQ-011 ac4 "Values are any
+# expression," production was already spec-correct; the golden was the
+# lagging implementation. GG-001 extended the golden's `objectEntry`
+# value position from `primary` to `rhsExpr` (matching what the spec
+# authorizes and what production already accepts). The golden now
+# parses and executes this macro cleanly, matching production's
+# envelope exactly.
 reconciliation:
-  predicted_matched_captured: false
-  captured_at: "2026-05-19T19:07:00Z"
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T20:50:00Z"
   golden_version: "0.3.0"
-  divergence_kind: golden_parser_gap
+  divergence_kind: resolved_golden_gap
+  spec_reference:
+    - "FlashQuery Macro Language Requirements REQ-011 ac4"
+  golden_gap_id: GG-001
+  golden_gap_doc: ../../GOLDEN_GAPS.md
   golden_captured:
-    outcome: parse_error
-    error:
-      code: parse_error
-      details:
-        reason: unexpected_token
+    outcome: success
+    return_result:
+      completed: ["alpha", "gamma"]
+      deferred: ["beta"]
+      completed_count: 2
+      deferred_count: 1
+    side_effects:
+      tool_call_count: 3
   notes: |
-    Golden's `objectEntry` rule (macro-golden-model/src/parser.ts) only
-    accepts `primary` in the value position. `primary` covers literals,
-    varOrField, listLit, objectLit, and toolCall — but NOT pipelines
-    (i.e., builtin calls like `count $list`). Production's evaluator
-    accepts this form, so the pilot passes against production.
-
-    Resolution path: golden gap. Either (a) extend the golden's
-    objectEntry value rule to accept pipelines (proper fix), or
-    (b) update this pilot's macro to use a pre-computed pattern
-    (`completed_count = count $done_items; ...; exit { completed_count: $completed_count }`).
-    For now, the macro is kept as-is (production accepts it), and this
-    finding is logged for a future golden fix.
+    GG-001 resolved by extending the golden's `objectEntry` grammar
+    from `primary` to `rhsExpr` (and the matching `convertObjectEntry`
+    AST conversion), per REQ-011 ac4 "Values are any expression." The
+    golden now matches production's envelope exactly:
+    completed=[alpha, gamma], deferred=[beta], completed_count=2,
+    deferred_count=1, 3 tool dispatches.
 
 # Test-runtime expect — matches production output.
 expect:

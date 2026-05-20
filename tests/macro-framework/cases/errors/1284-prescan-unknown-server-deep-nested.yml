@@ -1,0 +1,42 @@
+id: mtf-e-1284-prescan-unknown-server-deep-nested
+name: |-
+  REQ-028: deeply nested unknown server
+intent: |
+  REQ-028: deeply nested unknown server
+covers: [MTF-E-006]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  if true then
+    if true then
+      if true then
+        r = unreg.thing({})
+      fi
+    fi
+  fi
+  exit { ok: true }
+input_vars: {}
+vault: {}
+tools:
+  {}
+predicted_expect:
+  outcome: error
+  error:
+    code: unknown_server
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: error
+  error:
+    code: unknown_server
+  side_effects:
+    tool_call_count: 0

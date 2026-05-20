@@ -1,0 +1,38 @@
+id: mtf-d-1274-multi-dispatch-sequence
+name: |-
+  REQ-027: two dispatches in sequence
+intent: |
+  REQ-027: two dispatches in sequence
+covers: [MTF-C-009, MTF-D-101]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  a = svc.perform({ n: 1 })
+  b = svc.perform({ n: 2 })
+  exit { a: $a, b: $b }
+input_vars: {}
+vault: {}
+tools:
+  svc:
+    archetype: JSONTextTool
+    tool_name: perform
+    value: { ok: true }
+predicted_expect:
+  outcome: success
+  return_result: { a: { ok: true }, b: { ok: true } }
+  side_effects:
+    tool_call_count: 2
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { a: { ok: true }, b: { ok: true } }
+  side_effects:
+    tool_call_count: 2

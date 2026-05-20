@@ -198,6 +198,9 @@ function classifyError(e: unknown): { code: keyof typeof MACRO_ERROR_CODES; mess
         optional_inputs: e.details.optional_inputs,
         provided_inputs: e.details.provided_inputs,
         missing_inputs: e.details.missing_inputs,
+        ...(e.details.reason ? { reason: e.details.reason as Value } : {}),
+        ...(e.details.key ? { key: e.details.key as Value } : {}),
+        ...(e.details.default_kind ? { default_kind: e.details.default_kind as Value } : {}),
       },
     };
   }

@@ -1,0 +1,54 @@
+id: mtf-s-992-input-var-required-explicit-null
+name: input_var — required + explicit null binds null (REQ-008 ac2)
+intent: |
+  Required input_var. Pilot supplies the key with explicit null value.
+  Pre-flight passes because the key is present (REQ-008 ac2 distinguishes
+  explicit null from missing). The variable binds to null.
+description: |
+  REQ-008 ac2 — explicit null is a real value distinct from "missing."
+  Pre-flight passes; $key is null at runtime.
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  result = input_var "result"
+  exit { result: $result, is_null: $result == null }
+
+input_vars:
+  result: null
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    result: null
+    is_null: true
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    result: null
+    is_null: true
+  side_effects:
+    tool_call_count: 0

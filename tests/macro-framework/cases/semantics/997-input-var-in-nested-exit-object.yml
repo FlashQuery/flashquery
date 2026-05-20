@@ -1,0 +1,76 @@
+id: mtf-s-997-input-var-in-nested-exit-object
+name: input_vars composed into nested exit object construction
+intent: |
+  Multiple input_vars of mixed types composed into a nested object
+  literal in the exit expression. Tests the exit-as-output use case.
+description: |
+  REQ-007 + REQ-011 ac4 (object literal values are any expression).
+  Demonstrates that input_var-bound variables can appear as values
+  at any depth in a nested object literal.
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+  - MTF-L-004  # object-literal grammar
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  name = input_var "name"
+  n = input_var "count"
+  tags = input_var "tags"
+  exit {
+    meta: {
+      author: $name,
+      total: $n
+    },
+    payload: {
+      categories: $tags,
+      first_tag: $tags
+    }
+  }
+
+input_vars:
+  name: "Matt"
+  count: 5
+  tags: ["foo", "bar"]
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    meta:
+      author: "Matt"
+      total: 5
+    payload:
+      categories: ["foo", "bar"]
+      first_tag: ["foo", "bar"]
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    meta:
+      author: "Matt"
+      total: 5
+    payload:
+      categories: ["foo", "bar"]
+      first_tag: ["foo", "bar"]
+  side_effects:
+    tool_call_count: 0

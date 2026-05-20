@@ -1,0 +1,41 @@
+id: mtf-s-1256-self-empty-frontmatter
+name: |-
+  REQ-103: empty frontmatter
+intent: |
+  empty frontmatter ok; access raises (REQ-023 path on null) — capture
+covers: [MTF-C-009, MTF-I-101]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+self_binding:
+  path: "/M.md"
+  frontmatter:
+
+  title: "Test"
+  tags: []
+  fq_id: "fq:doc:test:001"
+
+macro: |
+  fm = $_self.frontmatter
+  exit { fm: $fm }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { fm: {} }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { fm: {} }
+  side_effects:
+    tool_call_count: 0

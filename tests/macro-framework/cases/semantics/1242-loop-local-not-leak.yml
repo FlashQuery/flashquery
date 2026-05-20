@@ -1,0 +1,39 @@
+id: mtf-s-1242-loop-local-not-leak
+name: |-
+  REQ-021 loop-local new var doesn\'t leak
+intent: |
+  var defined only inside for is gone after
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  outer_marker = "before"
+  for i in [1] do
+    loop_only = "set-inside"
+  done
+  if $outer_marker == "before" then
+    result = "loop-local-confirmed"
+  fi
+  exit { result: $result }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { result: "loop-local-confirmed" }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { result: "loop-local-confirmed" }
+  side_effects:
+    tool_call_count: 0

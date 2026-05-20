@@ -1,0 +1,93 @@
+# Pilot — SMOKE TEST #9 (input_var boolean defaults overridden by
+# explicit caller values, including explicit null).
+#
+# Tests REQ-112e ac5 + ac7 (MCP Broker Requirements §7.15): caller-
+# supplied boolean and null values override `--default` per REQ-008's
+# null-vs-missing semantics. Specifically:
+#   - input_vars: { flag: false } + --default true → binds false (ac5)
+#   - input_vars: { explicit_null: null } + --default true → binds null (ac7)
+#
+# This pilot exercises the same boolean-default declaration as pilot 980
+# but with caller overrides supplied. Together they cover REQ-112e ac3-7.
+
+id: mtf-s-981-smoke-input-var-boolean-default-overridden
+name: Smoke — input_var --default boolean overridden by explicit caller value
+intent: |
+  A macro that declares two optional input_vars with `--default true`,
+  exits with both bound values. The pilot supplies one as explicit
+  `false` (override) and one as explicit `null` (null-wins-over-default
+  per REQ-008 ac5). Tests REQ-112e ac5 + ac7 — caller-supplied wins
+  over default, explicit null is distinct from missing.
+description: |
+  Pure-compute pilot — no tool dispatches. Exercises REQ-112e ac5+ac7
+  (MCP Broker Requirements §7.15) composed with REQ-008 ac5 null-vs-
+  missing semantics. Initial expect block mirrors production's CURRENT
+  (pre-PG-002) behavior so the suite stays green; flips after PG-002.
+
+covers:
+  - MTF-C-009  # exit shapes
+  - MTF-L-002  # input_var contract collection (required + optional)
+  - MTF-L-010  # input_var --default literal types (boolean — REQ-112e)
+  - MTF-L-011  # input_var null-vs-missing semantics (REQ-008 ac5)
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  flag = input_var "flag" --default true
+  explicit_null = input_var "explicit_null" --default true
+
+  exit { flag: $flag, explicit_null: $explicit_null }
+
+input_vars:
+  flag: false
+  explicit_null: null
+vault: {}
+tools: {}
+
+# AI-predicted expect per REQ-112e ac5+ac7 and REQ-008 ac5:
+# `flag` is supplied as `false`, so it overrides the `true` default.
+# `explicit_null` is supplied as `null`, which is a real value distinct
+# from missing — null wins over the default.
+predicted_expect:
+  outcome: success
+  return_result:
+    flag: false
+    explicit_null: null
+  side_effects:
+    tool_call_count: 0
+
+# Reconciliation: all three oracles agreed exactly. Production already
+# honors REQ-008 ac5's null-wins-over-default semantics composed with
+# REQ-112e's boolean-default acceptance.
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:00:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  spec_reference:
+    - "MCP Broker Requirements REQ-112e ac5"
+    - "MCP Broker Requirements REQ-112e ac7"
+    - "Macro Lang REQ-008 ac5"
+  notes: |
+    Clean reconciliation across all three oracles. AI prediction,
+    golden capture, and production runtime all produced
+    {flag: false, explicit_null: null}: the explicit `false` overrode
+    the `true` default (REQ-112e ac5), and the explicit `null` wins
+    over the default (REQ-008 ac5 + REQ-112e ac7).
+
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+
+expect:
+  outcome: success
+  return_result:
+    flag: false
+    explicit_null: null
+  side_effects:
+    tool_call_count: 0

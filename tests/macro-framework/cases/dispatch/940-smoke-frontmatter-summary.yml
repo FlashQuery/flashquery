@@ -1,0 +1,105 @@
+# Pilot — SMOKE TEST #4 (frontmatter summary; string interpolation +
+# pipelines/comparisons in object-literal values; first deliberate
+# stress on GG-001).
+#
+# No tool dispatches — pure compute. Tests string interpolation
+# (REQ-011 ac2), object-literal grammar after GG-001 (REQ-011 ac4
+# "Values are any expression" — pipelines and comparisons now legal
+# in value position), and _self.frontmatter access (REQ-103).
+
+id: mtf-d-940-smoke-frontmatter-summary
+name: Smoke — frontmatter summary (interpolation + pipelines in object values)
+intent: |
+  A macro that reads `_self.frontmatter.title` (string),
+  `_self.frontmatter.author` (string), and `_self.frontmatter.tags`
+  (list of strings). Exit with a summary object containing:
+  `headline` (interpolated string '$title by $author'), `tag_count`
+  (count of tags), `is_multi_tag` (true if more than one tag), and
+  `display_block` (interpolated string showing all three fields
+  formatted as 'title — author — N tags').
+description: |
+  Pure-compute pilot — no tool dispatches. Exercises object-literal
+  value positions filled by string interpolation, pipelines
+  (`count $tags`), and comparisons (`$n_tags > 1`) — the broadened
+  grammar GG-001 shipped. Confirms the golden + production agree on
+  the result envelope.
+
+covers:
+  - MTF-C-009  # exit shapes
+  - MTF-S-007  # string interpolation
+  - MTF-L-004  # object-literal grammar
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T21:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/frontmatter-summary.md"
+  frontmatter:
+    title: "Migrating Macros to Production"
+    author: "M. Cogan"
+    tags: ["macros", "broker", "spec"]
+  title: "Frontmatter Summary"
+  tags: []
+  fq_id: "fq:doc:fm-summary:001"
+
+macro: |
+  title = $_self.frontmatter.title
+  author = $_self.frontmatter.author
+  tags = $_self.frontmatter.tags
+  n_tags = count $tags
+
+  exit {
+    headline: "${title} by ${author}",
+    tag_count: count $tags,
+    is_multi_tag: $n_tags > 1,
+    display_block: "${title} — ${author} — ${n_tags} tags"
+  }
+
+input_vars: {}
+vault: {}
+
+# AI-predicted expect at testgen time. No tool dispatches —
+# `tool_call_count: 0` baked in via strengthen's no-dispatch rule.
+predicted_expect:
+  outcome: success
+  return_result:
+    headline: "Migrating Macros to Production by M. Cogan"
+    tag_count: 3
+    is_multi_tag: true
+    display_block: "Migrating Macros to Production — M. Cogan — 3 tags"
+  side_effects:
+    tool_call_count: 0
+
+# Reconciliation: AI prediction and golden capture agreed exactly.
+# Pipelines and comparisons in object-literal values (GG-001 surface)
+# parsed and evaluated cleanly on both oracles.
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T21:03:39Z"
+  golden_version: "0.3.0"
+  notes: |
+    Clean reconciliation. AI prediction matched golden capture exactly:
+    headline, tag_count (via inline `count $tags` pipeline), is_multi_tag
+    (via inline `$n_tags > 1` comparison), and display_block (via string
+    interpolation) all produced the same values on both oracles. This
+    is the first deliberate stress on GG-001's broadened objectEntry
+    grammar — confirmed working end-to-end.
+
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+
+# Test-runtime expect — golden-verified.
+expect:
+  outcome: success
+  return_result:
+    headline: "Migrating Macros to Production by M. Cogan"
+    tag_count: 3
+    is_multi_tag: true
+    display_block: "Migrating Macros to Production — M. Cogan — 3 tags"
+  side_effects:
+    tool_call_count: 0

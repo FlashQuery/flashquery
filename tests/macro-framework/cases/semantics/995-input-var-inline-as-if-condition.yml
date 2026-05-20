@@ -1,0 +1,56 @@
+id: mtf-s-995-input-var-inline-as-if-condition
+name: input_var used inline as if-condition (no intermediate binding)
+intent: |
+  Use input_var directly as the condition of an if statement, without
+  assigning to a variable first. Tests that builtins (pipelines) are
+  valid expression positions for if-conditions.
+description: |
+  REQ-007 + spec §5.2 (builtins/pipelines valid in any expression
+  position). The condition is the result of the input_var pipeline.
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  if input_var "enabled" --default false then
+    result = "on"
+  else
+    result = "off"
+  fi
+  exit { result: $result }
+
+input_vars:
+  enabled: true
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    result: "on"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    result: "on"
+  side_effects:
+    tool_call_count: 0

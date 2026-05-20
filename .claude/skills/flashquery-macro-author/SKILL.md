@@ -51,6 +51,7 @@ Why calibration mode matters: if verify silently auto-fixes the same kind of iss
 
 1. Read `macro-spec.md` (this folder) to ground the generation in current production semantics.
 2. Parse the description for: (a) the load-bearing behavior, (b) the implicit success contract, (c) tools/frontmatter/inputs referenced.
+2.5. **Pre-generation feasibility check** (see "Pre-generation feasibility check" section below). Run two narrow checks against the description BEFORE generating any macro source — spec-feasibility and surface availability. If either flags a concern, return a structured pre-check response (with reasoning + a suggested restatement) WITHOUT generating. If both clean, proceed to step 3. Behavioral descriptions where a translation pattern exists DO NOT trigger the check — the skill picks the pattern and proceeds.
 3. Synthesize macro source using idiomatic post-REQ-112 patterns (lowercase booleans, flat if-scope, missing-field-null guards, leading-underscore introspection with VarRef when appropriate). Do not produce constructs the spec doesn't support.
 4. If `verify === true`:
    - **Validated mode** (`auto_correct: true`): invoke the verify workflow with `(description, macro_source, apply_fixes: true)`.
@@ -65,6 +66,7 @@ Why calibration mode matters: if verify silently auto-fixes the same kind of iss
 ```json
 {
   "mode": "validated",
+  "pre_check": { "feasible": true },
   "macro": "<macro source string, post-fix>",
   "verify_report": { ... },
   "attempts": 1,
@@ -72,6 +74,8 @@ Why calibration mode matters: if verify silently auto-fixes the same kind of iss
   "warnings": []
 }
 ```
+
+When the pre-check fires (description names an unsupported construct or missing surface), the response is different — see "Pre-generation feasibility check" below for the full shape with `concerns`, `reasoning`, and `suggested_restatement`. In that case `macro` is `null` and `attempts` is `0` (no generation was performed).
 
 The `attempts` field counts generations including the original (so 1 = first-try success, 2 = one retry, 3 = two retries).
 
@@ -177,6 +181,134 @@ Verify can mechanically correct macro source under these rules. The rules exist 
 **Deterministic-fix-only rule.** A mechanical fix is applied ONLY when there is exactly one valid correction. Ambiguous cases (e.g., a misspelled variable name where multiple identifiers in scope could be the intended target) escalate to `algorithmic_misses` rather than being silently corrected. Verify is not allowed to guess.
 
 If you can't tell what the fix should be without rereading the description's intent, that's not a mechanical issue — that's an algorithmic miss.
+
+## Pre-generation feasibility check
+
+Runs as Step 2.5 of the generate workflow — BEFORE any macro source is synthesized. The point is to catch unrepresentable requests at the cheapest possible stage (a short prompt-side check) rather than burning a macro generation and catching it in verify, or worse, generating fictional syntax that looks plausible but doesn't parse.
+
+### Scope — what the check is and isn't
+
+**The check is narrow on purpose.** It runs ONLY against two concrete categories:
+
+| Check | Catches | Examples |
+|---|---|---|
+| **Spec-feasibility** | Description names a construct the macro language doesn't have. Read against §10 of `macro-spec.md` ("Things the macro language does NOT have") plus the rare behavioral cases that are unrepresentable in any pattern. | "Use try/catch to handle errors." (no try/catch); "Index this list by position via `$list[0]`." (no list indexing); "Have this macro call itself recursively." (INV-08 forbids `call_macro` from inside a macro — unrepresentable in any pattern). |
+| **Surface availability** | Description names a specific tool/builtin/symbol that doesn't exist in the language's surface. | "Call the `lower` builtin." (no `lower`; closest is `sed` shell verb); "Use `--flag=value` argument syntax." (only `--flag value` is in the grammar); "Read frontmatter via `_self.frontmatter[key]`." (object key access is `.key` only). |
+
+**The check does NOT flag:**
+
+- **Behavioral descriptions where a translation pattern exists.** The skill's job is to translate English intent into representable macro patterns. "Capture errors from a brokered tool and keep processing" is BEHAVIORAL — REQ-107 fail-fast rules out the isError implementation path, but the return-value-envelope idiom (§10 of `macro-spec.md`) achieves the same behavior. The skill picks the pattern silently and proceeds. NOT a pre-check failure.
+- **Ambiguous-but-translatable descriptions.** "Handle the case where the document is missing" → could be REQ-112d missing-field-null guards, or `if doc._exists() then ... fi`, or a `fail` path. Multiple patterns work; the skill picks one. NOT a pre-check failure.
+- **Speculative semantic concerns.** "Don't process too many items" → the skill defers the decision to the caller's frontmatter / input_vars contract. NOT a pre-check failure.
+
+The bar is: a behavioral request gets translated, a prescriptive request that names a missing surface gets flagged, and a behavioral request that's genuinely unrepresentable gets flagged (rare — usually the missing-surface check catches these too, since the construct that would express the impossible behavior doesn't exist).
+
+### Output when the check fires
+
+When either check fires, return a structured pre-check response WITHOUT generating. The response must include solid reasoning AND a suggested restatement so the caller can refine their prompt rather than guess at what went wrong.
+
+```json
+{
+  "mode": "validated" | "calibration" | "zero-shot",
+  "pre_check": {
+    "feasible": false,
+    "concerns": [
+      {
+        "category": "spec_feasibility" | "surface_availability",
+        "issue": "<one-line summary of what's wrong>",
+        "spec_ref": "<macro-spec.md §X | REQ-NNN | INV-NN>",
+        "reasoning": "<solid explanation with spec text quoted or paraphrased — the caller should understand WHY this isn't representable, not just that it isn't>",
+        "suggested_restatement": "<a refined version of the original description the caller could try — phrased as a behavioral intent the language can satisfy>",
+        "rationale_for_restatement": "<why the restatement maps to a supported pattern, citing the idiom from macro-spec.md>"
+      }
+    ]
+  },
+  "macro": null,
+  "attempts": 0
+}
+```
+
+**The suggested_restatement is load-bearing.** Returning "your request can't be fulfilled" without proposing what would work makes the skill an obstacle. Returning a refined description the caller can copy-paste-and-tweak makes the skill genuinely helpful — the caller learns what the language can express AND gets a working starting point.
+
+### Examples
+
+**Example 1 — prescriptive request flagged by surface_availability:**
+
+```
+Description: "Use the `lower` builtin to lowercase the title and use `replace` to swap spaces for hyphens."
+```
+
+```json
+{
+  "pre_check": {
+    "feasible": false,
+    "concerns": [{
+      "category": "surface_availability",
+      "issue": "The macro language has no `lower` or `replace` builtins.",
+      "spec_ref": "§1.4 of macro-spec.md (Builtin names) + §10 (Things the macro language does NOT have)",
+      "reasoning": "The full list of recognized builtins is: echo, status, task_id, list_tasks, count, unique, append, concat, add/sub/mul/div/mod, sleep/slow_op, fail, exit, input_var, range, grep/find/sed/cat/wc/head/tail/ls. There is no string-case operator and no regex/replace primitive. String text manipulation happens via the `sed` shell verb operating on files in the vault — heavy for a single string transformation.",
+      "suggested_restatement": "Build a normalized summary object that includes the raw title and a separate `slug` field. If the slug needs case/space normalization, write the title to a vault file, run `sed` over it, and read the result back. Alternatively, if the title is already in a normalized form upstream (e.g., frontmatter author convention), just pass it through.",
+      "rationale_for_restatement": "The suggested restatement either acknowledges the limitation (defer the transformation upstream) or uses the only available text-manipulation path (sed on vault files). Both are documented in §10 and §1.4 of macro-spec.md."
+    }]
+  }
+}
+```
+
+**Example 2 — prescriptive request flagged by spec_feasibility:**
+
+```
+Description: "Use try/catch around the brokered tool call so the macro can continue on errors."
+```
+
+```json
+{
+  "pre_check": {
+    "feasible": false,
+    "concerns": [{
+      "category": "spec_feasibility",
+      "issue": "The macro language has no try/catch construct.",
+      "spec_ref": "§10 of macro-spec.md (Things the macro language does NOT have) + REQ-107 (Fail-fast on errors)",
+      "reasoning": "The macro language is small and shell-flavored — no exception-handling construct exists. Error handling happens through one of two production-compatible patterns: (a) the brokered tool returns a structured envelope like `{ ok: bool, ... }` and the macro reads `.ok` to branch (return-value-envelope pattern, §10); or (b) the macro halts immediately on any tool error (REQ-107 fail-fast — the macro engine catches `isError: true` and converts it to a `tool_call_failed` exit envelope).",
+      "suggested_restatement": "If the brokered tool can return a structured result like `{ ok: true, value: ... }` or `{ ok: false, reason: ... }` rather than using the SDK's isError flag, the macro can branch on `.ok` and continue. Otherwise, the macro will halt on the first error and the caller will see the `tool_call_failed` envelope — which may already be the right behavior for your use case.",
+      "rationale_for_restatement": "Maps to the return-value-envelope idiom in §10 of macro-spec.md, which is the only production-compatible way to do conditional flow on tool outcomes inside a single macro."
+    }]
+  }
+}
+```
+
+**Example 3 — behavioral request, NOT flagged (skill translates silently):**
+
+```
+Description: "For each paper, call summary_srv.summarize. Some calls may fail — capture the failures into a separate list and keep going."
+```
+
+Pre-check passes. The phrase "may fail" is behavioral. The skill picks the return-value-envelope pattern (tool returns `{ ok: bool, ... }`), branches on `.ok`, accumulates into `summaries` and `failures` lists, and proceeds to generation. No concern surfaced — translation is the skill's job.
+
+This was Run #5's actual behavior. The pre-check is not meant to catch this kind of request.
+
+### Mode-specific behavior
+
+| Mode | Pre-check action when concerns surface |
+|---|---|
+| **Zero-shot** | Return the pre-check response without generating. Same shape as above. |
+| **Validated** | Return the pre-check response without generating. Caller refines description and re-invokes. No auto-correction loop fires because there's no generated macro to correct. |
+| **Calibration** | Return the pre-check response AND proceed to generation anyway. The generated macro is surfaced as `macro_as_generated_post_concern`, so we can manually evaluate whether the concern was valid and whether the gen step did something reasonable despite the concern. This is the only mode that runs gen-despite-concern; it exists because calibration is for finding gaps in the skill (including the pre-check itself). |
+
+### Calibration-mode pre-check schema
+
+```json
+{
+  "mode": "calibration",
+  "pre_check": { "feasible": false, "concerns": [ ... ] },
+  "macro_as_generated_post_concern": "<what gen produced despite the concern — for manual evaluation>",
+  "verify_report": { ... },
+  "skill_improvement_signal": "<one-line: was the pre-check correct? did gen produce something usable anyway?>"
+}
+```
+
+### Maintenance
+
+When `macro-spec.md` §10 (unsupported constructs) or §1.4 (builtin names) changes, both checks track automatically — they're spec-grounded. No SKILL.md edit needed for spec evolution.
 
 ## Auto-correction loop (generate workflow)
 

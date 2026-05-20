@@ -1,0 +1,38 @@
+id: mtf-d-1277-coerce-then-field-access
+name: |-
+  Coerce JSON then field access
+intent: |
+  Coerce JSON then field access
+covers: [MTF-C-009, MTF-D-101]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = svc.perform({})
+  v = $r.flag
+  exit { v: $v }
+input_vars: {}
+vault: {}
+tools:
+  svc:
+    archetype: JSONTextTool
+    tool_name: perform
+    value: { flag: "on" }
+predicted_expect:
+  outcome: success
+  return_result: { v: "on" }
+  side_effects:
+    tool_call_count: 1
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { v: "on" }
+  side_effects:
+    tool_call_count: 1

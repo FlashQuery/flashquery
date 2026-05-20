@@ -1,0 +1,49 @@
+id: mtf-e-1107-parse-builtin-name-shadowing-exit
+name: builtin_name_shadowing — exit as variable
+intent: |
+  Assignment to builtin `exit`.
+description: |
+  Assignment to builtin `exit`.
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit = "stop"
+  exit { c: 1 }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: builtin_name_shadowing
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: builtin_name_shadowing
+  side_effects:
+    tool_call_count: 0

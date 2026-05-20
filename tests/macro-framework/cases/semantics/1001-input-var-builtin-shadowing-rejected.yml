@@ -1,0 +1,56 @@
+id: mtf-s-1001-input-var-builtin-shadowing-rejected
+name: assigning to `input_var` is rejected (builtin name shadowing)
+intent: |
+  Macro attempts to assign the literal value 5 to the variable name
+  `input_var`. Per REQ-009 / macro-spec §1.4, builtin names cannot be
+  shadowed by variable assignments → parse_error / builtin_name_shadowing.
+description: |
+  REQ-009 ac1 — assignment to a builtin name raises parse_error with
+  details.reason = builtin_name_shadowing. This is the "write attempt"
+  case: the author tries to overwrite the input_var builtin.
+
+covers:
+  - MTF-G-007  # reserved/builtin name rejection
+  - MTF-E-005  # parse_error envelope
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  input_var = 5
+  exit { x: $input_var }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: builtin_name_shadowing
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: builtin_name_shadowing
+  side_effects:
+    tool_call_count: 0

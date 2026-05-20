@@ -1,0 +1,38 @@
+id: mtf-e-1282-prescan-unknown-server-in-untaken-if
+name: |-
+  REQ-028 ac1: unknown server in UNTAKEN if-branch
+intent: |
+  REQ-028 ac1: unknown server in UNTAKEN if-branch
+covers: [MTF-E-006]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  if false then
+    r = unreg.thing({})
+  fi
+  exit { ok: true }
+input_vars: {}
+vault: {}
+tools:
+  {}
+predicted_expect:
+  outcome: error
+  error:
+    code: unknown_server
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: error
+  error:
+    code: unknown_server
+  side_effects:
+    tool_call_count: 0

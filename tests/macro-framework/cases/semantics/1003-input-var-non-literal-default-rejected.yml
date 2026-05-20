@@ -1,0 +1,60 @@
+id: mtf-s-1003-input-var-non-literal-default-rejected
+name: input_var with non-literal default ($variable) is rejected
+intent: |
+  Macro uses `input_var "key" --default $foo` — a VarRef as the default
+  value instead of a literal. Per REQ-007 ac1 the default must be a
+  literal; non-literals are rejected at parse or pre-flight with
+  invalid_input and details.reason = input_var_default_must_be_literal
+  (per the spec's failure-mode list).
+description: |
+  REQ-007 ac1/ac2 — default MUST be a literal. VarRef in the default
+  position is rejected. This is the other "write attempt" category —
+  the author tries to use a dynamic value as the default, which the
+  spec forbids.
+
+covers:
+  - MTF-L-002
+  - MTF-E-008
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  foo = "fallback"
+  result = input_var "result" --default $foo
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: input_var_default_must_be_literal
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      reason: input_var_default_must_be_literal
+  side_effects:
+    tool_call_count: 0

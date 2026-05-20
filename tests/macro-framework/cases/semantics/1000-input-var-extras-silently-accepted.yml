@@ -1,0 +1,55 @@
+id: mtf-s-1000-input-var-extras-silently-accepted
+name: extras in input_vars not declared by the macro are silently accepted
+intent: |
+  Macro declares one input_var; pilot supplies that plus additional
+  unused keys. Per REQ-007 ac7, the extras must be silently accepted
+  (no warning, no error).
+description: |
+  REQ-007 ac7 — "Extras in input_vars not declared by any input_var
+  call MUST be silently accepted." Confirms no-op on undeclared keys.
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  name = input_var "name"
+  exit { name: $name }
+
+input_vars:
+  name: "Alice"
+  unused_extra: 42
+  another_ignored: "ignored"
+  nested_extra: { foo: "bar" }
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    name: "Alice"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    name: "Alice"
+  side_effects:
+    tool_call_count: 0

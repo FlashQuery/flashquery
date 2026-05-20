@@ -1,0 +1,41 @@
+id: mtf-s-1259-self-in-interpolation
+name: |-
+  _self in string interpolation
+intent: |
+  ${_self.title} in string
+covers: [MTF-C-009, MTF-I-101]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+self_binding:
+  path: "/M.md"
+  frontmatter:
+
+  title: "Title!"
+  tags: []
+  fq_id: "fq:doc:test:001"
+
+macro: |
+  x = "macro is: ${_self.title}"
+  exit { x: $x }
+input_vars: {}
+vault: {}
+tools: {}
+predicted_expect:
+  outcome: success
+  return_result: { x: "macro is: Title!" }
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: success
+  return_result: { x: "macro is: Title!" }
+  side_effects:
+    tool_call_count: 0

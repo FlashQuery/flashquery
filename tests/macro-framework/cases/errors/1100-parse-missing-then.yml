@@ -1,0 +1,50 @@
+id: mtf-e-1100-parse-missing-then
+name: missing_then — if without then
+intent: |
+  Trigger missing_then by writing `if true` without a `then` keyword.
+description: |
+  Trigger missing_then by writing `if true` without a `then` keyword.
+
+covers:
+  - MTF-E-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  if true
+    x = 1
+  fi
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: missing_then
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+
+expect:
+  outcome: error
+  error:
+    code: parse_error
+    details:
+      reason: missing_then
+  side_effects:
+    tool_call_count: 0

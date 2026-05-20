@@ -1,0 +1,40 @@
+id: mtf-e-1279-prescan-unknown-server-different
+name: |-
+  REQ-028: known + unknown server mixed
+intent: |
+  REQ-028: known + unknown server mixed
+covers: [MTF-E-006]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  a = alpha.ping({})
+  b = unreg.thing({})
+  exit { ok: true }
+input_vars: {}
+vault: {}
+tools:
+  alpha:
+    archetype: JSONTextTool
+    tool_name: ping
+    value: { ok: true }
+predicted_expect:
+  outcome: error
+  error:
+    code: unknown_server
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: error
+  error:
+    code: unknown_server
+  side_effects:
+    tool_call_count: 0

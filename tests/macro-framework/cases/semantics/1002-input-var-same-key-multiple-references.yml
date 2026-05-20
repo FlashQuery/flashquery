@@ -1,0 +1,57 @@
+id: mtf-s-1002-input-var-same-key-multiple-references
+name: same input_var key referenced multiple times binds to same value
+intent: |
+  Macro reads the same input_var key twice. Both reads MUST return
+  the same supplied value.
+description: |
+  REQ-007 ac6 — at runtime each input_var call evaluates by looking up
+  its key in input_vars. Two calls to the same key return the same
+  value. Tests binding consistency.
+
+covers:
+  - MTF-L-002
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = input_var "shared"
+  b = input_var "shared"
+  exit { a: $a, b: $b, equal: $a == $b }
+
+input_vars:
+  shared: "hello"
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    a: "hello"
+    b: "hello"
+    equal: true
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    a: "hello"
+    b: "hello"
+    equal: true
+  side_effects:
+    tool_call_count: 0

@@ -1,0 +1,50 @@
+id: mtf-s-982-input-var-required-string
+name: input_var — required string, supplied
+intent: |
+  Required input_var of string type. Pilot supplies the value;
+  macro binds it and exits with it.
+description: |
+  REQ-007 ac1 (required form) + REQ-008 ac1 (string value type).
+
+covers:
+  - MTF-L-002  # input_var contract collection
+  - MTF-C-009  # exit shapes
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  name = input_var "name"
+  exit { name: $name }
+
+input_vars:
+  name: "Matt"
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    name: "Matt"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: success
+  return_result:
+    name: "Matt"
+  side_effects:
+    tool_call_count: 0

@@ -1,0 +1,128 @@
+# Pilot — SMOKE TEST #7 (numeric range loop with continue/break and
+# accumulator pattern).
+#
+# Pure compute, no tool dispatches. Tests:
+# - REQ-014 range operator (`0..$limit`, end-exclusive)
+# - REQ-104 `continue` (skip odd numbers)
+# - REQ-013 numeric expressions (mul, add, mod) and comparisons
+# - Walk-up assignment in a for-loop body (REQ-019 ac1)
+# - Multi-exit: early-exit guard for over-limit + normal exit
+#
+# Surfaces caught during calibration:
+# - `mod $n 2 == 0` was the initial form for the even-number guard,
+#   but a pipeline cannot be the left operand of a comparison (compareExpr
+#   chains over `rangeExpr`, which roots at `primary`, not `pipeline`).
+#   Author skill flagged this and pre-computed `remainder = mod $n 2`
+#   before comparing. Production-compatible.
+
+id: mtf-d-970-smoke-numeric-accumulator
+name: Smoke — numeric range/accumulator with continue (even-square sum)
+intent: |
+  Given a frontmatter `limit` integer, compute the sum of squares of
+  even numbers from 0 to limit (exclusive). If the limit exceeds 1000,
+  exit early with `{ rejected: true, reason: 'limit too high' }`.
+  Use `continue` to skip odd numbers; otherwise loop through
+  `0..limit` with a running accumulator and a count of included
+  numbers. Exit with `{ rejected: false, sum_of_squares: N,
+  count_included: M, limit_used: $limit }`.
+description: |
+  Pure-compute pilot — first smoke test with zero tool dispatches and
+  zero brokered references. Stresses REQ-014 (range operator), REQ-104
+  (continue inside a for-body), and the accumulator + counter pattern
+  that REQ-019 ac1 (walk-up assignment) enables. Two exit paths: the
+  rejected-because-limit-too-high guard, and the normal accumulator
+  exit. This pilot uses the normal path (limit=10).
+
+covers:
+  - MTF-C-009  # exit shapes (multi-exit)
+  - MTF-N-005  # numeric ops (mod, add, mul)
+  - MTF-L-007  # range operator
+  - MTF-L-008  # for-loop with continue (REQ-104)
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T21:00:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/numeric-accumulator.md"
+  frontmatter:
+    limit: 10
+  title: "Numeric Accumulator"
+  tags: []
+  fq_id: "fq:doc:num-accum:001"
+
+macro: |
+  limit = $_self.frontmatter.limit
+
+  if $limit > 1000 then
+    exit { rejected: true, reason: "limit too high" }
+  fi
+
+  total = 0
+  included = 0
+
+  for n in 0..$limit do
+    remainder = mod $n 2
+    if $remainder != 0 then
+      continue
+    fi
+    square = mul $n $n
+    total = add $total $square
+    included = add $included 1
+  done
+
+  exit {
+    rejected: false,
+    sum_of_squares: $total,
+    count_included: $included,
+    limit_used: $limit
+  }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+# AI-predicted expect at testgen time.
+# Even numbers in [0..10): 0, 2, 4, 6, 8.
+# Squares: 0, 4, 16, 36, 64. Sum: 120. Count: 5.
+predicted_expect:
+  outcome: success
+  return_result:
+    rejected: false
+    sum_of_squares: 120
+    count_included: 5
+    limit_used: 10
+  side_effects:
+    tool_call_count: 0
+
+# Reconciliation: AI prediction and golden capture agreed exactly.
+# Range op `0..$limit` end-exclusive, continue skipped odd numbers,
+# accumulator pattern walked-up the outer-scope total correctly.
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T21:03:39Z"
+  golden_version: "0.3.0"
+  notes: |
+    Clean reconciliation. AI prediction matched golden capture exactly:
+    sum_of_squares=120 (= 0+4+16+36+64 for evens 0,2,4,6,8 in [0..10)),
+    count_included=5, limit_used=10, rejected=false. The range operator,
+    REQ-104 continue, REQ-019 walk-up assignment, and multi-exit
+    composition all behaved per spec. No tool dispatches — first
+    pure-compute pilot in the smoke corpus.
+
+golden_snapshot:
+  captured_trace_kinds: ["progress", "exit"]
+  captured_tool_calls: []
+
+expect:
+  outcome: success
+  return_result:
+    rejected: false
+    sum_of_squares: 120
+    count_included: 5
+    limit_used: 10
+  side_effects:
+    tool_call_count: 0

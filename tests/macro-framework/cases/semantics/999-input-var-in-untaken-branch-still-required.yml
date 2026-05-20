@@ -1,0 +1,69 @@
+id: mtf-s-999-input-var-in-untaken-branch-still-required
+name: input_var inside an untaken branch is still required by pre-flight
+intent: |
+  Macro has an if-branch containing a required input_var. At runtime
+  the branch wouldn't execute, but per REQ-007 ac3 pre-flight walks
+  the ENTIRE AST. The input_var must still be supplied.
+description: |
+  REQ-007 ac3 — "The pre-flight scan MUST walk the entire AST." Pre-flight
+  runs BEFORE any statement executes, so it can't know which branches
+  will be taken at runtime. Pilot does NOT supply the required input_var
+  → invalid_input even though the branch never runs.
+
+covers:
+  - MTF-L-002
+  - MTF-E-008
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/conditional-required.md"
+  frontmatter:
+    mode: "shallow"
+  title: "Conditional Required"
+  tags: []
+  fq_id: "fq:doc:cond-req:001"
+
+macro: |
+  mode = $_self.frontmatter.mode
+  if $mode == "deep" then
+    detail = input_var "detail"
+    exit { mode: $mode, detail: $detail }
+  fi
+  exit { mode: $mode, detail: null }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      missing_inputs: ["detail"]
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-19T22:18:00Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. AI prediction, golden capture,
+    and production runtime all agreed on the envelope.
+
+expect:
+  outcome: error
+  error:
+    code: invalid_input
+    details:
+      missing_inputs: ["detail"]
+  side_effects:
+    tool_call_count: 0

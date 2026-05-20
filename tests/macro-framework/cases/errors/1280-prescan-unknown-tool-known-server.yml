@@ -1,0 +1,39 @@
+id: mtf-e-1280-prescan-unknown-tool-known-server
+name: |-
+  REQ-028: known server, unknown tool
+intent: |
+  REQ-028: known server, unknown tool
+covers: [MTF-E-006]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T22:55:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = alpha.missing_tool({})
+  exit { r: $r }
+input_vars: {}
+vault: {}
+tools:
+  alpha:
+    archetype: JSONTextTool
+    tool_name: ping
+    value: { ok: true }
+predicted_expect:
+  outcome: error
+  error:
+    code: unknown_tool
+  side_effects:
+    tool_call_count: 0
+reconciliation:
+  predicted_matched_captured: null
+  captured_at: null
+  golden_version: "0.3.0"
+  notes: |
+    Awaiting capture.
+expect:
+  outcome: error
+  error:
+    code: unknown_tool
+  side_effects:
+    tool_call_count: 0
