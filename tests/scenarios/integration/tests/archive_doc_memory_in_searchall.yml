@@ -50,4 +50,8 @@ steps:
       args:
         query: "ocean tides dusk calming"
         entity_types: [memories]
-      expect_contains: "Ocean tides"
+      expect_json_contains:
+        path: results
+        value:
+          entity_type: memory
+          memory_id: "${tides_mem.memory_id}"

@@ -250,8 +250,8 @@ from fqc_test_utils import FQCServer, TestContext, TestRun, expectation_detail
 # Valid dep names, matching FQCServer optional capability flags
 _KNOWN_DEPS = {"embeddings", "git", "locking", "llm"}
 
-# Substring FQC returns when a memory search is attempted without embeddings
-_NO_EMBEDDINGS_SIGNAL = "semantic embeddings"
+# Substrings FQC returns when a memory search is attempted without embeddings.
+_NO_EMBEDDINGS_SIGNALS = ("embedding_unavailable", "semantic embeddings")
 
 
 def _probe_llm(args: argparse.Namespace) -> bool:
@@ -295,7 +295,7 @@ def _probe_embeddings(args: argparse.Namespace) -> bool:
             entity_types=["memories"],
         )
         client.close()
-        return _NO_EMBEDDINGS_SIGNAL not in result.text
+        return not any(signal in result.text for signal in _NO_EMBEDDINGS_SIGNALS)
     except Exception:
         return True  # can't probe — optimistically assume deps may be met
 

@@ -47,7 +47,11 @@ steps:
       args:
         query: "hiking through redwood forests"
         entity_types: [memories]
-      expect_contains: "redwood forests"
+      expect_json_contains:
+        path: results
+        value:
+          entity_type: memory
+          memory_id: "${hiking_mem.memory_id}"
 
   - label: "search_all with entity_types=[memories] does not return the document (IS-05)"
     assert:
