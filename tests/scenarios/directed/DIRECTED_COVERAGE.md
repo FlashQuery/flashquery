@@ -53,8 +53,8 @@ This document defines every behavioral coverage point we want to verify through 
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| ML-11 | MACRO-DISP-04 / T-U-165: `call_macro` universally hides nested `fq.call_macro` references from macro authors as `unknown_tool`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
-| ML-12 | MACRO-DISP-05 / T-U-166: `call_macro` rejects real template-masqueraded tool names with `template_masquerade_tools_not_callable_from_macro`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-14 |
+| ML-11 | MCP Broker REQ-114 carry-forward: host-invoked `call_macro` permits nested `fq.call_macro` re-entry and returns the nested macro result while preserving the outer host context. | test_macro_dispatch_permissions | 2026-05-20 | 2026-05-20 |
+| ML-12 | MACRO-DISP-05 / T-U-166: `call_macro` rejects real template-masqueraded tool names with `template_masquerade_tools_not_callable_from_macro`. | test_macro_dispatch_permissions | 2026-05-14 | 2026-05-20 |
 | ML-13 | MACRO-DISP-02 / T-S-007 / T-U-160: public `call_macro` reports a known but host-disallowed FlashQuery tool as `forbidden_tools`, including forbidden and allowed lists, before dispatch. | test_macro_permission_prescan | 2026-05-15 | 2026-05-14 |
 | ML-14 | MACRO-DISP-02 / T-S-007 / T-U-161 / T-U-162: public `call_macro` reports multiple forbidden tool references across nested control-flow bodies before any nested result or side effect can occur. | test_macro_permission_prescan | 2026-05-15 | 2026-05-14 |
 | ML-15 | MACRO-DISP-06 / T-U-167 / T-U-168: delegated-origin `runMacroSource` hard-excludes `fq.call_model` with `recursive_model_excluded_from_delegated_macros`. | test_macro_delegated_hard_exclusions | 2026-05-14 | 2026-05-14 |
@@ -1832,7 +1832,7 @@ Phase 121 foundation behaviors for MCP tool consolidation metadata, response hel
 | D-foundation-tools-6 | Delegated native tool assembly cannot regain host-disabled tools. | Unit: llm-tool-registry.test.ts (`does not regain memory tools from tier selectors when the host catalog is doc-read only`); directed host boundary in test_foundation_host_tool_exposure | 2026-05-11 | 2026-05-11 |
 | D-foundation-tools-7 | Removed-status purpose tool names remain valid while their legacy tools are still registered; hard-fail suggestions are deferred until actual removal. | test_foundation_host_tool_exposure; llm-config.test.ts | 2026-05-11 | 2026-05-13 |
 | D-foundation-frontmatter-1 | Foundation frontmatter constant guardrails prevent new unmanaged raw `fq_*` field literals outside explicit legacy/fixture allowlists. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
-| D-foundation-description-1 | MCP `tools/list` exposes registered tool descriptions that include the XC-8 four-block template. | test_foundation_json_response | 2026-05-11 | 2026-05-11 |
+| D-foundation-description-1 | MCP `tools/list` exposes each FQ-native tool's `.tool.md` frontmatter description, including the short `help: true` convention rather than the full help body. | test_foundation_json_response | 2026-05-20 | 2026-05-20 |
 
 ### test_foundation_host_tool_exposure
 Covers: D-foundation-tools-2, D-foundation-tools-3, D-foundation-tools-4, D-foundation-tools-5, D-foundation-tools-7

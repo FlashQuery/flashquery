@@ -193,19 +193,21 @@ def run_test(args: argparse.Namespace) -> TestRun:
             tools = ((list_tools_raw.get("result") or {}).get("tools") or [])
             get_document_tool = next((tool for tool in tools if tool.get("name") == "get_document"), None)
             description_text = (get_document_tool or {}).get("description") or ""
-            required_blocks = ["Summary:", "Use when:", "Do not use when:", "Example:"]
-            missing_blocks = [block for block in required_blocks if block not in description_text]
-            description_passed = get_document_tool is not None and not missing_blocks
+            description_passed = (
+                get_document_tool is not None
+                and "Read one or more vault documents" in description_text
+                and "{help: true}" in description_text
+            )
             if get_document_tool is None:
                 description_detail = "get_document was absent from tools/list"
-            elif missing_blocks:
-                description_detail = f"get_document description missing blocks: {', '.join(missing_blocks)}"
+            elif not description_passed:
+                description_detail = f"get_document description did not match .tool.md help convention: {description_text!r}"
         except Exception as exc:
             description_detail = f"tools/list description check failed: {exc}"
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
 
         run.step(
-            label="D-foundation-description-1: tools/list exposes XC-8 registered description blocks",
+            label="D-foundation-description-1: tools/list exposes .tool.md description with help:true convention",
             passed=description_passed,
             detail=description_detail,
             timing_ms=0,

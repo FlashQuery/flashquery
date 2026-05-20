@@ -20,6 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "framework"))
 
+from fqc_client import get_json_path, parse_mcp_json
 from fqc_test_utils import TestContext, TestRun, expectation_detail
 
 
@@ -45,13 +46,23 @@ def run_test(args: argparse.Namespace) -> TestRun:
         log_mark = ctx.server.log_position if ctx.server else 0
         nested = ctx.client.call_tool("call_macro", source='exit fq.call_macro({ source: "exit 1" })')
         step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
-        nested.expect_json_equals("error", "unknown_tool")
-        nested.expect_json_equals("details.server", "fq")
-        nested.expect_json_equals("details.tool", "call_macro")
+        nested.expect_json_equals("result.result", 1)
+        nested_passed = nested.ok and nested.status == "pass"
+        nested_detail = expectation_detail(nested) or nested.error or ""
+        try:
+            nested_payload = parse_mcp_json(nested)
+            trace_name = get_json_path(nested_payload, "trace[0].name")
+            nested_trace_name = get_json_path(nested_payload, "result.trace[0].kind")
+            if trace_name != "fq.call_macro" or nested_trace_name != "exit":
+                nested_passed = False
+                nested_detail = f"unexpected nested macro trace: outer={trace_name!r}, inner={nested_trace_name!r}"
+        except Exception as exc:
+            nested_passed = False
+            nested_detail = f"nested macro response parse failed: {exc}"
         run.step(
-            label="nested fq.call_macro is hidden as unknown_tool",
-            passed=(nested.ok and nested.status == "pass"),
-            detail=expectation_detail(nested) or nested.error or "",
+            label="host nested fq.call_macro inherits context and returns nested result",
+            passed=nested_passed,
+            detail=nested_detail,
             timing_ms=nested.timing_ms,
             tool_result=nested,
             server_logs=step_logs,
