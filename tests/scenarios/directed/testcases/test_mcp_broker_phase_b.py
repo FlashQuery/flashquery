@@ -79,6 +79,19 @@ def _json_payload(result: Any) -> dict[str, Any]:
     return parsed if isinstance(parsed, dict) else {"payload": parsed}
 
 
+def _schema_drift(payload: dict[str, Any], tool: str) -> dict[str, Any]:
+    drift = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+    if drift.get("event") != "schema_drift_detected" or drift.get("server") != "quirky":
+        return {}
+    changes = drift.get("changes")
+    if isinstance(changes, list):
+        for change in changes:
+            if isinstance(change, dict) and change.get("tool") == tool:
+                return change
+        return {}
+    return drift if drift.get("tool") == tool else {}
+
+
 def _call_macro(client: FQCClient, source: str, input_vars: dict[str, Any] | None = None) -> Any:
     args: dict[str, Any] = {"source": source, "trace": "summary"}
     if input_vars is not None:
@@ -105,11 +118,9 @@ def test_macro_brokered_tofu_drift_exit(client: FQCClient) -> tuple[bool, dict[s
         ''',
     )
     payload = _json_payload(result)
-    drift = payload.get("payload") if isinstance(payload.get("payload"), dict) else {}
+    drift = _schema_drift(payload, "stable")
     passed = (
         payload.get("reason") == "needs_user_input"
-        and drift.get("event") == "schema_drift_detected"
-        and drift.get("server") == "quirky"
         and drift.get("tool") == "stable"
         and isinstance(drift.get("old_schema"), dict)
         and isinstance(drift.get("new_schema"), dict)
@@ -162,7 +173,7 @@ def test_macro_tofu_reapproval_reject_blocked(client: FQCClient) -> tuple[bool, 
     )
     payload = _json_payload(result)
     text = json.dumps(payload, sort_keys=True)
-    pending_drift = pending_payload.get("payload") if isinstance(pending_payload.get("payload"), dict) else {}
+    pending_drift = _schema_drift(pending_payload, "rejectable")
     passed = (
         pending_payload.get("reason") == "needs_user_input"
         and pending_drift.get("tool") == "rejectable"

@@ -239,25 +239,25 @@ Core CRUD operations on vault documents via MCP.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| MCB-01 | Macro calls brokered tool against fixture server; returns coerced JSON value through `call_macro` success envelope. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-18 |
-| MCB-02 | Macro calls brokered tool that returns `isError:true`; macro fails-fast with `tool_call_failed` envelope normalized via `formatToolError`. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-18 |
-| MCB-18 | Rejected reverse request (sampling / elicitation) audit-logged with `status: 'rejected_unsupported'` without raw prompt payload. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-18 |
+| MCB-01 | Macro calls brokered tool against fixture server; returns coerced JSON value through `call_macro` success envelope. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-19 |
+| MCB-02 | Macro calls brokered tool that returns `isError:true`; macro fails-fast with `tool_call_failed` envelope normalized via `formatToolError`. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-19 |
+| MCB-18 | Rejected reverse request (sampling / elicitation) audit-logged with `status: 'rejected_unsupported'` without raw prompt payload. | test_mcp_broker_phase_a | 2026-05-18 | 2026-05-19 |
 
 ## Phase 140 MCP Broker TOFU And List Changed
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| MCB-03 | Macro encounters TOFU schema drift and exits with `needs_user_input` payload containing old and new schema details. | test_macro_brokered_tofu_drift_exit | 2026-05-18 | 2026-05-18 |
-| MCB-04 | Chat-mediated TOFU approval is passed back through `call_macro` input vars and the macro re-invocation completes. | test_macro_tofu_reapproval_approve_resume | 2026-05-18 | 2026-05-18 |
-| MCB-05 | Chat-mediated TOFU rejection keeps the changed brokered tool blocked and does not continue silently. | test_macro_tofu_reapproval_reject_blocked | 2026-05-18 | 2026-05-18 |
-| MCB-17 | TOFU approval decisions are audit-logged in the managed server trace stream. | test_tofu_approval_audit_log | 2026-05-18 | 2026-05-18 |
+| MCB-03 | Macro encounters TOFU schema drift and exits with `needs_user_input` payload containing old and new schema details. | test_macro_brokered_tofu_drift_exit | 2026-05-18 | 2026-05-19 |
+| MCB-04 | Chat-mediated TOFU approval is passed back through `call_macro` input vars and the macro re-invocation completes. | test_macro_tofu_reapproval_approve_resume | 2026-05-18 | 2026-05-19 |
+| MCB-05 | Chat-mediated TOFU rejection keeps the changed brokered tool blocked and does not continue silently. | test_macro_tofu_reapproval_reject_blocked | 2026-05-18 | 2026-05-19 |
+| MCB-17 | TOFU approval decisions are audit-logged in the managed server trace stream. | test_tofu_approval_audit_log | 2026-05-18 | 2026-05-19 |
 
 ## Phase 141 BM25 Tool Search Help Pages And Description Overrides
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| MCB-21 | `help: true` against an FQ-native tool returns its `.tool.md` body through `call_model` before native schema validation rejects invalid required arguments. | test_fq_native_help_true_through_call_model | 2026-05-18 |  |
-| MCB-22 | A `tool_search: enabled` purpose initially exposes only `fq.search_tools`, returns native/brokered help discrimination in search results, and dispatches a discovered brokered tool. | test_search_tools_purpose_roundtrip | 2026-05-18 |  |
+| MCB-21 | `help: true` against an FQ-native tool returns its `.tool.md` body through `call_model` before native schema validation rejects invalid required arguments. | test_fq_native_help_true_through_call_model | 2026-05-18 | 2026-05-19 |
+| MCB-22 | A `tool_search: enabled` purpose initially exposes only `fq.search_tools`, returns native/brokered help discrimination in search results, and dispatches a discovered brokered tool. | test_search_tools_purpose_roundtrip | 2026-05-18 | 2026-05-19 |
 
 ## Phase 143 MCP Broker Diagnostics And Macro Extensions
 
@@ -276,12 +276,12 @@ Core CRUD operations on vault documents via MCP.
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| MCB-12 | T-S-012 macro references a brokered tool outside its consumer context and receives an unknown-tool style envelope without dispatching hidden input. | test_macro_brokered_tool_not_in_context | 2026-05-18 | 2026-05-18 |
-| MCB-13 | T-S-013 public delegated purpose invocation preserves purpose consumer context for purpose-visible brokered tools; nested delegated macro inheritance is covered by `tests/unit/macro-registry.test.ts` because `call_macro` is intentionally hard-excluded from delegated model-visible native tools. | test_macro_nested_purpose_context | 2026-05-18 | 2026-05-18 |
-| MCB-13b | Phase 140 carry-forward: autonomous delegated macro context preserves `interactive:false` across `fq.call_macro` and returns `tool_unavailable_pending_user_decision` for pending broker drift rather than `needs_user_input`. | test_mcp_broker_phase_d | 2026-05-18 | 2026-05-18 |
-| MCB-14 | T-S-014 nested macro invocation from a host-invoked macro preserves host context and host brokered visibility. | test_macro_nested_host_context | 2026-05-18 | 2026-05-18 |
-| MCB-15 | T-S-015 brokered `tool_calls` trace entries include resolved cost and sanitized consumer scope. | test_brokered_call_cost_in_trace | 2026-05-18 | 2026-05-18 |
-| MCB-16 | T-S-016 host-initiated brokered calls stay scoped to the host session rather than a fresh `call_model` trace. | test_host_brokered_call_trace_scope | 2026-05-18 | 2026-05-18 |
+| MCB-12 | T-S-012 macro references a brokered tool outside its consumer context and receives an unknown-tool style envelope without dispatching hidden input. | test_macro_brokered_tool_not_in_context | 2026-05-18 | 2026-05-19 |
+| MCB-13 | T-S-013 public delegated purpose invocation preserves purpose consumer context for purpose-visible brokered tools; nested delegated macro inheritance is covered by `tests/unit/macro-registry.test.ts` because `call_macro` is intentionally hard-excluded from delegated model-visible native tools. | test_macro_nested_purpose_context | 2026-05-18 | 2026-05-19 |
+| MCB-13b | Phase 140 carry-forward: autonomous delegated macro context preserves `interactive:false` across `fq.call_macro` and returns `tool_unavailable_pending_user_decision` for pending broker drift rather than `needs_user_input`. | test_mcp_broker_phase_d | 2026-05-18 | 2026-05-19 |
+| MCB-14 | T-S-014 nested macro invocation from a host-invoked macro preserves host context and host brokered visibility. | test_macro_nested_host_context | 2026-05-18 | 2026-05-19 |
+| MCB-15 | T-S-015 brokered `tool_calls` trace entries include resolved cost and sanitized consumer scope. | test_brokered_call_cost_in_trace | 2026-05-18 | 2026-05-19 |
+| MCB-16 | T-S-016 host-initiated brokered calls stay scoped to the host session rather than a fresh `call_model` trace. | test_host_brokered_call_trace_scope | 2026-05-18 | 2026-05-19 |
 
 ## 2. Document Content Operations
 
