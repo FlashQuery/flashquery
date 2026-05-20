@@ -3,6 +3,8 @@
 
 id: mtf-c-411-break-in-for
 name: "break inside for-loop"
+intent: |
+  break inside for-loop
 description: |
   break exits a for-loop at i==4; remaining iterations skipped.
 
@@ -32,3 +34,17 @@ vault: {}
 expect:
   outcome: success
   return_result: {"sum":6}
+predicted_expect:
+  outcome: success
+  return_result: {"sum":6}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

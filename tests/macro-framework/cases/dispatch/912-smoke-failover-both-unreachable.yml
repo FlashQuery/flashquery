@@ -78,32 +78,11 @@ predicted_expect:
 # matches the golden/spec-correct pre-scan refusal.
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-19T19:07:00Z"
+  captured_at: "2026-05-20T15:29:48Z"
   golden_version: "0.3.0"
-  divergence_kind: resolved_production_gap
-  spec_reference:
-    - "FlashQuery Macro Language Requirements REQ-028 ac1"
-    - "FlashQuery Macro Language Requirements REQ-028 ac5"
-    - "FlashQuery Macro Language Requirements INV-07"
-  production_gap_id: PG-001
-  production_gap_doc: ../../PRODUCTION_GAPS.md
-  golden_captured:
-    outcome: error
-    error:
-      code: unknown_server
-      message: "macro pre-scan rejected: unknown server(s): primary_srv, backup_srv"
+  divergence_kind: clean_match
   notes: |
-    Per REQ-028 ac5 ("MUST run after parse but before any statement
-    executes") and INV-07 ("MUST NOT execute any tool call when the
-    permission pre-scan finds a denied or unknown tool reference"),
-    the pre-scan is mandatory and unconditional. Production's
-    PG-001 removed the evaluator guard that skipped pre-scan when
-    `toolRegistry` or `allowedToolNames` was undefined.
-
-    The golden is spec-correct: it always pre-scans against
-    defaultToolRegistry, so `primary_srv` and `backup_srv` (unknown
-    servers) trigger the spec's `unknown_server` envelope.
-
+    Clean three-oracle reconciliation. Captured by generic capture runner.
 # Test-runtime expect — golden/spec-correct envelope after PG-001.
 expect:
   outcome: error
@@ -112,3 +91,6 @@ expect:
     message_contains: "primary_srv"
   side_effects:
     tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

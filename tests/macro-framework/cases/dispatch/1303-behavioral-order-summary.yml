@@ -1,0 +1,119 @@
+id: mtf-d-1303-behavioral-order-summary
+name: |-
+  Longer scenario (behavioral) — order processing summary
+intent: |
+  I'm processing a batch of orders. The caller provides a list of
+  orders via input_var `orders`, each with `id`, `status` (one of
+  'paid', 'pending', or 'refunded'), and `amount`. I want to know how
+  much revenue was actually collected, how many orders are still
+  waiting on the customer, how many came back as refunds, and which
+  orders specifically were paid. For every paid order, send it to
+  `audit_srv.log({ order_id, status })` for the audit trail. Return
+  a summary that someone reviewing this batch could look at.
+
+description: |
+  Behavioral-style description test (Run #10.3). The skill picks
+  variable names, branching pattern, accumulator shape, and exit
+  field names. Externalities specified: input_var key, order object
+  shape, tool name + signature. Implementation left open.
+
+covers:
+  - MTF-C-009
+  - MTF-D-101
+  - MTF-D-102
+  - MTF-L-002
+  - MTF-S-007
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:20:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  orders = input_var "orders"
+
+  total_revenue = 0
+  pending_count = 0
+  refund_count = 0
+  paid_ids = []
+
+  for order in $orders do
+    if $order.status == "paid" then
+      total_revenue = add $total_revenue $order.amount
+      paid_ids = append $paid_ids $order.id
+      audit_srv.log({ order_id: $order.id, status: $order.status })
+    fi
+    if $order.status == "pending" then
+      pending_count = add $pending_count 1
+    fi
+    if $order.status == "refunded" then
+      refund_count = add $refund_count 1
+    fi
+  done
+
+  total_orders = count $orders
+
+  exit {
+    total_revenue: $total_revenue,
+    pending_orders: $pending_count,
+    refunded_orders: $refund_count,
+    paid_order_ids: $paid_ids,
+    total_processed: $total_orders
+  }
+
+input_vars:
+  orders:
+    - { id: "ord-1", status: "paid", amount: 100 }
+    - { id: "ord-2", status: "pending", amount: 50 }
+    - { id: "ord-3", status: "paid", amount: 200 }
+    - { id: "ord-4", status: "refunded", amount: 75 }
+    - { id: "ord-5", status: "pending", amount: 30 }
+    - { id: "ord-6", status: "paid", amount: 150 }
+
+vault: {}
+
+tools:
+  audit_srv:
+    archetype: JSONTextTool
+    tool_name: log
+    value: { ok: true }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    total_revenue: 450
+    pending_orders: 2
+    refunded_orders: 1
+    paid_order_ids: ["ord-1", "ord-3", "ord-6"]
+    total_processed: 6
+  side_effects:
+    tool_call_count: 3
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    total_revenue: 450
+    pending_orders: 2
+    refunded_orders: 1
+    paid_order_ids: ["ord-1", "ord-3", "ord-6"]
+    total_processed: 6
+  side_effects:
+    tool_call_count: 3
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "audit_srv"
+      tool: "log"
+    - server: "audit_srv"
+      tool: "log"
+    - server: "audit_srv"
+      tool: "log"

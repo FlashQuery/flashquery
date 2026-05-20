@@ -1,0 +1,136 @@
+id: mtf-d-1300-longer-research-synthesis
+name: |-
+  Longer scenario — research synthesis (multi-tool, multi-accumulator)
+intent: |
+  A `query` input_var (required string) and optional `min_score`
+  (number, default 0). Call `search_srv.find_papers({ query })`
+  returning a list of paper objects each with `{ id, title, score }`.
+  For each paper whose score is at least min_score, call
+  `enrich_srv.fetch_summary({ paper_id })` returning
+  `{ ok, summary?, reason? }`. Accumulate successful summaries into
+  `enriched`, failures into `failed`, and count papers skipped due to
+  low score. Exit with the four accumulators.
+
+description: |
+  First longer-scenario smoke test (Run #10.1). Composes input_vars
+  + 2-server dispatch + per-item conditional dispatch + envelope
+  branching on `.ok` + three accumulators + REQ-108 passthrough +
+  structured exit. ~25-line macro, 1 search dispatch + N enrich
+  dispatches where N = (papers above threshold).
+
+covers:
+  - MTF-C-009
+  - MTF-D-101
+  - MTF-D-102
+  - MTF-D-103
+  - MTF-L-002
+  - MTF-L-008  # continue
+  - MTF-S-007  # field access
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:05:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  query = input_var "query"
+  min_score = input_var "min_score" --default 0
+  papers = search_srv.find_papers({ query: $query })
+
+  enriched = []
+  failed = []
+  skipped_low_score = 0
+
+  for paper in $papers do
+    if $paper.score < $min_score then
+      skipped_low_score = add $skipped_low_score 1
+      continue
+    fi
+    result = enrich_srv.fetch_summary({ paper_id: $paper.id })
+    if $result.ok then
+      enriched = append $enriched { id: $paper.id, title: $paper.title, summary: $result.summary }
+    else
+      failed = append $failed { id: $paper.id, reason: $result.reason }
+    fi
+  done
+
+  total_papers = count $papers
+
+  exit {
+    enriched: $enriched,
+    failed: $failed,
+    skipped_low_score: $skipped_low_score,
+    total_papers: $total_papers
+  }
+
+input_vars:
+  query: "macros"
+  min_score: 5
+
+vault: {}
+
+# 4 papers: p1 (score 8, above), p2 (score 3, below — skipped),
+# p3 (score 9, above), p4 (score 7, above). Of the 3 above-threshold,
+# enrich returns ok for p1 and p3, fail for p4.
+tools:
+  search_srv:
+    archetype: JSONTextTool
+    tool_name: find_papers
+    value:
+      - { id: "p1", title: "Paper One", score: 8 }
+      - { id: "p2", title: "Paper Two (low)", score: 3 }
+      - { id: "p3", title: "Paper Three", score: 9 }
+      - { id: "p4", title: "Paper Four", score: 7 }
+  enrich_srv:
+    archetype: ScriptedTool
+    tool_name: fetch_summary
+    responses:
+      - { content: [{ type: "text", text: '{"ok":true,"summary":"P1 summary"}' }] }
+      - { content: [{ type: "text", text: '{"ok":true,"summary":"P3 summary"}' }] }
+      - { content: [{ type: "text", text: '{"ok":false,"reason":"unavailable"}' }] }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    enriched:
+      - { id: "p1", title: "Paper One", summary: "P1 summary" }
+      - { id: "p3", title: "Paper Three", summary: "P3 summary" }
+    failed:
+      - { id: "p4", reason: "unavailable" }
+    skipped_low_score: 1
+    total_papers: 4
+  side_effects:
+    tool_call_count: 4
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    enriched:
+      - { id: "p1", title: "Paper One", summary: "P1 summary" }
+      - { id: "p3", title: "Paper Three", summary: "P3 summary" }
+    failed:
+      - { id: "p4", reason: "unavailable" }
+    skipped_low_score: 1
+    total_papers: 4
+  side_effects:
+    tool_call_count: 4
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "search_srv"
+      tool: "find_papers"
+    - server: "enrich_srv"
+      tool: "fetch_summary"
+    - server: "enrich_srv"
+      tool: "fetch_summary"
+    - server: "enrich_srv"
+      tool: "fetch_summary"

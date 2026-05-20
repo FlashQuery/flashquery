@@ -79,20 +79,14 @@ predicted_expect:
 # parsed and evaluated cleanly on both oracles.
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-19T21:03:39Z"
+  captured_at: "2026-05-20T15:29:48Z"
   golden_version: "0.3.0"
+  divergence_kind: clean_match
   notes: |
-    Clean reconciliation. AI prediction matched golden capture exactly:
-    headline, tag_count (via inline `count $tags` pipeline), is_multi_tag
-    (via inline `$n_tags > 1` comparison), and display_block (via string
-    interpolation) all produced the same values on both oracles. This
-    is the first deliberate stress on GG-001's broadened objectEntry
-    grammar — confirmed working end-to-end.
-
+    Clean three-oracle reconciliation. Captured by generic capture runner.
 golden_snapshot:
   captured_trace_kinds: ["exit"]
   captured_tool_calls: []
-
 # Test-runtime expect — golden-verified.
 expect:
   outcome: success

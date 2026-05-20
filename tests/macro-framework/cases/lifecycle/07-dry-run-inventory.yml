@@ -11,6 +11,8 @@
 
 id: mtf-l-07-dry-run-inventory
 name: Lifecycle — dry-run inventory
+intent: |
+  Lifecycle — dry-run inventory
 description: |
   Dry-run dispatches through runDryRun() and returns the static
   inventory envelope per REQ-053.
@@ -71,14 +73,29 @@ expect:
     tool_call_count: 0
 
 golden_snapshot:
-  state_notes:
-    - { kind: permission, tool: "inventory_srv.list", decision: allowed }
-    - { kind: permission, tool: "inventory_srv.process", decision: allowed }
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: binding, op: set, name: topic, value: "demo", scope: local }
-    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
-    - { kind: binding, op: set, name: n_lim, value: 3, scope: local }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: coerce, path: passthrough, raw_summary: "inventory_srv.list returned list (native, no coercion)" }
-    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 1, elapsed_ms: 0 }
-    - { kind: binding, op: set, name: docs, value: ["a", "b", "c"], scope: local }
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "inventory_srv"
+      tool: "list"
+predicted_expect:
+  outcome: success
+  dry_run_inventory:
+    input_var_contract:
+      required: ["topic"]
+      optional: [{ key: "n_lim", default: 10 }]
+    tool_references:
+      - "inventory_srv.list"
+      - "inventory_srv.process"
+    server_references:
+      - "inventory_srv"
+  side_effects:
+    tool_call_count: 0
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

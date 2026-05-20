@@ -1,0 +1,89 @@
+id: mtf-d-1308-behavioral-round-robin-workers
+name: |-
+  Behavioral complex — round-robin worker assignment (no-tool, no-dyn-keys)
+intent: |
+  Distribute items across N workers in round-robin order. Caller
+  provides `items` and `worker_count` via input_vars. Return each
+  worker's assigned items. Handle worker_count=0 or empty items as
+  empty output.
+
+description: |
+  Behavioral test (Run #11.4). Hits the language's no-dynamic-object-
+  keys limit. Skill chose list-of-lists shape (outer index = worker
+  id) + nested iteration with mod arithmetic. Pure compute, no tool
+  dispatch.
+
+covers: [MTF-C-009, MTF-L-002, MTF-N-005, MTF-L-008]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  items = input_var "items"
+  worker_count = input_var "worker_count"
+
+  if $worker_count == 0 then
+    exit { assignments: [] }
+  fi
+
+  n_items = count $items
+  if $n_items == 0 then
+    exit { assignments: [] }
+  fi
+
+  assignments = []
+  worker_idx = 0
+  while $worker_idx < $worker_count do
+    worker_items = []
+    item_idx = 0
+    for item in $items do
+      remainder = mod $item_idx $worker_count
+      if $remainder == $worker_idx then
+        worker_items = append $worker_items $item
+      fi
+      item_idx = add $item_idx 1
+    done
+    assignments = append $assignments $worker_items
+    worker_idx = add $worker_idx 1
+  done
+
+  exit { assignments: $assignments }
+
+input_vars:
+  items: ["a", "b", "c", "d", "e"]
+  worker_count: 3
+
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    assignments:
+      - ["a", "d"]
+      - ["b", "e"]
+      - ["c"]
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    assignments:
+      - ["a", "d"]
+      - ["b", "e"]
+      - ["c"]
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

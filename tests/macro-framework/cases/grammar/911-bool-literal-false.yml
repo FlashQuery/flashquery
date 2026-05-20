@@ -2,6 +2,8 @@
 
 id: mtf-g-911-bool-literal-false
 name: Grammar — `false` literal parses and binds as a boolean (REQ-112c ac4)
+intent: |
+  Grammar — `false` literal parses and binds as a boolean (REQ-112c ac4)
 description: |
   `false` literal is falsy per REQ-022. The then-branch must NOT run.
 
@@ -30,3 +32,18 @@ expect:
   outcome: success
   return_result:
     v: "default"
+predicted_expect:
+  outcome: success
+  return_result:
+    v: "default"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -24,13 +24,17 @@ predicted_expect:
   side_effects:
     tool_call_count: 0
 reconciliation:
-  predicted_matched_captured: null
-  captured_at: null
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
   golden_version: "0.3.0"
+  divergence_kind: clean_match
   notes: |
-    Awaiting capture.
+    Clean three-oracle reconciliation. Captured by generic capture runner.
 expect:
   outcome: success
   return_result: { r: "after" }
   side_effects:
     tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

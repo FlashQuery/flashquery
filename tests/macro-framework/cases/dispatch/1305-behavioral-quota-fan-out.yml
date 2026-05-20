@@ -1,0 +1,106 @@
+id: mtf-d-1305-behavioral-quota-fan-out
+name: |-
+  Behavioral complex — quota-limited fan-out (stateful early stop)
+intent: |
+  Process jobs sequentially via processor_srv.run({job}). Each response
+  includes an elapsed_ms field. Stop sending once accumulated elapsed_ms
+  hits a budget the caller provides. Return what got processed and what
+  got skipped because the budget was exhausted.
+
+description: |
+  Behavioral test (Run #11.1). Stateful iteration where the budget can
+  only be measured AFTER each call, making early-stop logic non-trivial.
+
+covers: [MTF-C-009, MTF-D-101, MTF-D-102, MTF-L-002, MTF-L-008]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  jobs = input_var "jobs"
+  budget_ms = input_var "budget_ms"
+
+  processed = []
+  skipped = []
+  total_elapsed_ms = 0
+
+  for job in $jobs do
+    if $total_elapsed_ms >= $budget_ms then
+      skipped = append $skipped $job
+      continue
+    fi
+    result = processor_srv.run({ job: $job })
+    processed = append $processed $job
+    total_elapsed_ms = add $total_elapsed_ms $result.elapsed_ms
+  done
+
+  exit {
+    processed: $processed,
+    skipped: $skipped,
+    total_elapsed_ms: $total_elapsed_ms
+  }
+
+input_vars:
+  jobs:
+    - { id: 1 }
+    - { id: 2 }
+    - { id: 3 }
+    - { id: 4 }
+    - { id: 5 }
+  budget_ms: 200
+
+vault: {}
+tools:
+  processor_srv:
+    archetype: ScriptedTool
+    tool_name: run
+    responses:
+      - { content: [{ type: "text", text: '{"elapsed_ms":80}' }] }
+      - { content: [{ type: "text", text: '{"elapsed_ms":80}' }] }
+      - { content: [{ type: "text", text: '{"elapsed_ms":80}' }] }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    processed:
+      - { id: 1 }
+      - { id: 2 }
+      - { id: 3 }
+    skipped:
+      - { id: 4 }
+      - { id: 5 }
+    total_elapsed_ms: 240
+  side_effects:
+    tool_call_count: 3
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    processed:
+      - { id: 1 }
+      - { id: 2 }
+      - { id: 3 }
+    skipped:
+      - { id: 4 }
+      - { id: 5 }
+    total_elapsed_ms: 240
+  side_effects:
+    tool_call_count: 3
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "processor_srv"
+      tool: "run"
+    - server: "processor_srv"
+      tool: "run"
+    - server: "processor_srv"
+      tool: "run"

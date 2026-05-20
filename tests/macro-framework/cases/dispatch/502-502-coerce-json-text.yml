@@ -3,6 +3,8 @@
 
 id: mtf-d-502-coerce-json-text
 name: "JSONTextTool path: text content parses as JSON"
+intent: |
+  JSONTextTool path: text content parses as JSON
 description: |
   REQ-106 path 3: text content that parses as JSON binds the parsed value.
 
@@ -32,3 +34,19 @@ tools:
 expect:
   outcome: success
   return_result: {"out":{"hello":"world","count":7}}
+predicted_expect:
+  outcome: success
+  return_result: {"out":{"hello":"world","count":7}}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "json_srv"
+      tool: "fetch"

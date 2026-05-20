@@ -3,6 +3,8 @@
 
 id: mtf-c-402-continue-last-iter
 name: "continue on last iteration"
+intent: |
+  continue on last iteration
 description: |
   continue fires on i==5; sum is 1+2+3+4 = 10.
 
@@ -32,3 +34,17 @@ vault: {}
 expect:
   outcome: success
   return_result: {"sum":10}
+predicted_expect:
+  outcome: success
+  return_result: {"sum":10}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -356,7 +356,12 @@ async function main() {
       }
     } else if (e instanceof MacroRuntimeError) {
       console.error("RUNTIME ERROR:");
-      console.error(JSON.stringify({ error: "runtime_error", message: e.message, details: { line: e.line ?? null } }, null, 2));
+      // GG-005: unexpected runtime errors use the canonical `tool_call_failed`
+      // envelope code per REQ-054 / `MACRO_ERROR_CODES`. The class name is
+      // `MacroRuntimeError` because the failure happens at runtime; the
+      // ENVELOPE code is `tool_call_failed` because that's the spec's
+      // catch-all for the XC-5 unexpected path.
+      console.error(JSON.stringify({ error: "tool_call_failed", message: e.message, details: { line: e.line ?? null } }, null, 2));
     } else {
       console.error("UNEXPECTED ERROR:");
       console.error(e);

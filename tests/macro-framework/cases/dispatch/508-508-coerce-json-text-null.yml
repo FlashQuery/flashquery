@@ -3,6 +3,8 @@
 
 id: mtf-d-508-coerce-json-text-null
 name: "JSONTextTool returns null"
+intent: |
+  JSONTextTool returns null
 description: |
   JSON-text "null" parses to null.
 
@@ -32,3 +34,19 @@ tools:
 expect:
   outcome: success
   return_result: {"v":null}
+predicted_expect:
+  outcome: success
+  return_result: {"v":null}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "n_srv"
+      tool: "get"

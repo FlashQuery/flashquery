@@ -1,6 +1,8 @@
 # Pilot — MTF-E-005: parse_error envelope for an unexpected token.
 id: mtf-e-705-parse-error-unexpected-token
 name: Errors — parse_error envelope (unexpected_token) (REQ-018)
+intent: |
+  Errors — parse_error envelope (unexpected_token) (REQ-018)
 description: |
   Wild token at top-level (e.g. a stray `}`) raises parse_error.
 covers: [MTF-E-005]
@@ -18,3 +20,18 @@ expect:
   outcome: parse_error
   error:
     code: parse_error
+predicted_expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

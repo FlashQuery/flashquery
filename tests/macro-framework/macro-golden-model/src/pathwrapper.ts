@@ -41,7 +41,14 @@ export function resolveMacroPath(macroPath: string, vaultRoot: string): string {
   // false positives like `/foo` matching `/foobar`.
   const rootWithSep = normalizedRoot.endsWith(sep) ? normalizedRoot : normalizedRoot + sep;
   if (normalized !== normalizedRoot && !normalized.startsWith(rootWithSep)) {
-    throw new ForbiddenPathError(macroPath, "resolves outside vault root");
+    // GG-013-equivalent fix (2026-05-20): use spec-canonical snake_case
+    // reason. Production uses `resolves_outside_vault`; the previous free-
+    // text "resolves outside vault root" wasn't a stable identifier per
+    // REQ-018 ac2's "stable snake_case identifiers" rule (the rule applies
+    // to parse-error reasons; runtime / forbidden-path reasons should
+    // follow the same convention for consistency with REQ-054 / spec
+    // taxonomy).
+    throw new ForbiddenPathError(macroPath, "resolves_outside_vault");
   }
   return normalized;
 }

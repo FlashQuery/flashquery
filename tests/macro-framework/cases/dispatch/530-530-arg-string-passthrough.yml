@@ -3,6 +3,8 @@
 
 id: mtf-d-530-arg-string-passthrough
 name: "String argument passes through bit-exact"
+intent: |
+  String argument passes through bit-exact
 description: |
   WriteTool returns { ok, side_effect, args }; the macro nests that under `v`. We verify msg reached the broker by reading $v.args.msg back.
 
@@ -32,3 +34,19 @@ tools:
 expect:
   outcome: success
   return_result: {"got":"hello world"}
+predicted_expect:
+  outcome: success
+  return_result: {"got":"hello world"}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "echo_srv"
+      tool: "run"

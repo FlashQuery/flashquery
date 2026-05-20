@@ -6,6 +6,8 @@
 
 id: mtf-d-05-multi-server-dispatch-chain
 name: Dispatch — chained tool calls across three brokered servers
+intent: |
+  Dispatch — chained tool calls across three brokered servers
 description: |
   Three brokered tool calls (svc_a.step, svc_b.transform, svc_c.finish)
   feed each other via $variable binding; the macro exits with a `trail`
@@ -61,19 +63,32 @@ expect:
       - { server: svc_c, tool: finish, args_match: { data: { stage: "b", value: 20 } } }
 
 golden_snapshot:
-  state_notes:
-    - { kind: permission, tool: "svc_a.step", decision: allowed }
-    - { kind: permission, tool: "svc_b.transform", decision: allowed }
-    - { kind: permission, tool: "svc_c.finish", decision: allowed }
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: coerce, path: passthrough, raw_summary: "svc_a.step returned object (native, no coercion)" }
-    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 1, elapsed_ms: 0 }
-    - { kind: binding, op: set, name: a, value: { stage: "a", value: 10 }, scope: local }
-    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
-    - { kind: coerce, path: passthrough, raw_summary: "svc_b.transform returned object (native, no coercion)" }
-    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 2, elapsed_ms: 0 }
-    - { kind: binding, op: set, name: b, value: { stage: "b", value: 20 }, scope: local }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: coerce, path: passthrough, raw_summary: "svc_c.finish returned object (native, no coercion)" }
-    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 3, elapsed_ms: 0 }
-    - { kind: binding, op: set, name: c, value: { stage: "c", value: 30 }, scope: local }
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "svc_a"
+      tool: "step"
+    - server: "svc_b"
+      tool: "transform"
+    - server: "svc_c"
+      tool: "finish"
+predicted_expect:
+  outcome: success
+  return_result:
+    trail:
+      - { stage: "a", value: 10 }
+      - { stage: "b", value: 20 }
+      - { stage: "c", value: 30 }
+  side_effects:
+    tool_calls:
+      - { server: svc_a, tool: step, args_match: { x: 10 } }
+      - { server: svc_b, tool: transform, args_match: { payload: { stage: "a", value: 10 } } }
+      - { server: svc_c, tool: finish, args_match: { data: { stage: "b", value: 20 } } }
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

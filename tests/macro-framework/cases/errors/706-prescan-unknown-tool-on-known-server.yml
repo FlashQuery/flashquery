@@ -3,6 +3,8 @@
 # reject with `unknown_tool`.
 id: mtf-e-706-prescan-unknown-tool-on-known-server
 name: Errors — prescan rejects unknown tool on a known server (REQ-028)
+intent: |
+  Errors — prescan rejects unknown tool on a known server (REQ-028)
 description: |
   `basic` server is configured with the `echo` tool. The macro tries to
   call `basic.does_not_exist`. Pre-scan must reject the call with
@@ -28,3 +30,19 @@ expect:
   error:
     code: unknown_tool
     message_contains: "does_not_exist"
+predicted_expect:
+  outcome: fail
+  error:
+    code: unknown_tool
+    message_contains: "does_not_exist"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

@@ -22,6 +22,8 @@
 
 id: mtf-e-29-needs-user-input-via-broker
 name: Errors — TOFU-drift during brokered dispatch propagates as fifth termination
+intent: |
+  Errors — TOFU-drift during brokered dispatch propagates as fifth termination
 description: |
   A brokered tool dispatch detects TOFU schema drift mid-call. The broker
   raises SchemaDriftNeedsUserInputError carrying a REQ-042 payload. The
@@ -80,11 +82,16 @@ expect:
   outcome: needs_user_input
 
 golden_snapshot:
-  # The state_notes below represent the EXPECTED internal trace for the
-  # corrected TOFU-drift path. They are informational (triage aid only);
-  # the structured comparator drives pass/fail off `expect.outcome`.
-  state_notes:
-    - { kind: permission, tool: "approval_srv.ask", decision: allowed }
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: tofu_drift, server: "approval_srv", tool: "ask", phase: dispatch }
-    - { kind: termination, reason: "needs_user_input", event: "schema_drift_detected" }
+  captured_trace_kinds: []
+  captured_tool_calls: []
+predicted_expect:
+  outcome: needs_user_input
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

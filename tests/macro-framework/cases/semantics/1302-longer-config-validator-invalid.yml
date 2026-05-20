@@ -1,0 +1,126 @@
+id: mtf-s-1302-longer-config-validator-invalid
+name: |-
+  Longer scenario — config validator (invalid input)
+intent: |
+  Same macro as 1301. This variant supplies frontmatter with host
+  missing, port out of range (70000), enabled missing, retries
+  supplied as 5. Expect valid=false and three errors accumulated.
+
+description: |
+  Longer scenario #10.2 (invalid variant). Tests the error-accumulator
+  path of the validator. Three errors fire (host missing, port
+  out_of_range, enabled missing). retries is supplied so no default
+  fires.
+
+covers:
+  - MTF-C-009
+  - MTF-I-101
+  - MTF-S-007
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:10:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/config-validator.md"
+  frontmatter:
+    port: 70000
+    retries: 5
+  title: "Config Validator (invalid)"
+  tags: []
+  fq_id: "fq:doc:config-val:002"
+
+macro: |
+  fm = $_self.frontmatter
+  errors = []
+
+  host = $fm.host
+  if $host == null then
+    errors = append $errors { field: "host", issue: "missing" }
+  fi
+
+  port = $fm.port
+  if $port == null then
+    errors = append $errors { field: "port", issue: "missing" }
+  fi
+  if $port != null then
+    if $port < 1 then
+      errors = append $errors { field: "port", issue: "out_of_range" }
+    fi
+    if $port > 65535 then
+      errors = append $errors { field: "port", issue: "out_of_range" }
+    fi
+  fi
+
+  enabled_flag = $fm.enabled
+  if $enabled_flag == null then
+    errors = append $errors { field: "enabled", issue: "missing" }
+  fi
+
+  retries = $fm.retries
+  if $retries == null then
+    retries = 3
+  fi
+
+  n_errors = count $errors
+  valid = $n_errors == 0
+
+  exit {
+    valid: $valid,
+    config: {
+      host: $host,
+      port: $port,
+      enabled: $enabled_flag,
+      retries: $retries
+    },
+    errors: $errors
+  }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    valid: false
+    config:
+      host: null
+      port: 70000
+      enabled: null
+      retries: 5
+    errors:
+      - { field: "host", issue: "missing" }
+      - { field: "port", issue: "out_of_range" }
+      - { field: "enabled", issue: "missing" }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    valid: false
+    config:
+      host: null
+      port: 70000
+      enabled: null
+      retries: 5
+    errors:
+      - { field: "host", issue: "missing" }
+      - { field: "port", issue: "out_of_range" }
+      - { field: "enabled", issue: "missing" }
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -7,6 +7,8 @@
 
 id: mtf-i-28-self-binding-real
 name: Isolation — _self.path/.title/.frontmatter/.fq_id via source_ref
+intent: |
+  Isolation — _self.path/.title/.frontmatter/.fq_id via source_ref
 description: |
   Macro accesses the source-document snapshot's path, title, frontmatter
   field, and fq_id. Tests REQ-103 _self binding when the macro was
@@ -51,12 +53,21 @@ expect:
     fq_id: "fq:doc:research-batch:abc123"
 
 golden_snapshot:
-  state_notes:
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: binding, op: set, name: p, value: "/Macros/research-batch.md", scope: local }
-    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
-    - { kind: binding, op: set, name: t, value: "Research Batch", scope: local }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: set, name: ft, value: "macro", scope: local }
-    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
-    - { kind: binding, op: set, name: ident, value: "fq:doc:research-batch:abc123", scope: local }
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: success
+  return_result:
+    path: "/Macros/research-batch.md"
+    title: "Research Batch"
+    type: "macro"
+    fq_id: "fq:doc:research-batch:abc123"
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

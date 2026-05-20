@@ -3,6 +3,8 @@
 
 id: mtf-d-512-coerce-empty-object
 name: "StructuredContent returning empty object"
+intent: |
+  StructuredContent returning empty object
 description: |
   `structuredContent: {}` binds as `{}` (truthy or falsy depends on lang semantics).
 
@@ -32,3 +34,19 @@ tools:
 expect:
   outcome: success
   return_result: {"v":{}}
+predicted_expect:
+  outcome: success
+  return_result: {"v":{}}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "sc"
+      tool: "get"

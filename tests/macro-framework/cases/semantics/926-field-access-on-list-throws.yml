@@ -4,6 +4,8 @@
 
 id: mtf-s-926-field-access-on-list-throws
 name: Semantics — field access on list value with non-integer key still throws (REQ-112d ac8)
+intent: |
+  Semantics — field access on list value with non-integer key still throws (REQ-112d ac8)
 description: |
   Field access on a list with a name-style key MUST raise per REQ-023 ac4.
   List indexing is deferred per Macro Lang §3.3; REQ-112d explicitly does
@@ -29,3 +31,16 @@ vault: {}
 
 expect:
   outcome: fail
+predicted_expect:
+  outcome: fail
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

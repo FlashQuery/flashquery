@@ -122,18 +122,18 @@ export const builtins: Builtins = {
     // registry's progress snapshot (so list_tasks reflects the intended
     // state), but we DO NOT emit anything to stderr or the trace.
     //
-    // REQ-048 ac2 milestones mode: `status` calls with an explicit
-    // `--milestone true` flag emit; otherwise they're throttled. The
-    // throttle policy matches the for-loop auto-progress emission logic.
+    // GG-012 fix (2026-05-20): per REQ-048 ac2 "milestones (default):
+    // author-explicit `status` calls + auto-emissions at model-call
+    // start/finish only" — author-explicit `status` calls emit
+    // UNCONDITIONALLY in milestones mode (no `--milestone true` flag
+    // required). The previous gate required `--milestone true` which
+    // contradicted the spec text. Only `silent` mode silences explicit
+    // status calls. Production emits all explicit status calls in
+    // milestones mode; the golden now matches.
     const mode = ctx.exec?.progressMode ?? "full";
-    // REQ-048 ac3: silent mode emits NO progress events (registry + stderr).
-    // We still update the task record's snapshot state in non-silent modes
-    // so `list_tasks` reflects intended progress.
-    const milestoneFlag = named.milestone === true;
-    const emitTrace = mode === "full" || (mode === "milestones" && milestoneFlag);
+    const emitTrace = mode !== "silent";
     ctx.exec?.taskRegistry.updateProgress(progress, total, message, { emitTrace });
     if (mode === "silent") return null;
-    if (mode === "milestones" && !milestoneFlag) return null;
 
     const out: string[] = ["[STATUS]"];
     if (progress !== null && total !== null) out.push(`[${progress}/${total}]`);

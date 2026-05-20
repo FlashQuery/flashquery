@@ -3,6 +3,8 @@
 
 id: mtf-d-507-coerce-json-text-list
 name: "JSONTextTool with list value"
+intent: |
+  JSONTextTool with list value
 description: |
   JSON text that parses to a list binds as a list (no double-wrap).
 
@@ -32,3 +34,19 @@ tools:
 expect:
   outcome: success
   return_result: {"n":3}
+predicted_expect:
+  outcome: success
+  return_result: {"n":3}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "list_srv"
+      tool: "get"

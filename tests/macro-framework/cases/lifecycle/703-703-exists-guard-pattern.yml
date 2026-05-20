@@ -3,6 +3,8 @@
 
 id: mtf-l-703-exists-guard-pattern
 name: "_exists() guard skips dispatch when false"
+intent: |
+  _exists() guard skips dispatch when false
 description: |
   The canonical guard pattern: assign _exists() to a var first, then branch on it. Boolean literal `true` deferred per Macro Lang §3.3, so the success signal is a string.
 
@@ -37,3 +39,17 @@ tools:
 expect:
   outcome: success
   return_result: {"v":"reached"}
+predicted_expect:
+  outcome: success
+  return_result: {"v":"reached"}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -3,6 +3,8 @@
 # per the `longer_alt: Identifier` rule on every keyword token.
 id: mtf-g-805-identifier-prefixed-with-keyword
 name: Grammar — keyword-prefixed identifiers parse as identifiers (longer_alt rule)
+intent: |
+  Grammar — keyword-prefixed identifiers parse as identifiers (longer_alt rule)
 description: |
   Variable names beginning with reserved-keyword prefixes (`forecast`,
   `inbox`, `donefile`, `iffy`) must lex as bare identifiers. Defends
@@ -28,3 +30,21 @@ expect:
     i: 42
     d: "x"
     y: "maybe"
+predicted_expect:
+  outcome: success
+  return_result:
+    f: "sunny"
+    i: 42
+    d: "x"
+    y: "maybe"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

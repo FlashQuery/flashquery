@@ -3,6 +3,8 @@
 
 id: mtf-d-538-arg-numeric-string
 name: "String \"42\" stays a string (no preemptive coercion)"
+intent: |
+  String "42" stays a string (no preemptive coercion)
 description: |
   Per REQ-108, arg "42" passes as string; engine does not coerce to number.
 
@@ -30,3 +32,18 @@ tools:
 
 expect:
   outcome: success
+predicted_expect:
+  outcome: success
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "srv"
+      tool: "run"

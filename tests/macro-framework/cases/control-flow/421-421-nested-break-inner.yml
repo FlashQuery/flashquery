@@ -3,6 +3,8 @@
 
 id: mtf-c-421-nested-break-inner
 name: "nested loops — break exits only inner"
+intent: |
+  nested loops — break exits only inner
 description: |
   Inner break exits inner loop; outer continues to completion.
 
@@ -36,3 +38,17 @@ vault: {}
 expect:
   outcome: success
   return_result: {"outer":3,"inner":6}
+predicted_expect:
+  outcome: success
+  return_result: {"outer":3,"inner":6}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

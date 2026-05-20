@@ -1,6 +1,8 @@
 # Pilot — MTF-E-005: parse_error envelope for missing `then` after if-cond.
 id: mtf-e-701-parse-error-missing-then
 name: Errors — parse_error envelope (missing_then) (REQ-018)
+intent: |
+  Errors — parse_error envelope (missing_then) (REQ-018)
 description: |
   `if $x == 1` without `then` raises a parse error with the canonical
   envelope: error="parse_error", details.reason="missing_then", at_line
@@ -24,3 +26,20 @@ expect:
     code: parse_error
     details:
       reason: missing_then
+predicted_expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+    details:
+      reason: missing_then
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

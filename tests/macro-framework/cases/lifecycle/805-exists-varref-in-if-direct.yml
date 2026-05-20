@@ -7,6 +7,8 @@
 
 id: mtf-l-805-exists-varref-in-if-direct
 name: Lifecycle — `if $svc._exists() then` (REQ-112a ac1+ac2 combined)
+intent: |
+  Lifecycle — `if $svc._exists() then` (REQ-112a ac1+ac2 combined)
 description: |
   Exercises the archived Macro Language REQ-040 ac3 worked example
   syntax (`if $x._exists() then ...`) which the macro testing framework's
@@ -46,3 +48,18 @@ expect:
   outcome: success
   return_result:
     v: "present"
+predicted_expect:
+  outcome: success
+  return_result:
+    v: "present"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

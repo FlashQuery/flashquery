@@ -3,6 +3,8 @@
 
 id: mtf-l-705-exists-truthy-in-if
 name: "_exists() return value drives an if-condition (assigned first)"
+intent: |
+  _exists() return value drives an if-condition (assigned first)
 description: |
   _exists() must be assigned to a variable before use in an expression (macro grammar). Variable then drives if-condition.
 
@@ -36,3 +38,17 @@ tools:
 expect:
   outcome: success
   return_result: {"r":"online"}
+predicted_expect:
+  outcome: success
+  return_result: {"r":"online"}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

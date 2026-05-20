@@ -8,6 +8,8 @@
 
 id: mtf-s-905-if-scope-walk-up-still-works
 name: Semantics — walk-up assignment from if-body updates outer (REQ-112b ac4)
+intent: |
+  Semantics — walk-up assignment from if-body updates outer (REQ-112b ac4)
 description: |
   Outer `x = "outer"` is declared at the top level. The if-body assigns
   `x = "inner"`. Walk-up assignment (REQ-019 ac1) finds the existing
@@ -38,3 +40,18 @@ expect:
   outcome: success
   return_result:
     v: "inner"
+predicted_expect:
+  outcome: success
+  return_result:
+    v: "inner"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

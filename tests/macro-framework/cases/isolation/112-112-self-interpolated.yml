@@ -3,6 +3,8 @@
 
 id: mtf-i-112-self-interpolated
 name: "_self interpolated into string"
+intent: |
+  _self interpolated into string
 description: |
   String interpolation of _self.title and _self.path verifies the interpolation surface accepts _self.* paths.
 
@@ -26,3 +28,17 @@ self_binding: {"path":"/Macros/x.md","frontmatter":{},"title":"Hello","tags":[],
 expect:
   outcome: success
   return_result: {"s":"doc Hello at /Macros/x.md"}
+predicted_expect:
+  outcome: success
+  return_result: {"s":"doc Hello at /Macros/x.md"}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

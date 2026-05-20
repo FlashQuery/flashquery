@@ -3,6 +3,8 @@
 
 id: mtf-e-606-drift-tool-then-good-blocked
 name: "Drift-flagged tool called — drift wins"
+intent: |
+  Drift-flagged tool called — drift wins
 description: |
   When the drift-flagged tool is actually invoked, drift fires (not the other tool).
 
@@ -29,3 +31,16 @@ tools:
 
 expect:
   outcome: needs_user_input
+predicted_expect:
+  outcome: needs_user_input
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

@@ -3,6 +3,8 @@
 
 id: mtf-i-109-self-multi-field-bundle
 name: "_self multi-field bundle access"
+intent: |
+  _self multi-field bundle access
 description: |
   All four read-only fields surface in a single bundle expression.
 
@@ -26,3 +28,17 @@ self_binding: {"path":"/Macros/research.md","frontmatter":{"type":"research"},"t
 expect:
   outcome: success
   return_result: {"p":"/Macros/research.md","t":"Research Macro","ft":"research","ident":"fq:doc:research:xyz"}
+predicted_expect:
+  outcome: success
+  return_result: {"p":"/Macros/research.md","t":"Research Macro","ft":"research","ident":"fq:doc:research:xyz"}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

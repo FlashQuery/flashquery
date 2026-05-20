@@ -10,6 +10,8 @@
 
 id: mtf-d-31-search-tools
 name: Dispatch — search_tools-shaped brokered call returns ranked SearchResult list
+intent: |
+  Dispatch — search_tools-shaped brokered call returns ranked SearchResult list
 description: |
   Brokered tool returns a JSON-text envelope containing three
   SearchResult-shaped entries (server, tool, registry_key, description,
@@ -75,8 +77,22 @@ expect:
     tool_call_count: 1
 
 golden_snapshot:
-  state_notes:
-    - { kind: permission, tool: "search_srv.search_tools", decision: allowed }
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: coerce, path: json_text, raw_summary: "search_srv.search_tools bound via json_text" }
-    - { kind: binding, op: set, name: n, value: 3, scope: local }
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "search_srv"
+      tool: "search_tools"
+predicted_expect:
+  outcome: success
+  return_result:
+    count: 3
+  side_effects:
+    tool_call_count: 1
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

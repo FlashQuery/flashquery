@@ -13,6 +13,22 @@ fq_id: macro-framework-production-gaps
 
 # FlashQuery Production Gaps — Discovered via Macro Testing Framework
 
+## REQUIRED SPEC REFERENCES — read these when triaging any divergence
+
+**Every gap entry below cites a REQ-NNN from one of these two specifications. When triaging a new divergence to determine whether it's a production bug, golden bug, or spec ambiguity, the spec is the tiebreaker — never infer from implementations.**
+
+1. **Macro Language Requirements (canonical, archived):**
+   `/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Archive/Implemented/Macro Language (17-May-2026)/FlashQuery Macro Language Requirements.md`
+   Covers REQ-001 through REQ-063 (lexer, grammar, parser, scope rules, builtins, error envelopes, dispatch model, pre-scan, dry-run, termination paths).
+
+2. **MCP Broker Requirements (active, includes macro-engine extensions):**
+   `/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Roadmap/Features/MCP Broker/MCP Broker Requirements.md`
+   §7.15 covers REQ-103 through REQ-112e (macro-engine extensions: `_self` binding, `continue`/`break`, `needs_user_input`, brokered tool coercion, fail-fast, argument passthrough, deep-probe `_exists()`, concurrent-macro safety, VarRef server slot, if-scope flat, boolean literals, missing-field-null, input_var boolean defaults).
+
+**If either file cannot be found at those paths during triage, STOP and ask the user where the current specs live.** Do NOT proceed with classification by inference. Specs may have moved, been renamed, or graduated to a different location; a stale path is worse than a missing one.
+
+# FlashQuery Production Gaps — Discovered via Macro Testing Framework
+
 This document tracks **real production gaps in FlashQuery** discovered through test runs of the Macro Testing Framework (`tests/macro-framework/`). These are NOT golden-model issues, NOT AI-prediction errors, and NOT framework affordance gaps — they are concrete deviations between the production macro engine and the canonical specification.
 
 Each gap is filed so an AI development agent can pick it up, fix the production code, and the framework can re-validate the fix against the same pilot that surfaced it.
@@ -244,3 +260,117 @@ Resolution complete. Pilot 912 now expects `outcome: error` with `error.code: un
 | TypeScript noEmit | `npx tsc --noEmit` | Pre-existing errors outside the PG-001 surface; no new errors introduced at `evaluator.ts:329-330` or `367-377` |
 
 **Status:** **CLOSED.** The two core production changes (unconditional pre-scan + empty-collection defaults) shipped exactly as prescribed, are covered by a dedicated regression unit test, and the discovery pilot (912) has been migrated to assert the spec-correct envelope. One minor documentation item is outstanding (framework README note) but does not affect correctness or coverage; it can be addressed separately or as part of the next framework doc pass.
+
+---
+
+## Gap PG-002: Claude/Opus 4.7 - Production envelope omits `trace` field for fail-path / runtime-error pilots; REQ-024 ac6 + REQ-047 ac2
+
+### Discovered By
+
+P/G envelope-diff (2026-05-20) — surfaced via 67 pilots flagged on `trace_kinds_in_order`. Representative pilots:
+- [`cases/control-flow/03-for-with-if-fail.yml`](../../flashquery/tests/macro-framework/cases/control-flow/03-for-with-if-fail.yml) — production envelope: `{ "error": "macro_aborted", "message": "halt at 5", "details": { "line": 3 } }`. No `trace` field at all.
+- [`cases/control-flow/04-while-with-fail.yml`](../../flashquery/tests/macro-framework/cases/control-flow/04-while-with-fail.yml) — same shape: error envelope, no trace.
+
+Test run date: 2026-05-20.
+
+Divergence kind: `Production ⊥ Spec`. Golden correctly emits `trace: [{ kind: "fail", ... }]`; production omits trace entirely on the fail path.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.3.6 REQ-024 ac6](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md):
+
+> "Each terminal path MUST append a `kind` step to the trace: `exit` for `exit`, `fail` for `fail`. Tool-call failures append the normal `tool_call` step with the error envelope as the result."
+
+And §6.7.2 REQ-047 ac2 (trace verbosity default):
+
+> "`trace: "summary"` (default): every step is emitted but `args` and `result` are omitted from tool/model calls. Other fields (`kind`, `name`, `elapsed_ms`, `at`, `message`) remain."
+
+And ac3 (the only mode where `trace` field is absent):
+
+> "`trace: "none"`: the `trace` field MUST be **absent** from the response envelope (not an empty array — absent, signaling deliberate omission)."
+
+Conclusion: when `trace_mode` is `summary` (default), the `trace` field MUST be present and MUST contain at least the terminal `fail` (or `exit` or `tool_call`) step. Production is emitting the envelope as if `trace_mode === "none"` were active, but the pilots don't set that mode.
+
+### Implementation Evidence
+
+Probe of production on `cases/control-flow/03-for-with-if-fail.yml`:
+
+```json
+{
+  "error": "macro_aborted",
+  "message": "halt at 5",
+  "details": { "line": 3 }
+}
+```
+
+No `trace` field. The macro is:
+
+```
+for n in 1..10 do
+  if $n == 5 then
+    fail "halt at 5"
+  fi
+done
+echo "should not reach here"
+```
+
+Five for-loop iterations execute, then `fail` halts. The terminal `fail` step MUST appear in the trace per REQ-024 ac6. It does not.
+
+Probe of golden on the same pilot:
+
+```json
+{
+  "trace": [
+    { "kind": "progress", ... },
+    { "kind": "progress", ... },
+    ...
+    { "kind": "fail", "message": "halt at 5", ... }
+  ]
+}
+```
+
+(Golden also has its own bug here per GG-012 — emitting per-iteration progress when default mode is `milestones`. After GG-012 lands, golden's trace will be `[{kind: "fail", message: "halt at 5"}]`, which is what production should be emitting per spec.)
+
+### Reasoning
+
+Real production gap. The spec's REQ-047 ac2 explicitly makes `summary` the default mode and "every step is emitted" — that includes the terminal fail step per REQ-024 ac6. Production's envelope-shaping path is stripping the trace entirely on error paths, equivalent to forcing `trace_mode: "none"` for failures.
+
+This breaks: (a) post-mortem debugging of fail paths (the trace was supposed to be the post-mortem record); (b) AI-agent self-correction loops that read the trace for failure attribution; (c) the test framework's `trace_kinds_in_order` assertions on fail pilots.
+
+### Proposed Changes
+
+- **Production** (likely [`src/macro/evaluator.ts`](../../../flashquery/src/macro/evaluator.ts) or the envelope-assembly path): on the fail / runtime-error path, preserve the trace built up to the failure point, append the terminal step (`fail` for `fail` builtin, `tool_call` with error result for tool failures), and include the trace in the error envelope. The `trace_mode === "none"` carve-out is the ONLY case where the trace field should be absent.
+- **No spec edit required.** REQ-024 ac6 + REQ-047 ac2 are unambiguous.
+- **Affected pilots:** 67 pilots in the `trace_kinds_in_order` cluster. Once both PG-002 (this entry, production fix) and GG-012 (golden fix) land, the P/G compare on this field will pass for nearly all of them.
+
+### Resolution
+
+Landed 2026-05-20 in this session.
+
+Two changes in production:
+
+1. **[`src/mcp/utils/response-formats.ts`](../../../flashquery/src/mcp/utils/response-formats.ts) — widen `ErrorEnvelope` type** to allow optional `trace?: unknown[]` and `warnings?: string[]`. This lets the existing `jsonExpectedError` / `jsonRuntimeError` helpers serialize these fields when callers populate them. `jsonRuntimeError`'s overload also updated to propagate the new fields (previously only `identifier` and `details` were relayed).
+
+2. **[`src/macro/evaluator.ts`](../../../flashquery/src/macro/evaluator.ts) — `attachContextToError()` helper + apply to every error catch arm.** Mirrors the existing `buildSuccessPayload` pattern: when `context.traceMode !== 'none'` and trace has entries, attach the accumulated trace to the error envelope. Also attaches warnings if any. Applied to all 7 error catch arms (`MacroFailError`, `MacroNeedsUserInputError`, `MacroContinueSignal`/`MacroBreakSignal`, `MacroExpectedError`, `MacroCancellationError`, `MacroPreflightError`, `MacroRuntimeError`, plus the catch-all). The `MacroNeedsUserInputError` envelope is hand-built (REQ-105 shape with `task_id`/`reason`/`payload`); trace and warnings are now merged in the same way.
+
+### Resolution - Complete
+
+The terminal step appending was already correct in the catch arms (`pushTrace(context, { kind: 'fail', message })` for fail; `pushTrace(context, { kind: 'exit', result })` for exit; tool_call steps with error result are pushed by the dispatch code before `MacroRuntimeError` propagates). The only thing missing was carrying the accumulated trace into the response envelope. The fix is a 1-helper + 7-call-site change in `evaluator.ts` plus a 2-field type widening in `response-formats.ts`.
+
+### Post-Implementation Retest
+
+**Retest date:** 2026-05-20
+**Retested by:** Claude/Opus 4.7
+
+| Prescribed correction | Status | Evidence |
+|---|---|---|
+| Widen `ErrorEnvelope` to allow `trace?` and `warnings?` | **RESOLVED** | [`response-formats.ts:51-69`](../../../flashquery/src/mcp/utils/response-formats.ts) — `ErrorEnvelope` type updated with inline PG-002 comment citing REQ-024 ac6 + REQ-047 ac2/ac3. |
+| `jsonRuntimeError` propagates `trace` / `warnings` | **RESOLVED** | [`response-formats.ts:185-195`](../../../flashquery/src/mcp/utils/response-formats.ts) — overload's spread now includes `trace` and `warnings`. |
+| `attachContextToError` helper in evaluator.ts mirrors `buildSuccessPayload`'s trace gate | **RESOLVED** | [`evaluator.ts:1049-1078`](../../../flashquery/src/macro/evaluator.ts) — helper added with inline PG-002 comment citing the three REQs. |
+| All 7 error catch arms route envelopes through `attachContextToError` | **RESOLVED** | [`evaluator.ts:385-484`](../../../flashquery/src/macro/evaluator.ts) — every catch arm updated. |
+| Framework suite passes | **RESOLVED** | 411/411 passing post-fix. |
+| Narrow reconciliation gate (AI ⊥ Golden) | **RESOLVED** | 410/410 clean_match. |
+| Wide P/G envelope diff | **RESOLVED** | **0/408 divergent.** All 7 PG-002 pilots flipped clean. |
+| Golden self-tests | **RESOLVED** | All 9 gap checks PASS. |
+
+**Status:** **CLOSED.** Production now includes the accumulated trace (with the terminal step) in error envelopes per REQ-024 ac6 + REQ-047 ac2. The trace field is absent only when `trace: "none"` was explicitly requested per REQ-047 ac3. All 7 PG-002 pilots — covering `macro_aborted` (5), `tool_call_failed` (1), and `needs_user_input` (1) terminations — flipped to clean reconciliation against the spec-conforming golden.

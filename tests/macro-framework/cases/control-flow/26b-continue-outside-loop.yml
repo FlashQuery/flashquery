@@ -7,6 +7,8 @@
 
 id: mtf-c-26b-continue-outside-loop
 name: Control flow — bare continue at top level → parse_error
+intent: |
+  Control flow — bare continue at top level → parse_error
 description: |
   `continue` written outside any for/while body must be rejected at
   parse time per REQ-104 acceptance criterion (loop_control_outside_loop).
@@ -39,4 +41,20 @@ expect:
       reason: loop_control_outside_loop
 
 golden_snapshot:
-  state_notes: []
+  captured_trace_kinds: []
+  captured_tool_calls: []
+predicted_expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+    details:
+      reason: loop_control_outside_loop
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

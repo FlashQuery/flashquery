@@ -3,6 +3,8 @@
 
 id: mtf-l-802-exists-in-compound-or
 name: Lifecycle — `_exists()` usable inside `||` (REQ-112a ac1)
+intent: |
+  Lifecycle — `_exists()` usable inside `||` (REQ-112a ac1)
 description: |
   `_exists()` in the left operand of `||` should evaluate without requiring
   prior assignment.
@@ -38,3 +40,18 @@ expect:
   outcome: success
   return_result:
     v: "yes"
+predicted_expect:
+  outcome: success
+  return_result:
+    v: "yes"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

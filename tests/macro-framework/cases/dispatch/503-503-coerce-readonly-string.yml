@@ -3,6 +3,8 @@
 
 id: mtf-d-503-coerce-readonly-string
 name: "ReadOnlyTool path: plain text content"
+intent: |
+  ReadOnlyTool path: plain text content
 description: |
   REQ-106 path 4: non-JSON text content binds the raw string.
 
@@ -32,3 +34,19 @@ tools:
 expect:
   outcome: success
   return_result: {"s":"a plain string body"}
+predicted_expect:
+  outcome: success
+  return_result: {"s":"a plain string body"}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "info_srv"
+      tool: "describe"

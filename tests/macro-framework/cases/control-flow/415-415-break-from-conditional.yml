@@ -3,6 +3,8 @@
 
 id: mtf-c-415-break-from-conditional
 name: "break inside if branch — only fires when branch taken"
+intent: |
+  break inside if branch — only fires when branch taken
 description: |
   break sits inside an if-then; only fires when the condition is true.
 
@@ -32,3 +34,17 @@ vault: {}
 expect:
   outcome: success
   return_result: {"c":3}
+predicted_expect:
+  outcome: success
+  return_result: {"c":3}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

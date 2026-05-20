@@ -1,0 +1,100 @@
+id: mtf-d-1307-behavioral-tier-promotion
+name: |-
+  Behavioral complex — threshold-based tier promotion with selective dispatch
+intent: |
+  Items have a score 0-100. Score 80+ is 'gold'. 50-79 is 'silver'.
+  Below 50 is 'bronze'. For gold items only, tag them via
+  tagger_srv.apply({id, tier: 'gold'}). Return tier counts and which
+  gold items got tagged.
+
+description: |
+  Behavioral test (Run #11.3). Three-way classification with selective
+  dispatch only for the top tier.
+
+covers: [MTF-C-009, MTF-D-101, MTF-L-002, MTF-N-005]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  items = input_var "items"
+  gold_count = 0
+  silver_count = 0
+  bronze_count = 0
+  tagged = []
+
+  for item in $items do
+    score = $item.score
+    if $score >= 80 then
+      gold_count = add $gold_count 1
+      tagger_srv.apply({ id: $item.id, tier: "gold" })
+      tagged = append $tagged $item.id
+    fi
+    is_silver_band = $score >= 50
+    if $is_silver_band then
+      if $score < 80 then
+        silver_count = add $silver_count 1
+      fi
+    fi
+    if $score < 50 then
+      bronze_count = add $bronze_count 1
+    fi
+  done
+
+  exit {
+    gold_count: $gold_count,
+    silver_count: $silver_count,
+    bronze_count: $bronze_count,
+    tagged: $tagged
+  }
+
+input_vars:
+  items:
+    - { id: "a", score: 90 }
+    - { id: "b", score: 60 }
+    - { id: "c", score: 30 }
+    - { id: "d", score: 85 }
+    - { id: "e", score: 50 }
+
+vault: {}
+tools:
+  tagger_srv:
+    archetype: JSONTextTool
+    tool_name: apply
+    value: { tagged: true }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    gold_count: 2
+    silver_count: 2
+    bronze_count: 1
+    tagged: ["a", "d"]
+  side_effects:
+    tool_call_count: 2
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    gold_count: 2
+    silver_count: 2
+    bronze_count: 1
+    tagged: ["a", "d"]
+  side_effects:
+    tool_call_count: 2
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "tagger_srv"
+      tool: "apply"
+    - server: "tagger_srv"
+      tool: "apply"

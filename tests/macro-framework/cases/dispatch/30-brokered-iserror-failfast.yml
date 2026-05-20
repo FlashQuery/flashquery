@@ -9,6 +9,8 @@
 
 id: mtf-d-30-brokered-iserror-failfast
 name: Dispatch — brokered isError:true triggers fail-fast → tool_call_failed
+intent: |
+  Dispatch — brokered isError:true triggers fail-fast → tool_call_failed
 description: |
   A brokered tool returns CallToolResult.isError=true with a text body.
   The macro engine surfaces this as `tool_call_failed` (REQ-107) without
@@ -46,7 +48,21 @@ expect:
     message_contains: "upstream said no"
 
 golden_snapshot:
-  state_notes:
-    - { kind: permission, tool: "bad_srv.boom", decision: allowed }
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: coerce, path: is_error, raw_summary: "bad_srv.boom isError: is_error_result — upstream said no" }
+  captured_trace_kinds: []
+  captured_tool_calls:
+    - server: "bad_srv"
+      tool: "boom"
+predicted_expect:
+  outcome: fail
+  error:
+    code: tool_call_failed
+    message_contains: "upstream said no"
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

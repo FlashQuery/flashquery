@@ -6,6 +6,8 @@
 
 id: mtf-d-06-brokered-coercion-paths
 name: Dispatch — ScriptedTool exercising coercion paths 2/3/4
+intent: |
+  Dispatch — ScriptedTool exercising coercion paths 2/3/4
 description: |
   ScriptedTool returns three different CallToolResult shapes on three
   successive calls. The macro binds each result and exits with all
@@ -56,17 +58,28 @@ expect:
     tool_call_count: 3
 
 golden_snapshot:
-  state_notes:
-    - { kind: permission, tool: "coerce_srv.shape", decision: allowed }
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: coerce, path: structured_content, raw_summary: "coerce_srv.shape bound via structured_content" }
-    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 1, elapsed_ms: 0 }
-    - { kind: binding, op: set, name: v1, value: { source: "structured", n: 1 }, scope: local }
-    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
-    - { kind: coerce, path: json_text, raw_summary: "coerce_srv.shape bound via json_text" }
-    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 2, elapsed_ms: 0 }
-    - { kind: binding, op: set, name: v2, value: { source: "json", n: 2 }, scope: local }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: coerce, path: raw_string, raw_summary: "coerce_srv.shape bound via raw_string" }
-    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 3, elapsed_ms: 0 }
-    - { kind: binding, op: set, name: v3, value: "plain raw text response 3", scope: local }
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "coerce_srv"
+      tool: "shape"
+    - server: "coerce_srv"
+      tool: "shape"
+    - server: "coerce_srv"
+      tool: "shape"
+predicted_expect:
+  outcome: success
+  return_result:
+    struct: { source: "structured", n: 1 }
+    json: { source: "json", n: 2 }
+    raw: "plain raw text response 3"
+  side_effects:
+    tool_call_count: 3
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

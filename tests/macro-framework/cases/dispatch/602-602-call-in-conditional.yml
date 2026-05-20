@@ -3,6 +3,8 @@
 
 id: mtf-d-602-call-in-conditional
 name: "Brokered call only in then-branch (outer-scope var pre-declared)"
+intent: |
+  Brokered call only in then-branch (outer-scope var pre-declared)
 description: |
   Tool dispatch nested in an if-then-else branch. Variable declared at outer scope so it survives after the `fi` (REQ-021 walk-up scope).
 
@@ -36,3 +38,19 @@ tools:
 expect:
   outcome: success
   return_result: {"r":{"k":"v"}}
+predicted_expect:
+  outcome: success
+  return_result: {"r":{"k":"v"}}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "jt"
+      tool: "get"

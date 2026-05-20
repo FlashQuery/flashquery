@@ -1,0 +1,91 @@
+id: mtf-d-1306-behavioral-cascade-first-success
+name: |-
+  Behavioral complex — first-success cascade across 3 fallback servers
+intent: |
+  Three brokered servers: primary, secondary, tertiary. Try each in
+  order via X.fetch({query}) where query is from input_var. Return the
+  first one that succeeds (.ok). If all three fail, return the failure
+  reasons collected during the cascade.
+
+description: |
+  Behavioral test (Run #11.2). Hardcoded cascade (REQ-112a forbids
+  fully-dynamic VarRef dispatch for non-introspection tools). Tests
+  early-exit pattern via `exit` inside a multi-step ladder.
+
+covers: [MTF-C-009, MTF-D-101, MTF-L-002, MTF-S-007]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  query = input_var "query"
+  failures = []
+
+  r = primary.fetch({ query: $query })
+  if $r.ok then
+    exit { server: "primary", value: $r.value }
+  fi
+  failures = append $failures { server: "primary", reason: $r.reason }
+
+  r = secondary.fetch({ query: $query })
+  if $r.ok then
+    exit { server: "secondary", value: $r.value }
+  fi
+  failures = append $failures { server: "secondary", reason: $r.reason }
+
+  r = tertiary.fetch({ query: $query })
+  if $r.ok then
+    exit { server: "tertiary", value: $r.value }
+  fi
+  failures = append $failures { server: "tertiary", reason: $r.reason }
+
+  exit { found: false, failures: $failures }
+
+input_vars:
+  query: "test"
+vault: {}
+tools:
+  primary:
+    archetype: JSONTextTool
+    tool_name: fetch
+    value: { ok: false, reason: "primary down" }
+  secondary:
+    archetype: JSONTextTool
+    tool_name: fetch
+    value: { ok: true, value: "data from secondary!" }
+  tertiary:
+    archetype: JSONTextTool
+    tool_name: fetch
+    value: { ok: true, value: "should not be reached" }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    server: "secondary"
+    value: "data from secondary!"
+  side_effects:
+    tool_call_count: 2
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    server: "secondary"
+    value: "data from secondary!"
+  side_effects:
+    tool_call_count: 2
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "primary"
+      tool: "fetch"
+    - server: "secondary"
+      tool: "fetch"

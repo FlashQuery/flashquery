@@ -10,6 +10,8 @@
 # generator (or its --mode=refresh) to update.
 id: mtf-s-14-field-access
 name: Semantics — field access (`$var.field`) reads object fields
+intent: |
+  Semantics — field access (`$var.field`) reads object fields
 description: >-
   Builds an object literal, reads three fields into bindings via `$obj.field`, exits with a composite. Verifies REQ-020
   (object literal) + REQ-021 (field access semantics).
@@ -47,43 +49,19 @@ expect:
     how_many: 7
     flag: 1
 golden_snapshot:
-  state_notes:
-    - kind: ast
-      node_kind: assignment
-      line: 1
-      column: 0
-    - kind: binding
-      op: set
-      name: profile
-      value:
-        name: alpha
-        count: 7
-        active: 1
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 2
-      column: 0
-    - kind: binding
-      op: set
-      name: who
-      value: alpha
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 3
-      column: 0
-    - kind: binding
-      op: set
-      name: how_many
-      value: 7
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 4
-      column: 0
-    - kind: binding
-      op: set
-      name: flag
-      value: 1
-      scope: local
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: success
+  return_result:
+    who: alpha
+    how_many: 7
+    flag: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

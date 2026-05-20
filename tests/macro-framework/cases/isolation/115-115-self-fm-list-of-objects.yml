@@ -3,6 +3,8 @@
 
 id: mtf-i-115-self-fm-list-of-objects
 name: "_self.frontmatter with list-of-objects"
+intent: |
+  _self.frontmatter with list-of-objects
 description: |
   Frontmatter field is a list of objects; element access drills down by index isn’t supported (deferred) but count works.
 
@@ -28,3 +30,17 @@ self_binding: {"path":"/x.md","frontmatter":{"items":[{"a":1},{"a":2}]},"title":
 expect:
   outcome: success
   return_result: {"n":2}
+predicted_expect:
+  outcome: success
+  return_result: {"n":2}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -3,6 +3,8 @@
 
 id: mtf-l-702-exists-fq-true
 name: "_exists() for fq is unconditionally true"
+intent: |
+  _exists() for fq is unconditionally true
 description: |
   The native fq namespace surfaces _exists() as true even without explicit tools.
 
@@ -30,3 +32,17 @@ tools:
 expect:
   outcome: success
   return_result: {"e":true}
+predicted_expect:
+  outcome: success
+  return_result: {"e":true}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

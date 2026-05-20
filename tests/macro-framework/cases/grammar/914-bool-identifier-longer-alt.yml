@@ -12,6 +12,8 @@
 
 id: mtf-g-914-bool-identifier-longer-alt
 name: Grammar — identifiers prefixed with true/false still lex as identifiers (REQ-112c ac1)
+intent: |
+  Grammar — identifiers prefixed with true/false still lex as identifiers (REQ-112c ac1)
 description: |
   Variable names `trueish` and `falsy_check` must lex as bare identifiers,
   not as `true`/`false` keyword tokens followed by an Identifier suffix.
@@ -44,3 +46,19 @@ expect:
   return_result:
     a: "string-value-A"
     b: "string-value-B"
+predicted_expect:
+  outcome: success
+  return_result:
+    a: "string-value-A"
+    b: "string-value-B"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

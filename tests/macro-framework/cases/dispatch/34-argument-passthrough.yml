@@ -4,6 +4,8 @@
 
 id: mtf-d-34-argument-passthrough
 name: Dispatch — argument-passthrough invariant (REQ-108)
+intent: |
+  Dispatch — argument-passthrough invariant (REQ-108)
 description: |
   Macro passes a mixed-shape object (number, boolean, string, null,
   array, nested object) to a brokered tool. The tool's recorded args
@@ -49,6 +51,30 @@ expect:
           nested: { x: "y" }
 
 golden_snapshot:
-  state_notes:
-    - { kind: permission, tool: "echo_srv.echo", decision: allowed }
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "echo_srv"
+      tool: "echo"
+predicted_expect:
+  outcome: success
+  return_result:
+    ok: 1
+  side_effects:
+    tool_calls:
+      - server: echo_srv
+        tool: echo
+        arg_equals:
+          n: 42
+          s: "hi"
+          nullf: null
+          list: [1, 2, 3]
+          nested: { x: "y" }
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

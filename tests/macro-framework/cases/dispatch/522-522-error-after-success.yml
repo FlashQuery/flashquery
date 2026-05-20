@@ -3,6 +3,8 @@
 
 id: mtf-d-522-error-after-success
 name: "Two calls: first succeeds, second is isError"
+intent: |
+  Two calls: first succeeds, second is isError
 description: |
   First call binds successfully; second hits isError fail-fast; macro fails.
 
@@ -39,3 +41,22 @@ expect:
   outcome: fail
   error:
     code: "tool_call_failed"
+predicted_expect:
+  outcome: fail
+  error:
+    code: "tool_call_failed"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call"]
+  captured_tool_calls:
+    - server: "good"
+      tool: "get"
+    - server: "bad"
+      tool: "boom"

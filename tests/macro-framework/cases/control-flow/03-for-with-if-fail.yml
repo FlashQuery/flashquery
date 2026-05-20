@@ -9,6 +9,8 @@
 
 id: mtf-c-03-for-with-if-fail
 name: Control flow — for-loop with mid-iteration if-fail
+intent: |
+  Control flow — for-loop with mid-iteration if-fail
 description: |
   for-loop iterates 1..10; an `if $n == 5 then fail` aborts at iter 4.
   Tests REQ-013 (for-loop) + REQ-016 (if/then/fi) + REQ-024 ac3 (fail
@@ -46,24 +48,19 @@ expect:
     message_contains: "halt at 5"
 
 golden_snapshot:
-  state_notes:
-    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 0, var: n, value: 1 }
-    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
-    - { kind: binding, op: shadow, name: n, value: 1, scope: local }
-    - { kind: ast, node_kind: if, line: 3, column: 0 }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 1, var: n, value: 2 }
-    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
-    - { kind: binding, op: shadow, name: n, value: 2, scope: local }
-    - { kind: ast, node_kind: if, line: 3, column: 0 }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 2, var: n, value: 3 }
-    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
-    - { kind: binding, op: shadow, name: n, value: 3, scope: local }
-    - { kind: ast, node_kind: if, line: 3, column: 0 }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 3, var: n, value: 4 }
-    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
-    - { kind: binding, op: shadow, name: n, value: 4, scope: local }
-    - { kind: ast, node_kind: if, line: 3, column: 0 }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_2, iter: 4, var: n, value: 5 }
-    - { kind: ast, node_kind: for_iter, line: 2, column: 0 }
-    - { kind: binding, op: shadow, name: n, value: 5, scope: local }
-    - { kind: ast, node_kind: if, line: 3, column: 0 }
+  captured_trace_kinds: ["fail"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "halt at 5"
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

@@ -8,6 +8,8 @@
 
 id: mtf-l-08-trace-summary-mode
 name: Lifecycle — trace_mode=summary omits args/result
+intent: |
+  Lifecycle — trace_mode=summary omits args/result
 description: |
   Runs two brokered tool calls under trace_mode=summary. Verifies that
   the resulting trace contains tool_call entries with their `kind` and
@@ -52,13 +54,26 @@ expect:
     - exit
 
 golden_snapshot:
-  state_notes:
-    - { kind: permission, tool: "trace_srv.shape", decision: allowed }
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: coerce, path: structured_content, raw_summary: "trace_srv.shape bound via structured_content" }
-    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 1, elapsed_ms: 0 }
-    - { kind: binding, op: set, name: a, value: { result: "fetched" }, scope: local }
-    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
-    - { kind: coerce, path: structured_content, raw_summary: "trace_srv.shape bound via structured_content" }
-    - { kind: budget, tokens: 0, model_calls: 0, external_tool_calls: 2, elapsed_ms: 0 }
-    - { kind: binding, op: set, name: b, value: { result: "transformed" }, scope: local }
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "trace_srv"
+      tool: "shape"
+    - server: "trace_srv"
+      tool: "shape"
+predicted_expect:
+  outcome: success
+  return_result:
+    final: { result: "transformed" }
+  trace_has_no_args: true
+  trace_kinds_contain:
+    - tool_call
+    - exit
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

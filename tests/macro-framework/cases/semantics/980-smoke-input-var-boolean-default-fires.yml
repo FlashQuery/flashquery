@@ -68,27 +68,14 @@ predicted_expect:
 # ratifies de-facto behavior; no PG entry needed.
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-19T22:00:00Z"
+  captured_at: "2026-05-20T15:29:48Z"
   golden_version: "0.3.0"
   divergence_kind: clean_match
-  spec_reference:
-    - "MCP Broker Requirements REQ-112e ac3"
-    - "MCP Broker Requirements REQ-112e ac4"
   notes: |
-    Clean reconciliation across all three oracles. AI prediction,
-    golden capture, and production runtime all produced {default_true:
-    true, default_false: false} with no tool dispatches.
-
-    Empirical finding: production already conforms to REQ-112e —
-    the spec edit was a documentation alignment, not a gap-driver.
-    No PG-002 filed. The narrative is "spec doc was stale,
-    implementations tracked REQ-112c's broader implication
-    automatically."
-
+    Clean three-oracle reconciliation. Captured by generic capture runner.
 golden_snapshot:
   captured_trace_kinds: ["exit"]
   captured_tool_calls: []
-
 expect:
   outcome: success
   return_result:

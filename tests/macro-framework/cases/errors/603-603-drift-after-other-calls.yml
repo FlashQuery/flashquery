@@ -3,6 +3,8 @@
 
 id: mtf-e-603-drift-after-other-calls
 name: "Drift detected on second call after a successful first"
+intent: |
+  Drift detected on second call after a successful first
 description: |
   First call succeeds; second tool is drift-flagged → macro fails over to fifth termination.
 
@@ -36,3 +38,18 @@ tools:
 
 expect:
   outcome: needs_user_input
+predicted_expect:
+  outcome: needs_user_input
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call"]
+  captured_tool_calls:
+    - server: "good_srv"
+      tool: "go"

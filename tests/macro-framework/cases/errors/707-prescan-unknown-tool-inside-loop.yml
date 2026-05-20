@@ -3,6 +3,8 @@
 # runs).
 id: mtf-e-707-prescan-unknown-tool-inside-loop
 name: Errors — prescan rejects unknown tool inside a loop body (REQ-028)
+intent: |
+  Errors — prescan rejects unknown tool inside a loop body (REQ-028)
 description: |
   Pre-scan is static; it walks every code path including loop bodies.
   An unknown tool reference inside `for ... do ... done` is rejected
@@ -30,3 +32,19 @@ expect:
   error:
     code: unknown_tool
     message_contains: "missing_tool"
+predicted_expect:
+  outcome: fail
+  error:
+    code: unknown_tool
+    message_contains: "missing_tool"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

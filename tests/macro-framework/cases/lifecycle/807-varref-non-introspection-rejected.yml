@@ -9,6 +9,8 @@
 
 id: mtf-l-807-varref-non-introspection-rejected
 name: Lifecycle — `$svc.real_tool()` rejected at static check (REQ-112a ac3)
+intent: |
+  Lifecycle — `$svc.real_tool()` rejected at static check (REQ-112a ac3)
 description: |
   Variable-ref server slot on a non-introspection tool name. Per REQ-112a
   ac3 this is a parse-time error — VarRef-subject is only allowed for
@@ -40,3 +42,16 @@ tools:
 
 expect:
   outcome: parse_error
+predicted_expect:
+  outcome: parse_error
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

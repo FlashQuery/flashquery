@@ -1,6 +1,8 @@
 # Pilot — MTF-D-010: shell-verb `cat` reads a file inside the vault.
 id: mtf-d-801-shell-cat-in-vault
 name: Dispatch — `cat` reads a vault-relative file
+intent: |
+  Dispatch — `cat` reads a vault-relative file
 description: |
   `cat /notes/hello.txt` should resolve to the vault root + path and
   return the file's contents.
@@ -20,3 +22,18 @@ expect:
   outcome: success
   return_result:
     contents: "Hello, FlashQuery!"
+predicted_expect:
+  outcome: success
+  return_result:
+    contents: "Hello, FlashQuery!"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

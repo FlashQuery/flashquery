@@ -3,6 +3,8 @@
 
 id: mtf-i-125-self-unbound-in-loop
 name: "_self unbound inside a loop — runtime error per iteration boundary"
+intent: |
+  _self unbound inside a loop — runtime error per iteration boundary
 description: |
   Reading _self.x inside a loop body when unbound still raises runtime error.
 
@@ -26,3 +28,16 @@ vault: {}
 
 expect:
   outcome: fail
+predicted_expect:
+  outcome: fail
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

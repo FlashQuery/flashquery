@@ -3,6 +3,8 @@
 
 id: mtf-i-28b-self-unbound-runtime-error
 name: Isolation — `_self` access without source_ref binding raises runtime error
+intent: |
+  Isolation — `_self` access without source_ref binding raises runtime error
 description: |
   When the macro was NOT loaded via source_ref, accessing `$_self.path`
   raises a runtime error with the spec-mandated message. Tests REQ-103
@@ -35,4 +37,19 @@ expect:
     message_contains: "_self"
 
 golden_snapshot:
-  state_notes: []
+  captured_trace_kinds: []
+  captured_tool_calls: []
+predicted_expect:
+  outcome: fail
+  error:
+    code: tool_call_failed
+    message_contains: "_self"
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

@@ -8,6 +8,8 @@
 
 id: mtf-s-922-chained-thru-missing-still-throws
 name: Semantics — chained access through missing field still throws (REQ-112d ac5)
+intent: |
+  Semantics — chained access through missing field still throws (REQ-112d ac5)
 description: |
   `$obj.missing.subfield` — leaf `missing` returns null (REQ-112d),
   then `.subfield` on null raises per REQ-023 ac2.
@@ -32,3 +34,16 @@ vault: {}
 
 expect:
   outcome: fail
+predicted_expect:
+  outcome: fail
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

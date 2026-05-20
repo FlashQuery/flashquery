@@ -6,6 +6,8 @@
 
 id: mtf-l-33-exists-deep-probe
 name: Lifecycle — `_exists()` deep-probe returns booleans for known/unknown servers
+intent: |
+  Lifecycle — `_exists()` deep-probe returns booleans for known/unknown servers
 description: |
   Two `_exists()` calls: one for a configured fake-broker server
   (`bar_srv`), one for an unconfigured server name. The configured one
@@ -44,8 +46,19 @@ expect:
     missing: false
 
 golden_snapshot:
-  state_notes:
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: binding, op: set, name: ok, value: true, scope: local }
-    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
-    - { kind: binding, op: set, name: missing, value: false, scope: local }
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: success
+  return_result:
+    ok: true
+    missing: false
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

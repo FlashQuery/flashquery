@@ -3,6 +3,8 @@
 
 id: mtf-c-401-continue-first-iter
 name: "continue on first iteration only"
+intent: |
+  continue on first iteration only
 description: |
   continue fires on i==1; remaining iterations sum 2+3+4+5 = 14.
 
@@ -32,3 +34,17 @@ vault: {}
 expect:
   outcome: success
   return_result: {"sum":14}
+predicted_expect:
+  outcome: success
+  return_result: {"sum":14}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

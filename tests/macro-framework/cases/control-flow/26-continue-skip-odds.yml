@@ -6,6 +6,8 @@
 
 id: mtf-c-26-continue-skip-odds
 name: Control flow — for-loop with `continue` filtering odd iterations
+intent: |
+  Control flow — for-loop with `continue` filtering odd iterations
 description: |
   Iterates 1..10, uses `continue` to skip odd $i, sums even $i. Result
   is 2+4+6+8+10 = 30. Tests REQ-104 continue semantics + nested if-body
@@ -43,13 +45,22 @@ expect:
     sum_evens: 30
 
 golden_snapshot:
-  state_notes:
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: binding, op: set, name: total, value: 0, scope: local }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 0, var: i, value: 1 }
-    - { kind: binding, op: update, name: total, value: 30, scope: outer }
-
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
 # Spot-check witness: the final `total = 30` outer-scope update event
 # (the running sum reached 30 by the final iteration).
 expect_state_notes:
   - { kind: binding, op: update, name: total, value: 30, scope: outer }
+predicted_expect:
+  outcome: success
+  return_result:
+    sum_evens: 30
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

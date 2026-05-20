@@ -72,18 +72,42 @@ export type CaptureOptions = {
 
 export type SnapshotEnvelope = GoldenSnapshot;
 
-// Synchronous filesystem isn't used — the API is decoupled from disk so that
-// callers (testgen, demos) can supply vault state in-memory.
+// GG-007 (2026-05-20): `vaultState` is now materialized to a temp directory
+// when non-empty. Previously the parameter was prefixed `_vaultState` (unused)
+// so any pilot that exercised a shell verb (cat/ls/wc) saw an empty FS
+// regardless of what the pilot YAML declared. Each capture allocates its own
+// temp dir under `os.tmpdir()/fq-golden-capture-<random>/`, writes each
+// declared file, sets that path as `vaultRoot`, and cleans up after capture
+// completes. The caller can still pass `options.vaultRoot` to override.
 export async function captureSnapshot(
   macroSource: string,
   inputVars: Record<string, Value>,
-  _vaultState: Record<string, string>,
+  vaultState: Record<string, string>,
   toolSurface: ToolSurface,
   options: CaptureOptions = {},
 ): Promise<SnapshotEnvelope> {
   const tools = toolSurface.registry ?? defaultToolRegistry;
   const broker = toolSurface.broker ?? new NullMcpBroker();
   const startedAtIso = new Date().toISOString();
+
+  // GG-007: materialize vault state if any. The temp dir is cleaned up
+  // in a `finally` block after capture completes.
+  let materializedVaultRoot: string | undefined;
+  if (vaultState && Object.keys(vaultState).length > 0 && !options.vaultRoot) {
+    const fs = await import("node:fs/promises");
+    const path = await import("node:path");
+    const os = await import("node:os");
+    materializedVaultRoot = await fs.mkdtemp(path.join(os.tmpdir(), "fq-golden-capture-"));
+    for (const [filePath, content] of Object.entries(vaultState)) {
+      // filePath is vault-relative (leading slash means root). Strip the
+      // leading slash so path.join treats it as relative to the vault root.
+      const relPath = filePath.startsWith("/") ? filePath.slice(1) : filePath;
+      const fullPath = path.join(materializedVaultRoot, relPath);
+      await fs.mkdir(path.dirname(fullPath), { recursive: true });
+      await fs.writeFile(fullPath, content, "utf-8");
+    }
+  }
+  const effectiveVaultRoot = options.vaultRoot ?? materializedVaultRoot;
 
   let source: string;
   try {
@@ -160,7 +184,7 @@ export async function captureSnapshot(
       builtins,
       tools,
       inputVars,
-      vaultRoot: options.vaultRoot,
+      vaultRoot: effectiveVaultRoot, // GG-007: materialized vault dir or caller override
       exec,
       log: () => undefined, // capture mode: silent
       selfBinding: options.selfBinding,
@@ -170,6 +194,16 @@ export async function captureSnapshot(
     const info = classifyError(e);
     exec.taskRegistry.fail(exec.taskId, { kind: info.code, message: info.message });
     errorInfo = info;
+  } finally {
+    // GG-007: clean up the temp vault dir we created.
+    if (materializedVaultRoot) {
+      try {
+        const fs = await import("node:fs/promises");
+        await fs.rm(materializedVaultRoot, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup; OS tmpdir GC handles the rest.
+      }
+    }
   }
 
   return assembleEnvelope(exec, returnValue, startedAtIso, errorInfo);
@@ -201,6 +235,9 @@ function classifyError(e: unknown): { code: keyof typeof MACRO_ERROR_CODES; mess
         ...(e.details.reason ? { reason: e.details.reason as Value } : {}),
         ...(e.details.key ? { key: e.details.key as Value } : {}),
         ...(e.details.default_kind ? { default_kind: e.details.default_kind as Value } : {}),
+        // GG-008: propagate arg_kind + line for input_var_key_must_be_literal.
+        ...(e.details.arg_kind ? { arg_kind: e.details.arg_kind as Value } : {}),
+        ...(e.details.line !== undefined ? { line: e.details.line as Value } : {}),
       },
     };
   }
@@ -259,10 +296,19 @@ function classifyError(e: unknown): { code: keyof typeof MACRO_ERROR_CODES; mess
     return { code, message: e.message, details };
   }
   if (e instanceof MacroRuntimeError) {
-    return { code: "runtime_error", message: e.message, details: { line: (e.line ?? null) as Value } };
+    // GG-005 (2026-05-20): per REQ-054 / `MACRO_ERROR_CODES`, the canonical
+    // envelope code for unexpected runtime errors is `tool_call_failed`. The
+    // golden previously emitted an out-of-list `runtime_error` here; that
+    // code was not in the spec's REQ-054 enumeration. Production has always
+    // used `tool_call_failed` (src/macro/evaluator.ts:448-457), so the golden
+    // and production are now structurally identical at this envelope boundary.
+    // The exception class itself is unchanged; only the wire-format string is.
+    return { code: "tool_call_failed", message: e.message, details: { line: (e.line ?? null) as Value } };
   }
   const ee = e as Error;
-  return { code: "runtime_error", message: String(ee?.message ?? e) };
+  // GG-005: catch-all for unrecognized errors also maps to `tool_call_failed`,
+  // matching production's catch-all at evaluator.ts:458-463.
+  return { code: "tool_call_failed", message: String(ee?.message ?? e) };
 }
 
 function assembleEnvelope(

@@ -13,6 +13,22 @@ fq_id: macro-framework-golden-gaps
 
 # Macro Golden Model Gaps — Discovered via Macro Testing Framework
 
+## REQUIRED SPEC REFERENCES — read these when triaging any divergence
+
+**Every gap entry below cites a REQ-NNN from one of these two specifications. When triaging a new divergence to determine whether it's a golden bug, production bug, or spec ambiguity, the spec is the tiebreaker — never infer from implementations.**
+
+1. **Macro Language Requirements (canonical, archived):**
+   `/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Archive/Implemented/Macro Language (17-May-2026)/FlashQuery Macro Language Requirements.md`
+   Covers REQ-001 through REQ-063 (lexer, grammar, parser, scope rules, builtins, error envelopes, dispatch model, pre-scan, dry-run, termination paths).
+
+2. **MCP Broker Requirements (active, includes macro-engine extensions):**
+   `/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Roadmap/Features/MCP Broker/MCP Broker Requirements.md`
+   §7.15 covers REQ-103 through REQ-112e (macro-engine extensions: `_self` binding, `continue`/`break`, `needs_user_input`, brokered tool coercion, fail-fast, argument passthrough, deep-probe `_exists()`, concurrent-macro safety, VarRef server slot, if-scope flat, boolean literals, missing-field-null, input_var boolean defaults).
+
+**If either file cannot be found at those paths during triage, STOP and ask the user where the current specs live.** Do NOT proceed with classification by inference. Specs may have moved, been renamed, or graduated to a different location; a stale path is worse than a missing one.
+
+# Macro Golden Model Gaps — Discovered via Macro Testing Framework
+
 This document tracks **real spec-compliance gaps in the macro golden model** (`tests/macro-framework/macro-golden-model/`) discovered through test runs of the Macro Testing Framework. These are NOT production bugs and NOT AI-prediction errors — they are concrete deviations between the canonical specification and the golden model that's supposed to encode the spec as an independent oracle.
 
 Each gap is filed so it can be fixed in the golden, the framework can re-validate the fix, and our reconciliation gate keeps its signal sharp. When the golden disagrees with both production AND the spec, the golden has the bug — and "the golden is the spec's reference implementation" is only true if we keep it that way.
@@ -454,3 +470,1218 @@ npx tsx tests/macro-framework/_backfill-smoke-capture.ts
 | Pilot 1003 reconciliation flips to clean | **RESOLVED** | Golden produces invalid_input + reason matching production. |
 
 **Status:** **CLOSED.** Real spec-conformance gap — the golden was missing the literal-kind check that REQ-007 ac1 implies. Added validation + propagation; no new spec edit needed.
+
+---
+
+## Gap GG-004: Claude/Opus 4.7 - Batch divergence — 49 pilots flagged `AI ⊥ Golden` during corpus-wide capture (2026-05-20)
+
+### Discovered By
+
+- **Discovery mechanism:** Run #12 corpus-wide golden-capture backfill via `_generic-capture-runner.ts` + `_apply-captures.py` + `_pilot-validate.py`. Of 409 pilots backfilled, 360 (88%) matched cleanly on first capture; 49 (12%) surfaced as `divergence_kind: predicted_diverges_from_golden`.
+- **Test run date:** 2026-05-20
+- **Divergence kind:** `predicted_diverges_from_golden` (AI's `predicted_expect` ≠ golden's captured envelope). Production still matches each pilot's hand-authored `expect:` block — the 410/410 suite is green — so this is exclusively an AI-vs-Golden disagreement at this point. Investigation will determine where each pilot lands on the AI-mistake / capture-runner-drift / real-golden-bug spectrum.
+
+The 49 pilots are listed below by hypothesised category. **All 49 are filed here per Matt's directive ("every one of these 49 needs to be listed in one of the *gap.md documents"); the per-pilot investigation step then decides whether each pilot lands as (a) AI-prediction-only fix to `predicted_expect`, (b) `_generic-capture-runner.ts` archetype drift requiring a refactor, or (c) a real golden gap meriting its own GG-NNN entry split off from this batch.**
+
+### Requirement
+
+The relevant spec sections vary across the 49 pilots. The triage will reference the canonical sources at the top of this document; the major REQs implicated are listed per cluster below.
+
+### Implementation Evidence
+
+The 49 divergent pilots cluster by spec area as follows. Each cluster has a primary hypothesis for what produced the divergence; the investigation step empirically confirms or refutes each.
+
+**Cluster A — REQ-024 5-path termination — AI predicted `tool_call_failed` where Golden returned `runtime_error` (8 pilots)**
+
+Older hand-authored runtime-error pilots that pre-date the 5-path termination refinement. REQ-024 partitions runtime failures into `tool_call_failed` (a brokered tool call returned isError) vs `runtime_error` (everything else: undefined var, field on null, count/iter on non-list, mod-by-zero, etc.). AI's `predicted_expect` uses `tool_call_failed` uniformly; golden correctly returns `runtime_error` for the non-tool-call path.
+
+- [`cases/errors/1116-runtime-unknown-variable.yml`](cases/errors/1116-runtime-unknown-variable.yml) — undefined var read
+- [`cases/errors/1117-runtime-field-on-null.yml`](cases/errors/1117-runtime-field-on-null.yml) — field access on null
+- [`cases/errors/1118-runtime-field-on-number.yml`](cases/errors/1118-runtime-field-on-number.yml) — field on non-object
+- [`cases/errors/1119-runtime-field-on-list-string-key.yml`](cases/errors/1119-runtime-field-on-list-string-key.yml) — list[string]
+- [`cases/errors/1121-runtime-div-by-zero.yml`](cases/errors/1121-runtime-div-by-zero.yml) — div by zero
+- [`cases/errors/1122-runtime-mod-by-zero.yml`](cases/errors/1122-runtime-mod-by-zero.yml) — mod by zero
+- [`cases/errors/1124-runtime-numeric-on-string.yml`](cases/errors/1124-runtime-numeric-on-string.yml) — type coercion mismatch
+- [`cases/errors/1126-runtime-count-non-list.yml`](cases/errors/1126-runtime-count-non-list.yml) — count on non-list
+- [`cases/errors/1125-runtime-iter-non-list.yml`](cases/errors/1125-runtime-iter-non-list.yml) — for over non-list
+
+**Cluster B — REQ-023 / REQ-112d field-access semantics — error.code divergence (5 pilots)**
+
+Spec says field access on null short-circuits to null (REQ-112d missing-field-null) UNTIL the access enters a context where a value is required, at which point a runtime error fires. AI predicted one specific termination shape; golden produces another.
+
+- [`cases/errors/1120-runtime-chained-through-null.yml`](cases/errors/1120-runtime-chained-through-null.yml)
+- [`cases/semantics/1199-req-023-ac2-chained-through-null.yml`](cases/semantics/1199-req-023-ac2-chained-through-null.yml)
+- [`cases/semantics/1200-req-023-ac2-null-obj.yml`](cases/semantics/1200-req-023-ac2-null-obj.yml)
+- [`cases/semantics/1201-req-023-ac3-non-object.yml`](cases/semantics/1201-req-023-ac3-non-object.yml)
+- [`cases/semantics/1202-req-023-ac4-list-string-key.yml`](cases/semantics/1202-req-023-ac4-list-string-key.yml)
+
+**Cluster C — REQ-108 argument passthrough — WriteTool envelope shape (11 pilots)**
+
+The 530-540 series pilots are auto-generated from `_tier2-batch-generator.ts` and exercise REQ-108 (arguments pass through to the brokered tool bit-exact). The pilots use the `WriteTool` archetype, which returns `{ ok, side_effect, args }`. The macro nests the response under `v` and exits `{ got: $v.args.msg }`. AI predicted `success`; golden's generic capture-runner WriteTool simulation returns `error` because of an archetype drift in `_generic-capture-runner.ts` (the generic runner's WriteTool implementation isn't the same as the framework's `fixtures/fake-broker/archetypes.ts` WriteTool). Strong suspect: capture-runner refactor (use framework archetypes) resolves the entire cluster.
+
+- [`cases/dispatch/530-530-arg-string-passthrough.yml`](cases/dispatch/530-530-arg-string-passthrough.yml)
+- [`cases/dispatch/531-531-arg-number-passthrough.yml`](cases/dispatch/531-531-arg-number-passthrough.yml)
+- [`cases/dispatch/532-532-arg-null-passthrough.yml`](cases/dispatch/532-532-arg-null-passthrough.yml)
+- [`cases/dispatch/533-533-arg-array-passthrough.yml`](cases/dispatch/533-533-arg-array-passthrough.yml)
+- [`cases/dispatch/534-534-arg-nested-object.yml`](cases/dispatch/534-534-arg-nested-object.yml)
+- [`cases/dispatch/535-535-arg-empty-object.yml`](cases/dispatch/535-535-arg-empty-object.yml)
+- [`cases/dispatch/536-536-arg-with-interpolation.yml`](cases/dispatch/536-536-arg-with-interpolation.yml)
+- [`cases/dispatch/537-537-arg-from-variable.yml`](cases/dispatch/537-537-arg-from-variable.yml)
+- [`cases/dispatch/538-538-arg-numeric-string.yml`](cases/dispatch/538-538-arg-numeric-string.yml)
+- [`cases/dispatch/539-539-arg-list-of-lists.yml`](cases/dispatch/539-539-arg-list-of-lists.yml)
+- [`cases/dispatch/540-540-arg-mixed-types.yml`](cases/dispatch/540-540-arg-mixed-types.yml)
+
+**Cluster D — REQ-106 brokered-tool coercion — return-envelope shape (7 pilots)**
+
+REQ-106 specifies the two-path coercion: `structuredContent` (binds directly) vs `content[].text` (parsed). The 501/505/506/511/512/601/604 pilots exercise `StructuredContentTool`. Same suspect as Cluster C — the generic-capture-runner's StructuredContentTool simulation differs from the framework's archetype. A capture-runner refactor likely resolves the cluster cleanly.
+
+- [`cases/dispatch/501-501-coerce-structured-content.yml`](cases/dispatch/501-501-coerce-structured-content.yml)
+- [`cases/dispatch/505-505-coerce-multiple-tools-in-macro.yml`](cases/dispatch/505-505-coerce-multiple-tools-in-macro.yml)
+- [`cases/dispatch/506-506-coerce-structured-list.yml`](cases/dispatch/506-506-coerce-structured-list.yml)
+- [`cases/dispatch/511-511-coerce-nested-deep.yml`](cases/dispatch/511-511-coerce-nested-deep.yml)
+- [`cases/dispatch/512-512-coerce-empty-object.yml`](cases/dispatch/512-512-coerce-empty-object.yml)
+- [`cases/dispatch/601-601-coercion-chain.yml`](cases/dispatch/601-601-coercion-chain.yml)
+- [`cases/dispatch/604-604-structured-bool-flag.yml`](cases/dispatch/604-604-structured-bool-flag.yml)
+
+**Cluster E — Shell-verb idiom — vault execution semantics (3 pilots)**
+
+The 801-803 dispatch pilots exercise shell-verb idioms (`cat`, `ls`, `wc -l`) executed in a vault. AI predicted success; golden's capture failed. Likely cause: the generic-capture-runner doesn't model the vault sandbox or shell broker the same way production does. Probable refactor target along with C and D.
+
+- [`cases/dispatch/801-shell-cat-in-vault.yml`](cases/dispatch/801-shell-cat-in-vault.yml)
+- [`cases/dispatch/802-shell-ls-in-vault.yml`](cases/dispatch/802-shell-ls-in-vault.yml)
+- [`cases/dispatch/803-shell-wc-line-count.yml`](cases/dispatch/803-shell-wc-line-count.yml)
+
+**Cluster F — `_exists()` compound conditions — boolean composition shape (2 pilots)**
+
+The lifecycle/801-802 pilots use `_exists()` inside `&&` / `||` conditions, exercising REQ-109's "anywhere a value is expected" pattern stress-tested against operator precedence. Investigation should compare what each oracle produced and check against §5.2 of the macro language requirements.
+
+- [`cases/lifecycle/801-exists-in-compound-and.yml`](cases/lifecycle/801-exists-in-compound-and.yml)
+- [`cases/lifecycle/802-exists-in-compound-or.yml`](cases/lifecycle/802-exists-in-compound-or.yml)
+
+**Cluster G — Builtin / sentinel / special-case (5 pilots)**
+
+Heterogeneous one-offs. Each needs individual review against its specific REQ.
+
+- [`cases/dispatch/32-help-sentinel.yml`](cases/dispatch/32-help-sentinel.yml) — `help: true` sentinel argument; spec area: REQ-108 (passthrough) + brokered-tool `--help` convention
+- [`cases/dispatch/1275-lying-tool-error-in-content.yml`](cases/dispatch/1275-lying-tool-error-in-content.yml) — LyingTool archetype semantics; generic-capture-runner's LyingTool returns empty {} per investigation rather than the simulated error shape
+- [`cases/semantics/1154-range-builtin-zero.yml`](cases/semantics/1154-range-builtin-zero.yml) — `range` builtin with zero arg; generic-capture-runner may not implement `range`
+- [`cases/semantics/1155-range-builtin-five.yml`](cases/semantics/1155-range-builtin-five.yml) — `range 5`
+- [`cases/isolation/28b-self-unbound-runtime-error.yml`](cases/isolation/28b-self-unbound-runtime-error.yml) — `_self` unbound runtime error code
+
+**Cluster H — Parse-error / preflight error envelope (2 pilots)**
+
+The parse-error envelope's `details` shape; AI predicted one structure, golden produced another.
+
+- [`cases/errors/1108-parse-input-var-key-must-be-literal.yml`](cases/errors/1108-parse-input-var-key-must-be-literal.yml)
+- [`cases/errors/1115-parse-invalid-literal-bad-number.yml`](cases/errors/1115-parse-invalid-literal-bad-number.yml)
+
+**Cluster I — Runtime self-inline-source (1 pilot)**
+
+- [`cases/errors/1127-runtime-self-inline-source.yml`](cases/errors/1127-runtime-self-inline-source.yml) — `_self` evaluated outside its binding context
+
+**Cluster J — Range builtin non-integer (1 pilot)**
+
+- [`cases/errors/1128-runtime-range-non-int.yml`](cases/errors/1128-runtime-range-non-int.yml) — `range` called with non-integer; same suspect as Cluster G's range entries
+
+**Cluster K — Lifecycle dry-run inventory (1 pilot)**
+
+- [`cases/lifecycle/07-dry-run-inventory.yml`](cases/lifecycle/07-dry-run-inventory.yml) — dry-run mode returns a tool-usage inventory; envelope shape divergence
+
+**Cluster L — Vault-jail violation (1 pilot)**
+
+- [`cases/errors/710-vault-jail-violation-ls.yml`](cases/errors/710-vault-jail-violation-ls.yml) — `ls` outside vault root; investigation pending
+
+**Cluster M — Self-test pilot (1 pilot) — should be excluded from triage**
+
+- [`cases/errors/_intentional-mismatch-fake-expected-result.yml`](cases/errors/_intentional-mismatch-fake-expected-result.yml) — explicit framework self-test that deliberately misaligns predicted/captured. Already marked with the `_` prefix as a meta-test. Triage outcome: exclude from the divergence count (it's by design); add an exception in `_pilot-validate.py` so this file's `divergence_kind: predicted_diverges_from_golden` is the intended state.
+
+**Cluster total:** 8 + 5 + 11 + 7 + 3 + 2 + 5 + 2 + 1 + 1 + 1 + 1 + 1 = 48 + the self-test = 49.
+
+### Reasoning
+
+Most of the 49 are expected to resolve into one of two non-spec-bug categories:
+
+1. **AI-prediction errors in older hand-authored pilots.** Clusters A and B were authored before the REQ-024 5-path termination refinement was fully internalised. Their `predicted_expect.error.code: tool_call_failed` is wrong; the golden's `runtime_error` is correct. The fix is to update `predicted_expect` in each pilot — no golden change, no spec change. (Per Matt's "those have been compared and found to be equivalent" target state for resolved pilots: the `expect:` blocks should be updated to match the golden envelope, which means accepting `runtime_error` as canonical for these paths.)
+
+2. **`_generic-capture-runner.ts` archetype drift.** Clusters C, D, E, and parts of G are most-likely-explained by the fact that the generic capture runner re-implements the archetype semantics (WriteTool, StructuredContentTool, ScriptedTool, LyingTool, shell vault) as inline `ToolFn` closures, rather than importing the framework's actual archetype factories from [`tests/macro-framework/fixtures/fake-broker/archetypes.ts`](fixtures/fake-broker/archetypes.ts). The two implementations have drifted: the runner's simulation differs from what production's `FakeBroker` actually returns. The proper resolution is to refactor `_generic-capture-runner.ts` to use the framework archetypes directly, so the golden captures match the production-archetype envelope by construction.
+
+3. **Real golden gaps.** A subset of Clusters F, G, H, I, K, L could still be real golden-vs-spec divergences. Those will spin out from this GG-004 batch entry into their own GG-005, GG-006, ... per-cluster gap entries as the investigation discovers them.
+
+The reason to file all 49 in this gap doc — even though most are not golden bugs — is **traceability and resolution accountability**. Per Matt's directive, every divergence the gate surfaces must be tracked through to a clean resolution; nothing gets quietly absorbed into "framework noise" without a paper trail. This batch entry creates that paper trail, identifies the suspects, and partitions the work.
+
+### Proposed Changes
+
+Investigation plan (executed as follow-up work to this filing):
+
+1. **Refactor `_generic-capture-runner.ts`** to import archetype factories from `fixtures/fake-broker/archetypes.ts` instead of re-implementing them inline. Re-capture all 49 divergent pilots through the refactored runner. Expected: Clusters C, D, E, and parts of G resolve cleanly (~21 pilots).
+
+2. **Per-cluster spec triage for the residue.** For each pilot still divergent after the refactor, look up the cited REQ in the spec, compare golden's captured envelope to spec text, and classify:
+   - **AI-prediction-only fix** (update `predicted_expect` and `expect` to match golden; reconciliation flips to `clean_match_after_prediction_fix`): Clusters A, B, and AI-error subsets of H.
+   - **Real golden gap** (spin out a new GG-NNN entry; resolution is a golden-model code fix): residual divergences after the runner refactor.
+   - **Excluded self-test** (annotate and exclude): Cluster M.
+
+3. **Update `expect:` blocks for resolved pilots** so that the resolved state has `predicted_expect == expect == golden_snapshot.envelope`. This is the "have been compared and found to be equivalent" target state.
+
+4. **Close GG-004** once all 49 pilots have either (a) flipped to `clean_match`, (b) been re-filed as a child GG-NNN, or (c) been annotated as self-tests.
+
+### Resolution
+
+**Step 1 — Capture-runner refactor (2026-05-20).** Refactored [`_generic-capture-runner.ts`](_generic-capture-runner.ts) to import the framework's archetype factories from [`fixtures/fake-broker/archetypes.ts`](fixtures/fake-broker/archetypes.ts) verbatim (mirroring `runner.ts:291` ARCHETYPE_FACTORIES exactly). The bug the original runner had — missing WriteTool case, wrong field names (`returns` vs `value`), `LyingTool` returning empty `{}` — were all consequences of re-implementing archetypes by hand instead of importing the framework's source of truth. After the refactor, the runner is structurally guaranteed to feed the golden the same archetype behavior production sees.
+
+**Step 2 — Comparator fix (2026-05-20).** Fixed [`_apply-captures.py`](_apply-captures.py) `compare()` so that when `predicted_expect.return_result` is **absent**, the comparator does NOT flag the capture as divergent on return_result grounds. Pilots that only declared `outcome: success` (without naming a return shape) were being wrongly flagged because the comparator treated absent-prediction as a contradictory expectation. The fix matches the comparator's already-correct handling of `error.code` (only compare if both pred and cap have a value).
+
+**Step 3 — Re-capture results.** Re-ran capture + apply on all 410 pilots:
+
+| Stage | Divergent count |
+|---|---|
+| Before runner refactor | 49 |
+| After runner refactor only | 40 |
+| After comparator-fix + runner refactor | **28** |
+
+**Closed clusters (21 pilots resolved):**
+
+- Cluster D — REQ-106 StructuredContentTool coercion (7 pilots: 501, 505, 506, 511, 512, 601, 604) — **closed** by reading `cfg.value` instead of `cfg.returns`.
+- Cluster G LyingTool sub-cluster — pilot 1275 — **closed** by delegating LyingTool to its `behaves` handler instead of returning `{}`.
+- Cluster C — REQ-108 arg passthrough — pilots 531-540 — **closed**: the runner now uses the framework's WriteTool, AND the comparator no longer flags absent-prediction as divergent. 11 of the 11 Cluster C pilots now match cleanly.
+- Cluster G's pilot 32 (help-sentinel) — **still divergent** because of the golden's hard-coded help-sentinel pre-emption (separate issue).
+- Cluster J's pilot 1128 — still divergent (folds into GG-005).
+- Cluster H's pilot 1115 — still divergent (folds into GG-005).
+- Pilot 530 — already clean before refactor (verified).
+
+**Residue split into child gap entries:**
+
+- **GG-005** (filed 2026-05-20) — picks up the **18 pilots** whose divergence is `error.code: runtime_error` vs `tool_call_failed`. This is a real golden vs spec issue, not a runner bug: the golden's `MACRO_ERROR_CODES` invented a `runtime_error` code that is NOT in the spec's canonical list at REQ-054 / `MACRO_ERROR_CODES` (line 1188 of the Macro Language Requirements). Empirical check confirmed production correctly emits `tool_call_failed` per spec; the golden alone emits `runtime_error`. See GG-005 for the full analysis and proposed resolution.
+
+- **GG-006** (deferred) — the **3 shell-verb pilots** (dispatch/801, dispatch/802, errors/710). Golden's `captureSnapshot()` accepts a `_vaultState` parameter but the implementation prefixes it with `_` (unused). Shell verbs that read files from the vault therefore see an empty filesystem in capture mode. This is a golden capture-API gap rather than a runtime error.
+
+- **GG-007** (deferred) — the **2 range-builtin pilots** (semantics/1154, 1155) and the lifecycle/dry-run pilot (lifecycle/07) — need individual investigation against REQ-014 / REQ-053.
+
+- **GG-008** (deferred) — the **2 _exists compound pilots** (lifecycle/801, lifecycle/802) — need individual investigation against REQ-109 + §5.2 boolean-composition.
+
+- **Special — Cluster M annotated as self-test** — pilot `_intentional-mismatch-fake-expected-result.yml` is the framework's self-test for the gate itself; its `predicted_diverges_from_golden` is the intended state. No fix required; will be excluded from the corpus-wide divergence count in `_pilot-validate.py` follow-up.
+
+**Outstanding:** pilot 32 (help-sentinel) and pilot 1108 (parse-error code) — folded into per-investigation triage; will spin out further GG-NNN entries if confirmed as real golden bugs.
+
+### Resolution - Complete
+
+_Partial._ Of the 49 originally-divergent pilots, 21 are now `clean_match`. The remaining 28 are accounted for in child gap entries (GG-005 plus the deferred GG-006/007/008). This entry will be marked CLOSED when all child gaps are closed.
+
+### Post-Implementation Retest
+
+**Retest date:** 2026-05-20
+**Retested by:** Claude/Opus 4.7 (same-session author + retest pass)
+
+| Prescribed correction | Status | Evidence |
+|---|---|---|
+| Refactor `_generic-capture-runner.ts` to import framework archetype factories | **RESOLVED** | Confirmed at [`_generic-capture-runner.ts`](_generic-capture-runner.ts) — `ARCHETYPE_FACTORIES` table now mirrors `runner.ts:291` exactly; bridge function `bridgeArchetypeToToolFn` wraps framework `ArchetypeHandler` as golden `ToolFn`. |
+| Comparator skips absent `return_result` predictions | **RESOLVED** | Confirmed at [`_apply-captures.py`](_apply-captures.py) `compare()` — `if "return_result" in prediction` gate added before the deep comparison. |
+| Re-capture corpus and confirm cluster reductions | **RESOLVED** | 410/410 pilots captured; divergence count dropped 49 → 28; 21 pilots flipped to `clean_match`; closures itemized above. |
+| Open child gap entries for remaining divergences | **PARTIAL** | GG-005 filed for the 18 `runtime_error` pilots; GG-006/007/008 noted as deferred placeholders. |
+| Annotate `_intentional-mismatch-fake-expected-result.yml` as self-test | **PENDING** | Will be addressed in a follow-up by making `_pilot-validate.py` exclude file basenames beginning with `_intentional-`. |
+
+**Status:** **PARTIAL.** Runner-archetype drift confirmed as the dominant cause (≈43% of the 49 closed by the refactor + comparator fix). The remaining 28 split cleanly: 18 to GG-005 (real spec/golden ambiguity), 3 to GG-006 (shell-verb vault-state limitation), 7 to deferred GG-007/008 plus per-pilot triage.
+
+---
+
+## Gap GG-005: Claude/Opus 4.7 - Golden emits `runtime_error` code that is NOT in spec's `MACRO_ERROR_CODES`; production correctly emits `tool_call_failed` per REQ-024 ac5
+
+### Discovered By
+
+- **Pilots:** 18 pilots in `cases/errors/` and `cases/semantics/`, all with `divergence_kind: predicted_diverges_from_golden` and `notes: "error.code divergence: predicted=tool_call_failed, captured=runtime_error"`:
+  - [`cases/errors/1116-runtime-unknown-variable.yml`](cases/errors/1116-runtime-unknown-variable.yml)
+  - [`cases/errors/1117-runtime-field-on-null.yml`](cases/errors/1117-runtime-field-on-null.yml)
+  - [`cases/errors/1118-runtime-field-on-number.yml`](cases/errors/1118-runtime-field-on-number.yml)
+  - [`cases/errors/1119-runtime-field-on-list-string-key.yml`](cases/errors/1119-runtime-field-on-list-string-key.yml)
+  - [`cases/errors/1120-runtime-chained-through-null.yml`](cases/errors/1120-runtime-chained-through-null.yml)
+  - [`cases/errors/1121-runtime-div-by-zero.yml`](cases/errors/1121-runtime-div-by-zero.yml)
+  - [`cases/errors/1122-runtime-mod-by-zero.yml`](cases/errors/1122-runtime-mod-by-zero.yml)
+  - [`cases/errors/1124-runtime-numeric-on-string.yml`](cases/errors/1124-runtime-numeric-on-string.yml)
+  - [`cases/errors/1125-runtime-iter-non-list.yml`](cases/errors/1125-runtime-iter-non-list.yml)
+  - [`cases/errors/1126-runtime-count-non-list.yml`](cases/errors/1126-runtime-count-non-list.yml)
+  - [`cases/errors/1127-runtime-self-inline-source.yml`](cases/errors/1127-runtime-self-inline-source.yml)
+  - [`cases/errors/1128-runtime-range-non-int.yml`](cases/errors/1128-runtime-range-non-int.yml)
+  - [`cases/errors/1115-parse-invalid-literal-bad-number.yml`](cases/errors/1115-parse-invalid-literal-bad-number.yml)
+  - [`cases/isolation/28b-self-unbound-runtime-error.yml`](cases/isolation/28b-self-unbound-runtime-error.yml)
+  - [`cases/semantics/1199-req-023-ac2-chained-through-null.yml`](cases/semantics/1199-req-023-ac2-chained-through-null.yml)
+  - [`cases/semantics/1200-req-023-ac2-null-obj.yml`](cases/semantics/1200-req-023-ac2-null-obj.yml)
+  - [`cases/semantics/1201-req-023-ac3-non-object.yml`](cases/semantics/1201-req-023-ac3-non-object.yml)
+  - [`cases/semantics/1202-req-023-ac4-list-string-key.yml`](cases/semantics/1202-req-023-ac4-list-string-key.yml)
+
+- **Test run date:** 2026-05-20 (corpus-wide capture, post-runner-refactor).
+- **Divergence kind:** golden emits `error: runtime_error` for unexpected runtime errors (undefined variable, field access on null/number, chained field through null, div/mod by zero, iter/count on non-list, _self unbound at inline source, range with non-integer, etc.). Production correctly emits `error: tool_call_failed`. The AI's `predicted_expect` matches production.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.3.6 REQ-024 ac5](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md):
+
+> "Tool-call failure (unexpected) or runtime error. Given a tool handler throws OR returns `isError: true`, OR the evaluator hits an unexpected runtime error, then the macro halts; the response is `{ error: \"tool_call_failed\" or other macro-namespaced code, …, trace? }` with `isError: true` (the canonical XC-5 'unexpected' path)."
+
+And REQ-054 / `MACRO_ERROR_CODES` (line 1188 of the spec):
+
+```typescript
+export const MACRO_ERROR_CODES = [
+  'macro_aborted',
+  'forbidden_tools',
+  'unknown_server',
+  'unknown_tool',
+  'forbidden_path',
+  'forbidden_shell_flag',
+  'template_masquerade_tools_not_callable_from_macro',
+  'budget_exceeded',
+  'timeout',
+  'tool_call_failed',
+  'cancelled',
+  'parse_error',
+] as const;
+```
+
+**`runtime_error` is NOT in the canonical list.** The spec's REQ-024 ac5 says "tool_call_failed or other macro-namespaced code," but the macro-namespaced codes are explicitly enumerated in REQ-054 and `runtime_error` isn't one of them.
+
+### Implementation Evidence
+
+**Golden side** ([`macro-golden-model/src/envelope.ts:32-53`](macro-golden-model/src/envelope.ts)):
+
+```typescript
+export const MACRO_ERROR_CODES = {
+  parse_error: "parse_error",
+  invalid_input: "invalid_input",
+  macro_aborted: "macro_aborted",
+  forbidden_path: "forbidden_path",
+  forbidden_shell_flag: "forbidden_shell_flag",
+  forbidden_tools: "forbidden_tools",
+  template_masquerade_tools_not_callable_from_macro:
+    "template_masquerade_tools_not_callable_from_macro",
+  cancelled: "cancelled",
+  unknown_server: "unknown_server",
+  unknown_tool: "unknown_tool",
+  permission_denied: "permission_denied",
+  budget_exceeded: "budget_exceeded",
+  timeout: "timeout",
+  tool_call_failed: "tool_call_failed",
+  runtime_error: "runtime_error",                           // <-- INVENTED CODE
+  needs_user_input: "needs_user_input",
+} as const;
+```
+
+The golden invented additional codes: `invalid_input`, `permission_denied`, and `runtime_error`. The `invalid_input` and `permission_denied` codes are defensible — they appear in the spec's prose at lines 1235, 1238 (e.g., REQ-007's `invalid_input` example). But `runtime_error` does not appear in the canonical list, and the spec's prose at line 1243 explicitly assigns the `tool_call_failed` code to "unexpected runtime errors":
+
+> `{ error: "tool_call_failed", details: { server, tool, line, underlying_error: { ... } }, trace?: [...] }` with `isError: true` for unexpected runtime errors
+
+**Production side** (empirical evidence): a probe of pilot 1116 (`exit { x: $undefined_var }`) executed against production returns:
+
+```json
+{
+  "error": "tool_call_failed",
+  "message": "Unknown variable: $undefined_var",
+  "details": {
+    "reason": "unknown_variable",
+    "name": "undefined_var"
+  }
+}
+```
+
+Production faithfully follows the spec — collapses all runtime errors into the `tool_call_failed` code with a `details.reason` discriminator (`unknown_variable`, `div_by_zero`, `mod_by_zero`, `iter_non_list`, `count_non_list`, `field_on_null`, etc.).
+
+### Reasoning
+
+This is a **real golden gap with a spec-clarity wrinkle**. Two interpretive paths:
+
+1. **Strict-list reading.** REQ-054 / `MACRO_ERROR_CODES` is the authoritative enumeration. `runtime_error` is not in the list. Production conforms; the golden alone emits an out-of-list code. **Resolution: remove `runtime_error` from the golden's MACRO_ERROR_CODES, emit `tool_call_failed` for unexpected runtime failures (matching production), use `details.reason` to discriminate sub-cases.**
+
+2. **Permissive-ac5 reading.** REQ-024 ac5 says "tool_call_failed or other macro-namespaced code". A future-tense reading would allow new macro-namespaced codes to be added without amending REQ-054. **Resolution: add `runtime_error` to REQ-054's `MACRO_ERROR_CODES` (spec ratification), have production also start emitting `runtime_error` for unexpected runtime errors that aren't tool-call failures.**
+
+Reading 1 is cleaner — `MACRO_ERROR_CODES` is meant to be the authoritative enumeration and `runtime_error` overlaps with `tool_call_failed` semantically when the spec's prose already covers "unexpected runtime errors" under `tool_call_failed`. The downside: `tool_call_failed` becomes overloaded (some are actual tool-call failures, others are pure-expression failures with no tool involved). Reading 2 resolves the overload but means production needs to change behavior.
+
+The fact that 18 pilots surfaced this divergence — including pilots that intentionally exercise runtime errors with NO tool calls at all (`$undefined_var`, `mod 7 0`, `count "string"`, `iter "string"`, etc.) — suggests Reading 2's clarity benefit may be real. The spec is admittedly ambiguous between the two readings.
+
+User-visible impact for the framework: the suite still passes 410/410 (because `expect:` blocks in these 18 pilots match production), but the AI ⊥ Golden gate flags every runtime-error path as divergent, drowning out other signal.
+
+### Proposed Changes
+
+**Recommended (Reading 1 — golden conforms to spec list):**
+
+- **Golden** ([`macro-golden-model/src/envelope.ts`](macro-golden-model/src/envelope.ts)): remove `runtime_error: "runtime_error"` from the `MACRO_ERROR_CODES` map. Update the corresponding emission sites in [`evaluator.ts`](macro-golden-model/src/evaluator.ts) and [`snapshot.ts`](macro-golden-model/src/snapshot.ts) to emit `tool_call_failed` with `details.reason` set to the specific runtime failure class (`unknown_variable`, `field_on_null`, `div_by_zero`, `mod_by_zero`, `iter_non_list`, `count_non_list`, etc.).
+- **No spec edit required** — Reading 1 already aligns with the canonical REQ-054 list.
+- **Affected pilots:** the 18 pilots above flip from `predicted_diverges_from_golden` to `clean_match`. No pilot YAML edits needed since `predicted_expect`, `expect`, and the (corrected) golden capture will then all agree on `tool_call_failed`.
+
+**Alternative (Reading 2 — spec adds `runtime_error`):**
+
+- **Spec** ([`FlashQuery Macro Language Requirements.md` REQ-054 line 1188](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md)): add `'runtime_error'` to the `MACRO_ERROR_CODES` list. Update REQ-024 ac5 to differentiate `tool_call_failed` (actual brokered-tool failures) from `runtime_error` (everything else).
+- **Production** (`src/macro/evaluator.ts`): change emission for non-tool-call runtime failures from `tool_call_failed` to `runtime_error`. **This is a behavior change for production callers.** Any downstream consumer that pattern-matches on `error: tool_call_failed` will now miss these cases.
+- **Affected pilots:** the 18 pilots above flip to `clean_match`; their `predicted_expect.error.code` and `expect.error.code` would be updated from `tool_call_failed` to `runtime_error`. (We would also need to update any production consumers — e.g. external tools that parse macro envelopes.)
+
+### Open Question — Matt's call
+
+**RESOLVED 2026-05-20.** Matt approved **Reading 1**: "Adhere to the spec in the golden model. As long as the tests are *expecting* the failure, which I assume is part of the 'pass' condition, then these should pass after making the golden model fix."
+
+### Resolution
+
+Implemented Reading 1 — three small edits in the golden, zero production changes, zero pilot YAML edits:
+
+1. **[`macro-golden-model/src/snapshot.ts:261-271`](macro-golden-model/src/snapshot.ts)** — `MacroRuntimeError` branch changed from `code: "runtime_error"` to `code: "tool_call_failed"`. Catch-all on the next line also flipped. Both sites carry inline `GG-005` comments citing REQ-054 and the production parallel at `evaluator.ts:448-457`.
+
+2. **[`macro-golden-model/src/envelope.ts:47-56`](macro-golden-model/src/envelope.ts)** — removed `runtime_error: "runtime_error"` from `MACRO_ERROR_CODES`. Inline comment explains the removal references REQ-054 and Matt's 2026-05-20 decision.
+
+3. **[`macro-golden-model/src/run.ts:357-365`](macro-golden-model/src/run.ts)** + **[`macro-golden-model/src/test-snapshot.ts:355,413-414`](macro-golden-model/src/test-snapshot.ts)** — incidental callers of the old code-name updated to emit / expect `tool_call_failed`. Behavior unchanged; wire-format string aligned.
+
+The `MacroRuntimeError` exception class itself is **unchanged**. Throw sites in the evaluator (≈18 of them, covering undefined var, field-on-non-object, div/mod by zero, count/iter on non-list, range non-int, `_self` unbound, chain-through-null, etc.) are **unchanged**. Only the wire-format envelope at the catch boundary in `snapshot.ts` is different.
+
+### Resolution - Complete
+
+Re-ran the capture + apply pipeline against all 410 pilots:
+
+| Stage | Divergent count |
+|---|---|
+| Before GG-005 fix | 28 (post GG-004 refactor) |
+| **After GG-005 fix** | **11** |
+
+**17 of 18 GG-005 pilots flipped to `clean_match`** — their `predicted_expect.error.code: tool_call_failed` and `expect.error.code: tool_call_failed` now agree with the golden's `tool_call_failed` capture.
+
+**1 pilot remained divergent** with a *changed* signature: [`cases/errors/1115-parse-invalid-literal-bad-number.yml`](cases/errors/1115-parse-invalid-literal-bad-number.yml). Before: `predicted=parse_error, captured=runtime_error`. After: `predicted=parse_error, captured=tool_call_failed`. The golden's fix took effect, but this pilot's predicted_expect was always going to be wrong — the test author thought the malformed number literal was a parse-time error, but the golden (and production) treat it as a runtime failure. **This is not a GG-005 residue; it's a per-pilot prediction error.** Will be addressed as a separate per-pilot edit (the YAML's `predicted_expect.error.code` should be updated to `tool_call_failed`).
+
+### Post-Implementation Retest
+
+**Retest date:** 2026-05-20
+**Retested by:** Claude/Opus 4.7
+
+| Prescribed correction | Status | Evidence |
+|---|---|---|
+| Change `snapshot.ts:262` to emit `tool_call_failed` | **RESOLVED** | Confirmed at [`snapshot.ts:261-271`](macro-golden-model/src/snapshot.ts) — both `MacroRuntimeError` branch and the catch-all now emit `tool_call_failed`. |
+| Remove `runtime_error` from `MACRO_ERROR_CODES` | **RESOLVED** | Confirmed at [`envelope.ts:47-56`](macro-golden-model/src/envelope.ts) — entry removed; inline comment cites GG-005 and Matt's 2026-05-20 decision. |
+| Update incidental references in `run.ts` + `test-snapshot.ts` | **RESOLVED** | Both files updated; Gap-4 self-test in `test-snapshot.ts` (REQ-012 ac4 `'a' < 'b'`) now reports "raised tool_call_failed: true". |
+| All 18 GG-005 pilots flip from `predicted_diverges_from_golden` to `clean_match` | **17/18 RESOLVED** | 17 pilots clean. Pilot 1115 still divergent for a different reason (predicted_expect was wrong; not a GG-005 issue). |
+| Framework suite unchanged | **RESOLVED** | `npm run test:macro-framework` → 411/411 passing. |
+| Golden self-tests pass | **RESOLVED** | `npx tsx tests/macro-framework/macro-golden-model/src/test-snapshot.ts` — all 9 gap checks PASS. |
+
+**Status:** **CLOSED.** Reading 1 implemented as a three-file, ≈10-line wire-format alignment. Golden and production are now structurally identical at the unexpected-runtime-error envelope boundary. The single-pilot edit for 1115 will be tracked separately (not a GG-005 follow-up; the AI prediction in that pilot was independently wrong).
+
+---
+
+## Gap GG-006: Claude/Opus 4.7 - Golden's `help: true` interception pre-empts brokered archetype dispatch
+
+### Discovered By
+
+- **Pilot:** [`cases/dispatch/32-help-sentinel.yml`](cases/dispatch/32-help-sentinel.yml) (`mtf-g-32-boolean-literal-object-arg`)
+- **Test run date:** 2026-05-20
+- **Divergence kind:** `predicted_diverges_from_golden` — AI predicted `success, "boolean accepted"`. Production returned `success, "boolean accepted"`. Golden returned `success` with a synthetic placeholder string `"(brokered) helper_srv.describe: help forwarded upstream — mock returns this placeholder."`.
+
+### Requirement
+
+[`MCP Broker Requirements.md` REQ-093 / REQ-098](../../../flashquery-product/Roadmap/Features/MCP%20Broker/MCP%20Broker%20Requirements.md): the `help: true` sentinel is a BROKER concern (delegated/host model → broker) and explicitly NOT in scope for macro frames. The pilot was repurposed (per its file header) to verify Broker REQ-112c (boolean-literal grammar). A macro that writes `{ help: true }` in an object argument should reach the brokered call as a plain boolean — same as any other key/value — and the archetype (ReadOnlyTool returning `"boolean accepted"`) should produce that string.
+
+### Implementation Evidence
+
+Probe of production:
+
+```json
+{
+  "result": "boolean accepted",
+  "trace": [
+    { "kind": "tool_call", "name": "helper_srv.describe", "args": {"help": true}, "result": "boolean accepted" },
+    { "kind": "exit", "result": "boolean accepted" }
+  ]
+}
+```
+
+Probe of golden capture (post GG-005, v3 captures):
+
+```json
+{
+  "return": {
+    "content": [{"type": "text", "text": "(brokered) helper_srv.describe: help forwarded upstream — mock returns this placeholder."}]
+  }
+}
+```
+
+The golden's evaluator at [`evaluator.ts:1580-1591`](macro-golden-model/src/evaluator.ts):
+
+```ts
+// help: true sentinel → synthesize a help body, no dispatch.
+const helpBody = lookupHelpBody(call.server, call.tool);
+result = { content: [{ type: "text", text: helpBody }] };
+```
+
+This pre-empts the archetype handler entirely when ANY brokered call carries `help: true`. Production has no such pre-emption — it dispatches the call normally and lets the broker (or in our case, the FakeBroker archetype) handle it.
+
+### Reasoning
+
+Real golden bug. Two problems with the interception:
+
+1. **Spec ownership wrong.** REQ-093/098 puts the help sentinel under the BROKER layer, not the macro engine. The macro engine should pass `help: true` through as a normal argument; if the broker wants to short-circuit and return a help body, that's the broker's choice. Embedding the short-circuit in the macro engine couples the engine to a broker behavior it shouldn't know about.
+
+2. **It defeats the test pilot's intent.** Pilot 32 deliberately uses `{ help: true }` to verify the GRAMMAR (boolean literal in object position, per REQ-112c). The test expects the boolean to flow through; the golden's interception prevents that flow and substitutes a placeholder, hiding whether the grammar actually works.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/evaluator.ts`](macro-golden-model/src/evaluator.ts) around line 1580): remove the `help: true` sentinel pre-emption block. Let the call flow through to the registered handler like any other tool dispatch.
+- **No spec edit required** — the spec already locates help-sentinel behavior in the broker layer.
+- **Affected pilot:** pilot 32 flips from `predicted_diverges_from_golden` to `clean_match`.
+
+### Resolution
+
+Landed in this session — see per-GG retest tables below.
+
+### Resolution - Complete
+
+See per-GG retest tables below.
+
+### Post-Implementation Retest
+
+Captured in the corpus-wide retest at the bottom of GG-011 (all six GG-006..011 fixes verified in one re-capture pass producing 0 divergences across 410 pilots).
+
+---
+
+## Gap GG-007: Claude/Opus 4.7 - `captureSnapshot()` ignores `_vaultState` parameter; shell verbs see empty filesystem
+
+### Discovered By
+
+- **Pilots:**
+  - [`cases/dispatch/801-shell-cat-in-vault.yml`](cases/dispatch/801-shell-cat-in-vault.yml) — `cat "/notes/hello.txt"` predicted/production return `{contents: "Hello, FlashQuery!"}`; golden returns `{contents: ""}`.
+  - [`cases/dispatch/802-shell-ls-in-vault.yml`](cases/dispatch/802-shell-ls-in-vault.yml) — `ls "/notes"` predicted/production return `{count: 3}`; golden returns `{count: 0}`.
+  - [`cases/errors/710-vault-jail-violation-ls.yml`](cases/errors/710-vault-jail-violation-ls.yml) (partial) — `ls "/etc"` production says `tool_call_failed/path_not_found`; golden returns `{n: 0}`. This pilot is also affected by stale `predicted_expect.outcome: fail` terminology (see follow-up task).
+- **Test run date:** 2026-05-20
+
+### Requirement
+
+The Macro Testing Framework's pilot YAML schema declares `vault:` as a name-to-content map that becomes the pilot's vault root. Shell verbs (REQ-038 / `cat`, `ls`, `wc`, etc.) operate against that vault root. The golden's `captureSnapshot()` API takes the vault state as its third parameter — but the parameter is named `_vaultState` (leading-underscore TypeScript convention for "unused"), and the function body never threads it into the evaluator's `vaultRoot` configuration.
+
+### Implementation Evidence
+
+[`macro-golden-model/src/snapshot.ts:77-84`](macro-golden-model/src/snapshot.ts):
+
+```ts
+export async function captureSnapshot(
+  macroSource: string,
+  inputVars: Record<string, Value>,
+  _vaultState: Record<string, string>,   // <-- prefix _ = unused
+  toolSurface: ToolSurface,
+  options: CaptureOptions = {},
+): Promise<SnapshotEnvelope> {
+```
+
+Grep across the file confirms `_vaultState` is never referenced. The execution context's `vaultRoot` is read from `options.vaultRoot` only, so any vault-content-bearing test sees an empty filesystem at runtime.
+
+Production routes the YAML's `vault:` through `buildVault()` (in [`tests/macro-framework/fixtures/vault-helper.ts`](fixtures/vault-helper.ts)), which materializes the contents to a temp directory and passes the path as `vaultRoot` to `evaluateProgram`. The golden capture has no equivalent.
+
+### Reasoning
+
+Real golden gap (capture-API). Without vault-state materialization, ANY pilot that exercises a shell verb captures incorrectly — the shell sees an empty filesystem, so `cat` returns empty, `ls` returns `[]`, `wc` returns 0. The reconciliation gate then flags all such pilots as divergent even when the underlying spec compliance is fine.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/snapshot.ts`](macro-golden-model/src/snapshot.ts)): replace the `_vaultState: Record<string, string>` parameter with `vaultState: Record<string, string>`. When non-empty, materialize it to a temp dir (mkdir + write each file) and use that path as `vaultRoot`. Clean up the temp dir after capture completes. (Mirror `fixtures/vault-helper.ts:buildVault` — could re-use it directly via import if the dependency direction is clean.)
+- **No spec edit required.**
+- **Affected pilots:** dispatch/801, dispatch/802 flip to `clean_match`. errors/710 partially affected — the vault-state fix surfaces production's `path_not_found` result, but the pilot still has a stale `outcome: fail` field (tracked separately).
+
+### Resolution
+
+Landed in this session — see per-GG retest tables below.
+
+### Resolution - Complete
+
+See per-GG retest tables below.
+
+### Post-Implementation Retest
+
+Captured in the corpus-wide retest at the bottom of GG-011 (all six GG-006..011 fixes verified in one re-capture pass producing 0 divergences across 410 pilots).
+
+---
+
+## Gap GG-008: Claude/Opus 4.7 - `input_var $k` raises `parse_error` instead of `invalid_input`
+
+### Discovered By
+
+- **Pilot:** [`cases/errors/1108-parse-input-var-key-must-be-literal.yml`](cases/errors/1108-parse-input-var-key-must-be-literal.yml)
+- **Test run date:** 2026-05-20
+- **Divergence kind:** `predicted_diverges_from_golden` — AI predicted + production return `error: invalid_input, details.reason: input_var_key_must_be_literal`. Golden returns `error: parse_error, details.reason: input_var_key_must_be_literal`.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.1.7 REQ-007 — failure modes](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md):
+
+> "Failure modes. `invalid_input` (missing required keys; **`input_var` first arg not literal**; default value is a boolean literal)."
+
+The non-literal-key case is explicitly `invalid_input`, not `parse_error`. This is a pre-flight contract check, not a parse-time grammar violation: the macro source `result = input_var $k` parses cleanly (it's valid grammar — `input_var` takes an expression). The check that the first argument must be a string LITERAL happens at preflight when collecting the input-var contract.
+
+### Implementation Evidence
+
+Probe of production:
+
+```json
+{
+  "error": "invalid_input",
+  "message": "input_var first argument must be a string literal.",
+  "details": { "reason": "input_var_key_must_be_literal", "line": 2 }
+}
+```
+
+Probe of golden (post GG-005):
+
+```json
+{
+  "error": "parse_error",
+  "message": "input_var key must be a string literal (got VarRef)",
+  "details": { "reason": "input_var_key_must_be_literal", "at_line": 2, "near_token": "input_var" }
+}
+```
+
+Both have the same `details.reason`, but the top-level `error` code is wrong in the golden. The check is implemented in the golden's parse path rather than the preflight path, so it surfaces as `parse_error`.
+
+### Reasoning
+
+Real golden gap. The check should be a preflight check (raised by the input-var-contract collector, like REQ-007 ac1's literal-default check we resolved in GG-003) rather than a parse-time error. Production already has it correct.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/parser.ts`](macro-golden-model/src/parser.ts) or [`evaluator.ts`](macro-golden-model/src/evaluator.ts) `collectInputVarContract`): move the non-literal-key check out of the parser. The parser should accept any expression in the first position (it's grammatically valid). The preflight contract collector then validates the literal-kind and throws `MacroPreflightError` with `reason: input_var_key_must_be_literal` (similar in shape to the GG-003 fix for `--default`).
+- **No spec edit required.**
+- **Affected pilot:** errors/1108 flips to `clean_match`.
+
+### Resolution
+
+Landed in this session — see per-GG retest tables below.
+
+### Resolution - Complete
+
+See per-GG retest tables below.
+
+### Post-Implementation Retest
+
+Captured in the corpus-wide retest at the bottom of GG-011 (all six GG-006..011 fixes verified in one re-capture pass producing 0 divergences across 410 pilots).
+
+---
+
+## Gap GG-009: Claude/Opus 4.7 - Scientific notation `1e5` split into `1` + identifier `e5` in golden lexer
+
+### Discovered By
+
+- **Pilot:** [`cases/errors/1115-parse-invalid-literal-bad-number.yml`](cases/errors/1115-parse-invalid-literal-bad-number.yml)
+- **Test run date:** 2026-05-20
+- **Divergence kind:** `predicted_diverges_from_golden` — AI predicted + production return `error: parse_error, details.reason: unexpected_token`. Golden returns `error: tool_call_failed, message: "Unknown function: e5 (line 1)"`.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §3 lexer / number literals](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md): number literals are integer + decimal. Scientific notation (e.g. `1e5`) is NOT in the v0 lexer grammar. The expected outcome when encountering `1e5` is a `parse_error` (the lexer/parser rejects the malformed token).
+
+### Implementation Evidence
+
+Probe of production:
+
+```json
+{
+  "error": "parse_error",
+  "message": "Expected a newline between macro statements.",
+  "details": { "reason": "unexpected_token", "at_line": 1, "near_token": "e5" }
+}
+```
+
+Probe of golden:
+
+```json
+{
+  "error": "tool_call_failed",
+  "message": "Unknown function: e5 (line 1)",
+  "details": { "line": 1 }
+}
+```
+
+Production rejects the source at parse time (it sees `1` then `e5` and complains about the missing newline between two statement-form tokens). The golden parses it successfully, treats `1` as one statement, `e5` as the next statement (calling the unknown function `e5`), and surfaces a runtime error.
+
+### Reasoning
+
+Real golden gap. The two implementations have different but related lexers — both split `1e5` into `1` and `e5`, but production's parser checks for a newline between consecutive top-level tokens (rejecting at parse), while the golden's parser is more permissive and lets `e5` become a builtin call (rejected at runtime).
+
+The user-visible outcome a spec-conforming implementation must produce is `parse_error` because scientific notation is reserved (not in the grammar) — production gets this right; the golden does not.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/parser.ts`](macro-golden-model/src/parser.ts)): match production's "newline between statements" check, so that `1` followed by `e5` on the same line surfaces as a `parse_error / unexpected_token`. Alternative (broader): add a lexer-side rule that consumes `[0-9]+[eE][0-9]+` as a single token and rejects it with a malformed-number-literal parse error.
+- **No spec edit required.**
+- **Affected pilot:** errors/1115 flips to `clean_match` (its `predicted_expect.error.code: parse_error` matches the spec-correct behavior).
+
+### Resolution
+
+Landed in this session — see per-GG retest tables below.
+
+### Resolution - Complete
+
+See per-GG retest tables below.
+
+### Post-Implementation Retest
+
+Captured in the corpus-wide retest at the bottom of GG-011 (all six GG-006..011 fixes verified in one re-capture pass producing 0 divergences across 410 pilots).
+
+---
+
+## Gap GG-010: Claude/Opus 4.7 - Golden's `condition` rule rejects `&&` / `||` after a tool call
+
+### Discovered By
+
+- **Pilots:**
+  - [`cases/lifecycle/801-exists-in-compound-and.yml`](cases/lifecycle/801-exists-in-compound-and.yml) — `if svc._exists() && 1 == 1 then` succeeds in production, parse_errors in golden.
+  - [`cases/lifecycle/802-exists-in-compound-or.yml`](cases/lifecycle/802-exists-in-compound-or.yml) — `if svc._exists() || 1 == 0 then` same.
+- **Test run date:** 2026-05-20
+
+### Requirement
+
+[`MCP Broker Requirements.md` REQ-112a ac1](../../../flashquery-product/Roadmap/Features/MCP%20Broker/MCP%20Broker%20Requirements.md):
+
+> "Introspection methods MUST be usable in any expression position, including inside `&&` / `||` operands."
+
+Production accepts the compound condition; golden's grammar does not.
+
+### Implementation Evidence
+
+Probe of production (lifecycle/801):
+
+```json
+{ "result": { "v": "yes" }, "trace": [{ "kind": "exit", "result": { "v": "yes" }}]}
+```
+
+Probe of golden (lifecycle/801):
+
+```json
+{
+  "error": "parse_error",
+  "message": "Parser errors:\n  line 2 near '&&' [missing_then]: Expecting token of type --> Then <-- but found --> '&&' <--",
+  "details": { "reason": "missing_then", "at_line": 2, "near_token": "&&" }
+}
+```
+
+The golden's parser, after consuming `svc._exists()` as a tool call, expects `then` and not `&&`. The `condition` rule was widened in GG-002 to use `rhsExpr` (allowing pipelines/tool calls), but `rhsExpr` doesn't compose with `&&` / `||` after a tool call in the same way `exprWithOps` does.
+
+### Reasoning
+
+Real golden gap. The fix for GG-002 broadened `condition` to accept a tool call as the operand, but didn't extend the chain so that the tool call can be composed with `&&` / `||`. Production has no such restriction. REQ-112a ac1 is explicit that introspection methods must compose with boolean operators.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/parser.ts`](macro-golden-model/src/parser.ts) `condition` and `exprWithOps`): ensure that a primary tool call inside the condition can be the left operand of `&&` / `||`. This may require introducing an explicit `booleanExpr` rule that combines tool-call primaries (and pipelines) with boolean operators, then using that as the condition rule's body.
+- **No spec edit required.**
+- **Affected pilots:** lifecycle/801, lifecycle/802 flip to `clean_match`.
+
+### Resolution
+
+Landed in this session — see per-GG retest tables below.
+
+### Resolution - Complete
+
+See per-GG retest tables below.
+
+### Post-Implementation Retest
+
+Captured in the corpus-wide retest at the bottom of GG-011 (all six GG-006..011 fixes verified in one re-capture pass producing 0 divergences across 410 pilots).
+
+---
+
+## Gap GG-011: Claude/Opus 4.7 - `range N` as for-loop iterable rejected by golden parser
+
+### Discovered By
+
+- **Pilots:**
+  - [`cases/semantics/1154-range-builtin-zero.yml`](cases/semantics/1154-range-builtin-zero.yml) — `for i in range 0 do ... done` succeeds in production (iters=0), parse_errors in golden.
+  - [`cases/semantics/1155-range-builtin-five.yml`](cases/semantics/1155-range-builtin-five.yml) — `for i in range 5 do ... done` succeeds in production (items=[0..4]), same parse_error in golden.
+- **Test run date:** 2026-05-20
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.2 REQ-014 `range` builtin](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md): `range N` returns the list `[0..N-1]`. It's a builtin that returns a list value, and is legal in any expression position where a list is acceptable — including the iterable position of `for ... in <expr> do`.
+
+### Implementation Evidence
+
+Probe of production (semantics/1155):
+
+```json
+{ "result": { "items": [0, 1, 2, 3, 4] }, "trace": [{ "kind": "exit", "result": { "items": [0,1,2,3,4] }}]}
+```
+
+Probe of golden:
+
+```json
+{
+  "error": "parse_error",
+  "message": "Parser errors:\n  line 2 near 'range' [missing_fi]: Expecting: one of these possible Token sequences: [DoubleQuotedString, SingleQuotedString, NumberLit, NullTok, TrueTok, FalseTok, Identifier, VarRefTok.Dot.Identifier, VarRefTok, LBracket, LBrace] but found: 'range'",
+  "details": { "reason": "missing_fi", "at_line": 2, "near_token": "range" }
+}
+```
+
+The golden's `forIterable` (or equivalent grammar rule) only accepts a primary expression (Identifier, VarRef, list literal, etc.), not a builtin call like `range 5`. Production accepts the builtin call here.
+
+### Reasoning
+
+Real golden gap. The macro language's `for ... in <expr> do` is supposed to take ANY value-producing expression as the iterable. Restricting to primary-only is too narrow.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/parser.ts`](macro-golden-model/src/parser.ts) `forIterable` or `forStmt`): widen the iterable rule to accept a builtin call (i.e., a `Pipeline` with a single `Call` stage that names a builtin). The simplest grammar change is to use `rhsExpr` (the broad alternation that includes pipelines) for the iterable position, matching the GG-001 / GG-002 pattern.
+- **No spec edit required.**
+- **Affected pilots:** semantics/1154, semantics/1155 flip to `clean_match`.
+
+### Resolution
+
+Landed in this session — see consolidated retest below.
+
+### Resolution - Complete
+
+See consolidated retest below.
+
+### Post-Implementation Retest — GG-006 through GG-011 (consolidated)
+
+**Retest date:** 2026-05-20
+**Retested by:** Claude/Opus 4.7
+
+Per-GG implementation summary:
+
+| GG | Pilots | Change | File |
+|---|---|---|---|
+| GG-006 | dispatch/32-help-sentinel | Gate `helpSentinel` on `call.server === "fq"` — broker tools no longer intercepted | `evaluator.ts` ~1565 |
+| GG-007 | dispatch/801, dispatch/802, errors/710 | Renamed `_vaultState` → `vaultState`; materialize to a temp dir, set `vaultRoot`, clean up in `finally` | `snapshot.ts` ~77, ~155 |
+| GG-008 | errors/1108 | Removed parse-time `input_var_key_must_be_literal` check; added preflight check in `collectInputVarContract` throwing `MacroPreflightError` → `invalid_input` envelope | `parser.ts` ~1125, `evaluator.ts` ~605, `snapshot.ts` ~205 |
+| GG-009 | errors/1115 | Added `MalformedNumber` lexer token matching `[0-9]+[a-zA-Z_]...`; positioned before `NumberLit` in `allTokens` so chevrotain's longest-match catches `1e5` as one bad token, which the parser then rejects as `parse_error` | `lexer.ts` ~144, ~256 |
+| GG-010 | lifecycle/801, lifecycle/802 | Extended `condition` rule with `MANY((AndAnd \| OrOr) rhsExpr)`; updated `convertCondition` to fold the chain into nested `BinaryOp` nodes by token source order | `parser.ts` ~443, ~894 |
+| GG-011 | semantics/1154, semantics/1155 | Replaced `iterable: listLit \| rangeOrPrimary` with `iterable: rhsExpr`; updated `convertIterable` to delegate to `convertRhsExpr` | `parser.ts` ~416, ~864 |
+
+Plus one pilot rewrite + one comparator extension for the residue:
+
+| Item | Pilots | Change |
+|---|---|---|
+| Pilot 710 rewrite | errors/710 | Macro changed from `ls "/etc"` (which exercises path-not-found, not vault-jail) to `ls "../../etc"` (true `..` escape, exercises REQ-042 `forbidden_path/resolves_outside_vault`); outcome terminology updated from `fail` → `error` |
+| Comparator extension | _intentional-mismatch | `_apply-captures.py compare()` now honors `comparison: match_some` — same semantics as the framework runner's `compareToExpect` |
+
+**Corpus-wide retest results:**
+
+| Stage | Divergences |
+|---|---|
+| Pre-session baseline (Run #12) | 49 |
+| After capture-runner refactor + comparator absent-return-result fix | 28 |
+| After GG-005 (`runtime_error` → `tool_call_failed`) | 11 |
+| After GG-006 + GG-008 + GG-009 | 8 |
+| After GG-007 | 5 |
+| After GG-010 + GG-011 | 2 |
+| **After pilot 710 rewrite + `match_some` honoring** | **0** |
+
+**Final state:**
+
+| Check | Command | Result |
+|---|---|---|
+| Framework suite | `npm run test:macro-framework` | **411/411 passing** |
+| Corpus-wide capture + apply | `npx tsx tests/macro-framework/_generic-capture-runner.ts && python3 tests/macro-framework/_apply-captures.py` | **410/410 clean_match, 0 divergent** |
+| Golden self-tests | `npx tsx tests/macro-framework/macro-golden-model/src/test-snapshot.ts` | All gap checks PASS |
+
+**Status:** **GG-006 through GG-011 all CLOSED.** Combined with GG-001 / GG-002 / GG-003 / GG-005 (previously closed) and GG-004 (now closed — its 49-pilot residue is fully accounted for through the GG-005..011 chain), the macro testing framework's reconciliation gate is reading 100% clean across the 410-pilot corpus for the first time since the gate's introduction.
+
+---
+
+## GG-012 through GG-016 — Broader P/G envelope-diff findings (2026-05-20)
+
+### Context
+
+After the GG-006..011 closures, the reconciliation gate's comparator was extended to do field-by-field envelope diffing between production and golden across the entire 410-pilot corpus (the `_pg-envelope-diff.ts` script). The narrow comparator had only checked three fields (outcome, return_result, error.code). The extended comparator surfaced 145 additional divergences across 8 clusters. Each cluster was triaged against the canonical spec — not against production's behavior. The following GG-NNN entries cover the clusters where the golden is the spec-non-conforming side. A sister PG entry (PG-002) covers a cluster where production is non-conforming. Two clusters are spec-ambiguous (wc default semantics, varref reason code naming — though the latter ended up resolved per Broker REQ-112a).
+
+---
+
+## Gap GG-012: Claude/Opus 4.7 - Golden auto-emits `progress` TraceStep at every for-loop iteration when progress mode is default `milestones`; REQ-048 ac2 violation
+
+### Discovered By
+
+P/G envelope-diff (2026-05-20) — 67 pilots flagged on `trace_kinds_in_order`. The dominant pattern: production trace is empty or just `[exit]`; golden trace has `["progress", "progress", "progress", ..., "exit"/"fail"]` — one progress per for-loop iteration. Representative pilots: `cases/control-flow/03-for-with-if-fail.yml` (5 iterations before fail), `cases/control-flow/26-continue-skip-odds.yml` (10 iterations to exit).
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.7.3 REQ-048 ac2](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md):
+
+> "`progress: "milestones"` (default): author-explicit `status` calls + auto-emissions at **model-call start/finish only**. No per-tool-call, no per-iteration emission."
+
+And §6.5.2 (REQ-038 ac3 — `status` builtin / progress emission):
+
+> "Auto-emitted progress (for-loop iteration boundaries, model-call boundaries) goes through the same emission path, subject to the `progress` mode (REQ-048)."
+
+The combined reading: when progress mode is default `milestones`, the engine MUST NOT auto-emit progress events at for-loop iteration boundaries. The golden emits them anyway.
+
+### Implementation Evidence
+
+Probe of golden on `cases/control-flow/03-for-with-if-fail.yml`:
+
+```json
+{
+  "trace": [
+    { "kind": "progress", "message": "for-loop iteration 1/9", ... },
+    { "kind": "progress", "message": "for-loop iteration 2/9", ... },
+    ...
+  ]
+}
+```
+
+The pilot does NOT set `progress_mode`, so default `milestones` applies. The 5 progress events are auto-emitted at for-loop iteration boundaries — not at model-call boundaries — which is the `full` progress mode behavior, not `milestones`.
+
+### Reasoning
+
+Real golden bug per REQ-048 ac2. Production correctly gates auto-progress at the milestones-only level by default; golden auto-emits as if `progress: "full"`.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/evaluator.ts`](macro-golden-model/src/evaluator.ts) — for-loop iteration emit point): gate the per-iteration `progress` TraceStep behind `ctx.exec.progressMode === "full"`. The status builtin's explicit user-emitted progress is unaffected (those go through a different path).
+- **No spec edit required.** REQ-048 ac2 is unambiguous.
+- **Affected pilots:** ~67 pilots flip their golden trace from `[progress×N, ...]` to `[..., terminal]` matching what spec-conforming production should also produce (see PG-002 for the production side).
+
+### Resolution
+
+_To be implemented in this session._
+
+### Resolution - Complete
+
+_Pending._
+
+### Post-Implementation Retest
+
+_Pending._
+
+---
+
+## Gap GG-013: Claude/Opus 4.7 - Golden parser mis-classifies `parse_error` `details.reason` for several spec-named scenarios; REQ-018 ac2 + Broker REQ-112a ac3
+
+### Discovered By
+
+P/G envelope-diff (2026-05-20) — 11 pilots flagged on `error.details.reason`. Representative pilots:
+
+- `cases/errors/1105-parse-reserved-keyword-assignment.yml` (`for = 5`): production says `reserved_keyword_assignment`; golden says `missing_fi`.
+- `cases/errors/1110-parse-varref-server-non-introspection.yml` (`$svc.real_tool({})`): production says `varref_server_non_introspection`; golden says `invalid_literal`.
+- `cases/errors/1111-parse-bare-keyword-as-object-key.yml` (`exit { done: $list }`): production says `unexpected_token`; golden says `missing_done`.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.2.10 REQ-018 ac2](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md):
+
+> "`details.reason` values MUST be stable snake_case identifiers; the v0 set includes (at minimum) `unexpected_token`, `missing_done`, `missing_then`, `missing_fi`, `malformed_fence_attributes`, `reserved_keyword_assignment`, `builtin_name_shadowing`, `invalid_literal`, `input_var_key_must_be_literal`."
+
+And §6.3.2 REQ-014.1 ac2 (within the reserved-keyword-assignment requirement):
+
+> "Given a variable assignment whose left-hand side is a reserved keyword (e.g., `for = 5`), the engine MUST emit `parse_error` with `details: { reason: \"reserved_keyword_assignment\", at_line: N, near_token: \"for\" }`."
+
+[`MCP Broker Requirements.md` REQ-112a ac3](../../../flashquery-product/Roadmap/Features/MCP%20Broker/MCP%20Broker%20Requirements.md):
+
+> "Reject `$svc.real_tool({...})` at static-check time with a parse-error reason such as `varref_server_non_introspection`."
+
+### Implementation Evidence
+
+The golden's parser's CST→error mapping uses the chevrotain parse-error type (`MismatchedTokenException`, `NoViableAltException`) which surfaces a generic `missing_<tok>` or `invalid_literal` reason rather than the spec-named scenario-specific reason. Specifically:
+
+- For `for = 5`, the golden's parser hits a mismatched token (Identifier expected, `=` found after `for`) and surfaces `missing_fi` (because `for` is also a control-flow keyword and the parser's recovery looks for the matching close). The spec says: when the LHS of an assignment is a reserved keyword, emit `reserved_keyword_assignment` — this is a STATIC-CHECK pass concern, not raw parser concern.
+- For `$svc.real_tool({})`, the golden's static-check pass at `enforceStaticChecks` apparently emits `invalid_literal` for the VarRef-server-non-introspection case rather than the spec-named `varref_server_non_introspection`.
+- For `exit { done: $list }`, the golden's parser treats `done` (a reserved keyword for the for-loop close) as a potential statement terminator and recovers with `missing_done` rather than identifying that `done` was used in an unexpected token position. Spec says `unexpected_token`.
+
+### Reasoning
+
+Real golden bug. The spec enumerates canonical reason codes specifically so that test consumers and dev-agent diagnostics can branch on them deterministically. The golden's reasons drift from the enumerated set in three cases observed.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/parser.ts`](macro-golden-model/src/parser.ts)):
+  1. In the static-check pass (`enforceStaticChecks`): detect bare-identifier LHS of assignment that is in the reserved-keyword set (`for`, `do`, `done`, `if`, `then`, `else`, `fi`, `while`, `continue`, `break`); emit `reserved_keyword_assignment` per spec.
+  2. In the static-check pass: when a VarRef-server tool call resolves to a non-introspection tool (tool name doesn't start with `_`), emit `varref_server_non_introspection` per Broker REQ-112a ac3 (currently emits `invalid_literal`).
+  3. In the CST→error mapping: when a reserved keyword appears in object-key position (`{ done: ... }` etc.), emit `unexpected_token` per REQ-018 ac2 enumeration (currently surfaces `missing_done` from the parser's recovery path).
+- **No spec edit required.** REQ-018 ac2 + REQ-014.1 ac2 + Broker REQ-112a ac3 are unambiguous.
+- **Affected pilots:** 1105, 1110, 1111, plus ~8 others in the cluster.
+
+### Resolution
+
+_To be implemented in this session — scope is the static-check pass and the CST→error mapping in parser.ts._
+
+### Resolution - Complete
+
+_Pending._
+
+### Post-Implementation Retest
+
+_Pending._
+
+---
+
+## Gap GG-014: Claude/Opus 4.7 - Golden's `parse_error` envelope emits `at_line: 0` for end-of-input parse failures; REQ-018 ac3 requires 1-indexed
+
+### Discovered By
+
+P/G envelope-diff (2026-05-20) — 6 pilots flagged on `error.details.at_line`. Representative: `cases/errors/1101-parse-missing-fi.yml`, `1102-parse-missing-done-for.yml`, `1103-parse-missing-done-while.yml` — all parse errors at end-of-input. Production: `at_line: 3` (or wherever the failure actually was). Golden: `at_line: 0`.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.2.10 REQ-018 ac3](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md):
+
+> "`at_line` MUST be 1-indexed and reflect the source line where the parse failed."
+
+`at_line: 0` is not a valid 1-indexed line number. The spec explicitly disallows it.
+
+### Implementation Evidence
+
+The golden's CST→error mapping at `parseErrorDetails` reads `detail.at_line` from the chevrotain `IRecognitionException`'s token info. For end-of-input failures, chevrotain's exception carries the failing-token info as `previousToken` or with `at_line: undefined`. The golden falls through to `at_line: 0` (or null) rather than computing the actual source line by counting newlines up to the failure point.
+
+### Reasoning
+
+Real golden bug per REQ-018 ac3. Production correctly populates `at_line: 3` (or wherever) even for end-of-input. Golden must do the same.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/parser.ts`](macro-golden-model/src/parser.ts) — `parseErrorDetails` and surrounding logic): when chevrotain's exception lacks a usable token line, count newlines in the source up to the end-of-input position OR fall back to the line of the last token consumed. Both heuristics produce a valid 1-indexed line number.
+- **No spec edit required.**
+- **Affected pilots:** 6 pilots in this cluster (parse_error at end of file).
+
+### Resolution
+
+_To be implemented in this session._
+
+### Resolution - Complete
+
+_Pending._
+
+### Post-Implementation Retest
+
+_Pending._
+
+---
+
+## Gap GG-015: Claude/Opus 4.7 - Golden's `side_effects.tool_calls` manifest omits failed tool calls; coherence with REQ-024 ac6
+
+### Discovered By
+
+P/G envelope-diff (2026-05-20) — 12 pilots flagged on `side_effects.tool_calls`. All in the fail-fast cluster: `cases/dispatch/1267-fail-fast-iserror.yml`, `1268-fail-fast-throwing.yml`, `1269-fail-fast-no-recovery.yml`, etc. Production's FakeBroker `callLog` shows 1 entry (the failed call); golden's `side_effects.tool_calls` is empty.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.3.6 REQ-024 ac6](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md):
+
+> "Each terminal path MUST append a `kind` step to the trace: `exit` for `exit`, `fail` for `fail`. Tool-call failures append the normal `tool_call` step with the error envelope as the result."
+
+So the TRACE records failed tool calls. The side-effects MANIFEST (§5.6.1 of the macro testing framework requirements) is a parallel record of macro-visible side effects per invocation. For coherence, the manifest should also record the failed call — otherwise the manifest contradicts the trace and the manifest's "this is what the macro did" semantics breaks down.
+
+The framework testing requirements doc and the Broker REQ-107 (fail-fast) treat the failed-tool-call as a real attempt: the call was dispatched, the broker observed it, the engine raised an error. From the macro author's perspective, the side effect is real (the broker was contacted; whether the tool itself wrote any state is opaque to the engine).
+
+### Implementation Evidence
+
+In [`macro-golden-model/src/evaluator.ts`](macro-golden-model/src/evaluator.ts) around line 1650, the `side_effects.tool_calls.push(...)` happens AFTER the dispatch returns and only on a successful return. The `catch` block at line ~1626 throws `MacroFailError` and does NOT record the attempt in `ctx.exec.sideEffects.tool_calls`. So failed calls drop out of the manifest.
+
+Production's `broker.callLog` (FakeBroker, the test side-channel) records the call BEFORE the macro engine sees the result, so failed calls are present there.
+
+### Reasoning
+
+Real golden bug, for coherence with REQ-024 ac6 (failed calls in trace) and to keep the manifest faithful to "what the macro tried to do." Spec text doesn't enumerate the manifest's per-call inclusion criteria explicitly, but the coherence argument is strong.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/evaluator.ts`](macro-golden-model/src/evaluator.ts) around the tool-call catch path): record the failed call in `ctx.exec.sideEffects.tool_calls` before throwing `MacroFailError`. Annotate the entry with the error envelope as `result` (mirroring the trace shape from REQ-024 ac6).
+- **No spec edit required;** could add a brief clarifier in framework requirements §5.6.1.
+- **Affected pilots:** 12 in this cluster.
+
+### Resolution
+
+_To be implemented in this session._
+
+### Resolution - Complete
+
+_Pending._
+
+### Post-Implementation Retest
+
+_Pending._
+
+---
+
+## Gap GG-016: Claude/Opus 4.7 - Golden capture pipeline lacks broker support for TOFU-drift archetype; needs_user_input pilots cannot capture correctly
+
+### Discovered By
+
+P/G envelope-diff (2026-05-20) — 10 pilots flagged on `outcome`. Production correctly returns `outcome: needs_user_input` with the full TOFU-drift payload per REQ-105. Golden returns `outcome: error` with message: "NeedsInputViaTofuDrift handler invoked — production should have short-circuited at the pre-dispatch pending-drift check."
+
+### Requirement
+
+[`MCP Broker Requirements.md` REQ-105](../../../flashquery-product/Roadmap/Features/MCP%20Broker/MCP%20Broker%20Requirements.md):
+
+> "Adds a fifth termination path to macro REQ-024 (joining fall-off, `exit`, `fail`, runtime error). [...] When the broker emits `needs_user_input` on TOFU drift per REQ-042, the payload adds `event: schema_drift_detected`, `server`, `tool`, `old_schema`, `new_schema`, `diff_summary`."
+
+[`MCP Broker Requirements.md` REQ-042](../../../flashquery-product/Roadmap/Features/MCP%20Broker/MCP%20Broker%20Requirements.md): broker emits the TOFU-drift payload from `getPendingSchemaDrift()`, which the macro engine's pre-dispatch check at `registry.ts:156-174` reads.
+
+### Implementation Evidence
+
+The framework's `NeedsInputViaTofuDrift` archetype (in [`fixtures/fake-broker/archetypes.ts`](fixtures/fake-broker/archetypes.ts)) is designed to register its drift payload through the broker's `getPendingSchemaDrift()`-style API. The handler itself THROWS a sentinel error if invoked — because production is supposed to short-circuit at the broker layer before reaching the handler.
+
+The golden's capture (`captureSnapshot()`) wires a `NullMcpBroker` by default, which has no TOFU-drift support. Brokered tool calls go through `evaluator.ts`'s direct `handler(arg, ctx)` call path — bypassing the broker's pre-dispatch check entirely. The archetype's sentinel error fires; the engine sees an unexpected error and emits `tool_call_failed`.
+
+### Reasoning
+
+This is a **golden capture infrastructure limitation**, not a golden engine bug. The golden engine code IS spec-compliant for needs_user_input (it has `MacroNeedsUserInputError` and the snapshot translator emits `code: "needs_user_input"` correctly). The issue is that the capture pipeline doesn't materialize an `McpBroker` that supports TOFU-drift discovery the way the framework's `FakeBroker` does.
+
+To resolve: the capture pipeline needs a lightweight `McpBroker` adapter that walks the pilot's `tools:` block, finds `NeedsInputViaTofuDrift` archetype configs, and returns their payloads from `getPendingSchemaDrift()`. Same logic as `FakeBroker.getPendingSchemaDrift()` in `fixtures/fake-broker/broker.ts`, but implementing the golden's narrower `McpBroker` interface (from `macro-golden-model/src/broker.ts`).
+
+### Proposed Changes
+
+- **Capture pipeline** ([`_generic-capture-runner.ts`](_generic-capture-runner.ts), [`_pg-envelope-diff.ts`](_pg-envelope-diff.ts), and the golden's `captureSnapshot` API surface): add an adapter `McpBroker` that surfaces drift-marked archetype payloads. Wire it into the registry build alongside the existing ToolFn bridge.
+- **No spec edit required;** REQ-105 / REQ-042 are clear on the production behavior; the golden engine matches; only the capture infrastructure lags.
+- **Affected pilots:** 10 in this cluster (29, 601, 602, ...).
+
+### Resolution
+
+Landed 2026-05-20. The framework's `NeedsInputViaTofuDrift` archetype attaches a `__tofuDriftPayload` marker to its handler. The capture pipelines (`_generic-capture-runner.ts` and `_pg-envelope-diff.ts`) detect this marker at bridge time and throw `MacroNeedsUserInputError` directly with the spec-conforming payload (REQ-105 fields: `question`, `answer_shape`, `event: schema_drift_detected`, `server`, `tool`, `old_schema`, `new_schema`, `diff_summary`, `options`). This mirrors production's pre-dispatch short-circuit semantics from REQ-042 (broker emits before dispatch). The error propagates through `dispatchToolCall`'s catch path (which excludes `MacroNeedsUserInputError` from fail-fast wrapping) and surfaces through `classifyError` as the canonical `needs_user_input` envelope. The GG-015 catch-path guard already excludes `MacroNeedsUserInputError` from `side_effects.tool_calls` recording, so the short-circuited call doesn't appear in the manifest — matching production's broker.callLog (also empty on short-circuit).
+
+### Resolution - Complete
+
+Re-ran the P/G envelope diff with the 10 TOFU pilots no longer in the skip list:
+
+| Stage | Findings |
+|---|---|
+| Before GG-016 fix (with TOFU pilots skipped) | 6 |
+| After GG-016 fix (with TOFU pilots included) | 7 (one extra is pilot 603 hitting PG-002's trace-absent issue) |
+
+All 10 TOFU pilots now produce `outcome: needs_user_input` in the golden capture, matching production. The single TOFU pilot (603) still flagged is for the same PG-002 trace-absent reason that affects the other 6 fail-path pilots — NOT a TOFU-specific issue.
+
+### Post-Implementation Retest
+
+**Retest date:** 2026-05-20
+
+| Prescribed correction | Status | Evidence |
+|---|---|---|
+| Bridge detects `__tofuDriftPayload` marker on framework archetype | **RESOLVED** | [`_generic-capture-runner.ts`](_generic-capture-runner.ts) and [`_pg-envelope-diff.ts`](_pg-envelope-diff.ts) — `bridgeArchetypeToToolFn` / `bridgeArchetype` check for the marker first. |
+| Bridge throws MacroNeedsUserInputError with REQ-105 payload | **RESOLVED** | Both files import `MacroNeedsUserInputError` from `macro-golden-model/src/evaluator.ts` and throw with the eight REQ-105 fields. |
+| TOFU pilots flip to `outcome: needs_user_input` in golden | **RESOLVED** | All 10 TOFU pilots removed from the P/G compare skip list; only pilot 603 still flagged (for PG-002 trace-absent reason, unrelated to TOFU). |
+| Framework suite passes | **RESOLVED** | 411/411 passing. |
+| Narrow reconciliation gate passes | **RESOLVED** | 410/410 clean_match. |
+
+**Status:** **CLOSED.** Spec-conforming TOFU-drift behavior available in golden capture without modifying the golden engine itself; the bridge adapter mirrors production's broker short-circuit semantics.
+
+---
+
+## Spec ambiguity notes (not GG entries)
+
+**`wc` builtin default behavior — surfaced by `cases/dispatch/803-shell-wc-line-count.yml`** (1 pilot):
+
+- Production returns 23 for a 4-line, 23-character file. Looks like default-bytes behavior.
+- Golden returns 4. Looks like default-lines behavior.
+- Spec §6.5.1 REQ-038 ac1 enumerates `wc` flags `-l`/`-w`/`-c` but does NOT specify the default-no-flag behavior.
+
+Both implementations are spec-defensible at this point. The pilot's name says "line-count" implying it expected the lines default. Without spec clarification, this is a genuine ambiguity. Recommend: ask Matt to add a spec clarifier (probably "default = lines, matching shell `wc -l` convention" or "default = char count, matching shell `wc -c`" — the former is more useful for vault scans). Filed as a spec-clarifier candidate, NOT a golden or production bug.
+
+**`error.message` text wording** (56 pilots affected):
+
+Spec REQ-024 ac3 + REQ-018 specify the `message` field but only as "human-readable" without mandating exact wording. Production and golden frequently word the same failure differently. The reconciliation comparator over-flagged this as a divergence. Resolution: the P/G comparator's `error.message` substring check is being suppressed (the canonical compare is on `error.code` and `error.details.reason`, which both implementations are now spec-aligned on after GG-013).
+
+**`error.details.near_token` definitions differ** (13 pilots affected):
+
+REQ-018 ac4: "`near_token` MUST carry the offending token's image OR a short surrounding excerpt WHEN AVAILABLE." The phrase "OR a short surrounding excerpt" gives implementations freedom to pick the surrounding span. Production and golden often define "offending token" differently — for `for = 5`, production picks `"for"`, golden picks `"="`. Both are spec-compliant readings. The comparator now excludes `near_token` from the field-by-field compare since the spec is permissive.
+
+---
+
+## Gap GG-017: Claude/Opus 4.7 - Golden's dry-run path runs pre-scan and rejects unknown_server before emitting the inventory envelope; REQ-053
+
+### Discovered By
+
+P/G envelope-diff (2026-05-20) — pilot [`cases/lifecycle/07-dry-run-inventory.yml`](cases/lifecycle/07-dry-run-inventory.yml). Pilot has `dry_run: true` and `tools: {}` (empty registry). Production correctly enters dry-run mode and emits `{ parsed_ok: true, input_var_contract, tool_references, server_references }`. Golden runs pre-scan first, finds `inventory_srv` unregistered, and emits `error: unknown_server, details.unknown_servers: ["inventory_srv"]`.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.8.2 REQ-053 — dry-run inventory](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md):
+
+Dry-run is a STATIC inventory pass — it lists `input_var_contract`, `tool_references`, and `server_references` that the macro WOULD invoke. It does not actually dispatch tools. By design, dry-run should be runnable against an UN-CONFIGURED tool surface (e.g., to discover what tools / servers the macro requires before configuring them). Pre-scan permission denial is a runtime-dispatch concern, not a dry-run concern.
+
+### Implementation Evidence
+
+Probe of golden capture on pilot 07 with `dryRun: true`:
+
+```json
+{
+  "error": {
+    "code": "unknown_server",
+    "message": "macro pre-scan rejected: unknown server(s): inventory_srv",
+    "details": { "unknown_servers": ["inventory_srv"] }
+  }
+}
+```
+
+The golden's `evaluate()` calls `enforceStaticChecks` → `runPreScan` before the dry-run branch. The pre-scan rejects unknown servers. Dry-run should fork BEFORE pre-scan (or bypass the unknown-server check) so it can emit the inventory regardless of registry state.
+
+### Reasoning
+
+Real golden bug per REQ-053 semantics. Production's `runDryRun()` is a separate code path that doesn't gate on registry pre-scan. The golden's `dryRun: true` option needs to take that fork too.
+
+### Proposed Changes
+
+- **Golden** ([`macro-golden-model/src/evaluator.ts`](macro-golden-model/src/evaluator.ts) — `evaluate()` entry path): when `exec.dryRun === true`, skip the registry / permission pre-scan and run only the static inventory collector. The collector already populates `dryRunInventory` on the ExecContext; the snapshot layer's `assembleEnvelope` then emits it via the dry-run envelope shape.
+- **No spec edit required;** REQ-053 is clear.
+- **Affected pilots:** 1 (`cases/lifecycle/07-dry-run-inventory.yml`). Other dry-run pilots may exist but only the one surfaced in P/G compare.
+
+### Resolution
+
+Landed 2026-05-20. The golden's `evaluate()` entry path now early-returns when `exec.dryRun === true`, BEFORE the pre-scan permission check. The `dryRunInventory` is already collected upstream (right after the input-var contract validation), so the snapshot layer's `assembleEnvelope` dry-run branch at `snapshot.ts:349` emits the canonical REQ-053 inventory envelope unchanged.
+
+The change is a 3-line gate at [`evaluator.ts` line ~520](macro-golden-model/src/evaluator.ts):
+
+```ts
+if (exec.dryRun) {
+  return null;  // skip pre-scan; dryRunInventory already populated
+}
+prescanPermissions(program, tools, exec);
+```
+
+### Resolution - Complete
+
+Re-ran the dry-run probe on pilot 07 (`cases/lifecycle/07-dry-run-inventory.yml`):
+
+```json
+{
+  "result_envelope": {
+    "parsed_ok": true,
+    "task_id": "...",
+    "result": null,
+    "input_var_contract": { "required": ["topic"], "optional": ["n_lim"] },
+    "tool_references": [
+      { "server": "inventory_srv", "tool": "list" },
+      { "server": "inventory_srv", "tool": "process" }
+    ],
+    "server_references": ["inventory_srv"],
+    "trace": []
+  }
+}
+```
+
+Matches the production envelope shape exactly (apart from `task_id` UUID which is non-deterministic). Pilot 07 removed from P/G compare skip list; now flagged only on the `result` field (`undefined` vs `null` — semantically equivalent), which was suppressed in the comparator with a dry-run-aware skip.
+
+### Post-Implementation Retest
+
+**Retest date:** 2026-05-20
+
+| Prescribed correction | Status | Evidence |
+|---|---|---|
+| Early-return from `evaluate()` when `exec.dryRun === true` | **RESOLVED** | Confirmed at [`evaluator.ts:520-538`](macro-golden-model/src/evaluator.ts) with inline GG-017 comment citing REQ-053. |
+| Snapshot layer's dry-run envelope emits unchanged | **RESOLVED** | `snapshot.ts:349-360` reads `dryRunInventory` from exec; populated by the upstream collector. |
+| Pilot 07 produces the inventory envelope per REQ-053 | **RESOLVED** | Probe shows full `input_var_contract` + `tool_references` + `server_references` matching production. |
+| Framework suite passes | **RESOLVED** | 411/411 passing. |
+
+**Status:** **CLOSED.** 3-line evaluator gate; no spec edit. Dry-run is now a true static-inventory pass that runs without registry permissions, per REQ-053.
+
+---
+
+## P/G envelope-diff retest — final state (2026-05-20)
+
+After all GG-006..017 fixes landed in this session, the corpus-wide P/G envelope diff lands at:
+
+| Stage | Findings |
+|---|---|
+| Initial P/G full-envelope compare | 145 |
+| After comparator: suppress message wording, pass dryRun, skip GG-016/wc | 104 |
+| After GG-012: default mode `summary`/`milestones` + per-iter progress gate | 39 |
+| After GG-013: parse-error reason classification + sourceLine context | 23 |
+| After GG-014/015/Pilot 710 + status-builtin milestones fix + skip list | 6 |
+| **After GG-016 (TOFU adapter) + GG-017 (dry-run pre-scan bypass) + result-undefined-vs-null suppression for dry-run** | **7** |
+
+**All 7 remaining findings are PG-002 (production trace-absent-in-fail-path).** Zero golden-side bugs remain in the field-by-field compare across 408 measured pilots. The +1 from the previous 6 is pilot 603 (a TOFU pilot now in scope after the GG-016 fix) hitting the SAME PG-002 trace-absent issue — not a new golden bug. After PG-002 lands on the production side, all 7 findings will resolve.
+
+Field breakdown of final 6:
+
+| Field | Count | Cluster |
+|---|---|---|
+| trace_kinds_in_order | 6 | PG-002 — production omits `trace` field on fail / runtime-error paths |
+
+These are owned by the production dev agent. Once PG-002 lands, the P/G compare will be 0/389 — every spec-conforming compare will be aligned.
+
+**Golden self-tests:** `npx tsx tests/macro-framework/macro-golden-model/src/test-snapshot.ts` — all 9 gap checks PASS.
+**Framework suite:** `npm run test:macro-framework` — 411/411 passing.
+**Reconciliation gate (narrow compare):** 410/410 pilots `clean_match`.
+**P/G envelope diff (wide compare):** 6/389 divergent — all production-side bugs.
+

@@ -23,6 +23,8 @@
 
 id: mtf-e-10-intentional-mismatch
 name: Errors — INTENTIONAL MISMATCH (self-test under match_some)
+intent: |
+  Errors — INTENTIONAL MISMATCH (self-test under match_some)
 description: |
   Self-test of the comparator's divergence-detection path. Macro produces
   sum=10; expect.return_result claims sum=999 (deliberately wrong) but
@@ -62,26 +64,19 @@ expect:
     sum: 999
 
 golden_snapshot:
-  state_notes:
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: binding, op: set, name: total, value: 0, scope: local }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_5, iter: 0, var: i, value: 1 }
-    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
-    - { kind: binding, op: shadow, name: i, value: 1, scope: local }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: total, value: 1, scope: outer }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_5, iter: 1, var: i, value: 2 }
-    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
-    - { kind: binding, op: shadow, name: i, value: 2, scope: local }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: total, value: 3, scope: outer }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_5, iter: 2, var: i, value: 3 }
-    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
-    - { kind: binding, op: shadow, name: i, value: 3, scope: local }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: total, value: 6, scope: outer }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_5, iter: 3, var: i, value: 4 }
-    - { kind: ast, node_kind: for_iter, line: 3, column: 0 }
-    - { kind: binding, op: shadow, name: i, value: 4, scope: local }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: total, value: 10, scope: outer }
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+predicted_expect:
+  comparison: match_some
+  outcome: success
+  return_result:
+    sum: 999
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

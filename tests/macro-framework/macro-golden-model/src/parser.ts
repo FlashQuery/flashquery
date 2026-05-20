@@ -98,7 +98,8 @@ export type ParseErrorReason =
   | "lexer_error"
   // Tier 2 (Macro Testing Framework v0.2):
   | "loop_control_outside_loop"  // REQ-104: continue/break outside a for/while body
-  | "assign_to_self";            // REQ-103: _self.* is read-only at parse time
+  | "assign_to_self"             // REQ-103: _self.* is read-only at parse time
+  | "varref_server_non_introspection"; // Broker REQ-112a ac3: `$svc.real_tool()` rejected
 
 export type ParseErrorDetail = {
   reason: ParseErrorReason;
@@ -413,23 +414,16 @@ class MacroParser extends CstParser {
 
   // Iterable: either a $var/$obj.field, a list literal, or a range expression
   // (`<start>..<end>`). The range form is detected by lookahead.
+  // GG-011 (2026-05-20): the `iterable` rule now uses `rhsExpr`, which
+  // accepts a list literal, a range op (e.g., `0..5`), a primary (varref /
+  // identifier), AND a pipeline (e.g., `range 5`, `count $items`). The
+  // previous grammar restricted iterables to `listLit | rangeOrPrimary`
+  // — primary-only — which rejected builtin invocations like `range 5`
+  // even though production accepts them per REQ-014. The runtime evaluator
+  // already enforces "iterable must evaluate to a list" so the parser
+  // doesn't need to constrain shape here.
   private iterable = this.RULE("iterable", () => {
-    this.OR([
-      {
-        GATE: () => this.LA(1).tokenType === LBracket,
-        ALT: () => this.SUBRULE(this.listLit),
-      },
-      { ALT: () => this.SUBRULE(this.rangeOrPrimary) },
-    ]);
-  });
-
-  // Iterable primary — a single primary or a range. Used by `for X in N..M`.
-  private rangeOrPrimary = this.RULE("rangeOrPrimary", () => {
-    this.SUBRULE(this.primary);
-    this.OPTION(() => {
-      this.CONSUME(DotDot);
-      this.SUBRULE2(this.primary);
-    });
+    this.SUBRULE(this.rhsExpr);
   });
 
   // condition := (boolean expression) — accepts the BROAD rhsExpr form
@@ -440,9 +434,22 @@ class MacroParser extends CstParser {
   // to `rhsExpr` on 2026-05-19 as GOLDEN_GAPS.md GG-002 (production
   // already accepted them; spec ratified). Optional leading `!`
   // negation remains supported and applies to the resulting value.
+  // GG-010 (2026-05-20): condition rule now allows `&&` / `||` chains
+  // between rhsExpr operands. Previously, after consuming a tool call or
+  // pipeline via rhsExpr, the parser expected `then` immediately and
+  // rejected `&&` / `||`. Per REQ-112a ac1, introspection methods (and
+  // other value-producing expressions) MUST be usable inside boolean
+  // composition operators. Production allows this; the golden now matches.
   private condition = this.RULE("condition", () => {
     this.OPTION(() => this.CONSUME(Bang));
     this.SUBRULE(this.rhsExpr);
+    this.MANY(() => {
+      this.OR([
+        { ALT: () => this.CONSUME(AndAnd) },
+        { ALT: () => this.CONSUME(OrOr) },
+      ]);
+      this.SUBRULE2(this.rhsExpr);
+    });
   });
 
   private arg = this.RULE("arg", () => {
@@ -518,14 +525,50 @@ const parserInstance = new MacroParser();
 // Heuristic mapping from Chevrotain parser-error messages to a canonical
 // reason code (REQ-018 / item 1). The reason set is small and the engine
 // emits canonical strings.
-function inferParseErrorReason(msg: string, nearToken?: string): ParseErrorReason {
+//
+// GG-013 fix (2026-05-20, revised): the previous version only looked at
+// the `nearToken` (token that failed to match). For cases like `for = 5`,
+// chevrotain's nearToken is `=` (the token that failed) — not `for` (the
+// reserved keyword that triggered the error). We must ALSO look at the
+// source line itself to see if a reserved keyword is being assigned to.
+function inferParseErrorReason(
+  msg: string,
+  nearToken: string | undefined,
+  sourceLine: string | undefined,
+): ParseErrorReason {
   const m = msg.toLowerCase();
-  if (m.includes("done")) return "missing_done";
-  if (m.includes("then")) return "missing_then";
-  if (m.includes("fi")) return "missing_fi";
-  if (m.includes("expecting --> do")) return "missing_do";
+
+  // SPEC-CANONICAL: when the source LINE begins with a reserved keyword
+  // followed by `=`, that's an assign-to-reserved-keyword case per
+  // REQ-014.1 ac2. The chevrotain error often fires AFTER the `=` so the
+  // raw near_token doesn't carry the keyword.
+  if (sourceLine) {
+    const trimmed = sourceLine.trim();
+    const lhsMatch = trimmed.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*=/);
+    if (lhsMatch) {
+      const lhs = lhsMatch[1];
+      if (BUILTIN_NAMES.has(lhs)) return "builtin_name_shadowing";
+      if (RESERVED_KEYWORDS.has(lhs)) return "reserved_keyword_assignment";
+    }
+  }
+
+  // SPEC-CANONICAL: explicit near_token discriminators.
   if (nearToken && BUILTIN_NAMES.has(nearToken)) return "builtin_name_shadowing";
-  if (nearToken && RESERVED_KEYWORDS.has(nearToken)) return "reserved_keyword_assignment";
+
+  // Recovery-context discriminators (preserve `missing_*` for genuine
+  // missing-close cases per REQ-018 ac2's enumeration).
+  if (m.includes("expecting --> do") || m.includes("expecting token of type --> do <--")) return "missing_do";
+  if (m.includes("expecting --> done") || m.includes("expecting token of type --> done <--")) return "missing_done";
+  if (m.includes("expecting --> then") || m.includes("expecting token of type --> then <--")) return "missing_then";
+  if (m.includes("expecting --> fi") || m.includes("expecting token of type --> fi <--")) return "missing_fi";
+
+  // SPEC-CANONICAL: reserved-keyword as near_token in non-assignment
+  // contexts (e.g., `exit { done: $list }`) is unexpected_token, not
+  // missing_close. The recovery-context checks above already filtered
+  // those out — anything reaching here with a reserved-keyword near is
+  // an unexpected_token.
+  if (nearToken && RESERVED_KEYWORDS.has(nearToken)) return "unexpected_token";
+
   return "unexpected_token";
 }
 
@@ -551,15 +594,33 @@ export function parse(source: string): Program {
   const cst = parserInstance.program();
 
   if (parserInstance.errors.length > 0) {
+    // GG-014 fix (2026-05-20): per REQ-018 ac3, `at_line` MUST be 1-indexed
+    // and reflect the source line where parsing failed.
+    const sourceLines = source.split("\n");
+    const sourceLineCount = sourceLines.length;
     const errs: ParseErrorDetail[] = parserInstance.errors.map((e) => {
       const tok = e.token;
       const isEof =
         !tok ||
         tok.image === "" ||
         (tok as { tokenType?: { name?: string } }).tokenType?.name === "EOF";
-      const line = Number.isFinite(tok?.startLine) ? (tok.startLine as number) : 0;
+      let line: number = 0;
+      if (Number.isFinite(tok?.startLine)) {
+        line = tok!.startLine as number;
+      } else {
+        const prev = (e as { previousToken?: { startLine?: number } }).previousToken;
+        if (prev && Number.isFinite(prev.startLine)) {
+          line = prev.startLine as number;
+        } else {
+          line = sourceLineCount;
+        }
+      }
       const nearToken = tok?.image && !isEof ? tok.image : undefined;
-      const reason = inferParseErrorReason(e.message, nearToken);
+      // GG-013 revised: pass the source line where the error fired so
+      // inferParseErrorReason can recognize `<keyword> =` shapes that
+      // chevrotain's near_token doesn't reveal.
+      const sourceLine = line >= 1 && line <= sourceLines.length ? sourceLines[line - 1] : undefined;
+      const reason = inferParseErrorReason(e.message, nearToken, sourceLine);
       return {
         reason,
         at_line: line,
@@ -862,27 +923,36 @@ function convertBlock(node: CstNode): Statement[] {
 }
 
 function convertIterable(node: CstNode): Expr {
-  const lst = getRule(node, "listLit");
-  if (lst) return convertListLit(lst);
-  const rop = getRule(node, "rangeOrPrimary");
-  if (rop) return convertRangeOrPrimary(rop);
+  // GG-011 (2026-05-20): iterable rule now reads `rhsExpr` (broad — list
+  // literal, range op, primary, pipeline). Delegating to convertRhsExpr
+  // handles all four shapes uniformly. Previously this function dispatched
+  // on a narrower `listLit | rangeOrPrimary` rule pair.
+  const rhsCst = getRule(node, "rhsExpr");
+  if (rhsCst) return convertRhsExpr(rhsCst);
   throw new Error("Empty iterable");
-}
-
-function convertRangeOrPrimary(node: CstNode): Expr {
-  const primaries = getRules(node, "primary");
-  const dot = getTok(node, "DotDot");
-  const start = convertPrimary(primaries[0]);
-  if (!dot || primaries.length < 2) return start;
-  const end = convertPrimary(primaries[1]);
-  return { kind: "RangeOp", start, end } as RangeOp;
 }
 
 function convertCondition(node: CstNode): Expr {
   // Per GG-002: condition rule reads rhsExpr (broad — pipelines + tool
   // calls + comparisons), not just exprWithOps.
-  const rhsCst = getRule(node, "rhsExpr")!;
-  const inner = convertRhsExpr(rhsCst);
+  //
+  // GG-010 (2026-05-20): condition rule may include `&&` / `||` chains
+  // between rhsExprs (e.g., `if svc._exists() && 1 == 1 then`). Fold the
+  // chain into nested BinaryOp nodes left-to-right by combining the
+  // operator tokens in source order via their startOffset.
+  const rhsList = getRules(node, "rhsExpr");
+  const andAndToks = ((node.children as Children).AndAnd ?? []) as IToken[];
+  const orOrToks = ((node.children as Children).OrOr ?? []) as IToken[];
+  const opToks: { op: "&&" | "||"; startOffset: number }[] = [
+    ...andAndToks.map((t) => ({ op: "&&" as const, startOffset: t.startOffset })),
+    ...orOrToks.map((t) => ({ op: "||" as const, startOffset: t.startOffset })),
+  ].sort((a, b) => a.startOffset - b.startOffset);
+
+  let inner: Expr = convertRhsExpr(rhsList[0]);
+  for (let i = 0; i < opToks.length; i += 1) {
+    const right = convertRhsExpr(rhsList[i + 1]);
+    inner = { kind: "BinaryOp", op: opToks[i].op, left: inner, right } as BinaryOp;
+  }
   const bangTok = getTok(node, "Bang");
   if (bangTok) {
     const neg: Negation = { kind: "Negation", expr: inner };
@@ -988,11 +1058,13 @@ function convertListLit(node: CstNode): ListLit {
 // dispatch on tool calls is deferred.
 function checkToolCallStatic(tc: ToolCall): void {
   if (tc.serverVarRef === true && !tc.tool.startsWith("_")) {
+    // GG-013 fix (2026-05-20): use the spec-canonical reason code per
+    // Broker REQ-112a ac3 ("Reject `$svc.real_tool({...})` at static-check
+    // time with a parse-error reason such as `varref_server_non_introspection`").
+    // Previously the golden used `invalid_literal` as a placeholder; the
+    // broker spec now pins the canonical name.
     const err: ParseErrorDetail = {
-      reason: "invalid_literal", // closest existing reason — dev agent
-                                  // may want to introduce a more specific
-                                  // `varref_server_non_introspection`
-                                  // taxonomy when implementing REQ-112a.
+      reason: "varref_server_non_introspection",
       at_line: tc.line,
       near_token: `$${tc.server}.${tc.tool}`,
       message:
@@ -1123,20 +1195,13 @@ function enforceStaticChecks(program: Program): void {
     }
   }
   function visitCall(c: Call): void {
-    if (c.name === "input_var") {
-      // Item 11 / REQ-007 ac1: first positional arg must be a string literal.
-      const first = c.args.find((a) => a.kind === "PositionalArg");
-      if (!first || first.kind !== "PositionalArg" || first.value.kind !== "StringLit") {
-        const found = first?.value?.kind ?? "(missing)";
-        const err: ParseErrorDetail = {
-          reason: "input_var_key_must_be_literal",
-          at_line: c.line,
-          near_token: "input_var",
-          message: `input_var key must be a string literal (got ${found})`,
-        };
-        throw new ParseError(err.message, [err]);
-      }
-    }
+    // GG-008 fix (2026-05-20): the `input_var first arg must be a string
+    // literal` check used to throw a parse_error here. Per REQ-007's
+    // failure-mode list ("`input_var` first arg not literal" -> `invalid_input`)
+    // and production's behavior, this is a preflight contract violation, not
+    // a parse-time grammar violation. The check now lives in evaluator.ts's
+    // `collectInputVarContract`, which throws `MacroPreflightError` -> the
+    // envelope correctly emits `invalid_input` instead of `parse_error`.
     for (const a of c.args) visitExpr(a.value);
   }
   visit(program.statements);

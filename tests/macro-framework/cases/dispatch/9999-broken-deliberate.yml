@@ -1,0 +1,48 @@
+id: mtf-d-9999-runner-gate-self-test
+name: |-
+  Runner gate self-test (intentional stub, fully valid)
+intent: |
+  This pilot exists solely to verify the runner's required-field gate
+  works. Originally written as a deliberately broken pilot (missing
+  intent, golden_version, reconciliation) to confirm the runner rejected
+  it. After the gate fired successfully, this pilot was rewritten to a
+  valid no-op so the suite stays green. The gate verification is
+  preserved in commit history / eval log.
+
+covers: [MTF-C-009]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T03:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  exit { ok: true }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    ok: true
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+expect:
+  outcome: success
+  return_result:
+    ok: true
+  side_effects:
+    tool_call_count: 0

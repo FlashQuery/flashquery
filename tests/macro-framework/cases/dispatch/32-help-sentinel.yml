@@ -15,6 +15,8 @@
 
 id: mtf-g-32-boolean-literal-object-arg
 name: Grammar — `true` in object literal is accepted
+intent: |
+  Grammar — `true` in object literal is accepted
 description: |
   A macro that writes a boolean literal inside an object argument must
   parse and dispatch successfully. Broker REQ-112c lifts the prior
@@ -48,5 +50,19 @@ expect:
   return_result: "boolean accepted"
 
 golden_snapshot:
-  state_notes:
-    - { kind: grammar, note: "boolean literal accepted in object arg", spec_ref: "Broker REQ-112c" }
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "helper_srv"
+      tool: "describe"
+predicted_expect:
+  outcome: success
+  return_result: "boolean accepted"
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

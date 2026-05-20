@@ -1,0 +1,111 @@
+id: mtf-d-1309-behavioral-audit-aggregator
+name: |-
+  Behavioral complex — audit aggregator with compound validation + tri-state reasons
+intent: |
+  Validate pending transactions in `_self.frontmatter.pending` (list
+  of {id, amount, type}). A tx is valid if amount > 0 AND type is one
+  of 'debit'/'credit'/'transfer'. Valid → commit via ledger_srv.
+  Invalid → reject with specific reason: 'negative_amount' or
+  'invalid_type' or 'multiple' if both. Return commits and rejects.
+
+description: |
+  Behavioral test (Run #11.5). Compound (AND-of-two-clauses) validation
+  with tri-state error classification.
+
+covers: [MTF-C-009, MTF-D-101, MTF-I-101, MTF-S-007]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/audit.md"
+  frontmatter:
+    pending:
+      - { id: "t1", amount: 100, type: "debit" }
+      - { id: "t2", amount: -50, type: "credit" }
+      - { id: "t3", amount: 200, type: "weird" }
+      - { id: "t4", amount: -10, type: "weird" }
+      - { id: "t5", amount: 75, type: "transfer" }
+  title: "Audit"
+  tags: []
+  fq_id: "fq:doc:audit:001"
+
+macro: |
+  pending = $_self.frontmatter.pending
+  committed = []
+  rejected = []
+
+  for tx in $pending do
+    is_negative = $tx.amount <= 0
+    is_debit = $tx.type == "debit"
+    is_credit = $tx.type == "credit"
+    is_transfer = $tx.type == "transfer"
+    is_valid_type = $is_debit || $is_credit || $is_transfer
+
+    if $is_negative then
+      if $is_valid_type then
+        rejected = append $rejected { id: $tx.id, reason: "negative_amount" }
+      else
+        rejected = append $rejected { id: $tx.id, reason: "multiple" }
+      fi
+      continue
+    fi
+
+    if $is_valid_type then
+      ledger_srv.commit({ id: $tx.id, amount: $tx.amount, type: $tx.type })
+      committed = append $committed $tx.id
+    else
+      rejected = append $rejected { id: $tx.id, reason: "invalid_type" }
+    fi
+  done
+
+  exit {
+    committed: $committed,
+    rejected: $rejected
+  }
+
+input_vars: {}
+vault: {}
+tools:
+  ledger_srv:
+    archetype: JSONTextTool
+    tool_name: commit
+    value: { ok: true }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    committed: ["t1", "t5"]
+    rejected:
+      - { id: "t2", reason: "negative_amount" }
+      - { id: "t3", reason: "invalid_type" }
+      - { id: "t4", reason: "multiple" }
+  side_effects:
+    tool_call_count: 2
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    committed: ["t1", "t5"]
+    rejected:
+      - { id: "t2", reason: "negative_amount" }
+      - { id: "t3", reason: "invalid_type" }
+      - { id: "t4", reason: "multiple" }
+  side_effects:
+    tool_call_count: 2
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "ledger_srv"
+      tool: "commit"
+    - server: "ledger_srv"
+      tool: "commit"

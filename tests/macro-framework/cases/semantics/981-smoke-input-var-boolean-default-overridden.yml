@@ -66,24 +66,14 @@ predicted_expect:
 # REQ-112e's boolean-default acceptance.
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-19T22:00:00Z"
+  captured_at: "2026-05-20T15:29:48Z"
   golden_version: "0.3.0"
   divergence_kind: clean_match
-  spec_reference:
-    - "MCP Broker Requirements REQ-112e ac5"
-    - "MCP Broker Requirements REQ-112e ac7"
-    - "Macro Lang REQ-008 ac5"
   notes: |
-    Clean reconciliation across all three oracles. AI prediction,
-    golden capture, and production runtime all produced
-    {flag: false, explicit_null: null}: the explicit `false` overrode
-    the `true` default (REQ-112e ac5), and the explicit `null` wins
-    over the default (REQ-008 ac5 + REQ-112e ac7).
-
+    Clean three-oracle reconciliation. Captured by generic capture runner.
 golden_snapshot:
   captured_trace_kinds: ["exit"]
   captured_tool_calls: []
-
 expect:
   outcome: success
   return_result:

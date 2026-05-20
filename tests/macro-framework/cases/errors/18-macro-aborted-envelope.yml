@@ -10,6 +10,8 @@
 # generator (or its --mode=refresh) to update.
 id: mtf-e-18-macro-aborted-envelope
 name: Errors — macro_aborted envelope from direct fail()
+intent: |
+  Errors — macro_aborted envelope from direct fail()
 description: >-
   Macro calls `fail "..."` directly; verifies the engine produces the canonical macro_aborted envelope with the
   operator-supplied message intact (REQ-016 + REQ-024 + REQ-054 envelope shape).
@@ -45,13 +47,18 @@ expect:
     code: macro_aborted
     message_contains: 'boom: operator-supplied message'
 golden_snapshot:
-  state_notes:
-    - kind: ast
-      node_kind: assignment
-      line: 1
-      column: 0
-    - kind: binding
-      op: set
-      name: x
-      value: 1
-      scope: local
+  captured_trace_kinds: ["fail"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: 'boom: operator-supplied message'
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

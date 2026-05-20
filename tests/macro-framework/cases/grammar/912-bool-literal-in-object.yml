@@ -3,6 +3,8 @@
 
 id: mtf-g-912-bool-literal-in-object
 name: Grammar — boolean literal as object-literal value (REQ-112c ac2)
+intent: |
+  Grammar — boolean literal as object-literal value (REQ-112c ac2)
 description: |
   Object literal `{help: true}` — the form REQ-093 specifies for the
   brokered help sentinel. Per REQ-112c the value MUST parse as a boolean.
@@ -29,3 +31,19 @@ expect:
   return_result:
     h: true
     v: false
+predicted_expect:
+  outcome: success
+  return_result:
+    h: true
+    v: false
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

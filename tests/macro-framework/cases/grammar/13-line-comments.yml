@@ -10,6 +10,8 @@
 # generator (or its --mode=refresh) to update.
 id: mtf-g-13-line-comments
 name: Grammar — line comments are skipped by the lexer
+intent: |
+  Grammar — line comments are skipped by the lexer
 description: >-
   Macro source contains `#`-prefixed line comments interleaved with executable lines. The lexer skips them entirely; the
   evaluator only sees the executable statements. Verifies REQ-007 (comment tokenization rule).
@@ -50,40 +52,18 @@ expect:
     msg: hello, world!
     ok: 1
 golden_snapshot:
-  state_notes:
-    - kind: ast
-      node_kind: assignment
-      line: 2
-      column: 0
-    - kind: binding
-      op: set
-      name: greeting
-      value: hello
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 4
-      column: 0
-    - kind: binding
-      op: set
-      name: target
-      value: world
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 7
-      column: 0
-    - kind: binding
-      op: set
-      name: msg
-      value: hello, world!
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 8
-      column: 0
-    - kind: binding
-      op: set
-      name: ok_flag
-      value: 1
-      scope: local
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: success
+  return_result:
+    msg: hello, world!
+    ok: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

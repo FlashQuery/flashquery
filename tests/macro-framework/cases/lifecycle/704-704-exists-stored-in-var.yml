@@ -3,6 +3,8 @@
 
 id: mtf-l-704-exists-stored-in-var
 name: "_exists() result stored in variable then re-checked"
+intent: |
+  _exists() result stored in variable then re-checked
 description: |
   Saving the probe in a variable and reading it later returns the same boolean.
 
@@ -33,3 +35,17 @@ tools:
 expect:
   outcome: success
   return_result: {"same":true}
+predicted_expect:
+  outcome: success
+  return_result: {"same":true}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

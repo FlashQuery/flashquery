@@ -3,6 +3,8 @@
 
 id: mtf-d-504-coerce-iserror-fail
 name: "IsErrorTool path: isError=true triggers fail-fast (no binding)"
+intent: |
+  IsErrorTool path: isError=true triggers fail-fast (no binding)
 description: |
   REQ-106 path 1 / REQ-107: isError=true short-circuits — no value binding, fail-fast as tool_call_failed.
 
@@ -34,3 +36,20 @@ expect:
   outcome: fail
   error:
     code: "tool_call_failed"
+predicted_expect:
+  outcome: fail
+  error:
+    code: "tool_call_failed"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls:
+    - server: "bad_srv"
+      tool: "boom"

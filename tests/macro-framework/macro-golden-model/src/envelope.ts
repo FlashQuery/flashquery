@@ -45,7 +45,14 @@ export const MACRO_ERROR_CODES = {
   budget_exceeded: "budget_exceeded",
   timeout: "timeout",
   tool_call_failed: "tool_call_failed",
-  runtime_error: "runtime_error",
+  // GG-005 (2026-05-20): removed `runtime_error` from the canonical list.
+  // REQ-054 / `MACRO_ERROR_CODES` (line 1188 of Macro Language Requirements)
+  // does not include it; the spec collapses unexpected runtime errors into
+  // `tool_call_failed` with a `details.reason` discriminator. Production
+  // followed this rule from day one (src/macro/evaluator.ts:448-457). The
+  // golden's translator at snapshot.ts:262 now emits `tool_call_failed` for
+  // `MacroRuntimeError`, matching production. Matt approved Reading 1
+  // (golden conforms to spec) on 2026-05-20.
   // Tier 2 (REQ-105): fifth termination class. Emitted by the
   // `needs_user_input` builtin and by the brokered-tool nested-propagation
   // path (broker emits a needs_user_input envelope per REQ-042).

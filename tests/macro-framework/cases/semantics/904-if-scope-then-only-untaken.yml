@@ -7,6 +7,8 @@
 
 id: mtf-s-904-if-scope-then-only-untaken
 name: Semantics — untaken-branch assignment leaves variable undefined (REQ-112b ac3)
+intent: |
+  Semantics — untaken-branch assignment leaves variable undefined (REQ-112b ac3)
 description: |
   `r` is assigned only in the then-branch, but the condition is falsy
   so that branch never runs. Reading `$r` after `fi` MUST raise the
@@ -34,3 +36,16 @@ vault: {}
 
 expect:
   outcome: fail
+predicted_expect:
+  outcome: fail
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

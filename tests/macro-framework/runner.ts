@@ -166,6 +166,74 @@ export interface TestCase {
   __file?: string;
 }
 
+// ───── Required-field validation ─────
+//
+// A pilot YAML must carry every field needed to make its run meaningful:
+// the AI prediction (predicted_expect), the golden capture state
+// (reconciliation with non-null predicted_matched_captured, captured_at,
+// and the captured snapshot), the source-of-truth expect block, and
+// provenance metadata (intent). Pilots missing any of these get rejected
+// at load time — the runner refuses to dispatch them against production.
+// This makes the three-oracle reconciliation gate enforceable at the
+// infrastructure layer, not just a periodic check.
+//
+// The required-field set parallels what `_pilot-validate.py` reports.
+
+function validateRequiredFields(parsed: TestCase, file: string): string[] {
+  const errors: string[] = [];
+  const p = parsed as unknown as Record<string, unknown>;
+
+  // Skeleton fields
+  if (!p.id) errors.push('missing required field: id');
+  if (!p.name) errors.push('missing required field: name');
+  if (!p.intent) errors.push('missing required field: intent');
+  if (!p.macro) errors.push('missing required field: macro');
+  if (!p.golden_version) errors.push('missing required field: golden_version');
+
+  // predicted_expect must be present and non-empty
+  const pe = p.predicted_expect as Record<string, unknown> | undefined;
+  if (!pe || typeof pe !== 'object') {
+    errors.push('predicted_expect: missing or empty (AI prediction is required)');
+  } else if (!pe.outcome) {
+    errors.push('predicted_expect: missing outcome field');
+  }
+
+  // reconciliation block — golden capture must have happened
+  const rec = p.reconciliation as Record<string, unknown> | undefined;
+  if (!rec || typeof rec !== 'object') {
+    errors.push('reconciliation: block missing (golden capture never ran)');
+  } else {
+    if (rec.predicted_matched_captured === null || rec.predicted_matched_captured === undefined) {
+      errors.push(
+        'reconciliation.predicted_matched_captured: null (golden capture never ran — three-oracle gate is not satisfied)',
+      );
+    }
+    if (rec.captured_at === null || rec.captured_at === undefined) {
+      errors.push('reconciliation.captured_at: null (golden capture never ran)');
+    }
+  }
+
+  // golden_snapshot — required when reconciliation claims success
+  if (rec && rec.predicted_matched_captured === true) {
+    const gs = p.golden_snapshot as Record<string, unknown> | undefined;
+    if (!gs || typeof gs !== 'object') {
+      errors.push(
+        'golden_snapshot: missing (but reconciliation claims capture succeeded)',
+      );
+    }
+  }
+
+  // expect block — the production-comparison target
+  const ex = p.expect as Record<string, unknown> | undefined;
+  if (!ex || typeof ex !== 'object') {
+    errors.push('expect: missing or empty (production comparison target is required)');
+  } else if (!ex.outcome) {
+    errors.push('expect: missing outcome field');
+  }
+
+  return errors;
+}
+
 // ───── Loader ─────
 
 export async function loadCases(category?: string): Promise<TestCase[]> {
@@ -193,6 +261,23 @@ export async function loadCases(category?: string): Promise<TestCase[]> {
       if (!parsed || typeof parsed !== 'object') {
         throw new Error(`Empty / invalid YAML test: ${file}`);
       }
+
+      // Required-field validation gate (added 2026-05-20).
+      // A pilot CANNOT run against production unless it has every field
+      // a properly-authored pilot is expected to carry. This enforces the
+      // three-oracle reconciliation discipline at the runner layer:
+      // the golden capture must have happened, the AI prediction must be
+      // recorded, the intent must be documented. AI-only predictions
+      // shipping as test gold is exactly what this gate prevents.
+      const validationErrors = validateRequiredFields(parsed, file);
+      if (validationErrors.length > 0) {
+        throw new Error(
+          `Pilot ${file} is missing required fields and cannot run:\n` +
+            validationErrors.map((e) => `  - ${e}`).join('\n') +
+            `\n\nRun \`python3 tests/macro-framework/_pilot-validate.py\` for the full report and fix the offending pilots before re-running the suite.`,
+        );
+      }
+
       parsed.__category = cat;
       parsed.__file = relative(FRAMEWORK_ROOT, file);
       out.push(parsed);

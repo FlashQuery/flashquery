@@ -1,0 +1,118 @@
+id: mtf-d-1304-behavioral-inbox-triage
+name: |-
+  Longer scenario (behavioral) — inbox triage with OR-condition split
+intent: |
+  I'm building a macro to triage incoming items. The caller provides
+  a list of items via input_var `inbox`. Each item has `subject`,
+  `priority` (a number 1-5), and `category` (a string). I want to
+  figure out which items need immediate attention — that means either
+  their priority is 4 or higher OR their category is 'urgent'. For
+  each immediate-attention item, call `notify_srv.alert({ subject })`
+  to send a notification. Return a summary that distinguishes the
+  items needing attention from the rest.
+
+description: |
+  Behavioral-style description test (Run #10.4). The skill chooses
+  the compound-condition idiom, two-bucket split, counter for
+  notifications, and exit shape. Tests REQ-013 boolean combinators
+  composed with REQ-112e first-class booleans.
+
+covers:
+  - MTF-C-009
+  - MTF-D-101
+  - MTF-D-102
+  - MTF-L-002
+  - MTF-S-007
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:20:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  inbox = input_var "inbox"
+
+  needs_attention = []
+  rest = []
+  notifications_sent = 0
+
+  for item in $inbox do
+    high_priority = $item.priority >= 4
+    is_urgent = $item.category == "urgent"
+    immediate = $high_priority || $is_urgent
+    if $immediate then
+      needs_attention = append $needs_attention $item
+      notify_srv.alert({ subject: $item.subject })
+      notifications_sent = add $notifications_sent 1
+    else
+      rest = append $rest $item
+    fi
+  done
+
+  exit {
+    needs_attention: $needs_attention,
+    rest: $rest,
+    notifications_sent: $notifications_sent
+  }
+
+input_vars:
+  inbox:
+    - { subject: "Server down", priority: 5, category: "ops" }
+    - { subject: "Weekly digest", priority: 2, category: "info" }
+    - { subject: "Customer complaint", priority: 3, category: "urgent" }
+    - { subject: "Meeting reminder", priority: 1, category: "calendar" }
+    - { subject: "Build broken", priority: 4, category: "ops" }
+
+vault: {}
+
+tools:
+  notify_srv:
+    archetype: JSONTextTool
+    tool_name: alert
+    value: { delivered: true }
+
+predicted_expect:
+  outcome: success
+  return_result:
+    needs_attention:
+      - { subject: "Server down", priority: 5, category: "ops" }
+      - { subject: "Customer complaint", priority: 3, category: "urgent" }
+      - { subject: "Build broken", priority: 4, category: "ops" }
+    rest:
+      - { subject: "Weekly digest", priority: 2, category: "info" }
+      - { subject: "Meeting reminder", priority: 1, category: "calendar" }
+    notifications_sent: 3
+  side_effects:
+    tool_call_count: 3
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    needs_attention:
+      - { subject: "Server down", priority: 5, category: "ops" }
+      - { subject: "Customer complaint", priority: 3, category: "urgent" }
+      - { subject: "Build broken", priority: 4, category: "ops" }
+    rest:
+      - { subject: "Weekly digest", priority: 2, category: "info" }
+      - { subject: "Meeting reminder", priority: 1, category: "calendar" }
+    notifications_sent: 3
+  side_effects:
+    tool_call_count: 3
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "notify_srv"
+      tool: "alert"
+    - server: "notify_srv"
+      tool: "alert"
+    - server: "notify_srv"
+      tool: "alert"

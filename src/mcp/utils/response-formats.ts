@@ -53,6 +53,16 @@ export interface ErrorEnvelope {
   message: string;
   identifier?: string;
   details?: Record<string, unknown>;
+  // PG-002 fix (2026-05-20): per REQ-024 ac6 + REQ-047 ac2, the trace
+  // MUST be present on error envelopes when trace_mode is anything other
+  // than "none" (which is the only mode that strips trace per REQ-047
+  // ac3). The terminal step (`exit`/`fail`/`tool_call` w/ error result)
+  // is appended before the catch arm builds the envelope, so this carries
+  // both the accumulated history and the terminal step. Optional in the
+  // type because non-macro callers of jsonExpectedError/jsonRuntimeError
+  // (e.g., tool-handler errors) may not have a trace context.
+  trace?: unknown[];
+  warnings?: string[];
 }
 
 export interface ToolResult {
@@ -188,6 +198,11 @@ export function jsonRuntimeError(
     message: messageOrError.message,
     ...(messageOrError.identifier === undefined ? {} : { identifier: messageOrError.identifier }),
     ...(messageOrError.details === undefined ? {} : { details: messageOrError.details }),
+    // PG-002 fix (2026-05-20): propagate trace + warnings (REQ-024 ac6 +
+    // REQ-047 ac2). Callers in the macro engine pass these when the
+    // macro context has them; non-macro callers leave them undefined.
+    ...(messageOrError.trace === undefined ? {} : { trace: messageOrError.trace }),
+    ...(messageOrError.warnings === undefined ? {} : { warnings: messageOrError.warnings }),
   });
 }
 

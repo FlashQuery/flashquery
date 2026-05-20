@@ -10,6 +10,8 @@
 # generator (or its --mode=refresh) to update.
 id: mtf-l-17-progress-emission
 name: Lifecycle — explicit status milestones during iteration
+intent: |
+  Lifecycle — explicit status milestones during iteration
 description: >-
   A for-loop iterates 1..8 (7 iterations); each iteration emits an explicit `status` milestone via the builtin. The
   runner captures progress events and the comparator asserts at least one milestone reached the sink (lower-bound
@@ -47,181 +49,18 @@ expect:
     sum: 28
   progress_milestones_min: 1
 golden_snapshot:
-  state_notes:
-    - kind: ast
-      node_kind: assignment
-      line: 1
-      column: 0
-    - kind: binding
-      op: set
-      name: acc
-      value: 0
-      scope: local
-    - kind: loop
-      loop_kind: for
-      loop_id: for_loop_1
-      iter: 0
-      var: 'n'
-      value: 1
-    - kind: ast
-      node_kind: for_iter
-      line: 2
-      column: 0
-    - kind: binding
-      op: shadow
-      name: 'n'
-      value: 1
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 3
-      column: 0
-    - kind: binding
-      op: update
-      name: acc
-      value: 1
-      scope: outer
-    - kind: loop
-      loop_kind: for
-      loop_id: for_loop_1
-      iter: 1
-      var: 'n'
-      value: 2
-    - kind: ast
-      node_kind: for_iter
-      line: 2
-      column: 0
-    - kind: binding
-      op: shadow
-      name: 'n'
-      value: 2
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 3
-      column: 0
-    - kind: binding
-      op: update
-      name: acc
-      value: 3
-      scope: outer
-    - kind: loop
-      loop_kind: for
-      loop_id: for_loop_1
-      iter: 2
-      var: 'n'
-      value: 3
-    - kind: ast
-      node_kind: for_iter
-      line: 2
-      column: 0
-    - kind: binding
-      op: shadow
-      name: 'n'
-      value: 3
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 3
-      column: 0
-    - kind: binding
-      op: update
-      name: acc
-      value: 6
-      scope: outer
-    - kind: loop
-      loop_kind: for
-      loop_id: for_loop_1
-      iter: 3
-      var: 'n'
-      value: 4
-    - kind: ast
-      node_kind: for_iter
-      line: 2
-      column: 0
-    - kind: binding
-      op: shadow
-      name: 'n'
-      value: 4
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 3
-      column: 0
-    - kind: binding
-      op: update
-      name: acc
-      value: 10
-      scope: outer
-    - kind: loop
-      loop_kind: for
-      loop_id: for_loop_1
-      iter: 4
-      var: 'n'
-      value: 5
-    - kind: ast
-      node_kind: for_iter
-      line: 2
-      column: 0
-    - kind: binding
-      op: shadow
-      name: 'n'
-      value: 5
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 3
-      column: 0
-    - kind: binding
-      op: update
-      name: acc
-      value: 15
-      scope: outer
-    - kind: loop
-      loop_kind: for
-      loop_id: for_loop_1
-      iter: 5
-      var: 'n'
-      value: 6
-    - kind: ast
-      node_kind: for_iter
-      line: 2
-      column: 0
-    - kind: binding
-      op: shadow
-      name: 'n'
-      value: 6
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 3
-      column: 0
-    - kind: binding
-      op: update
-      name: acc
-      value: 21
-      scope: outer
-    - kind: loop
-      loop_kind: for
-      loop_id: for_loop_1
-      iter: 6
-      var: 'n'
-      value: 7
-    - kind: ast
-      node_kind: for_iter
-      line: 2
-      column: 0
-    - kind: binding
-      op: shadow
-      name: 'n'
-      value: 7
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 3
-      column: 0
-    - kind: binding
-      op: update
-      name: acc
-      value: 28
-      scope: outer
+  captured_trace_kinds: ["progress", "exit"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: success
+  return_result:
+    sum: 28
+  progress_milestones_min: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

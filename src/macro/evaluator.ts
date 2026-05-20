@@ -20,6 +20,7 @@ import {
   jsonRuntimeError,
   macroResult,
   withWarnings,
+  type ErrorEnvelope,
   type ToolResult,
   type TraceStep,
   type WarningCode,
@@ -384,83 +385,102 @@ export async function evaluateProgram(
     }
     if (error instanceof MacroFailError) {
       pushTrace(context, { kind: 'fail', message: error.message });
-      return jsonExpectedError({
-        error: 'macro_aborted',
-        message: error.message,
-        details: { line: error.line },
-      });
+      // PG-002 fix: include trace + warnings via attachContextToError so
+      // the terminal `fail` step (just pushed) AND prior trace history
+      // are present in the envelope per REQ-024 ac6 + REQ-047 ac2.
+      return jsonExpectedError(
+        attachContextToError(context, {
+          error: 'macro_aborted',
+          message: error.message,
+          details: { line: error.line },
+        })
+      );
     }
     if (error instanceof MacroNeedsUserInputError) {
+      // PG-002 fix: needs_user_input envelope now carries trace + warnings.
+      // The envelope shape (task_id + reason + payload) is REQ-105-specific;
+      // trace is appended per REQ-024 ac6 + REQ-047 ac2.
+      const envelope: Record<string, unknown> = {
+        task_id: context.taskId,
+        reason: 'needs_user_input',
+        payload: error.payload,
+        ...(error.line === undefined ? {} : { line: error.line }),
+      };
+      if (context.traceMode !== 'none' && context.trace.length > 0) {
+        envelope.trace = context.trace;
+      }
       return {
         content: [
           {
             type: 'text',
-            text: JSON.stringify(
-              withWarnings(
-                {
-                  task_id: context.taskId,
-                  reason: 'needs_user_input',
-                  payload: error.payload,
-                  ...(error.line === undefined ? {} : { line: error.line }),
-                },
-                context.warnings
-              )
-            ),
+            text: JSON.stringify(withWarnings(envelope, context.warnings)),
           },
         ],
         isError: false,
       };
     }
     if (error instanceof MacroContinueSignal || error instanceof MacroBreakSignal) {
-      return jsonRuntimeError({
-        error: 'tool_call_failed',
-        message: `${error.name} was used outside a loop.`,
-        details: {
-          reason: 'loop_control_outside_loop',
-          ...(error.line === undefined ? {} : { line: error.line }),
-        },
-      });
+      return jsonRuntimeError(
+        attachContextToError(context, {
+          error: 'tool_call_failed',
+          message: `${error.name} was used outside a loop.`,
+          details: {
+            reason: 'loop_control_outside_loop',
+            ...(error.line === undefined ? {} : { line: error.line }),
+          },
+        })
+      );
     }
     if (error instanceof MacroExpectedError) {
-      return jsonExpectedError({
-        error: error.error,
-        message: error.message,
-        details: error.details,
-      });
+      return jsonExpectedError(
+        attachContextToError(context, {
+          error: error.error,
+          message: error.message,
+          details: error.details,
+        })
+      );
     }
     if (error instanceof MacroCancellationError) {
-      return jsonExpectedError({
-        error: 'cancelled',
-        message: 'Macro cancelled',
-        details: {
-          task_id: error.taskId,
-          at_safe_point: error.atSafePoint,
-        },
-      });
+      return jsonExpectedError(
+        attachContextToError(context, {
+          error: 'cancelled',
+          message: 'Macro cancelled',
+          details: {
+            task_id: error.taskId,
+            at_safe_point: error.atSafePoint,
+          },
+        })
+      );
     }
     if (error instanceof MacroPreflightError) {
-      return jsonExpectedError({
-        error: error.error,
-        message: error.message,
-        details: error.details,
-      });
+      return jsonExpectedError(
+        attachContextToError(context, {
+          error: error.error,
+          message: error.message,
+          details: error.details,
+        })
+      );
     }
     if (error instanceof MacroRuntimeError) {
-      return jsonRuntimeError({
-        error: 'tool_call_failed',
-        message: error.message,
-        details: {
-          ...(error.details ?? {}),
-          ...(error.line === undefined ? {} : { line: error.line }),
-        },
-      });
+      return jsonRuntimeError(
+        attachContextToError(context, {
+          error: 'tool_call_failed',
+          message: error.message,
+          details: {
+            ...(error.details ?? {}),
+            ...(error.line === undefined ? {} : { line: error.line }),
+          },
+        })
+      );
     }
     const message = error instanceof Error ? error.message : String(error);
-    return jsonRuntimeError({
-      error: 'tool_call_failed',
-      message,
-      details: { underlying_error: serializeError(error) },
-    });
+    return jsonRuntimeError(
+      attachContextToError(context, {
+        error: 'tool_call_failed',
+        message,
+        details: { underlying_error: serializeError(error) },
+      })
+    );
   }
 }
 
@@ -1044,6 +1064,33 @@ function buildSuccessPayload(context: MacroInvocationContext, result: MacroValue
     payload.external_tool_calls = context.budget.external_tool_calls;
   }
   return withWarnings(payload, context.warnings);
+}
+
+// PG-002 fix (2026-05-20): merge the accumulated trace + warnings from the
+// invocation context into an error envelope. Per REQ-024 ac6 the terminal
+// step (`exit` / `fail` / `tool_call` w/ error result) MUST appear in the
+// trace; per REQ-047 ac2 the default `summary` mode emits every step;
+// per REQ-047 ac3 the trace field is absent ONLY when `trace: "none"` was
+// explicitly requested. Mirrors buildSuccessPayload's existing trace-
+// inclusion gate.
+//
+// Each catch arm in `evaluateProgram`'s error path constructs its envelope
+// (the spec-shape `{ error, message, details, ... }`) and routes it
+// through this helper before passing to jsonExpectedError /
+// jsonRuntimeError, so the response includes the accumulated trace and
+// any warnings collected during execution.
+function attachContextToError(
+  context: MacroInvocationContext,
+  envelope: Omit<ErrorEnvelope, 'trace' | 'warnings'>
+): ErrorEnvelope {
+  const out: ErrorEnvelope = { ...envelope };
+  if (context.traceMode !== 'none' && context.trace.length > 0) {
+    out.trace = context.trace;
+  }
+  if (context.warnings.length > 0) {
+    out.warnings = [...context.warnings];
+  }
+  return out;
 }
 
 function pushTrace(context: MacroInvocationContext, step: Omit<TraceStep, 'at'>): void {

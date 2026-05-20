@@ -1,0 +1,124 @@
+id: mtf-s-1301-longer-config-validator-valid
+name: |-
+  Longer scenario — config validator (valid input)
+intent: |
+  `_self.frontmatter` is expected to contain `host` (string),
+  `port` (number 1-65535), `enabled` (boolean), and optionally
+  `retries` (number, default 3). Walk each field, validate it, and
+  exit with `{ valid: bool, config: {resolved fields}, errors: [...] }`.
+  Errors are objects `{ field, issue }` where issue is "missing" or
+  "out_of_range". This variant supplies all valid fields; expect
+  valid=true and errors=[].
+
+description: |
+  Longer scenario #10.2 (valid variant). Tests _self.frontmatter
+  REQ-103, REQ-112d missing-field-null guards, sequential conditional
+  validation, accumulator (errors list), conditional exit shape.
+
+covers:
+  - MTF-C-009
+  - MTF-I-101
+  - MTF-S-007
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-19T23:10:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+self_binding:
+  path: "/Macros/config-validator.md"
+  frontmatter:
+    host: "api.example.com"
+    port: 443
+    enabled: true
+  title: "Config Validator"
+  tags: []
+  fq_id: "fq:doc:config-val:001"
+
+macro: |
+  fm = $_self.frontmatter
+  errors = []
+
+  host = $fm.host
+  if $host == null then
+    errors = append $errors { field: "host", issue: "missing" }
+  fi
+
+  port = $fm.port
+  if $port == null then
+    errors = append $errors { field: "port", issue: "missing" }
+  fi
+  if $port != null then
+    if $port < 1 then
+      errors = append $errors { field: "port", issue: "out_of_range" }
+    fi
+    if $port > 65535 then
+      errors = append $errors { field: "port", issue: "out_of_range" }
+    fi
+  fi
+
+  enabled_flag = $fm.enabled
+  if $enabled_flag == null then
+    errors = append $errors { field: "enabled", issue: "missing" }
+  fi
+
+  retries = $fm.retries
+  if $retries == null then
+    retries = 3
+  fi
+
+  n_errors = count $errors
+  valid = $n_errors == 0
+
+  exit {
+    valid: $valid,
+    config: {
+      host: $host,
+      port: $port,
+      enabled: $enabled_flag,
+      retries: $retries
+    },
+    errors: $errors
+  }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    valid: true
+    config:
+      host: "api.example.com"
+      port: 443
+      enabled: true
+      retries: 3
+    errors: []
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    valid: true
+    config:
+      host: "api.example.com"
+      port: 443
+      enabled: true
+      retries: 3
+    errors: []
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

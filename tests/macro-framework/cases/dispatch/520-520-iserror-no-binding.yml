@@ -3,6 +3,8 @@
 
 id: mtf-d-520-iserror-no-binding
 name: "isError fail-fast: subsequent statements not reached"
+intent: |
+  isError fail-fast: subsequent statements not reached
 description: |
   After isError fail-fast, statements below are skipped (fail unwinds).
 
@@ -33,3 +35,18 @@ tools:
 
 expect:
   outcome: fail
+predicted_expect:
+  outcome: fail
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls:
+    - server: "bad"
+      tool: "boom"

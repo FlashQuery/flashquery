@@ -7,6 +7,8 @@
 
 id: mtf-s-02-walk-up-scope-counter
 name: Semantics — walk-up scope counter
+intent: |
+  Semantics — walk-up scope counter
 description: |
   for-loop child env update of outer `total` + `n_iters` bindings.
   Verifies REQ-019 walk-up semantics: outer-declared vars are written
@@ -47,43 +49,21 @@ expect:
     - exit
 
 golden_snapshot:
-  state_notes:
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: binding, op: set, name: total, value: 0, scope: local }
-    - { kind: ast, node_kind: assignment, line: 3, column: 0 }
-    - { kind: binding, op: set, name: n_iters, value: 0, scope: local }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 0, var: i, value: 1 }
-    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
-    - { kind: binding, op: shadow, name: i, value: 1, scope: local }
-    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
-    - { kind: binding, op: update, name: total, value: 1, scope: outer }
-    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
-    - { kind: binding, op: update, name: n_iters, value: 1, scope: outer }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 1, var: i, value: 2 }
-    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
-    - { kind: binding, op: shadow, name: i, value: 2, scope: local }
-    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
-    - { kind: binding, op: update, name: total, value: 3, scope: outer }
-    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
-    - { kind: binding, op: update, name: n_iters, value: 2, scope: outer }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 2, var: i, value: 3 }
-    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
-    - { kind: binding, op: shadow, name: i, value: 3, scope: local }
-    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
-    - { kind: binding, op: update, name: total, value: 6, scope: outer }
-    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
-    - { kind: binding, op: update, name: n_iters, value: 3, scope: outer }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 3, var: i, value: 4 }
-    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
-    - { kind: binding, op: shadow, name: i, value: 4, scope: local }
-    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
-    - { kind: binding, op: update, name: total, value: 10, scope: outer }
-    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
-    - { kind: binding, op: update, name: n_iters, value: 4, scope: outer }
-    - { kind: loop, loop_kind: for, loop_id: for_loop_1, iter: 4, var: i, value: 5 }
-    - { kind: ast, node_kind: for_iter, line: 4, column: 0 }
-    - { kind: binding, op: shadow, name: i, value: 5, scope: local }
-    - { kind: ast, node_kind: assignment, line: 5, column: 0 }
-    - { kind: binding, op: update, name: total, value: 15, scope: outer }
-    - { kind: ast, node_kind: assignment, line: 6, column: 0 }
-    - { kind: binding, op: update, name: n_iters, value: 5, scope: outer }
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: success
+  return_result:
+    total: 15
+    n_iters: 5
+  trace_kinds_contain:
+    - exit
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

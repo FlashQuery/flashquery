@@ -75,6 +75,14 @@ export class MacroPreflightError extends Error {
       optional_inputs: string[];
       provided_inputs: string[];
       missing_inputs: string[];
+      // GG-003 / GG-008: preflight sub-discriminators. Optional because
+      // not every preflight error carries them (the basic missing-input
+      // case uses only the four standard fields).
+      reason?: string;
+      key?: string;
+      default_kind?: string;
+      arg_kind?: string;
+      line?: number;
     },
   ) {
     super(message);
@@ -404,8 +412,15 @@ export function makeExecContext(opts: {
     budgetCounters: { tokens: 0, model_calls: 0, external_tool_calls: 0, started_at: now },
     permissionDecisions: [],
     stateNotes: [],
-    traceMode: opts.traceMode ?? "full",
-    progressMode: opts.progressMode ?? "full",
+    // GG-012 fix part 2 (2026-05-20): defaults updated to match spec.
+    //   - REQ-047 ac2: default trace mode is `summary` (not `full`).
+    //   - REQ-048 ac2: default progress mode is `milestones` (not `full`).
+    // Both defaults were previously `full`, which is the most-verbose
+    // mode — emitting per-iteration progress steps that the spec
+    // requires to be suppressed unless `progress: "full"` is explicitly
+    // selected. Production conforms to the spec default; golden now does too.
+    traceMode: opts.traceMode ?? "summary",
+    progressMode: opts.progressMode ?? "milestones",
     dryRun: opts.dryRun ?? false,
     broker: opts.broker ?? new NullMcpBroker(),
     allowedTools: opts.allowedTools ?? new Set<string>(),
@@ -502,6 +517,23 @@ export async function evaluate(program: Program, opts: EvaluateOptions): Promise
   };
 
   // ----- Pre-flight: static tool permission pre-scan (REQ-028, item 18) -----
+  //
+  // GG-017 fix (2026-05-20): in dry-run mode, skip the pre-scan registry
+  // check. Per REQ-053 dry-run is a STATIC INVENTORY pass that returns
+  // `input_var_contract`, `tool_references`, and `server_references` for
+  // the macro WITHOUT requiring those tools/servers to be registered. The
+  // pre-scan's job is runtime-dispatch permission enforcement (REQ-028),
+  // which is irrelevant in dry-run because no dispatch occurs. Production
+  // takes a separate `runDryRun()` code path that doesn't go through
+  // pre-scan; the golden conforms by gating pre-scan on `!exec.dryRun`.
+  //
+  // The `dryRunInventory` collected above (REQ-053 ac1) is sufficient for
+  // the envelope; we early-return null so the snapshot layer's dry-run
+  // branch (assembleEnvelope at snapshot.ts:349) emits the canonical
+  // REQ-053 envelope.
+  if (exec.dryRun) {
+    return null;
+  }
   prescanPermissions(program, tools, exec);
 
   // ----- Execute -----
@@ -603,7 +635,26 @@ function collectInputVarContract(program: Program): {
   function visitCall(call: Call): void {
     if (call.name === "input_var") {
       const first = call.args.find((a) => a.kind === "PositionalArg");
-      // Parser has already verified this is a literal — we only need the key.
+      // GG-008 fix (2026-05-20): REQ-007's failure-mode list places
+      // "input_var first arg not literal" under `invalid_input` (a preflight
+      // contract violation), not `parse_error`. Production handles this in
+      // the preflight collector; the golden now matches.
+      if (!first || first.kind !== "PositionalArg" || first.value.kind !== "StringLit") {
+        const found = first?.value?.kind ?? "(missing)";
+        throw new MacroPreflightError(
+          `input_var first argument must be a string literal.`,
+          {
+            error: "invalid_input",
+            required_inputs: [],
+            optional_inputs: [],
+            provided_inputs: [],
+            missing_inputs: [],
+            reason: "input_var_key_must_be_literal",
+            line: call.line,
+            arg_kind: found,
+          },
+        );
+      }
       if (first && first.value.kind === "StringLit") {
         const key = first.value.raw;
         const defaultArg = call.args.find(
@@ -1158,8 +1209,13 @@ async function execStatement(stmt: Statement, env: Env, builtins: Builtins, tool
       forIter: for (let i = 0; i < total; i++) {
         checkCancelled(ctx.exec, `for-loop iteration ${i + 1}/${total}`);
         checkBudget(ctx.exec);
-        const milestone = i === 0 || i === total - 1 || (total > 4 && i % Math.ceil(total / 4) === 0);
-        emitAutoProgress(ctx.exec, `for-loop iteration ${i + 1}/${total}`, milestone);
+        // GG-012 fix (2026-05-20): per REQ-048 ac2, default progress mode
+        // is `milestones` which auto-emits "at model-call start/finish only.
+        // No per-tool-call, no per-iteration emission." So for-loop
+        // iteration boundaries are NOT milestones — they only fire in
+        // `full` mode. The previous heuristic (treating quartile/first/last
+        // iterations as milestones) violated REQ-048 ac2 spec text.
+        emitAutoProgress(ctx.exec, `for-loop iteration ${i + 1}/${total}`, /* milestone */ false);
         emitStateNote(ctx.exec, {
           kind: "loop",
           loop_kind: "for",
@@ -1555,14 +1611,20 @@ async function runToolCall(
     arg = v;
   }
 
-  // Tier 2 (REQ-093 / REQ-098): `help: true` sentinel. When ANY tool call
-  // has `help: true` as an argument, the engine MUST NOT dispatch — it
-  // returns the tool's help-page body instead. For native fq tools the
-  // body lives in `HELP_PAGES` (production: `*.tool.md` files); brokered
-  // calls forward upstream unchanged per DELTA-1 (the mock returns a
-  // canned text body so the example macro can show the round trip).
+  // Tier 2 (REQ-093 / REQ-098): `help: true` sentinel. When a NATIVE fq
+  // tool call has `help: true`, the engine short-circuits and returns the
+  // tool's help-page body from `HELP_PAGES`. For BROKERED calls, REQ-098
+  // forwards the sentinel upstream — the macro engine MUST NOT short-
+  // circuit; the broker (or the brokered tool itself) decides what to do.
+  //
+  // GG-006 fix (2026-05-20): previously this block intercepted ANY
+  // tool call with `help: true`, including brokered ones, and replaced
+  // the result with a synthetic placeholder. That violated REQ-098 and
+  // hid genuine archetype behavior in pilot 32. Restricted to the
+  // native-fq path only.
   let helpSentinel = false;
   if (
+    call.server === "fq" &&
     arg !== null &&
     typeof arg === "object" &&
     !Array.isArray(arg) &&
@@ -1611,7 +1673,7 @@ async function runToolCall(
       // FQ handlers return plain Value (e.g., a list, object, primitive)
       // and bypass coercion entirely (REQ-106 step 0 by omission).
       if (call.server !== "fq" && isCallToolResultShape(raw)) {
-        result = applyBrokerCoercion(raw as unknown as CallToolResult, call, ctx);
+        result = applyBrokerCoercion(raw as unknown as CallToolResult, call, ctx, arg as Value);
       } else {
         result = raw;
         // Native-tool path: emit the existing passthrough state_note for
@@ -1634,6 +1696,24 @@ async function runToolCall(
           path: "is_error",
           raw_summary: `${call.server}.${call.tool} threw ${norm.kind}: ${norm.message.slice(0, 120)}`,
         });
+        // GG-015 fix (2026-05-20): record the failed tool call in the
+        // side_effects manifest before throwing. Per REQ-024 ac6 the
+        // failure is recorded in the trace as a `tool_call` step with the
+        // error envelope as the result; for coherence the per-invocation
+        // manifest MUST also include the attempt so "what the macro did"
+        // is faithful even when the call failed. Production records
+        // attempted calls in `broker.callLog` (test side-channel); the
+        // golden's envelope-level manifest now matches that semantic.
+        if (ctx.exec) {
+          ctx.exec.sideEffects.tool_calls.push({
+            server: call.server,
+            tool: call.tool,
+            arg,
+            result: { error: norm.kind, message: norm.message } as unknown as Value,
+            elapsed_ms: Date.now() - startedAt,
+            at: new Date().toISOString(),
+          });
+        }
         throw new MacroFailError(
           `brokered tool ${full} failed (${norm.kind}): ${norm.message}`,
           call.line,
@@ -1800,6 +1880,7 @@ function applyBrokerCoercion(
   envelope: CallToolResult,
   call: ToolCall,
   ctx: CallContext,
+  arg?: Value,
 ): Value {
   // Step 1: isError carve-out (REQ-106 step 1 + REQ-107).
   if (envelope.isError === true) {
@@ -1809,6 +1890,21 @@ function applyBrokerCoercion(
       path: "is_error",
       raw_summary: `${call.server}.${call.tool} isError: ${norm.kind} — ${norm.message.slice(0, 120)}`,
     });
+    // GG-015 fix (2026-05-20): record the isError-failed tool call in the
+    // side_effects manifest before throwing — same coherence requirement
+    // as the throwing-handler path. The `arg` parameter is threaded
+    // through from the call site so the manifest entry mirrors what the
+    // successful-call path records.
+    if (ctx.exec) {
+      ctx.exec.sideEffects.tool_calls.push({
+        server: call.server,
+        tool: call.tool,
+        arg: arg ?? null,
+        result: { error: norm.kind, message: norm.message } as unknown as Value,
+        elapsed_ms: 0,
+        at: new Date().toISOString(),
+      });
+    }
     throw new MacroFailError(
       `brokered tool ${call.server}.${call.tool} failed (${norm.kind}): ${norm.message}`,
       call.line,

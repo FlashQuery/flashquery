@@ -89,13 +89,11 @@ predicted_expect:
 
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-19T19:07:00Z"
+  captured_at: "2026-05-20T15:29:48Z"
   golden_version: "0.3.0"
+  divergence_kind: clean_match
   notes: |
-    AI prediction and golden capture agreed exactly. Both expected
-    happy-path indexing with 2 dispatches (doc_srv.fetch +
-    index_srv.add) and return_result of {indexed: true, doc_id: "doc-001"}.
-
+    Clean three-oracle reconciliation. Captured by generic capture runner.
 expect:
   outcome: success
   return_result:
@@ -105,7 +103,7 @@ expect:
     tool_call_count: 2
 
 golden_snapshot:
-  captured_trace_kinds: ["tool_call", "tool_call", "exit"]
+  captured_trace_kinds: ["tool_call", "exit"]
   captured_tool_calls:
     - server: "doc_srv"
       tool: "fetch"

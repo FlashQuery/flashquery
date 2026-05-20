@@ -1,5 +1,7 @@
 id: mtf-g-804-reserved-null-assignment
 name: Grammar — `null` cannot be used as a variable name (REQ-039)
+intent: |
+  Grammar — `null` cannot be used as a variable name (REQ-039)
 description: Reserved keyword `null` rejected at parse time.
 covers: [MTF-G-007]
 golden_version: "0.3.0"
@@ -17,3 +19,20 @@ expect:
     code: parse_error
     details:
       reason: reserved_keyword_assignment
+predicted_expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+    details:
+      reason: reserved_keyword_assignment
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

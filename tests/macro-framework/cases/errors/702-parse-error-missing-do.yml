@@ -1,6 +1,8 @@
 # Pilot — MTF-E-005: parse_error envelope for missing `do` after for-clause.
 id: mtf-e-702-parse-error-missing-do
 name: Errors — parse_error envelope (missing_do) (REQ-018)
+intent: |
+  Errors — parse_error envelope (missing_do) (REQ-018)
 description: |
   `for x in [1,2,3]` without `do` raises parse_error with reason
   `missing_do`.
@@ -22,3 +24,20 @@ expect:
     code: parse_error
     details:
       reason: missing_do
+predicted_expect:
+  outcome: parse_error
+  error:
+    code: parse_error
+    details:
+      reason: missing_do
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

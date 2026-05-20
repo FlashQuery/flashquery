@@ -113,30 +113,11 @@ predicted_expect:
 # envelope exactly.
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-19T20:50:00Z"
+  captured_at: "2026-05-20T15:29:48Z"
   golden_version: "0.3.0"
-  divergence_kind: resolved_golden_gap
-  spec_reference:
-    - "FlashQuery Macro Language Requirements REQ-011 ac4"
-  golden_gap_id: GG-001
-  golden_gap_doc: ../../GOLDEN_GAPS.md
-  golden_captured:
-    outcome: success
-    return_result:
-      completed: ["alpha", "gamma"]
-      deferred: ["beta"]
-      completed_count: 2
-      deferred_count: 1
-    side_effects:
-      tool_call_count: 3
+  divergence_kind: clean_match
   notes: |
-    GG-001 resolved by extending the golden's `objectEntry` grammar
-    from `primary` to `rhsExpr` (and the matching `convertObjectEntry`
-    AST conversion), per REQ-011 ac4 "Values are any expression." The
-    golden now matches production's envelope exactly:
-    completed=[alpha, gamma], deferred=[beta], completed_count=2,
-    deferred_count=1, 3 tool dispatches.
-
+    Clean three-oracle reconciliation. Captured by generic capture runner.
 # Test-runtime expect — matches production output.
 expect:
   outcome: success
@@ -147,3 +128,12 @@ expect:
     deferred_count: 1
   side_effects:
     tool_call_count: 3
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "processor_srv"
+      tool: "process"
+    - server: "processor_srv"
+      tool: "process"
+    - server: "processor_srv"
+      tool: "process"

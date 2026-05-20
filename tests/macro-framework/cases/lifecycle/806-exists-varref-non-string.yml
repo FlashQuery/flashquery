@@ -6,6 +6,8 @@
 
 id: mtf-l-806-exists-varref-non-string
 name: Lifecycle — `$svc._exists()` with non-string subject raises (REQ-112a ac2)
+intent: |
+  Lifecycle — `$svc._exists()` with non-string subject raises (REQ-112a ac2)
 description: |
   Variable `svc_name` holds a number, not a string. Per REQ-112a ac2 the
   engine must raise a runtime error (suggested envelope:
@@ -31,3 +33,16 @@ vault: {}
 
 expect:
   outcome: fail
+predicted_expect:
+  outcome: fail
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

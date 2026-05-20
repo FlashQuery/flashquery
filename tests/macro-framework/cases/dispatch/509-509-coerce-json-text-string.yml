@@ -3,6 +3,8 @@
 
 id: mtf-d-509-coerce-json-text-string
 name: "JSONTextTool returns JSON-string"
+intent: |
+  JSONTextTool returns JSON-string
 description: |
   JSON text that is a JSON-encoded string ("hello") parses to the bare string.
 
@@ -32,3 +34,19 @@ tools:
 expect:
   outcome: success
   return_result: {"v":"hello"}
+predicted_expect:
+  outcome: success
+  return_result: {"v":"hello"}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "s_srv"
+      tool: "get"

@@ -5,6 +5,8 @@
 
 id: mtf-c-04-while-with-fail
 name: Control flow — while-loop with fail
+intent: |
+  Control flow — while-loop with fail
 description: |
   while-loop iterates `counter` from 0 upward; an `if $counter == 7`
   fail aborts after 7 iterations. Verifies while-loop semantics and
@@ -43,34 +45,19 @@ expect:
     message_contains: "halt while at 7"
 
 golden_snapshot:
-  state_notes:
-    - { kind: ast, node_kind: assignment, line: 2, column: 0 }
-    - { kind: binding, op: set, name: counter, value: 0, scope: local }
-    - { kind: loop, loop_kind: while, loop_id: while_loop_3, iter: 0 }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: counter, value: 1, scope: outer }
-    - { kind: ast, node_kind: if, line: 5, column: 0 }
-    - { kind: loop, loop_kind: while, loop_id: while_loop_3, iter: 1 }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: counter, value: 2, scope: outer }
-    - { kind: ast, node_kind: if, line: 5, column: 0 }
-    - { kind: loop, loop_kind: while, loop_id: while_loop_3, iter: 2 }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: counter, value: 3, scope: outer }
-    - { kind: ast, node_kind: if, line: 5, column: 0 }
-    - { kind: loop, loop_kind: while, loop_id: while_loop_3, iter: 3 }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: counter, value: 4, scope: outer }
-    - { kind: ast, node_kind: if, line: 5, column: 0 }
-    - { kind: loop, loop_kind: while, loop_id: while_loop_3, iter: 4 }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: counter, value: 5, scope: outer }
-    - { kind: ast, node_kind: if, line: 5, column: 0 }
-    - { kind: loop, loop_kind: while, loop_id: while_loop_3, iter: 5 }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: counter, value: 6, scope: outer }
-    - { kind: ast, node_kind: if, line: 5, column: 0 }
-    - { kind: loop, loop_kind: while, loop_id: while_loop_3, iter: 6 }
-    - { kind: ast, node_kind: assignment, line: 4, column: 0 }
-    - { kind: binding, op: update, name: counter, value: 7, scope: outer }
-    - { kind: ast, node_kind: if, line: 5, column: 0 }
+  captured_trace_kinds: ["fail"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "halt while at 7"
+
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

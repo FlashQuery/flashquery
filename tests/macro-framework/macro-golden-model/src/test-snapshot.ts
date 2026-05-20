@@ -352,7 +352,7 @@ async function runFqmFenceCheck() {
   const envLegacy = await captureSnapshot(docLegacy, {}, {}, { registry: defaultToolRegistry });
   // The legacy fence should NOT produce the {greeting: "hi"} return
   // value that the fqm-recognized version did. Failure mode could be
-  // parse_error or runtime_error; either confirms the fence wasn't
+  // parse_error or tool_call_failed; either confirms the fence wasn't
   // recognized as a macro block.
   const legacyDidNotExecuteEmbedded =
     envLegacy.error !== undefined ||
@@ -410,8 +410,9 @@ result = "a" < "b"
 exit { result: $result }
 `;
   const envBad = await captureSnapshot(macroBad, {}, {}, { registry: defaultToolRegistry });
-  const badOk = envBad.error?.code === "runtime_error";
-  console.log("'a' < 'b' raised runtime_error:", badOk);
+  // GG-005: unexpected runtime errors emit `tool_call_failed` per REQ-054.
+  const badOk = envBad.error?.code === "tool_call_failed";
+  console.log("'a' < 'b' raised tool_call_failed:", badOk);
 
   const macroGood = `
 result = 1 < 2

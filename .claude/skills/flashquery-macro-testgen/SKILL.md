@@ -222,11 +222,47 @@ For pilots exercising "this should skip / fail / not happen" paths, the rigor an
 - Fail path: `outcome: fail` is correct, but ALSO `tool_call_count` should be capped before the failing dispatch.
 - Untaken branch: variables assigned only in the untaken branch should NOT appear in the return value.
 
+#### Axis 6 — Intent fidelity (added 2026-05-19 for behavioral-description testgen)
+
+When the macro was authored from a **behavioral description** (intent-level English, not pseudocode), the author skill picks an implementation. That implementation might:
+- miss a behavior the description named (intent has 3 axes; macro implements 2),
+- be structurally correct but not be exercised by the wired-up test inputs / tool config (dead-code branches in this pilot),
+- or be exercised but not pinned by the assertions (a regression in that behavior would still pass the pilot).
+
+Each of these makes the pilot *appear* to test the intent without actually doing so. Axis 6 catches it.
+
+**Three checks under Axis 6:**
+
+1. **Behavior-to-code mapping.** Parse the behavioral intent for named behaviors (e.g., "reject the whole batch if any item is invalid", "send a notification for urgent items", "default `retries` to 3 if missing"). For each named behavior, identify the code pattern that implements it in the macro. **A behavior with no corresponding code pattern is a fidelity gap.** Resolution: surface the gap with a concrete suggestion — either revise the macro (re-invoke author skill with the missing-behavior finding) or revise the intent description if it was ambiguous.
+
+2. **Pattern-to-input mapping.** For each behavior-implementing code pattern in the macro (especially branches, dispatches, guards), verify the test inputs + tool configuration actually drive execution through that pattern. **A pattern that the test inputs never trigger is dead code in this pilot.** Resolution: add test data that exercises the path, OR add a separate pilot variant whose inputs do, OR if the pattern is genuinely unreachable from valid inputs, note it as untestable framework-side.
+
+3. **Behavior-to-assertion mapping.** For each behavior the intent named AND the macro implements AND the inputs trigger, verify the `expect:` block has an assertion that would FAIL if that specific behavior regressed. **A behavior with no sensitive assertion is silently tested.** Resolution: add a targeted assertion (e.g., specific tool_call args, specific exit field value, specific trace_kind sequence).
+
+**Why this axis was added.** During Run #10.3 / #10.4 (first behavioral-description scenarios, 2026-05-19), the author skill produced macros that happened to fully implement the intent — but Matt flagged the broader risk: a behavioral description gives the skill latitude to pick an implementation, and that implementation might not exercise what we said we wanted to test. The strengthen workflow sits at the right layer to catch this: it has visibility into both the macro AND the test inputs / tool configuration, so it can ask "does this combination actually trigger every behavior the intent named?"
+
+**Findings produced under Axis 6:**
+
+```json
+{
+  "axis": "intent_fidelity",
+  "severity": "required_assertion_missing | recommended_assertion | style",
+  "sub_kind": "behavior_not_implemented | pattern_not_triggered | behavior_not_asserted",
+  "named_behavior": "<short quote or paraphrase from the intent>",
+  "current_state": "<what the macro/pilot does today>",
+  "missing": "<the specific gap>",
+  "suggested_resolution": "<one of: revise_macro | add_inputs | sharpen_assertion>",
+  "diff": "<concrete change proposal>"
+}
+```
+
+**When this axis fires `revise_macro`, the strengthen workflow can loop back to the author skill** with the behavior-not-implemented finding, asking for a regeneration that covers the missing behavior. This is the workflow loop Matt described: behavioral intent → macro → strengthen detects intent gap → macro revised → strengthen re-runs → settle.
+
 ### Finding taxonomy
 
 ```json
 {
-  "axis": "multi_exit_specificity | side_effect_coverage | branch_coverage | state_assertion | negative_assertion",
+  "axis": "multi_exit_specificity | side_effect_coverage | branch_coverage | state_assertion | negative_assertion | intent_fidelity",
   "severity": "required_assertion_missing | recommended_assertion | style",
   "finding": "<one-line description>",
   "current_state": "<what the pilot currently asserts>",
@@ -334,6 +370,26 @@ The full pilot-generation pipeline composes the author skill, the wrap workflow,
    production output vs expect: (which is golden-verified)
    any divergence → triage taxonomy (engine bug, golden drift, test bug)
 ```
+
+### MANDATORY: golden capture is non-optional (2026-05-20)
+
+**Every** pilot YAML written by this skill MUST be run through `_generic-capture-runner.ts` (or invoke `captureSnapshot` directly) before being considered complete. **No exceptions.** AI-only predictions are not a valid substitute — that's exactly what the reconciliation gate exists to prevent.
+
+The skill's "complete" criterion now includes:
+
+1. `reconciliation.predicted_matched_captured` is `true` or `false` (NEVER null)
+2. `reconciliation.captured_at` is a real ISO timestamp (NEVER null)
+3. `reconciliation.divergence_kind` is set (e.g., `clean_match`, `predicted_diverges_from_golden`, or a specific divergence-class label when triaged)
+4. `golden_snapshot:` block is present with `captured_trace_kinds` and `captured_tool_calls` lists
+5. `predicted_expect:` block is present (the AI's prediction, regardless of whether it matched)
+6. `expect:` block is present (the source-of-truth assertion the runner compares against)
+7. `intent:` field is present (verbatim natural-language description that drove generation)
+
+After every batch of newly authored pilots, run **`_pilot-validate.py`** as the final gate. It walks all pilot YAMLs under `cases/` and emits findings for any pilot missing a required field, any null reconciliation, any missing golden_snapshot when the reconciliation claims success. A clean validator run is the precondition for declaring a batch "done."
+
+If the validator reports incomplete pilots, the skill MUST loop back: run the generic capture runner, apply the captures via `_apply-captures.py`, re-validate. Do not declare done until validator is clean.
+
+This rule exists because between 2026-05-19 and 2026-05-20 the skill drifted: ~398 of 409 pilots in the corpus were incomplete (no golden capture, no reconciliation populated, sometimes missing predicted_expect or intent entirely). The autonomous Run #9 (200 pilots) was the worst offender. Matt called this out, and the fix is to make the validator a non-skippable step. Going forward, no pilot ships without the runner + validator having run successfully.
 
 ### Reconciliation gate semantics
 

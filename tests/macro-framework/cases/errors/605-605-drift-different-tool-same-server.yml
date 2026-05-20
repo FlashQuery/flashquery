@@ -3,6 +3,8 @@
 
 id: mtf-e-605-drift-different-tool-same-server
 name: "Drift on one tool — other tools on same server still callable"
+intent: |
+  Drift on one tool — other tools on same server still callable
 description: |
   A drift-flagged tool blocks; a different tool on the same server still dispatches normally.
 
@@ -30,3 +32,19 @@ tools:
 expect:
   outcome: success
   return_result: {"fine":true}
+predicted_expect:
+  outcome: success
+  return_result: {"fine":true}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "mixed_srv"
+      tool: "ok"

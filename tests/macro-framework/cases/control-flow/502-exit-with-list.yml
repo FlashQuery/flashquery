@@ -1,6 +1,8 @@
 # Pilot — MTF-C-009: exit returns a list value.
 id: mtf-c-502-exit-with-list
 name: Control-flow — exit returns a list value
+intent: |
+  Control-flow — exit returns a list value
 description: |
   exit accepts a list literal as its value; the result.value is the list.
 covers: [MTF-C-009]
@@ -16,3 +18,17 @@ vault: {}
 expect:
   outcome: success
   return_result: [1, 2, 3, 4]
+predicted_expect:
+  outcome: success
+  return_result: [1, 2, 3, 4]
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

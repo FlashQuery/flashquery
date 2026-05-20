@@ -10,6 +10,8 @@
 # generator (or its --mode=refresh) to update.
 id: mtf-c-15-if-else-branches
 name: Control flow — if/then/else/fi exercises both branches
+intent: |
+  Control flow — if/then/else/fi exercises both branches
 description: >-
   Two if/else blocks select between branches via integer comparison; verifies REQ-015 (conditional with else-branch)
   semantics. The macro accumulates which branch fired into a result object.
@@ -56,60 +58,19 @@ expect:
       - then-1
       - else-2
 golden_snapshot:
-  state_notes:
-    - kind: ast
-      node_kind: assignment
-      line: 1
-      column: 0
-    - kind: binding
-      op: set
-      name: taken
-      value: []
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 2
-      column: 0
-    - kind: binding
-      op: set
-      name: a
-      value: 1
-      scope: local
-    - kind: ast
-      node_kind: assignment
-      line: 3
-      column: 0
-    - kind: binding
-      op: set
-      name: b
-      value: 2
-      scope: local
-    - kind: ast
-      node_kind: if
-      line: 4
-      column: 0
-    - kind: ast
-      node_kind: assignment
-      line: 5
-      column: 0
-    - kind: binding
-      op: update
-      name: taken
-      value:
-        - then-1
-      scope: outer
-    - kind: ast
-      node_kind: if
-      line: 9
-      column: 0
-    - kind: ast
-      node_kind: assignment
-      line: 12
-      column: 0
-    - kind: binding
-      op: update
-      name: taken
-      value:
-        - then-1
-        - else-2
-      scope: outer
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
+predicted_expect:
+  outcome: success
+  return_result:
+    taken:
+      - then-1
+      - else-2
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.

@@ -75,13 +75,11 @@ predicted_expect:
 
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-19T19:07:00Z"
+  captured_at: "2026-05-20T15:29:48Z"
   golden_version: "0.3.0"
+  divergence_kind: clean_match
   notes: |
-    AI prediction and golden capture agreed exactly. First guard passes
-    (published=true); second guard fires (archived != null); only
-    doc_srv.fetch dispatched (count=1).
-
+    Clean three-oracle reconciliation. Captured by generic capture runner.
 expect:
   outcome: success
   return_result:

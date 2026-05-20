@@ -1,6 +1,8 @@
 # Pilot — MTF-C-009: exit with a variable-referenced value.
 id: mtf-c-505-exit-from-variable
 name: Control-flow — exit returns the value bound to a variable
+intent: |
+  Control-flow — exit returns the value bound to a variable
 description: |
   Build a structure into a variable, then exit with the variable. Common
   pattern in real macros.
@@ -20,3 +22,19 @@ expect:
   return_result:
     processed: 5
     skipped: 1
+predicted_expect:
+  outcome: success
+  return_result:
+    processed: 5
+    skipped: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

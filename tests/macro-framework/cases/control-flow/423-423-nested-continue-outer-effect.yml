@@ -3,6 +3,8 @@
 
 id: mtf-c-423-nested-continue-outer-effect
 name: "Nested loops — outer continue carries through"
+intent: |
+  Nested loops — outer continue carries through
 description: |
   continue in the outer loop skips both inner work and outer accumulator update. Range 1..4 = {1,2,3}, skip i=2 → outer = 1+3 = 4. Inner loop fires for i=1 and i=3, each adds 1+2 = 3, total inner = 6.
 
@@ -36,3 +38,17 @@ vault: {}
 expect:
   outcome: success
   return_result: {"o":4,"i":6}
+predicted_expect:
+  outcome: success
+  return_result: {"o":4,"i":6}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

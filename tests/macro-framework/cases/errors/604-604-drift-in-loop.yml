@@ -3,6 +3,8 @@
 
 id: mtf-e-604-drift-in-loop
 name: "Drift detected mid-loop"
+intent: |
+  Drift detected mid-loop
 description: |
   A brokered call inside a for-loop hits drift on the first iteration → loop body abandoned.
 
@@ -33,3 +35,16 @@ tools:
 
 expect:
   outcome: needs_user_input
+predicted_expect:
+  outcome: needs_user_input
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

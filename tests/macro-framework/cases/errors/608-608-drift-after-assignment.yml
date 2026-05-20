@@ -3,6 +3,8 @@
 
 id: mtf-e-608-drift-after-assignment
 name: "Drift surfaces even after non-tool side-effects"
+intent: |
+  Drift surfaces even after non-tool side-effects
 description: |
   Assignments and arithmetic before the drift call do not change the termination class.
 
@@ -33,3 +35,16 @@ tools:
 
 expect:
   outcome: needs_user_input
+predicted_expect:
+  outcome: needs_user_input
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

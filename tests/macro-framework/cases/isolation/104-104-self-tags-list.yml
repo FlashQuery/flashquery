@@ -3,6 +3,8 @@
 
 id: mtf-i-104-self-tags-list
 name: "_self.tags exposes the tag list"
+intent: |
+  _self.tags exposes the tag list
 description: |
   Verifies _self.tags surfaces as a list value usable with `count`.
 
@@ -27,3 +29,17 @@ self_binding: {"path":"/x.md","frontmatter":{},"title":"t","tags":["a","b","c"],
 expect:
   outcome: success
   return_result: {"n":3}
+predicted_expect:
+  outcome: success
+  return_result: {"n":3}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

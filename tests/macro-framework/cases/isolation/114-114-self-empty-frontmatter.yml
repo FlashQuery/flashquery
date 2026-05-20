@@ -3,6 +3,8 @@
 
 id: mtf-i-114-self-empty-frontmatter
 name: "_self with empty frontmatter — missing access returns null"
+intent: |
+  _self with empty frontmatter — missing access returns null
 description: |
   _self.frontmatter is present but empty; missing leaf access returns null.
 
@@ -27,3 +29,17 @@ self_binding: {"path":"/x.md","frontmatter":{},"title":"t","tags":[],"fq_id":"fq
 expect:
   outcome: success
   return_result: {"v": null}
+predicted_expect:
+  outcome: success
+  return_result: {"v": null}
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

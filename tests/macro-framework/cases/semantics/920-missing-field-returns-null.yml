@@ -3,6 +3,8 @@
 
 id: mtf-s-920-missing-field-returns-null
 name: Semantics — missing field on present object returns null (REQ-112d ac1)
+intent: |
+  Semantics — missing field on present object returns null (REQ-112d ac1)
 description: |
   Per REQ-112d, leaf-access on a missing key of a present object MUST
   return null instead of raising a runtime error. This enables guard
@@ -30,3 +32,18 @@ expect:
   outcome: success
   return_result:
     v: null
+predicted_expect:
+  outcome: success
+  return_result:
+    v: null
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T15:29:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

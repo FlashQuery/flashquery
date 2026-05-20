@@ -142,6 +142,23 @@ export const NumberLit = createToken({
   pattern: /-?(?:[0-9]+\.[0-9]+|[0-9]+(?!\.[0-9]))/,
 });
 
+// GG-009 (2026-05-20): malformed number literal — scientific notation (`1e5`)
+// and other digit-followed-by-letter sequences. v0 grammar (REQ-011) does
+// NOT support scientific notation; production rejects `1e5` as a
+// `parse_error`. The golden previously split `1e5` into NumberLit(1) +
+// Identifier(e5), surfacing a runtime "Unknown function: e5". This token
+// captures any digit-then-letter run as a single malformed token. The
+// parser declares it (via the static-check pass) as a parse_error with
+// reason `invalid_literal`.
+//
+// Pattern: -?[0-9]+[a-zA-Z_][a-zA-Z0-9_]* — captures `1e5`, `1abc`, `0xff`
+// (also malformed in v0), etc. Ordered BEFORE NumberLit and Identifier so
+// it wins the longest-match tie-breaker for these specific sequences.
+export const MalformedNumber = createToken({
+  name: "MalformedNumber",
+  pattern: /-?[0-9]+[a-zA-Z_][a-zA-Z0-9_]*/,
+});
+
 // Double-quoted string. Backslash escapes for \" and \\ are honored.
 // $var interpolation is handled at evaluation time, not in the lexer.
 // `\$` is preserved so that the interpolation pass can recognize the
@@ -253,6 +270,10 @@ export const allTokens = [
   // Literals
   DoubleQuotedString,
   SingleQuotedString,
+  // GG-009: MalformedNumber MUST come before NumberLit so the chevrotain
+  // longest-match rule catches `1e5` / `1abc` etc. as a single bad token
+  // rather than splitting them into NumberLit + Identifier.
+  MalformedNumber,
   NumberLit,
   // Multi-char punctuation BEFORE their single-char prefixes
   EqEq,
