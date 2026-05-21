@@ -1,0 +1,4 @@
+# This directory holds failure-triage records the runner writes on a genuine
+# FAIL. The records themselves are gitignored (ephemeral run output); this
+# .gitkeep keeps the directory present in a fresh checkout so the runner has
+# somewhere to write.

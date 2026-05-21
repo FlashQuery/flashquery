@@ -373,7 +373,7 @@ The full pilot-generation pipeline composes the author skill, the wrap workflow,
 
 ### MANDATORY: golden capture is non-optional (2026-05-20)
 
-**Every** pilot YAML written by this skill MUST be run through `_generic-capture-runner.ts` (or invoke `captureSnapshot` directly) before being considered complete. **No exceptions.** AI-only predictions are not a valid substitute — that's exactly what the reconciliation gate exists to prevent.
+**Every** pilot YAML written by this skill MUST be run through `scripts/capture-runner.ts` (or invoke `captureSnapshot` directly) before being considered complete. **No exceptions.** AI-only predictions are not a valid substitute — that's exactly what the reconciliation gate exists to prevent.
 
 The skill's "complete" criterion now includes:
 
@@ -385,9 +385,9 @@ The skill's "complete" criterion now includes:
 6. `expect:` block is present (the source-of-truth assertion the runner compares against)
 7. `intent:` field is present (verbatim natural-language description that drove generation)
 
-After every batch of newly authored pilots, run **`_pilot-validate.py`** as the final gate. It walks all pilot YAMLs under `cases/` and emits findings for any pilot missing a required field, any null reconciliation, any missing golden_snapshot when the reconciliation claims success. A clean validator run is the precondition for declaring a batch "done."
+After every batch of newly authored pilots, run **`scripts/validate-pilots.py`** as the final gate. It walks all pilot YAMLs under `cases/` and emits findings for any pilot missing a required field, any null reconciliation, any missing golden_snapshot when the reconciliation claims success. A clean validator run is the precondition for declaring a batch "done."
 
-If the validator reports incomplete pilots, the skill MUST loop back: run the generic capture runner, apply the captures via `_apply-captures.py`, re-validate. Do not declare done until validator is clean.
+If the validator reports incomplete pilots, the skill MUST loop back: run the generic capture runner, apply the captures via `scripts/apply-captures.py`, re-validate. Do not declare done until validator is clean.
 
 This rule exists because between 2026-05-19 and 2026-05-20 the skill drifted: ~398 of 409 pilots in the corpus were incomplete (no golden capture, no reconciliation populated, sometimes missing predicted_expect or intent entirely). The autonomous Run #9 (200 pilots) was the worst offender. Matt called this out, and the fix is to make the validator a non-skippable step. Going forward, no pilot ships without the runner + validator having run successfully.
 
@@ -446,7 +446,7 @@ Every reconciliation event produces calibration signal:
 - **Clean match** → skill's mental model is accurate for this scenario shape. Trust climbs.
 - **Divergence** → real signal: AI/golden/spec disagreement that needs resolving. Each one drives a spec edit, a golden patch, or a description refinement.
 
-The agreement rate across the pilot corpus is a top-line metric of skill quality (see `_skill-eval-log.md` for the running stats).
+The agreement rate across the pilot corpus is a top-line metric of skill quality (see `eval-log.md` for the running stats).
 
 ## Adding new scenarios to the library
 

@@ -1,30 +1,40 @@
 # FlashQuery Macro Testing Framework — gitignore policy
 #
-# This framework's authoritative artifacts (test cases, coverage matrix,
-# failure-triage records, golden source) are checked in. Scaffolding artifacts
-# from agent-driven development and ephemeral run outputs are gitignored.
+# COMMITTED: test cases (cases/), the coverage matrix (coverage/), the golden
+# model source (macro-golden-model/src/), the framework harness (src/), the
+# runnable pipeline scripts (scripts/), gap logs, the eval log, and the README.
 #
-# See _Golden-Spec-Compliance-Audit.md + the framework requirements doc §9.4 / §9.6
-# for the rationale behind the committed surfaces.
+# GITIGNORED: ephemeral run output and quarantined scratch.
+#
+# See the framework requirements doc §9.4 / §9.6 for the rationale behind the
+# committed surfaces.
 
 # ─── Negate parent gitignore rule for `coverage/` ──────────────────────────
-# The repo root .gitignore ignores `coverage/` (intended for nyc/istanbul
-# output). That unanchored rule would match our coverage matrix directory.
+# The repo-root .gitignore ignores `coverage/` (intended for nyc/istanbul
+# output). That unanchored rule would also match our coverage-matrix directory.
 # Per §9.4 the coverage matrix MUST be committed (manifest.ts, coverage.json,
 # MTF_COVERAGE.md, MTF_INTERACTIONS.md), so we re-include it here.
 !coverage/
 !coverage/**
 
-# ─── Fresh-cadence generated tests ──────────────────────────────────────────
+# ─── Fresh-cadence generated tests ─────────────────────────────────────────
 # Per §5.5 fresh mode: tests generated on each CI run, never committed.
 cases-fresh/
 
-# ─── Scaffolding / debugging artifacts ─────────────────────────────────────
-# Convention: anything prefixed `_` at the top level of the framework is a
-# scratch/debug file (smoke runners, probes, intermediate checks). Real
-# framework code uses descriptive names.
-_*.ts
-_*.js
+# ─── Failure-triage records — runtime output ───────────────────────────────
+# The runner writes a record into failures/ on a genuine FAIL. These are
+# ephemeral run output, not committed artifacts. Keep the directory itself
+# (via the .gitkeep) but ignore everything written into it.
+failures/*
+!failures/.gitkeep
+
+# ─── Quarantined scratch ───────────────────────────────────────────────────
+# One-off probes, dead scaffolding, and other throwaway files live in
+# _scratch/. Nothing here is load-bearing — delete the directory at will.
+# (Load-bearing tools live in scripts/ and are committed. Do NOT gitignore
+# files by a leading-underscore name convention — that rule previously hid
+# the capture runner and the P/G diff from version control.)
+_scratch/
 
 # ─── macOS / editor cruft ──────────────────────────────────────────────────
 .DS_Store

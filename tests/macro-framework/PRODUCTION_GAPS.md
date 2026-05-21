@@ -38,7 +38,7 @@ Source documents this gap log references:
 - [`FlashQuery Macro Language Requirements.md`](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md) — REQ-001..063 (archived, canonical for shipped macro engine)
 - [`MCP Broker Requirements.md`](../../../flashquery-product/Roadmap/Features/MCP%20Broker/MCP%20Broker%20Requirements.md) — REQ-103..118 macro-engine extensions
 - Macro Testing Framework requirements: [`tests/macro-framework/`](.)
-- Eval log (discovery context): [`_skill-eval-log.md`](_skill-eval-log.md)
+- Eval log (discovery context): [`eval-log.md`](eval-log.md)
 
 ## How this document works
 
@@ -147,7 +147,7 @@ if (context.toolRegistry && context.allowedToolNames) {
 
 The `if (context.toolRegistry && context.allowedToolNames)` guard silently **skips** the permission pre-scan when either is undefined. Both shell-flag pre-scan (`preScanForbiddenShellFlags`, line 365) and AST preflight (`preflightProgram`, line 366) run unconditionally; only the tool-permission pre-scan is gated. This is the offending divergence: per REQ-028 ac5, pre-scan must run before any statement executes — without exception for missing registry.
 
-Framework call site that exposes the bypass — [`tests/macro-framework/runner.ts:321-380`](runner.ts):
+Framework call site that exposes the bypass — [`tests/macro-framework/src/runner.ts:321-380`](runner.ts):
 
 ```ts
 // Build a tool registry from `tools:` for prescan + dispatch.

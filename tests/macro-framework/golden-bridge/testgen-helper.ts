@@ -43,7 +43,7 @@ import {
   getCell,
   type Cell,
 } from '../coverage/manifest.ts';
-import type { TestCase } from '../runner.ts';
+import type { TestCase } from '../src/runner.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FRAMEWORK_ROOT = join(__dirname, '..');
@@ -755,7 +755,7 @@ export interface ValidateResult {
  * to catch immediate breakage before committing.
  */
 export async function validateGeneratedTest(yamlPath: string): Promise<ValidateResult> {
-  const { loadCases, driveTest, compareToExpect } = await import('../runner.ts');
+  const { loadCases, driveTest, compareToExpect } = await import('../src/runner.ts');
   // Reload the case fresh.
   // `loadCases()` returns ALL cases — we filter to just the file we wrote.
   const allCases = await loadCases();

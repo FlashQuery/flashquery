@@ -17,7 +17,7 @@ import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import type { CompareFinding, DriveResult, TestCase } from '../runner.ts';
+import type { CompareFinding, DriveResult, TestCase } from '../src/runner.ts';
 import type { StateNote } from '../state-notes/schema.ts';
 import type {
   Classification,

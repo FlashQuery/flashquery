@@ -147,6 +147,61 @@ mcp:
   token_lifetime: 24
 
 
+# ─── Brokered MCP Servers ───────────────────────────────────────────────────
+# External MCP servers that FlashQuery can broker to the host model and/or
+# delegated call_model purposes. FlashQuery remains the intermediary; models
+# never connect to these servers directly.
+#
+# This is different from the mcp: section above:
+#   - mcp: configures FlashQuery's own MCP server.
+#   - mcp_servers: configures upstream MCP servers FlashQuery can broker.
+#
+# v1 supports stdio MCP servers only. Servers are spawned lazily on first use
+# and shared across all consumers that are allowed to see them.
+#
+# Uncomment and adapt these examples after installing the upstream MCP server
+# packages and adding any required secrets to your .env file.
+
+# mcp_servers:
+#   brave_search:
+#     transport: stdio
+#     command: npx
+#     args: ["-y", "@brave/brave-search-mcp-server", "--transport", "stdio"]
+#     env:
+#       BRAVE_API_KEY: "${BRAVE_API_KEY}"
+#     # Optional default cost applied to every brokered tool call from this
+#     # server unless overridden for a specific tool below.
+#     cost_per_call: 0.005
+#     tool_overrides:
+#       brave_web_search:
+#         # Replaces the upstream tool description everywhere FlashQuery
+#         # presents the tool: host tools/list, delegated models, and
+#         # search_tools results. TOFU schema pinning still hashes the
+#         # original upstream schema.
+#         description_override: "Search the public web for current information."
+#         cost_per_call: 0.005
+
+
+# ─── Host Tool Surface ──────────────────────────────────────────────────────
+# Controls brokered MCP servers exposed to the host model over FlashQuery's
+# own MCP surface. This is additive with host_mcp_tools, which controls
+# FlashQuery-native tools. Empty or absent host: means no brokered tools are
+# exposed to the host.
+#
+# In v1, mcp_servers lists whole upstream servers by ID. Per-tool subsetting
+# is not supported; use mcp_servers.<server>.tool_overrides above to adjust
+# descriptions and costs for individual brokered tools.
+#
+# Macros inherit the outer caller's surface. A macro called by the host sees
+# host.mcp_servers; a macro called by a delegated purpose sees that purpose's
+# mcp_servers.
+
+# host:
+#   mcp_servers:
+#     - brave_search
+#   tool_search: enabled
+
+
 
 # ─── Locking ────────────────────────────────────────────────────────────────
 # Coordinates concurrent writes across multiple FlashQuery instances that
@@ -294,14 +349,25 @@ llm:
     #
     # - name: researcher
     #   description: |
-    #     Delegated research loop with read-only vault access and a
-    #     purpose-bound template skill.
+    #     Delegated research loop with read-only vault access, brokered web
+    #     search, and a purpose-bound template skill.
     #   models:
     #     - fast
-    #   # tools expose FlashQuery native MCP tools to the delegated model
+    #   # tools expose FlashQuery-native MCP tools to the delegated model
     #   # inside a managed call_model loop. Use tiers or explicit tool names.
     #   tools:
     #     - tier:read-only
+    #
+    #   # Brokered MCP servers exposed to this delegated purpose. These IDs
+    #   # must exist under the top-level mcp_servers map. Purposes do not
+    #   # automatically inherit host.mcp_servers or other purposes' servers.
+    #   mcp_servers:
+    #     - brave_search
+    #
+    #   # When enabled, the delegated model starts with fq.search_tools rather
+    #   # than receiving every eligible native and brokered tool up front.
+    #   tool_search: enabled
+    #
     #   # templates listed here are rendered as generated function/tool
     #   # definitions for the delegated model, not as top-level MCP tools.
     #   # The backing vault document must include frontmatter:
@@ -311,3 +377,12 @@ llm:
     #   #   fq_params: ...  # optional argument schema/template fields
     #   templates:
     #     - Templates/research-brief.md
+    #
+    # - name: vault_summarizer
+    #   description: |
+    #     Summarizes local vault material without access to brokered servers.
+    #   models:
+    #     - fast
+    #   tools:
+    #     - tier:read-only
+    #   tool_search: disabled

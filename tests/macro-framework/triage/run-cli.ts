@@ -36,7 +36,7 @@ import {
   compareToExpect,
   driveTest,
   type TestCase,
-} from '../runner.ts';
+} from '../src/runner.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FRAMEWORK_ROOT = join(__dirname, '..');

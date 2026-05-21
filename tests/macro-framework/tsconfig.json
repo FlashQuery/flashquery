@@ -13,9 +13,9 @@
     "ignoreDeprecations": "6.0"
   },
   "include": [
-    "runner.ts",
+    "src/**/*.ts",
     "cases.test.ts",
-    "framework-registry.ts",
+    "scripts/**/*.ts",
     "state-notes/**/*.ts",
     "golden-bridge/**/*.ts",
     "fixtures/**/*.ts",

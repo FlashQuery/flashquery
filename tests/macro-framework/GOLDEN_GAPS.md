@@ -38,7 +38,7 @@ Source documents this gap log references:
 - [`FlashQuery Macro Language Requirements.md`](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md) — REQ-001..063 (archived, canonical for shipped macro engine)
 - [`MCP Broker Requirements.md`](../../../flashquery-product/Roadmap/Features/MCP%20Broker/MCP%20Broker%20Requirements.md) — REQ-103..118 macro-engine extensions
 - Macro Testing Framework requirements: [`tests/macro-framework/`](.)
-- Eval log (discovery context): [`_skill-eval-log.md`](_skill-eval-log.md)
+- Eval log (discovery context): [`eval-log.md`](eval-log.md)
 - Sister doc — production gaps: [`PRODUCTION_GAPS.md`](PRODUCTION_GAPS.md)
 
 ## How this document works
@@ -216,7 +216,7 @@ The fix is minimal — one grammar rule, one conversion call site. No AST change
 
 - **Affected pilots:** [`cases/dispatch/920-smoke-items-pipeline.yml`](cases/dispatch/920-smoke-items-pipeline.yml) flips from `reconciliation.predicted_matched_captured: false / divergence_kind: golden_parser_gap` to `true / divergence_kind: resolved_golden_gap`. No other pilot in the current corpus is impacted.
 
-- **Eval log** ([`_skill-eval-log.md`](_skill-eval-log.md)): mark the "Golden-parser bug count: pipelines-in-objectEntry — logged" entry as resolved, update the AI⟷golden agreement rate from 5/7 = 71% to 6/7 = 86% (the remaining mismatch is PG-001 itself, which now self-corrects since production is fixed).
+- **Eval log** ([`eval-log.md`](eval-log.md)): mark the "Golden-parser bug count: pipelines-in-objectEntry — logged" entry as resolved, update the AI⟷golden agreement rate from 5/7 = 71% to 6/7 = 86% (the remaining mismatch is PG-001 itself, which now self-corrects since production is fixed).
 
 ### Resolution
 
@@ -270,7 +270,7 @@ npx tsx tests/macro-framework/_backfill-smoke-capture.ts
 | No AST changes required (type already `Expr`) | **N/A — by design** | `ObjectEntry.value: Expr` already permits any expression. |
 | No evaluator changes required (already delegates to `evalExpr`) | **N/A — by design** | `case "ObjectLit"` in the evaluator already handles any `Expr` shape via recursive `evalExpr` calls. |
 | Pilot 920 `reconciliation:` flips to `predicted_matched_captured: true` / `resolved_golden_gap` | **RESOLVED** | Confirmed at [`cases/dispatch/920-smoke-items-pipeline.yml`](cases/dispatch/920-smoke-items-pipeline.yml) — reconciliation block updated with `divergence_kind: resolved_golden_gap`, `golden_gap_id: GG-001`, and matching captured envelope. |
-| Eval log updated to reflect resolution | **RESOLVED** | Confirmed at [`_skill-eval-log.md`](_skill-eval-log.md) — golden-parser bug count now "2 surfaced, 2 resolved"; AI⟷golden agreement rate climbs from 71% to 100% across the smoke-test corpus. |
+| Eval log updated to reflect resolution | **RESOLVED** | Confirmed at [`eval-log.md`](eval-log.md) — golden-parser bug count now "2 surfaced, 2 resolved"; AI⟷golden agreement rate climbs from 71% to 100% across the smoke-test corpus. |
 
 **Executable verification (this retest):**
 
@@ -477,11 +477,11 @@ npx tsx tests/macro-framework/_backfill-smoke-capture.ts
 
 ### Discovered By
 
-- **Discovery mechanism:** Run #12 corpus-wide golden-capture backfill via `_generic-capture-runner.ts` + `_apply-captures.py` + `_pilot-validate.py`. Of 409 pilots backfilled, 360 (88%) matched cleanly on first capture; 49 (12%) surfaced as `divergence_kind: predicted_diverges_from_golden`.
+- **Discovery mechanism:** Run #12 corpus-wide golden-capture backfill via `scripts/capture-runner.ts` + `scripts/apply-captures.py` + `scripts/validate-pilots.py`. Of 409 pilots backfilled, 360 (88%) matched cleanly on first capture; 49 (12%) surfaced as `divergence_kind: predicted_diverges_from_golden`.
 - **Test run date:** 2026-05-20
 - **Divergence kind:** `predicted_diverges_from_golden` (AI's `predicted_expect` ≠ golden's captured envelope). Production still matches each pilot's hand-authored `expect:` block — the 410/410 suite is green — so this is exclusively an AI-vs-Golden disagreement at this point. Investigation will determine where each pilot lands on the AI-mistake / capture-runner-drift / real-golden-bug spectrum.
 
-The 49 pilots are listed below by hypothesised category. **All 49 are filed here per Matt's directive ("every one of these 49 needs to be listed in one of the *gap.md documents"); the per-pilot investigation step then decides whether each pilot lands as (a) AI-prediction-only fix to `predicted_expect`, (b) `_generic-capture-runner.ts` archetype drift requiring a refactor, or (c) a real golden gap meriting its own GG-NNN entry split off from this batch.**
+The 49 pilots are listed below by hypothesised category. **All 49 are filed here per Matt's directive ("every one of these 49 needs to be listed in one of the *gap.md documents"); the per-pilot investigation step then decides whether each pilot lands as (a) AI-prediction-only fix to `predicted_expect`, (b) `scripts/capture-runner.ts` archetype drift requiring a refactor, or (c) a real golden gap meriting its own GG-NNN entry split off from this batch.**
 
 ### Requirement
 
@@ -517,7 +517,7 @@ Spec says field access on null short-circuits to null (REQ-112d missing-field-nu
 
 **Cluster C — REQ-108 argument passthrough — WriteTool envelope shape (11 pilots)**
 
-The 530-540 series pilots are auto-generated from `_tier2-batch-generator.ts` and exercise REQ-108 (arguments pass through to the brokered tool bit-exact). The pilots use the `WriteTool` archetype, which returns `{ ok, side_effect, args }`. The macro nests the response under `v` and exits `{ got: $v.args.msg }`. AI predicted `success`; golden's generic capture-runner WriteTool simulation returns `error` because of an archetype drift in `_generic-capture-runner.ts` (the generic runner's WriteTool implementation isn't the same as the framework's `fixtures/fake-broker/archetypes.ts` WriteTool). Strong suspect: capture-runner refactor (use framework archetypes) resolves the entire cluster.
+The 530-540 series pilots are auto-generated from `scripts/tier2-batch-generator.ts` and exercise REQ-108 (arguments pass through to the brokered tool bit-exact). The pilots use the `WriteTool` archetype, which returns `{ ok, side_effect, args }`. The macro nests the response under `v` and exits `{ got: $v.args.msg }`. AI predicted `success`; golden's generic capture-runner WriteTool simulation returns `error` because of an archetype drift in `scripts/capture-runner.ts` (the generic runner's WriteTool implementation isn't the same as the framework's `fixtures/fake-broker/archetypes.ts` WriteTool). Strong suspect: capture-runner refactor (use framework archetypes) resolves the entire cluster.
 
 - [`cases/dispatch/530-530-arg-string-passthrough.yml`](cases/dispatch/530-530-arg-string-passthrough.yml)
 - [`cases/dispatch/531-531-arg-number-passthrough.yml`](cases/dispatch/531-531-arg-number-passthrough.yml)
@@ -593,7 +593,7 @@ The parse-error envelope's `details` shape; AI predicted one structure, golden p
 
 **Cluster M — Self-test pilot (1 pilot) — should be excluded from triage**
 
-- [`cases/errors/_intentional-mismatch-fake-expected-result.yml`](cases/errors/_intentional-mismatch-fake-expected-result.yml) — explicit framework self-test that deliberately misaligns predicted/captured. Already marked with the `_` prefix as a meta-test. Triage outcome: exclude from the divergence count (it's by design); add an exception in `_pilot-validate.py` so this file's `divergence_kind: predicted_diverges_from_golden` is the intended state.
+- [`cases/errors/_intentional-mismatch-fake-expected-result.yml`](cases/errors/_intentional-mismatch-fake-expected-result.yml) — explicit framework self-test that deliberately misaligns predicted/captured. Already marked with the `_` prefix as a meta-test. Triage outcome: exclude from the divergence count (it's by design); add an exception in `scripts/validate-pilots.py` so this file's `divergence_kind: predicted_diverges_from_golden` is the intended state.
 
 **Cluster total:** 8 + 5 + 11 + 7 + 3 + 2 + 5 + 2 + 1 + 1 + 1 + 1 + 1 = 48 + the self-test = 49.
 
@@ -603,7 +603,7 @@ Most of the 49 are expected to resolve into one of two non-spec-bug categories:
 
 1. **AI-prediction errors in older hand-authored pilots.** Clusters A and B were authored before the REQ-024 5-path termination refinement was fully internalised. Their `predicted_expect.error.code: tool_call_failed` is wrong; the golden's `runtime_error` is correct. The fix is to update `predicted_expect` in each pilot — no golden change, no spec change. (Per Matt's "those have been compared and found to be equivalent" target state for resolved pilots: the `expect:` blocks should be updated to match the golden envelope, which means accepting `runtime_error` as canonical for these paths.)
 
-2. **`_generic-capture-runner.ts` archetype drift.** Clusters C, D, E, and parts of G are most-likely-explained by the fact that the generic capture runner re-implements the archetype semantics (WriteTool, StructuredContentTool, ScriptedTool, LyingTool, shell vault) as inline `ToolFn` closures, rather than importing the framework's actual archetype factories from [`tests/macro-framework/fixtures/fake-broker/archetypes.ts`](fixtures/fake-broker/archetypes.ts). The two implementations have drifted: the runner's simulation differs from what production's `FakeBroker` actually returns. The proper resolution is to refactor `_generic-capture-runner.ts` to use the framework archetypes directly, so the golden captures match the production-archetype envelope by construction.
+2. **`scripts/capture-runner.ts` archetype drift.** Clusters C, D, E, and parts of G are most-likely-explained by the fact that the generic capture runner re-implements the archetype semantics (WriteTool, StructuredContentTool, ScriptedTool, LyingTool, shell vault) as inline `ToolFn` closures, rather than importing the framework's actual archetype factories from [`tests/macro-framework/fixtures/fake-broker/archetypes.ts`](fixtures/fake-broker/archetypes.ts). The two implementations have drifted: the runner's simulation differs from what production's `FakeBroker` actually returns. The proper resolution is to refactor `scripts/capture-runner.ts` to use the framework archetypes directly, so the golden captures match the production-archetype envelope by construction.
 
 3. **Real golden gaps.** A subset of Clusters F, G, H, I, K, L could still be real golden-vs-spec divergences. Those will spin out from this GG-004 batch entry into their own GG-005, GG-006, ... per-cluster gap entries as the investigation discovers them.
 
@@ -613,7 +613,7 @@ The reason to file all 49 in this gap doc — even though most are not golden bu
 
 Investigation plan (executed as follow-up work to this filing):
 
-1. **Refactor `_generic-capture-runner.ts`** to import archetype factories from `fixtures/fake-broker/archetypes.ts` instead of re-implementing them inline. Re-capture all 49 divergent pilots through the refactored runner. Expected: Clusters C, D, E, and parts of G resolve cleanly (~21 pilots).
+1. **Refactor `scripts/capture-runner.ts`** to import archetype factories from `fixtures/fake-broker/archetypes.ts` instead of re-implementing them inline. Re-capture all 49 divergent pilots through the refactored runner. Expected: Clusters C, D, E, and parts of G resolve cleanly (~21 pilots).
 
 2. **Per-cluster spec triage for the residue.** For each pilot still divergent after the refactor, look up the cited REQ in the spec, compare golden's captured envelope to spec text, and classify:
    - **AI-prediction-only fix** (update `predicted_expect` and `expect` to match golden; reconciliation flips to `clean_match_after_prediction_fix`): Clusters A, B, and AI-error subsets of H.
@@ -626,9 +626,9 @@ Investigation plan (executed as follow-up work to this filing):
 
 ### Resolution
 
-**Step 1 — Capture-runner refactor (2026-05-20).** Refactored [`_generic-capture-runner.ts`](_generic-capture-runner.ts) to import the framework's archetype factories from [`fixtures/fake-broker/archetypes.ts`](fixtures/fake-broker/archetypes.ts) verbatim (mirroring `runner.ts:291` ARCHETYPE_FACTORIES exactly). The bug the original runner had — missing WriteTool case, wrong field names (`returns` vs `value`), `LyingTool` returning empty `{}` — were all consequences of re-implementing archetypes by hand instead of importing the framework's source of truth. After the refactor, the runner is structurally guaranteed to feed the golden the same archetype behavior production sees.
+**Step 1 — Capture-runner refactor (2026-05-20).** Refactored [`scripts/capture-runner.ts`](scripts/capture-runner.ts) to import the framework's archetype factories from [`fixtures/fake-broker/archetypes.ts`](fixtures/fake-broker/archetypes.ts) verbatim (mirroring `runner.ts:291` ARCHETYPE_FACTORIES exactly). The bug the original runner had — missing WriteTool case, wrong field names (`returns` vs `value`), `LyingTool` returning empty `{}` — were all consequences of re-implementing archetypes by hand instead of importing the framework's source of truth. After the refactor, the runner is structurally guaranteed to feed the golden the same archetype behavior production sees.
 
-**Step 2 — Comparator fix (2026-05-20).** Fixed [`_apply-captures.py`](_apply-captures.py) `compare()` so that when `predicted_expect.return_result` is **absent**, the comparator does NOT flag the capture as divergent on return_result grounds. Pilots that only declared `outcome: success` (without naming a return shape) were being wrongly flagged because the comparator treated absent-prediction as a contradictory expectation. The fix matches the comparator's already-correct handling of `error.code` (only compare if both pred and cap have a value).
+**Step 2 — Comparator fix (2026-05-20).** Fixed [`scripts/apply-captures.py`](scripts/apply-captures.py) `compare()` so that when `predicted_expect.return_result` is **absent**, the comparator does NOT flag the capture as divergent on return_result grounds. Pilots that only declared `outcome: success` (without naming a return shape) were being wrongly flagged because the comparator treated absent-prediction as a contradictory expectation. The fix matches the comparator's already-correct handling of `error.code` (only compare if both pred and cap have a value).
 
 **Step 3 — Re-capture results.** Re-ran capture + apply on all 410 pilots:
 
@@ -658,7 +658,7 @@ Investigation plan (executed as follow-up work to this filing):
 
 - **GG-008** (deferred) — the **2 _exists compound pilots** (lifecycle/801, lifecycle/802) — need individual investigation against REQ-109 + §5.2 boolean-composition.
 
-- **Special — Cluster M annotated as self-test** — pilot `_intentional-mismatch-fake-expected-result.yml` is the framework's self-test for the gate itself; its `predicted_diverges_from_golden` is the intended state. No fix required; will be excluded from the corpus-wide divergence count in `_pilot-validate.py` follow-up.
+- **Special — Cluster M annotated as self-test** — pilot `_intentional-mismatch-fake-expected-result.yml` is the framework's self-test for the gate itself; its `predicted_diverges_from_golden` is the intended state. No fix required; will be excluded from the corpus-wide divergence count in `scripts/validate-pilots.py` follow-up.
 
 **Outstanding:** pilot 32 (help-sentinel) and pilot 1108 (parse-error code) — folded into per-investigation triage; will spin out further GG-NNN entries if confirmed as real golden bugs.
 
@@ -673,11 +673,11 @@ _Partial._ Of the 49 originally-divergent pilots, 21 are now `clean_match`. The 
 
 | Prescribed correction | Status | Evidence |
 |---|---|---|
-| Refactor `_generic-capture-runner.ts` to import framework archetype factories | **RESOLVED** | Confirmed at [`_generic-capture-runner.ts`](_generic-capture-runner.ts) — `ARCHETYPE_FACTORIES` table now mirrors `runner.ts:291` exactly; bridge function `bridgeArchetypeToToolFn` wraps framework `ArchetypeHandler` as golden `ToolFn`. |
-| Comparator skips absent `return_result` predictions | **RESOLVED** | Confirmed at [`_apply-captures.py`](_apply-captures.py) `compare()` — `if "return_result" in prediction` gate added before the deep comparison. |
+| Refactor `scripts/capture-runner.ts` to import framework archetype factories | **RESOLVED** | Confirmed at [`scripts/capture-runner.ts`](scripts/capture-runner.ts) — `ARCHETYPE_FACTORIES` table now mirrors `runner.ts:291` exactly; bridge function `bridgeArchetypeToToolFn` wraps framework `ArchetypeHandler` as golden `ToolFn`. |
+| Comparator skips absent `return_result` predictions | **RESOLVED** | Confirmed at [`scripts/apply-captures.py`](scripts/apply-captures.py) `compare()` — `if "return_result" in prediction` gate added before the deep comparison. |
 | Re-capture corpus and confirm cluster reductions | **RESOLVED** | 410/410 pilots captured; divergence count dropped 49 → 28; 21 pilots flipped to `clean_match`; closures itemized above. |
 | Open child gap entries for remaining divergences | **PARTIAL** | GG-005 filed for the 18 `runtime_error` pilots; GG-006/007/008 noted as deferred placeholders. |
-| Annotate `_intentional-mismatch-fake-expected-result.yml` as self-test | **PENDING** | Will be addressed in a follow-up by making `_pilot-validate.py` exclude file basenames beginning with `_intentional-`. |
+| Annotate `_intentional-mismatch-fake-expected-result.yml` as self-test | **PENDING** | Will be addressed in a follow-up by making `scripts/validate-pilots.py` exclude file basenames beginning with `_intentional-`. |
 
 **Status:** **PARTIAL.** Runner-archetype drift confirmed as the dominant cause (≈43% of the 49 closed by the refactor + comparator fix). The remaining 28 split cleanly: 18 to GG-005 (real spec/golden ambiguity), 3 to GG-006 (shell-verb vault-state limitation), 7 to deferred GG-007/008 plus per-pilot triage.
 
@@ -1246,7 +1246,7 @@ Plus one pilot rewrite + one comparator extension for the residue:
 | Item | Pilots | Change |
 |---|---|---|
 | Pilot 710 rewrite | errors/710 | Macro changed from `ls "/etc"` (which exercises path-not-found, not vault-jail) to `ls "../../etc"` (true `..` escape, exercises REQ-042 `forbidden_path/resolves_outside_vault`); outcome terminology updated from `fail` → `error` |
-| Comparator extension | _intentional-mismatch | `_apply-captures.py compare()` now honors `comparison: match_some` — same semantics as the framework runner's `compareToExpect` |
+| Comparator extension | _intentional-mismatch | `scripts/apply-captures.py compare()` now honors `comparison: match_some` — same semantics as the framework runner's `compareToExpect` |
 
 **Corpus-wide retest results:**
 
@@ -1265,7 +1265,7 @@ Plus one pilot rewrite + one comparator extension for the residue:
 | Check | Command | Result |
 |---|---|---|
 | Framework suite | `npm run test:macro-framework` | **411/411 passing** |
-| Corpus-wide capture + apply | `npx tsx tests/macro-framework/_generic-capture-runner.ts && python3 tests/macro-framework/_apply-captures.py` | **410/410 clean_match, 0 divergent** |
+| Corpus-wide capture + apply | `npx tsx tests/macro-framework/scripts/capture-runner.ts && python3 tests/macro-framework/scripts/apply-captures.py` | **410/410 clean_match, 0 divergent** |
 | Golden self-tests | `npx tsx tests/macro-framework/macro-golden-model/src/test-snapshot.ts` | All gap checks PASS |
 
 **Status:** **GG-006 through GG-011 all CLOSED.** Combined with GG-001 / GG-002 / GG-003 / GG-005 (previously closed) and GG-004 (now closed — its 49-pilot residue is fully accounted for through the GG-005..011 chain), the macro testing framework's reconciliation gate is reading 100% clean across the 410-pilot corpus for the first time since the gate's introduction.
@@ -1276,7 +1276,7 @@ Plus one pilot rewrite + one comparator extension for the residue:
 
 ### Context
 
-After the GG-006..011 closures, the reconciliation gate's comparator was extended to do field-by-field envelope diffing between production and golden across the entire 410-pilot corpus (the `_pg-envelope-diff.ts` script). The narrow comparator had only checked three fields (outcome, return_result, error.code). The extended comparator surfaced 145 additional divergences across 8 clusters. Each cluster was triaged against the canonical spec — not against production's behavior. The following GG-NNN entries cover the clusters where the golden is the spec-non-conforming side. A sister PG entry (PG-002) covers a cluster where production is non-conforming. Two clusters are spec-ambiguous (wc default semantics, varref reason code naming — though the latter ended up resolved per Broker REQ-112a).
+After the GG-006..011 closures, the reconciliation gate's comparator was extended to do field-by-field envelope diffing between production and golden across the entire 410-pilot corpus (the `scripts/pg-envelope-diff.ts` script). The narrow comparator had only checked three fields (outcome, return_result, error.code). The extended comparator surfaced 145 additional divergences across 8 clusters. Each cluster was triaged against the canonical spec — not against production's behavior. The following GG-NNN entries cover the clusters where the golden is the spec-non-conforming side. A sister PG entry (PG-002) covers a cluster where production is non-conforming. Two clusters are spec-ambiguous (wc default semantics, varref reason code naming — though the latter ended up resolved per Broker REQ-112a).
 
 ---
 
@@ -1513,13 +1513,13 @@ To resolve: the capture pipeline needs a lightweight `McpBroker` adapter that wa
 
 ### Proposed Changes
 
-- **Capture pipeline** ([`_generic-capture-runner.ts`](_generic-capture-runner.ts), [`_pg-envelope-diff.ts`](_pg-envelope-diff.ts), and the golden's `captureSnapshot` API surface): add an adapter `McpBroker` that surfaces drift-marked archetype payloads. Wire it into the registry build alongside the existing ToolFn bridge.
+- **Capture pipeline** ([`scripts/capture-runner.ts`](scripts/capture-runner.ts), [`scripts/pg-envelope-diff.ts`](scripts/pg-envelope-diff.ts), and the golden's `captureSnapshot` API surface): add an adapter `McpBroker` that surfaces drift-marked archetype payloads. Wire it into the registry build alongside the existing ToolFn bridge.
 - **No spec edit required;** REQ-105 / REQ-042 are clear on the production behavior; the golden engine matches; only the capture infrastructure lags.
 - **Affected pilots:** 10 in this cluster (29, 601, 602, ...).
 
 ### Resolution
 
-Landed 2026-05-20. The framework's `NeedsInputViaTofuDrift` archetype attaches a `__tofuDriftPayload` marker to its handler. The capture pipelines (`_generic-capture-runner.ts` and `_pg-envelope-diff.ts`) detect this marker at bridge time and throw `MacroNeedsUserInputError` directly with the spec-conforming payload (REQ-105 fields: `question`, `answer_shape`, `event: schema_drift_detected`, `server`, `tool`, `old_schema`, `new_schema`, `diff_summary`, `options`). This mirrors production's pre-dispatch short-circuit semantics from REQ-042 (broker emits before dispatch). The error propagates through `dispatchToolCall`'s catch path (which excludes `MacroNeedsUserInputError` from fail-fast wrapping) and surfaces through `classifyError` as the canonical `needs_user_input` envelope. The GG-015 catch-path guard already excludes `MacroNeedsUserInputError` from `side_effects.tool_calls` recording, so the short-circuited call doesn't appear in the manifest — matching production's broker.callLog (also empty on short-circuit).
+Landed 2026-05-20. The framework's `NeedsInputViaTofuDrift` archetype attaches a `__tofuDriftPayload` marker to its handler. The capture pipelines (`scripts/capture-runner.ts` and `scripts/pg-envelope-diff.ts`) detect this marker at bridge time and throw `MacroNeedsUserInputError` directly with the spec-conforming payload (REQ-105 fields: `question`, `answer_shape`, `event: schema_drift_detected`, `server`, `tool`, `old_schema`, `new_schema`, `diff_summary`, `options`). This mirrors production's pre-dispatch short-circuit semantics from REQ-042 (broker emits before dispatch). The error propagates through `dispatchToolCall`'s catch path (which excludes `MacroNeedsUserInputError` from fail-fast wrapping) and surfaces through `classifyError` as the canonical `needs_user_input` envelope. The GG-015 catch-path guard already excludes `MacroNeedsUserInputError` from `side_effects.tool_calls` recording, so the short-circuited call doesn't appear in the manifest — matching production's broker.callLog (also empty on short-circuit).
 
 ### Resolution - Complete
 
@@ -1538,7 +1538,7 @@ All 10 TOFU pilots now produce `outcome: needs_user_input` in the golden capture
 
 | Prescribed correction | Status | Evidence |
 |---|---|---|
-| Bridge detects `__tofuDriftPayload` marker on framework archetype | **RESOLVED** | [`_generic-capture-runner.ts`](_generic-capture-runner.ts) and [`_pg-envelope-diff.ts`](_pg-envelope-diff.ts) — `bridgeArchetypeToToolFn` / `bridgeArchetype` check for the marker first. |
+| Bridge detects `__tofuDriftPayload` marker on framework archetype | **RESOLVED** | [`scripts/capture-runner.ts`](scripts/capture-runner.ts) and [`scripts/pg-envelope-diff.ts`](scripts/pg-envelope-diff.ts) — `bridgeArchetypeToToolFn` / `bridgeArchetype` check for the marker first. |
 | Bridge throws MacroNeedsUserInputError with REQ-105 payload | **RESOLVED** | Both files import `MacroNeedsUserInputError` from `macro-golden-model/src/evaluator.ts` and throw with the eight REQ-105 fields. |
 | TOFU pilots flip to `outcome: needs_user_input` in golden | **RESOLVED** | All 10 TOFU pilots removed from the P/G compare skip list; only pilot 603 still flagged (for PG-002 trace-absent reason, unrelated to TOFU). |
 | Framework suite passes | **RESOLVED** | 411/411 passing. |
@@ -1835,16 +1835,16 @@ A 2026-05-20 thin-cell coverage pass added `lifecycle/513-trace-none-suppressed.
 
 NOT a golden-model bug — a **harness** bug. The golden model was spec-correct; the capture harness never gave it the chance:
 
-1. `_generic-capture-runner.ts` built the `captureSnapshot` options object from `self_binding` only — it never read the pilot's `trace_mode` / `progress_mode` / `dry_run` fields. So every golden capture ran at the default trace mode.
-2. `_pg-envelope-diff.ts` threaded `dry_run` through but not `trace_mode`.
+1. `scripts/capture-runner.ts` built the `captureSnapshot` options object from `self_binding` only — it never read the pilot's `trace_mode` / `progress_mode` / `dry_run` fields. So every golden capture ran at the default trace mode.
+2. `scripts/pg-envelope-diff.ts` threaded `dry_run` through but not `trace_mode`.
 3. Separately, the P/G diff read the golden trace from the snapshot's top-level `trace` field — which is the **un-gated** record of all steps — rather than from `result_envelope.trace`, the **wire-shaped, mode-gated** trace. Production's `payload.trace` is the gated wire trace, so the comparison was wire-vs-snapshot, guaranteed to diverge under `trace_mode: none`.
 
 ### Resolution
 
 Landed 2026-05-20:
 
-- **`_generic-capture-runner.ts`**: builds a `captureOpts` object that now also carries `traceMode`, `progressMode`, and `dryRun` read from the pilot YAML.
-- **`_pg-envelope-diff.ts`**: threads `traceMode` / `progressMode` into the golden `captureSnapshot` call; and the trace comparison now reads the golden trace from `result_envelope.trace` (wire-shaped, mode-gated) — its absence there means the mode suppressed it — falling back to top-level `trace` only for envelopes with no `result_envelope`.
+- **`scripts/capture-runner.ts`**: builds a `captureOpts` object that now also carries `traceMode`, `progressMode`, and `dryRun` read from the pilot YAML.
+- **`scripts/pg-envelope-diff.ts`**: threads `traceMode` / `progressMode` into the golden `captureSnapshot` call; and the trace comparison now reads the golden trace from `result_envelope.trace` (wire-shaped, mode-gated) — its absence there means the mode suppressed it — falling back to top-level `trace` only for envelopes with no `result_envelope`.
 
 ### Post-Implementation Retest
 

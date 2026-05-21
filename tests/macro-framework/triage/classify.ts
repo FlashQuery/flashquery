@@ -22,7 +22,7 @@
 // `findings[]`, test YAML metadata, golden_snapshot.state_notes. No raw
 // stdout / stderr or text streams enter the classifier.
 
-import type { CompareFinding, TestCase } from '../runner.ts';
+import type { CompareFinding, TestCase } from '../src/runner.ts';
 import type { StateNote } from '../state-notes/schema.ts';
 
 export type Classification =

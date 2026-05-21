@@ -35,7 +35,7 @@ The classifier runs at runtime inside `cases.test.ts` (replacing the Phase 3 dra
 Read these when relevant:
 
 - `flashquery-product/Roadmap/Features/Macro Testing Framework/Macro Testing Framework Requirements.md` §5.8 (Failure-Triage Workflow), §9.6 (record format), §11.6 (authority levels).
-- `tests/macro-framework/failures/README.md` — the existing failure-record library landing page.
+- `tests/macro-framework/README.md` §9 — running and debugging failures (the framework's own operator guide).
 - `tests/macro-framework/triage/classify.ts` — the heuristic implementation.
 - `tests/macro-framework/triage/record.ts` — the writer / updater.
 - `.claude/skills/flashquery-macro-testgen/SKILL.md` — where stale tests get refreshed.
@@ -158,7 +158,7 @@ When modifying this skill, the run-cli, the classifier, or the record writer:
 
 **Stale-expectations gets refresh, not engine fixes.** When stale-expectations is the classification, the next step is `flashquery-macro-testgen --mode=refresh`, never an engine code change. Catching this distinction is the whole point of checking `golden_version` first.
 
-**Failure records are committed.** Per §9.6 the `failures/` directory is checked into git. Historical records (e.g., the 6 pilot-10 records from Phase 3) are preserved as history; new records add to them.
+**Failure records are runtime output, not committed.** As of the 2026-05-21 framework reorganization the `failures/` directory is gitignored (except `.gitkeep`) — the runner writes a classified record there on a genuine FAIL, but those records are ephemeral run output and regenerate on every run. Triage a record while it exists; durable findings belong in `GOLDEN_GAPS.md` / `PRODUCTION_GAPS.md`, not in `failures/`.
 
 ## Related skills
 

@@ -1,239 +1,484 @@
 # Macro Testing Framework
 
-The sixth Vitest tier — peer of `tests/unit/`, `tests/integration/`, `tests/e2e/`, `tests/scenarios/{directed,integration}/`, `tests/benchmark/` — built to exhaustively validate the FlashQuery macro engine's behaviour space. YAML-authored permutation tests drive the production engine in-process, comparing structured outputs to expectations captured at testgen time from a separate "golden" implementation.
+Exhaustive behavioural test coverage for the FlashQuery **macro engine** (`src/macro/`).
+Tests are declarative YAML "pilots"; the runner drives the real production engine
+in-process and compares its structured output to an expectation that has been
+**reconciled against an independent golden implementation**.
 
-The authoritative spec is `flashquery-product/Roadmap/Features/Macro Testing Framework/Macro Testing Framework Requirements.md`. Section references throughout this README point there.
+This is the sixth Vitest tier, a peer of `tests/unit/`, `tests/integration/`,
+`tests/e2e/`, `tests/scenarios/`, and `tests/benchmark/`.
 
-## 1. Overview
+The authoritative spec is
+`flashquery-product/Roadmap/Features/Macro Testing Framework/Macro Testing Framework Requirements.md`.
+`§N` references throughout point there. The macro **language** is specified by the
+archived `FlashQuery Macro Language Requirements.md` (REQ-001..063) and the active
+`MCP Broker Requirements.md` §7.15 (REQ-103..118).
 
-**What it tests.** Macro grammar, evaluator semantics, control flow, tool dispatch, lifecycle (dry-run / real-run / trace / progress / cancel), error taxonomy, and per-invocation isolation. The seven `MTF-*` coverage categories (G/S/C/D/L/E/I) map one-to-one to language subsystems, plus a framework-self-test category `MTF-FW`. See §5.3.
+> **New here? Read §1, then §13 ("Orientation for an AI dev agent") — that section
+> is the fast path to doing anything in this directory.**
 
-**Where it sits.** Per §3.5 this layer complements (does not replace) the other test tiers:
+---
 
-| Tier | Purpose |
-|---|---|
-| `tests/unit/` | Pure functions, no IO |
-| `tests/integration/` | Real Supabase + real handlers, broader product surface |
-| `tests/e2e/` | Full MCP wire transport |
-| `tests/scenarios/directed/` | Realistic single-user flows (Python) |
-| `tests/scenarios/integration/` | Realistic multi-system flows (Python) |
-| `tests/benchmark/` | Latency / throughput |
-| **`tests/macro-framework/`** | **Exhaustive engine-behaviour permutations (this layer).** |
+## 1. The core idea — three-oracle reconciliation
 
-**Who uses it.** Engine maintainers (regression coverage), the `flashquery-macro-testgen` skill (generates new pilots), and CI (regresses on engine drift).
+A test's expected output is never asserted by one source. Three independent
+oracles must agree before a pilot is trusted:
 
-## 2. Architecture summary
+1. **AI prediction** (`predicted_expect:`) — what the pilot's author (usually an
+   AI) predicted the engine would do, written from the spec.
+2. **Golden model** (`macro-golden-model/`) — a separate, independent TypeScript
+   implementation of the macro language that encodes the spec. It is *executed*
+   to capture the real envelope.
+3. **Production engine** (`src/macro/`) — the actual shipping engine the suite
+   runs against.
 
-- **Golden-as-snapshot** (§5.6) — A separate TypeScript implementation lives in `macro-golden-model/` and serves as the executable oracle. Each test embeds a snapshot of the golden's output captured at authoring time; the runner never invokes the golden. INV-MTF-04: golden is read-only at runtime.
-- **Structured-comparison invariant** (INV-MTF-07) — The runner compares structured fields only: return envelopes, trace entries (kind sequence), side-effect manifests, error envelopes, progress milestones. Never raw stdout/stderr.
-- **Fake-broker + real-Supabase stack** (INV-MTF-06 / §9.7) — Native FQ handlers run real against a real Supabase test instance. Brokered tools are fakes drawn from an archetype library (`fixtures/fake-broker/archetypes.ts`, per §5.7). Per-test latency target ≤50ms median.
-- **Author-declared pass mode** (§5.4) — Each test declares `expect.comparison` as `match_all` (default), `match_some`, or `match_none`. The runner's comparator is dumb-simple; only the verdict changes by mode.
+The **reconciliation gate**: the AI prediction is compared to the golden
+capture. If they **disagree**, work stops — either the prediction misread the
+spec or the golden has a bug; you investigate before the pilot enters the
+corpus. If they **agree**, that agreed envelope becomes the pilot's `expect:`
+block and the Vitest suite runs *production* against it. Every pilot's
+`reconciliation:` block records the verdict (`clean_match` or
+`predicted_diverges_from_golden`).
 
-## 3. Running tests
+A second, wider check — the **P/G envelope diff** — compares golden vs.
+production *field by field* across the whole corpus, catching divergences the
+narrow reconciliation (outcome / return_result / error.code only) would miss.
+
+When golden and production genuinely disagree, the divergence is triaged
+against the **spec** — never against whichever engine you happen to trust — and
+filed in `GOLDEN_GAPS.md` (golden bug) or `PRODUCTION_GAPS.md` (production bug).
+
+Today the corpus is **510 pilots** across **77 coverage cells**; the suite is
+**511 Vitest tests** (510 pilots + 1 framework self-test).
+
+---
+
+## 2. Directory layout
+
+```
+tests/macro-framework/
+  README.md                  ← this file
+  GOLDEN_GAPS.md              ← log of golden-model bugs found + fixed (GG-NNN)
+  PRODUCTION_GAPS.md          ← log of production-engine gaps found (PG-NNN)
+  eval-log.md                 ← calibration history for the testgen/author skills
+  cases.test.ts               ← Vitest entrypoint (pinned by the vitest config)
+  tsconfig.json               ← editor / `tsc --noEmit` config
+
+  src/                        ← the framework harness (library code, imported)
+    runner.ts                 ← YAML loader + driveTest + Vitest translator + comparator
+    framework-registry.ts     ← thin tool-registry construction for tests
+    framework-mirror-check.ts ← production-drift tripwire (see §11)
+
+  scripts/                    ← runnable pipeline tools (run directly, never imported)
+    capture-runner.ts         ← corpus-wide golden capture → JSON
+    apply-captures.py         ← writes capture JSON back into pilot reconciliation blocks
+    validate-pilots.py        ← required-field validator (the batch-done gate)
+    pg-envelope-diff.ts        ← golden-vs-production field-by-field diff
+    tier2-batch-generator.ts  ← one-time Tier-2 pilot generator (kept for provenance)
+
+  cases/                      ← the pilot corpus, by category (see §6)
+    grammar/ semantics/ control-flow/ dispatch/ lifecycle/ errors/ isolation/
+  cases-ts/                   ← escape-hatch for imperative TS tests (normally empty)
+  cases-fresh/                ← gitignored: fresh-cadence generated tests, never committed
+
+  coverage/                   ← the MTF-* coverage matrix
+    manifest.ts               ← source of truth for the cell list
+    render.ts                 ← regenerates the three outputs below
+    coverage.json  MTF_COVERAGE.md  MTF_INTERACTIONS.md
+
+  fixtures/                   ← fake broker, fake clock, fake LLM, vault + progress helpers
+  golden-bridge/              ← per-pilot capture machinery used by the testgen skill
+  triage/                     ← failure classification + triage-record writer (Phase 6)
+  state-notes/                ← state_notes schema + assertions + render
+  macro-golden-model/         ← the golden model (separate npm package — see §9)
+
+  failures/                   ← runtime output: triage records (gitignored except .gitkeep)
+```
+
+Conventions:
+
+- **`src/` is library code** — imported by `cases.test.ts` and the other modules.
+  **`scripts/` is runnable tools** — invoked directly, never imported.
+- There is **no leading-underscore "scratch" convention** — it used to exist and
+  it gitignored two load-bearing tools by accident. Everything outside
+  `cases-fresh/` and `failures/` is real and committed.
+- Two pilots keep a leading underscore on purpose because they are framework
+  self-test *fixtures*: `cases/control-flow/_placeholder-loop.yml` (the
+  `expect_state_notes` integrity-check witness, cell MTF-FW-002) and
+  `cases/errors/_intentional-mismatch-fake-expected-result.yml` (the comparator
+  divergence self-test, MTF-E-003). Leave them as they are.
+
+---
+
+## 3. Quick start — run the suite
 
 ```sh
-# Full suite (20 pilots today)
+# from the flashquery/ repo root
+
+# Run the whole suite (510 pilots)
 npm run test:macro-framework
 
-# Verbose per-case output
+# Verbose per-pilot output
 npm run test:macro-framework -- --reporter=verbose
 
-# Filter to a single test by id substring
-npm run test:macro-framework -- --testNamePattern=mtf-c-04
-
-# Filter to a category (test names are namespaced `macro-framework/<category>`)
-npm run test:macro-framework -- --testNamePattern='macro-framework/grammar'
+# Filter by pilot id or category (test names are `macro-framework/<category>`)
+npm run test:macro-framework -- --testNamePattern=mtf-d-885
+npm run test:macro-framework -- --testNamePattern='macro-framework/dispatch'
 ```
 
-The Vitest config is at `tests/config/vitest.macro-framework.config.ts` — single fork, `maxWorkers: 1` to avoid Supabase singleton races (per §9.7).
+The Vitest config is `tests/config/vitest.macro-framework.config.ts` —
+single-worker (`maxWorkers: 1`) to avoid Supabase singleton races. It loads one
+entrypoint, `cases.test.ts`, which calls `loadCases()` at module-load time and
+registers a `describe(macro-framework/<category>)` per category with one
+`it(<pilot-id>)` per pilot.
 
-The `cases.test.ts` entrypoint imports `runner.ts`, calls `loadCases()` at module-load time, then groups tests by category and registers a `describe(macro-framework/<category>)` per group with one `it(<test-id>)` per pilot. Vitest sees the concrete test ids — that's what makes `--testNamePattern` work.
+To run, triage, and report failures with classification, use the
+`flashquery-macro-run` skill or its npm script directly (see §10).
 
-## 4. Test case file layout (the YAML schema)
+---
 
-Tests live at `cases/<MTF-category>/NN-<descriptive-slug>.yml`. Categories: `grammar/`, `semantics/`, `control-flow/`, `dispatch/`, `lifecycle/`, `errors/`, `isolation/`. The directory grouping is for human navigation; the runner discovers all `*.yml` files recursively (file names starting with `_` are also discovered).
+## 4. The skills — the operator surface
 
-Canonical schema is documented in §5.4 of the requirements doc. Header fields:
+Four `.claude/skills/` skills wrap this framework. They are the intended way to
+generate, run, and maintain it. Each is invoked conversationally (the trigger
+phrases are in each skill's `description`) and most also have a direct npm
+script. **If you are an AI agent, prefer the skills** — they enforce the
+reconciliation gate that hand-editing would skip.
 
-```yaml
-id: mtf-c-04-while-with-fail            # unique test id
-name: While loop with mid-loop fail     # short human-readable name
-description: |                          # multi-line context
-  ...
-covers: [MTF-C-005, MTF-C-006]          # MTF-* cells this test contributes to (§9.4)
-generator:                              # provenance — only on AI-generated tests
-  skill: flashquery-macro-testgen
-  model: <model-id>
-  generated_at: <ISO timestamp>
-  targeted_cells: [...]
-  grounding_refs: [...]
-golden_version: "0.3.0"                 # macro-golden-model package version
-golden_run_at: 2026-05-19T01:00:00Z     # when the snapshot was captured
-```
-
-Inputs:
-
-```yaml
-macro: |                                # the macro source under test
-  total = 0
-  for i in 1..4 do
-    total = add $total $i
-  done
-  exit { sum: $total }
-input_vars: {}                          # bound at runtime
-vault: {}                               # seed vault state (built per-test in tmpdir)
-tools:                                  # tool surface — fq: real | fake, plus brokered archetypes
-  fq: real
-  brave_search:
-    archetype: ScriptedTool
-    tool_name: web_search
-    responses: [...]
-```
-
-Expectations (compared at runtime per INV-MTF-07):
-
-```yaml
-expect:
-  comparison: match_all                 # match_all (default) | match_some | match_none
-  outcome: success                      # success | fail | needs_user_input
-  return_result: {sum: 10}
-  error: {code: ..., message_contains: ...}
-  side_effects:
-    vault_writes: [...]
-    tool_calls: [...]
-    git_commits: 2
-  trace_kinds_in_order: [...]
-  progress_milestones: [...]
-```
-
-Snapshot + optional state-notes assertions:
-
-```yaml
-golden_snapshot:                        # debug context only; not live-compared
-  state_notes: [...]                    # see §5.6.1
-expect_state_notes:                     # author-curated load-time integrity check
-  - {kind: loop, iter: 2, ...}
-```
-
-The fastest way to learn the schema is to read an existing pilot — for example `cases/control-flow/04-while-with-fail.yml` exercises a brokered fail-fast and demonstrates a typical `tools:` block, an `expect:` block, and an embedded `golden_snapshot.state_notes` table.
-
-## 5. Where results and artifacts live
-
-| Artifact | Path | Notes |
+| Skill | Purpose | Direct script |
 |---|---|---|
-| Test pass/fail | stdout (Vitest) | Standard reporter; use `--reporter=verbose` for per-case lines |
-| Failure-triage records | `failures/<YYYY-MM-DD>-<HHMMSS>-<test-id>.md` | Per §9.6. YAML frontmatter (`status`, `classification`, `confidence`, `covers`, `test_file`, `golden_version_used`, ...) + structured body (rationale, expected vs. actual, golden state-notes table, suggested remediation, action log). Committed to git |
-| Coverage state (machine) | `coverage/coverage.json` | Authoritative per §9.4. Histogram counts, last-verified timestamps, density observations |
-| Coverage state (per-cell) | `coverage/MTF_COVERAGE.md` | Flat table rendered via `tablemark` |
-| Coverage state (heatmap) | `coverage/MTF_INTERACTIONS.md` | Category × category interaction heatmap rendered via `markdown-table` |
-| Coverage cell manifest | `coverage/manifest.ts` | TypeScript source of truth for the MTF-* cell list, descriptions, density targets, status |
-| Stale-test report | stdout | `npm run run:macro-framework -- --stale-check` |
+| **`flashquery-macro-author`** | English description → macro **source**. Generate + verify workflows. | (skill only) |
+| **`flashquery-macro-testgen`** | Wrap a macro into a runnable **test pilot** YAML; capture the golden snapshot; reconcile. | `npm run testgen:macro-framework` |
+| **`flashquery-macro-covgen`** | Regenerate the **coverage matrix** from the corpus. | `npm run coverage:macro-framework` |
+| **`flashquery-macro-run`** | Run the suite, **classify + triage** failures, write triage records. | `npm run run:macro-framework` |
 
-Failure-record lifecycle: `open` → (`resolved` | `escalated` | `invalidated`). Stale-expectations records auto-resolve when `flashquery-macro-testgen --mode=refresh` succeeds against the test.
+The dependency order for creating a new pilot is **author → testgen →
+covgen**, then **run** to confirm. `author` produces the macro; `testgen` wraps
++ reconciles it; `covgen` refreshes the matrix; `run` executes and triages.
 
-## 6. The three operator skills + four npm scripts
+---
 
-Three `.claude/skills/` skills wrap the framework (mirroring the directed/integration triad):
+## 5. Generating a macro (`flashquery-macro-author`)
 
-| Skill | What it does |
-|---|---|
-| `flashquery-macro-covgen` | Regenerate the coverage matrix after test changes; reads YAML cases + manifest, writes `coverage.json` + the two MD renders. Use after authoring or editing tests. |
-| `flashquery-macro-testgen` | Generate new pilots in one of three modes: `committed` (PR-reviewable, writes under `cases/<category>/`), `fresh` (gitignored breadth coverage in `cases-fresh/`), `refresh` (re-capture snapshots after a golden version bump). See §5.5 / §9.5. |
-| `flashquery-macro-run` | Execute the suite, perform first-pass §5.8 classification on any failures (stale-expectations / engine-bug / golden-bug / generator-misread / spec-ambiguity), write triage records. Also supports `--triage <record-path>` re-classification and `--stale-check` pre-run report. |
+A macro is the small, shell-flavoured program under test. The macro **language**
+is specified in `.claude/skills/flashquery-macro-author/macro-spec.md` — that
+file is the single source of truth for what production currently supports
+(grammar, builtins, the `--flag value` argument form, what the language does
+*not* have). Read it before writing macro source by hand.
 
-The skills shell out to four npm scripts in `flashquery/package.json`:
+The `flashquery-macro-author` skill translates English ⇄ macro source. Two
+workflows:
 
-| Script | Underlying command |
-|---|---|
-| `npm run test:macro-framework` | `vitest run --config tests/config/vitest.macro-framework.config.ts` |
-| `npm run coverage:macro-framework` | `tsx tests/macro-framework/coverage/render.ts` |
-| `npm run testgen:macro-framework -- --mode=...` | `tsx tests/macro-framework/golden-bridge/testgen-cli.ts` |
-| `npm run run:macro-framework [-- --stale-check \| --triage <path>]` | `tsx tests/macro-framework/triage/run-cli.ts` |
+- **generate** — `description` → macro source. Runs in three modes:
+  *zero-shot* (generate only), *validated* (generate → verify → auto-fix
+  mechanical issues → loop up to 2 retries on algorithmic misses — the default),
+  *calibration* (generate → verify → return raw + diagnostics, no fixes — for
+  skill development).
+- **verify** — `description` + macro source → conformance report. Can run
+  standalone ("verify this macro against my intent"). Distinguishes *mechanical*
+  issues (one deterministic fix — auto-corrected) from *algorithmic misses* (the
+  macro structurally won't do what was asked — triggers regeneration).
 
-## 7. Authoring a new test by hand
+A **pre-generation feasibility check** catches descriptions that name a
+construct the language lacks (no try/catch, no list indexing, no `lower`
+builtin, etc.) and returns a suggested restatement instead of inventing syntax.
 
-1. Pick a target MTF-* cell from `coverage/manifest.ts` (look for `status: actionable` with low `density_target` headroom — `coverage/MTF_COVERAGE.md` is the rendered view).
-2. Create `cases/<category>/NN-<slug>.yml` per the §5.4 schema. The pilot files in `cases/` are good templates.
-3. Capture the golden snapshot for embedding via `golden-bridge/capture-placeholder.ts` (single-shot helper) or use the testgen skill / `npm run testgen:macro-framework -- --mode=committed --target=<cell>` (preferred — runs full validation).
-4. Declare `covers: [MTF-...]` matching the cells the test exercises.
-5. Run `npm run test:macro-framework` to verify it passes.
-6. Run `npm run coverage:macro-framework` to update the coverage matrix.
+The skill produces **only the macro source**. Wrapping it into a test pilot is
+`flashquery-macro-testgen`'s job; running it is the host (`fq.call_macro`) or
+the suite.
 
-## 8. Authoring via the generator skill
+Macro-language essentials (full detail in `macro-spec.md`):
 
-Use `flashquery-macro-testgen` (or directly: `npm run testgen:macro-framework -- --mode=committed --target=MTF-G-006`). The skill reads cell metadata + grounding refs, synthesizes a macro, captures the golden's snapshot, embeds it, validates by re-driving the production engine, and writes the YAML. See §5.5 / §9.5.
+- Line-oriented, shell-flavoured. Builtins are called shell-style:
+  `total = add $a $b`, not `add(a, b)`.
+- Tool calls use `server.tool({ args })`. Object/list literals may span lines.
+- `for x in <list|range> do … done`, `while <cond> do … done`,
+  `if <cond> then … else … fi`. Ranges are end-exclusive: `1..4` → `1,2,3`.
+- `true` / `false` / `null` are first-class lowercase literals. `continue` /
+  `break` work inside loops. Strings interpolate `$var`, `${var}`, `$var.field`.
+- Reserved keywords and the ~28 builtin names cannot be used as variable names.
 
-## 9. Extending coverage for new features
+---
 
-When a new macro feature lands (new builtin, new fence attribute, new error code, etc.), follow §6.4: add cells to `coverage/manifest.ts` with `status: planned` if the feature isn't yet shipped or `actionable` if it is; declare `density_target`; provide `source_citations`; commit. The next `flashquery-macro-testgen` pass will pick up the new actionable cells as candidates.
+## 6. Generating a test pilot (`flashquery-macro-testgen`)
+
+`flashquery-macro-testgen` turns a macro into a runnable pilot. It wraps the
+macro with a tool surface, vault state, expectations, coverage tags, and a
+golden snapshot, then runs the **reconciliation gate** before the pilot is
+considered complete.
+
+### Three modes
+
+```sh
+# committed — one pilot per named cell, written under cases/<category>/, git-tracked
+npm run testgen:macro-framework -- --mode=committed --target=MTF-C-008
+npm run testgen:macro-framework -- --mode=committed --target=MTF-G-006 --target=MTF-S-007
+
+# fresh — N pilots for the lowest-density cells, written to cases-fresh/ (gitignored, run-once)
+npm run testgen:macro-framework -- --mode=fresh --count=5
+
+# refresh — re-capture snapshots for pilots whose golden_version is behind
+npm run testgen:macro-framework -- --mode=refresh --auto-accept-identical
+```
+
+### The five-step pipeline
+
+Every committed pilot goes through this pipeline (the skill orchestrates it):
+
+1. **`flashquery-macro-author` / generate** — description → macro source
+   (verify runs internally with an auto-correction loop).
+2. **`flashquery-macro-author` / verify** — "is the macro what was asked for?"
+3. **testgen / wrap** — macro + intent → a *draft* pilot YAML, including
+   `predicted_expect:` (the AI's prediction).
+4. **testgen / strengthen** — analyses the draft for test-rigor gaps
+   (multi-exit specificity, side-effect coverage, branch coverage, negative
+   assertions, intent fidelity) and tightens the assertions.
+5. **golden capture + reconciliation gate** — run the macro through the golden;
+   compare `predicted_expect` to the golden capture. On match → promote to
+   `expect:` and embed `golden_snapshot:`. On divergence → **hard stop** and
+   triage (AI wrong? golden wrong? intent ambiguous?).
+
+### The non-negotiable rule
+
+**Every pilot MUST pass through the golden capture + reconciliation gate before
+it is considered complete.** Hand-writing an `expect:` block and skipping the
+gate is the one thing this framework exists to prevent. A complete pilot has a
+populated `reconciliation:` block (`predicted_matched_captured` not null,
+`captured_at` a real timestamp, `divergence_kind` set) and a `golden_snapshot:`
+block. `scripts/validate-pilots.py` is the enforcement (see §8).
+
+After generating: run `npm run test:macro-framework` to confirm nothing
+regressed, then `flashquery-macro-covgen` to refresh the matrix.
+
+---
+
+## 7. The pilot YAML schema
+
+Pilots live at `cases/<category>/<NN-slug>.yml`. The seven categories map to
+language subsystems: `grammar` (G), `semantics` (S), `control-flow` (C),
+`dispatch` (D), `lifecycle` (L), `errors` (E), `isolation` (I). The runner
+discovers every `*.yml` recursively; the directory grouping is for humans.
+
+```yaml
+id: mtf-d-885-dispatch-basic-bind        # unique pilot id
+name: Dispatch — basic single brokered call
+intent: |                                # the plain-English design intent
+  A single brokered ReadOnlyTool call returns an object the macro binds.
+description: |                            # test mechanics + REQ citations
+  ...
+covers: [MTF-D-001, MTF-D-003]            # MTF-* coverage cells this pilot feeds
+golden_version: "0.3.0"                   # golden package version at capture time
+golden_run_at: 2026-05-20T17:40:00Z
+
+macro: |                                  # the macro source under test
+  r = svc.fetch({ id: 7 })
+  exit { r: $r }
+input_vars: {}                            # bound at runtime
+vault: {}                                 # seed vault state (built per-test in a tmpdir)
+tools:                                    # tool surface — archetypes per fixtures/fake-broker/
+  svc:
+    archetype: ReadOnlyTool
+    tool_name: fetch
+    returns: { ok: true, id: 7 }
+
+# dry_run: true                           # optional — dispatch through runDryRun()
+# trace_mode: summary|none|full           # optional — REQ-047 trace verbosity
+# progress_mode: full|milestones|silent   # optional — REQ-048
+
+predicted_expect:                         # ORACLE 1 — the AI/author prediction
+  outcome: success                        # success | fail | error
+  return_result: { r: { ok: true, id: 7 } }
+  side_effects: { tool_call_count: 1 }
+
+reconciliation:                           # written by apply-captures.py / the gate
+  predicted_matched_captured: true
+  divergence_kind: clean_match            # clean_match | predicted_diverges_from_golden
+  captured_at: "..."
+  golden_version: "0.3.0"
+
+expect:                                   # ORACLE 2/3 — what the suite asserts
+  outcome: success                        # (equals predicted_expect once reconciled)
+  return_result: { r: { ok: true, id: 7 } }
+  side_effects: { tool_call_count: 1 }
+
+golden_snapshot:                          # captured golden detail (not live-compared)
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls: [{ server: svc, tool: fetch }]
+```
+
+The fastest way to learn the schema is to read a recent pilot — e.g.
+`cases/dispatch/885-dispatch-basic-bind.yml` or
+`cases/semantics/1262-truthy-zero-float.yml`. Tool archetypes (`ReadOnlyTool`,
+`ScriptedTool`, `StructuredContentTool`, `JSONTextTool`, `ThrowingTool`,
+`IsErrorTool`, etc.) are defined in `fixtures/fake-broker/archetypes.ts`.
+
+---
+
+## 8. The reconciliation pipeline (`scripts/`)
+
+After authoring or editing pilots — or to re-verify the whole corpus — run the
+`scripts/` tools directly, in order:
+
+```sh
+# 1. Capture every pilot's macro through the GOLDEN model -> JSON
+npx tsx tests/macro-framework/scripts/capture-runner.ts > /tmp/captures.json
+
+# 2. Write the captures back into each pilot's reconciliation + golden_snapshot
+#    blocks. Reports clean_match vs predicted_diverges_from_golden counts.
+python3 tests/macro-framework/scripts/apply-captures.py /tmp/captures.json
+
+# 3. Validate every pilot has the required fields filled in (the batch-done gate)
+python3 tests/macro-framework/scripts/validate-pilots.py
+
+# 4. Run the suite — drives PRODUCTION against the reconciled expectations
+npm run test:macro-framework
+
+# 5. Wide check — golden vs production, field by field, across the corpus
+npx tsx tests/macro-framework/scripts/pg-envelope-diff.ts > /tmp/pg-diff.json
+```
+
+A healthy corpus: capture+apply all `clean_match`, validator `0 incomplete`,
+the Vitest suite all-pass, the P/G diff `0 divergent`. The golden model's own
+meta-tests are a separate gate:
+`cd macro-golden-model && npx tsx src/test-snapshot.ts`.
+
+(`scripts/tier2-batch-generator.ts` is a one-time generator kept for
+provenance; you will not normally run it.)
+
+---
+
+## 9. Running and debugging failures
+
+When `npm run test:macro-framework` reports a failure, **do not guess** — the
+framework gives you structured signal. Use the `flashquery-macro-run` skill (or
+`npm run run:macro-framework`), which runs the suite and writes a
+classified triage record into `failures/` for every failure.
+
+### The §5.8 five-way classification
+
+Every failure is first-pass classified into one of five kinds:
+
+| Classification | Meaning | Next step |
+|---|---|---|
+| **stale-expectations** | The pilot's `golden_version` is behind the current golden. | `flashquery-macro-testgen --mode=refresh` against the pilot. |
+| **engine-bug** | Production diverged from a golden-corroborated expectation. | Investigate the `src/macro/` code path; file in `PRODUCTION_GAPS.md`. |
+| **golden-bug** | The golden's captured value contradicts the spec. | Fix the golden, file in `GOLDEN_GAPS.md`. Verify against the spec. |
+| **generator-misread** | An AI-generated pilot misread the spec. | Regenerate via `flashquery-macro-testgen --mode=committed`. |
+| **spec-ambiguity** | None of the above fit; the spec is genuinely unclear. | Surface to the operator; consider a spec clarifier REQ. |
+
+Only `stale-expectations` is high-confidence automatable. Every other
+classification is a first-pass call the operator confirms or overrides.
+Triage records under `failures/` carry the classification, confidence,
+expected-vs-actual, the golden state-notes table, and a suggested remediation.
+Re-triage an existing record with
+`npm run run:macro-framework -- --triage <record-path>`.
+
+### Debugging checklist
+
+1. **Run one pilot in isolation:**
+   `npm run test:macro-framework -- --testNamePattern=<pilot-id> --reporter=verbose`.
+2. **Is it stale?** `npm run run:macro-framework -- --stale-check` lists pilots
+   whose `golden_version` is behind. Stale → refresh, don't debug.
+3. **A `predicted_diverges_from_golden` in `apply-captures.py` output** means the
+   AI prediction and the golden disagree — the pilot's `predicted_expect` and
+   the golden capture differ. Read the pilot's `reconciliation.notes`, then
+   decide against the **spec** which oracle is right.
+4. **A P/G diff finding** means golden and production disagree on a field. The
+   finding names the pilot and the field, with both values. Triage against the
+   spec → `GOLDEN_GAPS.md` or `PRODUCTION_GAPS.md`.
+5. **Probe production directly** when you need ground truth: parse a macro with
+   `parseMacroSource` and run it through `evaluateProgram` from `src/macro/`
+   (see how the gap-log entries describe this — a tiny throwaway script that
+   prints the real envelope). The golden has the same shape via
+   `captureSnapshot` in `macro-golden-model/src/snapshot.ts`.
+6. **The golden self-tests** (`macro-golden-model/src/test-snapshot.ts`) are the
+   golden's own regression gate — run them after any golden change.
+
+---
 
 ## 10. The golden model
 
-`macro-golden-model/` is a versioned, separate-`package.json` TypeScript implementation of the macro language. Per §9.2 it co-evolves with the spec — the golden adopts new behaviour first; the production engine follows. Current version is read from `macro-golden-model/src/version.ts` and surfaced as `GOLDEN_VERSION` from `golden-bridge/load.ts`.
+`macro-golden-model/` is a versioned, separate-`package.json` TypeScript
+implementation of the macro language — the independent oracle. Per §9.2 it
+co-evolves with the spec: the golden adopts new behaviour first, production
+follows. Its version is `macro-golden-model/src/version.ts` (`GOLDEN_VERSION`).
+It is **read-only at framework runtime** (INV-MTF-04) — only `golden-bridge/*`
+and the `scripts/` capture tools execute it.
 
-**Operator-gated bumps** (per §11.6): patch the golden, run its own meta-tests, bump `package.json` version, then either:
+Bumping the golden (operator-gated, §11.6): patch the golden, run its
+meta-tests (`src/test-snapshot.ts`), bump `package.json`, then run the testgen
+skill in `--mode=refresh` to re-capture snapshots, or let the
+stale-expectations classification flag pilots one at a time.
 
-- run `flashquery-macro-testgen --mode=refresh` to re-capture snapshots across affected tests, or
-- let the stale-expectations classification flag tests one at a time as they hit them.
+---
 
-The golden is read-only at framework runtime (INV-MTF-04). Only `golden-bridge/*.ts` and the testgen pipeline import from it.
+## 11. The coverage matrix and the drift tripwire
 
-## 11. What's committed vs. gitignored
+**Coverage matrix.** `coverage/manifest.ts` is the source of truth for the 77
+`MTF-*` cells (categories G/S/C/D/L/E/I plus the framework-self-test FW).
+`coverage/render.ts` (`npm run coverage:macro-framework`, or the
+`flashquery-macro-covgen` skill) reads the manifest + every pilot's `covers:`
+array and regenerates `coverage.json`, `MTF_COVERAGE.md` (per-cell table), and
+`MTF_INTERACTIONS.md` (category×category heatmap). A `covers:` entry is a claim
+that the pilot genuinely exercises that cell — never pad it. Five cells are
+`status: planned` (deliberate zero-coverage planning signal) because the
+in-process harness structurally cannot reach them; their `requires` notes in
+the manifest explain why.
 
-**Committed** (per §9.4 + §9.6):
+**Drift tripwire.** `src/framework-registry.ts`'s `wrapBrokerToolForFramework`
+is a hand-written mirror of production's module-private `wrapBrokerTool` in
+`src/macro/registry.ts`. `src/framework-mirror-check.ts` runs at suite startup:
+it SHA-256-hashes `registry.ts` and the body of `wrapBrokerTool` and compares to
+pinned constants. A mismatch fires a `framework-integrity` failure. When it
+fires: check the `src/macro/registry.ts` diff, mirror any behaviour change into
+`wrapBrokerToolForFramework`, paste the new hashes from the failure message into
+`PINNED_FILE_HASH` / `PINNED_FUNCTION_HASH`, re-run.
 
-- `cases/**/*.yml` — pilot tests
-- `cases-ts/` — TypeScript escape-hatch tests (empty placeholder today)
-- `coverage/` — manifest, render script, coverage.json, both MD renders
-- `failures/*.md` — triage records (records persist forever in git history per §9.6)
-- `fixtures/` — fake-broker archetypes, fake-llm, fake-clock, vault-helper, progress-capture
-- `golden-bridge/` — load.ts, snapshot.ts, capture-*.ts, testgen-helper.ts, testgen-cli.ts
-- `state-notes/` — schema, assert, render
-- `triage/` — classify, record, run-cli, stale-check (Phase 6)
-- `macro-golden-model/{src/*.ts (except _*.ts), examples/, sample-vault/, package.json, package-lock.json, tsconfig.json, README.md}`
-- `runner.ts`, `cases.test.ts`, `framework-registry.ts`, `framework-mirror-check.ts`, `tsconfig.json`, this `README.md`, `.gitignore`
+---
 
-**Gitignored**:
+## 12. Gap logs, the eval log, and cleanup
 
-- `cases-fresh/` — generated each CI run, never committed (per §5.5 fresh mode)
-- `_*.ts`, `_*.js` — scaffolding / probe / scratch files at any depth
-- `macro-golden-model/node_modules/`
-- `.DS_Store`, `*.swp`, `.idea/`, `.vscode/`, `*.log`, `tmp/`, `.cache/`
+- **`GOLDEN_GAPS.md`** — every golden-model bug the framework surfaced, with
+  spec citation, fix, and post-fix retest. Entries are `GG-NNN`.
+- **`PRODUCTION_GAPS.md`** — confirmed production-engine gaps, for the engine
+  dev agent. Entries are `PG-NNN`.
+- **`eval-log.md`** — calibration history for the testgen/author skills
+  (convergence stats, per-run findings). A working diary, not a spec.
 
-**One gotcha** (resolved as of Phase 6): the repo root `.gitignore` ignores `coverage/` (intended for nyc/istanbul output). That unanchored rule matched `tests/macro-framework/coverage/` too. The framework's local `.gitignore` now negates it with `!coverage/` + `!coverage/**` so the coverage matrix is committed per §9.4.
+Cleanup: **`failures/`** is runtime output — the runner writes a triage record
+on a genuine FAIL; it is gitignored except `.gitkeep`, delete freely.
+**`cases-fresh/`** is fresh-cadence generated pilots — gitignored, never
+committed, normally empty. The golden model's `node_modules/` is gitignored.
+`/tmp/captures.json` and `/tmp/pg-diff.json` are disposable pipeline scratch.
 
-## 12. Framework-vs-production drift tripwire
+What is **committed**: `cases/**`, `coverage/**`, `src/**`, `scripts/**`,
+`golden-bridge/**`, `triage/**`, `state-notes/**`, `fixtures/**`,
+`macro-golden-model/{src,examples,sample-vault,package*.json,tsconfig.json,README.md}`,
+the gap logs, `eval-log.md`, `cases.test.ts`, `tsconfig.json`, this README.
 
-The framework's brokered-dispatch wrapper (`framework-registry.ts wrapBrokerToolForFramework`) is a hand-written mirror of production's `src/macro/registry.ts wrapBrokerTool`. Production keeps that function module-private — it isn't exported — so direct import isn't an option without modifying production code. The mirror is the practical alternative, but it invites silent drift if production changes.
+---
 
-`framework-mirror-check.ts` is the tripwire. At suite startup it:
+## 13. Orientation for an AI dev agent
 
-1. Hashes the entire `src/macro/registry.ts` file (SHA-256).
-2. Extracts just the body of `function wrapBrokerTool(...)` via a brace-balanced scan and hashes that (SHA-256).
-3. Compares both to pinned constants. Either mismatch fires a `framework-integrity` test failure.
+If you are picking this framework up cold:
 
-The failure message prints the current hashes for one-line copy-paste, plus a remediation note indicating whether the change is inside `wrapBrokerTool` itself (mirror likely needs updating) or only in adjacent file content (mirror probably still accurate).
-
-**Maintainer workflow when the tripwire fires:**
-
-1. Look at the production diff at `src/macro/registry.ts:142+`.
-2. If `wrapBrokerTool`'s behavior changed, mirror the change in `framework-registry.ts wrapBrokerToolForFramework`.
-3. Paste the new hashes from the failure message into `PINNED_FILE_HASH` / `PINNED_FUNCTION_HASH` in `framework-mirror-check.ts`.
-4. Re-run; suite returns to green.
-
-Why two hashes (deliberately redundant): the file hash trips on any change to `registry.ts` (including comments / imports), so the maintainer at least glances. The function-body hash trips only on behavior-relevant changes inside `wrapBrokerTool`, so the maintainer knows whether the mirror itself needs updating.
-
-## 13. First end-to-end run vs. production v3.5 (2026-05-19)
-
-The framework's first end-to-end run against the just-shipped v3.5 broker was the inflection point for several corrections in this directory. Recording the conclusions here so future maintainers don't repeat the analysis.
-
-**Zero real production gaps were found** for the cells the framework exercises. The MCP Broker Gap Analysis doc was deliberately NOT extended with a "Post Implementation" section — that doc's audience is the broker dev agent looking for actionable fixes, and there were none from this surface.
-
-What the run did surface — corrected in-framework, not in production:
-
-- The `NeedsInputTool` archetype + pilot 29 originally exercised a brokered tool returning `{event: "needs_user_input", ...}` in its `CallToolResult` payload. MCP Broker Requirements §7.8 REQ-060 explicitly forbids this: *"Brokered tools CANNOT trigger needs_user_input in v1. Only two sources emit needs_user_input exits in v1: (a) a FlashQuery-native tool, (b) the broker layer itself on TOFU drift (§7.5)."* Production correctly does NOT propagate brokered-tool-returned events. The archetype was replaced with `NeedsInputViaTofuDrift`, which simulates spec-valid route (b) by surfacing the tool through `getPendingSchemaDrift` so the pre-dispatch check in production's `registry.ts:156-179` (and the framework mirror's equivalent) fires.
-- The golden model's `needs_user_input` macro builtin contradicted the same REQ-060 — a macro author cannot directly raise the fifth termination. The builtin was reduced to a stub that throws with a spec-aligned error message citing REQ-060; example 22 was retired.
-- Pilot 32 originally tried to drive Broker REQ-093/REQ-098 (`help: true` sentinel forwarding) through a macro. REQ-098 explicitly scopes the behavior to *"a delegated or host model"* calling the brokered tool — the macro frame is not in scope. The pilot was repurposed as a Macro Lang §3.3 boolean-literal rejection test (new coverage cell `MTF-G-009`). MTF-D-105 was marked `deprecated` in the manifest with a note redirecting REQ-093/098 verification to the broker layer (unit + delegated-call scenario).
-- The framework's `wrapBrokerToolForFramework` was a thinner mirror than production's `wrapBrokerTool` — it skipped the pre-dispatch visibility / `getPendingSchemaDrift` check entirely. That's been corrected; the framework now mirrors `registry.ts:154-179` so the REQ-105 nested-propagation path is actually exercised. The §12 tripwire enforces ongoing parity.
-
-The spec-valid REQ-105 nested-propagation route is correctly implemented in production at `registry.ts:156-179` and `:194-198`, with the canonical envelope surfacing at `evaluator.ts:396-415`. The framework's pilot 29 now drives that path via the TOFU-drift archetype and passes.
+1. **To run everything:** `npm run test:macro-framework` (from `flashquery/`).
+   That one command tells you if the corpus is healthy.
+2. **To generate a macro:** use the `flashquery-macro-author` skill, or read
+   `.claude/skills/flashquery-macro-author/macro-spec.md` and write it by hand.
+3. **To generate a test pilot:** use the `flashquery-macro-testgen` skill
+   (`npm run testgen:macro-framework -- --mode=committed --target=<cell>`). It
+   runs the five-step pipeline (§6) including the mandatory reconciliation gate.
+   **Never hand-write `expect:` and skip the gate** — run §8's pipeline.
+4. **To run + triage:** use `flashquery-macro-run` — it classifies every
+   failure and writes a triage record. Then refresh the matrix with
+   `flashquery-macro-covgen`.
+5. **If a pilot fails:** §9. Classify it (stale / engine-bug / golden-bug /
+   generator-misread / spec-ambiguity), triage against the **spec**, file the
+   gap in `GOLDEN_GAPS.md` or `PRODUCTION_GAPS.md`.
+6. **To add a new coverage cell:** edit `coverage/manifest.ts` first
+   (`status: actionable` if the feature ships today, `planned` with a `requires`
+   note if not), then author pilots for it.
+7. **Load-bearing code is `src/` and `scripts/`** and is committed. The spec is
+   authoritative: when the golden and production disagree, the requirements
+   docs decide who is right — production is never treated as ground truth.

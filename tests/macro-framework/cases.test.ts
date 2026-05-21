@@ -20,12 +20,12 @@ import {
   driveTest,
   compareToExpect,
   type TestCase,
-} from './runner.ts';
+} from './src/runner.ts';
 import { checkExpectStateNotes } from './state-notes/assert.ts';
 import { GOLDEN_VERSION } from './golden-bridge/load.ts';
 import { classifyFailure } from './triage/classify.ts';
 import { writeTriageRecord, findRelatedFailures } from './triage/record.ts';
-import { checkFrameworkMirror } from './framework-mirror-check.ts';
+import { checkFrameworkMirror } from './src/framework-mirror-check.ts';
 
 // Top-level await is supported in Vitest's ESM test modules.
 const cases = await loadCases();
