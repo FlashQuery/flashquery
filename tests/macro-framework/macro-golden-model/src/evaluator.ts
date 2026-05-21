@@ -650,10 +650,12 @@ function collectInputVarContract(program: Program): {
       // the preflight collector; the golden now matches.
       if (!first || first.kind !== "PositionalArg" || first.value.kind !== "StringLit") {
         const found = first?.value?.kind ?? "(missing)";
+        // The envelope `code` for every MacroPreflightError is hardcoded
+        // to `invalid_input` by the catch path in snapshot.ts; the
+        // `reason` discriminator carries the specific sub-classification.
         throw new MacroPreflightError(
           `input_var first argument must be a string literal.`,
           {
-            error: "invalid_input",
             required_inputs: [],
             optional_inputs: [],
             provided_inputs: [],

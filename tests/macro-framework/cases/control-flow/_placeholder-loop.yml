@@ -11,7 +11,7 @@
 # `macro-golden-model/src/_phase2-placeholder-capture.ts` against
 # golden_version 0.3.0.
 #
-# This test is also the integrity-check witness for `expect_state_notes`:
+# This test is also the integrity-check witness for `assert_golden_state_notes`:
 # one pattern is order-independent (matching the iter=2 loop event) and a
 # second is positional (asserting binding update at snapshot[6]).
 
@@ -57,7 +57,7 @@ golden_snapshot:
   captured_tool_calls: []
 # Load-time integrity check witnesses for the state-notes module.
 # One order-independent (no `step:`) and one positional (with `step:`).
-expect_state_notes:
+assert_golden_state_notes:
   - { kind: loop, loop_kind: for, iter: 2, var: i, value: 3 }   # 3rd iteration
   - { step: 7, kind: binding, op: update, name: total, value: 1, scope: outer }
 predicted_expect:

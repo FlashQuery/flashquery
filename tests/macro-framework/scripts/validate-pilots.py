@@ -43,6 +43,7 @@ REQUIRED_TOP_LEVEL_FIELDS = [
     "intent",
     "macro",
     "golden_version",
+    "covers",
     "predicted_expect",
     "reconciliation",
     "expect",
@@ -85,6 +86,12 @@ def validate_pilot(path: Path, current_golden: str | None) -> list[str]:
         findings.append("predicted_expect: missing or empty")
     elif "outcome" not in pe:
         findings.append("predicted_expect: missing outcome field")
+
+    # 2b. covers non-empty — a pilot with no MTF-* cell contributes nothing
+    #     to the coverage matrix, which is the framework's whole point.
+    cov = doc.get("covers")
+    if not cov or not isinstance(cov, list):
+        findings.append("covers: missing or empty (pilot must declare the MTF-* cell(s) it exercises)")
 
     # 3. reconciliation block — golden capture must have happened
     rec = doc.get("reconciliation")

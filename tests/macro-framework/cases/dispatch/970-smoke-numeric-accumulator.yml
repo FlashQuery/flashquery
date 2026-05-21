@@ -35,7 +35,7 @@ description: |
 
 covers:
   - MTF-C-009  # exit shapes (multi-exit)
-  - MTF-N-005  # numeric ops (mod, add, mul)
+  - MTF-S-009  # numeric ops (mod, add, mul)
   - MTF-L-007  # range operator
   - MTF-L-008  # for-loop with continue (REQ-104)
 

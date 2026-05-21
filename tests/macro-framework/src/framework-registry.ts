@@ -150,7 +150,12 @@ function wrapBrokerToolForFramework(server: string, tool: string, broker: FakeBr
       if (pendingDrift !== undefined) {
         throw new MacroNeedsUserInputError(
           pendingDrifts.length > 1
-            ? { event: 'schema_drift_detected', server, changes: pendingDrifts }
+            ? {
+                event: 'schema_drift_detected',
+                server,
+                question: `Multiple tools on server '${server}' have pending schema drift and need review before they can be called.`,
+                changes: pendingDrifts,
+              }
             : pendingDrift,
         );
       }

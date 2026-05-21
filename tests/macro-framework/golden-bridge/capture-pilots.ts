@@ -272,12 +272,12 @@ exit { sum: $total }
 `,
   },
 
-  // 11. MTF-I + expect_state_notes. _self is Tier 2 and not yet in
+  // 11. MTF-I + assert_golden_state_notes. _self is Tier 2 and not yet in
   //     production; we substitute by passing path/title via input_vars
   //     and asserting state_notes on the binding events.
   {
     id: '11-self-via-input-vars-with-state-notes',
-    description: '_self workaround via input_vars + expect_state_notes integrity check',
+    description: '_self workaround via input_vars + assert_golden_state_notes integrity check',
     macro: `
 path = input_var "self_path"
 title = input_var "self_title"

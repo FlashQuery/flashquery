@@ -1,0 +1,63 @@
+# Pilot — MTF-C control flow: while-loop aborted by fail() with an interpolated message
+id: mtf-c-1311-while-fail-interpolated-message
+name: while-loop — fail() terminates the loop with a runtime-interpolated message
+intent: |
+  A while-loop accumulates a running total each iteration and aborts the
+  moment the total crosses a ceiling. The abort message must name the
+  offending total, so this exercises $-interpolation inside a fail()
+  string. The total climbs 0 → 30 → 60 → 90 → 120; at 120 it crosses the
+  100 ceiling and the macro aborts with a macro_aborted envelope whose
+  message reads "budget exceeded at 120". The trailing echo never runs.
+covers:
+  - MTF-C-006
+  - MTF-C-005
+  - MTF-S-010
+  - MTF-E-004
+golden_version: "0.3.0"
+golden_run_at: 2026-05-21T00:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  total = 0
+  while $total < 1000 do
+    total = add $total 30
+    if $total > 100 then
+      fail "budget exceeded at $total"
+    fi
+  done
+  echo "unreached"
+input_vars: {}
+vault: {}
+tools: {}
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: claude-opus-4-7
+  generated_at: '2026-05-21T00:00:00Z'
+  targeted_cells:
+    - MTF-C-006
+  grounding_refs:
+    - Macro Language Requirements REQ-012
+    - Macro Language Requirements REQ-016
+    - Macro Language Requirements REQ-024
+predicted_expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "budget exceeded at 120"
+expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "budget exceeded at 120"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-21T17:37:14Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["fail"]
+  captured_tool_calls: []

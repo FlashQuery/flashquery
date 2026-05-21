@@ -1,109 +1,202 @@
 ---
 name: flashquery-macro-testgen
-description: Generate, refresh, and validate macro-framework test YAMLs against `tests/macro-framework/coverage/manifest.ts`. Use this skill when the user wants to generate a macro framework test, generate a macro framework pilot, add coverage for an MTF-* cell (e.g. MTF-C-008, MTF-D-008, MTF-L-008), fill a macro framework density gap, create an AI-generated macro pilot, exercise a low-density cell, refresh embedded golden snapshots after a golden_version bump, run a fresh-cadence exploratory batch, or asks to "make a macro test for X", "cover MTF-X", "regenerate this pilot's snapshot", "refresh the macro tests for the new golden", "fresh-run macro coverage", "rerun the testgen for the latest golden", or anything involving the `flashquery-macro-testgen` command. Sister skill to `flashquery-macro-covgen` and (when it lands) `flashquery-macro-run`; this one is exclusively for the `tests/macro-framework/` layer and the `macro-golden-model` snapshot source.
+description: Generate, refresh, and validate macro-framework test YAMLs against `tests/macro-framework/coverage/manifest.ts`. Use this skill when the user wants to generate a macro framework test, generate a macro framework pilot, add coverage for an MTF-* cell (e.g. MTF-C-008, MTF-D-008, MTF-L-008), fill a macro framework density gap, create an AI-generated macro pilot, exercise a low-density cell, refresh embedded golden snapshots after a golden_version bump, or asks to "make a macro test for X", "cover MTF-X", "regenerate this pilot's snapshot", "refresh the macro tests for the new golden", or anything involving generating macro-framework pilots. Sister skill to `flashquery-macro-covgen` and `flashquery-macro-run`; this one is exclusively for the `tests/macro-framework/` layer and the `macro-golden-model` snapshot source.
 ---
 
 # FlashQuery Macro TestGen (`flashquery-macro-testgen`)
 
-This skill generates new macro-framework test YAMLs by running synthesized macros through the `macro-golden-model` and embedding the resulting snapshots, per Macro Testing Framework Requirements §5.5 (AI Test Generation) and §9.5 (Generator integration approach). It is the macro-framework counterpart to `flashquery-directed-testgen` and `flashquery-integration-testgen`. The actual work is done by the TypeScript helper at `tests/macro-framework/golden-bridge/testgen-helper.ts` and the CLI at `tests/macro-framework/golden-bridge/testgen-cli.ts`; this skill is the instructions for invoking them correctly across the three supported modes.
+This skill generates new macro-framework test YAMLs by running synthesized macros through the `macro-golden-model` and embedding the resulting snapshots, per Macro Testing Framework Requirements §5.5 (AI Test Generation) and §9.5 (Generator integration approach). It is the macro-framework counterpart to `flashquery-directed-testgen` and `flashquery-integration-testgen`.
+
+This is an **agent-mode skill**: there is no CLI entry point. An AI agent runs the pipeline below directly — constructing the behavioral brief, delegating macro authorship to `flashquery-macro-author`, wrapping the macro into a pilot YAML, capturing the golden snapshot, and reconciling — using the `scripts/` capture tooling (`capture-runner.ts`, `apply-captures.py`, `validate-pilots.py`). Committed pilots are written straight into `tests/macro-framework/cases/<category>/`.
 
 ## When to use
 
-- The user names an MTF-* cell or describes an uncovered behavior and asks for a test (committed mode).
-- The user asks for a fresh exploratory batch targeting the lowest-density cells (fresh mode).
-- The golden version bumped and the user asks to refresh embedded snapshots in existing tests (refresh mode).
+- The user names an MTF-* cell or describes an uncovered behavior and asks for a test.
+- The user asks to fill the lowest-density coverage cells with new pilots.
+- The golden version bumped and the user asks to refresh embedded snapshots in existing tests.
 - The user asks to validate or repair a test that's failing after a golden change.
 
 ## What this skill does NOT do
 
 - It does **not** update `coverage.json`. After generating new tests run `flashquery-macro-covgen` to refresh the coverage matrix.
 - It does **not** add cells to `manifest.ts`. Cells are added manually per §6.4 lifecycle. If the user wants coverage for a behavior that has no cell yet, edit `tests/macro-framework/coverage/manifest.ts` first.
-- It does **not** run the full macro framework suite. That's `flashquery-macro-run` (Phase 6). The skill validates the *single* test it just generated; it does not re-run the whole 20+ pilot corpus.
+- It does **not** run the full macro framework suite. That's `flashquery-macro-run`. The skill validates the *single* test it just generated; it does not re-run the whole pilot corpus.
 - It does **not** modify the golden model. Bumping the golden version is a separate workflow (Phase 1 + golden meta-tests). This skill only consumes the current golden as a snapshot source.
 
 ## Inputs
 
-- One or more target cell IDs (committed mode), OR
-- A count of tests to generate from the lowest-density cells (fresh mode), OR
-- A filter pattern over existing tests whose `golden_version` is older than the current golden (refresh mode).
+- One or more target MTF-* cell IDs, OR
+- A request to fill the lowest-density cells (read `coverage/coverage.json` to rank them), OR
+- A set of existing tests whose `golden_version` is older than the current golden, to refresh.
 
 The skill reads `tests/macro-framework/coverage/manifest.ts`, `coverage/coverage.json`, the existing pilots under `cases/`, and the Macro Language Requirements REQ-NNN definitions to ground each generated test in spec text.
 
-## Three modes
+## Generating vs. refreshing
 
-### Committed mode — `--mode=committed`
+**Generating a new pilot.** When the user names a cell or describes a behavior, run the full five-step pipeline below. The pilot is written under `tests/macro-framework/cases/<category>/<NN-slug>.yml` and committed to git. Per §9.5 every generated pilot must carry `generator:` provenance (skill, version, model, timestamp, targeted cells, grounding refs) plus real `golden_snapshot:` data captured at generation time.
 
-Generate one test per named cell. Output lands in `tests/macro-framework/cases/<category>/<NN-slug>.yml` and is checked into git.
+**Refreshing a stale pilot.** When the golden version bumps, pilots whose embedded `golden_version` is behind the current golden need their snapshots re-captured. Re-run the capture pipeline (`scripts/capture-runner.ts` → `scripts/apply-captures.py`), then compare: a structurally-identical capture (same length, same per-step `kind`) can have its `golden_version` bumped directly; a divergent capture is an operator-review item — report it, don't silently rewrite. The `flashquery-macro-run` skill's `--stale-check` flags which pilots are behind.
 
-```bash
-npm run testgen:macro-framework -- --mode=committed --target=MTF-C-008
-npm run testgen:macro-framework -- --mode=committed --target=MTF-G-006 --target=MTF-S-007
+## Constructing the behavioral brief (the input to `flashquery-macro-author`)
+
+This skill — the wrapper — owns the quality of the input it hands the author skill. `flashquery-macro-author` is an obedient translator: it turns whatever description it receives into a macro and never second-guesses its caller. So if the wrapper passes it the mechanical cell one-liner ("for-loop with mid-iteration abort via `fail()`") or — worse — pseudocode, the author skill faithfully transcribes that, and the resulting pilot proves only "the engine runs *this exact macro*," never "the engine supports the *behavior* we wanted." The behavior→macro translation is the thing under test; it only happens if the input describes behavior.
+
+**Before delegating to `flashquery-macro-author` in Step 3, the wrapper MUST construct a behavioral brief and hand the author skill *that* — never the raw cell description, never pseudocode.**
+
+### What a behavioral brief is
+
+A structured statement of intent with these slots and no others:
+
+| Slot | Contents |
+|---|---|
+| `goal` | What the macro should accomplish, in plain English — the outcome, not the steps. |
+| `preconditions / inputs` | What the macro is given: `input_vars`, seed vault state, starting conditions. |
+| `tool surface` | Which brokered servers/tools the macro is expected to use, described by *what they do* ("a brokered tool that returns a structured object"), not by archetype name or call syntax. |
+| `triggering condition` | The scenario condition that drives the behavior under test — or "runs straight through" when there is no branch. |
+| `expected observable outcome` | What a correct run produces — exit value shape, envelope, side-effect facts — *including the negative facts* ("nothing after the abort runs"). |
+
+There is deliberately **no `steps` slot**. Pseudocode needs somewhere to live; the template gives it nowhere. A test brief is *prescriptive about the scenario* (these inputs, this condition, this observable outcome) and *silent about the implementation* (which constructs, which variable names, which statement order). Holding that line is the whole point of this step.
+
+### Where the brief comes from
+
+1. **If the target cell has a `behavior:` field in `manifest.ts`** — that field is a curated, human-reviewed behavioral framing. **Instantiate it**: keep its goal / condition / outcome, fill in concrete `input_vars` values and a concrete tool surface. Instantiation, not invention — this is the preferred path.
+2. **Otherwise, synthesize the brief** from the cell's `description` plus the REQ spec text reached via `source_citations`. **Ground the brief on the REQ text — REQs describe what the feature *does*.** Do NOT draft the brief from the exemplar pilots: exemplar *macros* are pseudocode, and drafting from them produces pseudocode-shaped briefs. The exemplars (Step 2) are for YAML shape only, never for the brief.
+
+### Few-shot examples — raw input → behavioral brief
+
+**Example A — a control-flow cell (expand a mechanical one-liner):**
+
+```
+RAW INPUT  cell MTF-C-002 — "for-loop with mid-iteration abort via fail()"
+           grounded on REQ-013 (for-loop) + REQ-024 ac3 (fail → macro_aborted)
+
+BEHAVIORAL BRIEF
+  goal: Scan a sequence of items one at a time and halt the entire run
+        immediately — with a diagnostic message — the moment a disallowed
+        item is encountered.
+  preconditions/inputs: a list of item identifiers, at least one of which is
+        the disallowed value.
+  tool surface: none (pure control flow).
+  triggering condition: the scan reaches the disallowed item.
+  expected observable outcome: the macro aborts with a macro_aborted envelope
+        carrying the diagnostic message; no item after the disallowed one is
+        processed.
 ```
 
-Use this when the user names a specific cell, describes a specific behavior, or asks to fill a known gap. Per §9.5 every committed test must carry `generator:` provenance (skill, version, model, timestamp, targeted cells, grounding refs) plus real `golden_snapshot:` data captured at testgen time — both are emitted automatically by the helper.
+**Example B — contrastive (same cell), the failure mode to avoid:**
 
-### Fresh mode — `--mode=fresh --count=N`
+```
+DON'T (pseudocode — this is transcription, not a brief):
+  "for n in 1..10: if n == 5, call fail('halt at 5'); then echo 'done'."
 
-Pick the N lowest-density actionable cells from `coverage.json` and generate tests for the subset the synthesis layer can handle. Output lands in `tests/macro-framework/cases-fresh/` (gitignored per §9.1) and is run-then-discarded.
-
-```bash
-npm run testgen:macro-framework -- --mode=fresh --count=5
-npm run testgen:macro-framework -- --mode=fresh --count=10 --categories=MTF-G,MTF-S
+DO (behavioral — Example A's brief).
 ```
 
-Use this when the user asks for "exploratory" or "broad" coverage, when CI is configured to surface fresh-cadence failures for promotion into the committed set (per §5.5's "fresh-each-run" cadence).
+The pseudocode version dictates the construct (`for`), the bound (`1..10`), the
+variable (`n`), the literal, and the statement order. The behavioral brief
+fixes the *scenario* and leaves every one of those choices to the translator.
 
-### Refresh mode — `--mode=refresh [--filter=<regex>] [--auto-accept-identical]`
+**Example C — a dispatch cell (the brief names a tool surface behaviorally):**
 
-Walk every YAML test whose `golden_version` field is older than the current golden (read from `tests/macro-framework/macro-golden-model/package.json` via `GOLDEN_VERSION`). For each, re-run the macro through the current golden and compare the new snapshot to the embedded one.
+```
+RAW INPUT  cell MTF-D-005 — "CallToolResult coercion path 2 (structuredContent)"
+           grounded on REQ-106
 
-```bash
-npm run testgen:macro-framework -- --mode=refresh --auto-accept-identical
-npm run testgen:macro-framework -- --mode=refresh --filter='mtf-c-' --auto-accept-identical
+BEHAVIORAL BRIEF
+  goal: Call a single brokered tool, bind its result, and return it — where
+        the tool delivers its data as a structured object.
+  preconditions/inputs: none.
+  tool surface: one brokered server exposing one tool that returns a small
+        structured record as its payload.
+  triggering condition: the tool call completes successfully.
+  expected observable outcome: the macro exits carrying the tool's structured
+        object as its result, bound and round-tripped intact.
 ```
 
-Without `--auto-accept-identical` the helper reports the diff and leaves the file untouched (operator-review path). With `--auto-accept-identical` it bumps `golden_version` + `golden_run_at` for tests whose snapshot is exactly identical or structurally identical (same length, same per-step `kind`); divergent snapshots are still reported and skipped.
+**Example D — a thin-surface cell (behavioral at the appropriate grain):**
 
-Use this when the user mentions a golden version bump, "refresh the snapshots", "after the golden change", or similar.
+```
+RAW INPUT  cell MTF-G-002 — "Number literal (integer)"
 
-## Workflow (§5.5 9-step mapping)
+BEHAVIORAL BRIEF
+  goal: Use a whole number as a value and confirm it survives a round-trip
+        through the engine unchanged.
+  preconditions/inputs: none.
+  tool surface: none.
+  triggering condition: runs straight through (no branch).
+  expected observable outcome: the macro exits carrying the integer it was
+        given, with the same value and numeric type.
+```
 
-The skill's workflow mirrors the §5.5 steps. Within each invocation:
+Example D is the guard against over-correction: a tiny feature gets a *small*
+behavioral brief stated plainly — do not fake-elaborate it into a story.
+
+### Self-check before handoff
+
+After drafting the brief, the wrapper checks its OWN output before passing it on:
+
+- **Does the brief name macro-language syntax or constructs?** Look for `for` / `while` / `do` / `done` / `if` / `then` / `fi` / `exit` / `fail` used as verbs, `$`-prefixed names, `=` assignments, builtin names used imperatively, object-literal `{...}` syntax. Any of these means the brief has drifted into pseudocode — **rewrite the brief and re-check.**
+- **Does every slot have content?** A missing `goal` or `expected observable outcome` means the brief is too thin to translate — fill it from the REQ text.
+- **Is it scenario-prescriptive but implementation-silent?** It must pin the data and the observable result without dictating the statement sequence.
+
+This loop is the wrapper checking the wrapper's own work. The author skill never sees a bad brief and never has to push back on its caller.
+
+### Handing the brief to the author skill
+
+The brief maps cleanly onto `flashquery-macro-author`'s existing input contract — **no change to that skill is needed**:
+
+- `goal` + `triggering condition` + `expected observable outcome` → the `description` string.
+- `tool surface` → `context.tool_surface` — **concretized first**. The brief's `tool surface` slot is behavioral ("a tool that returns a structured object"); what the author skill receives is the *concrete* surface — real `server.tool` names + archetype + return values — produced in Step 3a. The author is handed those names and transcribes them; it never invents or discovers servers.
+- `preconditions / inputs` → `context.input_vars` (the vault seed is the wrapper's own concern, handled in Step 3).
+- `expected observable outcome` → `context.success_contract`.
+
+The behavioral brief — verbatim — is also what becomes the pilot's `intent:` field (Step 7). That keeps every pilot traceable to the behavior it was meant to exercise.
+
+### Backstop — transcription distance
+
+After the macro comes back and the pilot is assembled, sanity-check translation distance: if the macro's variable names and statement order are ~1:1 derivable from the brief's wording, the brief was pseudocode that slipped the self-check. Flag it and note it in `eval-log.md` — it is a calibration signal that brief-construction needs tightening, not a hard test failure.
+
+## The wrap stage (§5.5)
+
+> **Orientation — read this first.** These 9 steps are the *mechanical detail of the `wrap` stage* — stage 3 of the end-to-end pipeline. They are **not** the whole workflow. The authoritative top-level workflow is **§"Five-step pipeline + reconciliation gate"** further down: construct the behavioral brief → the author skill generates the macro → wrap (these 9 steps) → strengthen → golden-capture + reconciliation gate → run. Read that section for the whole picture; read this one only for what `wrap` does internally.
+
+The wrap stage turns a macro — produced by `flashquery-macro-author` from the behavioral brief — into a *draft* pilot YAML. Within each invocation, in order:
 
 ### Step 1 — Read the cell metadata + REQ acceptance criteria
-The helper's `loadCellMetadata(cellId)` reads `manifest.ts`, follows `source_citations` (REQ-NNN refs), and extracts crude excerpts from the Macro Language Requirements doc. The cited-source text appears in the generated test's `generator.grounding_refs` for traceability.
+Read `coverage/manifest.ts` for the target cell, follow its `source_citations` (REQ-NNN refs) into the Macro Language Requirements doc, and pull the relevant acceptance-criteria text. Those REQ excerpts become the pilot's `generator.grounding_refs` for traceability — and they are the spec source the behavioral brief is grounded on.
 
 ### Step 2 — Read 2–3 hand-authored exemplar tests
-`loadExemplars(category, n)` returns up to N existing pilots in the same MTF-* category. Use them as shape/idiom references — variable naming, comment style, expect block conventions, etc.
+Read a couple of existing pilots in the same MTF-* category. Use them as shape/idiom references — variable naming, comment style, expect block conventions, YAML structure.
 
-### Step 3 — Synthesize the test inputs
-The CLI consults a built-in scenario library (`SCENARIOS` in `testgen-helper.ts`) keyed by cell ID. When invoking via an AI agent (rather than the autonomous CLI), supply a `SynthesizedTest` value directly via `synthesizeTestInputs(cell, exemplars, reqs, synth)`. The synthesis must include: macro source, input_vars, vault seed state, tool surface configuration (matching the framework's archetype library per §5.7), and an `expect_overrides` block declaring the author-intended pass condition.
+### Step 3 — Concretize the tool surface, then synthesize the test inputs
 
-**Macro source synthesis is delegated to `flashquery-macro-author`** (sister skill, also in `.claude/skills/`). That skill takes the cell description + REQ-NNN grounding refs and produces the macro source via its generate workflow (with built-in verify + auto-correction loop). When this skill drives the synthesis, invoke `flashquery-macro-author`'s generate workflow with the cell description as input; `flashquery-macro-author` handles the macro source. THIS skill (`flashquery-macro-testgen`) handles everything around the macro: tool surface, expectations, vault, coverage tagging, golden snapshot capture, provenance block.
+Step 3 has a **strict internal order: concretize the tool surface first, then author the macro against it.** The macro and the tool surface are co-designed — a macro that reads `$res.status` is only a meaningful test if the tool it called returns an object carrying a `status` field — so the surface cannot be honestly reverse-engineered from the macro after the fact. It must exist *before* the macro is authored.
+
+**3a — Concretize the tool surface.** The behavioral brief's `tool surface` slot is deliberately behavioral ("a brokered tool that returns a structured object"). Turn it into a concrete artifact — for **every** server and tool the scenario needs:
+
+- a concrete server name and tool name (invented here — arbitrary but sensible, e.g. `doc_srv` / `lookup`);
+- a framework archetype (`ReadOnlyTool`, `ScriptedTool`, `JSONTextTool`, `NeedsInputViaTofuDrift`, … per §5.7);
+- the concrete return value(s) the tool produces.
+
+The return values are **scenario design, not an afterthought** — they are coupled to the macro's field reads and to the `expect:` block, so they are decided here, by the wrapper, never inferred later. This concrete tool surface is the single source of truth: it feeds both the author skill (3b) and the pilot's `tools:` block in the assembled draft. A scenario with no brokered tools simply has an empty surface.
+
+**3b — Author the macro against that concrete surface.** Macro source synthesis is delegated to `flashquery-macro-author` (sister skill, also in `.claude/skills/`). Invoke its generate workflow with the behavioral brief mapped onto its `description` + `context` contract — and pass the **concrete** surface from 3a as `context.tool_surface` (real `server.tool` names, not the behavioral phrasing). **The author skill never invents or discovers server/tool names — it is always handed them and transcribes them into the macro.** This is symmetric with real end-user authoring, where the user names their real MCP servers directly: the author is given names either way; only the source differs (the user, or this wrapper).
+
+**3c — Synthesize the rest of the inputs.** Assemble `input_vars`, vault seed state, and anything else *around* the macro. THIS skill (`flashquery-macro-testgen`) owns everything around the macro: tool surface, expectations, vault, coverage tagging, golden snapshot capture, provenance block. The author skill's `generate` workflow runs its built-in verify + auto-correction loop internally.
 
 The split exists because macro source synthesis is reusable beyond the test framework (end-user macro authoring also goes through `flashquery-macro-author`). When the spec for the macro language evolves, the shared `macro-spec.md` in that skill's folder is the single update point — both generation and verification track automatically.
 
-When working in agent mode, anchor the synthesis on:
-- **What the REQ says.** The REQ-NNN excerpts from `loadCellMetadata` describe the language behavior the cell exercises.
-- **What the cell description says.** It's the human-readable mission statement.
-- **What the exemplars look like.** Match comment density and YAML structure.
-- **Production-engine surface (as of v3.5 + REQ-112a-d shipping, 2026-05-19).** Production now supports the full macro language surface; the synthesis should use idiomatic constructs rather than older workarounds. Positive guidance:
-  - **Boolean literals.** `true` and `false` are first-class lowercase keywords (REQ-112c). Use `flag = true` and `if $flag then ...`. Do NOT generate `True`/`False`/`None` — they parse as identifiers but the convention is lowercase. Integer-as-sentinel patterns (1/0) are still valid but discouraged when a true boolean is meant.
-  - **`continue` / `break` loop control.** Fully supported inside `for` / `while` bodies (REQ-104). Use them for skip / early-exit patterns. Parse-time error fires only when they appear outside a loop body.
-  - **`_self.*` direct binding.** When the macro is loaded via `source_ref`, `_self.path`, `_self.title`, `_self.frontmatter.*`, `_self.tags`, `_self.fq_id` are all directly readable (REQ-103). No `input_var` workaround needed.
-  - **`_exists()` introspection.** Bare-identifier form (`svc._exists()`) works in any expression position — if-condition, `&&`/`||` operands, after `!`, as a builtin arg, etc. VarRef-prefixed form (`$server_name._exists()`) is allowed too for dynamic dispatch on a variable-stored server name (REQ-112a, introspection methods only — not for regular tool dispatch).
-  - **`if`/`else` is NOT scope-creating** (REQ-112b). A new variable assigned only inside a branch persists after `fi`. No need to pre-declare outer-scope sentinels just to satisfy scoping. Untaken-branch assignments still leave the name undefined (no phantom default).
-  - **Missing-field access returns `null`** (REQ-112d). `$obj.maybe` on a present object whose key is absent yields `null` (not a runtime error). Use `if $obj.maybe == null then default = ... fi` for optional-field guards. Chained access through `null` (`$obj.missing.subfield`) still throws via REQ-023 ac2 — typo-protection preserved.
-  - **Flag argument syntax.** Use `--flag value` form (space-separated). The `--flag=value` form is not in the grammar.
-- **Range exclusivity.** `1..5` iterates [1, 2, 3, 4] — end-exclusive per `buildRange()` in `src/macro/builtins.ts`.
-- **Reserved keywords.** `for`, `in`, `do`, `done`, `if`, `then`, `else`, `fi`, `while`, `continue`, `break`, `null`, `true`, `false` cannot be assigned to. Identifiers BEGINNING with these prefixes (`forecast`, `truthy_check`) lex as bare identifiers — fine to use.
-- **Builtin names.** `echo`, `status`, `task_id`, `list_tasks`, `count`, `unique`, `append`, `concat`, `add`, `sub`, `mul`, `div`, `mod`, `sleep`, `slow_op`, `fail`, `exit`, `input_var`, `range`, `grep`, `find`, `sed`, `cat`, `wc`, `head`, `tail`, `ls` cannot be shadowed by user assignments. Prefer non-conflicting names (e.g., `phase` instead of `status`, `result_value` instead of `exit`).
+Anchor the synthesis on:
+- **What the REQ says.** The REQ-NNN excerpts read in Step 1 describe the language behavior the cell exercises — this is the behavioral source the brief is grounded on.
+- **What the behavioral brief says.** The brief constructed per §"Constructing the behavioral brief" is the mission statement — the brief, not the raw cell `description`, is what the macro is generated from.
+- **What the exemplars look like.** Match comment density and YAML structure. Use the exemplars for *YAML shape only* — never as a source for the behavioral brief (their macros are pseudocode and would pull the brief toward pseudocode).
+- **The macro-language surface is the author skill's domain — not restated here.** Boolean literals, `continue`/`break`, `_self`, `_exists()`, if/else scoping, missing-field-null, flag syntax, range exclusivity, reserved keywords, builtin-name shadowing — all of that is specified in `macro-spec.md` (in the `flashquery-macro-author` folder), and the author skill applies it during generation. `macro-spec.md` is the single source of truth; this skill deliberately does NOT duplicate macro-language rules, because a second copy only drifts. If you need to know what the language supports, read `macro-spec.md`.
 
 ### Step 4 — Run the synthesized macro through the current golden
-`captureAndEmbed(synth)` calls `captureSnapshot()` from `golden-bridge/load.ts`. The capture's return envelope, trace, side-effect manifest, progress events, and `state_notes` are all returned.
+Capture a golden snapshot of the synthesized macro — `captureSnapshot()` from `golden-bridge/load.ts` directly, or via `scripts/capture-runner.ts`. The capture yields the return envelope, trace, side-effect manifest, progress events, and `state_notes`.
 
 ### Step 5 — Embed those outputs into `expect:` and `golden_snapshot:`
-The helper merges author-declared `expect_overrides` over the captured baseline. The `golden_snapshot.state_notes` is taken verbatim from the capture.
+The captured envelope becomes the `expect:` block (the production-comparison target). `golden_snapshot.state_notes` is taken verbatim from the capture.
 
 **Side-effect count convention (lesson from strengthen-workflow calibration, 2026-05-19).** When the macro has **>1 tool dispatch AND >1 exit path**, the `expect.side_effects.tool_call_count` field should be populated for each pilot variant — positive count on the happy path (all dispatches fire), bounded count on each skip/fail path (only the dispatches before the early exit fire). Without this, the pilot can pass on the right return shape while masking a regression that adds spurious dispatches before the guard. The strengthen workflow will flag this if it's missing, but baking the convention into the wrap step avoids the loop.
 
@@ -129,22 +222,29 @@ expect:
 `GOLDEN_VERSION` is read from `tests/macro-framework/macro-golden-model/src/version.ts`. The `golden_run_at` field is the ISO timestamp at capture time.
 
 ### Step 7 — Add `generator:` provenance + `covers:` + `intent:`
-The generator block carries the skill name, version (currently `1`), model identifier, timestamp, targeted cell list, and grounding refs (REQ-NNN strings the synthesis used). The `covers:` array enumerates all MTF-* cells the test contributes to, including incidental ones.
+The generator block carries the skill name, version (currently `1`), model identifier, timestamp, targeted cell list, and grounding refs (REQ-NNN strings the synthesis used). The `covers:` array enumerates **every** MTF-* cell the test contributes to, including incidental ones — it is a **required** field, validated by the runner and `validate-pilots.py`, so it must never be empty.
 
-**`intent:` field (required for AI-generated, strongly recommended for hand-authored).** This is the natural-language description that drove macro generation — the English prompt given to `flashquery-macro-author`, or for hand-authored pilots, the design intent statement. Distinct from `description:` (which describes the test mechanics + REQ citations). Emit it verbatim from the original prompt; this makes it possible to:
+**`intent:` field (required for AI-generated, strongly recommended for hand-authored).** This is the natural-language description that drove macro generation — the behavioral brief given to `flashquery-macro-author`, or for hand-authored pilots, the design intent statement. Distinct from `description:` (which describes the test mechanics + REQ citations). Emit it verbatim from the behavioral brief; this makes it possible to:
 
 - grep the pilot corpus by wording to find related scenarios;
 - retrace why a particular macro shape emerged from a particular phrasing;
 - re-run the generation against an updated skill to check for improvements;
 - aggregate the calibration eval log automatically from pilot files.
 
-When wrapping a macro this testgen produced from `flashquery-macro-author`, copy the original description into `intent:` verbatim. Do not paraphrase.
+When wrapping a macro this skill produced from `flashquery-macro-author`, copy the behavioral brief into `intent:` verbatim. Do not paraphrase.
 
-### Step 8 — Validate the emitted YAML
-`validateGeneratedTest(path)` re-loads the YAML through the runner, drives the production engine, and runs the comparator. Any divergence at this stage indicates a generator misread (per §5.8) and should be reported to the operator with the comparator findings.
+### Step 8 — Validate the draft pilot
+Re-load the emitted YAML through the runner, drive the production engine, and run the comparator. Any divergence at this stage indicates a generator misread (per §5.8) and should be reported to the operator with the comparator findings — don't ship the pilot until it's resolved.
 
-### Step 9 — Write to `cases/<category>/` (committed) or `cases-fresh/` (fresh)
-`writeGeneratedTest(synth, yaml_text, opts)` handles destination paths. Committed-mode files land under `cases/<MTF-category>/<NN-descriptive-slug>.yml`; fresh-mode files land under `cases-fresh/<slug>.yml`.
+**Tool-surface consistency guard.** As part of this step, reconcile the authored macro's `server.tool` references against the concrete tool surface from Step 3a:
+
+- every `server.tool` the macro calls MUST exist in the pilot's `tools:` block — a reference to anything else is an author misread (the runner's pre-scan will also reject it as `unknown_server` / `unknown_tool`);
+- every server/tool provisioned in the `tools:` block SHOULD be exercised by the macro — an unused entry is dead surface (the strengthen workflow's side-effect axis will also flag it).
+
+A mismatch is a finding, not a silent fix: regenerate the macro or reconcile the surface before shipping. The guard catches the failure mode where the macro and the `tools:` block drift apart — they must agree by construction, because both derive from the single concrete surface chosen in 3a.
+
+### Step 9 — Write the pilot to `cases/<category>/`
+Committed pilots land under `cases/<MTF-category>/<NN-descriptive-slug>.yml` and are checked into git.
 
 ## Strengthen workflow — make the pilot rigorous
 
@@ -333,14 +433,15 @@ After successful generation:
 
 ## Five-step pipeline + reconciliation gate (canonical workflow)
 
-The full pilot-generation pipeline composes the author skill, the wrap workflow, the strengthen workflow, and a **golden-capture + reconciliation gate** that's mandatory before any pilot reaches the test suite. The reconciliation gate is the framework's enforcement of §5.6 (golden-as-snapshot): the golden is the independent oracle, AI predictions are checkpoints, production is the implementation being tested.
+The full pilot-generation pipeline composes behavioral-brief construction, the author skill, the wrap workflow, the strengthen workflow, and a **golden-capture + reconciliation gate** that's mandatory before any pilot reaches the test suite. The reconciliation gate is the framework's enforcement of §5.6 (golden-as-snapshot): the golden is the independent oracle, AI predictions are checkpoints, production is the implementation being tested.
 
 ### The pipeline
 
 ```
-1. flashquery-macro-author / generate
-   description → macro source
-   (verify runs internally; auto-correction loop on misses)
+1. testgen / construct the behavioral brief  →  flashquery-macro-author / generate
+   cell (curated cell.behavior, or synthesized) → behavioral brief → macro source
+   (brief construction per §"Constructing the behavioral brief"; the
+    author's verify runs internally, with an auto-correction loop on misses)
 
 2. flashquery-macro-author / verify (already inside step 1)
    description ↔ macro → "is the macro what was asked for?"
@@ -448,25 +549,19 @@ Every reconciliation event produces calibration signal:
 
 The agreement rate across the pilot corpus is a top-line metric of skill quality (see `eval-log.md` for the running stats).
 
-## Adding new scenarios to the library
-
-The CLI's built-in `SCENARIOS` library in `testgen-helper.ts` covers a starter set of cells (line comments, field access, if/else, scripted-tool dispatch, progress emission, macro_aborted envelope, per-invocation isolation). When the user asks for coverage of a cell not in this library:
-
-1. **AI-agent mode (preferred):** synthesize the test inputs in the conversation, build a `SynthesizedTest` value matching the interface in `testgen-helper.ts`, and pass it through `captureAndEmbed()` + `writeGeneratedTest()` directly. No library edit needed.
-2. **Library extension (when the cell will be re-targeted often):** add a new `SCENARIOS[cellId]` factory in `testgen-helper.ts`. Keep the factory pure — it returns a `SynthesizedTest` without side effects. After extending the library, the autonomous CLI can pick the cell up via `--target=`.
-
 ## Verification gate
 
-A successful committed-mode invocation satisfies:
+A successful pilot generation satisfies:
 
-- The generated YAML exists at the declared `output_path`.
+- The generated YAML exists under `cases/<category>/`.
 - `npm run test:macro-framework` passes including the new test.
-- The new test's `generator.targeted_cells` enumerates the cells the user asked for, plus any incidental cells.
+- `python3 tests/macro-framework/scripts/validate-pilots.py` reports the pilot valid.
+- The new test's `generator.targeted_cells` enumerates the cells the user asked for, plus any incidental cells, and `covers:` lists every MTF-* cell the pilot contributes to.
 - The new test's `generator.grounding_refs` cites REQ-NNN strings the synthesis was grounded in.
 - The new test's `golden_version` matches the current `GOLDEN_VERSION` and `golden_run_at` is recent.
 - The new test's `golden_snapshot.state_notes` is non-empty.
 
-A successful refresh-mode invocation satisfies:
+A successful refresh satisfies:
 
 - All stale-version tests with structurally-identical captures have their `golden_version` bumped to the current.
 - Tests with diverged captures are reported (not silently rewritten) so the operator can review.
@@ -474,7 +569,7 @@ A successful refresh-mode invocation satisfies:
 ## Related skills
 
 - **flashquery-macro-covgen** — regenerate `MTF_COVERAGE.md` / `MTF_INTERACTIONS.md` after this skill produces new tests.
-- **flashquery-macro-run** (Phase 6, future) — execute the macro framework suite, classify failures, write triage records.
+- **flashquery-macro-run** — execute the macro framework suite, classify failures, write triage records.
 - **flashquery-directed-testgen** / **flashquery-integration-testgen** — sister testgen skills for the other test layers. Same shape (covgen + testgen + run triad); this one is specific to the macro framework.
 
 ## Principles
@@ -486,3 +581,5 @@ A successful refresh-mode invocation satisfies:
 **Drift is explicit** (§5.6). Every test records `golden_version`. The refresh workflow makes drift a first-class operation — operator-gated by default; auto-bumped only for structurally-identical refreshes.
 
 **Production constraints are real.** The synthesis MUST produce a macro the production engine can actually execute. If the language doesn't support a construct (bool literals, `continue`/`break`, `_self`), the test substitutes a production-compatible alternative or targets a different cell.
+
+**The author is handed the tool surface — it never invents one.** Concrete `server.tool` names, archetypes, and return values are decided by the caller: the user (real end-user authoring against their own MCP servers) or this wrapper (test authoring, Step 3a). The author skill transcribes the names it is given; it does not discover or guess servers. This keeps it a pure obedient translator, and keeps the macro and the `tools:` block consistent by construction — both derive from one concrete surface.

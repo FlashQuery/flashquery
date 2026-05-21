@@ -193,7 +193,7 @@ export function NeedsInputViaTofuDrift(driftPayload: {
     throw new Error(
       'NeedsInputViaTofuDrift handler invoked — production should have short-circuited at the pre-dispatch pending-drift check.',
     );
-  }) as DriftMarkedHandler;
+  }) as unknown as DriftMarkedHandler;
   handler.__tofuDriftPayload = payload;
   return handler;
 }

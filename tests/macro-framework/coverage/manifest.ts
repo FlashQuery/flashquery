@@ -45,6 +45,18 @@ export type Cell = {
   category: string;
   /** One-line human-readable description of what the cell exercises. */
   description: string;
+  /**
+   * Curated behavioral framing for this cell — the goal / preconditions /
+   * tool surface / triggering condition / expected observable outcome that
+   * the `flashquery-macro-testgen` wrapper instantiates into the behavioral
+   * brief it hands `flashquery-macro-author`. OPTIONAL: when absent, the
+   * wrapper synthesizes a brief from `description` + `source_citations` per
+   * the few-shot examples in that skill's "Constructing the behavioral
+   * brief" section. Prefer a curated `behavior` — instantiation beats
+   * invention. Distinct from `description`, which stays a terse mechanical
+   * label for the coverage matrix.
+   */
+  behavior?: string;
   /** Target test count for this cell; surfaces low-density cells to the generator. */
   density_target: number;
   /** REQ-NNN or guide-section refs (per §9.4 / §11.3). */
@@ -237,6 +249,36 @@ export const CELLS: Cell[] = [
     source_citations: ["REQ-015", "REQ-021"],
     status: "actionable",
     added_in: TODAY,
+  },
+  {
+    id: "MTF-S-009",
+    category: "MTF-S",
+    description:
+      "Arithmetic builtins beyond add() — sub / mul / div / mod. Covers negative operands, integer-truncating division, float operands, and nested composition (e.g. mul (add 2 3) 4).",
+    density_target: 10,
+    source_citations: ["REQ-038"],
+    status: "actionable",
+    added_in: "2026-05-21",
+  },
+  {
+    id: "MTF-S-010",
+    category: "MTF-S",
+    description:
+      "Numeric comparison operators (`<`, `>`, `>=`, `<=`, etc.) on integer and float operands, including the pre-computed-operand grammar idiom and use in if-conditions.",
+    density_target: 5,
+    source_citations: ["REQ-015", "REQ-021"],
+    status: "actionable",
+    added_in: "2026-05-21",
+  },
+  {
+    id: "MTF-S-011",
+    category: "MTF-S",
+    description:
+      "`range` builtin and `..` range operator — basic, empty, and zero-length ranges. End-exclusive semantics (`0..5` → [0,1,2,3,4]; `range 5` → [0..4]).",
+    density_target: 5,
+    source_citations: ["REQ-014", "REQ-038"],
+    status: "actionable",
+    added_in: "2026-05-21",
   },
   {
     id: "MTF-S-101",
@@ -527,6 +569,26 @@ export const CELLS: Cell[] = [
     },
     added_in: TODAY,
   },
+  {
+    id: "MTF-L-010",
+    category: "MTF-L",
+    description:
+      "input_var `--default` value fires when the caller omits the input — the macro runs with the declared default rather than failing the contract.",
+    density_target: 5,
+    source_citations: ["REQ-053", "REQ-058"],
+    status: "actionable",
+    added_in: "2026-05-21",
+  },
+  {
+    id: "MTF-L-011",
+    category: "MTF-L",
+    description:
+      "input_var `--default` is overridden when the caller supplies a value — the supplied value wins over the declared default.",
+    density_target: 5,
+    source_citations: ["REQ-053", "REQ-058"],
+    status: "actionable",
+    added_in: "2026-05-21",
+  },
 
   // ─── MTF-E — Error taxonomy ──────────────────────────────────────────
   // Every envelope shape and reason code per REQ-054.
@@ -593,6 +655,16 @@ export const CELLS: Cell[] = [
     status: "actionable",
     added_in: TODAY,
   },
+  {
+    id: "MTF-E-008",
+    category: "MTF-E",
+    description:
+      "input_var contract violations — a required input the caller never supplied, multiple missing required inputs at once, and a non-literal `--default` expression being rejected.",
+    density_target: 5,
+    source_citations: ["REQ-058", "REQ-054"],
+    status: "actionable",
+    added_in: "2026-05-21",
+  },
 
   // ─── MTF-I — Isolation & caller identity ─────────────────────────────
   // Per-invocation state, input_var contract, _self binding.
@@ -652,7 +724,7 @@ export const CELLS: Cell[] = [
   {
     id: "MTF-FW-002",
     category: "MTF-FW",
-    description: "expect_state_notes load-time integrity check",
+    description: "assert_golden_state_notes load-time integrity check",
     density_target: 5,
     source_citations: ["MTF Framework §5.4", "REQ-051"],
     status: "actionable",

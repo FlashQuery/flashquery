@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated_at": "2026-05-21T12:42:24.105Z",
+  "generated_at": "2026-05-21T17:37:44.053Z",
   "cells": {
     "MTF-G-001": {
       "count": 4,
@@ -135,10 +135,13 @@
       ]
     },
     "MTF-S-003": {
-      "count": 9,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 12,
+      "last_verified": "2026-05-21T17:00:55.057Z",
       "tests": [
         "mtf-s-02-walk-up-scope-counter",
+        "mtf-s-1142-numeric-float-add",
+        "mtf-s-1149-numeric-large-int",
+        "mtf-s-1157-numeric-float-precision",
         "mtf-s-1282-nested-for-walkup-count",
         "mtf-s-1283-nested-range-loop-sum",
         "mtf-s-1284-while-counter-up",
@@ -182,14 +185,15 @@
       ]
     },
     "MTF-S-007": {
-      "count": 32,
-      "last_verified": "2026-05-20T17:25:14.261Z",
+      "count": 33,
+      "last_verified": "2026-05-21T17:37:44.053Z",
       "tests": [
         "mtf-d-1300-longer-research-synthesis",
         "mtf-d-1303-behavioral-order-summary",
         "mtf-d-1304-behavioral-inbox-triage",
         "mtf-d-1306-behavioral-cascade-first-success",
         "mtf-d-1309-behavioral-audit-aggregator",
+        "mtf-d-1312-dispatch-coerce-object-field-access",
         "mtf-d-920-smoke-items-pipeline",
         "mtf-d-930-smoke-conditional-index-happy-path",
         "mtf-d-931-smoke-conditional-index-not-published",
@@ -228,6 +232,44 @@
         "mtf-s-1287-if-no-else-taken-and-skipped",
         "mtf-s-1292-two-if-else-decisions",
         "mtf-s-1293-if-else-in-nested-loop"
+      ]
+    },
+    "MTF-S-009": {
+      "count": 11,
+      "last_verified": "2026-05-21T17:37:44.053Z",
+      "tests": [
+        "mtf-d-1308-behavioral-round-robin-workers",
+        "mtf-d-970-smoke-numeric-accumulator",
+        "mtf-s-1143-numeric-negative-mul",
+        "mtf-s-1144-numeric-sub-producing-negative",
+        "mtf-s-1145-numeric-mod-positive",
+        "mtf-s-1146-numeric-mod-negative-dividend",
+        "mtf-s-1147-numeric-div-truncation",
+        "mtf-s-1148-numeric-div-float",
+        "mtf-s-1156-numeric-nested-ops",
+        "mtf-s-1310-input-var-numeric-default-overridden",
+        "mtf-s-983-input-var-required-number"
+      ]
+    },
+    "MTF-S-010": {
+      "count": 5,
+      "last_verified": "2026-05-21T17:37:44.053Z",
+      "tests": [
+        "mtf-c-1311-while-fail-interpolated-message",
+        "mtf-d-1307-behavioral-tier-promotion",
+        "mtf-s-1150-numeric-comparison-lt",
+        "mtf-s-1151-numeric-comparison-gte",
+        "mtf-s-996-input-var-in-comparison-precomputed"
+      ]
+    },
+    "MTF-S-011": {
+      "count": 4,
+      "last_verified": "2026-05-21T17:00:55.057Z",
+      "tests": [
+        "mtf-s-1152-range-basic",
+        "mtf-s-1153-range-empty",
+        "mtf-s-1154-range-builtin-zero",
+        "mtf-s-1155-range-builtin-five"
       ]
     },
     "MTF-S-101": {
@@ -301,20 +343,22 @@
       ]
     },
     "MTF-C-005": {
-      "count": 4,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 5,
+      "last_verified": "2026-05-21T17:37:44.053Z",
       "tests": [
         "mtf-c-04-while-with-fail",
+        "mtf-c-1311-while-fail-interpolated-message",
         "mtf-l-516-deep-nested-for-while-mix",
         "mtf-s-1284-while-counter-up",
         "mtf-s-1285-while-countdown"
       ]
     },
     "MTF-C-006": {
-      "count": 3,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 4,
+      "last_verified": "2026-05-21T17:37:44.053Z",
       "tests": [
         "mtf-c-04-while-with-fail",
+        "mtf-c-1311-while-fail-interpolated-message",
         "mtf-c-507-while-fail-termination",
         "mtf-c-509-while-fail-on-countdown"
       ]
@@ -343,8 +387,8 @@
       ]
     },
     "MTF-C-009": {
-      "count": 210,
-      "last_verified": "2026-05-20T17:25:14.261Z",
+      "count": 212,
+      "last_verified": "2026-05-21T17:37:44.053Z",
       "tests": [
         "mtf-c-501-exit-with-object",
         "mtf-c-502-exit-with-list",
@@ -375,6 +419,7 @@
         "mtf-d-1307-behavioral-tier-promotion",
         "mtf-d-1308-behavioral-round-robin-workers",
         "mtf-d-1309-behavioral-audit-aggregator",
+        "mtf-d-1312-dispatch-coerce-object-field-access",
         "mtf-d-910-smoke-failover-primary-reachable",
         "mtf-d-911-smoke-failover-backup-taken",
         "mtf-d-912-smoke-failover-both-unreachable",
@@ -538,6 +583,7 @@
         "mtf-s-1276-truthy-negation-true",
         "mtf-s-1301-longer-config-validator-valid",
         "mtf-s-1302-longer-config-validator-invalid",
+        "mtf-s-1310-input-var-numeric-default-overridden",
         "mtf-s-980-smoke-input-var-boolean-default-fires",
         "mtf-s-981-smoke-input-var-boolean-default-overridden",
         "mtf-s-982-input-var-required-string",
@@ -559,10 +605,11 @@
       ]
     },
     "MTF-D-001": {
-      "count": 11,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 12,
+      "last_verified": "2026-05-21T17:37:44.053Z",
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1312-dispatch-coerce-object-field-access",
         "mtf-d-16-scripted-tool-sequence",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-886-dispatch-multi-server-pair",
@@ -586,10 +633,11 @@
       ]
     },
     "MTF-D-003": {
-      "count": 11,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 12,
+      "last_verified": "2026-05-21T17:37:44.053Z",
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1312-dispatch-coerce-object-field-access",
         "mtf-d-16-scripted-tool-sequence",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-886-dispatch-multi-server-pair",
@@ -603,10 +651,11 @@
       ]
     },
     "MTF-D-004": {
-      "count": 3,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 4,
+      "last_verified": "2026-05-21T17:37:44.053Z",
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1312-dispatch-coerce-object-field-access",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-896-dispatch-three-server-chain"
       ]
@@ -716,8 +765,8 @@
       ]
     },
     "MTF-L-002": {
-      "count": 31,
-      "last_verified": "2026-05-20T17:25:14.261Z",
+      "count": 32,
+      "last_verified": "2026-05-21T17:37:44.053Z",
       "tests": [
         "mtf-d-1300-longer-research-synthesis",
         "mtf-d-1303-behavioral-order-summary",
@@ -730,6 +779,7 @@
         "mtf-s-1000-input-var-extras-silently-accepted",
         "mtf-s-1002-input-var-same-key-multiple-references",
         "mtf-s-1003-input-var-non-literal-default-rejected",
+        "mtf-s-1310-input-var-numeric-default-overridden",
         "mtf-s-980-smoke-input-var-boolean-default-fires",
         "mtf-s-981-smoke-input-var-boolean-default-overridden",
         "mtf-s-982-input-var-required-string",
@@ -815,6 +865,22 @@
       "last_verified": null,
       "tests": []
     },
+    "MTF-L-010": {
+      "count": 2,
+      "last_verified": "2026-05-21T17:00:55.057Z",
+      "tests": [
+        "mtf-s-980-smoke-input-var-boolean-default-fires",
+        "mtf-s-981-smoke-input-var-boolean-default-overridden"
+      ]
+    },
+    "MTF-L-011": {
+      "count": 2,
+      "last_verified": "2026-05-21T17:37:44.053Z",
+      "tests": [
+        "mtf-s-1310-input-var-numeric-default-overridden",
+        "mtf-s-981-smoke-input-var-boolean-default-overridden"
+      ]
+    },
     "MTF-E-001": {
       "count": 3,
       "last_verified": "2026-05-20T18:29:04.361Z",
@@ -841,9 +907,10 @@
       ]
     },
     "MTF-E-004": {
-      "count": 4,
-      "last_verified": "2026-05-20T18:29:45.813Z",
+      "count": 5,
+      "last_verified": "2026-05-21T17:37:44.053Z",
       "tests": [
+        "mtf-c-1311-while-fail-interpolated-message",
         "mtf-c-506-for-fail-mid-iteration",
         "mtf-c-508-for-fail-on-list-match",
         "mtf-e-18-macro-aborted-envelope",
@@ -923,6 +990,15 @@
         "mtf-e-890-shell-sed-in-place-forbidden",
         "mtf-e-891-shell-find-exec-forbidden",
         "mtf-e-892-shell-find-delete-forbidden"
+      ]
+    },
+    "MTF-E-008": {
+      "count": 3,
+      "last_verified": "2026-05-21T17:00:55.057Z",
+      "tests": [
+        "mtf-s-1003-input-var-non-literal-default-rejected",
+        "mtf-s-998-input-var-missing-required-multi",
+        "mtf-s-999-input-var-in-untaken-branch-still-required"
       ]
     },
     "MTF-I-001": {
@@ -1286,9 +1362,10 @@
       ]
     },
     "MTF-C-005+MTF-C-006": {
-      "count": 1,
+      "count": 2,
       "tests": [
-        "mtf-c-04-while-with-fail"
+        "mtf-c-04-while-with-fail",
+        "mtf-c-1311-while-fail-interpolated-message"
       ]
     },
     "MTF-C-005+MTF-S-004": {
@@ -1303,6 +1380,36 @@
       "count": 1,
       "tests": [
         "mtf-c-04-while-with-fail"
+      ]
+    },
+    "MTF-C-005+MTF-E-004": {
+      "count": 1,
+      "tests": [
+        "mtf-c-1311-while-fail-interpolated-message"
+      ]
+    },
+    "MTF-C-005+MTF-S-010": {
+      "count": 1,
+      "tests": [
+        "mtf-c-1311-while-fail-interpolated-message"
+      ]
+    },
+    "MTF-C-006+MTF-E-004": {
+      "count": 1,
+      "tests": [
+        "mtf-c-1311-while-fail-interpolated-message"
+      ]
+    },
+    "MTF-C-006+MTF-S-010": {
+      "count": 1,
+      "tests": [
+        "mtf-c-1311-while-fail-interpolated-message"
+      ]
+    },
+    "MTF-E-004+MTF-S-010": {
+      "count": 1,
+      "tests": [
+        "mtf-c-1311-while-fail-interpolated-message"
       ]
     },
     "MTF-C-003+MTF-C-008": {
@@ -1386,9 +1493,10 @@
       ]
     },
     "MTF-D-001+MTF-D-003": {
-      "count": 11,
+      "count": 12,
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1312-dispatch-coerce-object-field-access",
         "mtf-d-16-scripted-tool-sequence",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-886-dispatch-multi-server-pair",
@@ -1402,9 +1510,10 @@
       ]
     },
     "MTF-D-001+MTF-D-004": {
-      "count": 3,
+      "count": 4,
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1312-dispatch-coerce-object-field-access",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-896-dispatch-three-server-chain"
       ]
@@ -1426,9 +1535,10 @@
       ]
     },
     "MTF-D-003+MTF-D-004": {
-      "count": 3,
+      "count": 4,
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1312-dispatch-coerce-object-field-access",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-896-dispatch-three-server-chain"
       ]
@@ -1533,7 +1643,7 @@
       ]
     },
     "MTF-C-009+MTF-L-002": {
-      "count": 27,
+      "count": 28,
       "tests": [
         "mtf-d-1300-longer-research-synthesis",
         "mtf-d-1303-behavioral-order-summary",
@@ -1544,6 +1654,7 @@
         "mtf-d-1308-behavioral-round-robin-workers",
         "mtf-s-1000-input-var-extras-silently-accepted",
         "mtf-s-1002-input-var-same-key-multiple-references",
+        "mtf-s-1310-input-var-numeric-default-overridden",
         "mtf-s-980-smoke-input-var-boolean-default-fires",
         "mtf-s-981-smoke-input-var-boolean-default-overridden",
         "mtf-s-982-input-var-required-string",
@@ -1574,13 +1685,14 @@
       ]
     },
     "MTF-C-009+MTF-S-007": {
-      "count": 31,
+      "count": 32,
       "tests": [
         "mtf-d-1300-longer-research-synthesis",
         "mtf-d-1303-behavioral-order-summary",
         "mtf-d-1304-behavioral-inbox-triage",
         "mtf-d-1306-behavioral-cascade-first-success",
         "mtf-d-1309-behavioral-audit-aggregator",
+        "mtf-d-1312-dispatch-coerce-object-field-access",
         "mtf-d-920-smoke-items-pipeline",
         "mtf-d-930-smoke-conditional-index-happy-path",
         "mtf-d-931-smoke-conditional-index-not-published",
@@ -1741,6 +1853,59 @@
         "mtf-d-1300-longer-research-synthesis"
       ]
     },
+    "MTF-C-009+MTF-S-010": {
+      "count": 4,
+      "tests": [
+        "mtf-d-1307-behavioral-tier-promotion",
+        "mtf-s-1150-numeric-comparison-lt",
+        "mtf-s-1151-numeric-comparison-gte",
+        "mtf-s-996-input-var-in-comparison-precomputed"
+      ]
+    },
+    "MTF-D-101+MTF-S-010": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1307-behavioral-tier-promotion"
+      ]
+    },
+    "MTF-L-002+MTF-S-010": {
+      "count": 2,
+      "tests": [
+        "mtf-d-1307-behavioral-tier-promotion",
+        "mtf-s-996-input-var-in-comparison-precomputed"
+      ]
+    },
+    "MTF-C-009+MTF-S-009": {
+      "count": 11,
+      "tests": [
+        "mtf-d-1308-behavioral-round-robin-workers",
+        "mtf-d-970-smoke-numeric-accumulator",
+        "mtf-s-1143-numeric-negative-mul",
+        "mtf-s-1144-numeric-sub-producing-negative",
+        "mtf-s-1145-numeric-mod-positive",
+        "mtf-s-1146-numeric-mod-negative-dividend",
+        "mtf-s-1147-numeric-div-truncation",
+        "mtf-s-1148-numeric-div-float",
+        "mtf-s-1156-numeric-nested-ops",
+        "mtf-s-1310-input-var-numeric-default-overridden",
+        "mtf-s-983-input-var-required-number"
+      ]
+    },
+    "MTF-L-002+MTF-S-009": {
+      "count": 3,
+      "tests": [
+        "mtf-d-1308-behavioral-round-robin-workers",
+        "mtf-s-1310-input-var-numeric-default-overridden",
+        "mtf-s-983-input-var-required-number"
+      ]
+    },
+    "MTF-L-008+MTF-S-009": {
+      "count": 2,
+      "tests": [
+        "mtf-d-1308-behavioral-round-robin-workers",
+        "mtf-d-970-smoke-numeric-accumulator"
+      ]
+    },
     "MTF-C-009+MTF-I-101": {
       "count": 22,
       "tests": [
@@ -1788,6 +1953,42 @@
         "mtf-d-932-smoke-conditional-index-archived",
         "mtf-s-1301-longer-config-validator-valid",
         "mtf-s-1302-longer-config-validator-invalid"
+      ]
+    },
+    "MTF-C-009+MTF-D-001": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1312-dispatch-coerce-object-field-access"
+      ]
+    },
+    "MTF-C-009+MTF-D-003": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1312-dispatch-coerce-object-field-access"
+      ]
+    },
+    "MTF-C-009+MTF-D-004": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1312-dispatch-coerce-object-field-access"
+      ]
+    },
+    "MTF-D-001+MTF-S-007": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1312-dispatch-coerce-object-field-access"
+      ]
+    },
+    "MTF-D-003+MTF-S-007": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1312-dispatch-coerce-object-field-access"
+      ]
+    },
+    "MTF-D-004+MTF-S-007": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1312-dispatch-coerce-object-field-access"
       ]
     },
     "MTF-D-001+MTF-D-008": {
@@ -2006,6 +2207,12 @@
       ]
     },
     "MTF-L-007+MTF-L-008": {
+      "count": 1,
+      "tests": [
+        "mtf-d-970-smoke-numeric-accumulator"
+      ]
+    },
+    "MTF-L-007+MTF-S-009": {
       "count": 1,
       "tests": [
         "mtf-d-970-smoke-numeric-accumulator"
@@ -2353,6 +2560,31 @@
         "mtf-s-1001-input-var-builtin-shadowing-rejected"
       ]
     },
+    "MTF-E-008+MTF-L-002": {
+      "count": 3,
+      "tests": [
+        "mtf-s-1003-input-var-non-literal-default-rejected",
+        "mtf-s-998-input-var-missing-required-multi",
+        "mtf-s-999-input-var-in-untaken-branch-still-required"
+      ]
+    },
+    "MTF-C-009+MTF-S-003": {
+      "count": 3,
+      "tests": [
+        "mtf-s-1142-numeric-float-add",
+        "mtf-s-1149-numeric-large-int",
+        "mtf-s-1157-numeric-float-precision"
+      ]
+    },
+    "MTF-C-009+MTF-S-011": {
+      "count": 4,
+      "tests": [
+        "mtf-s-1152-range-basic",
+        "mtf-s-1153-range-empty",
+        "mtf-s-1154-range-builtin-zero",
+        "mtf-s-1155-range-builtin-five"
+      ]
+    },
     "MTF-G-002+MTF-G-006": {
       "count": 1,
       "tests": [
@@ -2608,6 +2840,26 @@
         "mtf-s-1294-iterator-shadow-multiarg-add"
       ]
     },
+    "MTF-C-009+MTF-L-011": {
+      "count": 2,
+      "tests": [
+        "mtf-s-1310-input-var-numeric-default-overridden",
+        "mtf-s-981-smoke-input-var-boolean-default-overridden"
+      ]
+    },
+    "MTF-L-002+MTF-L-011": {
+      "count": 2,
+      "tests": [
+        "mtf-s-1310-input-var-numeric-default-overridden",
+        "mtf-s-981-smoke-input-var-boolean-default-overridden"
+      ]
+    },
+    "MTF-L-011+MTF-S-009": {
+      "count": 1,
+      "tests": [
+        "mtf-s-1310-input-var-numeric-default-overridden"
+      ]
+    },
     "MTF-G-004+MTF-S-007": {
       "count": 1,
       "tests": [
@@ -2618,6 +2870,26 @@
       "count": 1,
       "tests": [
         "mtf-s-923-missing-field-frontmatter"
+      ]
+    },
+    "MTF-C-009+MTF-L-010": {
+      "count": 2,
+      "tests": [
+        "mtf-s-980-smoke-input-var-boolean-default-fires",
+        "mtf-s-981-smoke-input-var-boolean-default-overridden"
+      ]
+    },
+    "MTF-L-002+MTF-L-010": {
+      "count": 2,
+      "tests": [
+        "mtf-s-980-smoke-input-var-boolean-default-fires",
+        "mtf-s-981-smoke-input-var-boolean-default-overridden"
+      ]
+    },
+    "MTF-L-010+MTF-L-011": {
+      "count": 1,
+      "tests": [
+        "mtf-s-981-smoke-input-var-boolean-default-overridden"
       ]
     },
     "MTF-C-009+MTF-D-104": {

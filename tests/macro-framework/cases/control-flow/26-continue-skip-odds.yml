@@ -49,7 +49,7 @@ golden_snapshot:
   captured_tool_calls: []
 # Spot-check witness: the final `total = 30` outer-scope update event
 # (the running sum reached 30 by the final iteration).
-expect_state_notes:
+assert_golden_state_notes:
   - { kind: binding, op: update, name: total, value: 30, scope: outer }
 predicted_expect:
   outcome: success

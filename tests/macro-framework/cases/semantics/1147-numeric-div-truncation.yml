@@ -3,7 +3,7 @@ name: |-
   integer division truncates
 intent: |
   div 7 2 = 3 (integer truncation)
-covers: [MTF-C-009, MTF-N-005]
+covers: [MTF-C-009, MTF-S-009]
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T22:55:00Z
 deps: []

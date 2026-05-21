@@ -21,7 +21,7 @@ import {
   compareToExpect,
   type TestCase,
 } from './src/runner.ts';
-import { checkExpectStateNotes } from './state-notes/assert.ts';
+import { checkGoldenStateNotes } from './state-notes/assert.ts';
 import { GOLDEN_VERSION } from './golden-bridge/load.ts';
 import { classifyFailure } from './triage/classify.ts';
 import { writeTriageRecord, findRelatedFailures } from './triage/record.ts';
@@ -58,14 +58,14 @@ for (const [cat, cs] of grouped) {
     for (const tc of cs) {
       it(tc.id, async () => {
         // Load-time integrity check (per §5.6.1).
-        if (tc.expect_state_notes && tc.golden_snapshot?.state_notes) {
-          const check = checkExpectStateNotes(
-            tc.expect_state_notes,
+        if (tc.assert_golden_state_notes && tc.golden_snapshot?.state_notes) {
+          const check = checkGoldenStateNotes(
+            tc.assert_golden_state_notes,
             tc.golden_snapshot.state_notes,
           );
           if (!check.ok) {
             throw new Error(
-              `expect_state_notes integrity check failed: ${JSON.stringify(check.errors, null, 2)}`,
+              `assert_golden_state_notes integrity check failed: ${JSON.stringify(check.errors, null, 2)}`,
             );
           }
         }

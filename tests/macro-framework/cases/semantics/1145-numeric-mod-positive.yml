@@ -3,7 +3,7 @@ name: |-
   mod positive operands
 intent: |
   mod 10 3 = 1
-covers: [MTF-C-009, MTF-N-005]
+covers: [MTF-C-009, MTF-S-009]
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T22:55:00Z
 deps: []

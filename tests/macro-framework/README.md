@@ -48,8 +48,8 @@ When golden and production genuinely disagree, the divergence is triaged
 against the **spec** — never against whichever engine you happen to trust — and
 filed in `GOLDEN_GAPS.md` (golden bug) or `PRODUCTION_GAPS.md` (production bug).
 
-Today the corpus is **510 pilots** across **77 coverage cells**; the suite is
-**511 Vitest tests** (510 pilots + 1 framework self-test).
+Today the corpus is **510 pilots** across **83 coverage cells** (78 exercised);
+the suite is **511 Vitest tests** (510 pilots + 1 framework self-test).
 
 ---
 
@@ -79,7 +79,6 @@ tests/macro-framework/
   cases/                      ← the pilot corpus, by category (see §6)
     grammar/ semantics/ control-flow/ dispatch/ lifecycle/ errors/ isolation/
   cases-ts/                   ← escape-hatch for imperative TS tests (normally empty)
-  cases-fresh/                ← gitignored: fresh-cadence generated tests, never committed
 
   coverage/                   ← the MTF-* coverage matrix
     manifest.ts               ← source of truth for the cell list
@@ -101,10 +100,10 @@ Conventions:
   **`scripts/` is runnable tools** — invoked directly, never imported.
 - There is **no leading-underscore "scratch" convention** — it used to exist and
   it gitignored two load-bearing tools by accident. Everything outside
-  `cases-fresh/` and `failures/` is real and committed.
+  `failures/` is real and committed.
 - Two pilots keep a leading underscore on purpose because they are framework
   self-test *fixtures*: `cases/control-flow/_placeholder-loop.yml` (the
-  `expect_state_notes` integrity-check witness, cell MTF-FW-002) and
+  `assert_golden_state_notes` integrity-check witness, cell MTF-FW-002) and
   `cases/errors/_intentional-mismatch-fake-expected-result.yml` (the comparator
   divergence self-test, MTF-E-003). Leave them as they are.
 
@@ -148,7 +147,7 @@ reconciliation gate that hand-editing would skip.
 | Skill | Purpose | Direct script |
 |---|---|---|
 | **`flashquery-macro-author`** | English description → macro **source**. Generate + verify workflows. | (skill only) |
-| **`flashquery-macro-testgen`** | Wrap a macro into a runnable **test pilot** YAML; capture the golden snapshot; reconcile. | `npm run testgen:macro-framework` |
+| **`flashquery-macro-testgen`** | Wrap a macro into a runnable **test pilot** YAML; capture the golden snapshot; reconcile. | (skill only — drives the `scripts/` pipeline) |
 | **`flashquery-macro-covgen`** | Regenerate the **coverage matrix** from the corpus. | `npm run coverage:macro-framework` |
 | **`flashquery-macro-run`** | Run the suite, **classify + triage** failures, write triage records. | `npm run run:macro-framework` |
 
@@ -207,19 +206,17 @@ macro with a tool surface, vault state, expectations, coverage tags, and a
 golden snapshot, then runs the **reconciliation gate** before the pilot is
 considered complete.
 
-### Three modes
+### How it runs
 
-```sh
-# committed — one pilot per named cell, written under cases/<category>/, git-tracked
-npm run testgen:macro-framework -- --mode=committed --target=MTF-C-008
-npm run testgen:macro-framework -- --mode=committed --target=MTF-G-006 --target=MTF-S-007
+`flashquery-macro-testgen` is an **agent-mode skill** — there is no CLI entry
+point. An AI agent invokes the skill, which orchestrates the five-step pipeline
+below and drives the `scripts/` capture tooling (`capture-runner.ts`,
+`apply-captures.py`) directly. A committed pilot is written under
+`cases/<category>/` and is git-tracked.
 
-# fresh — N pilots for the lowest-density cells, written to cases-fresh/ (gitignored, run-once)
-npm run testgen:macro-framework -- --mode=fresh --count=5
-
-# refresh — re-capture snapshots for pilots whose golden_version is behind
-npm run testgen:macro-framework -- --mode=refresh --auto-accept-identical
-```
+To **refresh** a pilot whose `golden_version` is behind the current golden,
+re-run the capture pipeline (§8) and accept the result if the diff is
+structurally identical; escalate to triage otherwise.
 
 ### The five-step pipeline
 
@@ -360,10 +357,10 @@ Every failure is first-pass classified into one of five kinds:
 
 | Classification | Meaning | Next step |
 |---|---|---|
-| **stale-expectations** | The pilot's `golden_version` is behind the current golden. | `flashquery-macro-testgen --mode=refresh` against the pilot. |
+| **stale-expectations** | The pilot's `golden_version` is behind the current golden. | Refresh the pilot's snapshot via the capture pipeline (§8). |
 | **engine-bug** | Production diverged from a golden-corroborated expectation. | Investigate the `src/macro/` code path; file in `PRODUCTION_GAPS.md`. |
 | **golden-bug** | The golden's captured value contradicts the spec. | Fix the golden, file in `GOLDEN_GAPS.md`. Verify against the spec. |
-| **generator-misread** | An AI-generated pilot misread the spec. | Regenerate via `flashquery-macro-testgen --mode=committed`. |
+| **generator-misread** | An AI-generated pilot misread the spec. | Regenerate the pilot with the `flashquery-macro-testgen` skill. |
 | **spec-ambiguity** | None of the above fit; the spec is genuinely unclear. | Surface to the operator; consider a spec clarifier REQ. |
 
 Only `stale-expectations` is high-confidence automatable. Every other
@@ -406,24 +403,25 @@ It is **read-only at framework runtime** (INV-MTF-04) — only `golden-bridge/*`
 and the `scripts/` capture tools execute it.
 
 Bumping the golden (operator-gated, §11.6): patch the golden, run its
-meta-tests (`src/test-snapshot.ts`), bump `package.json`, then run the testgen
-skill in `--mode=refresh` to re-capture snapshots, or let the
-stale-expectations classification flag pilots one at a time.
+meta-tests (`src/test-snapshot.ts`), bump `version.ts`, then re-run the capture
+pipeline (§8) to re-capture snapshots, or let the stale-expectations
+classification flag pilots one at a time.
 
 ---
 
 ## 11. The coverage matrix and the drift tripwire
 
-**Coverage matrix.** `coverage/manifest.ts` is the source of truth for the 77
+**Coverage matrix.** `coverage/manifest.ts` is the source of truth for the 83
 `MTF-*` cells (categories G/S/C/D/L/E/I plus the framework-self-test FW).
 `coverage/render.ts` (`npm run coverage:macro-framework`, or the
 `flashquery-macro-covgen` skill) reads the manifest + every pilot's `covers:`
 array and regenerates `coverage.json`, `MTF_COVERAGE.md` (per-cell table), and
 `MTF_INTERACTIONS.md` (category×category heatmap). A `covers:` entry is a claim
-that the pilot genuinely exercises that cell — never pad it. Five cells are
-`status: planned` (deliberate zero-coverage planning signal) because the
-in-process harness structurally cannot reach them; their `requires` notes in
-the manifest explain why.
+that the pilot genuinely exercises that cell — never pad it, and every cell ID
+a pilot lists must exist in the manifest (covgen warns on any that don't). Five
+cells are `status: planned` (deliberate zero-coverage planning signal) because
+the in-process harness structurally cannot reach them; their `requires` notes
+in the manifest explain why.
 
 **Drift tripwire.** `src/framework-registry.ts`'s `wrapBrokerToolForFramework`
 is a hand-written mirror of production's module-private `wrapBrokerTool` in
@@ -446,10 +444,9 @@ fires: check the `src/macro/registry.ts` diff, mirror any behaviour change into
   (convergence stats, per-run findings). A working diary, not a spec.
 
 Cleanup: **`failures/`** is runtime output — the runner writes a triage record
-on a genuine FAIL; it is gitignored except `.gitkeep`, delete freely.
-**`cases-fresh/`** is fresh-cadence generated pilots — gitignored, never
-committed, normally empty. The golden model's `node_modules/` is gitignored.
-`/tmp/captures.json` and `/tmp/pg-diff.json` are disposable pipeline scratch.
+on a genuine FAIL; it is gitignored except `.gitkeep`, delete freely. The golden
+model's `node_modules/` is gitignored. `/tmp/captures.json` and `/tmp/pg-diff.json`
+are disposable pipeline scratch.
 
 What is **committed**: `cases/**`, `coverage/**`, `src/**`, `scripts/**`,
 `golden-bridge/**`, `triage/**`, `state-notes/**`, `fixtures/**`,
@@ -466,8 +463,7 @@ If you are picking this framework up cold:
    That one command tells you if the corpus is healthy.
 2. **To generate a macro:** use the `flashquery-macro-author` skill, or read
    `.claude/skills/flashquery-macro-author/macro-spec.md` and write it by hand.
-3. **To generate a test pilot:** use the `flashquery-macro-testgen` skill
-   (`npm run testgen:macro-framework -- --mode=committed --target=<cell>`). It
+3. **To generate a test pilot:** use the `flashquery-macro-testgen` skill. It
    runs the five-step pipeline (§6) including the mandatory reconciliation gate.
    **Never hand-write `expect:` and skip the gate** — run §8's pipeline.
 4. **To run + triage:** use `flashquery-macro-run` — it classifies every

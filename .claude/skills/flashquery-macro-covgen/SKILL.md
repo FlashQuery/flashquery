@@ -1,6 +1,6 @@
 ---
 name: flashquery-macro-covgen
-description: Regenerate the macro-framework coverage matrix from the current test corpus. Use this skill whenever the user wants to refresh `MTF_COVERAGE.md`, refresh `MTF_INTERACTIONS.md`, regenerate `coverage.json`, update the macro-framework coverage report after authoring new pilots, after a `--mode=refresh` pass, after a golden version bump, or periodically to keep the coverage docs in sync with the test corpus. Also trigger when the user says "regen macro coverage", "rebuild MTF coverage", "refresh the macro coverage matrix", "run coverage:macro-framework", or asks "is the macro coverage report up to date?". Sister skill to `flashquery-directed-covgen` and `flashquery-integration-covgen`; this one is exclusively for the `tests/macro-framework/` layer.
+description: Regenerate the macro-framework coverage matrix from the current test corpus. Use this skill whenever the user wants to refresh `MTF_COVERAGE.md`, refresh `MTF_INTERACTIONS.md`, regenerate `coverage.json`, update the macro-framework coverage report after authoring new pilots, after a snapshot-refresh pass, after a golden version bump, or periodically to keep the coverage docs in sync with the test corpus. Also trigger when the user says "regen macro coverage", "rebuild MTF coverage", "refresh the macro coverage matrix", "run coverage:macro-framework", or asks "is the macro coverage report up to date?". Sister skill to `flashquery-directed-covgen` and `flashquery-integration-covgen`; this one is exclusively for the `tests/macro-framework/` layer.
 ---
 
 # FlashQuery Macro Coverage Generator (flashquery-macro-covgen)
@@ -10,7 +10,7 @@ This skill regenerates the macro testing framework's coverage matrix from the cu
 ## When to use
 
 - After authoring new pilots in `tests/macro-framework/cases/<category>/*.yml`.
-- After running `flashquery-macro-testgen --mode=refresh` (refresh pass after a golden version bump).
+- After a `flashquery-macro-testgen` snapshot-refresh pass (re-capturing pilots after a golden version bump).
 - Periodically to keep `MTF_COVERAGE.md` / `MTF_INTERACTIONS.md` in sync with the test corpus.
 - After a manifest edit (adding cells, transitioning a cell's `status`).
 

@@ -3,7 +3,7 @@ name: |-
   float precision 0.1+0.2
 intent: |
   add 0.1 0.2 — capture actual behavior (likely 0.30000... but may round)
-covers: [MTF-C-009, MTF-N-005]
+covers: [MTF-C-009, MTF-S-003]
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T22:55:00Z
 deps: []

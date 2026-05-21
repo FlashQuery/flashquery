@@ -11,7 +11,7 @@ description: |
   Behavioral test (Run #11.3). Three-way classification with selective
   dispatch only for the top tier.
 
-covers: [MTF-C-009, MTF-D-101, MTF-L-002, MTF-N-005]
+covers: [MTF-C-009, MTF-D-101, MTF-L-002, MTF-S-010]
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T23:30:00Z
 deps: []

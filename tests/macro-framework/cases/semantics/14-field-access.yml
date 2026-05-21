@@ -6,8 +6,8 @@
 #
 # This file was emitted by the generator after running the macro through
 # the macro-golden-model (v0.3.0) and embedding the snapshot.
-# Do NOT hand-edit `expect:` or `golden_snapshot:` — re-run the
-# generator (or its --mode=refresh) to update.
+# Do NOT hand-edit `expect:` or `golden_snapshot:` — regenerate via the
+# flashquery-macro-testgen skill, or re-capture through the scripts/ pipeline.
 id: mtf-s-14-field-access
 name: Semantics — field access (`$var.field`) reads object fields
 intent: |

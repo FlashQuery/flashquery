@@ -1,4 +1,4 @@
-# Pilot 11 — MTF-I isolation + expect_state_notes integrity check
+# Pilot 11 — MTF-I isolation + assert_golden_state_notes integrity check
 #
 # Honest deviation from the brief's suggested pilot:
 #
@@ -19,24 +19,24 @@
 #
 # The pilot still satisfies the architectural goals:
 #   (a) MTF-I cell: per-invocation isolation of input_vars contract.
-#   (b) expect_state_notes diversity requirement (§9.5 constraint 2):
+#   (b) assert_golden_state_notes diversity requirement (§9.5 constraint 2):
 #       two patterns, one order-independent + one positional, both
 #       targeting the `binding` events.
 
 id: mtf-i-11-self-via-input-vars
-name: Isolation — _self workaround via input_vars + expect_state_notes
+name: Isolation — _self workaround via input_vars + assert_golden_state_notes
 intent: |
-  Isolation — _self workaround via input_vars + expect_state_notes
+  Isolation — _self workaround via input_vars + assert_golden_state_notes
 description: |
   Simulates _self.path/.title/.frontmatter.type by passing the three
   fields as input_vars and re-aggregating them into a self_view
   object. Validates per-invocation isolation of input_vars + the
-  expect_state_notes load-time integrity check.
+  assert_golden_state_notes load-time integrity check.
 
 covers:
   - MTF-I-001   # per-invocation input_var contract
   - MTF-I-002   # _self surface (workaround; Tier 2 pending in production)
-  - MTF-FW-002  # expect_state_notes load-time integrity check
+  - MTF-FW-002  # assert_golden_state_notes load-time integrity check
 
 golden_version: "0.3.0"
 golden_run_at: 2026-05-18T23:36:01.752Z
@@ -72,7 +72,7 @@ golden_snapshot:
   captured_tool_calls: []
 # Two integrity-check witnesses — one order-independent (any matching
 # `binding` event anywhere) and one positional (snapshot[4] = `title`).
-expect_state_notes:
+assert_golden_state_notes:
   - { kind: binding, op: set, name: path, value: "/Macros/research-batch.md" }
   - { step: 4, kind: binding, op: set, name: title, value: "Research Batch" }
 predicted_expect:

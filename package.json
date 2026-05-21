@@ -25,7 +25,6 @@
     "test:integration": "vitest run --config tests/config/vitest.integration.config.ts",
     "test:macro-framework": "vitest run --config tests/config/vitest.macro-framework.config.ts",
     "coverage:macro-framework": "tsx tests/macro-framework/coverage/render.ts",
-    "testgen:macro-framework": "tsx tests/macro-framework/golden-bridge/testgen-cli.ts",
     "run:macro-framework": "tsx tests/macro-framework/triage/run-cli.ts",
     "test:e2e": "vitest run --config tests/config/vitest.e2e.config.ts",
     "test:benchmark": "vitest run --config tests/config/vitest.benchmark.config.ts",

@@ -3,7 +3,7 @@ name: |-
   large integer arithmetic
 intent: |
   add 1000000 2000000 = 3000000
-covers: [MTF-C-009, MTF-N-005]
+covers: [MTF-C-009, MTF-S-003]
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T22:55:00Z
 deps: []

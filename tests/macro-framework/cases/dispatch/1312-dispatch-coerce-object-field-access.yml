@@ -1,0 +1,68 @@
+# Pilot — MTF-D dispatch: brokered tool result coerced to an object, then field-accessed
+id: mtf-d-1312-dispatch-coerce-object-field-access
+name: Dispatch — coerce a brokered tool result to an object and read its fields
+intent: |
+  Call a brokered tool that returns a structured object, bind the result,
+  and read two fields off it — confirming the engine coerced the call
+  result into a real object rather than an opaque value. The tool returns
+  { status: "ok", count: 3 }; the macro exits carrying $res.status and
+  $res.count. If coercion produced a non-object, the field reads would
+  not round-trip the values.
+covers:
+  - MTF-D-004
+  - MTF-D-001
+  - MTF-D-003
+  - MTF-S-007
+  - MTF-C-009
+golden_version: "0.3.0"
+golden_run_at: 2026-05-21T00:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  res = doc_srv.lookup({ id: 42 })
+  exit { status: $res.status, count: $res.count }
+input_vars: {}
+vault: {}
+tools:
+  doc_srv:
+    archetype: ReadOnlyTool
+    tool_name: lookup
+    returns: {"status": "ok", "count": 3}
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: claude-opus-4-7
+  generated_at: '2026-05-21T00:00:00Z'
+  targeted_cells:
+    - MTF-D-004
+  grounding_refs:
+    - Macro Language Requirements REQ-027
+    - Macro Language Requirements REQ-028
+    - MCP Broker Requirements REQ-106
+predicted_expect:
+  outcome: success
+  return_result:
+    status: ok
+    count: 3
+  side_effects:
+    tool_call_count: 1
+expect:
+  outcome: success
+  return_result:
+    status: ok
+    count: 3
+  side_effects:
+    tool_call_count: 1
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-21T17:37:14Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "doc_srv"
+      tool: "lookup"

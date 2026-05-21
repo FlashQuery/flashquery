@@ -46,7 +46,7 @@ expect:
 golden_snapshot:
   captured_trace_kinds: ["exit"]
   captured_tool_calls: []
-expect_state_notes:
+assert_golden_state_notes:
   - { kind: binding, op: update, name: counter, value: 7, scope: outer }
 predicted_expect:
   outcome: success

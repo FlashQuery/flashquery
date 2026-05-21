@@ -56,7 +56,7 @@ expect:
 golden_snapshot:
   captured_trace_kinds: ["exit"]
   captured_tool_calls: []
-expect_state_notes:
+assert_golden_state_notes:
   - { kind: binding, op: set, name: greeting, value: "hello" }
   - { step: 6, kind: binding, op: set, name: msg, value: "hello, world!" }
 predicted_expect:

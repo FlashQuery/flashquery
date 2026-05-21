@@ -162,7 +162,7 @@ function bridgeArchetypeToToolFn(
         old_schema: drift.old_schema as Value,
         new_schema: drift.new_schema as Value,
         diff_summary: drift.diff_summary,
-        options: drift.options as Value,
+        options: drift.options,
       });
     };
   }

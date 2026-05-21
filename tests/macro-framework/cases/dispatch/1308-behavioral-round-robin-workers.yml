@@ -13,7 +13,7 @@ description: |
   id) + nested iteration with mod arithmetic. Pure compute, no tool
   dispatch.
 
-covers: [MTF-C-009, MTF-L-002, MTF-N-005, MTF-L-008]
+covers: [MTF-C-009, MTF-L-002, MTF-S-009, MTF-L-008]
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T23:30:00Z
 deps: []

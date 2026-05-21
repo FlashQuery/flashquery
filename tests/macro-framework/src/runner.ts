@@ -46,7 +46,7 @@ import * as Archetypes from '../fixtures/fake-broker/archetypes.ts';
 import { buildVault } from '../fixtures/vault-helper.ts';
 import { createProgressCapture } from '../fixtures/progress-capture.ts';
 import { buildFrameworkRegistry } from './framework-registry.ts';
-import { checkExpectStateNotes, type StateNotePattern } from '../state-notes/assert.ts';
+import { checkGoldenStateNotes, type StateNotePattern } from '../state-notes/assert.ts';
 import type { StateNote } from '../state-notes/schema.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -150,7 +150,7 @@ export interface TestCase {
   progress_mode?: 'full' | 'milestones' | 'silent';
   expect?: ExpectBlock;
   golden_snapshot?: GoldenSnapshotBlock;
-  expect_state_notes?: StateNotePattern[];
+  assert_golden_state_notes?: StateNotePattern[];
   generator?: Record<string, unknown>;
   // Tier 2 (Broker REQ-103): when present, drive the engine with this
   // snapshot bound to `_self`. Required by pilots that exercise the
@@ -190,6 +190,14 @@ function validateRequiredFields(parsed: TestCase, file: string): string[] {
   if (!p.intent) errors.push('missing required field: intent');
   if (!p.macro) errors.push('missing required field: macro');
   if (!p.golden_version) errors.push('missing required field: golden_version');
+
+  // covers — the MTF-* coverage cells this pilot feeds. Required and
+  // non-empty: a pilot that declares no cell contributes nothing to the
+  // coverage matrix, which is the framework's whole point.
+  const covers = p.covers;
+  if (!Array.isArray(covers) || covers.length === 0) {
+    errors.push('covers: missing or empty (a pilot must declare the MTF-* cell(s) it exercises)');
+  }
 
   // predicted_expect must be present and non-empty
   const pe = p.predicted_expect as Record<string, unknown> | undefined;
@@ -933,48 +941,9 @@ function deepEqual(a: unknown, b: unknown): boolean {
   return true;
 }
 
-// ───── Failure-triage record writer (§9.6 draft format) ─────
-
-export interface FailureRecordInput {
-  tc: TestCase;
-  findings: CompareFinding[];
-  drive: DriveResult;
-  goldenVersionCurrent?: string;
-}
-
-/**
- * Writes a §9.6-shape failure-triage record to
- * `tests/macro-framework/failures/<YYYY-MM-DD>-<HHMMSS>-<test_id>.md`.
- *
- * @deprecated Phase 6 replaced this draft writer with the full
- * `triage/record.ts` + `triage/classify.ts` modules. New callers should
- * use `writeTriageRecord()` and `classifyFailure()`. This function is
- * retained for backward compatibility with any out-of-tree consumers
- * that imported it from `runner.ts`; it now delegates to the Phase 6
- * classifier and writer so its output matches the new format.
- */
-export async function writeFailureRecord(input: FailureRecordInput): Promise<string> {
-  // Delegate to the Phase 6 classifier + writer. This keeps any
-  // pre-existing imports of `writeFailureRecord` working while routing
-  // through the full §5.8 five-way classifier.
-  const { classifyFailure } = await import('./triage/classify.ts');
-  const { writeTriageRecord, findRelatedFailures } = await import('./triage/record.ts');
-  const classification = classifyFailure(input.tc, input.findings, {
-    goldenVersionCurrent: input.goldenVersionCurrent ?? '<unknown>',
-  });
-  const related = await findRelatedFailures(input.tc.id);
-  return writeTriageRecord({
-    tc: input.tc,
-    findings: input.findings,
-    drive: input.drive,
-    classification,
-    goldenVersionCurrent: input.goldenVersionCurrent ?? '<unknown>',
-    relatedFailures: related,
-  });
-}
-
-// Render helpers used by the deprecated writeFailureRecord path now live
-// in `triage/record.ts`; the runner is back to being a pure
-// load + drive + compare module.
+// Failure-triage classification + record writing live in `triage/` —
+// `classifyFailure` (triage/classify.ts) and `writeTriageRecord`
+// (triage/record.ts), driven from `cases.test.ts`. The runner itself is a
+// pure load + drive + compare module.
 
 // ───── Vitest plumbing lives in `cases.test.ts` ─────

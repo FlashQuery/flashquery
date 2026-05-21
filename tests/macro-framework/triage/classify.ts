@@ -88,9 +88,11 @@ export function classifyFailure(
         `cheapest classification — the embedded expectations may simply be out of date. ` +
         `No code change anywhere unless refresh confirms a regression.`,
       suggested_action:
-        `Run \`npm run testgen:macro-framework -- --mode=refresh --filter='${tc.id}' ` +
-        `--auto-accept-identical\` to regenerate the embedded snapshot against the current ` +
-        `golden. If the refresh diff is structurally identical, the failure auto-resolves. ` +
+        `Refresh the embedded golden snapshot for \`${tc.id}\` against the current golden: ` +
+        `re-run the capture pipeline ` +
+        `(\`npx tsx tests/macro-framework/scripts/capture-runner.ts > /tmp/captures.json\` ` +
+        `then \`python3 tests/macro-framework/scripts/apply-captures.py /tmp/captures.json\`). ` +
+        `If the refreshed diff is structurally identical, the failure auto-resolves. ` +
         `If divergent, escalate as a possible engine-bug or golden-bug.`,
     };
   }
@@ -181,10 +183,11 @@ export function classifyFailure(
         `block can disagree with what the engine actually does.`,
       suggested_action:
         `Re-read the cited grounding refs against the macro source and \`expect:\` block. ` +
-        `If the expectations are wrong relative to the spec, regenerate the test via ` +
-        `\`npm run testgen:macro-framework -- --mode=committed --target=${(tc.covers ?? ['UNKNOWN'])[0]}\` ` +
-        `with refined synthesis. If the spec section is itself ambiguous, escalate to ` +
-        `spec-ambiguity.`,
+        `If the expectations are wrong relative to the spec, regenerate the pilot with the ` +
+        `\`flashquery-macro-testgen\` skill (targeting cell ` +
+        `${(tc.covers ?? ['UNKNOWN'])[0]}) using refined synthesis, then re-capture and ` +
+        `reconcile via the capture pipeline. If the spec section is itself ambiguous, ` +
+        `escalate to spec-ambiguity.`,
     };
   }
 

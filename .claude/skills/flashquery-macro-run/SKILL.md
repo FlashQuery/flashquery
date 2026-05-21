@@ -57,7 +57,7 @@ Steps:
    npm run run:macro-framework -- --stale-check
    ```
 
-   If it reports stale tests, summarize them to the user and ask whether they want to refresh via `flashquery-macro-testgen --mode=refresh` first. Don't refresh from this skill — hand off to testgen. If the user says "just run them anyway," continue to step 2.
+   If it reports stale tests, summarize them to the user and ask whether they want to refresh their golden snapshots via the `flashquery-macro-testgen` skill first. Don't refresh from this skill — hand off to testgen. If the user says "just run them anyway," continue to step 2.
 
 2. **Invoke the suite**:
 
@@ -73,10 +73,10 @@ Steps:
    - Whether any classifications look low-confidence and should get human review next.
 
 4. **Hand off per classification** (per §11.6 authority):
-   - **stale-expectations** → suggest `flashquery-macro-testgen --mode=refresh` against the affected test ID(s).
+   - **stale-expectations** → suggest a `flashquery-macro-testgen` snapshot refresh against the affected test ID(s).
    - **engine-bug** → suggest investigating the engine code path; the record's "Suggested remediation" section names the symptom.
    - **golden-bug** → suggest manually re-running the macro through the golden + reviewing the patch list in `_POC-Audit-Findings.md`. Golden version bumps are operator-approved (§11.6 gate 1).
-   - **generator-misread** → suggest regenerating via `flashquery-macro-testgen --mode=committed --target=<cell>` after refining the synthesis.
+   - **generator-misread** → suggest regenerating the pilot with the `flashquery-macro-testgen` skill (targeting the affected cell) after refining the synthesis.
    - **spec-ambiguity** → surface the record's "Spec ambiguity proposal" section, ask the operator whether to promote to a real OQ in the relevant spec doc (§11.6 gate 2).
 
 5. **Offer no commits**. Failure records are write-only artifacts; commit when the operator decides what to do.
@@ -120,7 +120,7 @@ Steps:
 
 2. **Surface the report**. For each stale test: ID, recorded version → current version, suggested refresh command.
 
-3. **Offer to hand off to testgen**. If the user says "yes refresh them," route to `flashquery-macro-testgen --mode=refresh --auto-accept-identical`. Don't refresh from this skill.
+3. **Offer to hand off to testgen**. If the user says "yes refresh them," route to the `flashquery-macro-testgen` skill for a snapshot-refresh pass. Don't refresh from this skill.
 
 ## Classifier reference (§5.8 heuristics)
 
@@ -156,7 +156,7 @@ When modifying this skill, the run-cli, the classifier, or the record writer:
 
 **Records are append-only.** Re-triage appends to the action log; it doesn't rewrite history. The original classification stays visible even after a reclassification.
 
-**Stale-expectations gets refresh, not engine fixes.** When stale-expectations is the classification, the next step is `flashquery-macro-testgen --mode=refresh`, never an engine code change. Catching this distinction is the whole point of checking `golden_version` first.
+**Stale-expectations gets refresh, not engine fixes.** When stale-expectations is the classification, the next step is a `flashquery-macro-testgen` snapshot refresh, never an engine code change. Catching this distinction is the whole point of checking `golden_version` first.
 
 **Failure records are runtime output, not committed.** As of the 2026-05-21 framework reorganization the `failures/` directory is gitignored (except `.gitkeep`) — the runner writes a classified record there on a genuine FAIL, but those records are ephemeral run output and regenerate on every run. Triage a record while it exists; durable findings belong in `GOLDEN_GAPS.md` / `PRODUCTION_GAPS.md`, not in `failures/`.
 

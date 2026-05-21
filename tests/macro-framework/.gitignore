@@ -17,10 +17,6 @@
 !coverage/
 !coverage/**
 
-# ─── Fresh-cadence generated tests ─────────────────────────────────────────
-# Per §5.5 fresh mode: tests generated on each CI run, never committed.
-cases-fresh/
-
 # ─── Failure-triage records — runtime output ───────────────────────────────
 # The runner writes a record into failures/ on a genuine FAIL. These are
 # ephemeral run output, not committed artifacts. Keep the directory itself

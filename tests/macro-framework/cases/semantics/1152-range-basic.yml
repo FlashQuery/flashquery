@@ -3,7 +3,7 @@ name: |-
   range basic
 intent: |
   0..5 → [0,1,2,3,4] (end-exclusive)
-covers: [MTF-C-009, MTF-N-005]
+covers: [MTF-C-009, MTF-S-011]
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T22:55:00Z
 deps: []

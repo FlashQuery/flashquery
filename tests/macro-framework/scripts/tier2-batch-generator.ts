@@ -28,11 +28,20 @@ interface ErrorBlock {
   details?: Record<string, unknown>;
 }
 
-interface ToolSpec {
+/** A single-tool server entry: one archetype configures the whole server. */
+interface SingleToolSpec {
   archetype: string;
   tool_name?: string;
   [k: string]: unknown;
 }
+
+/** A multi-tool server entry: a `tools` map, each entry its own spec. */
+interface MultiToolSpec {
+  tools: Record<string, SingleToolSpec>;
+}
+
+/** A server entry is either single-tool or multi-tool. */
+type ToolSpec = SingleToolSpec | MultiToolSpec;
 
 interface Spec {
   category: 'control-flow' | 'dispatch' | 'errors' | 'isolation' | 'lifecycle' | 'grammar' | 'semantics';

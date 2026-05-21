@@ -383,7 +383,7 @@ The skill is invoked when the user says any of:
 - "review my macro" (when a macro source is in scope)
 - "make me a rundoc macro that <description>"
 
-When invoked from `flashquery-macro-testgen`, the skill is called via its `generate` workflow with the coverage cell's description as input.
+When invoked from `flashquery-macro-testgen`, the skill is called via its `generate` workflow with the **behavioral brief** that testgen constructs (never the raw coverage-cell description) mapped onto the `description` + `context` contract.
 
 ## Related skills
 

@@ -1,7 +1,7 @@
-// expect_state_notes load-time integrity check (per Macro Testing Framework
+// assert_golden_state_notes load-time integrity check (per Macro Testing Framework
 // Requirements §5.6.1).
 //
-// At test-load time, every entry in `expect_state_notes` must match at least
+// At test-load time, every entry in `assert_golden_state_notes` must match at least
 // one entry in `golden_snapshot.state_notes`. Matching is partial-match: a
 // pattern matches a note when every field in the pattern equals the
 // corresponding field of the note. Fields absent from the pattern are
@@ -26,7 +26,7 @@ export interface IntegrityCheckResult {
 }
 
 export interface IntegrityCheckError {
-  index: number; // pattern index (0-based) into expect_state_notes array
+  index: number; // pattern index (0-based) into assert_golden_state_notes array
   pattern: StateNotePattern;
   reason:
     | 'no_match'
@@ -38,10 +38,10 @@ export interface IntegrityCheckError {
 /**
  * Run the load-time integrity check.
  *
- * @param patterns The `expect_state_notes` array from the test YAML.
+ * @param patterns The `assert_golden_state_notes` array from the test YAML.
  * @param snapshot The `golden_snapshot.state_notes` array from the test YAML.
  */
-export function checkExpectStateNotes(
+export function checkGoldenStateNotes(
   patterns: StateNotePattern[],
   snapshot: StateNote[],
 ): IntegrityCheckResult {

@@ -3,7 +3,7 @@ name: |-
   range builtin 5
 intent: |
   range 5 → [0..4]
-covers: [MTF-C-009, MTF-N-005]
+covers: [MTF-C-009, MTF-S-011]
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T22:55:00Z
 deps: []

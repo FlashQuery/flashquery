@@ -10,7 +10,7 @@ description: |
 covers:
   - MTF-L-002
   - MTF-C-009
-  - MTF-N-005  # numeric ops
+  - MTF-S-009  # numeric ops
 
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T22:30:00Z

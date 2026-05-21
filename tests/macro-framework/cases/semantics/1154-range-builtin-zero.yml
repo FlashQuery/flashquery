@@ -3,7 +3,7 @@ name: |-
   range builtin 0
 intent: |
   range 0 → no iterations
-covers: [MTF-C-009, MTF-N-005]
+covers: [MTF-C-009, MTF-S-011]
 golden_version: "0.3.0"
 golden_run_at: 2026-05-19T22:55:00Z
 deps: []
