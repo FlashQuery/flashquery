@@ -1,0 +1,57 @@
+id: mtf-s-1284-while-counter-up
+name: Control flow — while-loop driven by a counter mutated in the body
+intent: |
+  A while-loop condition reads a counter that the loop body increments each iteration.
+
+covers:
+  - MTF-C-005
+  - MTF-S-004
+  - MTF-S-003
+  - MTF-G-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  # while loop driven by a counter mutated in the body
+  n = 0
+  doubled = 0
+  while $n < 6 do
+    n = add $n 1
+    doubled = add $doubled 2
+  done
+  exit { n: $n, doubled: $doubled }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    n: 6
+    doubled: 12
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    n: 6
+    doubled: 12
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,38 @@
+# Pilot — REQ-038 grep -c: count matches.
+id: mtf-d-843-shell-grep-count
+name: Dispatch — `grep -c` returns match count
+intent: |
+  -c returns a single number (the count of matching lines), not the lines themselves.
+description: |
+  Per REQ-038 §6.5.1, `grep -c <pattern> <file>` returns the count of
+  matching lines as a number. Verifies the integer-return shape under -c.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = grep -c "apple" "/notes/words.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/words.txt": "apple banana cherry\napple date elderberry\nfig grape"
+expect:
+  outcome: success
+  return_result:
+    r: 2
+predicted_expect:
+  outcome: success
+  return_result:
+    r: 2
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

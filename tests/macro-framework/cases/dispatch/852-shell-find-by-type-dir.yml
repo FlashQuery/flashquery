@@ -1,0 +1,46 @@
+# Pilot — REQ-038 find --type "d": filter to directories only.
+id: mtf-d-852-shell-find-by-type-dir
+name: Dispatch — `find --type "d"` returns only directories
+intent: |
+  --type "d" restricts results to directories (excludes regular files).
+description: |
+  Per REQ-038 §6.5.1, `find <root> --type "d"` returns directory paths
+  only — including the root itself. The complementary case to --type "f".
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = find "/notes" --type "d"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/top.txt": "noise"
+  "/notes/sub/inside.txt": "noise"
+  "/notes/sub/deeper/leaf.txt": "noise"
+expect:
+  outcome: success
+  return_result:
+    r:
+      - "/notes"
+      - "/notes/sub"
+      - "/notes/sub/deeper"
+predicted_expect:
+  outcome: success
+  return_result:
+    r:
+      - "/notes"
+      - "/notes/sub"
+      - "/notes/sub/deeper"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

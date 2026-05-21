@@ -1,0 +1,54 @@
+# Pilot — MTF-L-006: Lifecycle — trace_mode=none suppresses the trace entirely
+id: mtf-l-513-trace-none-suppressed
+name: Lifecycle — trace_mode=none suppresses the trace entirely
+intent: |
+  Under trace_mode=none the result envelope carries no trace at all (REQ-047 ac2).
+
+covers:
+  - MTF-L-006
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = q.go({})
+  exit { a: $a }
+
+input_vars: {}
+vault: {}
+
+tools:
+  q:
+    archetype: ReadOnlyTool
+    tool_name: go
+    returns: {"ok": true}
+
+trace_mode: none
+
+predicted_expect:
+  outcome: success
+  return_result:
+    a: {"ok": true}
+  trace_absent: true
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    a: {"ok": true}
+  trace_absent: true
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "q"
+      tool: "go"

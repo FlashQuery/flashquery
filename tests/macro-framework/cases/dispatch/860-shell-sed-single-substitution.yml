@@ -1,0 +1,39 @@
+# Pilot — REQ-038 sed: single substitution (first match per line).
+id: mtf-d-860-shell-sed-single-substitution
+name: Dispatch — `sed s/old/new/` substitutes the first match per line
+intent: |
+  Without the `g` flag, sed replaces only the first match on each line.
+description: |
+  Per REQ-038 §6.5.1, `sed "s/<old>/<new>/" <file>` returns the file
+  contents with the first occurrence of <old> on each line replaced by
+  <new>. Returns a string preserving newlines.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = sed "s/alpha/AAAA/" "/notes/lines.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/lines.txt": "alpha\nbeta\ngamma\ndelta\n"
+expect:
+  outcome: success
+  return_result:
+    r: "AAAA\nbeta\ngamma\ndelta\n"
+predicted_expect:
+  outcome: success
+  return_result:
+    r: "AAAA\nbeta\ngamma\ndelta\n"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

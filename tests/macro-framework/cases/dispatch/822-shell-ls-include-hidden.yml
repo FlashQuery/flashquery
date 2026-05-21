@@ -1,0 +1,46 @@
+# Pilot — REQ-038 ls -A: include dot-prefixed (hidden) entries.
+id: mtf-d-822-shell-ls-include-hidden
+name: Dispatch — `ls -A` includes dot-prefixed (hidden) entries
+intent: |
+  The -A flag causes ls to include entries whose names start with `.`.
+description: |
+  Per REQ-038 §6.5.1, `ls -A` includes dot-prefixed names in the listing.
+  Without -A, those names are omitted (POSIX-style hidden-file convention).
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = ls "/notes" -A
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/.hidden": "secret"
+  "/notes/visible.txt": "shown"
+  "/notes/sub/inside.txt": "inside"
+expect:
+  outcome: success
+  return_result:
+    r:
+      - ".hidden"
+      - "sub"
+      - "visible.txt"
+predicted_expect:
+  outcome: success
+  return_result:
+    r:
+      - ".hidden"
+      - "sub"
+      - "visible.txt"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

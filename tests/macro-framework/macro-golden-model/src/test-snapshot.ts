@@ -2,8 +2,9 @@
 // execution paths; each one runs through `captureSnapshot()` and prints a
 // summary. The Phase-1 cases (simple loop, fail path, tool dispatch,
 // pre-scan rejection) remain; v0.2.0 adds Tier 2 cases for `_self`,
-// `isError`-coercion, and `needs_user_input`, plus a concurrency test
-// that verifies per-invocation isolation under simultaneous captures.
+// `isError`-coercion, and the `needs_user_input` rejection (it is not a
+// macro builtin), plus a concurrency test that verifies per-invocation
+// isolation under simultaneous captures.
 //
 // To run: `npx tsx src/test-snapshot.ts`
 
@@ -80,9 +81,13 @@ echo "this should never run"
 exit { unreachable: true }
 `;
 
-// needs_user_input (REQ-105): the fifth termination. Snapshot envelope's
-// error block must be code "needs_user_input" with the question +
-// answer_shape in details.
+// needs_user_input is NOT a macro builtin. It was removed as a builtin
+// during the macro testing framework's Tier 2 work: per MCP Broker
+// REQ-060 / REQ-105, the fifth termination ("needs user input") is emitted
+// by FQ-native tools or by the broker layer's TOFU drift — never by a
+// macro-language builtin. Calling `needs_user_input` in macro source
+// therefore halts the macro with a `tool_call_failed` envelope explaining
+// that it is not a builtin. This macro exercises that rejection.
 const needsInputMacro = `
 needs_user_input \
   --question "Which workspace?" \
@@ -203,17 +208,19 @@ async function runIsErrorCoercionCheck() {
   }
 }
 
-// Tier 2 invariant check: needs_user_input surfaces as an error envelope
-// with code "needs_user_input" and details carry question + answer_shape.
+// Tier 2 invariant check: `needs_user_input` is NOT a macro builtin, so
+// calling it halts the macro with a `tool_call_failed` envelope. The fifth
+// termination is a property of FQ-native tools / broker TOFU drift, not of
+// a macro-language builtin (REQ-105 / MCP Broker REQ-060). The golden must
+// reject the call rather than emit a `needs_user_input` outcome itself.
 async function runNeedsUserInputCheck() {
-  const env = await run("Tier 2: needs_user_input fifth termination (REQ-105)", needsInputMacro);
+  const env = await run("Tier 2: needs_user_input is not a macro builtin (REQ-105)", needsInputMacro);
   const code = env.error?.code;
-  const details = env.error?.details as Record<string, unknown> | undefined;
+  const message = env.error?.message ?? "";
   const ok =
-    code === "needs_user_input" &&
-    details?.question === "Which workspace?" &&
-    details?.answer_shape === "frontmatter.workspace" &&
-    Array.isArray(details?.options) &&
+    code === "tool_call_failed" &&
+    /not a macro builtin/i.test(message) &&
+    env.return === null &&
     env.golden_version === "0.3.0";
   console.log("verdict:", ok ? "PASS" : "FAIL");
   if (!ok) {

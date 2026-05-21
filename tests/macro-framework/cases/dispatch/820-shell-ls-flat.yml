@@ -1,0 +1,59 @@
+# Pilot — REQ-038 ls: flat directory listing returns alphabetized entry names.
+id: mtf-d-820-shell-ls-flat
+name: Dispatch — `ls` flat listing returns alphabetized entries
+intent: |
+  ls without flags returns the names of entries in the directory.
+description: |
+  Per REQ-038 §6.5.1, `ls` returns the directory's entries as a list of
+  strings, alphabetized. Subdirectory names appear without a trailing slash.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = ls "/notes"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/animals/cat.txt": "meow"
+  "/notes/animals/dog.txt": "woof"
+  "/notes/case.txt": "Aa\naa"
+  "/notes/empty.txt": ""
+  "/notes/lines.txt": "alpha\nbeta\ngamma\ndelta\n"
+  "/notes/single.txt": "only one"
+  "/notes/twenty.txt": "l01\nl02\nl03\n"
+  "/notes/words.txt": "apple banana cherry"
+expect:
+  outcome: success
+  return_result:
+    r:
+      - "animals"
+      - "case.txt"
+      - "empty.txt"
+      - "lines.txt"
+      - "single.txt"
+      - "twenty.txt"
+      - "words.txt"
+predicted_expect:
+  outcome: success
+  return_result:
+    r:
+      - "animals"
+      - "case.txt"
+      - "empty.txt"
+      - "lines.txt"
+      - "single.txt"
+      - "twenty.txt"
+      - "words.txt"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

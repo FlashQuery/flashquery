@@ -103,7 +103,7 @@ predicted_expect:
 # accumulator pattern walked-up the outer-scope total correctly.
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-20T15:29:48Z"
+  captured_at: "2026-05-20T18:25:48Z"
   golden_version: "0.3.0"
   divergence_kind: clean_match
   notes: |

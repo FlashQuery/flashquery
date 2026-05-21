@@ -303,7 +303,21 @@ function classifyError(e: unknown): { code: keyof typeof MACRO_ERROR_CODES; mess
     // used `tool_call_failed` (src/macro/evaluator.ts:448-457), so the golden
     // and production are now structurally identical at this envelope boundary.
     // The exception class itself is unchanged; only the wire-format string is.
-    return { code: "tool_call_failed", message: e.message, details: { line: (e.line ?? null) as Value } };
+    //
+    // GG-018 (2026-05-20): propagate `e.details` (the runtime error's
+    // sub-discriminator — e.g. shell `path_not_found`) so the envelope's
+    // `details.reason` matches production. `line` is merged in unless the
+    // details already carry one.
+    return {
+      code: "tool_call_failed",
+      message: e.message,
+      details: {
+        ...(e.details ?? {}),
+        ...(e.line !== undefined && !(e.details && "line" in e.details)
+          ? { line: e.line as Value }
+          : {}),
+      },
+    };
   }
   const ee = e as Error;
   // GG-005: catch-all for unrecognized errors also maps to `tool_call_failed`,

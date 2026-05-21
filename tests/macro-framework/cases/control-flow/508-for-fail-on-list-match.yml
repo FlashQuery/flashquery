@@ -1,0 +1,51 @@
+# Pilot — MTF-C-002: Control flow — for-loop over a list aborted by fail() on a match
+id: mtf-c-508-for-fail-on-list-match
+name: Control flow — for-loop over a list aborted by fail() on a match
+intent: |
+  A for-loop over a string list calls fail() when it reaches a matching element.
+
+covers:
+  - MTF-C-002
+  - MTF-C-004
+  - MTF-E-004
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  for item in ["a", "b", "c"] do
+    if $item == "b" then
+      fail "found b"
+    fi
+  done
+  echo "unreached"
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "found b"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "found b"
+golden_snapshot:
+  captured_trace_kinds: ["fail"]
+  captured_tool_calls: []

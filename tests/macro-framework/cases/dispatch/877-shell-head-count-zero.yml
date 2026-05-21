@@ -1,0 +1,40 @@
+# Pilot — REQ-112f: `head -n 0` returns an empty list (zero-count edge).
+id: mtf-d-877-shell-head-count-zero
+name: Dispatch — `head -n 0` returns an empty list
+intent: |
+  head -n 0 returns an empty list — zero is a valid non-negative count.
+description: |
+  Per REQ-112f ac3, the head/tail count token must be a non-negative
+  integer literal — zero is valid. `head -n 0 <file>` returns the first 0
+  lines, i.e. an empty LIST. Verifies the boundary of the count flag and
+  that zero is accepted rather than rejected as a count.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:15:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = head -n 0 "/notes/twenty.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/twenty.txt": "l01\nl02\nl03\nl04\nl05\nl06\nl07\nl08\nl09\nl10\nl11\nl12\nl13\nl14\nl15\nl16\nl17\nl18\nl19\nl20\n"
+expect:
+  outcome: success
+  return_result:
+    r: []
+predicted_expect:
+  outcome: success
+  return_result:
+    r: []
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

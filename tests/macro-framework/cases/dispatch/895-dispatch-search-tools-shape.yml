@@ -1,0 +1,57 @@
+# Pilot — MTF-D dispatch: Dispatch — search_tools-shaped brokered call returns a ranked SearchResult list
+id: mtf-d-895-dispatch-search-tools-shape
+name: Dispatch — search_tools-shaped brokered call returns a ranked SearchResult list
+intent: |
+  A brokered tool returns a JSON-text envelope of SearchResult-shaped entries; the macro binds and counts them.
+
+covers:
+  - MTF-D-104
+  - MTF-D-001
+  - MTF-D-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  hits = search_srv.search_tools({ query: "document", limit: 2 })
+  n = count $hits
+  exit { count: $n }
+
+input_vars: {}
+vault: {}
+
+tools:
+  search_srv:
+    archetype: JSONTextTool
+    tool_name: search_tools
+    value: [{"server": "fq", "tool": "search", "registry_key": "fq.search", "description": "Free-text search over vault documents.", "arg_summary": "query: string, entity_types?: string[], tags?: string[]", "score": 1, "normalizedScore": 1, "has_help": true, "help_hint": "FlashQuery-native tool. Pass `{help: true}` for full documentation."}, {"server": "fq", "tool": "get_document", "registry_key": "fq.get_document", "description": "Read a single document by identifier or path.", "arg_summary": "identifiers: string, include?: string[]", "score": 1, "normalizedScore": 1, "has_help": true, "help_hint": "FlashQuery-native tool. Pass `{help: true}` for full documentation."}]
+
+predicted_expect:
+  outcome: success
+  return_result:
+    count: 2
+  side_effects:
+    tool_call_count: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    count: 2
+  side_effects:
+    tool_call_count: 1
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "search_srv"
+      tool: "search_tools"

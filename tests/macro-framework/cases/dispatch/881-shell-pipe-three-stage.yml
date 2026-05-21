@@ -1,0 +1,39 @@
+# Pilot — REQ-038 pipeline: 3-stage cat | grep | wc -l.
+id: mtf-d-881-shell-pipe-three-stage
+name: Dispatch — `cat | grep | wc -l` 3-stage pipeline
+intent: |
+  Three-stage pipeline composes cat → grep → wc, returning the count of matches.
+description: |
+  Per REQ-038 §6.5.1, pipeline stages chain N-deep. Reading words.txt,
+  filtering for "apple", then counting lines should return 2 (two of the
+  three lines contain "apple").
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = cat "/notes/words.txt" | grep "apple" | wc -l
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/words.txt": "apple banana cherry\napple date elderberry\nfig grape"
+expect:
+  outcome: success
+  return_result:
+    r: 2
+predicted_expect:
+  outcome: success
+  return_result:
+    r: 2
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

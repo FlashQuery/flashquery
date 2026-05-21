@@ -1685,3 +1685,177 @@ These are owned by the production dev agent. Once PG-002 lands, the P/G compare 
 **Reconciliation gate (narrow compare):** 410/410 pilots `clean_match`.
 **P/G envelope diff (wide compare):** 6/389 divergent — all production-side bugs.
 
+---
+
+## Gap GG-018: Claude/Opus 4.7 - Golden shell-verb layer (`shellbuiltins.ts`) diverges from production/ShellJS across six behaviors
+
+### Discovered By
+
+A 40-pilot shell-verb coverage batch (REQ-038 + REQ-043 + REQ-051) was written 2026-05-20 with `predicted_expect` values backed by production probes. The first golden capture flagged 12 of the 40 as `predicted_diverges_from_golden`. Triage showed 11 were real golden shell-verb engine bugs and 1 was a pilot-vault edge case. A subsequent P/G envelope-diff surfaced 3 more (forbidden-flag `details.reason` shape). Representative pilots: `cases/dispatch/810`–`884`, `cases/errors/813` / `890`–`892`.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.5.1 REQ-038](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md): the eight shell verbs `grep`/`find`/`sed`/`cat`/`wc`/`head`/`tail`/`ls` are backed by ShellJS; "their flag surfaces match POC `src/shellbuiltins.ts`." Per Matt's guidance, ShellJS's well-understood shell semantics + production's behavior serve as the spec reference for shell-verb output shapes. REQ-018 ac2's "stable snake_case identifiers" convention for `details.reason` applies to `forbidden_shell_flag` reasons too.
+
+### Implementation Evidence & Reasoning
+
+Six distinct divergence classes in [`macro-golden-model/src/shellbuiltins.ts`](macro-golden-model/src/shellbuiltins.ts):
+
+1. **Absolute-path leak** (`ls -d`, `grep -l`): the golden returned the absolute host temp-dir path (`/sessions/.../fq-golden-capture-XXX/notes/sub`) instead of the vault-relative path (`/notes/sub`). Shell-verb output MUST NOT leak the host filesystem layout.
+2. **`ls -R` shape**: returned target-relative paths without a leading slash, in traversal order. Contract is vault-relative full paths, alphabetized.
+3. **`find` not sorted**: ShellJS `find` returns traversal order (platform-dependent); the contract is alphabetized for stability.
+4. **`grep -v` spurious empty entry**: a file's trailing newline produced a phantom empty line that `-v` (invert) kept, leaking a `""` into the result.
+5. **`grep -c` wrong type**: returned a list; `-c` (count) must return a number. ShellJS's grep doesn't support `-c`, so the flag was a no-op.
+6. **`head`/`tail` wrong shape**: returned a joined string; the contract (matching production + consistent with `grep`/`ls`/`find`) is a list of lines.
+
+Plus three more from the P/G envelope diff:
+
+7. **Forbidden-flag `details.reason` free-text**: golden used English phrases ("sed -i mutates files"); production uses snake_case (`sed_in_place_mutates_files`, `find_exec_mutates_or_executes`, `find_delete_mutates_files`).
+
+And one cross-cutting gap:
+
+8. **No path-existence check**: ShellJS `cat` with `fatal:false` silently returns `""` for a missing file; the golden inherited that silent-success behavior where production raises `tool_call_failed / path_not_found`.
+
+### Resolution
+
+Landed 2026-05-20 in [`macro-golden-model/src/shellbuiltins.ts`](macro-golden-model/src/shellbuiltins.ts) plus supporting changes:
+
+- **`toVaultRelative()` helper** extracted (was inline in `find`) and applied to `ls -d`, `ls -R`, `grep -l`.
+- **`ls -R`**: re-list each target, prefix entries with the target's vault-relative path, sort.
+- **`find`**: `.sort()` the results.
+- **`grep`**: `-c`/`-n` are no longer passed to ShellJS (which doesn't support them) — the golden computes them. `-c` returns a number. `-l` translates paths via `toVaultRelative`. Trailing-empty-line popping changed from "pop one" to "pop all" so `-v` doesn't leak a `""`.
+- **`head`/`tail`**: return a list of lines (not a joined string). `resolveCountFlag` also honors the long-form `--lines N`.
+- **`sed` stdin path**: when stdin is already a string, operate on it directly (the previous `linesToText(valueToLines(...))` round-trip was lossy — it dropped trailing newlines through the pipe).
+- **`globExpandFiles`**: non-glob file paths are now existence-checked; a missing path throws `MacroRuntimeError` with `details.reason: path_not_found`.
+- **`MacroRuntimeError`** ([`evaluator.ts`](macro-golden-model/src/evaluator.ts)): added the optional `details` param (production's class already had it); [`snapshot.ts`](macro-golden-model/src/snapshot.ts)'s `MacroRuntimeError` branch now propagates `details`.
+- **Forbidden-flag reasons** ([`evaluator.ts`](macro-golden-model/src/evaluator.ts) `preScanForbiddenFlags`): changed from free-text to snake_case identifiers matching production.
+
+Two pilots adjusted (not golden bugs): `errors/813` got a decoy vault file (an entirely empty `vault: {}` left the golden capture with no materialized root, masking the path-not-found); `dispatch/870`/`872` were rewritten to test head/tail return-shape on short files. (At the time these were rewritten "without the count flag" under the belief that `-n N` was unusable. That belief was wrong — see the corrected note below and GG-019; `-n N` works and now has dedicated pilots `874`/`875`/`876`/`877`.)
+
+### Resolution - Complete
+
+| Stage | Divergent shell-verb pilots |
+|---|---|
+| Initial capture of the 40-pilot batch | 12 |
+| After shellbuiltins.ts fixes (path/sort/grep/head/tail/sed) + pilot 813/870/872/883 adjustments | 1 (813 — capture edge) |
+| After `globExpandFiles` existence check + `MacroRuntimeError.details` | 0 |
+| After forbidden-flag snake_case reasons (P/G envelope-diff residue) | 0 |
+
+### Post-Implementation Retest
+
+**Retest date:** 2026-05-20
+
+| Check | Result |
+|---|---|
+| Reconciliation gate (capture + apply) | **450/450 clean_match** |
+| Framework suite | **451/451 passing** |
+| P/G envelope diff | **448/448 clean, 0 divergent** |
+| Golden self-tests (REQ-038/043/051 gap checks) | PASS |
+
+**Status:** **CLOSED.** The golden's shell-verb layer is now aligned with production/ShellJS across all six divergence classes plus the path-existence and forbidden-flag-reason gaps. The 40-pilot shell-verb batch (cat ×4, ls ×6, wc ×4, grep ×7, find ×4, sed ×3, head/tail ×4, pipelines ×5, forbidden-flags ×3) is fully clean across all three oracles.
+
+**Noted spec/grammar gap — CORRECTED 2026-05-20 (see GG-019 and REQ-112f).** This paragraph originally claimed the documented `-n N` head/tail count flag was "unusable" because `-n` lexes as a boolean short flag. That claim was **wrong**. A follow-up empirical probe (golden + production) showed `head -n N <file>` / `tail -n N <file>` work correctly in both engines: `-n` lexes as a boolean short flag and `N` is a *separate positional integer literal* that both count-flag resolvers consume. There is no grammar gap on `-n N`. The real divergence was the opposite: the GG-018 `resolveCountFlag` change *added* a long-form `--lines N` / `--n N` form that the golden honored but production never supported. That golden-only regression is filed and fixed as **GG-019**; the spec side is pinned by **REQ-112f** (MCP Broker Requirements §7.15), which confirms `-n N` as the canonical and only count-flag surface. Dedicated `-n N` pilots `dispatch/874`–`877` were added.
+
+---
+
+## Gap GG-019: Claude/Opus 4.7 - Golden `resolveCountFlag` honored non-spec long-form count flags (`--lines N` / `--n N`) that production never supported
+
+### Discovered By
+
+A 2026-05-20 follow-up to GG-018. While drafting the head/tail count-flag spec clarifier (REQ-112f), an empirical golden+production probe was run to verify the GG-018 closing note's claim that the `-n N` count flag was "unusable." The probe **disproved** that claim and instead surfaced a golden-only regression that GG-018 had introduced.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` §6.6.1 REQ-041 ac1](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md) documents the `head`/`tail` count flag as **`-n N`** — and that is the *only* count flag in the spec. [`MCP Broker Requirements.md` §7.15 REQ-112f](../../../flashquery-product/Roadmap/Features/MCP%20Broker/MCP%20Broker%20Requirements.md) pins this down: the count flag is the boolean short flag `-n` followed by a positional integer literal; there is **no** long-form `--lines N` / `--n N` count flag. Per the spec-canonical principle, the golden conforms to the spec, and the spec defines `-n N` only.
+
+### Implementation Evidence & Reasoning
+
+Empirical probe (golden + production, vault `{"/notes/six.txt": "a1..a6"}`):
+
+| Macro | Production | Golden (pre-GG-019) | Verdict |
+|---|---|---|---|
+| `head -n 2 <file>` | `["a1","a2"]` | `["a1","a2"]` | ✅ match — `-n N` works in both |
+| `head <file>` (no flag) | all 6 (default 10) | all 6 | ✅ match |
+| `head --lines 2 <file>` | all 6 (`--lines` ignored) | `["a1","a2"]` | ❌ **golden divergence** |
+| `head --n 2 <file>` | `tool_call_failed` / `head_line_count_type` | `["a1","a2"]` | ❌ **golden divergence** |
+
+Two findings:
+
+1. **`-n N` is NOT a gap.** `-n` lexes as a boolean short flag (macro short flags are boolean-only); the count `N` is a *separate positional integer literal*. Production's `extractLineCount` (`src/macro/shell-verbs.ts`) and the golden's `resolveCountFlag` both detect the boolean `-n` and consume the leading positional integer. `head -n N` / `tail -n N` work identically in both engines. The GG-018 closing note's "unusable" claim conflated "the short flag `-n` cannot carry an attached value" (true) with "the `-n N` form does not work" (false).
+2. **The golden invented long-form count flags.** GG-018's `resolveCountFlag` added `if (typeof named.lines === "number")` and `if (typeof named.n === "number")` branches — honoring `--lines N` and `--n N`. Neither form is in REQ-041 ac1. Production silently ignores `--lines` and rejects `--n`. The golden therefore diverged from both the spec and production on these two forms (latent — no pilot exercised them, so the GG-018 reconciliation run did not catch it).
+
+### Resolution
+
+Landed 2026-05-20 in [`macro-golden-model/src/shellbuiltins.ts`](macro-golden-model/src/shellbuiltins.ts):
+
+- **`resolveCountFlag` rewritten to mirror production's `extractLineCount` exactly.** The `--lines N` and `--n N` branches are removed. The flag is "present" when `named.n` is truthy (matching production's `hasFlag`); when present, `positional[0]` is the count and must be a non-negative integer (else `MacroRuntimeError` with `details.reason: "<builtin>_line_count_type"`); an empty positional list raises `"<builtin>_argument_count"`. When absent, the default count applies. The function gained a `builtin: "head" | "tail"` parameter so the reason codes are verb-specific, matching production.
+- **`run.ts` RUNTIME ERROR rendering** now propagates `e.details` (and merges `line` the same way `snapshot.ts` does) instead of emitting only `{ line }` — so the CLI rendering of a runtime error matches the captured envelope (`details.reason` was previously dropped from the CLI view only).
+
+Spec side: **REQ-112f** added to MCP Broker Requirements §7.15 — confirms `-n N` as canonical, forecloses long-form alternatives, and records that the golden's `resolveCountFlag` was corrected alongside it.
+
+### Resolution - Complete
+
+| Macro | Production | Golden (post-GG-019) | Verdict |
+|---|---|---|---|
+| `head -n 2 <file>` | `["a1","a2"]` | `["a1","a2"]` | ✅ match |
+| `head <file>` (no flag) | all 6 | all 6 | ✅ match |
+| `head --lines 2 <file>` | all 6 (`--lines` ignored) | all 6 (`--lines` ignored) | ✅ match |
+| `head --n 2 <file>` | `tool_call_failed` / `head_line_count_type` | `tool_call_failed` / `head_line_count_type` | ✅ match |
+
+Four dedicated `-n N` count-flag pilots added (`cases/dispatch/874`–`877`): `head -n N`, `tail -n N`, piped `cat | head -n N` (REQ-112f ac5), and the `head -n 0` zero-count edge. Pilots `870`/`872` renamed `*-short-file.yml` to match their ids; `871`/`873` `intent:` lines corrected (they said "Without --lines" → "Without the -n flag").
+
+### Post-Implementation Retest
+
+**Retest date:** 2026-05-20
+
+| Check | Result |
+|---|---|
+| Reconciliation gate (capture + apply) | **469/469 clean_match** |
+| Framework suite (`vitest`) | **470/470 passing** |
+| P/G envelope diff | **467/467 clean, 0 divergent** |
+| Pilot validator | **469/469 valid** |
+
+(Corpus totals include the 15 REQ-021 truthiness-table pilots added in the same 2026-05-20 session; the GG-019 head/tail pilots `874`–`877` are clean within them.)
+
+**Status:** **CLOSED.** The golden's `resolveCountFlag` now tracks production's `extractLineCount` exactly across all four count-flag forms. The GG-018 closing note has been corrected in place. No production change is required — production already implemented the spec-correct `-n N` behavior; the regression was golden-only.
+
+---
+
+## Gap GG-020: Claude/Opus 4.7 - Capture harness did not thread `trace_mode` into the golden capture (`trace_mode: none` spuriously diverged)
+
+### Discovered By
+
+A 2026-05-20 thin-cell coverage pass added `lifecycle/513-trace-none-suppressed.yml`, the first pilot to exercise `trace_mode: none`. The P/G envelope diff flagged it: production `trace_kinds_in_order: []`, golden `["tool_call","exit"]`.
+
+### Requirement
+
+[`FlashQuery Macro Language Requirements.md` REQ-047](../../../flashquery-product/Archive/Implemented/Macro%20Language%20%2817-May-2026%29/FlashQuery%20Macro%20Language%20Requirements.md) ac2: `trace_mode: none` suppresses the trace entirely from the result envelope. Production honors this; the golden model's `captureSnapshot` honors it too (`snapshot.ts`: `trace: exec.traceMode === "none" ? undefined : trace`).
+
+### Implementation Evidence & Reasoning
+
+NOT a golden-model bug — a **harness** bug. The golden model was spec-correct; the capture harness never gave it the chance:
+
+1. `_generic-capture-runner.ts` built the `captureSnapshot` options object from `self_binding` only — it never read the pilot's `trace_mode` / `progress_mode` / `dry_run` fields. So every golden capture ran at the default trace mode.
+2. `_pg-envelope-diff.ts` threaded `dry_run` through but not `trace_mode`.
+3. Separately, the P/G diff read the golden trace from the snapshot's top-level `trace` field — which is the **un-gated** record of all steps — rather than from `result_envelope.trace`, the **wire-shaped, mode-gated** trace. Production's `payload.trace` is the gated wire trace, so the comparison was wire-vs-snapshot, guaranteed to diverge under `trace_mode: none`.
+
+### Resolution
+
+Landed 2026-05-20:
+
+- **`_generic-capture-runner.ts`**: builds a `captureOpts` object that now also carries `traceMode`, `progressMode`, and `dryRun` read from the pilot YAML.
+- **`_pg-envelope-diff.ts`**: threads `traceMode` / `progressMode` into the golden `captureSnapshot` call; and the trace comparison now reads the golden trace from `result_envelope.trace` (wire-shaped, mode-gated) — its absence there means the mode suppressed it — falling back to top-level `trace` only for envelopes with no `result_envelope`.
+
+### Post-Implementation Retest
+
+**Retest date:** 2026-05-20
+
+| Check | Result |
+|---|---|
+| Reconciliation gate (capture + apply) | **511/511 clean_match** |
+| Framework suite (`vitest`) | **512/512 passing** |
+| P/G envelope diff | **509/509 clean, 0 divergent** |
+| Pilot validator | **511/511 valid** |
+
+**Status:** **CLOSED.** The harness now threads trace/progress/dry-run modes into the golden capture, and the P/G diff compares wire-trace to wire-trace. `513-trace-none-suppressed` reconciles clean across all three oracles.
+

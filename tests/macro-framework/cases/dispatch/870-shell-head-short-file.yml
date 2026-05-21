@@ -1,0 +1,40 @@
+# Pilot — REQ-038 head: file shorter than the default count returns all lines.
+id: mtf-d-870-shell-head-short-file
+name: Dispatch — `head` on a file shorter than the default returns all lines
+intent: |
+  head of a file with fewer than 10 lines returns every line as a list.
+description: |
+  Per REQ-038 §6.5.1, `head <file>` returns the first N lines (default
+  N = 10) as a LIST of strings. When the file has fewer than 10 lines,
+  the whole file is returned. Verifies the list return-shape and the
+  shorter-than-default edge case.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = head "/notes/six.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/six.txt": "a1\na2\na3\na4\na5\na6\n"
+expect:
+  outcome: success
+  return_result:
+    r: ["a1", "a2", "a3", "a4", "a5", "a6"]
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ["a1", "a2", "a3", "a4", "a5", "a6"]
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

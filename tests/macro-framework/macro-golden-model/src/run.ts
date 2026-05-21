@@ -361,7 +361,20 @@ async function main() {
       // `MacroRuntimeError` because the failure happens at runtime; the
       // ENVELOPE code is `tool_call_failed` because that's the spec's
       // catch-all for the XC-5 unexpected path.
-      console.error(JSON.stringify({ error: "tool_call_failed", message: e.message, details: { line: e.line ?? null } }, null, 2));
+      // GG-019: propagate `e.details` (the runtime error's sub-discriminator,
+      // e.g. shell `reason: head_line_count_type`) and merge `line` the same
+      // way snapshot.ts does, so the CLI rendering matches the captured
+      // envelope instead of dropping `details.reason`.
+      console.error(JSON.stringify({
+        error: "tool_call_failed",
+        message: e.message,
+        details: {
+          ...(e.details ?? {}),
+          ...(e.line !== undefined && !(e.details && "line" in e.details)
+            ? { line: e.line }
+            : {}),
+        },
+      }, null, 2));
     } else {
       console.error("UNEXPECTED ERROR:");
       console.error(e);

@@ -1,7 +1,7 @@
 id: mtf-s-1131-truthy-zero
 name: zero is falsy
 intent: |
-  REQ-022: 0 is falsy.
+  REQ-021: 0 is falsy.
 
 covers:
   - MTF-C-009
@@ -34,7 +34,7 @@ predicted_expect:
 
 reconciliation:
   predicted_matched_captured: true
-  captured_at: "2026-05-20T15:29:48Z"
+  captured_at: "2026-05-20T18:25:48Z"
   golden_version: "0.3.0"
   divergence_kind: clean_match
   notes: |

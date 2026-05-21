@@ -1,0 +1,49 @@
+id: mtf-s-1276-truthy-negation-true
+name: negating the true literal yields falsy
+intent: |
+  REQ-021 ac3 + REQ-040 ac4 + REQ-112c: negating the truthy true literal is falsy, so the else-branch runs.
+
+covers:
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:25:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = true
+  if !$x then
+    result = "then"
+  else
+    result = "else"
+  fi
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { result: "else" }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result: { result: "else" }
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

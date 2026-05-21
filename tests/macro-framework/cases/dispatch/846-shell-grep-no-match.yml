@@ -1,0 +1,42 @@
+# Pilot — REQ-038 grep no-match: returns empty list, not an error.
+id: mtf-d-846-shell-grep-no-match
+name: Dispatch — `grep` with no matches returns empty list
+intent: |
+  No-match is success with an empty list, not an error envelope.
+description: |
+  Per REQ-038 §6.5.1, `grep <pattern> <file>` returns an empty list when
+  no lines match. No-match is NOT an error — the operation succeeded, the
+  result happens to be empty. (POSIX grep exit code 1 doesn't apply here;
+  the macro-engine reports success regardless.)
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = grep "nonexistent_term" "/notes/lines.txt"
+  exit { r: $r, n: count $r }
+input_vars: {}
+vault:
+  "/notes/lines.txt": "alpha\nbeta\ngamma\ndelta\n"
+expect:
+  outcome: success
+  return_result:
+    r: []
+    n: 0
+predicted_expect:
+  outcome: success
+  return_result:
+    r: []
+    n: 0
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,38 @@
+# Pilot — REQ-038 grep: basic substring match returns matching lines.
+id: mtf-d-840-shell-grep-basic
+name: Dispatch — `grep` returns matching lines
+intent: |
+  grep returns the subset of lines that contain the pattern.
+description: |
+  Per REQ-038 §6.5.1, `grep <pattern> <file>` returns the matching lines
+  as a list of strings (no flags = case-sensitive substring match).
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = grep "alpha" "/notes/lines.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/lines.txt": "alpha\nbeta\ngamma\ndelta\n"
+expect:
+  outcome: success
+  return_result:
+    r: ["alpha"]
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ["alpha"]
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

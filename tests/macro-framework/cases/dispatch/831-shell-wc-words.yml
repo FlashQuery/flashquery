@@ -1,0 +1,38 @@
+# Pilot — REQ-038 wc -w: word count.
+id: mtf-d-831-shell-wc-words
+name: Dispatch — `wc -w` counts whitespace-separated words
+intent: |
+  -w returns the count of whitespace-separated tokens in the file.
+description: |
+  Per REQ-038 §6.5.1, `wc -w` counts words (whitespace-separated tokens).
+  Multiple consecutive whitespace characters count as one separator.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = wc "/notes/words.txt" -w
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/words.txt": "apple banana cherry\napple date elderberry\nfig grape"
+expect:
+  outcome: success
+  return_result:
+    r: 8
+predicted_expect:
+  outcome: success
+  return_result:
+    r: 8
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

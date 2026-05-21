@@ -30,6 +30,7 @@
 import shImport from "shelljs";
 import fastGlob from "fast-glob";
 import { resolveMacroPath } from "./pathwrapper.ts";
+import { MacroRuntimeError } from "./evaluator.ts";
 import type { CallContext } from "./types.ts";
 
 // shelljs is a CJS module. With esModuleInterop, the default import gives us
@@ -92,7 +93,20 @@ function globExpandFiles(args: Value[], vaultRoot: string | undefined): string[]
       }
       for (const m of matches) out.push(m);
     } else {
-      out.push(resolveMacroPath(a, root));
+      const resolved = resolveMacroPath(a, root);
+      // GG-018: non-glob file paths MUST exist. ShellJS's `cat` (with
+      // `fatal: false`) silently returns "" for a missing file; the golden
+      // previously inherited that silent-success behavior, where production
+      // raises `tool_call_failed / path_not_found`. Check existence here so
+      // every file-consuming verb (cat, grep, sed, wc, head, tail) errors
+      // consistently on a missing path.
+      if (!sh.test("-e", resolved)) {
+        throw new MacroRuntimeError("Shell path does not exist.", undefined, {
+          reason: "path_not_found",
+          path: a,
+        });
+      }
+      out.push(resolved);
     }
   }
   return out;
@@ -136,6 +150,23 @@ function describe(v: Value): string {
   return typeof v;
 }
 
+// GG-018 (2026-05-20): translate absolute host paths back to vault-relative
+// form (leading-slash, vault-rooted). Shell verbs MUST NOT leak the host
+// filesystem layout (e.g. the temp-dir path the vault was materialized to)
+// into macro-visible values — the contract is vault-relative paths so the
+// result is portable and re-usable as input to other shell verbs. Extracted
+// from `find`'s previously-inline translation block so `ls`/`grep -l` can
+// share it.
+function toVaultRelative(paths: string[], root: string | undefined): string[] {
+  if (!root) return paths;
+  const sepLen = root.endsWith("/") ? root.length : root.length + 1;
+  return paths.map((p) => {
+    if (p === root) return "/";
+    if (p.startsWith(root + "/")) return "/" + p.slice(sepLen);
+    return p;
+  });
+}
+
 // Set ShellJS to silent so we don't print its own messages to stderr.
 sh.config.silent = true;
 sh.config.fatal = false;
@@ -153,7 +184,15 @@ const grep: BuiltinFn = (positional, named, ctx) => {
   const root = ensureVaultCwd(ctx);
   const pattern = String(positional[0]);
   const fileArgs = positional.slice(1);
-  const flagArgs = flagsToShellArgs(named, ["i", "v", "c", "l", "n"]);
+  // GG-018: `-c` (count) and `-n` (line numbers) are NOT passed to ShellJS.
+  // ShellJS's grep only supports -i / -v / -l. We compute -c and -n
+  // ourselves below. Passing -c to ShellJS produced empty output (the
+  // golden previously returned `[]` for `grep -c`, where production
+  // returns the count as a number).
+  const flagArgs = flagsToShellArgs(named, ["i", "v", "l"]);
+  const wantCount = named.c === true;
+  const wantLineNumbers = named.n === true;
+  const wantFilenames = named.l === true;
 
   let outputText = "";
   if (ctx.stdin !== undefined) {
@@ -177,9 +216,40 @@ const grep: BuiltinFn = (positional, named, ctx) => {
     outputText = result.stdout;
   }
 
-  // Split into lines, drop trailing blank.
+  // Split into lines, drop ALL trailing blanks. GG-018: a file's trailing
+  // newline produces a phantom empty line; under `-v` (invert) that empty
+  // line is "kept" and leaks into the result as a spurious "" entry. Pop
+  // every trailing empty string, not just one, so `grep -v` matches
+  // production.
   const lines = outputText.split(/\r?\n/);
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+
+  // GG-018: `-l` returns matching FILE paths. ShellJS emits absolute host
+  // paths; translate them to vault-relative form (no host-layout leak).
+  if (wantFilenames) {
+    return toVaultRelative(lines, root);
+  }
+  // GG-018: `-c` returns the match COUNT as a number, not a list.
+  if (wantCount) {
+    return lines.length;
+  }
+  // GG-018: `-n` prefixes each match with its 1-indexed line number.
+  // (ShellJS doesn't emit line numbers; we synthesize them by re-scanning.)
+  if (wantLineNumbers) {
+    // Re-derive line numbers from the source so the prefix is the line's
+    // position in the original file, not in the filtered result.
+    const sourceText =
+      ctx.stdin !== undefined
+        ? linesToText(valueToLines(ctx.stdin))
+        : sh.cat(...globExpandFiles(fileArgs, root)).stdout;
+    const sourceLines = sourceText.split(/\r?\n/);
+    const matchSet = new Set(lines);
+    const numbered: string[] = [];
+    sourceLines.forEach((line, idx) => {
+      if (matchSet.has(line)) numbered.push(`${idx + 1}:${line}`);
+    });
+    return numbered;
+  }
   return lines;
 };
 
@@ -218,14 +288,11 @@ const find: BuiltinFn = (positional, named, ctx) => {
   // re-usable as inputs to other shell verbs in the same macro. Without
   // this, `for f in $files; cat $f; done` would double-jail the host
   // path and miss the file.
-  if (root) {
-    const sepLen = root.endsWith("/") ? root.length : root.length + 1;
-    results = results.map((p) => {
-      if (p === root) return "/";
-      if (p.startsWith(root + "/")) return "/" + p.slice(sepLen);
-      return p;
-    });
-  }
+  results = toVaultRelative(results, root);
+  // GG-018: alphabetize for stability. Production sorts find results;
+  // ShellJS's `find` returns traversal order, which is non-deterministic
+  // across platforms. A sorted result is the spec-stable contract.
+  results.sort();
   return results;
 };
 
@@ -275,7 +342,15 @@ const sed: BuiltinFn = (positional, _named, ctx) => {
   const replacement = newRaw;
 
   if (ctx.stdin !== undefined) {
-    const text = linesToText(valueToLines(ctx.stdin));
+    // GG-018: when stdin is already a string (the common case — `cat | sed`),
+    // operate on it DIRECTLY. The previous `linesToText(valueToLines(...))`
+    // round-trip is lossy: valueToLines drops the trailing newline, so a
+    // file with a trailing newline lost it through the pipe. Only the
+    // non-string stdin case (a list piped in) needs the join.
+    const text =
+      typeof ctx.stdin === "string"
+        ? ctx.stdin
+        : linesToText(valueToLines(ctx.stdin));
     return text.replace(regex, replacement);
   }
 
@@ -345,74 +420,97 @@ const wc: BuiltinFn = (positional, named, ctx) => {
 // Bash:  head [-n N] file...
 // DSL:   head [-n N] file_or_glob...
 //        echo "..." | head [-n N]
-// Returns: first N lines (default N = 10) joined as a string.
+// Returns: first N lines (default N = 10) as a list of strings.
 
-// Resolve the "-n N" count flag for head/tail. In our short-flag grammar,
-// `-n` is parsed as a boolean (`named.n === true`) and the count `5` becomes
-// positional[0]. We detect this and consume that leading number. Also
-// accept the long-form `--n 5` (named.n === number) — and, defensively, a
-// positional-only form `head 5 file.md` is NOT supported (would be
+// Resolve the `-n N` count flag for head/tail. Per REQ-112f, `-n` lexes as
+// a boolean short flag (macro short flags are boolean-only) and the count N
+// is a SEPARATE positional integer literal immediately after it. There is
+// NO long-form `--lines N` / `--n N` count flag. This mirrors production's
+// `extractLineCount` (src/macro/shell-verbs.ts) exactly:
+//   - flag absent  → default count, positional untouched
+//   - flag present → positional[0] is the count (must be a non-negative
+//                    integer); the remaining positionals are the file args
+// GG-019: an earlier GG-018 pass had this honor `--lines N` / `--n N`,
+// which the spec never defined and production never supported — `--lines`
+// is silently ignored by production and `--n` is rejected. Both branches
+// are removed here so the golden tracks production and REQ-112f.
+// A bare positional-only `head 5 file.md` is NOT supported (would be
 // indistinguishable from a file path called "5").
 function resolveCountFlag(
+  builtin: "head" | "tail",
   positional: Value[],
   named: Record<string, Value>,
   defaultN: number,
 ): { count: number; rest: Value[] } {
-  if (typeof named.n === "number") {
-    return { count: named.n, rest: positional };
+  // `-n` counts as present when named.n is anything truthy: `-n` yields
+  // `true`; the non-spec long form `--n` yields a number — both trip the
+  // count-flag path, matching production's hasFlag().
+  const flagPresent =
+    named.n !== undefined && named.n !== null && named.n !== false;
+  if (!flagPresent) return { count: defaultN, rest: positional };
+  if (positional.length < 1) {
+    throw new MacroRuntimeError(
+      `${builtin} received an invalid number of arguments.`,
+      undefined,
+      { reason: `${builtin}_argument_count` },
+    );
   }
-  if (named.n === true && positional.length > 0 && typeof positional[0] === "number") {
-    return { count: positional[0] as number, rest: positional.slice(1) };
+  const n = positional[0];
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 0) {
+    throw new MacroRuntimeError(
+      "Shell line count must be a non-negative integer.",
+      undefined,
+      { reason: `${builtin}_line_count_type` },
+    );
   }
-  return { count: defaultN, rest: positional };
+  return { count: n, rest: positional.slice(1) };
 }
 
+// GG-018: head/tail return a LIST of lines (one string per line), not a
+// joined string. This matches production and is consistent with the other
+// line-oriented verbs (grep, ls, find all return lists). The previous
+// joined-string return was the lone inconsistency.
 const head: BuiltinFn = (positional, named, ctx) => {
   const root = ensureVaultCwd(ctx);
-  const { count, rest } = resolveCountFlag(positional, named, 10);
-  let text: string;
+  const { count, rest } = resolveCountFlag("head", positional, named, 10);
   if (ctx.stdin !== undefined && rest.length === 0) {
-    text = linesToText(valueToLines(ctx.stdin));
-  } else {
-    if (rest.length === 0) {
-      throw new Error("head: missing file argument (and nothing piped in)");
-    }
-    const files = globExpandFiles(rest, root);
-    text = sh.head({ "-n": count }, ...files).stdout;
-    // Trim trailing newline that ShellJS appends, then return as-is.
-    if (text.endsWith("\n")) text = text.slice(0, -1);
-    return text;
+    const lines = valueToLines(ctx.stdin);
+    return lines.slice(0, count);
   }
-  // stdin path: slice manually.
+  if (rest.length === 0) {
+    throw new Error("head: missing file argument (and nothing piped in)");
+  }
+  const files = globExpandFiles(rest, root);
+  // ShellJS's head already limits to `count` lines.
+  const text = sh.head({ "-n": count }, ...files).stdout;
   const lines = text.split(/\r?\n/);
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return linesToText(lines.slice(0, count));
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return lines;
 };
 
 // ----- tail -----
 // Bash:  tail [-n N] file...
 // DSL:   tail [-n N] file_or_glob...
 //        echo "..." | tail [-n N]
-// Returns: last N lines (default N = 10) joined as a string.
+// Returns: last N lines (default N = 10) as a list of strings.
 
+// GG-018: see head — tail likewise returns a list of lines.
 const tail: BuiltinFn = (positional, named, ctx) => {
   const root = ensureVaultCwd(ctx);
-  const { count, rest } = resolveCountFlag(positional, named, 10);
-  let text: string;
+  const { count, rest } = resolveCountFlag("tail", positional, named, 10);
   if (ctx.stdin !== undefined && rest.length === 0) {
-    text = linesToText(valueToLines(ctx.stdin));
-  } else {
-    if (rest.length === 0) {
-      throw new Error("tail: missing file argument (and nothing piped in)");
-    }
-    const files = globExpandFiles(rest, root);
-    text = sh.tail({ "-n": count }, ...files).stdout;
-    if (text.endsWith("\n")) text = text.slice(0, -1);
-    return text;
+    const lines = valueToLines(ctx.stdin);
+    return lines.slice(Math.max(0, lines.length - count));
   }
+  if (rest.length === 0) {
+    throw new Error("tail: missing file argument (and nothing piped in)");
+  }
+  const files = globExpandFiles(rest, root);
+  // ShellJS's tail already limits to the last `count` lines.
+  const text = sh.tail({ "-n": count }, ...files).stdout;
   const lines = text.split(/\r?\n/);
-  if (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
-  return linesToText(lines.slice(Math.max(0, lines.length - count)));
+  while (lines.length > 0 && lines[lines.length - 1] === "") lines.pop();
+  return lines;
 };
 
 // ----- ls -----
@@ -456,7 +554,36 @@ const ls: BuiltinFn = (positional, named, ctx) => {
       mtime: entry.mtime instanceof Date ? entry.mtime.toISOString() : String(entry.mtime),
     }));
   }
-  return result.map((s) => String(s));
+
+  const names = result.map((s) => String(s));
+
+  // GG-018: `-d` returns the directory ITSELF. ShellJS emits the absolute
+  // host path; translate to vault-relative so the host layout doesn't leak.
+  if (named.d === true) {
+    return toVaultRelative(names, root);
+  }
+
+  // GG-018: `-R` (recursive) returns entries relative to the listed
+  // directory with no leading slash and in traversal order. The contract
+  // (matching production) is vault-relative full paths, alphabetized. We
+  // prefix each entry with the vault-relative form of its target and sort.
+  if (named.R === true) {
+    const out: string[] = [];
+    for (const target of targets) {
+      const vaultRelTarget = toVaultRelative([target], root)[0];
+      const base = vaultRelTarget === "/" ? "" : vaultRelTarget;
+      // The first chunk of ShellJS -R output for a single target is the
+      // target's own entries; nested entries carry their sub-path.
+      const targetEntries = (flagArg ? sh.ls(flagArg, target) : sh.ls(target)).map((s) => String(s));
+      for (const entry of targetEntries) {
+        out.push(`${base}/${entry}`);
+      }
+    }
+    out.sort();
+    return out;
+  }
+
+  return names;
 };
 
 // ----- exports -----

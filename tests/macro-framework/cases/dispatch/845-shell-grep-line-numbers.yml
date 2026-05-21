@@ -1,0 +1,43 @@
+# Pilot — REQ-038 grep -n: prefix matches with line numbers.
+id: mtf-d-845-shell-grep-line-numbers
+name: Dispatch — `grep -n` prefixes matches with 1-indexed line numbers
+intent: |
+  -n prefixes each matching line with "<lineno>:<content>".
+description: |
+  Per REQ-038 §6.5.1, `grep -n <pattern> <file>` returns matching lines
+  with their 1-indexed line numbers as a "N:line" prefix. Matches in
+  lines 1 and 2 of a 3-line file render as ["1:...", "2:..."].
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = grep -n "apple" "/notes/words.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/words.txt": "apple banana cherry\napple date elderberry\nfig grape"
+expect:
+  outcome: success
+  return_result:
+    r:
+      - "1:apple banana cherry"
+      - "2:apple date elderberry"
+predicted_expect:
+  outcome: success
+  return_result:
+    r:
+      - "1:apple banana cherry"
+      - "2:apple date elderberry"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,40 @@
+# Pilot — REQ-112f + REQ-051: `| head -n N` applies the count to piped input.
+id: mtf-d-876-shell-pipe-cat-head-count
+name: Dispatch — `cat | head -n N` applies the count to the piped line list
+intent: |
+  cat piped into head -n 2 yields the first 2 lines of the piped input.
+description: |
+  Per REQ-112f ac5, the piped form `<expr> | head -n N` applies the same
+  count semantics to the piped-in line list (REQ-051 pipeline
+  participation). `cat <file> | head -n 2` takes cat's output as head's
+  implicit stdin and returns the first 2 lines as a LIST of strings.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:15:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = cat "/notes/twenty.txt" | head -n 2
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/twenty.txt": "l01\nl02\nl03\nl04\nl05\nl06\nl07\nl08\nl09\nl10\nl11\nl12\nl13\nl14\nl15\nl16\nl17\nl18\nl19\nl20\n"
+expect:
+  outcome: success
+  return_result:
+    r: ["l01", "l02"]
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ["l01", "l02"]
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,47 @@
+# Pilot — REQ-038 ls: subdirectory listing.
+id: mtf-d-821-shell-ls-subdir
+name: Dispatch — `ls` of a nested subdirectory
+intent: |
+  ls of a subdirectory lists only that directory's children.
+description: |
+  Per REQ-038, ls returns the children of the named directory only —
+  not the parent's contents and not recursive descendants.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = ls "/notes/animals"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/animals/cat.txt": "meow"
+  "/notes/animals/dog.txt": "woof"
+  "/notes/animals/fish/goldfish.txt": "blub"
+  "/notes/sibling.txt": "irrelevant"
+expect:
+  outcome: success
+  return_result:
+    r:
+      - "cat.txt"
+      - "dog.txt"
+      - "fish"
+predicted_expect:
+  outcome: success
+  return_result:
+    r:
+      - "cat.txt"
+      - "dog.txt"
+      - "fish"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

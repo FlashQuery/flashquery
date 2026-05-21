@@ -1,0 +1,52 @@
+# Pilot — MTF-C-006: Control flow — while-loop countdown terminated by fail()
+id: mtf-c-509-while-fail-on-countdown
+name: Control flow — while-loop countdown terminated by fail()
+intent: |
+  A while-loop counts a value down and calls fail() when it hits a threshold.
+
+covers:
+  - MTF-C-006
+  - MTF-C-004
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  remaining = 5
+  while $remaining do
+    remaining = sub $remaining 1
+    if $remaining == 2 then
+      fail "countdown abort"
+    fi
+  done
+  echo "unreached"
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "countdown abort"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "countdown abort"
+golden_snapshot:
+  captured_trace_kinds: ["fail"]
+  captured_tool_calls: []

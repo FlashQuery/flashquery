@@ -1,0 +1,38 @@
+# Pilot — REQ-038 cat: single-line file (no trailing newline) returns as-is.
+id: mtf-d-812-shell-cat-single-line
+name: Dispatch — `cat` returns single-line file content as-is (no trailing newline)
+intent: |
+  cat preserves the file's bytes exactly, including absence of trailing newline.
+description: |
+  A file with exactly one line and no trailing newline is returned exactly
+  as stored. Verifies cat doesn't append or strip whitespace.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = cat "/notes/single.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/single.txt": "only one line"
+expect:
+  outcome: success
+  return_result:
+    r: "only one line"
+predicted_expect:
+  outcome: success
+  return_result:
+    r: "only one line"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

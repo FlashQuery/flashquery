@@ -1,0 +1,58 @@
+id: mtf-s-1287-if-no-else-taken-and-skipped
+name: Control flow — if/then/fi with no else, taken and skipped
+intent: |
+  An if/then/fi with no else branch: the body runs under a truthy condition and is skipped under a falsy one.
+
+covers:
+  - MTF-C-003
+  - MTF-S-008
+  - MTF-G-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  # if without else - body runs only when the condition is truthy
+  hit = "no"
+  if 1 then
+    hit = "yes"
+  fi
+  missed = "stays"
+  if 0 then
+    missed = "changed"
+  fi
+  exit { hit: $hit, missed: $missed }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    hit: "yes"
+    missed: "stays"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    hit: "yes"
+    missed: "stays"
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

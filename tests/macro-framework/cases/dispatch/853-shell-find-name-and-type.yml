@@ -1,0 +1,46 @@
+# Pilot — REQ-038 find: combine --name + --type filters.
+id: mtf-d-853-shell-find-name-and-type
+name: Dispatch — `find --name + --type` composes both filters
+intent: |
+  Multiple find flags compose: --name "*.txt" + --type "f" yields txt files only.
+description: |
+  Per REQ-038 §6.5.1, find filters compose. Combining --name and --type
+  intersects the two predicates (logical AND). Verifies that the markdown
+  file matching --name "*" but failing --type would be excluded, and the
+  txt files match both.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = find "/notes" --name "*.txt" --type "f"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/keep1.txt": "keep"
+  "/notes/skip.md": "skip"
+  "/notes/sub/keep2.txt": "keep"
+expect:
+  outcome: success
+  return_result:
+    r:
+      - "/notes/keep1.txt"
+      - "/notes/sub/keep2.txt"
+predicted_expect:
+  outcome: success
+  return_result:
+    r:
+      - "/notes/keep1.txt"
+      - "/notes/sub/keep2.txt"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,40 @@
+# Pilot — REQ-038 tail: file shorter than the default count returns all lines.
+id: mtf-d-872-shell-tail-short-file
+name: Dispatch — `tail` on a file shorter than the default returns all lines
+intent: |
+  tail of a file with fewer than 10 lines returns every line as a list.
+description: |
+  Per REQ-038 §6.5.1, `tail <file>` returns the last N lines (default
+  N = 10) as a LIST of strings. When the file has fewer than 10 lines,
+  the whole file is returned. Verifies the list return-shape and the
+  shorter-than-default edge case.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = tail "/notes/six.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/six.txt": "z1\nz2\nz3\nz4\nz5\nz6\n"
+expect:
+  outcome: success
+  return_result:
+    r: ["z1", "z2", "z3", "z4", "z5", "z6"]
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ["z1", "z2", "z3", "z4", "z5", "z6"]
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

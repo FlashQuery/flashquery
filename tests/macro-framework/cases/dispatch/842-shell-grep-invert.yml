@@ -1,0 +1,39 @@
+# Pilot — REQ-038 grep -v: invert match (returns lines that DON'T match).
+id: mtf-d-842-shell-grep-invert
+name: Dispatch — `grep -v` returns non-matching lines
+intent: |
+  -v inverts the match: returns only lines that do NOT contain the pattern.
+description: |
+  Per REQ-038 §6.5.1, `grep -v <pattern> <file>` returns the subset of
+  lines that do NOT match. Combined with the default substring semantic,
+  matches "alpha" exactly on one line, so -v returns the other three.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = grep -v "alpha" "/notes/lines.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/lines.txt": "alpha\nbeta\ngamma\ndelta\n"
+expect:
+  outcome: success
+  return_result:
+    r: ["beta", "gamma", "delta"]
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ["beta", "gamma", "delta"]
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

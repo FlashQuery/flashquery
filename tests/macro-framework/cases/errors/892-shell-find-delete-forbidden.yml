@@ -1,0 +1,46 @@
+# Pilot — REQ-043 + INV-06: `find -delete` is rejected at parse-time pre-scan.
+id: mtf-e-892-shell-find-delete-forbidden
+name: Errors — `find -delete` rejected at pre-scan (forbidden_shell_flag)
+intent: |
+  `find -delete` (delete every matched path) is a forbidden shell flag.
+description: |
+  Per REQ-043 §6.6.3 + INV-06, `find -delete` MUST be rejected at
+  parse-time pre-scan — it mutates the vault destructively. The envelope
+  is `forbidden_shell_flag` identifying verb `find` and flag `-delete`.
+  No file is deleted; the rejection happens before execution.
+covers: [MTF-E-007]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = find "/notes" -delete
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/file.txt": "content"
+expect:
+  outcome: error
+  error:
+    code: forbidden_shell_flag
+    details:
+      verb: find
+      flag: "-delete"
+predicted_expect:
+  outcome: error
+  error:
+    code: forbidden_shell_flag
+    details:
+      verb: find
+      flag: "-delete"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

@@ -40,7 +40,16 @@ import { coerceNonError, formatToolError, type CoercePath } from "./coerce.ts";
 // MacroExitError + the pre-flight / forbidden / budget classes) -----
 
 export class MacroRuntimeError extends Error {
-  constructor(message: string, public line?: number) {
+  // GG-018 (2026-05-20): added the optional `details` param to match
+  // production's `MacroRuntimeError` signature (src/macro/evaluator.ts).
+  // Production carries `details` through to the envelope; the golden's
+  // class previously dropped it, so runtime errors with a sub-reason
+  // (e.g. shell `path_not_found`) couldn't surface `details.reason`.
+  constructor(
+    message: string,
+    public line?: number,
+    public details?: Record<string, Value>,
+  ) {
     super(line !== undefined ? `${message} (line ${line})` : message);
   }
 }
@@ -1122,31 +1131,37 @@ function preScanForbiddenFlags(program: Program): void {
     }
   }
   function visitCall(call: Call): void {
+    // GG-018 (2026-05-20): the forbidden-flag `reason` MUST be a stable
+    // snake_case identifier (per REQ-018 ac2's convention for `details.reason`
+    // — applied here for forbidden_shell_flag consistency). Production uses
+    // `sed_in_place_mutates_files` / `find_exec_mutates_or_executes` /
+    // `find_delete_mutates_files`. The golden previously used free-text
+    // English ("sed -i mutates files"), which isn't a stable identifier.
     if (call.name === "sed") {
       for (const a of call.args) {
         if (a.kind !== "NamedArg") continue;
         if (a.name === "i" && a.rawShortFlag) {
-          throw new MacroForbiddenFlagError("sed", "-i", "sed -i mutates files");
+          throw new MacroForbiddenFlagError("sed", "-i", "sed_in_place_mutates_files");
         }
         if ((a.name === "in-place" || a.name === "i") && !a.rawShortFlag) {
-          throw new MacroForbiddenFlagError("sed", "--" + a.name, "sed in-place mutates files");
+          throw new MacroForbiddenFlagError("sed", "--" + a.name, "sed_in_place_mutates_files");
         }
       }
     } else if (call.name === "find") {
       for (const a of call.args) {
         if (a.kind !== "NamedArg") continue;
         if (a.rawShortFlag === "-exec") {
-          throw new MacroForbiddenFlagError("find", "-exec", "arbitrary command execution");
+          throw new MacroForbiddenFlagError("find", "-exec", "find_exec_mutates_or_executes");
         }
         if (a.rawShortFlag === "-delete") {
-          throw new MacroForbiddenFlagError("find", "-delete", "file mutation via find");
+          throw new MacroForbiddenFlagError("find", "-delete", "find_delete_mutates_files");
         }
         if (!a.rawShortFlag) {
           if (a.name === "exec") {
-            throw new MacroForbiddenFlagError("find", "--exec", "arbitrary command execution");
+            throw new MacroForbiddenFlagError("find", "--exec", "find_exec_mutates_or_executes");
           }
           if (a.name === "delete") {
-            throw new MacroForbiddenFlagError("find", "--delete", "file mutation via find");
+            throw new MacroForbiddenFlagError("find", "--delete", "find_delete_mutates_files");
           }
         }
       }

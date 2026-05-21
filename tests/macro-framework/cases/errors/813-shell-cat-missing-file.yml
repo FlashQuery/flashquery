@@ -1,0 +1,46 @@
+# Pilot — REQ-038 + REQ-024: cat on nonexistent vault path → tool_call_failed.
+id: mtf-e-813-shell-cat-missing-file
+name: Errors — `cat` on nonexistent vault path raises path_not_found
+intent: |
+  cat of a nonexistent vault file halts with tool_call_failed/path_not_found.
+description: |
+  Per REQ-038 + REQ-024 ac5, a shell-verb failure (file not in vault)
+  raises `tool_call_failed` with `details.reason: path_not_found`. The
+  envelope identifies the failing path and the builtin (`read`).
+covers: [MTF-D-010, MTF-E-005]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = cat "/notes/nonexistent.txt"
+  exit { r: $r }
+input_vars: {}
+# A decoy file is present so the vault root materializes; the macro still
+# cats a DIFFERENT, nonexistent path. (An entirely empty vault would leave
+# the golden capture with no materialized root, masking the path-not-found.)
+vault:
+  "/notes/decoy.txt": "this file exists; the macro reads a different path"
+expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: path_not_found
+predicted_expect:
+  outcome: error
+  error:
+    code: tool_call_failed
+    details:
+      reason: path_not_found
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

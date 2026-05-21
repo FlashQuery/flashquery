@@ -1,0 +1,41 @@
+# Pilot — REQ-038 pipeline: cat | sed (transform streamed content).
+id: mtf-d-883-shell-pipe-cat-sed
+name: Dispatch — `cat | sed` transforms streamed content
+intent: |
+  cat output streams to sed, which applies a substitution to the text.
+description: |
+  Per REQ-038 §6.5.1 + REQ-051, `cat /notes/words.txt | sed "s/apple/PEAR/g"`
+  reads the file and applies a global substitution to the streamed text.
+  Result is the transformed string.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = cat "/notes/words.txt" | sed "s/apple/PEAR/g"
+  exit { r: $r }
+input_vars: {}
+# words.txt has a trailing newline; cat preserves it, sed preserves it,
+# so the pipe round-trip is lossless on both oracles.
+vault:
+  "/notes/words.txt": "apple banana cherry\napple date elderberry\nfig grape\n"
+expect:
+  outcome: success
+  return_result:
+    r: "PEAR banana cherry\nPEAR date elderberry\nfig grape\n"
+predicted_expect:
+  outcome: success
+  return_result:
+    r: "PEAR banana cherry\nPEAR date elderberry\nfig grape\n"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

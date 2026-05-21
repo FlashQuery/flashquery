@@ -1,0 +1,41 @@
+# Pilot — REQ-112f: `head -n N` returns the first N lines (explicit count flag).
+id: mtf-d-874-shell-head-explicit-count
+name: Dispatch — `head -n N` returns the first N lines
+intent: |
+  head -n 3 returns exactly the first 3 lines of the file as a list.
+description: |
+  Per REQ-112f (clarifier of REQ-038 §6.5.1), the head/tail count flag is
+  the boolean short flag `-n` followed by a positional integer literal N.
+  `head -n 3 <file>` returns the first 3 lines as a LIST of strings. This
+  pilot exercises the explicit-count surface that REQ-112f pins down — the
+  short flag `-n` lexes as a boolean and N is a separate positional token.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:15:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = head -n 3 "/notes/twenty.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/twenty.txt": "l01\nl02\nl03\nl04\nl05\nl06\nl07\nl08\nl09\nl10\nl11\nl12\nl13\nl14\nl15\nl16\nl17\nl18\nl19\nl20\n"
+expect:
+  outcome: success
+  return_result:
+    r: ["l01", "l02", "l03"]
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ["l01", "l02", "l03"]
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

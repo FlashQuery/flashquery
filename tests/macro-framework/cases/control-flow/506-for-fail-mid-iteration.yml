@@ -1,0 +1,52 @@
+# Pilot — MTF-C-002: Control flow — for-loop aborted mid-iteration by fail()
+id: mtf-c-506-for-fail-mid-iteration
+name: Control flow — for-loop aborted mid-iteration by fail()
+intent: |
+  A for-loop runs until an if-condition fires fail() partway through, aborting with macro_aborted.
+
+covers:
+  - MTF-C-002
+  - MTF-C-004
+  - MTF-C-003
+  - MTF-E-004
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  for n in 1..8 do
+    if $n == 4 then
+      fail "abort at four"
+    fi
+  done
+  echo "unreached"
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "abort at four"
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: fail
+  error:
+    code: macro_aborted
+    message_contains: "abort at four"
+golden_snapshot:
+  captured_trace_kinds: ["fail"]
+  captured_tool_calls: []

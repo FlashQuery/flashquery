@@ -1,0 +1,63 @@
+# Pilot — MTF-D dispatch: ScriptedTool returns a different result on each call
+id: mtf-d-897-dispatch-scripted-bind-sequence
+name: Dispatch — ScriptedTool returns a distinct result on each successive call
+intent: |
+  A ScriptedTool returns two different JSON-text results on two calls; the macro binds each into its own variable.
+
+covers:
+  - MTF-D-008
+  - MTF-D-001
+  - MTF-D-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = seq.next({})
+  y = seq.next({})
+  exit { x: $x, y: $y }
+
+input_vars: {}
+vault: {}
+
+tools:
+  seq:
+    archetype: ScriptedTool
+    tool_name: next
+    responses:
+      - content: [{ type: text, text: '{"a":1}' }]
+      - content: [{ type: text, text: '{"a":2}' }]
+
+predicted_expect:
+  outcome: success
+  return_result:
+    x: { a: 1 }
+    y: { a: 2 }
+  side_effects:
+    tool_call_count: 2
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    x: { a: 1 }
+    y: { a: 2 }
+  side_effects:
+    tool_call_count: 2
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "seq"
+      tool: "next"
+    - server: "seq"
+      tool: "next"

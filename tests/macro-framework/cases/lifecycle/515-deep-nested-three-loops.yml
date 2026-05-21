@@ -1,0 +1,60 @@
+# Pilot — MTF-L-007: Lifecycle — three-deep nested for-loops produce an elaborate trace
+id: mtf-l-515-deep-nested-three-loops
+name: Lifecycle — three-deep nested for-loops produce an elaborate trace
+intent: |
+  Three nested for-loops run 27 inner iterations, accumulating across walk-up scope.
+
+covers:
+  - MTF-L-007
+  - MTF-C-007
+  - MTF-S-006
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  total = 0
+  n = 0
+  for a in 1..4 do
+    for b in 1..4 do
+      for c in 1..4 do
+        total = add $total $c
+        n = add $n 1
+      done
+    done
+  done
+  exit { total: $total, count: $n }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    total: 54
+    count: 27
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    total: 54
+    count: 27
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

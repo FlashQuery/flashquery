@@ -1,0 +1,52 @@
+# Pilot — REQ-038 ls -R: recursive listing returns full vault-relative paths.
+id: mtf-d-825-shell-ls-recursive
+name: Dispatch — `ls -R` recursively lists nested entries as paths
+intent: |
+  -R causes ls to recursively enumerate all entries as vault-relative paths.
+description: |
+  Per REQ-038 §6.5.1, `ls -R` recursively walks the directory tree and
+  returns each entry as a vault-relative path (with leading slash). Unlike
+  the non-recursive form (entry names only), the recursive form returns
+  the full path so the listing self-identifies the location.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = ls "/notes" -R
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/top.txt": "top"
+  "/notes/sub/inside.txt": "inside"
+  "/notes/sub/deeper/leaf.txt": "leaf"
+expect:
+  outcome: success
+  return_result:
+    r:
+      - "/notes/sub"
+      - "/notes/sub/deeper"
+      - "/notes/sub/deeper/leaf.txt"
+      - "/notes/sub/inside.txt"
+      - "/notes/top.txt"
+predicted_expect:
+  outcome: success
+  return_result:
+    r:
+      - "/notes/sub"
+      - "/notes/sub/deeper"
+      - "/notes/sub/deeper/leaf.txt"
+      - "/notes/sub/inside.txt"
+      - "/notes/top.txt"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,39 @@
+# Pilot — REQ-038 cat: reads multi-line file content verbatim.
+id: mtf-d-810-shell-cat-multiline
+name: Dispatch — `cat` reads multi-line file content verbatim
+intent: |
+  cat returns the file's content as a string, preserving newlines.
+description: |
+  Per REQ-038 §6.5.1, `cat` reads a vault-relative path and returns the
+  file contents as a string. Multi-line files are returned with newlines
+  preserved.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = cat "/notes/lines.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/lines.txt": "alpha\nbeta\ngamma\ndelta\n"
+expect:
+  outcome: success
+  return_result:
+    r: "alpha\nbeta\ngamma\ndelta\n"
+predicted_expect:
+  outcome: success
+  return_result:
+    r: "alpha\nbeta\ngamma\ndelta\n"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

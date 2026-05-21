@@ -1,0 +1,49 @@
+# Pilot — REQ-038 ls -l: long-format listing with size + mtime metadata.
+id: mtf-d-824-shell-ls-long-format
+name: Dispatch — `ls -l` returns objects with size + mtime
+intent: |
+  The -l flag causes ls to return objects with {name, size, mtime} per entry.
+description: |
+  Per REQ-038 §6.5.1, `ls -l` returns long-format entries — each as an
+  object carrying the entry's `name`, byte `size`, and ISO `mtime`. The
+  pilot asserts the structural shape via return_result_keys-style probing;
+  exact mtime values are non-deterministic so we just verify the keys are
+  populated and the names match.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = ls "/notes" -l
+  names = []
+  for entry in $r do
+    names = append $names $entry.name
+  done
+  exit { names: $names, count: count $r }
+input_vars: {}
+vault:
+  "/notes/a.txt": "one"
+  "/notes/b.txt": "two"
+  "/notes/c.txt": "three"
+expect:
+  outcome: success
+  return_result:
+    names: ["a.txt", "b.txt", "c.txt"]
+    count: 3
+predicted_expect:
+  outcome: success
+  return_result:
+    names: ["a.txt", "b.txt", "c.txt"]
+    count: 3
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

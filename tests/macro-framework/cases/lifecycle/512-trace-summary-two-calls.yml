@@ -1,0 +1,66 @@
+# Pilot — MTF-L-005: Lifecycle — trace_mode=summary omits args/result on two calls
+id: mtf-l-512-trace-summary-two-calls
+name: Lifecycle — trace_mode=summary omits args/result on two calls
+intent: |
+  Under trace_mode=summary the trace keeps tool_call/exit kinds but strips args and result (REQ-047 ac2).
+
+covers:
+  - MTF-L-005
+  - MTF-L-006
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = trc.go({ x: 1 })
+  b = trc.go({ y: $a })
+  exit { last: $b }
+
+input_vars: {}
+vault: {}
+
+tools:
+  trc:
+    archetype: ScriptedTool
+    tool_name: go
+    responses:
+      - { content: [{ type: text, text: '{"step":1}' }] }
+      - { content: [{ type: text, text: '{"step":2}' }] }
+
+trace_mode: summary
+
+predicted_expect:
+  outcome: success
+  return_result:
+    last: {"step": 2}
+  trace_has_no_args: true
+  trace_kinds_contain:
+    - tool_call
+    - exit
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    last: {"step": 2}
+  trace_has_no_args: true
+  trace_kinds_contain:
+    - tool_call
+    - exit
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "trc"
+      tool: "go"
+    - server: "trc"
+      tool: "go"

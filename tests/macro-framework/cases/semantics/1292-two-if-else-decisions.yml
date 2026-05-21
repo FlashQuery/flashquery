@@ -1,0 +1,62 @@
+id: mtf-s-1292-two-if-else-decisions
+name: Control flow — two independent if/then/else/fi decisions
+intent: |
+  Two separate if/else statements each pick a branch; both branches are exercised across the pair.
+
+covers:
+  - MTF-C-008
+  - MTF-S-008
+  - MTF-G-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  # two independent if/else decisions
+  a = 3
+  if $a then
+    a_branch = "pos"
+  else
+    a_branch = "zero"
+  fi
+  b = ""
+  if $b then
+    b_branch = "nonempty"
+  else
+    b_branch = "empty"
+  fi
+  exit { a_branch: $a_branch, b_branch: $b_branch }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    a_branch: "pos"
+    b_branch: "empty"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    a_branch: "pos"
+    b_branch: "empty"
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

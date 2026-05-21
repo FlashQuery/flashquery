@@ -1,0 +1,56 @@
+# Pilot — MTF-D dispatch: Dispatch — CallToolResult coercion path 2 (structuredContent)
+id: mtf-d-887-dispatch-structured-content
+name: Dispatch — CallToolResult coercion path 2 (structuredContent)
+intent: |
+  A brokered tool returns structuredContent; the engine binds the structured value (REQ-106 path 2).
+
+covers:
+  - MTF-D-005
+  - MTF-D-001
+  - MTF-D-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = struct_srv.shape({})
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  struct_srv:
+    archetype: StructuredContentTool
+    tool_name: shape
+    value: {"source": "structured", "n": 5}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    v: {"source": "structured", "n": 5}
+  side_effects:
+    tool_call_count: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    v: {"source": "structured", "n": 5}
+  side_effects:
+    tool_call_count: 1
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "struct_srv"
+      tool: "shape"

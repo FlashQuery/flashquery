@@ -1,0 +1,70 @@
+# Pilot — MTF-L-001: Lifecycle — dry-run inventory with a required-only contract
+id: mtf-l-511-dry-run-required-only
+name: Lifecycle — dry-run inventory with a required-only contract
+intent: |
+  Dry-run reports a required-only input_var contract; a tool called twice deduplicates to one reference.
+
+covers:
+  - MTF-L-001
+  - MTF-L-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  name = input_var "name"
+  a = alpha.run({ name: $name })
+  b = alpha.run({ name: $name })
+  exit { ok: true }
+
+input_vars:
+  name: "widget"
+vault: {}
+
+tools:
+  alpha:
+    archetype: ReadOnlyTool
+    tool_name: run
+    returns: {}
+
+dry_run: true
+
+predicted_expect:
+  outcome: success
+  dry_run_inventory:
+    input_var_contract:
+      required: ["name"]
+      optional: []
+    tool_references:
+      - "alpha.run"
+    server_references:
+      - "alpha"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  dry_run_inventory:
+    input_var_contract:
+      required: ["name"]
+      optional: []
+    tool_references:
+      - "alpha.run"
+    server_references:
+      - "alpha"
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

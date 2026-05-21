@@ -1,0 +1,49 @@
+id: mtf-s-1265-truthy-nonempty-list
+name: a non-empty list is truthy
+intent: |
+  REQ-021 ac2: a non-empty list is truthy.
+
+covers:
+  - MTF-C-009
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:25:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  x = [1, 2]
+  if $x then
+    result = "truthy"
+  else
+    result = "falsy"
+  fi
+  exit { result: $result }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result: { result: "truthy" }
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result: { result: "truthy" }
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

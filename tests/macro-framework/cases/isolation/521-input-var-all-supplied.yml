@@ -1,0 +1,54 @@
+# Pilot — MTF-I-001: Invocation — a macro reads input_vars all supplied by the caller
+id: mtf-i-521-input-var-all-supplied
+name: Invocation — a macro reads input_vars all supplied by the caller
+intent: |
+  The caller supplies both the required and the optional input_var; the supplied value overrides the default.
+
+covers:
+  - MTF-I-001
+  - MTF-I-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  seed = input_var "seed"
+  factor = input_var "factor" --default 10
+  out = mul $seed $factor
+  exit { seed: $seed, out: $out }
+
+input_vars:
+  seed: 4
+  factor: 5
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    seed: 4
+    out: 20
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    seed: 4
+    out: 20
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

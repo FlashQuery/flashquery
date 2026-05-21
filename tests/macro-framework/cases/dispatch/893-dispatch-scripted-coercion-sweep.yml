@@ -1,0 +1,74 @@
+# Pilot — MTF-D dispatch: ScriptedTool returning three coercion shapes in sequence
+id: mtf-d-893-dispatch-scripted-coercion-sweep
+name: Dispatch — ScriptedTool sweeps coercion paths 2/3/4 across three calls
+intent: |
+  One ScriptedTool returns structuredContent, then JSON-text, then a raw string across three successive calls.
+
+covers:
+  - MTF-D-008
+  - MTF-D-005
+  - MTF-D-006
+  - MTF-D-007
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v1 = coerce.shape({})
+  v2 = coerce.shape({})
+  v3 = coerce.shape({})
+  exit { struct: $v1, json: $v2, raw: $v3 }
+
+input_vars: {}
+vault: {}
+
+tools:
+  coerce:
+    archetype: ScriptedTool
+    tool_name: shape
+    responses:
+      # Call 1: structuredContent populated -> REQ-106 path 2
+      - content: [{ type: text, text: '{"source":"scripted-struct","n":1}' }]
+        structuredContent: { source: "scripted-struct", n: 1 }
+      # Call 2: text content parseable as JSON -> REQ-106 path 3
+      - content: [{ type: text, text: '{"source":"scripted-json","n":2}' }]
+      # Call 3: text content NOT parseable as JSON -> REQ-106 path 4
+      - content: [{ type: text, text: "scripted raw text" }]
+
+predicted_expect:
+  outcome: success
+  return_result:
+    struct: { source: "scripted-struct", n: 1 }
+    json: { source: "scripted-json", n: 2 }
+    raw: "scripted raw text"
+  side_effects:
+    tool_call_count: 3
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    struct: { source: "scripted-struct", n: 1 }
+    json: { source: "scripted-json", n: 2 }
+    raw: "scripted raw text"
+  side_effects:
+    tool_call_count: 3
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "coerce"
+      tool: "shape"
+    - server: "coerce"
+      tool: "shape"
+    - server: "coerce"
+      tool: "shape"

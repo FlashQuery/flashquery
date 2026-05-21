@@ -1,0 +1,71 @@
+# Pilot — MTF-D dispatch: Dispatch — three brokered servers chained by result binding
+id: mtf-d-896-dispatch-three-server-chain
+name: Dispatch — three brokered servers chained by result binding
+intent: |
+  Three brokered tool calls thread their results through $variable bindings into an exit trail.
+
+covers:
+  - MTF-D-002
+  - MTF-D-001
+  - MTF-D-003
+  - MTF-D-004
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = s1.go({})
+  b = s2.go({ prev: $a })
+  c = s3.go({ prev: $b })
+  exit { trail: [$a, $b, $c] }
+
+input_vars: {}
+vault: {}
+
+tools:
+  s1:
+    archetype: ReadOnlyTool
+    tool_name: go
+    returns: {"stage": 1}
+  s2:
+    archetype: ReadOnlyTool
+    tool_name: go
+    returns: {"stage": 2}
+  s3:
+    archetype: ReadOnlyTool
+    tool_name: go
+    returns: {"stage": 3}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    trail: [{"stage": 1}, {"stage": 2}, {"stage": 3}]
+  side_effects:
+    tool_call_count: 3
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    trail: [{"stage": 1}, {"stage": 2}, {"stage": 3}]
+  side_effects:
+    tool_call_count: 3
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "s1"
+      tool: "go"
+    - server: "s2"
+      tool: "go"
+    - server: "s3"
+      tool: "go"

@@ -1,0 +1,55 @@
+# Pilot — MTF-I-001: Invocation — a macro reads a required and a defaulted optional input_var
+id: mtf-i-520-input-var-required-and-optional
+name: Invocation — a macro reads a required and a defaulted optional input_var
+intent: |
+  The macro reads one required and one optional (defaulted) input_var; the optional default fires when the key is absent.
+
+covers:
+  - MTF-I-001
+  - MTF-I-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  project = input_var "project"
+  limit = input_var "limit" --default 3
+  doubled = mul $limit 2
+  exit { project: $project, limit: $limit, doubled: $doubled }
+
+input_vars:
+  project: "alpha"
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    project: "alpha"
+    limit: 3
+    doubled: 6
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    project: "alpha"
+    limit: 3
+    doubled: 6
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

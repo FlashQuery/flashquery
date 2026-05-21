@@ -1,0 +1,57 @@
+# Pilot — MTF-L-007: Lifecycle — a for-loop nesting a while-loop produces an elaborate trace
+id: mtf-l-516-deep-nested-for-while-mix
+name: Lifecycle — a for-loop nesting a while-loop produces an elaborate trace
+intent: |
+  A for-loop nests a while-loop; the trace structure spans both loop kinds.
+
+covers:
+  - MTF-L-007
+  - MTF-C-007
+  - MTF-C-005
+  - MTF-S-006
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  grand = 0
+  for a in 1..4 do
+    k = 0
+    while $k < 3 do
+      k = add $k 1
+      grand = add $grand $k
+    done
+  done
+  exit { grand: $grand }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    grand: 18
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    grand: 18
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,39 @@
+# Pilot — REQ-038 sed: global substitution with the `g` flag.
+id: mtf-d-861-shell-sed-global-substitution
+name: Dispatch — `sed s/old/new/g` substitutes all matches per line
+intent: |
+  The `g` flag causes sed to replace all matches on each line.
+description: |
+  Per REQ-038 §6.5.1, `sed "s/<old>/<new>/g" <file>` replaces every
+  occurrence of <old> on each line (not just the first). Verifies the
+  multi-match-per-line behavior under -g.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = sed "s/apple/PEAR/g" "/notes/words.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/words.txt": "apple banana cherry\napple date elderberry\nfig grape"
+expect:
+  outcome: success
+  return_result:
+    r: "PEAR banana cherry\nPEAR date elderberry\nfig grape"
+predicted_expect:
+  outcome: success
+  return_result:
+    r: "PEAR banana cherry\nPEAR date elderberry\nfig grape"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

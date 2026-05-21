@@ -1,0 +1,42 @@
+# Pilot — REQ-038 pipeline: ls | grep (filter a directory listing).
+id: mtf-d-882-shell-pipe-ls-grep
+name: Dispatch — `ls | grep` filters a directory listing
+intent: |
+  ls output (a list) streams to grep, which filters the entries.
+description: |
+  Per REQ-038 §6.5.1 + REQ-051, `ls /notes | grep "txt"` lists the
+  directory then filters entries containing "txt". The subdirectory
+  "animals" (no "txt") is excluded; the .txt files are kept.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = ls "/notes" | grep "txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/animals/cat.txt": "meow"
+  "/notes/alpha.txt": "a"
+  "/notes/beta.txt": "b"
+  "/notes/readme.md": "doc"
+expect:
+  outcome: success
+  return_result:
+    r: ["alpha.txt", "beta.txt"]
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ["alpha.txt", "beta.txt"]
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

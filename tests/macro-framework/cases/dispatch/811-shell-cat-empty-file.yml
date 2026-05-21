@@ -1,0 +1,39 @@
+# Pilot — REQ-038 cat: empty file returns empty string.
+id: mtf-d-811-shell-cat-empty-file
+name: Dispatch — `cat` on empty file returns empty string
+intent: |
+  cat of a zero-byte file returns "".
+description: |
+  Per REQ-038, cat returns the file's contents as a string. An empty
+  file produces the empty string (not null, not "missing"). Verifies
+  the empty-content edge case is well-defined.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = cat "/notes/empty.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/empty.txt": ""
+expect:
+  outcome: success
+  return_result:
+    r: ""
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ""
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,39 @@
+# Pilot — REQ-038 grep -l: list matching filenames (vault-absolute paths).
+id: mtf-d-844-shell-grep-list-filenames
+name: Dispatch — `grep -l` returns filenames that contain matches
+intent: |
+  -l returns the vault-relative paths of files that contain at least one match.
+description: |
+  Per REQ-038 §6.5.1, `grep -l <pattern> <file>` returns the file's
+  vault-relative path (with leading slash) when at least one line matches.
+  No-match files are omitted.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = grep -l "apple" "/notes/words.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/words.txt": "apple banana cherry\napple date elderberry\nfig grape"
+expect:
+  outcome: success
+  return_result:
+    r: ["/notes/words.txt"]
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ["/notes/words.txt"]
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

@@ -1,0 +1,61 @@
+id: mtf-s-1294-iterator-shadow-multiarg-add
+name: Semantics — loop-local iterator with multi-positional add
+intent: |
+  A nested loop reuses an outer variable name as its iterator and accumulates via a three-argument add.
+
+covers:
+  - MTF-S-002
+  - MTF-S-005
+  - MTF-C-007
+  - MTF-S-006
+  - MTF-S-003
+  - MTF-G-003
+  - MTF-G-005
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  # iterator stays loop-local; accumulate via multi-positional add
+  i = "outer-i"
+  running = 0
+  for i in [1, 2] do
+    for j in [3, 4] do
+      running = add $running 1 1
+    done
+  done
+  exit { i: $i, running: $running }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    i: "outer-i"
+    running: 8
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    i: "outer-i"
+    running: 8
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

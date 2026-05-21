@@ -1,0 +1,39 @@
+# Pilot — REQ-038 sed: global + case-insensitive (`gi` flags).
+id: mtf-d-862-shell-sed-global-case-insensitive
+name: Dispatch — `sed s/old/new/gi` is global and case-insensitive
+intent: |
+  Combined `gi` flags do both: every match per line, case-insensitive.
+description: |
+  Per REQ-038 §6.5.1, `sed "s/<old>/<new>/gi" <file>` replaces every
+  case-insensitive match. A file with "Apple\napple\nAPPLE" rewrites all
+  three lines to "PEAR" when matching with `gi`.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = sed "s/apple/PEAR/gi" "/notes/case.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/case.txt": "Apple\napple\nAPPLE"
+expect:
+  outcome: success
+  return_result:
+    r: "PEAR\nPEAR\nPEAR"
+predicted_expect:
+  outcome: success
+  return_result:
+    r: "PEAR\nPEAR\nPEAR"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

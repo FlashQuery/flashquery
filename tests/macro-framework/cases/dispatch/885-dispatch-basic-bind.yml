@@ -1,0 +1,56 @@
+# Pilot — MTF-D dispatch: Dispatch — basic single brokered call bound into a local variable
+id: mtf-d-885-dispatch-basic-bind
+name: Dispatch — basic single brokered call bound into a local variable
+intent: |
+  A single brokered ReadOnlyTool call returns an object that the macro binds and exits.
+
+covers:
+  - MTF-D-001
+  - MTF-D-003
+  - MTF-D-004
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  r = svc.fetch({ id: 7 })
+  exit { r: $r }
+
+input_vars: {}
+vault: {}
+
+tools:
+  svc:
+    archetype: ReadOnlyTool
+    tool_name: fetch
+    returns: {"ok": true, "id": 7}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    r: {"ok": true, "id": 7}
+  side_effects:
+    tool_call_count: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    r: {"ok": true, "id": 7}
+  side_effects:
+    tool_call_count: 1
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "svc"
+      tool: "fetch"

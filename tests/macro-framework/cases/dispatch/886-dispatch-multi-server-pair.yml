@@ -1,0 +1,65 @@
+# Pilot — MTF-D dispatch: Dispatch — two brokered servers called within one macro
+id: mtf-d-886-dispatch-multi-server-pair
+name: Dispatch — two brokered servers called within one macro
+intent: |
+  Two distinct brokered servers are each called once; the second call receives the first result as an arg.
+
+covers:
+  - MTF-D-002
+  - MTF-D-001
+  - MTF-D-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  a = alpha.ping({})
+  b = beta.pong({ prev: $a })
+  exit { a: $a, b: $b }
+
+input_vars: {}
+vault: {}
+
+tools:
+  alpha:
+    archetype: ReadOnlyTool
+    tool_name: ping
+    returns: {"svc": "alpha"}
+  beta:
+    archetype: ReadOnlyTool
+    tool_name: pong
+    returns: {"svc": "beta"}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    a: {"svc": "alpha"}
+    b: {"svc": "beta"}
+  side_effects:
+    tool_call_count: 2
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    a: {"svc": "alpha"}
+    b: {"svc": "beta"}
+  side_effects:
+    tool_call_count: 2
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "alpha"
+      tool: "ping"
+    - server: "beta"
+      tool: "pong"

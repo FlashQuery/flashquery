@@ -1,0 +1,50 @@
+# Pilot — MTF-I-001: Invocation — a macro reads a list-valued input_var
+id: mtf-i-522-input-var-list-payload
+name: Invocation — a macro reads a list-valued input_var
+intent: |
+  The caller supplies a list as an input_var; the macro consumes it per the per-invocation contract.
+
+covers:
+  - MTF-I-001
+  - MTF-I-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  items = input_var "items"
+  n = count $items
+  exit { n: $n }
+
+input_vars:
+  items: [1, 2, 3, 4]
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    n: 4
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    n: 4
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

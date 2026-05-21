@@ -1,0 +1,56 @@
+# Pilot — MTF-D dispatch: Dispatch — CallToolResult coercion path 4 (raw string)
+id: mtf-d-889-dispatch-raw-string
+name: Dispatch — CallToolResult coercion path 4 (raw string)
+intent: |
+  A brokered tool returns text content that is NOT JSON; the engine binds the raw string (REQ-106 path 4).
+
+covers:
+  - MTF-D-007
+  - MTF-D-001
+  - MTF-D-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  v = raw_srv.emit({})
+  exit { v: $v }
+
+input_vars: {}
+vault: {}
+
+tools:
+  raw_srv:
+    archetype: ReadOnlyTool
+    tool_name: emit
+    returns: "plain raw payload"
+
+predicted_expect:
+  outcome: success
+  return_result:
+    v: "plain raw payload"
+  side_effects:
+    tool_call_count: 1
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    v: "plain raw payload"
+  side_effects:
+    tool_call_count: 1
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "raw_srv"
+      tool: "emit"

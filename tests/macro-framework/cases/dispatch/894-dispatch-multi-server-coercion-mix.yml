@@ -1,0 +1,77 @@
+# Pilot — MTF-D dispatch: Dispatch — three servers exercising structured / JSON-text / raw coercion
+id: mtf-d-894-dispatch-multi-server-coercion-mix
+name: Dispatch — three servers exercising structured / JSON-text / raw coercion
+intent: |
+  Three brokered servers return three different CallToolResult shapes; the macro binds all three.
+
+covers:
+  - MTF-D-002
+  - MTF-D-005
+  - MTF-D-006
+  - MTF-D-007
+  - MTF-D-001
+  - MTF-D-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:40:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  s = a_srv.go({})
+  j = b_srv.go({})
+  r = c_srv.go({})
+  exit { s: $s, j: $j, r: $r }
+
+input_vars: {}
+vault: {}
+
+tools:
+  a_srv:
+    archetype: StructuredContentTool
+    tool_name: go
+    value: {"shape": "structured"}
+  b_srv:
+    archetype: JSONTextTool
+    tool_name: go
+    value: {"shape": "json_text"}
+  c_srv:
+    archetype: ReadOnlyTool
+    tool_name: go
+    returns: "raw text out"
+
+predicted_expect:
+  outcome: success
+  return_result:
+    s: {"shape": "structured"}
+    j: {"shape": "json_text"}
+    r: "raw text out"
+  side_effects:
+    tool_call_count: 3
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    s: {"shape": "structured"}
+    j: {"shape": "json_text"}
+    r: "raw text out"
+  side_effects:
+    tool_call_count: 3
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "a_srv"
+      tool: "go"
+    - server: "b_srv"
+      tool: "go"
+    - server: "c_srv"
+      tool: "go"

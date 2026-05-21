@@ -1,0 +1,80 @@
+# Pilot — MTF-L-001: Lifecycle — dry-run inventory with input_var contract and dedup
+id: mtf-l-510-dry-run-contract-and-dedup
+name: Lifecycle — dry-run inventory with input_var contract and dedup
+intent: |
+  Dry-run reports the input_var contract and a deduplicated tool/server inventory; a repeated tool reference appears once.
+
+covers:
+  - MTF-L-001
+  - MTF-L-003
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:50:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  topic = input_var "topic"
+  limit = input_var "limit" --default 5
+  a = svc.query({ q: $topic })
+  b = svc.query({ q: $topic, n: $limit })
+  c = other.fetch({})
+  exit { ok: true }
+
+input_vars:
+  topic: "demo"
+vault: {}
+
+tools:
+  svc:
+    archetype: ReadOnlyTool
+    tool_name: query
+    returns: {}
+  other:
+    archetype: ReadOnlyTool
+    tool_name: fetch
+    returns: {}
+
+dry_run: true
+
+predicted_expect:
+  outcome: success
+  dry_run_inventory:
+    input_var_contract:
+      required: ["topic"]
+      optional: [{"key": "limit", "default": 5}]
+    tool_references:
+      - "other.fetch"
+      - "svc.query"
+    server_references:
+      - "other"
+      - "svc"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  dry_run_inventory:
+    input_var_contract:
+      required: ["topic"]
+      optional: [{"key": "limit", "default": 5}]
+    tool_references:
+      - "other.fetch"
+      - "svc.query"
+    server_references:
+      - "other"
+      - "svc"
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

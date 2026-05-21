@@ -1,0 +1,46 @@
+# Pilot — REQ-043 + INV-06: `sed -i` is rejected at parse-time pre-scan.
+id: mtf-e-890-shell-sed-in-place-forbidden
+name: Errors — `sed -i` rejected at pre-scan (forbidden_shell_flag)
+intent: |
+  `sed -i` (in-place edit) is a forbidden shell flag — pre-scan rejects it.
+description: |
+  Per REQ-043 §6.6.3 + INV-06, the in-place-edit flag `sed -i` MUST be
+  rejected at parse-time pre-scan, before any execution. The envelope is
+  `forbidden_shell_flag` with `details.verb`, `details.flag`, and a reason.
+  Statements below MUST NOT execute — no partial side effects.
+covers: [MTF-E-007]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = sed -i "s/alpha/beta/" "/notes/lines.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/lines.txt": "alpha\nbeta\ngamma\n"
+expect:
+  outcome: error
+  error:
+    code: forbidden_shell_flag
+    details:
+      verb: sed
+      flag: "-i"
+predicted_expect:
+  outcome: error
+  error:
+    code: forbidden_shell_flag
+    details:
+      verb: sed
+      flag: "-i"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: []
+  captured_tool_calls: []

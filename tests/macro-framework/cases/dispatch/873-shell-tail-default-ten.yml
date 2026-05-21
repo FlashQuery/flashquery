@@ -1,0 +1,38 @@
+# Pilot — REQ-038 tail default: returns last 10 lines.
+id: mtf-d-873-shell-tail-default-ten
+name: Dispatch — `tail` default returns last 10 lines
+intent: |
+  Without the -n flag, tail returns the last 10 lines (POSIX default).
+description: |
+  Per REQ-038 §6.5.1, the default `tail <file>` returns the last 10
+  lines. For a 20-line file, this yields lines 11-20.
+covers: [MTF-D-010]
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T16:30:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  r = tail "/notes/twenty.txt"
+  exit { r: $r }
+input_vars: {}
+vault:
+  "/notes/twenty.txt": "l01\nl02\nl03\nl04\nl05\nl06\nl07\nl08\nl09\nl10\nl11\nl12\nl13\nl14\nl15\nl16\nl17\nl18\nl19\nl20\n"
+expect:
+  outcome: success
+  return_result:
+    r: ["l11", "l12", "l13", "l14", "l15", "l16", "l17", "l18", "l19", "l20"]
+predicted_expect:
+  outcome: success
+  return_result:
+    r: ["l11", "l12", "l13", "l14", "l15", "l16", "l17", "l18", "l19", "l20"]
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []

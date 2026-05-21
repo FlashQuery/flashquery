@@ -1,0 +1,60 @@
+id: mtf-s-1281-string-interpolation-forms
+name: Grammar — $var, ${var}, and $var.field interpolation
+intent: |
+  Double-quoted strings interpolate $var, ${var}, and $var.field forms (REQ-022).
+
+covers:
+  - MTF-G-001
+  - MTF-G-004
+  - MTF-G-005
+  - MTF-G-006
+
+golden_version: "0.3.0"
+golden_run_at: 2026-05-20T17:30:00Z
+
+deps: []
+require_embedding: false
+require_git: false
+
+macro: |
+  # string interpolation forms
+  who = "Ada"
+  plain = "hello, $who"
+  braced = "name is ${who}"
+  person = { first: "Grace", year: 1906 }
+  field = "born $person.year"
+  exit { plain: $plain, braced: $braced, field: $field, who: $who }
+
+input_vars: {}
+vault: {}
+tools: {}
+
+predicted_expect:
+  outcome: success
+  return_result:
+    plain: "hello, Ada"
+    braced: "name is Ada"
+    field: "born 1906"
+    who: "Ada"
+  side_effects:
+    tool_call_count: 0
+
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-20T18:25:48Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+expect:
+  outcome: success
+  return_result:
+    plain: "hello, Ada"
+    braced: "name is Ada"
+    field: "born 1906"
+    who: "Ada"
+  side_effects:
+    tool_call_count: 0
+golden_snapshot:
+  captured_trace_kinds: ["exit"]
+  captured_tool_calls: []
