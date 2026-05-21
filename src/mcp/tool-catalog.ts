@@ -1,4 +1,5 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { z } from 'zod';
 import type { NativeToolDefinition, NativeToolHandler } from '../llm/tool-registry.js';
 import type { ToolMeta } from '../services/tool-search/tool-meta.js';
 import { getToolMetadata } from './tool-metadata.js';
@@ -17,6 +18,19 @@ type ToolCatalogOptions = {
 const toolCatalogs = new WeakMap<McpServer, NativeToolDefinition[]>();
 const wrappedServers = new WeakSet<McpServer>();
 const uncatalogedRegisterTool = new WeakMap<McpServer, RegisterToolFunction>();
+
+function injectNativeHelpSchema(inputSchema: unknown): unknown {
+  if (inputSchema instanceof z.ZodObject) {
+    return inputSchema.extend({ help: z.boolean().optional() });
+  }
+  if (inputSchema instanceof z.ZodType) {
+    return inputSchema;
+  }
+  if (typeof inputSchema === 'object' && inputSchema !== null && !Array.isArray(inputSchema)) {
+    return { ...inputSchema, help: z.boolean().optional() };
+  }
+  return { help: z.boolean().optional() };
+}
 
 export function createNativeToolCatalog(): NativeToolDefinition[] {
   return [];
@@ -45,19 +59,23 @@ export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalo
     const registeredConfig = metadataDescription === undefined
       ? config
       : { ...config, description: metadataDescription };
+    const nativeConfig = {
+      ...registeredConfig,
+      inputSchema: injectNativeHelpSchema(registeredConfig.inputSchema),
+    };
     const handler: NativeToolHandler = async (args, context) => {
       return await (cb as NativeToolHandler)(args, context);
     };
     catalog.push({
       name,
-      description: registeredConfig.description ?? '',
-      inputSchema: registeredConfig.inputSchema ?? {},
+      description: nativeConfig.description ?? '',
+      inputSchema: nativeConfig.inputSchema ?? {},
       handler,
     });
     if (options.hostEnabledToolNames && !options.hostEnabledToolNames.has(name)) {
       return undefined;
     }
-    return originalRegisterTool(name, registeredConfig, cb as never);
+    return originalRegisterTool(name, nativeConfig, cb as never);
   }) as RegisterToolFunction;
 
   wrappedServers.add(server);

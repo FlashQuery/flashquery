@@ -11,6 +11,8 @@ export default defineConfig({
       'tests/integration/llm-config-sync.test.ts',
       'tests/integration/tool-registry.test.ts',
       'tests/integration/archive-document-lock.test.ts',
+      'tests/integration/supabase-schema-verify.test.ts',
+      'tests/integration/template-tools.integration.test.ts',
       'tests/integration/macro-parse-error.test.ts',
       'tests/integration/macro-shell-verbs.integration.test.ts',
       'tests/integration/macro-tool-dispatch.test.ts',

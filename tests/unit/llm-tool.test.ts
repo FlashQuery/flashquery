@@ -2159,11 +2159,12 @@ describe('call_model handler — discovery resolvers (U-DISC)', () => {
         hard_excluded: [],
         unknown: [],
       });
-      expect(purpose.template_tools).toEqual([]);
+      expect('template_tools' in purpose).toBe(false);
       expect(purpose.template_tool_warnings).toEqual([]);
       expect(purpose.template_tool_conflicts).toEqual([]);
       expect(purpose.dangling_template_paths).toEqual([]);
     }
+    expect(payload).toMatchObject({ template_tools: [] });
   });
 
   it('[ATL-U-16] list_purposes includes the public usage block with every resolver', async () => {
@@ -2752,8 +2753,7 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
     const result = await handler({ resolver: 'list_purposes' });
     const payload = JSON.parse(result.content[0].text);
 
-    expect(payload.purposes[0]).toMatchObject({
-      name: 'reviewer',
+    expect(payload).toMatchObject({
       template_tools: expect.arrayContaining([
         expect.objectContaining({
           name: 'flashquery_skill_research_skill',
@@ -2766,8 +2766,12 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
           template_path: 'Templates/Document Review.md',
         }),
       ]),
+    });
+    expect(payload.purposes[0]).toMatchObject({
+      name: 'reviewer',
       template_tool_conflicts: expect.any(Array),
     });
+    expect(payload.purposes[0]).not.toHaveProperty('template_tools');
   });
 
   it('search exposes resolved purpose metadata including template diagnostics', async () => {
@@ -2810,12 +2814,6 @@ describe('call_model handler — ATL-U-15 template tool discovery metadata', () 
     expect(payload.results.purposes).toEqual([
       expect.objectContaining({
         name: 'template_reviewer',
-        template_tools: expect.arrayContaining([
-          expect.objectContaining({
-            name: 'flashquery_skill_research_skill',
-            template_path: 'Templates/Research-Skill.md',
-          }),
-        ]),
         template_tool_conflicts: [],
       }),
     ]);

@@ -14,6 +14,7 @@ import { propagateFqcIdChange } from './plugin-propagation.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
 import { FM } from '../constants/frontmatter-fields.js';
+import { extractTemplateMeta } from '../llm/template-meta.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // scanMutex — DCP-03: serializes concurrent runScanOnce() calls
@@ -161,6 +162,11 @@ interface DbRow {
   title: string;
   status: string;
   updated_at: string;
+  template_meta?: Record<string, unknown> | null;
+}
+
+function templateMetaChanged(current: unknown, next: unknown): boolean {
+  return JSON.stringify(current ?? null) !== JSON.stringify(next ?? null);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,7 +295,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   // re-marked missing — the SCAN-04 loop only acts on active rows.
   const { data: allDbDocs, error: dbDocsError } = await (supabase
     .from('fqc_documents')
-    .select('id, path, content_hash, title, status, updated_at')
+    .select('id, path, content_hash, title, status, updated_at, template_meta')
     .eq('instance_id', instanceId)
     .in('status', ['active', 'missing']) as unknown as Promise<{ data: DbRow[] | null; error: unknown }>);
 
@@ -367,7 +373,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   // Load archived rows so IDC-04 can detect archived-UUID collisions without a blind INSERT
   const { data: archivedDocs } = await (supabase
     .from('fqc_documents')
-    .select('id, path, content_hash, status, updated_at')
+    .select('id, path, content_hash, status, updated_at, template_meta')
     .eq('instance_id', instanceId)
     .eq('status', 'archived') as unknown as Promise<{ data: DbRow[] | null; error: unknown }>);
 
@@ -584,6 +590,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
 
       const fqcOwner = typeof frontmatter[FM.OWNER] === 'string' ? (frontmatter[FM.OWNER] as string) : null;
       const fqcType = typeof frontmatter[FM.TYPE] === 'string' ? (frontmatter[FM.TYPE] as string) : null;
+      const templateMeta = extractTemplateMeta(frontmatter);
 
       const dbRowByHash = hashToRow.get(H);
 
@@ -601,9 +608,13 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
           // IDC-01: Restore missing → active for unchanged file that reappeared
           if (dbRowByHash.status === 'missing') {
             await supabase.from('fqc_documents')
-              .update({ status: 'active', updated_at: now })
+              .update({ status: 'active', template_meta: templateMeta, updated_at: now })
               .eq('id', dbRowByHash.id);
             logger.info(`[IDC-01] restored missing -> active: "${relativePath}" (fqc_id=${dbRowByHash.id})`);
+          } else if (templateMetaChanged(dbRowByHash.template_meta, templateMeta)) {
+            await supabase.from('fqc_documents')
+              .update({ template_meta: templateMeta, updated_at: now })
+              .eq('id', dbRowByHash.id);
           }
           // File completely unchanged — track and skip
           seenFqcIds.add(dbRowByHash.id);
@@ -630,6 +641,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             content_hash: H,  // pre-write hash (file as-is on disk)
             created_at: (frontmatter[FM.CREATED] as string) || now,
             updated_at: now,
+            template_meta: templateMeta,
             needs_frontmatter_repair: true,
             ownership_plugin_id: fqcOwner,
             ownership_type: fqcType,
@@ -692,6 +704,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             .from('fqc_documents')
             .update({
               path: relativePath,
+              template_meta: templateMeta,
               updated_at: now,
               status: dbRowByHash.status === 'missing' ? 'active' : dbRowByHash.status,
             })
@@ -740,6 +753,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             updated_at: now,
             ownership_plugin_id: fqcOwner,
             ownership_type: fqcType,
+            template_meta: templateMeta,
           };
           if (dbRowById.path !== relativePath) {
             const originalAbsPath = `${vaultRoot}/${dbRowById.path}`;
@@ -759,6 +773,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
                 content_hash: H,  // pre-write hash (file as-is on disk)
                 created_at: (frontmatter[FM.CREATED] as string) || now,
                 updated_at: now,
+                template_meta: templateMeta,
                 needs_frontmatter_repair: true,
                 ownership_plugin_id: fqcOwner,
                 ownership_type: fqcType,
@@ -859,10 +874,14 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             // and do not count as new (the file was always tracked, just archived).
             if (archivedIdToRow.has(Y)) {
               const archivedRow = archivedIdToRow.get(Y)!;
-              if (archivedRow.path !== relativePath || archivedRow.content_hash !== H) {
+              if (
+                archivedRow.path !== relativePath ||
+                archivedRow.content_hash !== H ||
+                templateMetaChanged(archivedRow.template_meta, templateMeta)
+              ) {
                 await supabase
                   .from('fqc_documents')
-                  .update({ path: relativePath, content_hash: H, updated_at: now })
+                  .update({ path: relativePath, content_hash: H, template_meta: templateMeta, updated_at: now })
                   .eq('id', Y);
               }
               seenFqcIds.add(Y);
@@ -880,6 +899,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               content_hash: H,
               created_at: (frontmatter[FM.CREATED] as string) || now,
               updated_at: now,
+              template_meta: templateMeta,
               ownership_plugin_id: fqcOwner,
               ownership_type: fqcType,
             });
@@ -925,6 +945,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
                 content_hash: H,  // pre-write hash (file as-is on disk)
                 updated_at: now,
                 status: (frontmatter[FM.STATUS] as string) || dbRowByPath.status,
+                template_meta: templateMeta,
                 needs_frontmatter_repair: true,
                 ownership_plugin_id: fqcOwner,
                 ownership_type: fqcType,
@@ -969,6 +990,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             content_hash: H,  // pre-write hash (file as-is on disk)
             created_at: (frontmatter[FM.CREATED] as string) || now,
             updated_at: now,
+            template_meta: templateMeta,
             needs_frontmatter_repair: true,
             ownership_plugin_id: fqcOwner,
             ownership_type: fqcType,

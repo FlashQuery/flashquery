@@ -9,6 +9,10 @@ import {
 } from './tool-registry.js';
 import {
   assembleTemplateToolRegistry,
+  collectTemplateRegistryBoundPaths,
+  loadTemplateCandidatesForRegistry,
+  type TemplateCandidateBinding,
+  type TemplateDocumentCandidate,
   type TemplateToolDiagnostics,
   type TemplateToolRuntimeBinding,
 } from './template-tools.js';
@@ -22,6 +26,12 @@ interface DiscoveryBuildOptions {
   config: FlashQueryConfig;
   nativeToolCatalog: NativeToolDefinition[];
   runtimeTemplateBindings: TemplateToolRuntimeBinding[];
+}
+
+interface DiscoveryTemplateCandidateSet {
+  responseMode: 'permissive' | 'restrictive';
+  allCandidates: TemplateDocumentCandidate[];
+  boundByPurpose: Map<string, TemplateCandidateBinding[]>;
 }
 
 const EMPTY_NATIVE_DIAGNOSTICS = {
@@ -102,7 +112,12 @@ function modelToResponse(config: FlashQueryConfig, model: LlmModel, providersByN
   return entry;
 }
 
-async function purposeToResponse(options: DiscoveryBuildOptions, purpose: LlmPurpose): Promise<Record<string, unknown>> {
+async function purposeToResponse(
+  options: DiscoveryBuildOptions,
+  purpose: LlmPurpose,
+  candidateSet: DiscoveryTemplateCandidateSet
+): Promise<Record<string, unknown>> {
+  const responseMode = candidateSet.responseMode;
   const modelsByName = modelLookup(options.config);
   const primaryName = purpose.models[0];
   const primary = primaryName ? modelsByName.get(primaryName) : undefined;
@@ -119,6 +134,7 @@ async function purposeToResponse(options: DiscoveryBuildOptions, purpose: LlmPur
     runtimeBindings: options.runtimeTemplateBindings,
     nativeToolNames: nativeRegistry.nativeToolNames,
     strictTools,
+    templateCandidates: candidatesForPurpose(candidateSet, purpose.name),
   });
   const mergedRegistry = mergeModelVisibleToolRegistries({
     native: nativeRegistry,
@@ -133,11 +149,13 @@ async function purposeToResponse(options: DiscoveryBuildOptions, purpose: LlmPur
     output_cost_per_million: primary?.costPerMillion.output ?? 0,
     native_tools: mergedRegistry.nativeToolNames,
     native_tool_diagnostics: toNativeToolDiagnostics(nativeRegistry.diagnostics),
-    template_tools: templateDiagnostics.template_tools ?? [],
     template_tool_warnings: templateDiagnostics.template_tool_warnings ?? [],
     template_tool_conflicts: templateDiagnostics.template_tool_conflicts ?? [],
     dangling_template_paths: templateDiagnostics.dangling_template_paths ?? [],
   };
+  if (responseMode === 'restrictive') {
+    entry['template_tools'] = templateDiagnostics.template_tools ?? [];
+  }
   if (purpose.defaults !== undefined) entry['defaults'] = purpose.defaults;
   return entry;
 }
@@ -148,9 +166,63 @@ export function buildListModelsContent(config: FlashQueryConfig): Record<string,
   return { models };
 }
 
+function candidatesForPurpose(
+  candidateSet: DiscoveryTemplateCandidateSet,
+  purposeName: string
+): TemplateDocumentCandidate[] {
+  if (candidateSet.responseMode === 'permissive') return candidateSet.allCandidates;
+  const boundPaths = new Set((candidateSet.boundByPurpose.get(purposeName) ?? []).map((entry) => entry.templatePath));
+  return candidateSet.allCandidates.filter((candidate) => boundPaths.has(candidate.templatePath));
+}
+
+async function loadDiscoveryTemplateCandidateSet(options: DiscoveryBuildOptions): Promise<DiscoveryTemplateCandidateSet> {
+  const responseMode = options.config.templates?.defaultAccess === 'restrictive' ? 'restrictive' : 'permissive';
+  const boundByPurpose = new Map<string, TemplateCandidateBinding[]>();
+  const boundByPath = new Map<string, TemplateCandidateBinding>();
+  for (const purpose of options.config.llm?.purposes ?? []) {
+    const bound = collectTemplateRegistryBoundPaths({
+      config: options.config,
+      purposeName: purpose.name,
+      runtimeBindings: options.runtimeTemplateBindings,
+    });
+    boundByPurpose.set(purpose.name, bound);
+    for (const entry of bound) {
+      boundByPath.set(entry.templatePath, entry);
+    }
+  }
+  const allCandidates = await loadTemplateCandidatesForRegistry({
+    config: options.config,
+    access: responseMode,
+    bound: [...boundByPath.values()],
+  });
+  return { responseMode, allCandidates, boundByPurpose };
+}
+
 export async function buildListPurposesContent(options: DiscoveryBuildOptions): Promise<Record<string, unknown>> {
-  const purposes = await Promise.all((options.config.llm?.purposes ?? []).map((purpose) => purposeToResponse(options, purpose)));
-  return { purposes, usage: buildCallModelUsageContent() };
+  const candidateSet = await loadDiscoveryTemplateCandidateSet(options);
+  const responseMode = candidateSet.responseMode;
+  const purposes = await Promise.all((options.config.llm?.purposes ?? []).map((purpose) =>
+    purposeToResponse(options, purpose, candidateSet)
+  ));
+  const content: Record<string, unknown> = { purposes, usage: buildCallModelUsageContent() };
+  if (responseMode === 'permissive') {
+    const templateToolsByName = new Map<string, unknown>();
+    for (const purpose of options.config.llm?.purposes ?? []) {
+      const nativeRegistry = assembleNativeToolRegistry(options.config, purpose.name, options.nativeToolCatalog);
+      const templateRegistry = await assembleTemplateToolRegistry({
+        config: options.config,
+        purposeName: purpose.name,
+        runtimeBindings: options.runtimeTemplateBindings,
+        nativeToolNames: nativeRegistry.nativeToolNames,
+        templateCandidates: candidateSet.allCandidates,
+      });
+      for (const tool of templateRegistry.diagnostics.template_tools) {
+        templateToolsByName.set(tool.name, tool);
+      }
+    }
+    content['template_tools'] = [...templateToolsByName.values()];
+  }
+  return content;
 }
 
 function lowerSearchText(value: unknown): string {

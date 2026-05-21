@@ -23,6 +23,22 @@ export async function tableExists(client: pg.Client, tableName: string): Promise
   return (result.rows[0] as Record<string, unknown>)['?column?'] === true;
 }
 
+export async function columnExists(client: pg.Client, tableName: string, columnName: string): Promise<boolean> {
+  const result = await client.query(
+    `
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = $1
+        AND column_name = $2
+    )
+    `,
+    [tableName, columnName]
+  );
+  return (result.rows[0] as Record<string, unknown>).exists === true;
+}
+
 /**
  * Verifies that all required FlashQuery tables exist in the database.
  *
@@ -73,5 +89,21 @@ export async function verifySchema(client: pg.Client): Promise<void> {
 
   if (missingTables.length > 0) {
     throw new Error(`Missing required tables after DDL: [${missingTables.join(', ')}]`);
+  }
+
+  const requiredColumns: Array<{ table: string; column: string }> = [
+    { table: 'fqc_documents', column: 'template_meta' },
+  ];
+  const missingColumns: string[] = [];
+
+  for (const required of requiredColumns) {
+    const exists = await columnExists(client, required.table, required.column);
+    if (!exists) {
+      missingColumns.push(`${required.table}.${required.column}`);
+    }
+  }
+
+  if (missingColumns.length > 0) {
+    throw new Error(`Missing required columns after DDL: [${missingColumns.join(', ')}]`);
   }
 }

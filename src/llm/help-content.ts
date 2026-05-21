@@ -172,7 +172,7 @@ export function buildCallModelHelpContent(options: CallModelHelpOptions = {}): R
           'purposes',
           'native_tools',
           'native_tool_diagnostics',
-          'template_tools',
+          'template_tools (top-level in permissive mode, per-purpose in restrictive mode)',
           'template_tool_warnings',
           'template_tool_conflicts',
           'dangling_template_paths',

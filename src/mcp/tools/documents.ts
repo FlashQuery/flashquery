@@ -45,6 +45,7 @@ import {
 import { validateVaultPath } from '../utils/path-validation.js';
 import { pluginManager, getFolderClaimsMap } from '../../plugins/manager.js';
 import { FM } from '../../constants/frontmatter-fields.js';
+import { extractTemplateMeta } from '../../llm/template-meta.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal types
@@ -505,6 +506,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             tags: deduplicated,
             content_hash: contentHash,
             status: 'active',
+            template_meta: extractTemplateMeta(fm),
             embedding: null,
           };
           const { error: insertError } = await supabase.from('fqc_documents').insert(insertPayload);
@@ -605,6 +607,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             tags: effectiveTags,
             content_hash: postWriteHash,
             path: resolved.relativePath,
+            template_meta: extractTemplateMeta(fm),
             updated_at: new Date().toISOString(),
           })
           .eq('id', fqcId);
@@ -1413,6 +1416,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           tags: deduplicated,
           content_hash: contentHash,
           status: 'active',
+          template_meta: extractTemplateMeta(copyFm),
           embedding: null,
         });
         if (insertError) {

@@ -3,7 +3,7 @@ import type http from 'node:http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, type CallToolRequest, type CallToolResult, isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import express, { type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { initLogger, logger } from '../logging/logger.js';
@@ -25,6 +25,7 @@ import { createBroker, type Broker } from '../services/mcp-broker.js';
 import { registerHostBrokeredTools } from './host-brokered-tools.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from './tool-catalog.js';
 import { validateAndCacheNativeToolSchemas } from '../llm/tool-registry.js';
+import { dispatchNativeToolCore } from '../llm/native-tool-core.js';
 import { getResolvedHostToolExposure, type FlashQueryConfig } from '../config/loader.js';
 import { assertRegisteredToolsHaveToolMeta, loadToolMetaSync } from '../services/tool-search/tool-meta.js';
 import { ToolSearchService } from '../services/tool-search/tool-search-service.js';
@@ -474,6 +475,103 @@ export interface CreateMcpServerOptions {
 const hostToolSearchServices = new WeakMap<McpServer, ToolSearchService>();
 const hostToolSearchInitializers = new WeakMap<McpServer, Promise<void>>();
 
+type CallToolHandler = (request: CallToolRequest, extra: unknown) => Promise<CallToolResult> | CallToolResult;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function resolveHostSessionId(extra: unknown): string | undefined {
+  if (!isRecord(extra)) return undefined;
+  for (const key of ['sessionId', 'session_id', 'transportSessionId']) {
+    const value = extra[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  for (const key of ['session', 'transport', 'requestInfo']) {
+    const nested = extra[key];
+    if (!isRecord(nested)) continue;
+    const value = nested['id'] ?? nested['sessionId'] ?? nested['session_id'];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return undefined;
+}
+
+function captureSdkCallToolHandler(server: McpServer): {
+  getCapturedSdkHandler: () => CallToolHandler | undefined;
+  setCallToolHandlerWithoutCapture: (handler: CallToolHandler) => void;
+} {
+  let captured: CallToolHandler | undefined;
+  let captureEnabled = true;
+  const originalSetRequestHandler = server.server.setRequestHandler.bind(server.server);
+  const patchedSetRequestHandler: typeof server.server.setRequestHandler = (schema, handler) => {
+    const shape = schema as { shape?: { method?: { value?: unknown } } };
+    if (captureEnabled && shape.shape?.method?.value === 'tools/call') {
+      captured = handler as CallToolHandler;
+    }
+    return originalSetRequestHandler(schema, handler);
+  };
+  server.server.setRequestHandler = patchedSetRequestHandler;
+  return {
+    getCapturedSdkHandler: () => captured,
+    setCallToolHandlerWithoutCapture: (handler) => {
+      captureEnabled = false;
+      try {
+        server.server.setRequestHandler(CallToolRequestSchema, handler);
+      } finally {
+        captureEnabled = true;
+      }
+    },
+  };
+}
+
+function installHostNativeCallToolHandler(input: {
+  server: McpServer;
+  getCapturedSdkHandler: () => CallToolHandler | undefined;
+  setCallToolHandlerWithoutCapture: (handler: CallToolHandler) => void;
+  hostEnabledToolNames: Set<string>;
+  instanceId: string;
+  traceIdProvider?: (extra: unknown) => string | undefined;
+}): void {
+  const catalog = getNativeToolCatalog(input.server);
+  const nativeCatalogNames = new Set(catalog.map((tool) => tool.name));
+  input.setCallToolHandlerWithoutCapture(async (request, extra) => {
+    const toolName = request.params.name;
+    if (!input.hostEnabledToolNames.has(toolName) || !nativeCatalogNames.has(toolName)) {
+      const sdkHandler = input.getCapturedSdkHandler();
+      if (sdkHandler === undefined) {
+        return {
+          content: [{ type: 'text', text: `Tool ${toolName} not found` }],
+          isError: true,
+        };
+      }
+      return await sdkHandler(request, extra);
+    }
+
+    const controller = new AbortController();
+    const result = await dispatchNativeToolCore({
+      toolName,
+      args: request.params.arguments ?? {},
+      catalog,
+      nativeToolNames: [...input.hostEnabledToolNames],
+      wrapHandlerErrors: false,
+      dispatchContext: {
+        ...(isRecord(extra) ? extra : {}),
+        signal: (isRecord(extra) && extra.signal instanceof AbortSignal) ? extra.signal : controller.signal,
+        traceId: input.traceIdProvider?.(extra) ?? resolveHostSessionId(extra),
+        instanceId: input.instanceId,
+        logger,
+        logContext: {},
+      },
+    });
+
+    if (result.payload.ok) return result.payload.result;
+    return {
+      content: [{ type: 'text', text: result.payload.error.message }],
+      isError: true,
+    };
+  });
+}
+
 export function getHostToolSearchServiceForServer(server: McpServer): ToolSearchService | undefined {
   return hostToolSearchServices.get(server);
 }
@@ -484,6 +582,7 @@ export async function initializeHostToolSearchForServer(server: McpServer): Prom
 
 export function createMcpServer(config: FlashQueryConfig, version: string, options: CreateMcpServerOptions = {}): McpServer {
   const server = new McpServer({ name: 'flashquery', version });
+  const { getCapturedSdkHandler, setCallToolHandlerWithoutCapture } = captureSdkCallToolHandler(server);
   const maybeLegacyConfig = config as FlashQueryConfig & { host?: FlashQueryConfig['host'] };
   const hostConfig = maybeLegacyConfig.host ?? { mcpServers: [], toolSearch: 'disabled' as const };
   const hostToolSearchService = ToolSearchService.createEmpty();
@@ -534,6 +633,14 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   const catalog = getNativeToolCatalog(server);
   assertRegisteredToolsHaveToolMeta(catalog, toolMeta);
   validateAndCacheNativeToolSchemas(catalog);
+  installHostNativeCallToolHandler({
+    server,
+    getCapturedSdkHandler,
+    setCallToolHandlerWithoutCapture,
+    hostEnabledToolNames,
+    instanceId: config.instance.id,
+    traceIdProvider: options.hostTraceIdProvider,
+  });
   hostToolSearchServices.set(server, hostToolSearchService);
   hostToolSearchInitializers.set(
     server,

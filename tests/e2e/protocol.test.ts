@@ -21,6 +21,7 @@ import pg from 'pg';
 import { startMcpServerFixture, stopMcpServerFixture } from '../helpers/mcp-server-fixture.js';
 import { cleanupTestRows, setupTestSupabase } from '../helpers/supabase.js';
 import { TEST_DATABASE_URL } from '../helpers/test-env.js';
+import { loadToolMetaSync } from '../../src/services/tool-search/tool-meta.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -93,6 +94,10 @@ function getText(result: { content: Array<{ type: string; text: string }>; isErr
     );
   }
   return first.text;
+}
+
+function normalizeNotFoundText(text: string, toolName: string): string {
+  return text.replaceAll(toolName, '<tool>');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,6 +191,117 @@ describe.sequential('MCP protocol E2E', () => {
       expect(toolNames).not.toContain('force_file_scan');
       expect(toolNames).not.toContain('get_briefing');
       expect(toolNames).not.toContain('insert_doc_link');
+    } finally {
+      if (filteredClient && filteredTransport) {
+        await stopMcpServerFixture(filteredClient, filteredTransport);
+      }
+    }
+  }, 30000);
+
+  it('B/T-E-001 host stdio dispatches a normal native tools/call through the shared core', async () => {
+    const result = await client.callTool({
+      name: 'list_vault',
+      arguments: {},
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBeFalsy();
+    expect(JSON.parse(getText(result))).toMatchObject({
+      path: '/',
+      entries: expect.any(Array),
+    });
+  }, 30000);
+
+  it('B/T-E-002 host stdio returns native .tool.md help for help: true before validation', async () => {
+    const result = await client.callTool({
+      name: 'list_vault',
+      arguments: { help: true, path: 123 },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+    const helpBody = loadToolMetaSync().get('list_vault')?.helpPageBody;
+
+    expect(helpBody).toBeDefined();
+    expect(result.isError).toBeFalsy();
+    expect(getText(result)).toBe(helpBody);
+  }, 30000);
+
+  it('B/T-E-003 host stdio delegates unknown tool calls to the SDK handler', async () => {
+    const result = await client.callTool({
+      name: 'phase_144_unknown_tool',
+      arguments: { help: true },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain('phase_144_unknown_tool');
+    expect(getText(result)).not.toContain('# list_vault');
+  }, 30000);
+
+  it('B/T-E-005 host tools/list advertises optional help on every native tool schema', async () => {
+    const { tools } = await client.listTools();
+    const nativeToolNames = [
+      'get_memory',
+      'write_memory',
+      'archive_memory',
+      'get_document',
+      'search',
+      'write_document',
+      'copy_document',
+      'move_document',
+      'archive_document',
+      'write_record',
+      'remove_document',
+      'manage_directory',
+      'maintain_vault',
+      'get_briefing',
+      'insert_doc_link',
+      'list_vault',
+      'call_model',
+      'call_macro',
+      'get_llm_usage',
+      'search_tools',
+    ];
+
+    for (const tool of tools.filter((entry: { name: string }) => nativeToolNames.includes(entry.name))) {
+      const inputSchema = tool.inputSchema as { properties?: Record<string, unknown>; required?: string[] };
+      expect(inputSchema.properties?.help, `${tool.name} help schema`).toMatchObject({ type: 'boolean' });
+      expect(inputSchema.required ?? [], `${tool.name} required schema`).not.toContain('help');
+    }
+  }, 30000);
+
+  it('B/T-E-006 host malformed native arguments return the help footer', async () => {
+    const result = await client.callTool({
+      name: 'list_vault',
+      arguments: { path: 123 },
+    }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+    expect(result.isError).toBe(true);
+    expect(getText(result)).toContain('For full documentation, examples, and parameter details, call `list_vault` with `help: true`.');
+  }, 30000);
+
+  it('B/T-E-007/B/T-E-008 host help for a non-exposed native tool is indistinguishable from unknown', async () => {
+    let filteredClient: Client | undefined;
+    let filteredTransport: StdioClientTransport | undefined;
+    const hiddenTool = 'write_memory';
+    const unknownTool = 'phase_144_unknown_tool';
+
+    try {
+      const fixture = await startMcpServerFixture({ configPath: HOST_FILTERED_FIXTURE_PATH });
+      filteredClient = fixture.client;
+      filteredTransport = fixture.transport;
+
+      const hidden = await filteredClient.callTool({
+        name: hiddenTool,
+        arguments: { help: true },
+      }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+      const unknown = await filteredClient.callTool({
+        name: unknownTool,
+        arguments: { help: true },
+      }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
+
+      expect(hidden.isError).toBe(true);
+      expect(unknown.isError).toBe(true);
+      expect(getText(hidden)).not.toBe(loadToolMetaSync().get(hiddenTool)?.helpPageBody);
+      expect(normalizeNotFoundText(getText(hidden), hiddenTool)).toBe(
+        normalizeNotFoundText(getText(unknown), unknownTool)
+      );
     } finally {
       if (filteredClient && filteredTransport) {
         await stopMcpServerFixture(filteredClient, filteredTransport);

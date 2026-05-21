@@ -1,7 +1,8 @@
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import matter from 'gray-matter';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
 type TemplateToolsModule = {
@@ -24,6 +25,16 @@ async function writeDoc(vaultPath: string, relPath: string, frontmatter: Record<
     .map(([key, value]) => `${key}: ${JSON.stringify(value)}`)
     .join('\n');
   await writeFile(path, `---\n${yaml}\n---\n\n${body}`);
+}
+
+async function candidateFromFile(vaultPath: string, relPath: string, source?: string): Promise<Record<string, unknown>> {
+  const parsed = matter(await readFile(join(vaultPath, relPath), 'utf8'));
+  return {
+    templatePath: relPath,
+    body: parsed.content,
+    frontmatter: parsed.data,
+    ...(source === undefined ? {} : { source }),
+  };
 }
 
 function makeConfig(vaultPath: string, defaultAccess: 'permissive' | 'restrictive', templates?: string[]): FlashQueryConfig {
@@ -74,7 +85,11 @@ describe('ATL-I-03 template discovery through real vault files', () => {
     }, 'Research {{topic}}');
 
     const config = makeConfig(vaultPath, 'permissive');
-    const first = await assembleTemplateToolRegistry({ config, purposeName: 'researcher' });
+    const first = await assembleTemplateToolRegistry({
+      config,
+      purposeName: 'researcher',
+      templateCandidates: [await candidateFromFile(vaultPath, 'Templates/Research-Skill.md')],
+    });
     await writeDoc(vaultPath, 'Templates/Research-Skill.md', {
       fq_template: true,
       fq_expose_as_tool: true,
@@ -82,7 +97,11 @@ describe('ATL-I-03 template discovery through real vault files', () => {
       fq_desc: 'Fresh v2',
       fq_params: { topic: { type: 'string', required: true } },
     }, 'Research {{topic}}');
-    const second = await assembleTemplateToolRegistry({ config, purposeName: 'researcher' });
+    const second = await assembleTemplateToolRegistry({
+      config,
+      purposeName: 'researcher',
+      templateCandidates: [await candidateFromFile(vaultPath, 'Templates/Research-Skill.md')],
+    });
 
     expect(first.providerTools?.[0].function).toMatchObject({
       name: 'flashquery_skill_research_skill',
@@ -106,14 +125,17 @@ describe('ATL-I-03 template discovery through real vault files', () => {
     const permissive = await assembleTemplateToolRegistry({
       config: makeConfig(vaultPath, 'permissive'),
       purposeName: 'researcher',
+      templateCandidates: [await candidateFromFile(vaultPath, 'Templates/Weekly Checklist.md')],
     });
     const restrictiveWithoutBinding = await assembleTemplateToolRegistry({
       config: makeConfig(vaultPath, 'restrictive'),
       purposeName: 'researcher',
+      templateCandidates: [],
     });
     const restrictiveWithBinding = await assembleTemplateToolRegistry({
       config: makeConfig(vaultPath, 'restrictive', ['Templates/Weekly Checklist.md']),
       purposeName: 'researcher',
+      templateCandidates: [await candidateFromFile(vaultPath, 'Templates/Weekly Checklist.md', 'yaml')],
     });
 
     expect(permissive.providerTools?.map((tool) => tool.function.name)).toContain('flashquery_template_weekly_checklist');
@@ -137,6 +159,7 @@ describe('ATL-I-03 template discovery through real vault files', () => {
       runtimeBindings: [
         { purpose_name: 'researcher', template_path: 'Templates/Runtime Skill.md', source: 'api' },
       ],
+      templateCandidates: [await candidateFromFile(vaultPath, 'Templates/Document Review.md', 'yaml')],
     });
 
     expect(registry.providerTools?.map((tool) => tool.function.name)).toContain('flashquery_review_document_review');

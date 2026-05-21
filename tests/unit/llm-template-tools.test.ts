@@ -148,6 +148,53 @@ describe('ATL-U-15 template masquerade name generation and discovery contracts',
     expect(JSON.stringify(registry.diagnostics)).toContain('unsupported_template_param_schema');
   });
 
+  it('silently skips ordinary non-template documents without not_template diagnostics', async () => {
+    const { assembleTemplateToolRegistry } = await loadTemplateTools();
+    const assembleWithPlainDocs = async (plainDocCount: number) => {
+      const vaultPath = await mkdtemp(join(tmpdir(), `fqc-template-tools-silent-skip-${plainDocCount}-`));
+      for (let index = 0; index < plainDocCount; index += 1) {
+        await writeTemplate(vaultPath, `Notes/Plain-${index}.md`, {
+          title: `Plain note ${index}`,
+          status: 'active',
+        }, 'Plain document body');
+      }
+      await writeTemplate(vaultPath, 'Templates/Missing Desc.md', {
+        fq_template: true,
+        fq_expose_as_tool: true,
+        fq_namespace: 'skill',
+      }, 'Misconfigured template body');
+      await writeTemplate(vaultPath, 'Templates/Valid.md', {
+        fq_template: true,
+        fq_expose_as_tool: true,
+        fq_namespace: 'skill',
+        fq_desc: 'Valid template',
+      }, 'Template body');
+
+      return await assembleTemplateToolRegistry({
+        config: {
+          instance: { id: 'unit', vault: { path: vaultPath, markdownExtensions: ['.md'] } },
+          templates: { defaultAccess: 'permissive' },
+          llm: { purposes: [{ name: 'researcher', description: 'Researcher', models: ['fast'] }] },
+        },
+        purposeName: 'researcher',
+      });
+    };
+
+    const onePlainDoc = await assembleWithPlainDocs(1);
+    const fiftyPlainDocs = await assembleWithPlainDocs(50);
+
+    expect(onePlainDoc.diagnostics.template_tool_warnings).toHaveLength(1);
+    expect(fiftyPlainDocs.diagnostics.template_tool_warnings).toHaveLength(1);
+    expect(fiftyPlainDocs.diagnostics.template_tool_warnings.length).toBe(
+      onePlainDoc.diagnostics.template_tool_warnings.length
+    );
+    expect(JSON.stringify(fiftyPlainDocs.diagnostics)).toContain('missing_description');
+    expect(JSON.stringify(fiftyPlainDocs.diagnostics)).not.toContain('not_template');
+    expect(JSON.stringify(fiftyPlainDocs.diagnostics)).not.toContain('Notes/Plain-');
+    expect(fiftyPlainDocs.providerTools?.map((tool) => tool.function.name)).toEqual(['flashquery_skill_valid']);
+    expect(fiftyPlainDocs.templateReverseMap.get('flashquery_skill_valid')).toBe('Templates/Valid.md');
+  });
+
   it('builds provider schemas, fresh descriptions, and explicit reverse maps from current frontmatter', async () => {
     const { assembleTemplateToolRegistry } = await loadTemplateTools();
     const vaultPath = await mkdtemp(join(tmpdir(), 'fqc-template-tools-fresh-'));

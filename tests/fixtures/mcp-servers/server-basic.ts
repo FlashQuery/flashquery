@@ -37,6 +37,18 @@ server.registerTool(
 );
 
 server.registerTool(
+  'help_probe',
+  {
+    description: 'Returns whether the upstream fixture received help: true.',
+    inputSchema: z.object({ help: z.boolean().optional() }),
+  },
+  async ({ help }) => ({
+    content: [{ type: 'text', text: JSON.stringify({ help: help === true }) }],
+    structuredContent: { help: help === true },
+  })
+);
+
+server.registerTool(
   'crash',
   {
     description: 'Terminates the fixture process after acknowledging the call.',

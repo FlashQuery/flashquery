@@ -78,6 +78,7 @@ export interface AssembleTemplateToolRegistryOptions {
   runtimeBindings?: TemplateToolRuntimeBinding[];
   nativeToolNames?: readonly string[];
   strictTools?: boolean;
+  templateCandidates?: TemplateDocumentCandidate[];
 }
 
 export interface DispatchTemplateToolCallOptions {
@@ -107,11 +108,16 @@ export interface DispatchTemplateToolCallResult {
   logEntry: TemplateToolCallLogEntry;
 }
 
-interface TemplateDocumentCandidate {
+export interface TemplateDocumentCandidate {
   templatePath: string;
   body: string;
   frontmatter: Record<string, unknown>;
   source?: string;
+}
+
+export interface TemplateCandidateBinding {
+  templatePath: string;
+  source: string;
 }
 
 const TEMPLATE_TOOL_PREFIX = 'flashquery';
@@ -256,6 +262,49 @@ async function discoverAllTemplateCandidates(config: FlashQueryConfig): Promise<
   return candidates.filter((candidate): candidate is TemplateDocumentCandidate => candidate !== null);
 }
 
+async function loadIndexedTemplateCandidates(
+  config: FlashQueryConfig,
+  options: { access: 'permissive' | 'restrictive'; bound: Array<{ templatePath: string; source: string }> }
+): Promise<TemplateDocumentCandidate[]> {
+  let supabase: ReturnType<typeof supabaseManager.getClient>;
+  try {
+    supabase = supabaseManager.getClient();
+  } catch (error) {
+    logger.warn(`template discovery index unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    return [];
+  }
+  let query = supabase
+    .from('fqc_documents')
+    .select('path, template_meta')
+    .eq('instance_id', config.instance.id)
+    .eq('status', 'active');
+
+  if (options.access === 'permissive') {
+    query = query.filter('template_meta->>fq_template', 'eq', 'true');
+  } else {
+    const paths = options.bound.map((entry) => entry.templatePath);
+    if (paths.length === 0) return [];
+    query = query.in('path', paths);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    logger.warn(`template discovery index query failed: ${error.message}`);
+    return [];
+  }
+
+  const sourceByPath = new Map(options.bound.map((entry) => [entry.templatePath, entry.source]));
+  return (data ?? []).flatMap((row: { path?: unknown; template_meta?: unknown }) => {
+    if (typeof row.path !== 'string' || !isRecord(row.template_meta)) return [];
+    return [{
+      templatePath: normalizeTemplatePath(row.path),
+      body: '',
+      frontmatter: row.template_meta,
+      source: sourceByPath.get(normalizeTemplatePath(row.path)),
+    }];
+  });
+}
+
 function bindingPath(binding: TemplateToolRuntimeBinding): string | null {
   const raw = binding.template_path ?? binding.templatePath;
   return typeof raw === 'string' ? normalizeTemplatePath(raw) : null;
@@ -266,21 +315,44 @@ function bindingPurpose(binding: TemplateToolRuntimeBinding): string | null {
   return typeof raw === 'string' ? raw : null;
 }
 
-function collectBoundTemplatePaths(options: AssembleTemplateToolRegistryOptions): Array<{ templatePath: string; source: string }> {
-  const purpose = options.config.llm?.purposes.find((candidate) =>
-    candidate.name.toLowerCase() === options.purposeName.toLowerCase()
+export function collectTemplateRegistryBoundPaths(input: {
+  config: FlashQueryConfig;
+  purposeName: string;
+  runtimeBindings?: TemplateToolRuntimeBinding[];
+}): TemplateCandidateBinding[] {
+  const purpose = input.config.llm?.purposes.find((candidate) =>
+    candidate.name.toLowerCase() === input.purposeName.toLowerCase()
   );
   const byPath = new Map<string, string>();
   for (const path of purpose?.templates ?? []) {
     byPath.set(normalizeTemplatePath(path), 'yaml');
   }
-  for (const binding of options.runtimeBindings ?? []) {
-    if (bindingPurpose(binding)?.toLowerCase() !== options.purposeName.toLowerCase()) continue;
+  for (const binding of input.runtimeBindings ?? []) {
+    if (bindingPurpose(binding)?.toLowerCase() !== input.purposeName.toLowerCase()) continue;
     const templatePath = bindingPath(binding);
     if (templatePath === null) continue;
     byPath.set(templatePath, binding.source ?? 'api');
   }
   return [...byPath.entries()].map(([templatePath, source]) => ({ templatePath, source }));
+}
+
+export async function loadTemplateCandidatesForRegistry(input: {
+  config: FlashQueryConfig;
+  access: 'permissive' | 'restrictive';
+  bound: TemplateCandidateBinding[];
+}): Promise<TemplateDocumentCandidate[]> {
+  if ('supabase' in input.config) {
+    return await loadIndexedTemplateCandidates(input.config, {
+      access: input.access,
+      bound: input.bound,
+    });
+  }
+  if (input.access === 'permissive') {
+    return await discoverAllTemplateCandidates(input.config);
+  }
+  return (await Promise.all(input.bound.map(async (entry) =>
+    await readTemplateCandidate(input.config, entry.templatePath, entry.source)
+  ))).filter((candidate): candidate is TemplateDocumentCandidate => candidate !== null);
 }
 
 function templateParamSchema(
@@ -348,31 +420,35 @@ function templateProviderSchema(
 
 function validateTemplateCandidate(
   candidate: TemplateDocumentCandidate
-): { toolName?: string; warning?: { code: string; message: string }; schema?: Record<string, unknown> } {
+): (
+  | { kind: 'skip' }
+  | { kind: 'warning'; warning: { code: string; message: string } }
+  | { kind: 'tool'; toolName: string; schema: Record<string, unknown> }
+) {
   const frontmatter = candidate.frontmatter;
   if (frontmatter.fq_template !== true) {
-    return { warning: { code: 'not_template', message: 'Document is not an fq_template template' } };
+    return { kind: 'skip' };
   }
   if (frontmatter.fq_expose_as_tool !== true) {
-    return { warning: { code: 'not_exposed', message: 'Template is missing fq_expose_as_tool: true' } };
+    return { kind: 'warning', warning: { code: 'not_exposed', message: 'Template is missing fq_expose_as_tool: true' } };
   }
   const namespace = typeof frontmatter.fq_namespace === 'string' ? frontmatter.fq_namespace : DEFAULT_NAMESPACE;
   if (!NAMESPACE_PATTERN.test(namespace)) {
-    return { warning: { code: 'invalid_namespace', message: `Invalid fq_namespace '${namespace}'` } };
+    return { kind: 'warning', warning: { code: 'invalid_namespace', message: `Invalid fq_namespace '${namespace}'` } };
   }
   const description = frontmatter.fq_desc;
   if (typeof description !== 'string' || description.trim().length === 0) {
-    return { warning: { code: 'missing_description', message: 'Template is missing fq_desc' } };
+    return { kind: 'warning', warning: { code: 'missing_description', message: 'Template is missing fq_desc' } };
   }
   const toolName = generateTemplateToolName({ namespace, path: candidate.templatePath });
   if (toolName === null) {
-    return { warning: { code: 'invalid_tool_name', message: 'Template filename produced an invalid provider tool name' } };
+    return { kind: 'warning', warning: { code: 'invalid_tool_name', message: 'Template filename produced an invalid provider tool name' } };
   }
   const params = templateParamSchema(frontmatter.fq_params);
   if (params.error !== undefined) {
-    return { warning: { code: 'unsupported_template_param_schema', message: params.error } };
+    return { kind: 'warning', warning: { code: 'unsupported_template_param_schema', message: params.error } };
   }
-  return { toolName, schema: params.schema };
+  return { kind: 'tool', toolName, schema: params.schema };
 }
 
 function addConflict(
@@ -400,13 +476,13 @@ export async function assembleTemplateToolRegistry(
     : { ...(maybeOptions ?? {}), config: optionsOrConfig as FlashQueryConfig, purposeName: purposeName ?? '' };
   const diagnostics = emptyDiagnostics();
   const access = options.config.templates?.defaultAccess ?? 'permissive';
-  const bound = collectBoundTemplatePaths(options);
+  const bound = collectTemplateRegistryBoundPaths(options);
   const boundByPath = new Map(bound.map((entry) => [entry.templatePath, entry.source]));
-  const candidates = access === 'permissive'
-    ? await discoverAllTemplateCandidates(options.config)
-    : (await Promise.all(bound.map(async (entry) =>
-        await readTemplateCandidate(options.config, entry.templatePath, entry.source)
-      ))).filter((candidate): candidate is TemplateDocumentCandidate => candidate !== null);
+  const candidates = options.templateCandidates ?? await loadTemplateCandidatesForRegistry({
+    config: options.config,
+    access,
+    bound,
+  });
 
   for (const binding of bound) {
     if (!candidates.some((candidate) => candidate.templatePath === binding.templatePath)) {
@@ -424,11 +500,14 @@ export async function assembleTemplateToolRegistry(
   for (const candidate of candidates) {
     const source = candidate.source ?? boundByPath.get(candidate.templatePath);
     const validation = validateTemplateCandidate(candidate);
-    if (validation.warning !== undefined || validation.toolName === undefined || validation.schema === undefined) {
+    if (validation.kind === 'skip') {
+      continue;
+    }
+    if (validation.kind === 'warning') {
       diagnostics.template_tool_warnings.push({
         template_path: candidate.templatePath,
-        code: validation.warning?.code ?? 'invalid_template_tool',
-        message: validation.warning?.message ?? 'Template cannot be exposed as a model-visible tool',
+        code: validation.warning.code,
+        message: validation.warning.message,
         ...(source === undefined ? {} : { source }),
       });
       continue;

@@ -330,10 +330,15 @@ function coerceMacroValue(value: unknown): MacroValue {
   if (Array.isArray(value)) {
     return value.map(coerceMacroValue);
   }
-  if (typeof value === 'object') {
+  if (value !== null && typeof value === 'object') {
     return coerceMacroRecord(value as Record<string, unknown>);
   }
-  return String(value);
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'boolean' || typeof value === 'bigint') {
+    return value.toString();
+  }
+  if (typeof value === 'symbol') return value.description ?? '';
+  return '';
 }
 
 export async function runMacroSource(options: RunMacroSourceOptions): Promise<RunMacroSourceResult> {
@@ -472,6 +477,7 @@ function createNativeDispatchContext(config: FlashQueryConfig, signal?: AbortSig
     signal: signal ?? new AbortController().signal,
     instanceId: config.instance.id,
     ...(traceId === undefined ? {} : { traceId }),
+    logger,
     logContext: { tool: 'call_macro' },
   };
 }

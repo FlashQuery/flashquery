@@ -197,12 +197,21 @@ describe('TOOL_TIERS', () => {
     expect(catalog[0]).toMatchObject({
       name: 'get_document',
       description: expect.stringContaining('Summary: Read one or more vault documents'),
-      inputSchema,
+      inputSchema: expect.objectContaining({
+        identifier: inputSchema.identifier,
+        help: expect.any(Object),
+      }),
     });
     expect(catalog[0].handler).toEqual(expect.any(Function));
     expect(originalRegisterTool).toHaveBeenCalledWith(
       'get_document',
-      { description: expect.stringContaining('Summary: Read one or more vault documents'), inputSchema },
+      {
+        description: expect.stringContaining('Summary: Read one or more vault documents'),
+        inputSchema: expect.objectContaining({
+          identifier: inputSchema.identifier,
+          help: expect.any(Object),
+        }),
+      },
       handler
     );
 

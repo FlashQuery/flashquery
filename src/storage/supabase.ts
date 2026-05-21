@@ -373,6 +373,9 @@ ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS needs_frontmatter_r
 -- Phase 123: archive_document lifecycle timestamp (DOC-02)
 ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ;
 
+-- Phase 144: indexed template metadata for bounded template discovery
+ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS template_meta JSONB;
+
 -- Phase 88: Remove push-notification infrastructure (LEGACY-07)
 DROP TABLE IF EXISTS fqc_change_queue;
 ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS watcher_claims;

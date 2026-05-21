@@ -105,15 +105,18 @@ describe('verifySchema', () => {
 
   it('verifies all 11 required tables exist including fqc_purpose_templates for ATL-I-01', async () => {
     // All tables exist
-    mockQuery.mockResolvedValue({
-      rows: [{ '?column?': true }],
+    mockQuery.mockImplementation((sql: string) => {
+      if (sql.includes('information_schema.columns')) {
+        return Promise.resolve({ rows: [{ exists: true }] });
+      }
+      return Promise.resolve({ rows: [{ '?column?': true }] });
     });
 
     // Should not throw
     await expect(verifySchema(mockClient)).resolves.toBeUndefined();
 
-    // Verify that tableExists was called 11 times (once per table)
-    expect(mockQuery).toHaveBeenCalledTimes(11);
+    // Verify that tableExists was called 11 times, plus one required-column check.
+    expect(mockQuery).toHaveBeenCalledTimes(12);
   });
 
   it('throws error listing missing tables when one table is missing', async () => {
@@ -178,8 +181,11 @@ describe('verifySchema', () => {
   });
 
   it('checks tables in the correct order', async () => {
-    mockQuery.mockResolvedValue({
-      rows: [{ '?column?': true }],
+    mockQuery.mockImplementation((sql: string) => {
+      if (sql.includes('information_schema.columns')) {
+        return Promise.resolve({ rows: [{ exists: true }] });
+      }
+      return Promise.resolve({ rows: [{ '?column?': true }] });
     });
 
     await verifySchema(mockClient);

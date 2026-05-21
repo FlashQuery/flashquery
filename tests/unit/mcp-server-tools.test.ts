@@ -19,6 +19,7 @@ import { registerLlmTools } from '../../src/mcp/tools/llm.js';
 import { registerLlmUsageTools } from '../../src/mcp/tools/llm-usage.js';
 import { registerMacroTools } from '../../src/mcp/tools/macro.js';
 import { getNativeToolCatalog, wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
+import { initLogger } from '../../src/logging/logger.js';
 import {
   assertRegisteredToolsHaveMetadata,
   requireToolMetadata,
@@ -50,8 +51,19 @@ const mockConfig: FlashQueryConfig = {
   macro: { defaultTimeoutMs: 60000 },
 };
 
+initLogger(mockConfig);
+
 function makeCatalogServer(): McpServer {
   return wrapServerWithToolCatalog(new McpServer({ name: 'test', version: '0.1.0' }));
+}
+
+function makeMacroDispatchContext(signal = new AbortController().signal, instanceId = 'macro-unit-test'): Record<string, unknown> {
+  return {
+    signal,
+    instanceId,
+    logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    logContext: {},
+  };
 }
 
 function registerAllCurrentTools(server: McpServer): void {
@@ -198,7 +210,7 @@ describe('MCP tool registration metadata', () => {
     const callMacro = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro');
     expect(callMacro).toBeDefined();
 
-    const result = await callMacro?.handler({ source: 'exit "hello"' }, {} as never);
+    const result = await callMacro?.handler({ source: 'exit "hello"' }, makeMacroDispatchContext() as never);
     expect(result?.isError).toBeUndefined();
     expect(JSON.parse(result?.content[0]?.text ?? '')).toMatchObject({
       result: 'hello',
@@ -255,12 +267,13 @@ describe('MCP tool registration metadata', () => {
       templates: { defaultAccess: 'permissive' },
       hostMcpTools: { tools: ['call_macro'] },
     } as FlashQueryConfig;
+    delete (config as Partial<FlashQueryConfig>).supabase;
     registerMacroTools(server, config);
 
     const callMacro = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro');
     const result = await callMacro?.handler({
       source: 'exit fq.flashquery_skill_research_skill({ topic: "dispatch" })',
-    }, { signal: new AbortController().signal, instanceId: config.instance.id } as never);
+    }, makeMacroDispatchContext(new AbortController().signal, config.instance.id) as never);
 
     expect(result?.isError).toBeFalsy();
     expect(JSON.parse(result?.content[0]?.text ?? '')).toMatchObject({
@@ -289,7 +302,7 @@ describe('MCP tool registration metadata', () => {
     const callMacro = getNativeToolCatalog(server).find((tool) => tool.name === 'call_macro');
     const result = await callMacro?.handler(
       { source: 'exit fq.search({})' },
-      { signal: requestController.signal, instanceId: 'macro-signal-test' } as never
+      makeMacroDispatchContext(requestController.signal, 'macro-signal-test') as never
     );
 
     expect(JSON.parse(result?.content[0]?.text ?? '')).toMatchObject({ result: { ok: true } });

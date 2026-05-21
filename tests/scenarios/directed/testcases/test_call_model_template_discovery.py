@@ -130,22 +130,25 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 "Plain document body",
             )
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
+            sync_result = client.call_tool("maintain_vault", action="sync")
             result = client.call_tool("call_model", resolver="list_purposes")
             payload = json.loads(result.text or "{}") if result.ok else {}
             purpose = next((p for p in payload.get("purposes", []) if p.get("name") == "researcher"), {})
-            tools = purpose.get("template_tools", [])
+            tools = payload.get("template_tools", [])
             passed = (
                 result.ok
+                and sync_result.ok
                 and any(t.get("name") == "flashquery_skill_research_skill" and t.get("template_path") == "Templates/Research-Skill.md" and "parameters" in t for t in tools)
                 and any(t.get("name") == "flashquery_template_weekly_checklist" and t.get("description") == "Weekly checklist" for t in tools)
                 and not any(t.get("template_path") == "Templates/Hidden Skill.md" for t in tools)
                 and not any(t.get("template_path") == "Docs/Plain.md" for t in tools)
+                and "template_tools" not in purpose
                 and isinstance(purpose.get("template_tool_conflicts"), list)
             )
             run.step(
                 "ATL-DS-07 list_purposes exposes template_tools name/template_path/description/parameters",
                 passed,
-                json.dumps({"purpose": purpose, "provider_requests": provider.requests}, sort_keys=True)[:3000],
+                json.dumps({"purpose": purpose, "template_tools": tools, "sync_ok": sync_result.ok, "provider_requests": provider.requests}, sort_keys=True)[:3000],
                 tool_result=result,
             )
     return run

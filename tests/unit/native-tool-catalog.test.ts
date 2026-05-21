@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { assembleNativeToolRegistry } from '../../src/llm/tool-registry.js';
 import { createMcpServer } from '../../src/mcp/server.js';
-import { getNativeToolCatalog } from '../../src/mcp/tool-catalog.js';
+import { getNativeToolCatalog, registerUncatalogedTool, wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
 
 function makeConfig(): FlashQueryConfig {
   return {
@@ -102,5 +103,41 @@ describe('native tool catalog capture', () => {
     expect(catalog.find((tool) => tool.name === 'get_document')?.description).toBe(
       'Read one or more vault documents with include-gated bodies, frontmatter, headings, sections, and frontmatter references. Pass {help: true} for full help.'
     );
+  });
+
+  it('injects optional boolean help into native catalog schemas', () => {
+    const config = makeConfig();
+    const server = createMcpServer(config, 'test');
+    const catalog = getNativeToolCatalog(server);
+    const getDocument = catalog.find((tool) => tool.name === 'get_document');
+
+    expect(getDocument).toBeDefined();
+    const schema = getDocument?.inputSchema as Record<string, unknown> | undefined;
+    expect(schema).toHaveProperty('help');
+    expect((schema?.help as z.ZodType).safeParse(true).success).toBe(true);
+    expect((schema?.help as z.ZodType).safeParse('true').success).toBe(false);
+  });
+
+  it('does not inject native help schema into uncataloged brokered tool registrations', () => {
+    const registered: Array<{ name: string; config: { inputSchema?: Record<string, unknown> } }> = [];
+    const server = wrapServerWithToolCatalog({
+      registerTool: vi.fn((name: string, config: { inputSchema?: Record<string, unknown> }) => {
+        registered.push({ name, config });
+        return undefined;
+      }),
+    } as unknown as Parameters<typeof wrapServerWithToolCatalog>[0]);
+
+    registerUncatalogedTool(
+      server,
+      'upstream__remote_tool',
+      { inputSchema: { value: z.string() } },
+      vi.fn()
+    );
+
+    expect(registered).toHaveLength(1);
+    expect(registered[0].name).toBe('upstream__remote_tool');
+    expect(registered[0].config.inputSchema).toHaveProperty('value');
+    expect(registered[0].config.inputSchema).not.toHaveProperty('help');
+    expect(getNativeToolCatalog(server).map((tool) => tool.name)).not.toContain('upstream__remote_tool');
   });
 });

@@ -23,6 +23,7 @@ import {
   getBrokeredToolCallTraceSnapshot,
 } from '../../src/services/mcp-broker/trace.js';
 import { createBroker } from '../../src/services/mcp-broker.js';
+import { loadToolMetaSync } from '../../src/services/tool-search/tool-meta.js';
 
 const MCP_ACCEPT = 'application/json, text/event-stream';
 const INSTANCE_ID = `mcp-broker-e2e-${randomUUID().slice(0, 8)}`;
@@ -519,6 +520,40 @@ describe('Phase B MCP broker E2E', () => {
         decision: 'approve',
       })
     );
+  });
+});
+
+describe('Help convention brokered host-path E2E', () => {
+  it('B/T-E-004 returns native help: true over the streamable-HTTP host transport', async () => {
+    const messages = await callTool(300, 'call_macro', { help: true, source: 123 });
+    const response = responseById(messages, 300);
+    const result = response['result'] as Record<string, unknown>;
+    const content = result['content'] as Array<Record<string, unknown>>;
+
+    expect(result['isError']).not.toBe(true);
+    expect(String(content[0]?.['text'] ?? '')).toBe(loadToolMetaSync().get('call_macro')?.helpPageBody);
+  });
+
+  it('B/T-E-009 forwards brokered help: true upstream unchanged on the host path', async () => {
+    const messages = await callTool(301, 'basic__help_probe', { help: true });
+    const response = responseById(messages, 301);
+    const result = response['result'] as Record<string, unknown>;
+    const content = result['content'] as Array<Record<string, unknown>>;
+
+    expect(result['isError']).not.toBe(true);
+    expect(JSON.parse(String(content[0]?.['text'] ?? '{}'))).toEqual({ help: true });
+  });
+
+  it('B/T-E-010 returns brokered errors unwrapped without the native help footer', async () => {
+    const messages = await callTool(302, 'basic__slow', { ms: 'not-a-number' });
+    const response = responseById(messages, 302);
+    const error = response['error'] as Record<string, unknown> | undefined;
+    const result = response['result'] as Record<string, unknown> | undefined;
+    const serialized = JSON.stringify(error ?? result ?? response);
+
+    expect(error ?? result).toBeDefined();
+    expect(serialized).not.toContain('For full documentation, examples, and parameter details');
+    expect(serialized).not.toContain('help: true');
   });
 });
 

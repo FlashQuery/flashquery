@@ -1,7 +1,7 @@
-import { z } from 'zod';
 import type { LlmChatToolCall, LlmToolMessage } from './types.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { dispatchTemplateToolCall, type TemplateToolReverseMap } from './template-tools.js';
+import { appendNativeHelpFooter, dispatchNativeToolCore, type NativeToolCorePayload } from './native-tool-core.js';
 import {
   formatToolError,
   parseRegistryKey,
@@ -9,11 +9,9 @@ import {
   type Broker,
   type ConsumerContext,
 } from '../services/mcp-broker/index.js';
-import { loadToolMeta, type ToolMeta } from '../services/tool-search/tool-meta.js';
 import type {
   NativeToolDefinition,
   NativeToolDispatchContext,
-  NativeToolResponse,
 } from './tool-registry.js';
 
 export type { NativeToolDispatchContext } from './tool-registry.js';
@@ -72,55 +70,12 @@ export interface DispatchToolCallsResult {
   logEntries: Array<NativeToolCallLogEntry | Awaited<ReturnType<typeof dispatchTemplateToolCall>>['logEntry']>;
 }
 
-interface ToolErrorPayload {
-  ok: false;
-  error: {
-    code: string;
-    message: string;
-    recoverable: true;
-    details?: unknown;
-  };
-}
-
-interface ToolSuccessPayload {
-  ok: true;
-  result: NativeToolResponse;
-}
-
-let toolMetaCache: Promise<Map<string, ToolMeta>> | null = null;
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function toCatalogMap(catalog: NativeToolDefinition[] | Map<string, NativeToolDefinition>): Map<string, NativeToolDefinition> {
-  if (catalog instanceof Map) return catalog;
-  return new Map(catalog.map((tool) => [tool.name, tool]));
-}
-
-function toZodObjectSchema(inputSchema: unknown): z.ZodObject<z.ZodRawShape> {
-  if (inputSchema instanceof z.ZodObject) return inputSchema;
-  if (inputSchema instanceof z.ZodType) {
-    throw new Error('Tool inputSchema must be a Zod object schema.');
-  }
-  if (isRecord(inputSchema)) return z.object(inputSchema as z.ZodRawShape);
-  throw new Error('Tool inputSchema must be a raw Zod shape object or Zod object schema.');
-}
-
-function stringifyPayload(payload: ToolSuccessPayload | ToolErrorPayload): string {
+function stringifyPayload(payload: NativeToolCorePayload): string {
   return JSON.stringify(payload);
 }
 
 function summarize(content: string): string {
   return content.length > 500 ? `${content.slice(0, 500)}...` : content;
-}
-
-function getAbortCode(signal: AbortSignal): string {
-  const reason = signal.reason as unknown;
-  if (reason === 'timeout' || reason === 'shutdown') return reason;
-  if (reason instanceof Error && /timeout/i.test(reason.message)) return 'timeout';
-  if (reason instanceof Error && /shutdown/i.test(reason.message)) return 'shutdown';
-  return 'shutdown';
 }
 
 function makeToolMessage(toolCall: LlmChatToolCall, content: string): LlmToolMessage {
@@ -134,7 +89,7 @@ function makeToolMessage(toolCall: LlmChatToolCall, content: string): LlmToolMes
 function makeLogEntry(
   toolCall: LlmChatToolCall,
   args: Record<string, unknown>,
-  payload: ToolSuccessPayload | ToolErrorPayload,
+  payload: NativeToolCorePayload,
   content: string,
   kind: NativeToolCallLogEntry['kind'] = 'native'
 ): NativeToolCallLogEntry {
@@ -156,25 +111,6 @@ function makeLogEntry(
 
 function makeTemplateReverseMap(options: DispatchToolCallsOptions): TemplateToolReverseMap {
   return options.templateReverseMap ?? new Map<string, string>();
-}
-
-async function getLoadedToolMeta(): Promise<Map<string, ToolMeta>> {
-  toolMetaCache ??= loadToolMeta();
-  return await toolMetaCache;
-}
-
-function isNativeHelpRequest(args: Record<string, unknown>): boolean {
-  return args.help === true;
-}
-
-function nativeHelpFooter(toolName: string): string {
-  return `For full documentation, examples, and parameter details, call \`${toolName}\` with \`help: true\`.`;
-}
-
-function appendNativeHelpFooter(message: string, toolName: string): string {
-  const footer = nativeHelpFooter(toolName);
-  if (message.includes(footer)) return message;
-  return `${message}\n\n${footer}`;
 }
 
 async function dispatchOneToolCall(
@@ -254,7 +190,7 @@ async function dispatchBrokeredToolCall(
       return dispatchError(toolCall, args, normalized.kind, normalized.message, undefined, 'brokered');
     }
 
-    const payload: ToolSuccessPayload = { ok: true, result: { content: result.content } };
+    const payload: NativeToolCorePayload = { ok: true, result: { content: result.content } };
     const content = stringifyPayload(payload);
     return {
       message: makeToolMessage(toolCall, content),
@@ -266,7 +202,7 @@ async function dispatchBrokeredToolCall(
   }
 }
 
-function errorPayload(code: string, message: string, details?: unknown): ToolErrorPayload {
+function errorPayload(code: string, message: string, details?: unknown): NativeToolCorePayload {
   return {
     ok: false,
     error: {
@@ -310,84 +246,18 @@ export async function dispatchNativeToolCall(options: DispatchNativeToolCallOpti
   const dispatchContext = resolveContext(options);
   const toolName = options.toolCall.function.name;
   const args = options.toolCall.function.arguments;
-  const nativeToolNames = new Set(options.nativeToolNames);
-  const catalogByName = toCatalogMap(options.catalog);
-
-  if (dispatchContext.signal.aborted) {
-    const code = getAbortCode(dispatchContext.signal);
-    return dispatchError(options.toolCall, args, code, `Native tool dispatch aborted before invoking '${toolName}'.`);
-  }
-
-  if (!nativeToolNames.has(toolName)) {
-    return dispatchError(
-      options.toolCall,
-      args,
-      'tool_not_in_registry',
-      `Tool '${toolName}' is not available in the immutable native tool registry snapshot.`
-    );
-  }
-
-  const tool = catalogByName.get(toolName);
-  if (!tool) {
-    return dispatchError(options.toolCall, args, 'tool_not_in_registry', `Tool '${toolName}' is not in the native catalog.`);
-  }
-
-  if (isNativeHelpRequest(args)) {
-    const toolMeta = await getLoadedToolMeta();
-    const meta = toolMeta.get(toolName);
-    if (meta) {
-      const result: NativeToolResponse = { content: [{ type: 'text', text: meta.helpPageBody }] };
-      const payload: ToolSuccessPayload = { ok: true, result };
-      const content = stringifyPayload(payload);
-      return {
-        message: makeToolMessage(options.toolCall, content),
-        logEntry: makeLogEntry(options.toolCall, args, payload, content),
-      };
-    }
-  }
-
-  let parsedArgs: Record<string, unknown>;
-  try {
-    parsedArgs = toZodObjectSchema(tool.inputSchema).parse(args);
-  } catch (error: unknown) {
-    return dispatchError(
-      options.toolCall,
-      args,
-      'invalid_tool_arguments',
-      `Arguments for native tool '${toolName}' failed validation.`,
-      error instanceof z.ZodError ? z.treeifyError(error) : String(error)
-    );
-  }
-
-  if (dispatchContext.signal.aborted) {
-    const code = getAbortCode(dispatchContext.signal);
-    return dispatchError(options.toolCall, parsedArgs, code, `Native tool dispatch aborted before invoking '${toolName}'.`);
-  }
-
-  try {
-    const result = await tool.handler(parsedArgs, dispatchContext);
-    if (dispatchContext.signal.aborted) {
-      const code = getAbortCode(dispatchContext.signal);
-      return dispatchError(options.toolCall, parsedArgs, code, `Native tool dispatch aborted while invoking '${toolName}'.`);
-    }
-    if (result.isError === true) {
-      return dispatchError(options.toolCall, parsedArgs, 'handler_error', `Native tool '${toolName}' returned an error response.`, result);
-    }
-
-    const payload: ToolSuccessPayload = { ok: true, result };
-    const content = stringifyPayload(payload);
-    return {
-      message: makeToolMessage(options.toolCall, content),
-      logEntry: makeLogEntry(options.toolCall, parsedArgs, payload, content),
-    };
-  } catch (error: unknown) {
-    return dispatchError(
-      options.toolCall,
-      parsedArgs,
-      'handler_error',
-      error instanceof Error ? error.message : String(error)
-    );
-  }
+  const result = await dispatchNativeToolCore({
+    toolName,
+    args,
+    catalog: options.catalog,
+    nativeToolNames: options.nativeToolNames,
+    dispatchContext,
+  });
+  const content = stringifyPayload(result.payload);
+  return {
+    message: makeToolMessage(options.toolCall, content),
+    logEntry: makeLogEntry(options.toolCall, result.args, result.payload, content),
+  };
 }
 
 export async function dispatchToolCalls(options: DispatchToolCallsOptions): Promise<DispatchToolCallsResult> {

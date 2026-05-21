@@ -80,6 +80,16 @@ describe('buildSchemaDDL', () => {
     expect(ddl).toContain('content_hash TEXT');
   });
 
+  it('adds idempotent template_meta JSONB without per-template-field columns', () => {
+    const ddl = buildSchemaDDL(1536);
+    expect(ddl).toContain('ALTER TABLE IF EXISTS fqc_documents ADD COLUMN IF NOT EXISTS template_meta JSONB');
+    expect(ddl).not.toContain('ADD COLUMN IF NOT EXISTS fq_template');
+    expect(ddl).not.toContain('ADD COLUMN IF NOT EXISTS fq_expose_as_tool');
+    expect(ddl).not.toContain('ADD COLUMN IF NOT EXISTS fq_namespace');
+    expect(ddl).not.toContain('ADD COLUMN IF NOT EXISTS fq_desc');
+    expect(ddl).not.toContain('ADD COLUMN IF NOT EXISTS fq_params');
+  });
+
   it('creates fqc_documents indexes including HNSW and instance_path unique index', () => {
     const ddl = buildSchemaDDL(1536);
     expect(ddl).toContain('idx_fqc_documents_embedding');
