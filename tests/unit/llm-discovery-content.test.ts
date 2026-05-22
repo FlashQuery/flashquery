@@ -2,6 +2,18 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
 const queryCount = vi.hoisted(() => ({ value: 0 }));
+const indexedRows = vi.hoisted(() => ({
+  value: [{
+    path: 'Templates/Research.md',
+    template_meta: {
+      fq_template: true,
+      fq_expose_as_tool: true,
+      fq_namespace: 'template',
+      fq_desc: 'Reusable research template',
+      fq_params: {},
+    },
+  }],
+}));
 
 vi.mock('../../src/logging/logger.js', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
@@ -29,7 +41,7 @@ vi.mock('../../src/storage/supabase.js', () => {
       }),
       in: vi.fn(() => {
         queryCount.value += 1;
-        return Promise.resolve({ data: [], error: null });
+        return Promise.resolve({ data: indexedRows.value, error: null });
       }),
     };
     return query;
@@ -46,7 +58,7 @@ vi.mock('../../src/storage/supabase.js', () => {
   };
 });
 
-function makeConfig(): FlashQueryConfig {
+function makeConfig(defaultAccess: 'permissive' | 'restrictive' = 'permissive'): FlashQueryConfig {
   return {
     instance: {
       id: 'discovery-content-unit',
@@ -63,7 +75,7 @@ function makeConfig(): FlashQueryConfig {
     mcp: { transport: 'stdio' },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'error', output: 'stdout' },
-    templates: { defaultAccess: 'permissive' },
+    templates: { defaultAccess },
     llm: {
       providers: [{ name: 'mock', type: 'openai-compatible', endpoint: 'http://127.0.0.1:1' }],
       models: [{
@@ -75,7 +87,7 @@ function makeConfig(): FlashQueryConfig {
         capabilities: { tool_calling: true },
       }],
       purposes: [
-        { name: 'alpha', description: 'Alpha', models: ['tool-model'] },
+        { name: 'alpha', description: 'Alpha', models: ['tool-model'], templates: ['Templates/Research.md'] },
         { name: 'beta', description: 'Beta', models: ['tool-model'] },
       ],
     },
@@ -85,6 +97,16 @@ function makeConfig(): FlashQueryConfig {
 describe('buildListPurposesContent', () => {
   beforeEach(() => {
     queryCount.value = 0;
+    indexedRows.value = [{
+      path: 'Templates/Research.md',
+      template_meta: {
+        fq_template: true,
+        fq_expose_as_tool: true,
+        fq_namespace: 'template',
+        fq_desc: 'Reusable research template',
+        fq_params: {},
+      },
+    }];
     vi.clearAllMocks();
   });
 
@@ -105,5 +127,23 @@ describe('buildListPurposesContent', () => {
       expect(purpose).not.toHaveProperty('template_tools');
       expect(purpose.template_tool_warnings).toEqual([]);
     }
+  });
+
+  it('keeps restrictive template_tools per purpose on the index-backed path', async () => {
+    const { buildListPurposesContent } = await import('../../src/llm/discovery-content.js');
+
+    const content = await buildListPurposesContent({
+      config: makeConfig('restrictive'),
+      nativeToolCatalog: [],
+      runtimeTemplateBindings: [],
+    });
+
+    expect(queryCount.value).toBe(1);
+    expect(content).not.toHaveProperty('template_tools');
+    const purposes = content.purposes as Array<Record<string, unknown>>;
+    expect(purposes.find((purpose) => purpose.name === 'alpha')?.template_tools).toEqual([
+      expect.objectContaining({ name: 'flashquery_template_research' }),
+    ]);
+    expect(purposes.find((purpose) => purpose.name === 'beta')?.template_tools).toEqual([]);
   });
 });

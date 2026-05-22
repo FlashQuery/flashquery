@@ -13,6 +13,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
+import { mkdirSync } from 'node:fs';
 
 describe('Shutdown E2E', () => {
   let fqcProcess: ChildProcess | null = null;
@@ -25,6 +26,7 @@ describe('Shutdown E2E', () => {
 
   it('should gracefully shutdown on SIGINT within 30 seconds', async () => {
     const configPath = join(process.cwd(), 'tests/fixtures/flashquery.e2e.yaml');
+    mkdirSync(join(process.cwd(), 'vault-e2e'), { recursive: true });
 
     fqcProcess = spawn('node', ['dist/index.js', 'start', '--config', configPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -127,6 +129,7 @@ describe('Shutdown E2E', () => {
 
   it('should gracefully shutdown on SIGTERM', async () => {
     const configPath = join(process.cwd(), 'tests/fixtures/flashquery.e2e.yaml');
+    mkdirSync(join(process.cwd(), 'vault-e2e'), { recursive: true });
 
     fqcProcess = spawn('node', ['dist/index.js', 'start', '--config', configPath], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -174,6 +177,7 @@ describe('Shutdown E2E', () => {
 
   it('should exit within 30 second hard deadline even on timeout', async () => {
     const configPath = join(process.cwd(), 'tests/fixtures/flashquery.e2e.yaml');
+    mkdirSync(join(process.cwd(), 'vault-e2e'), { recursive: true });
 
     fqcProcess = spawn('node', ['dist/index.js', 'start', '--config', configPath], {
       stdio: ['pipe', 'pipe', 'pipe'],

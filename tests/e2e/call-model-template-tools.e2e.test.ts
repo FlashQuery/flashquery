@@ -203,6 +203,8 @@ llm:
   const client = new Client({ name: 'template-tools-e2e', version: '1.0.0' });
   try {
     await client.connect(transport);
+    const sync = await client.callTool({ name: 'maintain_vault', arguments: { action: 'sync' } }) as { isError?: boolean };
+    expect(sync.isError).toBeFalsy();
     return await fn(client, vaultPath);
   } finally {
     await client.close().catch(() => undefined);

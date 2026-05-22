@@ -2,18 +2,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { randomUUID } from 'node:crypto';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { MacroTaskRegistry } from '../../src/macro/task-registry.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { wrapServerWithToolCatalog } from '../../src/mcp/tool-catalog.js';
-import { registerMacroTools, type RegisterMacroToolsResult } from '../../src/mcp/tools/macro.js';
+import { assembleMacroTemplateMetadata, registerMacroTools, type RegisterMacroToolsResult } from '../../src/mcp/tools/macro.js';
 import { NullMcpBroker } from '../../src/services/mcp-broker.js';
 import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
 import { TEST_DATABASE_URL, TEST_SUPABASE_KEY, TEST_SUPABASE_URL } from '../helpers/test-env.js';
 
 const UUID_V4_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-function testConfig(): FlashQueryConfig {
+function testConfig(templateAccess: 'permissive' | 'restrictive' = 'restrictive'): FlashQueryConfig {
   return {
     instance: {
       id: 'macro-call-macro-session-integration',
@@ -28,7 +29,7 @@ function testConfig(): FlashQueryConfig {
     },
     hostMcpTools: { tools: ['call_macro'] },
     llm: { providers: [], models: [], purposes: [] },
-    templates: { defaultAccess: 'restrictive' },
+    templates: { defaultAccess: templateAccess },
   } as FlashQueryConfig;
 }
 
@@ -80,7 +81,58 @@ describe('call_macro public session scoping integration', () => {
   }, 30000);
 
   afterAll(async () => {
+    await supabaseManager.getClient().from('fqc_documents').delete().eq('instance_id', 'macro-call-macro-session-integration');
     await supabaseManager?.close();
+  });
+
+  it('A/T-I-009 assembles macro template metadata from the index without changing the macro surface', async () => {
+    const now = new Date().toISOString();
+    const { error } = await supabaseManager.getClient().from('fqc_documents').insert([
+      {
+        id: randomUUID(),
+        instance_id: 'macro-call-macro-session-integration',
+        path: 'Templates/Macro Skill.md',
+        title: 'Macro Skill',
+        tags: [],
+        content_hash: 'macro-template-hash',
+        status: 'active',
+        created_at: now,
+        updated_at: now,
+        template_meta: {
+          fq_template: true,
+          fq_expose_as_tool: true,
+          fq_namespace: 'macro',
+          fq_desc: 'Macro visible template',
+          fq_params: {},
+        },
+      },
+      ...Array.from({ length: 25 }, (_, index) => ({
+        id: randomUUID(),
+        instance_id: 'macro-call-macro-session-integration',
+        path: `Docs/Plain-${index}.md`,
+        title: `Plain ${index}`,
+        tags: [],
+        content_hash: `macro-plain-${index}`,
+        status: 'active',
+        created_at: now,
+        updated_at: now,
+        template_meta: null,
+      })),
+    ]);
+    expect(error).toBeNull();
+
+    const metadata = await assembleMacroTemplateMetadata({
+      config: testConfig('permissive'),
+      callerContext: { origin: 'host' },
+      catalog: [],
+    });
+
+    expect(metadata.templateToolNames).toEqual(['flashquery_macro_macro_skill']);
+    expect([...metadata.templateReverseMap.entries()]).toEqual([
+      ['flashquery_macro_macro_skill', 'Templates/Macro Skill.md'],
+    ]);
+    expect(JSON.stringify(metadata)).not.toContain('Plain-');
+    expect(JSON.stringify(metadata)).not.toContain('template_tool_warnings');
   });
 
   it('T-I-002b derives public handler session IDs and isolates list_tasks across clients', async () => {

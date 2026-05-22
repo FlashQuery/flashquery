@@ -803,6 +803,10 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | L-101 | `call_model` with `resolver=purpose` walks the purpose's configured model list in order and uses the first later model that succeeds after earlier models fail | test_call_model_fallback | 2026-05-16 | 2026-05-16 |
 | L-102 | `call_model` reports `metadata.fallback_position` as the 1-based index of the successful model in an arbitrary-length purpose fallback chain, not simply whether fallback happened or whether the last model was used | test_call_model_fallback | 2026-05-16 | 2026-05-16 |
 | L-103 | `call_model` returns `isError:true` with an exhausted-chain error listing every attempted model in order when all models in a multi-model purpose fallback chain fail | test_call_model_fallback | 2026-05-16 | 2026-05-16 |
+| L-104 | Phase 144 A/T-S-001: `resolver=list_purposes` with many plain non-template documents returns bounded template discovery metadata with no `not_template` warning flood and no plain-document paths in warnings. | test_call_model_template_discovery | 2026-05-22 | 2026-05-22 |
+| L-105 | Phase 144 A/T-S-002: `resolver=search` matched purpose entries carry no `not_template` warnings or plain-document paths from skipped template discovery candidates. | test_call_model_template_discovery | 2026-05-22 | 2026-05-22 |
+| L-106 | Phase 144 A/T-S-003: `resolver=purpose` public metadata diagnostics omit non-template warnings while preserving genuine template diagnostics when model-visible tools exist. | test_call_model_template_discovery | 2026-05-22 | 2026-05-22 |
+| L-107 | Phase 144 A/T-S-004: discovery search relevance is not polluted by skipped document path text or `not_template`, while genuine template warning text remains searchable. | test_call_model_template_discovery | 2026-05-22 | 2026-05-22 |
 
 ### 15.3 `call_model` — Parameter Handling
 

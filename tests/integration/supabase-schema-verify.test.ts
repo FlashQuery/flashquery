@@ -342,6 +342,51 @@ describe('Schema Verification (Integration)', () => {
     );
   });
 
+  it('Template T-I-001 restores nullable fqc_documents.template_meta JSONB on a pre-column database', async () => {
+    if (!testSupabaseAvailable) {
+      console.log('⏭️  Skipping: Supabase not available');
+      return;
+    }
+
+    const testClient = new pg.Client({ connectionString: TEST_DATABASE_URL });
+    try {
+      await testClient.connect();
+    } catch {
+      console.log('⏭️  Skipping: Cannot connect to database for column migration manipulation');
+      return;
+    }
+
+    try {
+      await testClient.query('ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS template_meta');
+      await initSupabase(loadTestConfig());
+      await expect(verifySchema(client!)).resolves.toBeUndefined();
+
+      const result = await client!.query(
+        `
+        SELECT column_name, is_nullable, data_type
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'fqc_documents'
+          AND column_name = 'template_meta'
+        `
+      );
+
+      expect(result.rows[0]).toEqual(
+        expect.objectContaining({
+          column_name: 'template_meta',
+          is_nullable: 'YES',
+          data_type: 'jsonb',
+        })
+      );
+    } finally {
+      try {
+        await initSupabase(loadTestConfig());
+      } finally {
+        await testClient.end();
+      }
+    }
+  });
+
   it('ATL-I-01 enforces unique fqc_purpose_templates identity by instance, purpose, and template_path', async () => {
     if (!testSupabaseAvailable) {
       console.log('⏭️  Skipping: Supabase not available');

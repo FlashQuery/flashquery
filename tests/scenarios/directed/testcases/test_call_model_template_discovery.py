@@ -21,7 +21,7 @@ from fqc_client import FQCClient  # noqa: E402
 from fqc_test_utils import FQCServer, TestRun  # noqa: E402
 
 TEST_NAME = "test_call_model_template_discovery"
-COVERAGE = ["ATL-DS-07", "VAL-118"]
+COVERAGE = ["ATL-DS-07", "VAL-118", "L-104", "L-105", "L-106", "L-107"]
 
 
 class MockProvider:
@@ -129,12 +129,20 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 "Docs/Plain.md",
                 "Plain document body",
             )
+            for index in range(30):
+                _write_doc(
+                    server.vault_path,
+                    f"Archive/Plain-{index}.md",
+                    f"Archive plain document {index}",
+                )
             client = FQCClient(base_url=server.base_url, auth_secret=server.auth_secret)
             sync_result = client.call_tool("maintain_vault", action="sync")
             result = client.call_tool("call_model", resolver="list_purposes")
             payload = json.loads(result.text or "{}") if result.ok else {}
             purpose = next((p for p in payload.get("purposes", []) if p.get("name") == "researcher"), {})
             tools = payload.get("template_tools", [])
+            serialized_payload = json.dumps(payload, sort_keys=True)
+            warning_text = json.dumps(purpose.get("template_tool_warnings", []), sort_keys=True)
             passed = (
                 result.ok
                 and sync_result.ok
@@ -150,6 +158,88 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 passed,
                 json.dumps({"purpose": purpose, "template_tools": tools, "sync_ok": sync_result.ok, "provider_requests": provider.requests}, sort_keys=True)[:3000],
                 tool_result=result,
+            )
+            run.step(
+                "L-104 list_purposes stays bounded and omits non-template warning flood",
+                (
+                    result.ok
+                    and "not_template" not in serialized_payload
+                    and "Archive/Plain-" not in serialized_payload
+                    and "Docs/Plain.md" not in warning_text
+                    and len(serialized_payload) < 60000
+                ),
+                json.dumps({
+                    "payload_bytes": len(serialized_payload),
+                    "warning_text": warning_text,
+                    "contains_archive_plain": "Archive/Plain-" in serialized_payload,
+                }, sort_keys=True),
+                tool_result=result,
+            )
+
+            search_result = client.call_tool("call_model", resolver="search", parameters={"query": "researcher"})
+            search_payload = json.loads(search_result.text or "{}") if search_result.ok else {}
+            search_text = json.dumps(search_payload, sort_keys=True)
+            run.step(
+                "L-105 search results carry no non-template warning flood",
+                (
+                    search_result.ok
+                    and any(p.get("name") == "researcher" for p in search_payload.get("results", {}).get("purposes", []))
+                    and "not_template" not in search_text
+                    and "Archive/Plain-" not in search_text
+                    and "Docs/Plain.md" not in search_text
+                ),
+                search_text[:3000],
+                tool_result=search_result,
+            )
+
+            purpose_result = client.call_tool(
+                "call_model",
+                resolver="purpose",
+                name="researcher",
+                messages=[{"role": "user", "content": "Phase 144 template diagnostics"}],
+            )
+            purpose_payload = json.loads(purpose_result.text or "{}") if purpose_result.ok else {}
+            diagnostics = purpose_payload.get("metadata", {}).get("tools", {}).get("diagnostics", {})
+            diagnostics_text = json.dumps(diagnostics, sort_keys=True)
+            run.step(
+                "L-106 purpose call metadata diagnostics omit non-template warnings",
+                (
+                    purpose_result.ok
+                    and "not_template" not in diagnostics_text
+                    and "Archive/Plain-" not in diagnostics_text
+                    and "Docs/Plain.md" not in diagnostics_text
+                    and "not_exposed" in diagnostics_text
+                ),
+                json.dumps({
+                    "diagnostics": diagnostics,
+                    "metadata": purpose_payload.get("metadata", {}),
+                    "provider_request_count": len(provider.requests),
+                }, sort_keys=True)[:3000],
+                tool_result=purpose_result,
+            )
+
+            archive_search = client.call_tool("call_model", resolver="search", parameters={"query": "Archive/"})
+            not_template_search = client.call_tool("call_model", resolver="search", parameters={"query": "not_template"})
+            hidden_warning_search = client.call_tool("call_model", resolver="search", parameters={"query": "Hidden Skill"})
+            archive_payload = json.loads(archive_search.text or "{}") if archive_search.ok else {}
+            not_template_payload = json.loads(not_template_search.text or "{}") if not_template_search.ok else {}
+            hidden_payload = json.loads(hidden_warning_search.text or "{}") if hidden_warning_search.ok else {}
+            run.step(
+                "L-107 skipped document text does not pollute discovery search relevance",
+                (
+                    archive_search.ok
+                    and not_template_search.ok
+                    and hidden_warning_search.ok
+                    and archive_payload.get("results", {}).get("purposes", []) == []
+                    and not_template_payload.get("results", {}).get("purposes", []) == []
+                    and any(p.get("name") == "researcher" for p in hidden_payload.get("results", {}).get("purposes", []))
+                ),
+                json.dumps({
+                    "archive": archive_payload,
+                    "not_template": not_template_payload,
+                    "hidden": hidden_payload,
+                }, sort_keys=True)[:3000],
+                tool_result=hidden_warning_search,
             )
     return run
 

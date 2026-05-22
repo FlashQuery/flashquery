@@ -517,7 +517,7 @@ async function loadRuntimeTemplateBindings(config: FlashQueryConfig) {
   return await loadPurposeTemplateRuntimeBindings(config.instance.id);
 }
 
-async function assembleMacroTemplateMetadata(input: {
+export async function assembleMacroTemplateMetadata(input: {
   config: FlashQueryConfig;
   callerContext: MacroCallerContext;
   catalog: NativeToolDefinition[];

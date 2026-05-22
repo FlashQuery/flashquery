@@ -167,6 +167,8 @@ function toPublicToolDiagnostics(diagnostics: ToolRegistryAssembly['diagnostics'
   return publicDiagnostics;
 }
 
+export const toPublicToolDiagnosticsForTests = toPublicToolDiagnostics;
+
 function hasPublicToolDiagnostics(diagnostics: PublicToolDiagnostics): boolean {
   return Object.keys(diagnostics).length > 0;
 }
