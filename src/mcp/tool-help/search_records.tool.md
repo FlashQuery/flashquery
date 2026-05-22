@@ -9,7 +9,7 @@ args:
   table: "Required unless taggable_tables_only is true."
   filters: "Optional equality filters applied with AND logic."
   query: "Optional text query; semantic search is used when embed_fields exist."
-  tag: "Optional tag filter for taggable plugin tables."
+  tag: "Optional tag filter for taggable-table mode."
   taggable_tables_only: "Optional cross-plugin taggable-table search mode."
   include: "Optional result sections: data, schema_metadata."
   limit: "Optional max result count; defaults to 10."
@@ -30,7 +30,7 @@ Use `search_records` to discover active rows in plugin-owned structured tables. 
 | `table` | string | conditionally | none | Table name from the plugin schema. |
 | `filters` | object | no | none | Key-value equality filters applied with AND logic. |
 | `query` | string | no | empty | Text query. Uses vector similarity when the table has embeddings; otherwise uses ILIKE over text-like fields. |
-| `tag` | string | no | none | Tag to match when a plugin table has a `tags` or `tag` column. |
+| `tag` | string | no | none | Tag to match in `taggable_tables_only` mode. In single-table searches, this is echoed in the response but does not add a filter; use `filters` for table-specific tag fields. |
 | `taggable_tables_only` | boolean | no | false | Search all registered taggable plugin tables instead of one plugin/table pair. |
 | `include` | string[] | no | search default | Optional result sections: `data`, `schema_metadata`. |
 | `limit` | number | no | 10 | Maximum number of rows to return. |
@@ -63,6 +63,7 @@ Searches registered plugin tables that expose a `tags` or `tag` column.
 
 - `plugin_id` and `table` are required unless `taggable_tables_only` is true.
 - Normal table searches filter to `status: "active"`; archived rows are hidden from search.
+- In normal single-table mode, `tag` is not applied as a database filter. Use `filters` for exact field filters, or `taggable_tables_only: true` for tag-column discovery.
 - Semantic search only runs when the plugin table declares `embed_fields` and rows have embeddings.
 - Taggable-table mode uses registered schemas and may return a warning when no taggable tables exist.
 - Use `search` for documents and memories; this tool is for plugin records only.

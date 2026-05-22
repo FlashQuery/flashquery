@@ -25,7 +25,7 @@ Use `register_plugin` to install or update a FlashQuery plugin schema. The tool 
 
 ## Returns
 
-Returns JSON text with plugin identification, status `registered`, table count, registration timestamp, `was_new`, plugin instance, and schema version. Re-registration with the same version is idempotent. Version upgrades apply safe additive table or column changes and return `safe_change_count`; unsafe changes return a structured conflict with guidance.
+Returns JSON text with plugin identification, status `registered`, table count, registration timestamp, `was_new`, plugin instance, and schema version for new or same-version registrations. Version upgrades apply safe additive table or column changes and return `safe_change_count`; unsafe changes return a structured conflict with guidance. The safe-upgrade response includes the new `schema_version` and `safe_change_count`, but not every field from the first-registration response.
 
 ## Examples
 

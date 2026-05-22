@@ -21,7 +21,7 @@ Use `archive_document` to mark documents archived while keeping the Markdown fil
 
 ## Returns
 
-Returns JSON text. A single identifier returns one archive result or an expected error. Batch input returns an array preserving input order. Successful entries include `identifier`, `title`, `path`, `fq_id`, `modified`, `chars`, `status: "archived"`, and `archived_at`.
+Returns JSON text. A single identifier returns one archive result or an expected error. Batch input returns an array preserving input order. Successful entries include `identifier`, `title`, `path`, `fq_id`, `modified`, `size.chars`, `status: "archived"`, and `archived_at`.
 
 ## Examples
 

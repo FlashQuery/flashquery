@@ -21,7 +21,7 @@ Use `remove_document` when documents should no longer appear in normal vault wor
 
 ## Returns
 
-Returns JSON text. Single-string input returns one removal result; array input returns ordered per-document results. Successful entries include document identification, archived lifecycle metadata, and removal destination details. Expected errors are returned per item for invalid identifiers, missing documents, unsafe trash config, or conflicts.
+Returns JSON text. Single-string input returns one removal result; array input returns ordered per-document results. Successful entries include document identification with `size.chars`, archived lifecycle metadata, and `moved_to` removal destination details. Expected errors are returned per item for invalid identifiers, missing documents, unsafe trash config, or conflicts.
 
 ## Examples
 

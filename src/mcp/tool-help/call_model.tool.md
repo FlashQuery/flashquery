@@ -33,7 +33,7 @@ Use `call_model` to run a configured LLM model alias or named purpose through Fl
 
 ## Returns
 
-Model and purpose calls return text plus metadata including resolver, name, provider/model, tokens, cost, latency, and optional trace fields. Purpose tool loops may include tool diagnostics and call logs. Discovery resolvers return JSON metadata with no LLM call.
+Model and purpose calls return a JSON envelope with `response`, `messages`, and `metadata`. Metadata includes resolver, name, resolved provider/model, fallback position, tokens, cost, latency, optional reference hydration data, optional trace fields, and optional tool diagnostics. Purpose tool loops may include tool diagnostics and tool-call traces. Discovery resolvers return JSON metadata with no provider call. The `help` resolver returns help content before checking whether LLM providers are configured.
 
 ## Examples
 
@@ -58,8 +58,11 @@ Hydrates a document reference, runs the purpose fallback chain, and records usag
 ## Gotchas
 
 - The LLM provider must be configured for model and purpose calls.
-- Discovery resolvers ignore `messages`.
+- `list_models`, `list_purposes`, and `search` still require an `llm:` configuration; only `help` works before the unconfigured-provider guard.
+- Discovery resolvers ignore `messages`; `search` requires `parameters.query` as a non-empty string.
 - Provider parameters are passed through; prompt safety remains the caller's responsibility.
+- Caller-provided provider tools are deferred; `parameters.tools` or top-level `tools` return an error.
+- `role: "tool"` messages must use `tool_call_id`; a `name` field on tool messages is rejected.
 - Recursive model/tool behavior is powerful and intentionally admin-tier.
 - Use `get_llm_usage` for usage inspection after calls complete.
 

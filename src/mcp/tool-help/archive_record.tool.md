@@ -25,7 +25,7 @@ Use `archive_record` to soft-archive plugin-owned structured records. The tool a
 
 ## Returns
 
-Returns JSON text containing an array of per-target results in the same order as the request. Successful entries contain record identification fields, `status: "archived"`, reconciliation metadata when applicable, and `archived_at` when the table supports that column. Missing tables or records produce per-item expected error envelopes where possible.
+Returns JSON text containing an array of per-target results in the same order as the request. Successful entries contain record identification fields, reconciliation metadata when applicable, and `archived_at` when the table supports that column. Tables without `archived_at` still archive by updating row status and return `warnings: ["archived_at_unavailable"]`. Missing tables or records produce per-item expected error envelopes where possible.
 
 ## Examples
 
@@ -45,6 +45,7 @@ Archives a record from a named plugin instance.
 
 - This is not a hard delete and does not drop plugin table rows.
 - Archived records are excluded from normal `search_records` active-result paths.
+- The archived row's `status` field is updated in the database but is not included in the default response unless you later retrieve the record with data included.
 - Tables without an `archived_at` column still update status and return an `archived_at_unavailable` warning.
 - Batch results preserve request order, so callers can match successes and expected errors back to targets.
 - Write locks may block the operation while another process is modifying records.

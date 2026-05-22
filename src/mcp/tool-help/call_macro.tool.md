@@ -28,8 +28,8 @@ Use `call_macro` when one request needs deterministic orchestration across multi
 | `input_vars` | object | no | `{}` | Initial variables available to the macro. |
 | `budget` | object | no | configured defaults | Optional `max_total_tokens`, `max_model_calls`, `max_external_tool_calls`, and `timeout_ms`. |
 | `dry_run` | boolean | no | `false` | Parse and plan without executing side effects. |
-| `trace` | string | no | implementation default | `full`, `summary`, or `none`. |
-| `progress` | string | no | implementation default | `full`, `milestones`, or `silent` progress notifications. |
+| `trace` | string | no | `summary` | `full`, `summary`, or `none`. |
+| `progress` | string | no | `milestones` | `full`, `milestones`, or `silent` progress notifications. |
 
 ## Returns
 

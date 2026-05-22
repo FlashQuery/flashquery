@@ -4,7 +4,7 @@ description: "Archive one or more memory version chains so outdated memories sto
 help_hint: "Use archive_memory when a saved memory is wrong, obsolete, or should be hidden from normal retrieval."
 tier: read-write
 args:
-  memory_ids: "Optional required modern memory identifier or identifier array."
+  memory_ids: "Modern memory identifier or identifier array; required unless memory_id is supplied."
   memory_id: "Optional legacy singular memory identifier."
 ---
 
@@ -23,7 +23,7 @@ Use `archive_memory` to mark one memory or an ordered set of memories as archive
 
 ## Returns
 
-Returns JSON text. Single input returns one memory result. Batch input returns an ordered array. Successful entries include memory identification fields, `status: "archived"`, `archived_at`, and `archived_version_count`. Missing memories return per-item `not_found` entries in batch mode.
+Returns JSON text. Single input returns one memory result or one error object. Batch input returns an ordered array. Successful entries include memory identification fields, `status: "archived"`, `archived_at`, and `archived_version_count`. Missing memories return `not_found` entries in the payload.
 
 ## Examples
 

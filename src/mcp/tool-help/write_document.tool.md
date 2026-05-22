@@ -33,7 +33,7 @@ Use `write_document` to create a new Markdown document or update one existing do
 
 ## Returns
 
-Returns JSON text with a document write result containing `mode`, document identification fields, `modified`, and body character count. Expected errors cover invalid mode, missing required fields, unsafe paths, path conflicts, reserved frontmatter, tag validation, missing documents, and ambiguous identifiers.
+Returns JSON text with a document write result containing `mode`, document identification fields, `modified`, and `size.chars`. Expected errors cover invalid mode, missing required fields, unsafe paths, path conflicts, reserved frontmatter, tag validation, missing documents, and ambiguous identifiers.
 
 ## Examples
 

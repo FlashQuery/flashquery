@@ -5,7 +5,7 @@ help_hint: "Use manage_directory for vault folder creation or empty-folder remov
 tier: read-write
 args:
   action: "Required create or remove."
-  paths: "Required directory path or paths."
+  paths: "Required ordered array of directory paths."
 ---
 
 # manage_directory
@@ -19,7 +19,7 @@ Use `manage_directory` to create vault folders or remove empty vault folders. It
 | Name | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
 | `action` | string | yes | none | `create` or `remove`. |
-| `paths` | string or string[] | yes | none | One or more vault-relative directory paths. |
+| `paths` | string[] | yes | none | Ordered array of vault-relative directory paths. Duplicate paths execute sequentially. |
 
 ## Returns
 
@@ -45,6 +45,7 @@ Removes an empty folder.
 - Do not use this to delete documents; use `remove_document`.
 - Do not use this to move documents between folders; use `move_document`.
 - Paths are vault-relative and validated against traversal.
+- `paths` must be an array, even for a single directory.
 
 ## Related Tools
 

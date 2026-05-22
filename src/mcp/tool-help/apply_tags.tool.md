@@ -15,7 +15,7 @@ args:
 
 ## Purpose
 
-Use `apply_tags` to add or remove tags on explicit document and memory targets in one ordered request. It is best for incremental tag edits: add tags without replacing the whole tag list, remove tags without failing when a tag is already absent, and receive one result per target. Document targets update vault frontmatter and sync the document row. Memory targets update the latest memory row in Supabase.
+Use `apply_tags` to add or remove tags on explicit document and memory targets in one ordered request. It is best for incremental tag edits: add tags without replacing the whole tag list, remove tags without failing when a tag is already absent, and receive one result per target. Document targets update vault frontmatter and sync the document row. Memory targets update the specified memory row in Supabase.
 
 ## Params
 
@@ -56,7 +56,7 @@ Uses the legacy document shorthand for an ordered document batch.
 - At least one target and at least one of `add_tags` or `remove_tags` is required.
 - Use `write_document` when replacing a document's full tag list.
 - Tag validation runs after edits; conflicting status tags return per-target errors.
-- Memory tagging depends on the memory category being enabled.
+- Memory tagging depends on the memory category being enabled and applies to the exact memory ID provided.
 
 ## Related Tools
 

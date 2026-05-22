@@ -13,6 +13,12 @@ args:
   list_all: "Optional unfiltered list-mode opt-in."
   path_filter: "Optional document path substring."
   include_archived: "Optional archived entity inclusion flag."
+  body_contains: "Unsupported deferred literal body-search parameter."
+  body_regex: "Unsupported deferred literal body-search parameter."
+  regex: "Unsupported deferred literal body-search parameter."
+  line_range: "Unsupported deferred literal body-search parameter."
+  lines: "Unsupported deferred literal body-search parameter."
+  byte_range: "Unsupported deferred literal body-search parameter."
 ---
 
 # search
@@ -34,6 +40,7 @@ Use `search` to discover documents and memories through one unified result list.
 | `list_all` | boolean | no | `false` | Allows empty unfiltered list-mode search. |
 | `path_filter` | string | no | none | Document path substring filter for filesystem/list searches. |
 | `include_archived` | boolean | no | `false` | Include archived documents and memories. |
+| `body_contains`, `body_regex`, `regex`, `line_range`, `lines`, `byte_range` | any | no | none | Recognized only to return a clear `invalid_input`; literal body grep, regex, line-range, and byte-range search are deferred to macro/string operations. |
 
 ## Returns
 
@@ -63,7 +70,10 @@ Searches memories semantically when embeddings are configured.
 
 - This is not literal body grep or regex search.
 - Semantic mode can return `unsupported` when embeddings are unavailable.
+- `mode: "semantic"` requires a non-empty query.
 - Empty unfiltered queries require `list_all: true` to prevent accidental broad listings.
+- Empty filtered list-mode searches require explicit `entity_types`.
+- Passing deferred literal body-search parameters returns `invalid_input` instead of silently ignoring them.
 - Use `get_document` or `get_memory` after search when full content is needed.
 
 ## Related Tools
