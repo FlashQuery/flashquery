@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.5
-milestone_name: MCP Broker
-status: milestone_complete
-stopped_at: Milestone complete (Phase 143 was final phase)
-last_updated: 2026-05-19T02:01:22.967Z
-last_activity: 2026-05-19 -- Phase 143 verified and v3.5 milestone complete
+milestone: v3.6
+milestone_name: Bug Fixes & Host Parity
+status: executing
+stopped_at: Phase 144 planning complete; ready to execute
+last_updated: "2026-05-21T21:24:00.224Z"
+last_activity: 2026-05-21 -- Phase 144 planning complete
 progress:
-  total_phases: 5
-  completed_phases: 5
-  total_plans: 34
-  completed_plans: 34
-  percent: 100
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 6
+  completed_plans: 0
+  percent: 0
 ---
 
 # FlashQuery Core — State
@@ -21,20 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-17)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Milestone complete
+**Current focus:** Execute Phase 144 bug-fix scope
 
 ## Current Position
 
-Phase: 143
+Phase: 144
 Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-19 -- Phase 143 verified and v3.5 milestone complete
+Status: Ready to execute
+Last activity: 2026-05-21 -- Phase 144 planning complete
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 62 (this milestone)
+- Total plans completed: 0 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -63,6 +63,7 @@ Last activity: 2026-05-19 -- Phase 143 verified and v3.5 milestone complete
 | 141 | 11 | - | - |
 | 142 | 6 | - | - |
 | 143 | 5 | - | - |
+| 144 | 0 | - | - |
 
 *Updated after each plan completion*
 | Phase 107 P04 | 15m | 2 tasks | 9 files |
@@ -338,6 +339,7 @@ Last activity: 2026-05-19 -- Phase 143 verified and v3.5 milestone complete
 
 - Phase 111 added: CMR Verification Fixes — occurrence_out_of_range error code, local flag, test correctness, and coverage gaps (post-verification phase added 2026-05-02)
 - Phase 129 added: Correct delegated tier eligibility derivation — closes MCP Tool Consolidation Requirements §3.11.1 delegated tier allow-list drift found 2026-05-13.
+- Phase 144 added: Fix template warning flood and host help convention parity — consolidates two ready bug specs with required unit, integration, directed, and E2E coverage.
 
 ### Milestone v3.2 Initialization (2026-05-05)
 

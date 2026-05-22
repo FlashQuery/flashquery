@@ -1,0 +1,74 @@
+# Pilot — MTF-E errors: a multi-server chain surfaces needs_user_input from a drift-flagged tool
+id: mtf-e-1316-multi-server-drift-needs-input
+name: Multi-server dispatch — a drift-flagged tool mid-chain surfaces needs_user_input
+intent: |
+  A two-server chain where the second server's tool has pending schema
+  drift. The macro reads a seed value from the first server (succeeds),
+  then calls the drift-flagged tool on the second server. Per the broker's
+  pre-dispatch pending-drift check, that call short-circuits before
+  dispatch and the macro terminates with a needs_user_input outcome — the
+  user must review the schema change before the tool can run. The first
+  server's read is the only dispatched call.
+covers:
+  - MTF-D-002
+  - MTF-E-101
+  - MTF-E-102
+  - MTF-D-001
+golden_version: "0.3.0"
+golden_run_at: 2026-05-21T00:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  seed = data_srv.read({ id: 1 })
+  result = gated_srv.act({ seed: $seed.value })
+  exit { result: $result }
+input_vars: {}
+vault: {}
+tools:
+  data_srv:
+    archetype: ReadOnlyTool
+    tool_name: read
+    returns: {"value": "v1"}
+  gated_srv:
+    archetype: NeedsInputViaTofuDrift
+    tool_name: act
+    drift_payload:
+      server: gated_srv
+      tool: act
+      question: "The schema for gated_srv.act changed since first approval. Review and decide."
+      old_schema:
+        name: act
+        description: "Act on a seed value."
+        inputSchema:
+          type: object
+          properties:
+            seed:
+              type: string
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: claude-opus-4-7
+  generated_at: '2026-05-21T00:00:00Z'
+  targeted_cells:
+    - MTF-E-101
+    - MTF-D-002
+  grounding_refs:
+    - MCP Broker Requirements REQ-105
+    - MCP Broker Requirements REQ-042
+predicted_expect:
+  outcome: needs_user_input
+expect:
+  outcome: needs_user_input
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-21T18:10:33Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call"]
+  captured_tool_calls:
+    - server: "data_srv"
+      tool: "read"

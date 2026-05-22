@@ -1,0 +1,88 @@
+# Pilot — MTF-D dispatch: aggregate a snapshot across three brokered servers, mixed coercion archetypes
+id: mtf-d-1313-multi-server-research-aggregation
+name: Multi-server dispatch — aggregate one result from three servers across three coercion paths
+intent: |
+  Build one company snapshot by calling three independent brokered servers
+  and composing a field from each. The three servers deliver their payloads
+  by three different coercion routes — a plain object, a structuredContent
+  block, and a JSON-text block — so a single macro exercises all three
+  coercion paths in one run. The macro reads one field off each result and
+  exits with the merged object, confirming every server's payload coerced
+  to a real object that field access can reach.
+covers:
+  - MTF-D-002
+  - MTF-D-001
+  - MTF-D-003
+  - MTF-D-004
+  - MTF-D-005
+  - MTF-D-006
+  - MTF-S-007
+  - MTF-C-009
+golden_version: "0.3.0"
+golden_run_at: 2026-05-21T00:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  prof = profile_srv.lookup({ company: "Acme" })
+  mtr = metrics_srv.stats({ company: "Acme" })
+  news = news_srv.latest({ company: "Acme" })
+  exit { name: $prof.name, employees: $mtr.employees, headline: $news.headline }
+input_vars: {}
+vault: {}
+tools:
+  profile_srv:
+    archetype: ReadOnlyTool
+    tool_name: lookup
+    returns: {"name": "Acme Corp", "sector": "tech"}
+  metrics_srv:
+    archetype: StructuredContentTool
+    tool_name: stats
+    value: {"employees": 240, "revenue": 50}
+  news_srv:
+    archetype: JSONTextTool
+    tool_name: latest
+    value: {"headline": "Acme ships v2", "date": "2026-05"}
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: claude-opus-4-7
+  generated_at: '2026-05-21T00:00:00Z'
+  targeted_cells:
+    - MTF-D-002
+  grounding_refs:
+    - Macro Language Requirements REQ-027
+    - Macro Language Requirements REQ-028
+    - MCP Broker Requirements REQ-106
+predicted_expect:
+  outcome: success
+  return_result:
+    name: Acme Corp
+    employees: 240
+    headline: Acme ships v2
+  side_effects:
+    tool_call_count: 3
+expect:
+  outcome: success
+  return_result:
+    name: Acme Corp
+    employees: 240
+    headline: Acme ships v2
+  side_effects:
+    tool_call_count: 3
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-21T18:10:33Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "profile_srv"
+      tool: "lookup"
+    - server: "metrics_srv"
+      tool: "stats"
+    - server: "news_srv"
+      tool: "latest"

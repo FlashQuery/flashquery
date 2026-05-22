@@ -468,22 +468,19 @@ Phase 144 is a schema/data migration and request-path refactor; runtime state ma
 | A3 | Warning signs listed under pitfalls are expected symptoms. | Common Pitfalls | Planner may overweight heuristic checks. |
 | A4 | Missing `psql` can be replaced by app/integration helpers. | Environment Availability | Manual DB investigation would need another tool if app helpers fail. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should schema verification become column-aware for `template_meta`?**
    - What we know: `verifySchema` currently checks required tables only. [VERIFIED: codebase grep]
-   - What's unclear: The product requirement says schema verification must recognize the new column. [CITED: product requirements]
-   - Recommendation: Plan a focused column-existence check or an integration assertion in `supabase-schema-verify.test.ts`; do not leave this as table-only. [ASSUMED]
+   - Resolution: Yes. Plan 144-02 must update schema verification/tests so `template_meta` is explicitly recognized, including `tests/integration/supabase-schema-verify.test.ts`. Do not leave verification table-only. [RESOLVED 2026-05-21]
 
 2. **What exact top-level permissive field name should be locked?**
    - What we know: Product docs propose moving `template_tools` to top level in permissive mode. [CITED: product requirements]
-   - What's unclear: It is described as a proposal finalizable by implementers. [CITED: product requirements]
-   - Recommendation: Use top-level `template_tools` to minimize contract churn and update help + ATL-DS-07 together. [ASSUMED]
+   - Resolution: Use top-level `template_tools` in permissive mode to minimize contract churn, and update `src/llm/help-content.ts` plus ATL-DS-07 together. [RESOLVED 2026-05-21]
 
 3. **Can the Supabase JS filter express `template_meta->>fq_template = true` directly in the current client style?**
    - What we know: The requirement gives SQL query semantics. [CITED: product requirements]
-   - What's unclear: The exact Supabase client filter syntax should be confirmed during implementation. [ASSUMED]
-   - Recommendation: If client syntax is awkward, create a small storage helper with a tested query boundary rather than spreading query literals. [ASSUMED]
+   - Resolution: Implementation must verify the exact Supabase client syntax while executing Plan 144-03. If direct JSON-path filtering is awkward, create a small tested query helper rather than spreading query literals. This is an implementation detail, not a planning blocker. [RESOLVED 2026-05-21]
 
 ## Sources
 

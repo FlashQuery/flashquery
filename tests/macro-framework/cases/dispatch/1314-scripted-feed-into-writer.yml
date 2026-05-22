@@ -1,0 +1,87 @@
+# Pilot — MTF-D dispatch: a scripted feed server drives a writer server
+id: mtf-d-1314-scripted-feed-into-writer
+name: Multi-server dispatch — scripted feed pulled twice, then handed to a writer
+intent: |
+  Pull two successive items from a scripted feed server — the same tool
+  called twice returns a different payload each time — then hand both
+  values to a separate writer server and confirm the write succeeded. This
+  exercises a two-server chain where one server's per-call sequencing feeds
+  the other: the macro pulls stage "alpha" then stage "beta", writes their
+  values, and exits carrying both stage labels plus the writer's ok flag.
+covers:
+  - MTF-D-002
+  - MTF-D-008
+  - MTF-D-001
+  - MTF-D-003
+  - MTF-S-007
+  - MTF-C-009
+golden_version: "0.3.0"
+golden_run_at: 2026-05-21T00:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  first = feed_srv.pull({})
+  second = feed_srv.pull({})
+  saved = store_srv.put({ a: $first.value, b: $second.value })
+  exit { first: $first.stage, second: $second.stage, saved: $saved.ok }
+input_vars: {}
+vault: {}
+tools:
+  feed_srv:
+    archetype: ScriptedTool
+    tool_name: pull
+    responses:
+      - content:
+          - type: text
+            text: '{"stage":"alpha","value":10}'
+      - content:
+          - type: text
+            text: '{"stage":"beta","value":20}'
+  store_srv:
+    archetype: WriteTool
+    tool_name: put
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: claude-opus-4-7
+  generated_at: '2026-05-21T00:00:00Z'
+  targeted_cells:
+    - MTF-D-002
+    - MTF-D-008
+  grounding_refs:
+    - Macro Language Requirements REQ-027
+    - Macro Language Requirements REQ-028
+    - Macro Testing Framework Requirements §5.7
+predicted_expect:
+  outcome: success
+  return_result:
+    first: alpha
+    second: beta
+    saved: true
+  side_effects:
+    tool_call_count: 3
+expect:
+  outcome: success
+  return_result:
+    first: alpha
+    second: beta
+    saved: true
+  side_effects:
+    tool_call_count: 3
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-21T18:10:33Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call", "exit"]
+  captured_tool_calls:
+    - server: "feed_srv"
+      tool: "pull"
+    - server: "feed_srv"
+      tool: "pull"
+    - server: "store_srv"
+      tool: "put"

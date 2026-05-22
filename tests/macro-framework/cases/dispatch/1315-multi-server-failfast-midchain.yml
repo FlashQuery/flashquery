@@ -1,0 +1,77 @@
+# Pilot — MTF-D dispatch: a three-server chain aborts fail-fast at the middle server
+id: mtf-d-1315-multi-server-failfast-midchain
+name: Multi-server dispatch — fail-fast at the middle server halts the chain
+intent: |
+  A three-server chain where the middle server fails. The macro logs in
+  against the first server (succeeds), calls the second server which
+  returns an error result, and would call a third server afterward. Per
+  fail-fast, the errored brokered call halts the macro immediately with a
+  tool_call_failed envelope — the third server is never dispatched. The
+  test pins both the failure (tool_call_failed carrying the upstream
+  message) and the negative fact: exactly two tool calls fire, not three.
+covers:
+  - MTF-D-002
+  - MTF-D-101
+  - MTF-D-102
+  - MTF-D-001
+  - MTF-D-003
+golden_version: "0.3.0"
+golden_run_at: 2026-05-21T00:00:00Z
+deps: []
+require_embedding: false
+require_git: false
+macro: |
+  token = auth_srv.login({ user: "matt" })
+  data = risky_srv.fetch({ token: $token.token })
+  final = after_srv.finish({ data: $data })
+  exit { final: $final }
+input_vars: {}
+vault: {}
+tools:
+  auth_srv:
+    archetype: ReadOnlyTool
+    tool_name: login
+    returns: {"token": "t-123"}
+  risky_srv:
+    archetype: IsErrorTool
+    tool_name: fetch
+    message: "upstream rejected the token"
+  after_srv:
+    archetype: ReadOnlyTool
+    tool_name: finish
+    returns: {"done": true}
+generator:
+  skill: flashquery-macro-testgen
+  version: 1
+  model: claude-opus-4-7
+  generated_at: '2026-05-21T00:00:00Z'
+  targeted_cells:
+    - MTF-D-002
+    - MTF-D-101
+  grounding_refs:
+    - Macro Language Requirements REQ-027
+    - MCP Broker Requirements REQ-107
+predicted_expect:
+  outcome: fail
+  error:
+    code: tool_call_failed
+    message_contains: "upstream rejected the token"
+expect:
+  outcome: fail
+  error:
+    code: tool_call_failed
+    message_contains: "upstream rejected the token"
+reconciliation:
+  predicted_matched_captured: true
+  captured_at: "2026-05-21T18:10:33Z"
+  golden_version: "0.3.0"
+  divergence_kind: clean_match
+  notes: |
+    Clean three-oracle reconciliation. Captured by generic capture runner.
+golden_snapshot:
+  captured_trace_kinds: ["tool_call"]
+  captured_tool_calls:
+    - server: "auth_srv"
+      tool: "login"
+    - server: "risky_srv"
+      tool: "fetch"

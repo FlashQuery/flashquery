@@ -1,6 +1,6 @@
 {
   "schema_version": "1",
-  "generated_at": "2026-05-21T17:37:44.053Z",
+  "generated_at": "2026-05-21T18:10:55.054Z",
   "cells": {
     "MTF-G-001": {
       "count": 4,
@@ -185,8 +185,8 @@
       ]
     },
     "MTF-S-007": {
-      "count": 33,
-      "last_verified": "2026-05-21T17:37:44.053Z",
+      "count": 35,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-1300-longer-research-synthesis",
         "mtf-d-1303-behavioral-order-summary",
@@ -194,6 +194,8 @@
         "mtf-d-1306-behavioral-cascade-first-success",
         "mtf-d-1309-behavioral-audit-aggregator",
         "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer",
         "mtf-d-920-smoke-items-pipeline",
         "mtf-d-930-smoke-conditional-index-happy-path",
         "mtf-d-931-smoke-conditional-index-not-published",
@@ -387,8 +389,8 @@
       ]
     },
     "MTF-C-009": {
-      "count": 212,
-      "last_verified": "2026-05-21T17:37:44.053Z",
+      "count": 214,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-c-501-exit-with-object",
         "mtf-c-502-exit-with-list",
@@ -420,6 +422,8 @@
         "mtf-d-1308-behavioral-round-robin-workers",
         "mtf-d-1309-behavioral-audit-aggregator",
         "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer",
         "mtf-d-910-smoke-failover-primary-reachable",
         "mtf-d-911-smoke-failover-backup-taken",
         "mtf-d-912-smoke-failover-both-unreachable",
@@ -605,11 +609,14 @@
       ]
     },
     "MTF-D-001": {
-      "count": 12,
-      "last_verified": "2026-05-21T17:37:44.053Z",
+      "count": 16,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
         "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer",
+        "mtf-d-1315-multi-server-failfast-midchain",
         "mtf-d-16-scripted-tool-sequence",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-886-dispatch-multi-server-pair",
@@ -619,25 +626,33 @@
         "mtf-d-894-dispatch-multi-server-coercion-mix",
         "mtf-d-895-dispatch-search-tools-shape",
         "mtf-d-896-dispatch-three-server-chain",
-        "mtf-d-897-dispatch-scripted-bind-sequence"
+        "mtf-d-897-dispatch-scripted-bind-sequence",
+        "mtf-e-1316-multi-server-drift-needs-input"
       ]
     },
     "MTF-D-002": {
-      "count": 4,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 8,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer",
+        "mtf-d-1315-multi-server-failfast-midchain",
         "mtf-d-886-dispatch-multi-server-pair",
         "mtf-d-894-dispatch-multi-server-coercion-mix",
-        "mtf-d-896-dispatch-three-server-chain"
+        "mtf-d-896-dispatch-three-server-chain",
+        "mtf-e-1316-multi-server-drift-needs-input"
       ]
     },
     "MTF-D-003": {
-      "count": 12,
-      "last_verified": "2026-05-21T17:37:44.053Z",
+      "count": 15,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
         "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer",
+        "mtf-d-1315-multi-server-failfast-midchain",
         "mtf-d-16-scripted-tool-sequence",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-886-dispatch-multi-server-pair",
@@ -651,30 +666,33 @@
       ]
     },
     "MTF-D-004": {
-      "count": 4,
-      "last_verified": "2026-05-21T17:37:44.053Z",
+      "count": 5,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
         "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-896-dispatch-three-server-chain"
       ]
     },
     "MTF-D-005": {
-      "count": 4,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 5,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-06-brokered-coercion-paths",
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-887-dispatch-structured-content",
         "mtf-d-893-dispatch-scripted-coercion-sweep",
         "mtf-d-894-dispatch-multi-server-coercion-mix"
       ]
     },
     "MTF-D-006": {
-      "count": 4,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 5,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-06-brokered-coercion-paths",
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-888-dispatch-json-text",
         "mtf-d-893-dispatch-scripted-coercion-sweep",
         "mtf-d-894-dispatch-multi-server-coercion-mix"
@@ -691,10 +709,11 @@
       ]
     },
     "MTF-D-008": {
-      "count": 4,
-      "last_verified": "2026-05-20T18:29:04.361Z",
+      "count": 5,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-06-brokered-coercion-paths",
+        "mtf-d-1314-scripted-feed-into-writer",
         "mtf-d-16-scripted-tool-sequence",
         "mtf-d-893-dispatch-scripted-coercion-sweep",
         "mtf-d-897-dispatch-scripted-bind-sequence"
@@ -1096,8 +1115,8 @@
       ]
     },
     "MTF-D-101": {
-      "count": 55,
-      "last_verified": "2026-05-20T17:25:14.261Z",
+      "count": 56,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-1262-coerce-json-text",
         "mtf-d-1263-coerce-json-array",
@@ -1122,6 +1141,7 @@
         "mtf-d-1306-behavioral-cascade-first-success",
         "mtf-d-1307-behavioral-tier-promotion",
         "mtf-d-1309-behavioral-audit-aggregator",
+        "mtf-d-1315-multi-server-failfast-midchain",
         "mtf-d-30-brokered-iserror-failfast",
         "mtf-d-501-coerce-structured-content",
         "mtf-d-502-coerce-json-text",
@@ -1157,13 +1177,14 @@
       ]
     },
     "MTF-D-102": {
-      "count": 13,
-      "last_verified": "2026-05-20T17:25:14.261Z",
+      "count": 14,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
         "mtf-d-1300-longer-research-synthesis",
         "mtf-d-1303-behavioral-order-summary",
         "mtf-d-1304-behavioral-inbox-triage",
         "mtf-d-1305-behavioral-quota-fan-out",
+        "mtf-d-1315-multi-server-failfast-midchain",
         "mtf-d-30-brokered-iserror-failfast",
         "mtf-d-504-coerce-iserror-fail",
         "mtf-d-520-iserror-no-binding",
@@ -1211,9 +1232,10 @@
       "tests": []
     },
     "MTF-E-101": {
-      "count": 10,
-      "last_verified": "2026-05-19T13:48:51.406Z",
+      "count": 11,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
+        "mtf-e-1316-multi-server-drift-needs-input",
         "mtf-e-29-needs-user-input-via-broker",
         "mtf-e-601-drift-on-first-call",
         "mtf-e-602-drift-with-rich-payload",
@@ -1227,9 +1249,10 @@
       ]
     },
     "MTF-E-102": {
-      "count": 3,
-      "last_verified": "2026-05-19T13:48:51.406Z",
+      "count": 4,
+      "last_verified": "2026-05-21T18:10:55.054Z",
       "tests": [
+        "mtf-e-1316-multi-server-drift-needs-input",
         "mtf-e-29-needs-user-input-via-broker",
         "mtf-e-602-drift-with-rich-payload",
         "mtf-e-607-drift-payload-default-question"
@@ -1484,19 +1507,26 @@
       ]
     },
     "MTF-D-001+MTF-D-002": {
-      "count": 4,
+      "count": 8,
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer",
+        "mtf-d-1315-multi-server-failfast-midchain",
         "mtf-d-886-dispatch-multi-server-pair",
         "mtf-d-894-dispatch-multi-server-coercion-mix",
-        "mtf-d-896-dispatch-three-server-chain"
+        "mtf-d-896-dispatch-three-server-chain",
+        "mtf-e-1316-multi-server-drift-needs-input"
       ]
     },
     "MTF-D-001+MTF-D-003": {
-      "count": 12,
+      "count": 15,
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
         "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer",
+        "mtf-d-1315-multi-server-failfast-midchain",
         "mtf-d-16-scripted-tool-sequence",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-886-dispatch-multi-server-pair",
@@ -1510,43 +1540,50 @@
       ]
     },
     "MTF-D-001+MTF-D-004": {
-      "count": 4,
+      "count": 5,
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
         "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-896-dispatch-three-server-chain"
       ]
     },
     "MTF-D-002+MTF-D-003": {
-      "count": 4,
+      "count": 7,
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer",
+        "mtf-d-1315-multi-server-failfast-midchain",
         "mtf-d-886-dispatch-multi-server-pair",
         "mtf-d-894-dispatch-multi-server-coercion-mix",
         "mtf-d-896-dispatch-three-server-chain"
       ]
     },
     "MTF-D-002+MTF-D-004": {
-      "count": 2,
+      "count": 3,
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-896-dispatch-three-server-chain"
       ]
     },
     "MTF-D-003+MTF-D-004": {
-      "count": 4,
+      "count": 5,
       "tests": [
         "mtf-d-05-multi-server-dispatch-chain",
         "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-885-dispatch-basic-bind",
         "mtf-d-896-dispatch-three-server-chain"
       ]
     },
     "MTF-D-005+MTF-D-006": {
-      "count": 3,
+      "count": 4,
       "tests": [
         "mtf-d-06-brokered-coercion-paths",
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-893-dispatch-scripted-coercion-sweep",
         "mtf-d-894-dispatch-multi-server-coercion-mix"
       ]
@@ -1685,7 +1722,7 @@
       ]
     },
     "MTF-C-009+MTF-S-007": {
-      "count": 32,
+      "count": 34,
       "tests": [
         "mtf-d-1300-longer-research-synthesis",
         "mtf-d-1303-behavioral-order-summary",
@@ -1693,6 +1730,8 @@
         "mtf-d-1306-behavioral-cascade-first-success",
         "mtf-d-1309-behavioral-audit-aggregator",
         "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer",
         "mtf-d-920-smoke-items-pipeline",
         "mtf-d-930-smoke-conditional-index-happy-path",
         "mtf-d-931-smoke-conditional-index-not-published",
@@ -1722,12 +1761,13 @@
       ]
     },
     "MTF-D-101+MTF-D-102": {
-      "count": 12,
+      "count": 13,
       "tests": [
         "mtf-d-1300-longer-research-synthesis",
         "mtf-d-1303-behavioral-order-summary",
         "mtf-d-1304-behavioral-inbox-triage",
         "mtf-d-1305-behavioral-quota-fan-out",
+        "mtf-d-1315-multi-server-failfast-midchain",
         "mtf-d-30-brokered-iserror-failfast",
         "mtf-d-504-coerce-iserror-fail",
         "mtf-d-520-iserror-no-binding",
@@ -1956,81 +1996,215 @@
       ]
     },
     "MTF-C-009+MTF-D-001": {
-      "count": 1,
+      "count": 3,
       "tests": [
-        "mtf-d-1312-dispatch-coerce-object-field-access"
+        "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer"
       ]
     },
     "MTF-C-009+MTF-D-003": {
-      "count": 1,
+      "count": 3,
       "tests": [
-        "mtf-d-1312-dispatch-coerce-object-field-access"
+        "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer"
       ]
     },
     "MTF-C-009+MTF-D-004": {
-      "count": 1,
+      "count": 2,
       "tests": [
-        "mtf-d-1312-dispatch-coerce-object-field-access"
+        "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation"
       ]
     },
     "MTF-D-001+MTF-S-007": {
-      "count": 1,
+      "count": 3,
       "tests": [
-        "mtf-d-1312-dispatch-coerce-object-field-access"
+        "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer"
       ]
     },
     "MTF-D-003+MTF-S-007": {
-      "count": 1,
+      "count": 3,
       "tests": [
-        "mtf-d-1312-dispatch-coerce-object-field-access"
+        "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer"
       ]
     },
     "MTF-D-004+MTF-S-007": {
+      "count": 2,
+      "tests": [
+        "mtf-d-1312-dispatch-coerce-object-field-access",
+        "mtf-d-1313-multi-server-research-aggregation"
+      ]
+    },
+    "MTF-C-009+MTF-D-002": {
+      "count": 2,
+      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer"
+      ]
+    },
+    "MTF-C-009+MTF-D-005": {
       "count": 1,
       "tests": [
-        "mtf-d-1312-dispatch-coerce-object-field-access"
+        "mtf-d-1313-multi-server-research-aggregation"
       ]
     },
-    "MTF-D-001+MTF-D-008": {
-      "count": 2,
+    "MTF-C-009+MTF-D-006": {
+      "count": 1,
       "tests": [
-        "mtf-d-16-scripted-tool-sequence",
-        "mtf-d-897-dispatch-scripted-bind-sequence"
-      ]
-    },
-    "MTF-D-003+MTF-D-008": {
-      "count": 2,
-      "tests": [
-        "mtf-d-16-scripted-tool-sequence",
-        "mtf-d-897-dispatch-scripted-bind-sequence"
+        "mtf-d-1313-multi-server-research-aggregation"
       ]
     },
     "MTF-D-001+MTF-D-005": {
-      "count": 2,
+      "count": 3,
       "tests": [
-        "mtf-d-887-dispatch-structured-content",
-        "mtf-d-894-dispatch-multi-server-coercion-mix"
-      ]
-    },
-    "MTF-D-003+MTF-D-005": {
-      "count": 2,
-      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-887-dispatch-structured-content",
         "mtf-d-894-dispatch-multi-server-coercion-mix"
       ]
     },
     "MTF-D-001+MTF-D-006": {
-      "count": 2,
+      "count": 3,
       "tests": [
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-888-dispatch-json-text",
         "mtf-d-894-dispatch-multi-server-coercion-mix"
       ]
     },
-    "MTF-D-003+MTF-D-006": {
+    "MTF-D-002+MTF-D-005": {
       "count": 2,
       "tests": [
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-894-dispatch-multi-server-coercion-mix"
+      ]
+    },
+    "MTF-D-002+MTF-D-006": {
+      "count": 2,
+      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-894-dispatch-multi-server-coercion-mix"
+      ]
+    },
+    "MTF-D-002+MTF-S-007": {
+      "count": 2,
+      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-1314-scripted-feed-into-writer"
+      ]
+    },
+    "MTF-D-003+MTF-D-005": {
+      "count": 3,
+      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation",
+        "mtf-d-887-dispatch-structured-content",
+        "mtf-d-894-dispatch-multi-server-coercion-mix"
+      ]
+    },
+    "MTF-D-003+MTF-D-006": {
+      "count": 3,
+      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation",
         "mtf-d-888-dispatch-json-text",
         "mtf-d-894-dispatch-multi-server-coercion-mix"
+      ]
+    },
+    "MTF-D-004+MTF-D-005": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation"
+      ]
+    },
+    "MTF-D-004+MTF-D-006": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation"
+      ]
+    },
+    "MTF-D-005+MTF-S-007": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation"
+      ]
+    },
+    "MTF-D-006+MTF-S-007": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1313-multi-server-research-aggregation"
+      ]
+    },
+    "MTF-C-009+MTF-D-008": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1314-scripted-feed-into-writer"
+      ]
+    },
+    "MTF-D-001+MTF-D-008": {
+      "count": 3,
+      "tests": [
+        "mtf-d-1314-scripted-feed-into-writer",
+        "mtf-d-16-scripted-tool-sequence",
+        "mtf-d-897-dispatch-scripted-bind-sequence"
+      ]
+    },
+    "MTF-D-002+MTF-D-008": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1314-scripted-feed-into-writer"
+      ]
+    },
+    "MTF-D-003+MTF-D-008": {
+      "count": 3,
+      "tests": [
+        "mtf-d-1314-scripted-feed-into-writer",
+        "mtf-d-16-scripted-tool-sequence",
+        "mtf-d-897-dispatch-scripted-bind-sequence"
+      ]
+    },
+    "MTF-D-008+MTF-S-007": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1314-scripted-feed-into-writer"
+      ]
+    },
+    "MTF-D-001+MTF-D-101": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1315-multi-server-failfast-midchain"
+      ]
+    },
+    "MTF-D-001+MTF-D-102": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1315-multi-server-failfast-midchain"
+      ]
+    },
+    "MTF-D-002+MTF-D-101": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1315-multi-server-failfast-midchain"
+      ]
+    },
+    "MTF-D-002+MTF-D-102": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1315-multi-server-failfast-midchain"
+      ]
+    },
+    "MTF-D-003+MTF-D-101": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1315-multi-server-failfast-midchain"
+      ]
+    },
+    "MTF-D-003+MTF-D-102": {
+      "count": 1,
+      "tests": [
+        "mtf-d-1315-multi-server-failfast-midchain"
       ]
     },
     "MTF-D-001+MTF-D-007": {
@@ -2044,18 +2218,6 @@
       "count": 2,
       "tests": [
         "mtf-d-889-dispatch-raw-string",
-        "mtf-d-894-dispatch-multi-server-coercion-mix"
-      ]
-    },
-    "MTF-D-002+MTF-D-005": {
-      "count": 1,
-      "tests": [
-        "mtf-d-894-dispatch-multi-server-coercion-mix"
-      ]
-    },
-    "MTF-D-002+MTF-D-006": {
-      "count": 1,
-      "tests": [
         "mtf-d-894-dispatch-multi-server-coercion-mix"
       ]
     },
@@ -2226,9 +2388,34 @@
         "mtf-e-894-prescan-unknown-server-in-loop"
       ]
     },
-    "MTF-E-101+MTF-E-102": {
-      "count": 2,
+    "MTF-D-001+MTF-E-101": {
+      "count": 1,
       "tests": [
+        "mtf-e-1316-multi-server-drift-needs-input"
+      ]
+    },
+    "MTF-D-001+MTF-E-102": {
+      "count": 1,
+      "tests": [
+        "mtf-e-1316-multi-server-drift-needs-input"
+      ]
+    },
+    "MTF-D-002+MTF-E-101": {
+      "count": 1,
+      "tests": [
+        "mtf-e-1316-multi-server-drift-needs-input"
+      ]
+    },
+    "MTF-D-002+MTF-E-102": {
+      "count": 1,
+      "tests": [
+        "mtf-e-1316-multi-server-drift-needs-input"
+      ]
+    },
+    "MTF-E-101+MTF-E-102": {
+      "count": 3,
+      "tests": [
+        "mtf-e-1316-multi-server-drift-needs-input",
         "mtf-e-29-needs-user-input-via-broker",
         "mtf-e-602-drift-with-rich-payload"
       ]
