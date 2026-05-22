@@ -776,7 +776,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             } catch (err) {
               if (err instanceof DocumentRequestError) {
                 // section_not_found / follow_ref_*_error etc. — embed the helper-normalized envelope at this position
-                return JSON.parse(jsonExpectedError(err.envelope as ErrorEnvelope).content[0]?.text ?? '{}') as ErrorEnvelope;
+                return JSON.parse(jsonExpectedError(err.envelope).content[0]?.text ?? '{}') as ErrorEnvelope;
               }
               const msg = err instanceof Error ? err.message : String(err);
               const isNotFound =
@@ -802,7 +802,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         return jsonToolResult(result);
       } catch (err) {
         if (err instanceof DocumentRequestError) {
-          return jsonExpectedError(err.envelope as ErrorEnvelope);
+          return jsonExpectedError(err.envelope);
         }
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`get_document failed - ${msg}`);

@@ -37,11 +37,12 @@ Before pushing changes to the repository, run the preflight script to catch the 
 npm run preflight
 ```
 
-This runs four checks in sequence:
+This runs five checks in sequence:
 
 | Step | Command | What it catches |
 |------|---------|-----------------|
 | Lint | `npm run lint` | TypeScript and ESLint errors, unused vars, floating promises |
+| Typecheck | `npm run typecheck` | Full `tsc --noEmit` source type drift |
 | Tests | `npm run preflight:test` | Unit test regressions (56 test files, ~1 000 tests) |
 | Package contents | `npm run preflight:pack` | Accidental inclusion of `src/`, `tests/`, or `.env` in the published package |
 | Docker Compose | `npm run preflight:docker` | Structural errors in the three compose files (skipped if Docker is not installed) |

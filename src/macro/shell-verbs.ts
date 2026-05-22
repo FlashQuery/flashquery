@@ -15,6 +15,10 @@ const sh = shelljs;
 sh.config.silent = true;
 sh.config.fatal = false;
 
+function isMacroValueArray(value: MacroValue): value is MacroValue[] {
+  return Array.isArray(value);
+}
+
 export const shellBuiltins: Record<string, MacroBuiltin> = {
   grep: (positional, named, context) => grepBuiltin(positional, named, context),
   find: (positional, named, context) => findBuiltin(positional, named, context),
@@ -266,7 +270,7 @@ function valueToLines(value: MacroValue): SourceLine[] {
   if (typeof value === 'string') {
     return splitLines(value).map((text, index) => ({ text, lineNumber: index + 1, source: null }));
   }
-  if (Array.isArray(value)) {
+  if (isMacroValueArray(value)) {
     return value.map((item, index) => ({
       text: macroValueToText(item),
       lineNumber: index + 1,

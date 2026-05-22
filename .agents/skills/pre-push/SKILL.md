@@ -15,12 +15,13 @@ Run:
 npm run preflight
 ```
 
-This runs four checks in sequence:
+This runs five checks in sequence:
 
 1. **Lint** — ESLint with zero warnings tolerance
-2. **Tests** — Unit test suite (excludes two known macOS-only deferred failures in `git-manager` and `compound-tools`)
-3. **Package contents** — Verifies no `src/`, `tests/`, or `.env` files sneak into the published npm package
-4. **Docker Compose** — Validates all three compose files structurally (skipped automatically if Docker is not installed)
+2. **Typecheck** — Full `tsc --noEmit` source typecheck
+3. **Tests** — Unit test suite (excludes two known macOS-only deferred failures in `git-manager` and `compound-tools`)
+4. **Package contents** — Verifies no `src/`, `tests/`, or `.env` files sneak into the published npm package
+5. **Docker Compose** — Validates all three compose files structurally (skipped automatically if Docker is not installed)
 
 ## Decision tree
 

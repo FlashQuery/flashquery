@@ -535,7 +535,7 @@ async function execStatement(
       throw new MacroBreakSignal(stmt.line);
     case 'ForLoop': {
       const iterable = await evalExpr(stmt.iterable, env, context);
-      if (!Array.isArray(iterable)) {
+      if (!isMacroValueArray(iterable)) {
         throw new MacroRuntimeError('For-loop iterable must be a list.', stmt.line, {
           reason: 'for_iterable_type_mismatch',
         });
@@ -1187,6 +1187,10 @@ function coerceMacroValue(value: unknown): MacroValue {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isMacroValueArray(value: MacroValue): value is MacroValue[] {
+  return Array.isArray(value);
 }
 
 function cloneMacroObject(input: Record<string, MacroValue>): Record<string, MacroValue> {

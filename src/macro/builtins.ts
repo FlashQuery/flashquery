@@ -10,6 +10,10 @@ import { MACRO_SAFE_POINTS } from './safe-points.js';
 
 const CHUNK_MS = 100;
 
+function isMacroValueArray(value: MacroValue): value is MacroValue[] {
+  return Array.isArray(value);
+}
+
 export const standardBuiltins: Record<string, MacroBuiltin> = {
   fail: (positional, named) => {
     requireNamedArgs('fail', named, []);
@@ -74,7 +78,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     requireNamedArgs('unique', named, []);
     requireArgCount('unique', positional, 1, 1, 'unique_argument_count');
     const list = positional[0];
-    if (!Array.isArray(list)) {
+    if (!isMacroValueArray(list)) {
       throw new MacroRuntimeError('unique expects exactly one list argument.', undefined, {
         reason: 'unique_argument_type',
       });
@@ -91,7 +95,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     requireNamedArgs('append', named, []);
     requireArgCount('append', positional, 2, Number.POSITIVE_INFINITY, 'append_argument_count');
     const list = positional[0];
-    if (!Array.isArray(list)) {
+    if (!isMacroValueArray(list)) {
       throw new MacroRuntimeError('append first argument must be a list.', undefined, {
         reason: 'append_argument_type',
       });
@@ -104,7 +108,7 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     if (positional.every((value) => typeof value === 'string')) {
       return positional.join('');
     }
-    if (positional.every((value) => Array.isArray(value))) {
+    if (positional.every(isMacroValueArray)) {
       return positional.flatMap((value) => value);
     }
     throw new MacroRuntimeError('concat expects all strings or all lists.', undefined, {
@@ -355,8 +359,11 @@ function stringifyMacroValue(value: MacroValue): string {
 
 function deepEqual(left: MacroValue, right: MacroValue): boolean {
   if (left === right) return true;
-  if (Array.isArray(left) && Array.isArray(right)) {
-    return left.length === right.length && left.every((value, index) => deepEqual(value, right[index]));
+  if (isMacroValueArray(left) && isMacroValueArray(right)) {
+    return left.length === right.length && left.every((value, index) => {
+      const rightValue = right[index];
+      return rightValue !== undefined && deepEqual(value, rightValue);
+    });
   }
   if (isRecord(left) && isRecord(right)) {
     const leftKeys = Object.keys(left).sort();

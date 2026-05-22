@@ -87,8 +87,12 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         }
 
         // Step 5: handle version mismatch with auto-migration logic (SPEC-15)
-        if (existing && existing.schema_version !== schema.plugin.version) {
-          const versionComparison = compareSchemaVersions(existing.schema_version as string, schema.plugin.version);
+        const existingSchemaVersion = typeof existing?.schema_version === 'string'
+          ? existing.schema_version
+          : undefined;
+
+        if (existing && existingSchemaVersion !== undefined && existingSchemaVersion !== schema.plugin.version) {
+          const versionComparison = compareSchemaVersions(existingSchemaVersion, schema.plugin.version);
           let safeChangeCount = 0;
 
           // Identical versions (should not happen, but idempotent check)
@@ -143,7 +147,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                 message: `Schema migration failed: plugin "${schema.plugin.id}" contains breaking changes`,
                 identifier: schema.plugin.id,
                 details: {
-                  from_version: existing.schema_version,
+                  from_version: existingSchemaVersion,
                   to_version: schema.plugin.version,
                   unsafe_changes: unsafe,
                   guidance: [
@@ -201,7 +205,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           } else {
             // Version downgrade (new < old) — not supported
             logger.warn(
-              `register_plugin: plugin '${schema.plugin.id}' instance '${instanceName}' version downgrade detected (${existing.schema_version} → ${schema.plugin.version}). No DDL changes applied.`
+              `register_plugin: plugin '${schema.plugin.id}' instance '${instanceName}' version downgrade detected (${existingSchemaVersion} → ${schema.plugin.version}). No DDL changes applied.`
             );
           }
 

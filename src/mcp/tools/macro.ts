@@ -304,7 +304,7 @@ function stringFrontmatterValue(value: MacroValue | undefined): string | undefin
 }
 
 function listFrontmatterValue(value: MacroValue | undefined): MacroValue[] {
-  return Array.isArray(value) ? [...value] : [];
+  return Array.isArray(value) ? value.map((item) => coerceMacroValue(item)) : [];
 }
 
 function coerceMacroRecord(input: Record<string, unknown>): Record<string, MacroValue> {

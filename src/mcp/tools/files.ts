@@ -378,12 +378,15 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
 
       try {
         const vaultRoot = config.instance.vault.path;
-        const includeValues = Array.isArray(include) ? include : [];
+        const includeValues: unknown[] = Array.isArray(include) ? include : [];
         const invalidInclude = includeValues.find((value) => value !== 'metadata' && value !== 'tracking');
         if (invalidInclude !== undefined) {
+          const invalidIncludeText = typeof invalidInclude === 'string'
+            ? invalidInclude
+            : JSON.stringify(invalidInclude);
           return jsonExpectedError({
             error: 'invalid_input',
-            message: `Invalid include value "${invalidInclude}". Expected one of: metadata, tracking.`,
+            message: `Invalid include value "${invalidIncludeText}". Expected one of: metadata, tracking.`,
             details: { field: 'include', allowed: ['metadata', 'tracking'] },
           });
         }

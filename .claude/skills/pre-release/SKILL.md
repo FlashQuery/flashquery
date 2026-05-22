@@ -38,7 +38,7 @@ Check whether `npm run preflight` has been run recently on this branch. If you'r
 npm run preflight
 ```
 
-This runs lint, unit tests, package contents check, and Docker Compose validation. If it fails, stop and report which step failed. Do not proceed with the release until preflight passes or the user explicitly overrides.
+This runs lint, typecheck, unit tests, package contents check, and Docker Compose validation. If it fails, stop and report which step failed. Do not proceed with the release until preflight passes or the user explicitly overrides.
 
 If preflight was already run and passed in this session (e.g., via the `/pre-push` skill), you can skip re-running it — just note that it passed.
 
