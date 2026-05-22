@@ -5,13 +5,15 @@ Test: host help convention parity for native and brokered MCP tools.
 Scenario:
     1. Call every FlashQuery-native MCP tool with a non-boolean help value and
        verify the resulting native error includes that tool's single help footer.
-    2. Call a brokered host tool with help:true and verify the upstream fixture
+    2. Call a native tool that returns isError:true from its handler and verify
+       the native help footer is still appended.
+    3. Call a brokered host tool with help:true and verify the upstream fixture
        receives it unchanged.
-    3. Trigger a brokered host tool error and verify FlashQuery does not append
+    4. Trigger a brokered host tool error and verify FlashQuery does not append
        the native help footer.
     Cleanup is automatic.
 
-Coverage points: MCB-23 through MCB-54
+Coverage points: MCB-23 through MCB-55
 
 Modes:
     Default     Ignored; this test always starts a dedicated managed server
@@ -34,7 +36,7 @@ COVERAGE = [
     "MCB-30", "MCB-31", "MCB-32", "MCB-33", "MCB-34", "MCB-35", "MCB-36",
     "MCB-37", "MCB-38", "MCB-39", "MCB-40", "MCB-41", "MCB-42", "MCB-43",
     "MCB-44", "MCB-45", "MCB-46", "MCB-47", "MCB-48", "MCB-49", "MCB-50",
-    "MCB-51", "MCB-52", "MCB-53", "MCB-54",
+    "MCB-51", "MCB-52", "MCB-53", "MCB-54", "MCB-55",
 ]
 
 import argparse
@@ -201,7 +203,34 @@ def run_test(args: argparse.Namespace) -> TestRun:
                 if not passed:
                     return run
 
-            # ── Step 31: brokered help:true passes upstream unchanged ──────
+            # ── Step 31: handler-returned isError:true gets the footer ─────
+            log_mark = ctx.server.log_position if ctx.server else 0
+            handler_err = ctx.client.call_tool("call_model", resolver="model")
+            step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
+            footer = _native_footer("call_model")
+            passed = (
+                not handler_err.ok
+                and footer in handler_err.text
+                and handler_err.text.count(footer) == 1
+            )
+            run.step(
+                label="MCB-55: call_model handler-returned isError:true includes the help footer",
+                passed=passed,
+                detail=_step_detail(
+                    handler_err,
+                    {
+                        "expected_footer": footer,
+                        "footer_count": handler_err.text.count(footer),
+                    },
+                ),
+                timing_ms=handler_err.timing_ms,
+                tool_result=handler_err,
+                server_logs=step_logs,
+            )
+            if not passed:
+                return run
+
+            # ── Step 32: brokered help:true passes upstream unchanged ──────
             log_mark = ctx.server.log_position if ctx.server else 0
             help_result = ctx.client.call_tool("basic__help_probe", help=True)
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None
@@ -218,7 +247,7 @@ def run_test(args: argparse.Namespace) -> TestRun:
             if not passed:
                 return run
 
-            # ── Step 32: brokered errors do not get native help footer ─────
+            # ── Step 33: brokered errors do not get native help footer ─────
             log_mark = ctx.server.log_position if ctx.server else 0
             broker_error = ctx.client.call_tool("basic__slow", ms="not-a-number")
             step_logs = ctx.server.logs_since(log_mark) if ctx.server else None

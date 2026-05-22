@@ -295,6 +295,7 @@ Core CRUD operations on vault documents via MCP.
 | MCB-52 | `write_record` native tool errors include the single native help footer. | test_host_help_convention_parity | 2026-05-21 | 2026-05-21 |
 | MCB-53 | Host brokered `help:true` calls are forwarded upstream unchanged. | test_host_help_convention_parity | 2026-05-21 | 2026-05-21 |
 | MCB-54 | Brokered tool errors omit the native help footer. | test_host_help_convention_parity | 2026-05-21 | 2026-05-21 |
+| MCB-55 | `call_model` handler-returned `isError:true` error includes the native help footer. | test_host_help_convention_parity | 2026-05-21 | 2026-05-21 |
 
 ## Phase 143 MCP Broker Diagnostics And Macro Extensions
 
@@ -1017,8 +1018,8 @@ Behaviors for `call_model` and `get_llm_usage`. Tests require a FlashQuery insta
 | Plugin Reconciliation | 59 | 59 | 0 |
 | LLM Tools | 112 | 111 | 1 |
 | Macro Language | 26 | 26 | 0 |
-| Host Help Convention Parity | 32 | 32 | 0 |
-| **Total** | **454** | **449** | **5** |
+| Host Help Convention Parity | 33 | 33 | 0 |
+| **Total** | **455** | **450** | **5** |
 
 ---
 
@@ -1788,7 +1789,7 @@ Covers: L-39f, L-39g, L-39h, L-39h_purposes, L-96, L-97, L-98, VAL-119
 Covers: L-99, ATL-DS-15, VAL-119
 
 ### test_host_help_convention_parity
-Covers: MCB-23, MCB-24, MCB-25, MCB-26, MCB-27, MCB-28, MCB-29, MCB-30, MCB-31, MCB-32, MCB-33, MCB-34, MCB-35, MCB-36, MCB-37, MCB-38, MCB-39, MCB-40, MCB-41, MCB-42, MCB-43, MCB-44, MCB-45, MCB-46, MCB-47, MCB-48, MCB-49, MCB-50, MCB-51, MCB-52, MCB-53, MCB-54
+Covers: MCB-23, MCB-24, MCB-25, MCB-26, MCB-27, MCB-28, MCB-29, MCB-30, MCB-31, MCB-32, MCB-33, MCB-34, MCB-35, MCB-36, MCB-37, MCB-38, MCB-39, MCB-40, MCB-41, MCB-42, MCB-43, MCB-44, MCB-45, MCB-46, MCB-47, MCB-48, MCB-49, MCB-50, MCB-51, MCB-52, MCB-53, MCB-54, MCB-55
 
 ### test_macro_vault_jail_escape
 Covers: ML-09
