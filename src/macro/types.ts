@@ -24,7 +24,7 @@ export interface MacroCallerContext {
 }
 
 export interface MacroNeedsUserInputPayload {
-  question: string;
+  question?: string;
   context?: unknown;
   options?: readonly string[];
   answer_shape?: string;

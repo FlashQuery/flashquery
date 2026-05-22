@@ -147,6 +147,11 @@ export function validateWriteRecordInput(
 
   const dataError = validateDataObject(input, mode);
   if (dataError) return dataError;
+  if (!isPlainObject(input.data)) {
+    return invalidInput(`data is required when mode is "${mode}" and must be an object`, {
+      field: 'data',
+    });
+  }
   const data = input.data;
 
   const fieldError = validateDataFields(data, tableSpec, input);

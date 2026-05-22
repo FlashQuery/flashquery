@@ -1,4 +1,5 @@
 import { lstat, readdir, readFile, realpath } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 import { basename, extname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { posix as pathPosix } from 'node:path';
 import matter from 'gray-matter';
@@ -127,6 +128,10 @@ const TOOL_NAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 // Contract markers: generated tools are `flashquery_${namespace}_${slug}` and
 // resolver-backed dispatch reads templates with effectiveInclude: ['body', 'frontmatter'].
 
+function warn(message: string): void {
+  logger?.warn(message);
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -182,7 +187,7 @@ function emptyDiagnostics(): TemplateToolDiagnostics {
 
 async function discoverMarkdownFiles(root: string, markdownExtensions: string[]): Promise<string[]> {
   async function walk(dir: string): Promise<string[]> {
-    let entries: Awaited<ReturnType<typeof readdir>>;
+    let entries: Array<Dirent<string>>;
     try {
       entries = await readdir(dir, { withFileTypes: true });
     } catch {
@@ -270,7 +275,7 @@ async function loadIndexedTemplateCandidates(
   try {
     supabase = supabaseManager.getClient();
   } catch (error) {
-    logger.warn(`template discovery index unavailable: ${error instanceof Error ? error.message : String(error)}`);
+    warn(`template discovery index unavailable: ${error instanceof Error ? error.message : String(error)}`);
     return [];
   }
   let query = supabase
@@ -289,7 +294,7 @@ async function loadIndexedTemplateCandidates(
 
   const { data, error } = await query;
   if (error) {
-    logger.warn(`template discovery index query failed: ${error.message}`);
+    warn(`template discovery index query failed: ${error.message}`);
     return [];
   }
 

@@ -291,10 +291,11 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             );
           }
         } else {
+          const updateId = id ?? '';
           const updateResult = (await supabase
             .from(resolved.fullTableName)
             .update({ ...recordData, updated_at: now })
-            .eq('id', id)
+            .eq('id', updateId)
             .eq('instance_id', config.instance.id)
             .select('*')
             .single()) as { data: Record<string, unknown> | null; error: { message: string; code?: string } | null };
@@ -302,14 +303,14 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             if (!isNotFoundDbError(updateResult.error)) {
               return jsonRuntimeError(updateResult.error?.message ?? 'Update returned no data');
             }
-            return jsonExpectedError(recordNotFoundEnvelope(id, plugin_id, table));
+            return jsonExpectedError(recordNotFoundEnvelope(updateId, plugin_id, table));
           }
           row = updateResult.data;
 
           if (resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
             fireAndForgetEmbed(
               resolved.fullTableName,
-              id,
+              updateId,
               row,
               resolved.tableSpec.embed_fields,
               config.supabase.databaseUrl

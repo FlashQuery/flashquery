@@ -41,10 +41,7 @@ export class LlmNetworkError extends Error {
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  content: string;
-}
+export type ChatMessage = LlmChatMessage;
 
 export interface LlmCompletionResult {
   text: string;

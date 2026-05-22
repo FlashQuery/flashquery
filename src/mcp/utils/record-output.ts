@@ -66,7 +66,7 @@ export function buildRecordSchemaMetadata(tableSpec: PluginTableSpec): RecordSch
   };
 }
 
-export function addReconciliationPayload<T extends Record<string, unknown>>(
+export function addReconciliationPayload<T extends object>(
   payload: T,
   reconciliation: Record<string, unknown> | undefined
 ): T & { reconciliation?: Record<string, unknown> } {
@@ -76,7 +76,7 @@ export function addReconciliationPayload<T extends Record<string, unknown>>(
   return { ...payload, reconciliation };
 }
 
-export function addPendingReviewPayload<T extends Record<string, unknown>>(
+export function addPendingReviewPayload<T extends object>(
   payload: T,
   pendingReview: Record<string, unknown> | undefined
 ): T & { pending_review?: Record<string, unknown> } {

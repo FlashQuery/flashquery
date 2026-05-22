@@ -15,6 +15,7 @@
  */
 
 import { z } from 'zod';
+import type { Dirent } from 'node:fs';
 import { mkdir, stat, readdir, rmdir, readFile } from 'node:fs/promises';
 import { join, extname } from 'node:path';
 import matter from 'gray-matter';
@@ -83,7 +84,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
 
       const vaultRoot = config.instance.vault.path;
       const client = supabaseManager.getClient();
-      const results: Array<Record<string, unknown>> = [];
+      const results: unknown[] = [];
 
       for (const inputPath of paths) {
         const normalizedPath = normalizePath(inputPath);
@@ -378,9 +379,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
       try {
         const vaultRoot = config.instance.vault.path;
         const includeValues = Array.isArray(include) ? include : [];
-        const invalidInclude = includeValues.find(
-          (value): value is string => value !== 'metadata' && value !== 'tracking'
-        );
+        const invalidInclude = includeValues.find((value) => value !== 'metadata' && value !== 'tracking');
         if (invalidInclude !== undefined) {
           return jsonExpectedError({
             error: 'invalid_input',
@@ -478,7 +477,7 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
           relBase: string,
           isRecursive: boolean,
         ): Promise<WalkEntry[]> {
-          let dirents: Awaited<ReturnType<typeof readdir>>;
+          let dirents: Array<Dirent<string>>;
           try {
             dirents = await readdir(absDir, { withFileTypes: true });
           } catch (e) {

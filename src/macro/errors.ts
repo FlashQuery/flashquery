@@ -39,7 +39,7 @@ export type MacroInvalidInputReason =
 
 export type MacroInvalidInputEnvelope = ErrorEnvelope & {
   error: 'invalid_input';
-  details: { reason: MacroInvalidInputReason } & Record<string, unknown>;
+  details: { reason: MacroInvalidInputReason } & object;
 };
 
 export function macroParseError(
@@ -61,7 +61,7 @@ export function macroParseError(
 
 export function macroInvalidInput(
   reason: MacroInvalidInputReason,
-  details: Record<string, unknown> = {},
+  details: object = {},
   message = 'Macro input is invalid.',
   identifier?: string
 ): MacroInvalidInputEnvelope {

@@ -24,6 +24,7 @@ import {
   type ToolResult,
   type TraceStep,
   type WarningCode,
+  type MacroSuccessPayload,
 } from '../mcp/utils/response-formats.js';
 import type { McpBroker } from '../services/mcp-broker.js';
 import { NullMcpBroker } from '../services/mcp-broker.js';
@@ -48,7 +49,7 @@ export type MacroValue =
   | number
   | string
   | MacroValue[]
-  | { [key: string]: MacroValue };
+  | object;
 
 export type MacroNamedArgs = Record<string, MacroValue>;
 
@@ -227,7 +228,7 @@ export class MacroExpectedError extends Error {
   constructor(
     public readonly error: string,
     message: string,
-    public readonly details?: Record<string, unknown>
+    public readonly details?: object
   ) {
     super(message);
     this.name = 'MacroExpectedError';
@@ -683,7 +684,8 @@ async function evalCall(
         line: call.line,
       });
     }
-    throw new MacroFailError(positional[0] ?? 'macro aborted', call.line);
+    const message = positional[0];
+    throw new MacroFailError(typeof message === 'string' ? message : 'macro aborted', call.line);
   }
 
   const builtin = context.builtins[call.name];
@@ -763,7 +765,7 @@ function stepField(target: MacroValue, field: string): MacroValue {
   if (!Object.prototype.hasOwnProperty.call(target, field)) {
     return null;
   }
-  return target[field];
+  return (target as Record<string, MacroValue>)[field] ?? null;
 }
 
 async function evalRange(
@@ -922,7 +924,16 @@ async function evalToolCall(
 
   let result: ToolResult;
   try {
-    result = await context.dispatchTool(call.server, call.tool, arg, context);
+    const dispatchTool = context.dispatchTool;
+    if (dispatchTool === undefined) {
+      throw new MacroRuntimeError(`No tool dispatcher configured for ${call.server}.${call.tool}.`, call.line, {
+        reason: 'tool_dispatcher_missing',
+        server: call.server,
+        tool: call.tool,
+        line: call.line,
+      });
+    }
+    result = await dispatchTool(call.server, call.tool, arg, context);
   } catch (error) {
     if (error instanceof MacroNeedsUserInputError) throw error;
     throw new MacroRuntimeError(`Tool call failed: ${call.server}.${call.tool}`, call.line, {
@@ -974,7 +985,7 @@ async function evalToolArg(
       line: call.line,
     });
   }
-  return value;
+  return value as Record<string, MacroValue>;
 }
 
 async function evalToolExists(
@@ -1048,8 +1059,8 @@ function stringifyMacroValue(value: MacroValue): string {
   return JSON.stringify(value);
 }
 
-function buildSuccessPayload(context: MacroInvocationContext, result: MacroValue) {
-  const payload: Record<string, unknown> = {
+function buildSuccessPayload(context: MacroInvocationContext, result: MacroValue): MacroSuccessPayload {
+  const payload: MacroSuccessPayload = {
     task_id: context.taskId,
     result,
   };
@@ -1081,9 +1092,9 @@ function buildSuccessPayload(context: MacroInvocationContext, result: MacroValue
 // any warnings collected during execution.
 function attachContextToError(
   context: MacroInvocationContext,
-  envelope: Omit<ErrorEnvelope, 'trace' | 'warnings'>
+  envelope: { [key: string]: unknown; error: string; message: string }
 ): ErrorEnvelope {
-  const out: ErrorEnvelope = { ...envelope };
+  const out: ErrorEnvelope = { ...envelope, error: envelope.error, message: envelope.message };
   if (context.traceMode !== 'none' && context.trace.length > 0) {
     out.trace = context.trace;
   }

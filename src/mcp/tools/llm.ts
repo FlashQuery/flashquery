@@ -723,6 +723,9 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
             logger,
             getIsShuttingDown,
           });
+          if (toolRegistry === undefined) {
+            throw new Error('Mode 2 requires an assembled tool registry.');
+          }
           const envelope = buildMode2Envelope(
             loopEnvelope,
             hydratedMessages,
@@ -831,9 +834,9 @@ export function registerLlmTools(server: McpServer, config: FlashQueryConfig, op
 
       // Step 3: Compute cost from config
       // result.modelName is the resolved alias (lowercased per Phase 99 D-08)
-      const assistantMessage: LlmChatResult['message'] | undefined = 'message' in result ? result.message : undefined;
+      const assistantMessage: LlmChatResult['message'] | undefined = 'message' in result ? result.message as LlmChatResult['message'] : undefined;
       const hasAssistantToolCalls = (assistantMessage?.tool_calls?.length ?? 0) > 0;
-      const responseText: string = 'text' in result
+      const responseText: string | undefined = 'text' in result
         ? result.text
         : typeof assistantMessage?.content === 'string'
           ? assistantMessage.content

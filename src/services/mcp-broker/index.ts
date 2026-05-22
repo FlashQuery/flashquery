@@ -12,6 +12,7 @@ import type {
   BrokerAuditEvent,
   BrokerAuditEventInput,
   BrokerClientConfig,
+  BrokerServerConfig,
   BrokerConnectionOptions,
   BrokeredTool,
   BrokerToolRef,
@@ -44,8 +45,10 @@ export { InMemoryTofuStore, canonicalJson, hashToolSchema } from './tofu.js';
 export { SchemaDriftNeedsUserInputError } from './types.js';
 export type * from './types.js';
 
+type BrokerConfigServer = BrokerServerConfig & Partial<Pick<BrokerClientConfig, 'onToolListChanged'>>;
+
 export interface BrokerConfig extends ToolRegistryConfig {
-  mcpServers?: Record<string, BrokerClientConfig>;
+  mcpServers?: Record<string, BrokerConfigServer>;
   indexSink?: ToolIndexSink;
   onTofuDrift?: (bundle: TofuDriftBundle) => void | Promise<void>;
   onAudit?: (event: BrokerAuditEvent) => void;

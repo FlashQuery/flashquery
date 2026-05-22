@@ -23,6 +23,7 @@ import { DocumentReadError, resolveDocumentIdentifier, targetedScan } from './re
 import type { supabaseManager } from '../../storage/supabase.js';
 import type { embeddingProvider } from '../../embedding/provider.js';
 import type { logger } from '../../logging/logger.js';
+import type { ErrorEnvelope } from './response-formats.js';
 import { extractHeadings } from './markdown-utils.js';
 import { computeSectionChars, extractSection, extractMultipleSections, findHeadingOccurrence, SectionExtractError } from './markdown-sections.js';
 import { isValidUuid } from '../../utils/uuid.js';
@@ -338,7 +339,7 @@ export function traverseFollowRef(
 
 /** Errors thrown from the document resolution pipeline mapping to MCP isError:true responses. */
 export class DocumentRequestError extends Error {
-  constructor(public envelope: Record<string, unknown>) {
+  constructor(public envelope: ErrorEnvelope) {
     super(typeof envelope.message === 'string' ? envelope.message : 'document request failed');
     this.name = 'DocumentRequestError';
   }

@@ -75,7 +75,7 @@ export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalo
     if (options.hostEnabledToolNames && !options.hostEnabledToolNames.has(name)) {
       return undefined;
     }
-    return originalRegisterTool(name, nativeConfig, cb as never);
+    return originalRegisterTool(name, nativeConfig as never, cb as never);
   }) as RegisterToolFunction;
 
   wrappedServers.add(server);

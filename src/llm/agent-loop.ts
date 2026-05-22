@@ -316,7 +316,7 @@ function makeEnvelope(
         ...(options.toolRegistry?.templateToolNames && options.toolRegistry.templateToolNames.length > 0
           ? { template_tool_names: options.toolRegistry.templateToolNames }
           : {}),
-        diagnostics: options.toolRegistry?.diagnostics ?? {},
+        diagnostics: { ...(options.toolRegistry?.diagnostics ?? {}) },
         stop_reason: stopReason,
         iterations: callsLog.length,
         calls_log: callsLog,
@@ -558,7 +558,8 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
       envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }
-    if (options.getIsShuttingDown?.() === true || options.shutdownSignal?.aborted === true || abortStopReason === 'shutdown') {
+    const shuttingDown = options.getIsShuttingDown?.() === true || options.shutdownSignal?.aborted || abortStopReason === 'shutdown';
+    if (shuttingDown) {
       const envelope = makeEnvelope(options, messages, callsLog, 'shutdown', totals, latestAssistantText, firstSuccessfulResult);
       envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;

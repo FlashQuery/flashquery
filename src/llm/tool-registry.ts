@@ -1,6 +1,7 @@
 import type { FlashQueryConfig } from '../config/loader.js';
 import type { logger } from '../logging/logger.js';
 import type { MacroCallerContext } from '../macro/types.js';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import type {
   TemplateToolDiagnostics,
@@ -13,16 +14,15 @@ import {
   getToolNamesByTier,
 } from '../mcp/tool-metadata.js';
 
-export interface NativeToolResponse {
-  content: Array<{ type: 'text'; text: string }>;
-  isError?: boolean;
+export interface NativeToolResponse extends CallToolResult {
+  content: Array<Extract<CallToolResult['content'][number], { type: 'text' }>>;
 }
 
 export interface NativeToolDispatchContext {
   signal: AbortSignal;
   traceId?: string | null;
   instanceId: string;
-  logger?: Pick<typeof logger, 'debug' | 'warn' | 'error'>;
+  logger?: Partial<Pick<typeof logger, 'debug' | 'warn' | 'error'>>;
   logContext?: Record<string, unknown>;
   macroCallerContext?: MacroCallerContext;
 }

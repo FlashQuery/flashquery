@@ -65,7 +65,7 @@ async function resolvePluginScope(config: FlashQueryConfig, pluginScope: string 
         search_name: pluginScope,
         p_instance_id: config.instance.id,
         threshold: 0.8,
-      }) as Promise<{ data: string; error: { message: string } | null }>);
+      }) as unknown as Promise<{ data: string; error: { message: string } | null }>);
     if (rpcError) {
       logger.warn(`write_memory: plugin_scope lookup failed: ${rpcError.message} - defaulting to 'global'`);
       return 'global';
@@ -438,7 +438,7 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
           return jsonToolResult([]);
         }
         const archivedAtByRoot = new Map<string, string>();
-        const results: Array<ReturnType<typeof buildMemoryResult> | { error: string; message: string; identifier: string }> = [];
+        const results: unknown[] = [];
         const { data: chainRows, error: fetchError } = await supabase
           .from('fqc_memory')
           .select('id, content, tags, plugin_scope, status, created_at, updated_at, version, previous_version_id, is_latest, archived_at')

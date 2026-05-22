@@ -41,7 +41,7 @@ export function serializeOrderedFrontmatter(
   ]);
 
   // FQ-managed fields: placed at the end of the output in established order
-  const preserveOrder = [
+  const preserveOrder: string[] = [
     FM.TITLE, FM.STATUS, FM.TAGS, FM.CREATED, FM.UPDATED,
     FM.OWNER, FM.TYPE, FM.INSTANCE, FM.ID,
   ];

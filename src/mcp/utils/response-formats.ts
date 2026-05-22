@@ -13,6 +13,8 @@
  * - All key-value pairs: `Label: value` format on single lines
  */
 
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+
 export const CANONICAL_ERROR_CODES = [
   'not_found',
   'ambiguous_identifier',
@@ -49,10 +51,11 @@ export type MacroErrorCode = (typeof MACRO_ERROR_CODES)[number];
 export type WarningCode = (typeof WARNING_CODES)[number] | (string & {});
 
 export interface ErrorEnvelope {
+  [key: string]: unknown;
   error: string;
   message: string;
   identifier?: string;
-  details?: Record<string, unknown>;
+  details?: object;
   // PG-002 fix (2026-05-20): per REQ-024 ac6 + REQ-047 ac2, the trace
   // MUST be present on error envelopes when trace_mode is anything other
   // than "none" (which is the only mode that strips trace per REQ-047
@@ -65,9 +68,8 @@ export interface ErrorEnvelope {
   warnings?: string[];
 }
 
-export interface ToolResult {
-  content: Array<{ type: 'text'; text: string }>;
-  isError?: boolean;
+export interface ToolResult extends CallToolResult {
+  content: Array<Extract<CallToolResult['content'][number], { type: 'text' }>>;
 }
 
 export interface DocumentIdentificationInput {
@@ -183,11 +185,20 @@ export function jsonExpectedError(error: ErrorEnvelope): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(error) }], isError: false };
 }
 
-export function jsonRuntimeError(message: string, details?: Record<string, unknown>): ToolResult;
-export function jsonRuntimeError(error: Omit<ErrorEnvelope, 'error'> & { error?: string }): ToolResult;
+type RuntimeErrorInput = {
+  error?: string;
+  message: string;
+  identifier?: string;
+  details?: object;
+  trace?: unknown[];
+  warnings?: string[];
+};
+
+export function jsonRuntimeError(message: string, details?: object): ToolResult;
+export function jsonRuntimeError(error: RuntimeErrorInput): ToolResult;
 export function jsonRuntimeError(
-  messageOrError: string | (Omit<ErrorEnvelope, 'error'> & { error?: string }),
-  details?: Record<string, unknown>
+  messageOrError: string | RuntimeErrorInput,
+  details?: object
 ): ToolResult {
   if (typeof messageOrError === 'string') {
     return jsonRuntimeErrorFromEnvelope({ error: 'runtime_error', message: messageOrError, details });
@@ -210,7 +221,7 @@ function jsonRuntimeErrorFromEnvelope(error: ErrorEnvelope): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(error) }], isError: true };
 }
 
-export function withWarnings<T extends Record<string, unknown>>(
+export function withWarnings<T extends object>(
   payload: T,
   warnings: WarningCode[]
 ): T & { warnings?: WarningCode[] } {

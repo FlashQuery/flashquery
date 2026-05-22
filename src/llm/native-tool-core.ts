@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { loadToolMeta, type ToolMeta } from '../services/tool-search/tool-meta.js';
 import type { NativeToolDefinition, NativeToolDispatchContext, NativeToolResponse } from './tool-registry.js';
 
@@ -14,7 +15,7 @@ interface ToolErrorPayload {
 
 interface ToolSuccessPayload {
   ok: true;
-  result: NativeToolResponse;
+  result: CallToolResult;
 }
 
 export type NativeToolCorePayload = ToolSuccessPayload | ToolErrorPayload;
@@ -84,7 +85,11 @@ function appendHelpFooterToResult(result: NativeToolResponse, toolName: string):
   const content = [...result.content];
   if (content.length > 0) {
     const last = content[content.length - 1];
-    content[content.length - 1] = { ...last, text: appendNativeHelpFooter(last.text, toolName) };
+    if (last.type === 'text') {
+      content[content.length - 1] = { ...last, text: appendNativeHelpFooter(last.text, toolName) };
+    } else {
+      content.push({ type: 'text', text: nativeHelpFooter(toolName) });
+    }
   } else {
     content.push({ type: 'text', text: nativeHelpFooter(toolName) });
   }

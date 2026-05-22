@@ -188,7 +188,7 @@ export function validateToolMeta(sources: readonly ToolMetaSource[]): ToolMetaVa
     if (Object.hasOwn(data, 'tier')) {
       if (typeof data['tier'] !== 'string' || tier === '') {
         diagnostics.push(warningDiagnostic(source.filePath, "optional frontmatter field 'tier' should be one of read-only, read-write, admin when provided"));
-      } else if (!VALID_TIERS.has(tier)) {
+      } else if (!VALID_TIERS.has(tier as ToolMetaTier)) {
         diagnostics.push(warningDiagnostic(source.filePath, "optional frontmatter field 'tier' should be one of read-only, read-write, admin when provided"));
       }
     }

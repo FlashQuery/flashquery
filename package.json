@@ -28,6 +28,7 @@
     "run:macro-framework": "tsx tests/macro-framework/triage/run-cli.ts",
     "test:e2e": "vitest run --config tests/config/vitest.e2e.config.ts",
     "test:benchmark": "vitest run --config tests/config/vitest.benchmark.config.ts",
+    "typecheck": "tsc --noEmit",
     "bench:mcp-broker": "npm run test:benchmark -- --run tests/benchmark/**/*.bench.ts",
     "lint": "eslint src/ --max-warnings 0",
     "format": "prettier --write src/",

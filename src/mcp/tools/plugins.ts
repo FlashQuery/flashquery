@@ -476,7 +476,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
                 `SELECT COUNT(*) as count FROM information_schema.tables WHERE table_name = $1 AND table_schema = 'public'`,
                 [table]
               );
-              const tableExists = ((result.rows[0] as { count?: unknown })?.count ?? 0) > 0;
+              const tableExists = Number((result.rows[0] as { count?: unknown })?.count ?? 0) > 0;
               if (tableExists) {
                 const countResult = await pgClient.query(`SELECT COUNT(*) as count FROM "${table}" WHERE instance_id = $1 AND status = 'active'`, [config.instance.id]);
                 tableStats.push({

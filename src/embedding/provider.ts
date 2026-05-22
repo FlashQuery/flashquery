@@ -153,7 +153,7 @@ export class NullEmbeddingProvider implements EmbeddingProvider {
 // createEmbeddingProvider factory
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function createEmbeddingProvider(config: FlashQueryConfig['embedding']): EmbeddingProvider {
+export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['embedding']>): EmbeddingProvider {
   switch (config.provider) {
     case 'openai':
       return new OpenAICompatibleProvider(

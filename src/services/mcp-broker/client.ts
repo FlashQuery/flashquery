@@ -4,6 +4,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import {
   ErrorCode,
   McpError,
+  CallToolResultSchema,
   ToolListChangedNotificationSchema,
   type CallToolResult,
   type Tool,
@@ -19,13 +20,9 @@ const DEFAULT_HEALTH_TIMEOUT_MS = 250;
 const DEFAULT_SHUTDOWN_GRACE_MS = 5_000;
 const STDERR_LIMIT_BYTES = 4 * 1024;
 
-type SdkClient = Client & {
-  fallbackRequestHandler?: (request: { method: string }) => Promise<never>;
-};
-
 export class BrokerClient {
   readonly #config: BrokerClientConfig;
-  #client: SdkClient | null = null;
+  #client: Client | null = null;
   #transport: StdioClientTransport | null = null;
   #connectPromise: Promise<void> | null = null;
   #tools: BrokeredTool[] = [];
@@ -62,7 +59,8 @@ export class BrokerClient {
   }
 
   async ensureConnected(): Promise<void> {
-    if (this.#client !== null && this.#transport?.pid !== null && isProcessAlive(this.#transport.pid)) return;
+    const pid = this.#transport?.pid ?? null;
+    if (this.#client !== null && pid !== null && isProcessAlive(pid)) return;
     if (this.#connectPromise !== null) return this.#connectPromise;
 
     if (this.#needsRestart && !this.#restartAttempted) {
@@ -89,10 +87,10 @@ export class BrokerClient {
     try {
       const result = await client.callTool(
         { name: toolName, arguments: args as Record<string, unknown> },
-        undefined,
+        CallToolResultSchema,
         { timeout: this.#config.perCallTimeoutMs }
       );
-      return result;
+      return result as CallToolResult;
     } catch (error) {
       const normalized = formatToolError(error, this.#errorContext(toolName));
       if (this.#closed || this.#client === null || this.#transport === null) {
@@ -107,11 +105,11 @@ export class BrokerClient {
         await this.#resetConnection();
         await this.ensureConnected();
         this.#restartCount += 1;
-        return this.#requireClient().callTool(
+        return await this.#requireClient().callTool(
           { name: toolName, arguments: args as Record<string, unknown> },
-          undefined,
+          CallToolResultSchema,
           { timeout: this.#config.perCallTimeoutMs }
-        );
+        ) as CallToolResult;
       }
       throw toThrowableToolError(normalized);
     }
@@ -161,7 +159,7 @@ export class BrokerClient {
   }
 
   async #connect(): Promise<void> {
-    const client: SdkClient = new Client(
+    const client = new Client(
       { name: `flashquery-broker:${this.#config.serverId}`, version: '1.0.0' },
       { capabilities: {} }
     );
@@ -255,7 +253,7 @@ export class BrokerClient {
     }
   }
 
-  #bindUnsupportedRequestAudit(client: SdkClient): void {
+  #bindUnsupportedRequestAudit(client: Client): void {
     client.fallbackRequestHandler = (request) => {
       this.#emitAudit({
         type: 'mcp_broker_reverse_request_rejected',
@@ -269,7 +267,7 @@ export class BrokerClient {
     };
   }
 
-  #bindToolListChanged(client: SdkClient): void {
+  #bindToolListChanged(client: Client): void {
     client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
       const tools = await this.#refreshTools(client);
       await this.#config.onToolListChanged?.(this.#config.serverId, tools);
@@ -279,6 +277,7 @@ export class BrokerClient {
   #emitAudit(event: BrokerAuditEventInput): void {
     const timestamped = recordBrokerAuditEvent(event);
     this.#config.onAudit?.(timestamped);
+    if (timestamped.type !== 'mcp_broker_reverse_request_rejected') return;
     logger?.warn(
       `mcp_broker_reverse_request_rejected ts=${timestamped.ts} server=${timestamped.serverId} method=${timestamped.method} status=${timestamped.status}${
         timestamped.traceId === undefined ? '' : ` trace_id=${timestamped.traceId}`

@@ -167,7 +167,7 @@ describe('mcp broker client lifecycle integration', () => {
     const client = trackClient();
     const tools = await client.listTools();
 
-    expect(tools.map((tool) => tool.toolName).sort()).toEqual(['crash', 'echo', 'slow', 'stderr_write']);
+    expect(tools.map((tool) => tool.toolName).sort()).toEqual(['crash', 'echo', 'help_probe', 'slow', 'stderr_write']);
   });
 
   it('T-I-008 maps per-call timeout failures to server_timeout', async () => {

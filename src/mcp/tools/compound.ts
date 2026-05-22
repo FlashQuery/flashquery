@@ -1176,7 +1176,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             identifier,
             title: docTitle,
             path: relativePath,
-            fq_id: typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : resolved.fqcId,
+            fq_id: typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : resolved.fqcId ?? '',
             modified: typeof frontmatter[FM.UPDATED] === 'string' ? frontmatter[FM.UPDATED] as string : new Date().toISOString(),
             chars: modifiedBody.length,
           }),

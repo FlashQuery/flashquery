@@ -524,7 +524,7 @@ export async function assembleMacroTemplateMetadata(input: {
 }): Promise<{ templateReverseMap: TemplateToolReverseMap; templateToolNames: string[] }> {
   const { assembleTemplateToolRegistry } = await import('../../llm/template-tools.js');
   const purposeName = input.callerContext.origin === 'delegated'
-    ? input.callerContext.purposeName
+    ? input.callerContext.purposeName ?? ''
     : '';
   const runtimeBindings = await loadRuntimeTemplateBindings(input.config);
   const templateRegistry = await assembleTemplateToolRegistry({

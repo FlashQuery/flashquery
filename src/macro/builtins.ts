@@ -18,7 +18,8 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
         reason: 'fail_argument_shape',
       });
     }
-    throw new MacroFailError(positional[0] ?? 'macro aborted');
+    const message = positional[0];
+    throw new MacroFailError(typeof message === 'string' ? message : 'macro aborted');
   },
   exit: (positional, named) => {
     requireNamedArgs('exit', named, []);
@@ -118,23 +119,25 @@ export const standardBuiltins: Record<string, MacroBuiltin> = {
     requireNamedArgs('sub', named, []);
     requireArgCount('sub', positional, 1, Number.POSITIVE_INFINITY, 'arithmetic_argument_count');
     const numbers = positional.map((value) => requireNumber(value, 'sub'));
-    if (numbers.length === 1) return -numbers[0];
-    return numbers.slice(1).reduce((total, value) => total - value, numbers[0]);
+    const first = numbers[0] ?? 0;
+    if (numbers.length === 1) return -first;
+    return numbers.slice(1).reduce((total, value) => total - value, first);
   },
   mul: (positional, named) => {
     requireNamedArgs('mul', named, []);
-    return positional.reduce((total, value) => total * requireNumber(value, 'mul'), 1);
+    return positional.reduce<number>((total, value) => total * requireNumber(value, 'mul'), 1);
   },
   div: (positional, named) => {
     requireNamedArgs('div', named, []);
     requireArgCount('div', positional, 2, Number.POSITIVE_INFINITY, 'div_argument_count');
     const numbers = positional.map((value) => requireNumber(value, 'div'));
+    const first = numbers[0] ?? 0;
     return numbers.slice(1).reduce((total, value) => {
       if (value === 0) {
         throw new MacroRuntimeError('Division by zero.', undefined, { reason: 'div_by_zero' });
       }
       return Math.trunc(total / value);
-    }, numbers[0]);
+    }, first);
   },
   mod: (positional, named) => {
     requireNamedArgs('mod', named, []);

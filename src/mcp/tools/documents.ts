@@ -70,6 +70,11 @@ function isAmbiguousDocumentIdentifierError(err: unknown): err is Error & { matc
   return err instanceof Error && err.name === 'AmbiguousDocumentIdentifierError';
 }
 
+function stringField(record: object, key: string, fallback: string): string {
+  const value = (record as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.length > 0 ? value : fallback;
+}
+
 interface TrashDestination {
   absPath: string;
   responsePath: string;
@@ -894,10 +899,10 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
               );
             }
 
-            const existingArchivedAt =
-              typeof parsed.data[FM.ARCHIVED_AT] === 'string' && parsed.data[FM.ARCHIVED_AT].length > 0
-                ? parsed.data[FM.ARCHIVED_AT]
-                : null;
+            const archivedAtValue = parsed.data[FM.ARCHIVED_AT];
+            const existingArchivedAt = typeof archivedAtValue === 'string' && archivedAtValue.length > 0
+              ? archivedAtValue
+              : null;
             const archivedAt = existingArchivedAt ?? new Date().toISOString();
 
             // Step 2: Call targetedScan to update frontmatter with archived status
@@ -923,7 +928,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
             // Write archived status to vault (VAULT-FIRST)
             const archivedTitle = archivedFm[FM.TITLE];
-            const fqcId = resolved.fqcId ?? preScan.capturedFrontmatter.fqcId;
+            const fqcId = resolved.fqcId ?? stringField(preScan.capturedFrontmatter, 'fqcId', '');
             const updatedAt = new Date().toISOString();
             let archivedFileWritten = false;
             try {
@@ -979,7 +984,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             }
 
             const archivedStats = await stat(join(config.instance.vault.path, relativePath));
-            const title = typeof archivedFm[FM.TITLE] === 'string' ? archivedFm[FM.TITLE] : relativePath;
+            const title = stringField(archivedFm, FM.TITLE, relativePath);
 
             logger.info(`archive_document: archived ${relativePath}`);
             results.push(documentArchiveResult({
@@ -1115,12 +1120,12 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
             const relativePath = resolved.relativePath;
             const parsed = await vaultManager.readMarkdown(relativePath);
-            const existingArchivedAt =
-              typeof parsed.data[FM.ARCHIVED_AT] === 'string' && parsed.data[FM.ARCHIVED_AT].length > 0
-                ? parsed.data[FM.ARCHIVED_AT]
-                : null;
+            const archivedAtValue = parsed.data[FM.ARCHIVED_AT];
+            const existingArchivedAt = typeof archivedAtValue === 'string' && archivedAtValue.length > 0
+              ? archivedAtValue
+              : null;
             const archivedAt = existingArchivedAt ?? new Date().toISOString();
-            const title = typeof parsed.data[FM.TITLE] === 'string' ? parsed.data[FM.TITLE] : relativePath;
+            const title = stringField(parsed.data, FM.TITLE, relativePath);
 
             const archivedFm: Record<string, unknown> = {
               ...parsed.data,
@@ -1134,7 +1139,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             const serialized = matter.stringify(parsed.content, archivedFm);
             const newContentHash = computeHash(serialized);
             const preScan = await targetedScan(config, supabase, resolved, newContentHash, logger);
-            const fqcId = resolved.fqcId ?? preScan.capturedFrontmatter.fqcId;
+            const fqcId = resolved.fqcId ?? stringField(preScan.capturedFrontmatter, 'fqcId', '');
             archivedFm[FM.ID] = fqcId;
 
             let archivedFileWritten = false;
@@ -1195,13 +1200,11 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
                 await vaultManager.writeMarkdown(relativePath, parsed.data, parsed.content);
               }
               if (archivedRowWritten) {
-                const originalStatus =
-                  typeof parsed.data[FM.STATUS] === 'string' && parsed.data[FM.STATUS].length > 0
-                    ? parsed.data[FM.STATUS]
-                    : 'active';
+                const originalStatus = stringField(parsed.data, FM.STATUS, 'active');
+                const originalArchivedAtValue = parsed.data[FM.ARCHIVED_AT];
                 const originalArchivedAt =
-                  typeof parsed.data[FM.ARCHIVED_AT] === 'string' && parsed.data[FM.ARCHIVED_AT].length > 0
-                    ? parsed.data[FM.ARCHIVED_AT]
+                  typeof originalArchivedAtValue === 'string' && originalArchivedAtValue.length > 0
+                    ? originalArchivedAtValue
                     : null;
                 const { error: restoreError } = await supabase
                   .from('fqc_documents')
@@ -1442,7 +1445,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         }
 
         const written = await vaultManager.readMarkdown(copyRelativePath);
-        const modified = typeof written.data[FM.UPDATED] === 'string' ? written.data[FM.UPDATED] : now;
+        const modified = stringField(written.data, FM.UPDATED, now);
 
         return jsonToolResult(documentIdentification({
           identifier: copyRelativePath,
@@ -1675,9 +1678,10 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         }
 
         const moved = await vaultManager.readMarkdown(destPath);
-        const movedTitle = typeof moved.data[FM.TITLE] === 'string' ? moved.data[FM.TITLE] : responseTitle;
-        const modified = typeof moved.data[FM.UPDATED] === 'string' ? moved.data[FM.UPDATED] : new Date().toISOString();
-        const movedFqcId = typeof moved.data[FM.ID] === 'string' ? moved.data[FM.ID] : null;
+        const movedTitle = stringField(moved.data, FM.TITLE, responseTitle);
+        const modified = stringField(moved.data, FM.UPDATED, new Date().toISOString());
+        const movedFqcIdValue = moved.data[FM.ID];
+        const movedFqcId = typeof movedFqcIdValue === 'string' ? movedFqcIdValue : null;
         if (!sourceFqcId && !movedFqcId) {
           return jsonExpectedError({
             error: 'invalid_input',
@@ -1686,7 +1690,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             details: { reason: 'untracked_document' },
           });
         }
-        const responseFqcId = sourceFqcId ?? movedFqcId;
+        const responseFqcId = sourceFqcId ?? movedFqcId ?? '';
         const payload = documentIdentification({
           identifier: destPath,
           title: movedTitle,

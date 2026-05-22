@@ -146,7 +146,8 @@ function normalizeMcpMessage(error: Pick<McpError, 'code' | 'message'>): string 
 
 function mapNativeErrorKind(error: Error): ToolErrorKind {
   const message = error.message;
-  const code = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : '';
+  const codeValue = (error as { code?: unknown }).code;
+  const code = typeof codeValue === 'string' ? codeValue : '';
   const combined = `${code} ${message}`;
 
   if (/\bEPIPE\b|Connection closed|transport closed/i.test(combined)) return 'transport_closed';
