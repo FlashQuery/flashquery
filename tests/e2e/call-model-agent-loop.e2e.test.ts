@@ -321,6 +321,17 @@ describe('call_model agent-loop public E2E contracts', () => {
           expect.objectContaining({ role: 'tool', tool_call_id: 'call_search_1' }),
         ]),
       });
+      const secondRequestMessages = provider.requests[1].messages as Array<{
+        role?: string;
+        tool_calls?: Array<{ function?: { arguments?: unknown } }>;
+      }>;
+      const assistantEcho = secondRequestMessages.find((message) => message.role === 'assistant');
+      expect(typeof assistantEcho?.tool_calls?.[0].function?.arguments).toBe('string');
+      expect(assistantEcho?.tool_calls?.[0].function?.arguments).toBe(JSON.stringify({
+        query: 'ATL-E2E-02',
+        entity_types: ['documents'],
+        mode: 'filesystem',
+      }));
     } finally {
       await provider.stop();
     }

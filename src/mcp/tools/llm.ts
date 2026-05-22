@@ -255,6 +255,7 @@ function buildMode2Envelope(
         : {}),
       diagnostics: publicDiagnostics,
       stop_reason: loopTools?.stop_reason ?? 'error',
+      ...(loopTools?.error_detail ? { error_detail: loopTools.error_detail } : {}),
       iterations: loopTools?.iterations ?? 0,
       calls_log: loopTools?.calls_log ?? [],
       aggregate_usage: loopTools?.aggregate_usage ?? {

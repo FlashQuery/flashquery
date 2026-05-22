@@ -3,8 +3,18 @@ import { dispatchToolCalls } from './tool-dispatcher.js';
 import type { AgentLoopStopReason } from '../constants/llm.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { z } from 'zod';
+import { LlmFallbackError } from './resolver.js';
+import { LlmHttpError } from './client.js';
 import type { LlmUsageRecord } from './cost-tracker.js';
-import type { LlmChatMessage, LlmChatResult, LlmChatToolCall, CallModelEnvelope, AgentLoopCallLogEntry, AgentLoopToolCallLogEntry } from './types.js';
+import type {
+  LlmChatMessage,
+  LlmChatResult,
+  LlmChatToolCall,
+  CallModelEnvelope,
+  AgentLoopCallLogEntry,
+  AgentLoopErrorDetail,
+  AgentLoopToolCallLogEntry,
+} from './types.js';
 import type { DispatchToolCallsOptions, NativeToolDispatchContext } from './tool-dispatcher.js';
 import type { Broker, ConsumerContext } from '../services/mcp-broker/index.js';
 import type { NativeToolDefinition, OpenAiToolDefinition, ToolRegistryAssembly } from './tool-registry.js';
@@ -15,6 +25,13 @@ import { ToolSearchService } from '../services/tool-search/tool-search-service.j
 import { loadToolMeta } from '../services/tool-search/tool-meta.js';
 
 export const DEFAULT_OUTPUT_TOKEN_ESTIMATE = 2048;
+const LOOP_ONLY_PARAMETER_KEYS = new Set([
+  'timeout_ms',
+  'max_cost_usd',
+  'max_tokens_budget',
+  'max_iterations',
+  'result_summary_chars',
+]);
 
 type ChatByPurpose = (
   purposeName: string,
@@ -250,6 +267,47 @@ function normalizeStopReason(value: unknown): AgentLoopStopReason | null {
   return null;
 }
 
+function stripLoopOnlyParameters(parameters: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(parameters).filter(([key]) => !LOOP_ONLY_PARAMETER_KEYS.has(key))
+  );
+}
+
+function getErrorType(error: unknown): string {
+  return error instanceof Error ? error.name : typeof error;
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function buildErrorDetail(error: unknown): AgentLoopErrorDetail {
+  if (error instanceof LlmFallbackError) {
+    return {
+      type: error.name,
+      message: error.message,
+      purpose_name: error.purposeName,
+      attempts: error.attempts.map((attempt) => ({
+        model_name: attempt.modelName,
+        provider_name: attempt.providerName,
+        error_type: getErrorType(attempt.error),
+        message: getErrorMessage(attempt.error),
+        ...(attempt.error instanceof LlmHttpError ? { status: attempt.error.status } : {}),
+        ...(attempt.error instanceof LlmHttpError && attempt.error.retryAfterMs !== undefined
+          ? { retry_after_ms: attempt.error.retryAfterMs }
+          : {}),
+      })),
+    };
+  }
+
+  return {
+    type: getErrorType(error),
+    message: getErrorMessage(error),
+    ...(error instanceof LlmHttpError ? { status: error.status } : {}),
+    ...(error instanceof LlmHttpError && error.retryAfterMs !== undefined ? { retry_after_ms: error.retryAfterMs } : {}),
+  };
+}
+
 function shouldStopBeforeCall(
   options: ExecuteAgentLoopOptions,
   messages: LlmChatMessage[],
@@ -292,7 +350,8 @@ function makeEnvelope(
   stopReason: AgentLoopStopReason,
   totals: LoopTotals,
   latestAssistantText: string,
-  resultForMetadata: (LlmChatResult & { fallbackPosition?: number }) | null
+  resultForMetadata: (LlmChatResult & { fallbackPosition?: number }) | null,
+  errorDetail?: AgentLoopErrorDetail
 ): CallModelEnvelope & { mode?: string; usageRow?: Partial<LlmUsageRecord> } {
   const resolvedModelName = resultForMetadata?.modelName ?? '';
   const providerName = resultForMetadata?.providerName ?? '';
@@ -318,6 +377,7 @@ function makeEnvelope(
           : {}),
         diagnostics: { ...(options.toolRegistry?.diagnostics ?? {}) },
         stop_reason: stopReason,
+        ...(errorDetail ? { error_detail: errorDetail } : {}),
         iterations: callsLog.length,
         calls_log: callsLog,
         aggregate_usage: {
@@ -408,6 +468,7 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
   }
 
   const parameters = options.providerParameters ?? options.parameters ?? {};
+  const providerCallParameters = stripLoopOnlyParameters(parameters);
   const purposeDefaults = options.purposeDefaults ?? {};
   const timeoutMs = loopParameter(parameters, purposeDefaults, 'timeout_ms', 30_000) ?? 30_000;
   const maxIterations = loopParameter(parameters, purposeDefaults, 'max_iterations', 10) ?? 10;
@@ -454,13 +515,22 @@ export async function executeAgentLoop(options: ExecuteAgentLoopOptions): Promis
     let result: LlmChatResult & { fallbackPosition?: number };
     try {
       result = await chatByPurpose(options.purposeName, messages, {
-        ...parameters,
+        ...providerCallParameters,
         ...(providerTools.length > 0 ? { tools: providerTools } : {}),
         signal: abortController.signal,
       });
-    } catch {
+    } catch (err: unknown) {
       const stopReason = getAbortStopReason(abortController.signal) ?? 'error';
-      const envelope = makeEnvelope(options, messages, callsLog, stopReason, totals, latestAssistantText, firstSuccessfulResult);
+      const envelope = makeEnvelope(
+        options,
+        messages,
+        callsLog,
+        stopReason,
+        totals,
+        latestAssistantText,
+        firstSuccessfulResult,
+        stopReason === 'error' ? buildErrorDetail(err) : undefined
+      );
       envelope.usageRow = recordAggregateUsage(options, firstSuccessfulResult, totals);
       return envelope;
     }

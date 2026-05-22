@@ -422,11 +422,47 @@ describe('ATL-U-13 loop executor state machine contract', () => {
     expect(result.metadata).toMatchObject({
       tools: {
         stop_reason: 'error',
+        error_detail: {
+          type: 'Error',
+          message: 'provider error: content_filter',
+        },
         calls_log: [expect.objectContaining({ tokens: { input: 17, output: 3 } })],
       },
       tokens: { input: 17, output: 3 },
     });
     expect(recordUsage).toHaveBeenCalledWith(expect.objectContaining({ inputTokens: 17, outputTokens: 3 }));
+  });
+
+  it('ATL-U-13 strips loop-only guardrail parameters before provider calls but preserves model parameters', async () => {
+    const { executeAgentLoop } = await loadAgentLoop();
+    const chat = vi.fn().mockResolvedValueOnce(chatResult());
+
+    await executeAgentLoop(buildOptions({
+      chat,
+      parameters: {
+        max_tokens: 128,
+        temperature: 0.2,
+        timeout_ms: 1234,
+        max_iterations: 5,
+        max_tokens_budget: 9000,
+        max_cost_usd: 0.5,
+        result_summary_chars: 64,
+      },
+    }));
+
+    expect(chat).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({
+      max_tokens: 128,
+      temperature: 0.2,
+      tools: expect.any(Array),
+      signal: expect.any(AbortSignal),
+    }));
+    expect(chat).toHaveBeenCalledWith(expect.any(Array), expect.not.objectContaining({
+      timeout_ms: expect.anything(),
+      max_iterations: expect.anything(),
+      max_tokens_budget: expect.anything(),
+      max_cost_usd: expect.anything(),
+      result_summary_chars: expect.anything(),
+    }));
   });
 
   it('ATL-U-13 handles dispatch-time timeout as stop_reason timeout and preserves completed usage only', async () => {

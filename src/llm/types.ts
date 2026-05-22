@@ -106,11 +106,28 @@ export interface AgentLoopAggregateUsage {
   latency_ms: number;
 }
 
+export interface AgentLoopErrorDetail {
+  type: string;
+  message: string;
+  status?: number;
+  retry_after_ms?: number;
+  purpose_name?: string;
+  attempts?: Array<{
+    model_name: string;
+    provider_name: string;
+    error_type: string;
+    message: string;
+    status?: number;
+    retry_after_ms?: number;
+  }>;
+}
+
 export interface AgentLoopMetadataTools {
   native_tool_names: string[];
   template_tool_names?: string[];
   diagnostics: Record<string, unknown>;
   stop_reason?: AgentLoopStopReason;
+  error_detail?: AgentLoopErrorDetail;
   iterations?: number;
   calls_log?: AgentLoopCallLogEntry[];
   aggregate_usage?: AgentLoopAggregateUsage;

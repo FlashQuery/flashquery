@@ -281,6 +281,35 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     });
   }
 
+  private serializeToolCallArguments(args: unknown): string {
+    if (typeof args === 'string') return args;
+    if (args && typeof args === 'object' && !Array.isArray(args)) {
+      return JSON.stringify(args);
+    }
+    return '{}';
+  }
+
+  private serializeMessagesForProvider(messages: LlmChatMessage[]): unknown[] {
+    return messages.map((message) => {
+      if (!('tool_calls' in message) || !Array.isArray(message.tool_calls) || message.tool_calls.length === 0) {
+        return message;
+      }
+
+      return {
+        ...message,
+        tool_calls: message.tool_calls.map((toolCall) => ({
+          ...toolCall,
+          function: {
+            ...toolCall.function,
+            arguments: this.serializeToolCallArguments(
+              (toolCall.function as { arguments?: unknown }).arguments
+            ),
+          },
+        })),
+      };
+    });
+  }
+
   private toTextCompletion(result: LlmChatResult): LlmCompletionResult {
     if ((result.message.tool_calls?.length ?? 0) > 0) {
       throw new Error('LLM error: text completion wrapper received tool calls; use chat() for tool-capable responses.');
@@ -343,13 +372,14 @@ export class OpenAICompatibleLlmClient implements LlmClient {
     try {
       let response: Response;
       try {
+        const providerMessages = this.serializeMessagesForProvider(messages);
         response = await nodeFetch(`${provider.endpoint.replace(/\/$/, '')}/v1/chat/completions`, {
           method: 'POST',
           headers: {
             ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ ...mergedParams, model: model.model, messages }), // D-07
+          body: JSON.stringify({ ...mergedParams, model: model.model, messages: providerMessages }), // D-07
           signal: controller.signal,
         });
       } catch (err: unknown) {

@@ -1660,6 +1660,61 @@ describe('call_model handler — Phase 116 native tool registry wiring', () => {
     }
   });
 
+  it('[LOOP-07] Mode 2 envelope preserves loop error detail for opaque provider failures', async () => {
+    vi.mocked(executeAgentLoop).mockResolvedValue({
+      response: '',
+      messages: [],
+      metadata: {
+        resolver: 'purpose',
+        name: 'documented',
+        resolved_model_name: 'fast',
+        provider_name: 'openai',
+        fallback_position: 1,
+        tokens: { input: 0, output: 0 },
+        cost_usd: 0,
+        latency_ms: 0,
+        tools: {
+          native_tool_names: ['get_document'],
+          diagnostics: { explicitTools: ['get_document'] },
+          stop_reason: 'error',
+          error_detail: { type: 'Error', message: 'provider error: content_filter' },
+          iterations: 0,
+          calls_log: [],
+          aggregate_usage: { tokens: { input: 0, output: 0 }, cost_usd: 0, latency_ms: 0 },
+        },
+      },
+    });
+    _llmClientValue = {
+      complete: vi.fn(),
+      completeByPurpose: vi.fn(),
+      chatByPurpose: vi.fn(),
+      chatByPurposeUnrecorded: vi.fn(),
+      getModelForPurpose: vi.fn().mockReturnValue({
+        modelName: 'fast',
+        providerName: 'openai',
+        config: TOOL_PURPOSE_CONFIG.llm?.models[0],
+      }),
+    } as unknown as LlmClient;
+
+    const { handler, server } = captureCallModelRegistration(TOOL_PURPOSE_CONFIG as typeof TEST_CONFIG);
+    seedNativeToolCatalog(server);
+
+    const result = await handler({
+      resolver: 'purpose',
+      name: 'documented',
+      messages: [{ role: 'user', content: 'Read the document.' }],
+    });
+
+    expect(result.isError).toBeUndefined();
+    const envelope = JSON.parse(result.content[0].text) as {
+      metadata: { tools: { error_detail?: { type: string; message: string } } };
+    };
+    expect(envelope.metadata.tools.error_detail).toEqual({
+      type: 'Error',
+      message: 'provider error: content_filter',
+    });
+  });
+
   it('[REQ-065] Mode 2 trace metadata includes empty tool_calls when no brokered tools ran', async () => {
     vi.mocked(executeAgentLoop).mockResolvedValue({
       response: 'final loop answer',

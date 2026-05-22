@@ -412,6 +412,7 @@ describe('OpenAICompatibleLlmClient.complete', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   it('U-15: complete() returns LlmCompletionResult with text/modelName/providerName/inputTokens/outputTokens/latencyMs populated when provider returns a valid OpenAI-shaped response', async () => {
@@ -750,6 +751,10 @@ describe('OpenAICompatibleLlmClient.chat', () => {
     client = new OpenAICompatibleLlmClient(TEST_LLM_CONFIG, 'test-instance-chat');
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('chat() returns finishReason stop for provider finish_reason stop', async () => {
     __setNextResponse({ status: 200, body: makeOpenAISuccessBody({ text: 'plain text' }) });
     const result = await client.chat('gpt-4o', SAMPLE_MESSAGES);
@@ -794,6 +799,69 @@ describe('OpenAICompatibleLlmClient.chat', () => {
     expect(capturedBodies[1].tools).toEqual([
       { type: 'function', function: { name: 'search_documents', parameters: {} } },
     ]);
+  });
+
+  it('chat() serializes assistant tool call arguments for provider requests without mutating messages', async () => {
+    const httpsMod = await import('node:https');
+    const capturedBodies: Array<Record<string, unknown>> = [];
+    vi.spyOn(httpsMod as typeof httpsMod & { request: unknown }, 'request').mockImplementation(
+      (_opts: unknown, cb: unknown) => {
+        return {
+          on(_event: string, _handler: (err?: Error) => void) {},
+          write(body: string) {
+            capturedBodies.push(JSON.parse(body) as Record<string, unknown>);
+          },
+          end() {
+            const bodyStr = JSON.stringify(makeOpenAISuccessBody({ text: 'ok' }));
+            const chunks = [Buffer.from(bodyStr, 'utf-8')];
+            const res = {
+              statusCode: 200,
+              statusMessage: 'OK',
+              headers: {},
+              on(event: string, handler: (chunk?: Buffer) => void) {
+                if (event === 'data') for (const chunk of chunks) handler(chunk);
+                else if (event === 'end') setTimeout(() => handler(), 0);
+              },
+            };
+            (cb as (res: typeof res) => void)(res);
+          },
+        } as unknown as ReturnType<typeof httpsMod.request>;
+      }
+    );
+    const messages: LlmChatMessage[] = [
+      { role: 'user', content: 'Use the tool.' },
+      {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'call_1',
+            type: 'function',
+            function: { name: 'search_documents', arguments: { query: 'alpha' } },
+          },
+          {
+            id: 'call_2',
+            type: 'function',
+            function: {
+              name: 'search_documents',
+              arguments: '{"query":"already-string"}' as unknown as Record<string, unknown>,
+            },
+          },
+        ],
+      },
+      { role: 'tool', tool_call_id: 'call_1', content: '{"ok":true}' },
+    ];
+
+    await client.chat('gpt-4o', messages);
+
+    const sentMessages = capturedBodies[0].messages as Array<{
+      tool_calls?: Array<{ function: { arguments: unknown } }>;
+    }>;
+    const sentToolCalls = sentMessages[1].tool_calls ?? [];
+    expect(sentToolCalls[0].function.arguments).toBe('{"query":"alpha"}');
+    expect(sentToolCalls[1].function.arguments).toBe('{"query":"already-string"}');
+    expect(messages[1].tool_calls?.[0].function.arguments).toEqual({ query: 'alpha' });
+    expect(messages[1].tool_calls?.[1].function.arguments).toBe('{"query":"already-string"}');
   });
 
   it('chat() maps function_call and non-empty tool_calls to finishReason tool_calls', async () => {
