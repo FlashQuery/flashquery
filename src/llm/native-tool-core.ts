@@ -80,6 +80,17 @@ export function appendNativeHelpFooter(message: string, toolName: string): strin
   return `${message}\n\n${footer}`;
 }
 
+function appendHelpFooterToResult(result: NativeToolResponse, toolName: string): NativeToolResponse {
+  const content = [...result.content];
+  if (content.length > 0) {
+    const last = content[content.length - 1];
+    content[content.length - 1] = { ...last, text: appendNativeHelpFooter(last.text, toolName) };
+  } else {
+    content.push({ type: 'text', text: nativeHelpFooter(toolName) });
+  }
+  return { ...result, content };
+}
+
 function errorPayload(toolName: string, code: string, message: string, details?: unknown): ToolErrorPayload {
   return {
     ok: false,
@@ -163,10 +174,18 @@ export async function dispatchNativeToolCore(options: DispatchNativeToolCoreOpti
         payload: errorPayload(toolName, code, `Native tool dispatch aborted while invoking '${toolName}'.`),
       };
     }
-    if (result.isError === true && options.wrapHandlerErrors !== false) {
+    if (result.isError === true) {
+      if (options.wrapHandlerErrors !== false) {
+        return {
+          args: parsedArgs,
+          payload: errorPayload(toolName, 'handler_error', `Native tool '${toolName}' returned an error response.`, result),
+        };
+      }
+      // wrapHandlerErrors === false (host path): preserve the handler's MCP
+      // result shape, but still append the help footer per REQ-005 condition (c).
       return {
         args: parsedArgs,
-        payload: errorPayload(toolName, 'handler_error', `Native tool '${toolName}' returned an error response.`, result),
+        payload: { ok: true, result: appendHelpFooterToResult(result, toolName) },
       };
     }
 

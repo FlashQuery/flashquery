@@ -168,4 +168,67 @@ describe('native tool core help convention', () => {
     });
     expect(JSON.stringify(result.payload)).not.toContain('help: true');
   });
+
+  it('wraps a handler isError:true result into a footered error envelope by default', async () => {
+    const { dispatchNativeToolCore } = await loadCore();
+    const result = await dispatchNativeToolCore({
+      toolName: 'get_document',
+      args: { identifier: 'Research/ATL.md' },
+      catalog: catalog(vi.fn(async () => ({
+        content: [{ type: 'text' as const, text: 'handler said no' }],
+        isError: true,
+      }))),
+      nativeToolNames: ['get_document'],
+      dispatchContext: context(),
+    });
+
+    expect(result.payload.ok).toBe(false);
+    if (result.payload.ok) throw new Error('expected an error payload');
+    expect(result.payload.error.code).toBe('handler_error');
+    expect(result.payload.error.message).toContain(footerFor('get_document'));
+  });
+
+  it('appends the footer to a handler isError:true result when wrapHandlerErrors is false (host path)', async () => {
+    const { dispatchNativeToolCore } = await loadCore();
+    const result = await dispatchNativeToolCore({
+      toolName: 'get_document',
+      args: { identifier: 'Research/ATL.md' },
+      catalog: catalog(vi.fn(async () => ({
+        content: [{ type: 'text' as const, text: 'name is required' }],
+        isError: true,
+      }))),
+      nativeToolNames: ['get_document'],
+      wrapHandlerErrors: false,
+      dispatchContext: context(),
+    });
+
+    expect(result.payload).toEqual({
+      ok: true,
+      result: {
+        content: [{ type: 'text', text: `name is required\n\n${footerFor('get_document')}` }],
+        isError: true,
+      },
+    });
+  });
+
+  it('does not append the footer to a handler isError:false result when wrapHandlerErrors is false', async () => {
+    const { dispatchNativeToolCore } = await loadCore();
+    const result = await dispatchNativeToolCore({
+      toolName: 'get_document',
+      args: { identifier: 'Research/ATL.md' },
+      catalog: catalog(vi.fn(async () => ({
+        content: [{ type: 'text' as const, text: 'fine' }],
+        isError: false,
+      }))),
+      nativeToolNames: ['get_document'],
+      wrapHandlerErrors: false,
+      dispatchContext: context(),
+    });
+
+    expect(result.payload).toEqual({
+      ok: true,
+      result: { content: [{ type: 'text', text: 'fine' }], isError: false },
+    });
+    expect(JSON.stringify(result.payload)).not.toContain('help: true');
+  });
 });
