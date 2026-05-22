@@ -259,6 +259,43 @@ Core CRUD operations on vault documents via MCP.
 | MCB-21 | `help: true` against an FQ-native tool returns its `.tool.md` body through `call_model` before native schema validation rejects invalid required arguments. | test_fq_native_help_true_through_call_model | 2026-05-18 | 2026-05-19 |
 | MCB-22 | A `tool_search: enabled` purpose initially exposes only `fq.search_tools`, returns native/brokered help discrimination in search results, and dispatches a discovered brokered tool. | test_search_tools_purpose_roundtrip | 2026-05-18 | 2026-05-19 |
 
+## Host Help Convention Parity
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| MCB-23 | `apply_tags` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-24 | `archive_document` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-25 | `archive_memory` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-26 | `archive_record` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-27 | `call_macro` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-28 | `call_model` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-29 | `clear_pending_reviews` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-30 | `copy_document` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-31 | `get_briefing` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-32 | `get_document` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-33 | `get_llm_usage` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-34 | `get_memory` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-35 | `get_plugin_info` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-36 | `get_record` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-37 | `insert_doc_link` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-38 | `insert_in_doc` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-39 | `list_vault` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-40 | `maintain_vault` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-41 | `manage_directory` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-42 | `move_document` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-43 | `register_plugin` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-44 | `remove_document` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-45 | `replace_doc_section` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-46 | `search` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-47 | `search_records` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-48 | `search_tools` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-49 | `unregister_plugin` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-50 | `write_document` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-51 | `write_memory` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-52 | `write_record` native tool errors include the single native help footer. | — | 2026-05-21 |  |
+| MCB-53 | Host brokered `help:true` calls are forwarded upstream unchanged. | — | 2026-05-21 |  |
+| MCB-54 | Brokered tool errors omit the native help footer. | — | 2026-05-21 |  |
+
 ## Phase 143 MCP Broker Diagnostics And Macro Extensions
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
