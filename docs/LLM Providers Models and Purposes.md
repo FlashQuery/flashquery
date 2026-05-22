@@ -107,7 +107,7 @@ Provider fields:
 | `name` | yes | Your provider alias. Names are normalized to lowercase and must match `[a-z0-9][a-z0-9_-]*`. |
 | `type` | yes | `openai-compatible` or `ollama`. |
 | `endpoint` | yes | Provider base URL. Must be a valid URL. |
-| `api_key` | no | API key or environment-variable reference such as `${OPENAI_API_KEY}`. |
+| `api_key` | no | API key or environment-variable reference such as `${OPENAI_API_KEY}`. FlashQuery silently loads a `.env` file from the directory containing `flashquery.yml` before expanding references. |
 | `local` | no | Caller-facing metadata surfaced by `list_models`. `type: ollama` is also reported as local. |
 
 Use one provider per endpoint or account boundary. For example, you might have `openai`, `openrouter`, and `local-ollama` providers. Models then point at whichever provider should serve them.
@@ -210,6 +210,8 @@ Purpose fields:
 | `tools` | no | Native tool names or tool tiers exposed to the delegated model. |
 | `excluded_tools` | no | Tools removed from the `tools` set. Requires `tools` to be present. |
 | `templates` | no | Vault template paths exposed as model-visible template tools for this purpose. |
+| `mcp_servers` | no | External brokered MCP server IDs exposed to this purpose. Each ID must exist in top-level `mcp_servers`. |
+| `tool_search` | no | `enabled` or `disabled`. Defaults to `disabled`; when enabled, the purpose gets the `search_tools` discovery tool for its visible native and brokered tool index. |
 
 Think of purposes as stable workflow names. Instead of asking callers to decide "Should this use `gpt-4o-mini` or `gpt-4o`?", let them call `summarization`, `reviewer`, or `researcher`. You can later change the purpose's model chain without changing callers.
 
@@ -334,6 +336,46 @@ purposes:
 Some tools are always excluded from delegated model-visible native access, even if listed: `call_model`, `call_macro`, `register_plugin`, `unregister_plugin`, plugin administration tools, and `get_plugin_info`.
 
 Administrative tools are also hard-excluded from delegated native access: `clear_pending_reviews` and `maintain_vault`. Removed legacy administrative names such as `force_file_scan` and `reconcile_documents` are not available as current host tools and are rejected by startup validation when used in purpose tool configuration.
+
+`search_tools` is not configured through `tools` and is not part of broad delegated tiers. Enable it with `tool_search: enabled` when a purpose should discover available tools during the managed loop:
+
+```yaml
+purposes:
+  - name: researcher
+    description: Research assistant that can search its tool surface before calling tools.
+    models: [fast]
+    tools:
+      - tier:read-only
+    tool_search: enabled
+```
+
+Purposes can also expose brokered external MCP servers. Server definitions live at top level and purpose `mcp_servers` lists the server IDs that purpose may use:
+
+```yaml
+mcp_servers:
+  docs-helper:
+    transport: stdio
+    command: node
+    args: [/path/to/docs-helper/dist/index.js]
+    env:
+      DOCS_API_KEY: ${DOCS_API_KEY}
+    cost_per_call: 0
+    per_call_timeout_ms: 30000
+    tool_overrides: {}
+
+llm:
+  purposes:
+    - name: docs-researcher
+      description: Research assistant with vault reads and a docs helper server.
+      models: [fast]
+      tools:
+        - tier:read-only
+      mcp_servers:
+        - docs-helper
+      tool_search: enabled
+```
+
+Brokered MCP server configs currently use `transport: stdio`, `command`, optional `args`, optional `env`, optional `cost_per_call`, optional `per_call_timeout_ms`, and optional `tool_overrides`. Tool overrides can set `cost_per_call` or `description_override` for a brokered tool.
 
 ## Purpose Templates
 
@@ -498,6 +540,8 @@ FlashQuery validates LLM config on startup:
 - `excluded_tools` requires `tools`.
 - Tool tiers must be known.
 - Purpose `tools` and `excluded_tools` entries must be known delegated tool names, known hard-excluded names, or known tiers. Removed legacy tool names are rejected with replacement suggestions.
+- Purpose `mcp_servers` entries and `host.mcp_servers` entries must reference server IDs declared under top-level `mcp_servers`.
+- Purpose `tool_search` and `host.tool_search` must be `enabled` or `disabled`.
 - Purpose loop-control defaults such as `timeout_ms` and `max_iterations` must be numbers.
 
 If a value is not recognized in a strict section, FlashQuery reports a config error rather than silently accepting it.
@@ -572,6 +616,7 @@ llm:
         max_iterations: 4
       tools:
         - tier:read-only
+      tool_search: enabled
       templates:
         - Templates/document-review.md
 ```
@@ -580,7 +625,7 @@ This configuration gives callers:
 
 - `resolver: "model", name: "fast"` for exact model selection.
 - `resolver: "purpose", name: "general"` for routine calls with fallback.
-- `resolver: "purpose", name: "reviewer"` for a tool-enabled review workflow with a curated template.
+- `resolver: "purpose", name: "reviewer"` for a tool-enabled review workflow with a curated template and `search_tools` discovery available inside the managed loop.
 
 ## Practical Guidance
 
@@ -591,4 +636,5 @@ This configuration gives callers:
 - Use direct model calls for controlled experiments, diagnostics, and cases where fallback would hide the behavior you are testing.
 - Keep purpose descriptions specific. They are used by humans and agents deciding which purpose to call.
 - Declare capabilities explicitly for non-OpenAI providers when using tools or templates.
+- Use `tool_search: enabled` for broad or brokered tool surfaces so the delegated model can discover the right tool before calling it.
 - Put expensive models behind specific purposes rather than making every caller choose them manually.

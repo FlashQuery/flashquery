@@ -431,7 +431,7 @@ Resolves one document, finds a heading by text, optional match mode, optional le
 
 **Output**
 
-Success returns document identification plus section mutation metadata. Expected errors include `not_found`, `ambiguous_identifier`, `invalid_input`, and lock `conflict`.
+Success returns document identification plus `extracted_section` mutation metadata, top-level `heading_match`, and optional top-level `heading_level`. Expected errors include `not_found`, `ambiguous_identifier`, `invalid_input`, and lock `conflict`.
 
 **Examples**
 
@@ -452,11 +452,15 @@ mcp__flashquery__replace_doc_section({
   "fq_id": "550e8400-e29b-41d4-a716-446655440000",
   "modified": "2026-05-17T12:00:00.000Z",
   "size": { "chars": 300 },
-  "replaced_section": {
+  "extracted_section": {
     "heading": "Risks",
-    "heading_match": "exact",
-    "include_nested": true
-  }
+    "level": 2,
+    "old_content_length": 84,
+    "new_content_length": 14,
+    "include_nested": true,
+    "heading_removed": false
+  },
+  "heading_match": "exact"
 }
 ```
 
@@ -565,6 +569,10 @@ mcp__flashquery__write_memory({
   "content_preview": "The user prefers concise implementation updates.",
   "tags": ["preference"],
   "plugin_scope": "global",
+  "version": 1,
+  "previous_version_id": null,
+  "is_latest": true,
+  "archived_at": null,
   "created_at": "2026-05-17T12:00:00.000Z",
   "updated_at": "2026-05-17T12:00:00.000Z",
   "content": "The user prefers concise implementation updates."
@@ -613,6 +621,10 @@ mcp__flashquery__get_memory({
   "content_preview": "The user prefers concise implementation updates.",
   "tags": ["preference"],
   "plugin_scope": "global",
+  "version": 1,
+  "previous_version_id": null,
+  "is_latest": true,
+  "archived_at": null,
   "created_at": "2026-05-17T12:00:00.000Z",
   "updated_at": "2026-05-17T12:00:00.000Z",
   "content": "The user prefers concise implementation updates.",
@@ -645,7 +657,7 @@ Archives one or more memory version chains. The preferred input is `memory_ids`;
 
 **Output**
 
-Success returns one memory result for single input or an ordered array for batch input. Per-item errors include `not_found`.
+Success returns one memory result for single input, one error object for a failed single input, or an ordered array for batch input. Successful archive payloads include memory identification, version fields, `status: "archived"`, `archived_at`, and `archived_version_count`. Per-item errors include `not_found`.
 
 **Examples**
 
@@ -662,9 +674,14 @@ mcp__flashquery__archive_memory({
     "content_preview": "The user prefers concise implementation updates.",
     "tags": ["preference"],
     "plugin_scope": "global",
+    "version": 1,
+    "previous_version_id": null,
+    "is_latest": true,
     "created_at": "2026-05-17T12:00:00.000Z",
     "updated_at": "2026-05-17T12:00:00.000Z",
-    "archived_at": "2026-05-17T12:00:00.000Z"
+    "archived_at": "2026-05-17T12:00:00.000Z",
+    "status": "archived",
+    "archived_version_count": 1
   }
 ]
 ```
@@ -685,13 +702,13 @@ Use `search` with `include_archived: true` to include archived memories and `wri
 
 **Behavior**
 
-`search` unifies document and memory search. `mode: "filesystem"` uses document title/path/tags and memory content/tags. `mode: "semantic"` uses embeddings and returns `unsupported` if semantic search is unavailable. `mode: "mixed"` combines semantic and filesystem results and falls back with warnings when embeddings are unavailable. Empty query requires filters or `list_all: true`. Archived entities are excluded unless `include_archived` is true.
+`search` unifies document and memory search. `mode: "filesystem"` uses document title/path/tags and memory content/tags. `mode: "semantic"` uses embeddings and returns `unsupported` if semantic search is unavailable. `mode: "mixed"` combines semantic and filesystem results and falls back with warnings when embeddings are unavailable. Empty query requires filters or `list_all: true`; filtered list-mode also requires explicit `entity_types` so the target domains are unambiguous. Archived entities are excluded unless `include_archived` is true.
 
 **Inputs**
 
 | Field | Type | Required | Default | Description |
 |---|---:|---:|---:|---|
-| `query` | `string` | no | none | Search query. Empty query requires filters or `list_all: true`. |
+| `query` | `string` | no | none | Search query. Empty query is list-mode and requires filters or `list_all: true`; filtered list-mode requires explicit `entity_types`. |
 | `mode` | `"filesystem" \| "semantic" \| "mixed"` | no | `"mixed"` | Search mode. |
 | `tags` | `string[]` | no | none | Tag filter. |
 | `tag_match` | `"any" \| "all"` | no | `"any"` | Tag matching mode. |
@@ -937,7 +954,7 @@ Reads plugin YAML from `schema_path` or `schema_yaml`, defaulting `plugin_instan
 
 **Output**
 
-Success returns plugin identification plus `registered_at`, `was_new`, `plugin_instance`, `schema_version`, and sometimes `safe_change_count`. Expected errors include invalid input and unsafe migration `conflict`. Runtime errors cover YAML/DDL/database failures.
+First registration, same-version re-registration, and version downgrades return plugin identification plus `registered_at`, `was_new`, `plugin_instance`, and `schema_version`. Safe additive upgrades return `status: "registered"`, `schema_version`, and `safe_change_count`; that upgrade response is intentionally narrower and does not include every first-registration field. Expected errors include invalid input and unsafe migration `conflict`. Runtime errors cover YAML/DDL/database failures.
 
 **Examples**
 
@@ -1231,7 +1248,7 @@ Use `search_records` to find record IDs and `unregister_plugin` only for plugin 
 
 **Behavior**
 
-Can search one plugin table or, with `taggable_tables_only: true`, all registered plugin tables that have a `tags` or `tag` column. For one table, filters are equality predicates combined with AND. With `query` and `embed_fields`, semantic vector search is used. With `query` and no embedding fields, text columns are searched with ILIKE. With no query, filters-only search runs. All normal searches are scoped to active rows in the current FlashQuery instance. Record tools run plugin document reconciliation as a preamble.
+Can search one plugin table or, with `taggable_tables_only: true`, all registered plugin tables that have a `tags` or `tag` column. For one table, filters are equality predicates combined with AND; the `tag` field is echoed in the response but is only applied as a database filter in `taggable_tables_only` mode. With `query` and `embed_fields`, semantic vector search is used. With `query` and no embedding fields, text columns are searched with ILIKE. With no query, filters-only search runs. All normal searches are scoped to active rows in the current FlashQuery instance. Record tools run plugin document reconciliation as a preamble.
 
 **Inputs**
 
@@ -1242,14 +1259,14 @@ Can search one plugin table or, with `taggable_tables_only: true`, all registere
 | `table` | `string` | conditional | none | Required unless `taggable_tables_only` is true. |
 | `filters` | `object` | no | none | Field equality filters. |
 | `query` | `string` | no | none | Text or semantic query. |
-| `tag` | `string` | no | none | Tag filter for taggable table aggregation. |
+| `tag` | `string` | no | none | Tag filter for `taggable_tables_only` aggregation. In single-table mode it is returned in the envelope but does not add a tag predicate. |
 | `taggable_tables_only` | `boolean` | no | `false` | Search all registered taggable plugin tables. |
 | `include` | `("data" \| "schema_metadata")[]` | no | result defaults | Optional payload sections. |
 | `limit` | `number` | no | `10` | Maximum result count. |
 
 **Output**
 
-Success returns a search envelope with `plugin_id`, `table`, `query`, `tag`, `total`, and `results`. Results contain record identification and optional `data`, `schema_metadata`, `similarity`, and reconciliation information. If no taggable tables exist, returns total `0` with warning `plugin_no_taggable_tables`.
+Single-table success returns a search envelope with `plugin_id`, `table`, `query`, optional `tag`, `total`, and `results`. `taggable_tables_only` success omits top-level `plugin_id` and `table`; each result carries its own record identification. Results contain record identification and optional `data`, `schema_metadata`, semantic `score`, and reconciliation information. If no taggable tables exist, returns total `0` with warning `plugin_no_taggable_tables`.
 
 **Examples**
 
@@ -1427,7 +1444,61 @@ mcp__flashquery__call_model({
 
 **Related tools**
 
-See `docs/Document Reference System.md` for reference syntax and `docs/LLM Providers Models and Purposes.md` for configuration. Use `get_llm_usage` for usage reporting.
+See `docs/Document Reference System.md` for reference syntax and `docs/LLM Providers Models and Purposes.md` for configuration. Use `search_tools` for host or delegated tool discovery and `get_llm_usage` for usage reporting.
+
+### `search_tools`
+
+**Status:** final
+**Category:** llm
+**Tier:** read-only
+**Use when:** Discovering the visible FlashQuery-native and brokered tool surface by intent.
+**Do not use when:** You need to execute a tool or retrieve vault data; call the selected tool directly after discovery.
+
+**Behavior**
+
+Searches a BM25-style index of visible tools and returns ranked discovery results. As a host MCP tool, it indexes the host-visible native tool surface plus host-visible brokered MCP tools when `host.tool_search: enabled`. Inside a managed `call_model` purpose loop, `tool_search: enabled` exposes this discovery tool so the delegated model can search the purpose-visible native and brokered tool index before making direct calls. The search result is discovery metadata only; it does not execute the returned tool.
+
+**Inputs**
+
+| Field | Type | Required | Default | Description |
+|---|---:|---:|---:|---|
+| `query` | `string` | yes | none | Natural-language search query over tool names, descriptions, and argument summaries. |
+| `limit` | positive integer up to 50 | no | `8` | Maximum number of ranked tool matches. |
+
+**Output**
+
+Success returns a JSON array of ranked results. Each result includes `server`, `tool`, `registry_key`, `description`, `arg_summary`, `score`, `normalizedScore`, and `has_help`. Native FlashQuery tools also include `help_hint`. Invalid input returns `isError: true` with text beginning `search_tools invalid input:`.
+
+**Examples**
+
+```js
+mcp__flashquery__search_tools({
+  query: "read a vault document with frontmatter",
+  limit: 5
+})
+```
+
+```json
+[
+  {
+    "server": "flashquery",
+    "tool": "get_document",
+    "registry_key": "get_document",
+    "description": "Read one or more vault documents and return structured document data.",
+    "arg_summary": [
+      { "name": "identifiers", "description": "One or more document identifiers.", "required": false }
+    ],
+    "score": 3.42,
+    "normalizedScore": 1,
+    "has_help": true,
+    "help_hint": "Pass help:true to this tool for full usage guidance."
+  }
+]
+```
+
+**Related tools**
+
+Use `call_model` with a `tool_search: enabled` purpose when a delegated model should discover tools during a managed loop. Use `call_macro` when deterministic orchestration should choose and call tools directly.
 
 ### `get_llm_usage`
 
@@ -1506,10 +1577,10 @@ Runs inline macro `source` or resolves macro code from `source_ref`. Exactly one
 | `source` | `string` | conditional | none | Inline macro source. Mutually exclusive with `source_ref`. |
 | `source_ref` | `string` | conditional | none | Document or fenced-block reference for macro source. Mutually exclusive with `source`. |
 | `input_vars` | `object` | no | `{}` | Values for macro input variables. |
-| `budget` | `object` | no | none | Optional `max_total_tokens`, `max_model_calls`, `max_external_tool_calls`, and `timeout_ms`. |
+| `budget` | `object` | no | `timeout_ms` from `macro.default_timeout_ms` (`60000` unless configured) | Optional `max_total_tokens`, `max_model_calls`, `max_external_tool_calls`, and `timeout_ms`. |
 | `dry_run` | `boolean` | no | `false` | Parse and analyze without side effects. |
-| `trace` | `"full" \| "summary" \| "none"` | no | implementation default | Trace detail level. |
-| `progress` | `"full" \| "milestones" \| "silent"` | no | implementation default | Progress notification verbosity. |
+| `trace` | `"full" \| "summary" \| "none"` | no | `"summary"` | Trace detail level. |
+| `progress` | `"full" \| "milestones" \| "silent"` | no | `"milestones"` | Progress notification verbosity. |
 
 **Output**
 
@@ -1519,7 +1590,7 @@ Execution success returns `{ task_id, result, trace?, token_total?, model_calls?
 
 ```js
 mcp__flashquery__call_macro({
-  source: "let result = fq.search({ query: \"alpha\", entity_types: [\"documents\"] }); result",
+  source: "result = fq.search({ query: \"alpha\", entity_types: [\"documents\"] })\nexit result",
   dry_run: true
 })
 ```
@@ -1550,7 +1621,7 @@ Use direct MCP tools for simple operations. Transitional `get_briefing` and `ins
 
 **Behavior**
 
-Builds structured JSON groups of matching documents and memories, and includes plugin record counts when `plugin_id` and record entity type are active. Entity domains are affected by enabled configuration categories. Explicitly requested disabled domains produce warnings. Removal gate: `call_macro` parity.
+Builds tag-grouped JSON over active matching documents, latest active memories, and taggable plugin records when record search is active. Entity domains are affected by enabled configuration categories. Explicitly requested disabled domains produce warnings. If records are requested and no taggable plugin tables are available, the response includes `plugin_no_taggable_tables`. Removal gate: `call_macro` parity.
 
 **Inputs**
 
@@ -1560,11 +1631,11 @@ Builds structured JSON groups of matching documents and memories, and includes p
 | `tag_match` | `"any" \| "all"` | no | `"any"` | Tag matching mode. |
 | `limit` | `number` | no | `20` | Maximum results per section. |
 | `entity_types` | `("documents" \| "memories" \| "records")[]` | no | enabled docs/memories, plus records when `plugin_id` is provided | Domains to include. |
-| `plugin_id` | `string` | no | none | Include records from this plugin. |
+| `plugin_id` | `string` | no | none | Limit record groups to this plugin. When omitted and records are active, all registered taggable plugin tables are considered. |
 
 **Output**
 
-Success returns structured briefing groups, counts, optional warnings, and `removal_gate: "call_macro parity"`.
+Success returns `generated_at`, `entity_types`, `tags`, `tag_match`, `limit`, `removal_gate: "call_macro parity"`, optional `warnings`, and `groups`. Each group has `type: "tag"`, the tag value, and an `items` array containing document, memory, and/or record identification payloads.
 
 **Examples**
 
@@ -1578,11 +1649,19 @@ mcp__flashquery__get_briefing({
 
 ```json
 {
+  "generated_at": "2026-05-17T12:00:00.000Z",
+  "entity_types": ["documents", "memories"],
   "tags": ["alpha"],
   "tag_match": "any",
-  "documents": [],
-  "memories": [],
-  "removal_gate": "call_macro parity"
+  "limit": 20,
+  "removal_gate": "call_macro parity",
+  "groups": [
+    {
+      "type": "tag",
+      "tag": "alpha",
+      "items": []
+    }
+  ]
 }
 ```
 
@@ -1672,7 +1751,7 @@ The native tool catalog still records all registered tools for macro/agent dispa
 
 ## Delegated Native Tool Exposure
 
-Purpose-level delegated tool selectors use the same metadata but exclude unsafe tools. Broad delegated tiers include only data categories (`doc-read`, `doc-write`, `memory`, and `plugin`) and exclude hard-blocked tools.
+Purpose-level delegated tool selectors use the same metadata but exclude unsafe tools. Broad delegated tiers include only data categories (`doc-read`, `doc-write`, `memory`, and `plugin`) and exclude hard-blocked tools. LLM-category tools such as `get_llm_usage` and `search_tools` are not included by `tier:read-only` or `tier:read-write`; use purpose `tool_search: enabled` to make `search_tools` available as the managed-loop discovery tool.
 
 Hard-excluded delegated tools:
 
@@ -1708,5 +1787,3 @@ The following names are removed legacy migration references and must not appear 
 | `create_record` | `write_record` with `mode: "create"` | Plugin schema-validated write. |
 | `update_record` | `write_record` with `mode: "update"` | Requires record `id`. |
 | `search_all` | `search` with `entity_types` | Unified document/memory surface. |
-| `list_projects` | `list_vault` or `search` | Project concepts are represented by vault structure and metadata. |
-| `get_project_info` | `search`, `get_document`, or transitional `get_briefing` | Use `get_briefing` only with the `call_macro` removal gate noted. |
