@@ -308,20 +308,27 @@ class FQCServer:
         # OPENAI_API_KEY is the shorter form used in .env.test.example.
         api_key = env.get("EMBEDDING_API_KEY") or env.get("OPENAI_API_KEY", "")
         model = env.get("EMBEDDING_MODEL", "text-embedding-3-small")
+        endpoint = env.get("EMBEDDING_ENDPOINT")
+        if not endpoint and provider == "ollama":
+            endpoint = env.get("OLLAMA_URL", "http://localhost:11434")
+        dimensions = int(env.get("EMBEDDING_DIMENSIONS", "1536"))
 
-        if not api_key:
+        if provider in {"openai", "openrouter"} and not api_key:
             raise RuntimeError(
                 "FQCServer started with require_embedding=True but no API key was found "
                 "in .env.test or .env. Set EMBEDDING_API_KEY (or OPENAI_API_KEY for "
                 "OpenAI) in .env.test and try again."
             )
 
-        return {
+        config = {
             "provider": provider,
             "model": model,
             "api_key": api_key,
-            "dimensions": 1536,
+            "dimensions": dimensions,
         }
+        if endpoint:
+            config["endpoint"] = endpoint
+        return config
 
     # -- LLM config --------------------------------------------------------
 

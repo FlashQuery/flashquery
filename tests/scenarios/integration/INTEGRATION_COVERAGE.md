@@ -89,7 +89,7 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
-| IS-13 | MACRO-DISP-01 / MACRO-INT-03 / T-Y-001: `call_macro` composes search results with archive_document so a matched document is archived and absent from active search. | macro_search_archive_workflow | 2026-05-20   | 2026-05-20   |
+| IS-13 | MACRO-DISP-01 / MACRO-INT-03 / T-Y-001: `call_macro` composes search results with archive_document so a matched document is archived and absent from active search. | macro_search_archive_workflow | 2026-05-22   | 2026-05-22   |
 | IS-10 | MACRO-DISP-01 / T-Y-002: `call_macro` can invoke `fq.call_model` with response_format, branch on the structured verdict, and mutate a document. | macro_call_model_branch_mutate | 2026-05-19   | 2026-05-15   |
 | IS-14 | MACRO-SRC-07 / MACRO-SRC-08 / T-Y-003: `call_macro` iterates list-typed input_vars over zero-to-N values and returns deterministic counts. | macro_input_vars_iteration   | 2026-05-20   | 2026-05-20   |
 | IA-09 | MACRO-INT-02 / T-Y-004: concurrent public `call_macro` write workflows for different documents both complete through the existing write-lock layer. | macro_concurrent_write_lock  | 2026-05-19   | 2026-05-19   |
@@ -130,9 +130,9 @@ Verifies that content written through one path is discoverable through the expec
 |--------|----------------------------------------------------------------------|-----------------------------|--------------|--------------|
 | IS-01  | Create document → appears in search_documents results (VALIDATED)                 | write_then_search            | 2026-05-20   | 2026-05-20   |
 | IS-02  | Create memory → appears in search_memories results (VALIDATED)                    | write_then_search            | 2026-05-20   | 2026-05-20   |
-| IS-03  | Create document + memory → both appear in search_all results (VALIDATED)          | cross_domain_search_embeddings | 2026-05-20   | 2026-05-20   |
+| IS-03  | Create document + memory → both appear in search_all results (VALIDATED)          | cross_domain_search_embeddings | 2026-05-22   | 2026-05-22   |
 | IS-04  | search_all with entity_types=['documents'] returns only documents (VALIDATED)     | cross_domain_search          | 2026-05-20   | 2026-05-20   |
-| IS-05  | search_all with entity_types=['memories'] returns only memories (VALIDATED)       | search_memories_only         | 2026-05-20   | 2026-05-20   |
+| IS-05  | search_all with entity_types=['memories'] returns only memories (VALIDATED)       | search_memories_only         | 2026-05-22   | 2026-05-22   |
 | IS-06  | Tagged document appears in tag-filtered search_documents (VALIDATED)              | tag_filtered_documents       | 2026-05-20   | 2026-05-20   |
 | IS-07  | Tagged memory appears in tag-filtered search_memories (VALIDATED)                 | tag_filtered_memories        | 2026-05-20   | 2026-05-20   |
 | IS-08  | Multi-tag filter returns only documents matching all specified tags (VALIDATED)    | multitag_filter              | 2026-05-20   | 2026-05-20   |
@@ -163,8 +163,8 @@ Verifies behaviors that span more than one FlashQuery domain (documents, memorie
 
 | ID     | Behavior                                                                    | Covered By           | Date Updated | Last Passing |
 |--------|-----------------------------------------------------------------------------|----------------------|--------------|--------------|
-| IX-01  | Document and memory share a tag → search_all with that tag returns both (VALIDATED)      | cross_domain_search_embeddings | 2026-05-20   | 2026-05-20   |
-| IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-05-20   | 2026-05-15   |
+| IX-01  | Document and memory share a tag → search_all with that tag returns both (VALIDATED)      | cross_domain_search_embeddings | 2026-05-22   | 2026-05-22   |
+| IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-05-22   | 2026-05-22   |
 | IX-03  | Create via vault.write, update via update_document → search returns new content (VALIDATED) | write_document_then_search   | 2026-05-20   | 2026-05-20   |
 | IX-04  | Create document, get_document by fqc_id → returns correct content (VALIDATED)           | document_retrieval_by_id     | 2026-05-20   | 2026-05-20   |
 | IX-05  | Create document with tags, apply_tags to add more → all tags searchable (VALIDATED)     | apply_tags_composition       | 2026-05-20   | 2026-05-20   |

@@ -538,13 +538,16 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
           void embeddingProvider
             .embed(`${effectiveTitle}\n\n${body}`)
-            .then((vector) =>
-              supabaseManager
+            .then(async (vector) => {
+              const { error } = await supabaseManager
                 .getClient()
                 .from('fqc_documents')
                 .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                .eq('id', fqcId)
-            )
+                .eq('id', fqcId);
+              if (error) {
+                logger.warn(`write_document(create): background embedding update failed for ${relativePath}: ${error.message}`);
+              }
+            })
             .catch((err) =>
               logger.warn(
                 `write_document(create): background embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
@@ -622,13 +625,16 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
 
         void embeddingProvider
           .embed(`${effectiveTitle}\n\n${effectiveBody}`)
-          .then((vector) =>
-            supabaseManager
+          .then(async (vector) => {
+            const { error } = await supabaseManager
               .getClient()
               .from('fqc_documents')
               .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-              .eq('id', fqcId)
-          )
+              .eq('id', fqcId);
+            if (error) {
+              logger.warn(`write_document(update): background embedding update failed for ${resolved.relativePath}: ${error.message}`);
+            }
+          })
           .catch((err) =>
             logger.warn(
               `write_document(update): background re-embed failed for ${resolved.relativePath}: ${err instanceof Error ? err.message : String(err)}`
@@ -1430,13 +1436,16 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         if (contentHash !== null) {
           void embeddingProvider
             .embed(`${copyTitle}\n\n${parsed.content}`)
-            .then((vector) =>
-              supabaseManager
+            .then(async (vector) => {
+              const { error } = await supabaseManager
                 .getClient()
                 .from('fqc_documents')
                 .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                .eq('id', newFqcId)
-            )
+                .eq('id', newFqcId);
+              if (error) {
+                logger.warn(`copy_document: background embedding update failed for ${copyRelativePath}: ${error.message}`);
+              }
+            })
             .catch((err) =>
               logger.warn(
                 `copy_document: background embed failed for ${copyRelativePath}: ${err instanceof Error ? err.message : String(err)}`
