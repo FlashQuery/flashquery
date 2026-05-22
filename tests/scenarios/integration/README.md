@@ -70,6 +70,14 @@ python3 run_integration.py tests/write_then_search.yml
 
 If no match is found, the runner lists available tests and exits.
 
+Managed tests with `deps: [embeddings]` generate an `llm.purposes[name=embedding]`
+config from `.env.test` / environment settings. `FQC_TEST_EMBEDDING_MODE`
+supports `ollama_openai` (default), `ollama`, and `openai`;
+`FQC_TEST_EMBEDDING_DIMENSIONS` defaults to `768`; `OLLAMA_URL` /
+`OLLAMA_EMBEDDING_MODEL` configure the local provider; `OPENAI_EMBEDDING_API_KEY`
+or `OPENAI_API_KEY` plus `OPENAI_EMBEDDING_MODEL` configure the OpenAI provider.
+The `--ollama-url` flag overrides `OLLAMA_URL` for managed runs.
+
 ### Useful flags
 
 ```bash
@@ -84,6 +92,9 @@ python3 run_integration.py --managed --enable-git
 
 # Enable write-lock contention handling (for locking-behavior tests)
 python3 run_integration.py --managed --enable-locking
+
+# Override the Ollama endpoint for managed embedding tests
+python3 run_integration.py --managed --ollama-url http://localhost:11434
 
 # Use a specific port range for the managed server (if the default 9100–9199 conflicts)
 python3 run_integration.py --managed --port-range 9200 9299

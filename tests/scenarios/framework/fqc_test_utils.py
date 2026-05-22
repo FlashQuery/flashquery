@@ -159,6 +159,7 @@ class FQCServer:
         require_llm: bool = False,
         enable_locking: bool = False,
         enable_git: bool = False,
+        ollama_url: str | None = None,
         extra_config: dict | None = None,
     ) -> None:
         # Resolve the flashquery-core project directory
@@ -180,6 +181,7 @@ class FQCServer:
         self.require_llm = require_llm
         self.enable_locking = enable_locking
         self.enable_git = enable_git
+        self.ollama_url = ollama_url
         self.extra_config = extra_config or {}
 
         # Vault: use provided path or create a temp directory
@@ -258,7 +260,12 @@ class FQCServer:
                 "port": self.port,
                 "auth_secret": self.auth_secret,
             },
-            "embedding": self._resolve_embedding_config(env),
+            "embedding": {
+                "provider": "none",
+                "model": "",
+                "api_key": "",
+                "dimensions": 1536,
+            },
             "locking": {
                 "enabled": self.enable_locking,
             },
@@ -271,6 +278,12 @@ class FQCServer:
         if self.require_llm:
             config["llm"] = self._resolve_llm_config(env)
 
+        if self.require_embedding:
+            config["llm"] = self._merge_llm_config(
+                config.get("llm"),
+                self._resolve_embedding_llm_config(env),
+            )
+
         # Deep-merge any caller-supplied extra_config. Top-level keys are merged
         # at the root; nested dict keys are recursively merged; list values are replaced.
         if self.extra_config:
@@ -282,53 +295,114 @@ class FQCServer:
         self._config_path = path
         return path
 
+    def _merge_llm_config(self, base: dict | None, overlay: dict) -> dict:
+        """Merge generated LLM config arrays by appending overlay entries."""
+        if base is None:
+            return overlay
+        merged = dict(base)
+        for key in ("providers", "models", "purposes"):
+            merged[key] = [*(base.get(key, []) or []), *(overlay.get(key, []) or [])]
+        return merged
+
     # -- Embedding config --------------------------------------------------
 
-    def _resolve_embedding_config(self, env: dict[str, str]) -> dict:
-        """Return the embedding config block for the generated flashquery.yml.
-
-        If require_embedding=False (the default), embedding is disabled so tests
-        run fast and without network or API key requirements.
-
-        If require_embedding=True, credentials are read from the env files
-        (.env.test takes priority over .env, matching _load_env_file order).
-        Raises RuntimeError if no API key is found — the test cannot run
-        meaningfully without embeddings, so a loud failure is correct.
-        """
-        if not self.require_embedding:
-            return {
-                "provider": "none",
-                "model": "",
-                "api_key": "",
-                "dimensions": 1536,
-            }
-
-        provider = env.get("EMBEDDING_PROVIDER", "openai")
-        # EMBEDDING_API_KEY is the canonical name in .env;
-        # OPENAI_API_KEY is the shorter form used in .env.test.example.
-        api_key = env.get("EMBEDDING_API_KEY") or env.get("OPENAI_API_KEY", "")
-        model = env.get("EMBEDDING_MODEL", "text-embedding-3-small")
-        endpoint = env.get("EMBEDDING_ENDPOINT")
-        if not endpoint and provider == "ollama":
-            endpoint = env.get("OLLAMA_URL", "http://localhost:11434")
-        dimensions = int(env.get("EMBEDDING_DIMENSIONS", "1536"))
-
-        if provider in {"openai", "openrouter"} and not api_key:
+    def _resolve_embedding_llm_config(self, env: dict[str, str]) -> dict:
+        """Return test-managed embedding purpose config."""
+        mode = (
+            os.environ.get("FQC_TEST_EMBEDDING_MODE")
+            or env.get("FQC_TEST_EMBEDDING_MODE", "ollama_openai")
+        ).lower().replace("-", "_")
+        if mode not in {"ollama_openai", "ollama", "openai"}:
             raise RuntimeError(
-                "FQCServer started with require_embedding=True but no API key was found "
-                "in .env.test or .env. Set EMBEDDING_API_KEY (or OPENAI_API_KEY for "
-                "OpenAI) in .env.test and try again."
+                "FQC_TEST_EMBEDDING_MODE must be one of: ollama_openai, ollama, openai"
             )
 
-        config = {
-            "provider": provider,
-            "model": model,
-            "api_key": api_key,
-            "dimensions": dimensions,
+        ollama_url = self.ollama_url or os.environ.get("OLLAMA_URL") or env.get("OLLAMA_URL", "http://localhost:11434")
+        ollama_model = os.environ.get("OLLAMA_EMBEDDING_MODEL") or env.get("OLLAMA_EMBEDDING_MODEL", "nomic-embed-text")
+        openai_api_key = (
+            os.environ.get("OPENAI_EMBEDDING_API_KEY")
+            or os.environ.get("OPENAI_API_KEY")
+            or env.get("OPENAI_EMBEDDING_API_KEY")
+            or env.get("OPENAI_API_KEY", "")
+        )
+        openai_model = (
+            os.environ.get("OPENAI_EMBEDDING_MODEL")
+            or env.get("OPENAI_EMBEDDING_MODEL", "text-embedding-3-small")
+        )
+        dimensions = int(
+            os.environ.get("FQC_TEST_EMBEDDING_DIMENSIONS")
+            or env.get("FQC_TEST_EMBEDDING_DIMENSIONS", "768")
+        )
+
+        providers = []
+        models = []
+        purpose_models = []
+
+        if mode in {"ollama_openai", "ollama"}:
+            providers.append({
+                "name": "local-ollama",
+                "type": "ollama",
+                "endpoint": ollama_url,
+                "local": True,
+            })
+            models.append({
+                "name": "local-ollama-embeddings",
+                "provider_name": "local-ollama",
+                "model": ollama_model,
+                "type": "embedding",
+                "dimensions": dimensions,
+                "cost_per_million": {"input": 0.0, "output": 0.0},
+                "capabilities": {
+                    "tool_calling": True,
+                    "usage_on_tool_calls": True,
+                },
+            })
+            purpose_models.append("local-ollama-embeddings")
+
+        if mode in {"ollama_openai", "openai"}:
+            if not openai_api_key:
+                if mode == "openai":
+                    raise RuntimeError(
+                        "FQC_TEST_EMBEDDING_MODE=openai requires OPENAI_EMBEDDING_API_KEY or OPENAI_API_KEY"
+                    )
+            else:
+                providers.append({
+                    "name": "openai-embeddings",
+                    "type": "openai-compatible",
+                    "endpoint": "https://api.openai.com",
+                    "api_key": openai_api_key,
+                })
+                models.append({
+                    "name": "openai-embeddings",
+                    "provider_name": "openai-embeddings",
+                    "model": openai_model,
+                    "type": "embedding",
+                    "dimensions": dimensions,
+                    "cost_per_million": {"input": 0.02, "output": 0.0},
+                    "capabilities": {
+                        "tool_calling": True,
+                        "usage_on_tool_calls": True,
+                    },
+                })
+                purpose_models.append("openai-embeddings")
+
+        if not purpose_models:
+            raise RuntimeError(
+                "Managed embedding tests could not configure an embedding model. "
+                "Check FQC_TEST_EMBEDDING_MODE and provider credentials."
+            )
+
+        return {
+            "providers": providers,
+            "models": models,
+            "purposes": [
+                {
+                    "name": "embedding",
+                    "description": "Generates vector embeddings for semantic search.",
+                    "models": purpose_models,
+                }
+            ],
         }
-        if endpoint:
-            config["endpoint"] = endpoint
-        return config
 
     # -- LLM config --------------------------------------------------------
 
@@ -729,6 +803,7 @@ class TestContext:
         require_llm: bool = False,
         enable_locking: bool = False,
         enable_git: bool = False,
+        ollama_url: str | None = None,
         extra_config: dict | None = None,
     ) -> None:
         self.test_prefix = test_prefix
@@ -744,6 +819,7 @@ class TestContext:
         self._require_llm = require_llm
         self._enable_locking = enable_locking
         self._enable_git = enable_git
+        self._ollama_url = ollama_url
         self.extra_config = extra_config
 
         # Initialized in __enter__
@@ -768,6 +844,7 @@ class TestContext:
                 require_llm=self._require_llm,
                 enable_locking=self._enable_locking,
                 enable_git=self._enable_git,
+                ollama_url=self._ollama_url,
                 extra_config=self.extra_config,
             )
             self.server.start()

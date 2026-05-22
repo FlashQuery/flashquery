@@ -686,6 +686,7 @@ def run_suite(args: argparse.Namespace) -> int:
             require_embedding=needs_embedding,
             enable_git=args.enable_git,
             enable_locking=args.enable_locking,
+            ollama_url=args.ollama_url,
         )
         print("Starting managed FQC server...", file=sys.stderr)
         shared_server.start()
@@ -763,6 +764,7 @@ def run_suite(args: argparse.Namespace) -> int:
                 require_embedding=args.require_embedding,
                 enable_git=args.enable_git,
                 enable_locking=args.enable_locking,
+                ollama_url=args.ollama_url,
             )
             per_test_server.start()
             active_server = per_test_server
@@ -1023,6 +1025,14 @@ def main() -> None:
         help="Enable embedding provider in the managed server (for semantic search tests).",
     )
     parser.add_argument(
+        "--ollama-url", default=None,
+        help=(
+            "Override the Ollama endpoint used by managed embedding tests "
+            "(default: OLLAMA_URL from .env.test, then http://localhost:11434). "
+            "Embedding mode is configured by FQC_TEST_EMBEDDING_MODE."
+        ),
+    )
+    parser.add_argument(
         "--enable-git", action="store_true",
         help="Initialize git in the managed server's vault (for auto-commit tests).",
     )
@@ -1032,6 +1042,9 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if args.ollama_url:
+        os.environ["OLLAMA_URL"] = args.ollama_url
 
     if args.strict_cleanup and not (args.managed or args.per_test_server):
         print(

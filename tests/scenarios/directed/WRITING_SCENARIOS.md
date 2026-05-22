@@ -138,7 +138,7 @@ with TestContext(
 
 Three constructor arguments enable specific framework behaviors that are off by default (they cost time, require credentials, or change the environment). Turn them on when a test genuinely needs them; leave them off otherwise.
 
-**`require_embedding=True`** — needed for any test that exercises semantic or mixed-mode search. Tells the managed server to read `EMBEDDING_PROVIDER`, `EMBEDDING_API_KEY` (or `OPENAI_API_KEY`), and `EMBEDDING_MODEL` from `.env.test` (falling back to `.env`), and fails loudly at startup if credentials are missing. Without this flag, the server runs with `embedding.provider: "none"` and semantic search will return errors or empty results.
+**`require_embedding=True`** — needed for any test that exercises semantic or mixed-mode search. Tells the managed server to generate an `llm.purposes[name=embedding]` config from `.env.test` / environment settings. `FQC_TEST_EMBEDDING_MODE` supports `ollama_openai` (default), `ollama`, and `openai`; `FQC_TEST_EMBEDDING_DIMENSIONS` defaults to `768`; `OLLAMA_URL` / `OLLAMA_EMBEDDING_MODEL` configure the local provider; `OPENAI_EMBEDDING_API_KEY` or `OPENAI_API_KEY` plus `OPENAI_EMBEDDING_MODEL` configure the OpenAI provider. Without this flag, the server runs with embeddings disabled and semantic search will return errors or empty results.
 
 **`enable_locking=True`** — needed for any test that exercises write-lock contention, concurrent writes, or wait-and-retry semantics. Turns on the file-lock machinery in the managed server (disabled by default for speed and test isolation). Tests that don't care about locking should omit this flag.
 

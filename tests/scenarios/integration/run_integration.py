@@ -138,6 +138,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import platform
 import random
 import re
@@ -1062,9 +1063,9 @@ def run_yaml_test(
       - Optional managed FQC server (--managed flag)
       - Config auto-discovery from flashquery.yml / .env
 
-    If require_embedding=True and the managed server cannot start because no
-    embedding API key is configured, raises DepNotMet("embeddings", ...) so
-    the caller can record a SKIP rather than a FAIL.
+    If require_embedding=True and the managed server cannot start because the
+    generated embedding purpose cannot be configured, raises DepNotMet
+    ("embeddings", ...) so the caller can record a SKIP rather than a FAIL.
     """
     name = test_def.get("name", "unnamed_test")
     run = TestRun(name)
@@ -1109,6 +1110,7 @@ def run_yaml_test(
             require_llm=require_llm,
             enable_git=getattr(args, "enable_git", False),
             enable_locking=getattr(args, "enable_locking", False),
+            ollama_url=getattr(args, "ollama_url", None),
             extra_config=yaml_extra_config,
         ) as ctx:
 
@@ -1647,6 +1649,14 @@ def main() -> None:
         help="Enable write-lock contention handling in the managed server",
     )
     parser.add_argument(
+        "--ollama-url", default=None,
+        help=(
+            "Override the Ollama endpoint used by managed embedding tests "
+            "(default: OLLAMA_URL from .env.test, then http://localhost:11434). "
+            "Embedding mode is configured by FQC_TEST_EMBEDDING_MODE."
+        ),
+    )
+    parser.add_argument(
         "--seed", type=int, default=None,
         help="Shuffle test execution order using this seed (reproducible). "
              "Omit for alphabetical order.",
@@ -1661,6 +1671,9 @@ def main() -> None:
     )
 
     args = parser.parse_args()
+
+    if args.ollama_url:
+        os.environ["OLLAMA_URL"] = args.ollama_url
 
     # Project root — used for build verification and table cleanup script path.
     # run_integration.py lives at flashquery-core/tests/scenarios/integration/,

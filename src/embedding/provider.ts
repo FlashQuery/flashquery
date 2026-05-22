@@ -21,19 +21,22 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
   private apiKey: string;
   private dimensions: number;
   private providerName: string;
+  private includeDimensions: boolean;
 
   constructor(
     baseUrl: string,
     model: string,
     apiKey: string,
     dimensions: number,
-    providerName: string
+    providerName: string,
+    includeDimensions = false
   ) {
     this.baseUrl = baseUrl.replace(/\/$/, '');
     this.model = model;
     this.apiKey = apiKey;
     this.dimensions = dimensions;
     this.providerName = providerName;
+    this.includeDimensions = includeDimensions;
   }
 
   async embed(text: string): Promise<number[]> {
@@ -46,7 +49,11 @@ export class OpenAICompatibleProvider implements EmbeddingProvider {
           Authorization: `Bearer ${this.apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ model: this.model, input: text }),
+        body: JSON.stringify({
+          model: this.model,
+          input: text,
+          ...(this.includeDimensions ? { dimensions: this.dimensions } : {}),
+        }),
       });
     } catch {
       throw new Error(
@@ -150,6 +157,38 @@ export class NullEmbeddingProvider implements EmbeddingProvider {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// FallbackEmbeddingProvider
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class FallbackEmbeddingProvider implements EmbeddingProvider {
+  private providers: Array<{ name: string; provider: EmbeddingProvider }>;
+  private dimensions: number;
+
+  constructor(providers: Array<{ name: string; provider: EmbeddingProvider }>, dimensions: number) {
+    this.providers = providers;
+    this.dimensions = dimensions;
+  }
+
+  async embed(text: string): Promise<number[]> {
+    const failures: string[] = [];
+    for (const { name, provider } of this.providers) {
+      try {
+        return await provider.embed(text);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        failures.push(`${name}: ${message}`);
+        logger.warn(`Embedding: ${name} failed, trying next fallback: ${message}`);
+      }
+    }
+    throw new Error(`Embedding error: all providers failed (${failures.join('; ')})`);
+  }
+
+  getDimensions(): number {
+    return this.dimensions;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // createEmbeddingProvider factory
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -161,7 +200,8 @@ export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['em
         config.model,
         config.apiKey!,
         config.dimensions,
-        'OpenAI'
+        'OpenAI',
+        config.dimensions !== 1536
       );
     case 'openrouter':
       return new OpenAICompatibleProvider(
@@ -169,7 +209,8 @@ export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['em
         config.model,
         config.apiKey!,
         config.dimensions,
-        'OpenRouter'
+        'OpenRouter',
+        config.dimensions !== 1536
       );
     case 'ollama':
       return new OllamaProvider(
@@ -214,8 +255,52 @@ export function initEmbedding(config: FlashQueryConfig, llmClient?: LlmClient): 
   // at line ~202 handles that case cleanly.
   const hasEmbeddingPurpose = config.llm?.purposes?.some(p => p.name === 'embedding');
   if (hasEmbeddingPurpose && llmClient) {
-    const result = llmClient.getModelForPurpose('embedding');
-    if (!result) {
+    const embeddingPurpose = config.llm?.purposes?.find(p => p.name === 'embedding');
+    const fallbackProviders: Array<{ name: string; provider: EmbeddingProvider }> = [];
+    for (const modelName of embeddingPurpose?.models ?? []) {
+      const modelEntry = config.llm!.models.find(m => m.name === modelName);
+      if (!modelEntry || modelEntry.type !== 'embedding') {
+        logger.warn(
+          `Embedding purpose 'embedding' includes model '${modelName}' with ` +
+          `type='${modelEntry?.type ?? 'unknown'}', not 'embedding' — skipping.`
+        );
+        continue;
+      }
+
+      const providerEntry = config.llm!.providers.find(p => p.name === modelEntry.providerName);
+      if (!providerEntry) {
+        logger.warn(
+          `Embedding purpose model '${modelName}' references missing provider ` +
+          `'${modelEntry.providerName}' — skipping.`
+        );
+        continue;
+      }
+
+      if (providerEntry.type === 'ollama') {
+        fallbackProviders.push({
+          name: `${providerEntry.name}/${modelEntry.model}`,
+          provider: new OllamaProvider(providerEntry.endpoint, modelEntry.model, dimensions),
+        });
+      } else if (providerEntry.apiKey) {
+        fallbackProviders.push({
+          name: `${providerEntry.name}/${modelEntry.model}`,
+          provider: new OpenAICompatibleProvider(
+            providerEntry.endpoint,
+            modelEntry.model,
+            providerEntry.apiKey,
+            dimensions,
+            providerEntry.name,
+            dimensions !== 1536
+          ),
+        });
+      } else {
+        logger.warn(
+          `Embedding purpose provider '${providerEntry.name}' has no API key — skipping.`
+        );
+      }
+    }
+
+    if (fallbackProviders.length === 0) {
       logger.warn(
         "Embedding purpose 'embedding' has no models in its fallback chain — " +
         "semantic search DISABLED. Fix: add at least one model with type='embedding' to the embedding purpose."
@@ -223,36 +308,16 @@ export function initEmbedding(config: FlashQueryConfig, llmClient?: LlmClient): 
       embeddingProvider = new NullEmbeddingProvider(dimensions);
       return;
     }
-    const modelEntry = config.llm!.models.find(m => m.name === result.modelName);
-    if (!modelEntry || modelEntry.type !== 'embedding') {
-      logger.warn(
-        `Embedding purpose 'embedding' resolves to model '${result.modelName}' which has ` +
-        `type='${modelEntry?.type ?? 'unknown'}', not 'embedding' — semantic search DISABLED. ` +
-        `Fix: assign a model with type='embedding' to the embedding purpose.`
-      );
-      embeddingProvider = new NullEmbeddingProvider(dimensions);
-      return;
-    }
-    const providerEntry = config.llm!.providers.find(p => p.name === result.providerName);
-    if (!providerEntry) {
-      logger.warn(
-        `Embedding purpose provider '${result.providerName}' not found — semantic search DISABLED.`
-      );
-      embeddingProvider = new NullEmbeddingProvider(dimensions);
-      return;
-    }
-    if (providerEntry.type === 'ollama') {
-      embeddingProvider = new OllamaProvider(providerEntry.endpoint, modelEntry.model, dimensions);
+
+    if (fallbackProviders.length === 1) {
+      embeddingProvider = fallbackProviders[0].provider;
     } else {
-      embeddingProvider = new OpenAICompatibleProvider(
-        providerEntry.endpoint,
-        modelEntry.model,
-        providerEntry.apiKey ?? '',
-        dimensions,
-        providerEntry.name
-      );
+      embeddingProvider = new FallbackEmbeddingProvider(fallbackProviders, dimensions);
     }
-    logger.info(`Embedding: routing through purpose 'embedding' → ${providerEntry.name}/${modelEntry.model}`);
+    logger.info(
+      `Embedding: routing through purpose 'embedding' → ` +
+      fallbackProviders.map(p => p.name).join(' → ')
+    );
     return;
   }
 
