@@ -11,7 +11,7 @@ const toolMetaMock = vi.hoisted(() => ({
       helpPageBody: 'GET_DOCUMENT_RAW_HELP_BODY',
       tier: 'read-only',
       args: { identifier: { type: 'string', required: true } },
-      filePath: 'src/mcp/tools/get_document.tool.md',
+      filePath: 'src/mcp/tool-help/get_document.tool.md',
     }],
   ])),
 }));

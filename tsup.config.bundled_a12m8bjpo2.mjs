@@ -55,7 +55,7 @@ var tsup_config_default = defineConfig({
   ],
   noExternal: [],
   esbuildPlugins: [externalPluginImports],
-  onSuccess: "mkdir -p dist/mcp/tools && cp src/mcp/tools/*.tool.md dist/mcp/tools/"
+  onSuccess: "mkdir -p dist/mcp/tool-help && cp src/mcp/tool-help/*.tool.md dist/mcp/tool-help/"
 });
 export {
   tsup_config_default as default

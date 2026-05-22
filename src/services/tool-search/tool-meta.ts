@@ -5,8 +5,8 @@ import { fileURLToPath } from 'node:url';
 import fg from 'fast-glob';
 import matter from 'gray-matter';
 
-export const TOOL_META_GLOB = 'src/mcp/tools/*.tool.md';
-const DIST_TOOL_META_GLOB = 'dist/mcp/tools/*.tool.md';
+export const TOOL_META_GLOB = 'src/mcp/tool-help/*.tool.md';
+const DIST_TOOL_META_GLOB = 'dist/mcp/tool-help/*.tool.md';
 export const DEFAULT_HELP_HINT =
   "FlashQuery-native tool. Pass `{help: true}` for full documentation, examples, and common patterns before composing your call if you're uncertain about parameters.";
 
@@ -101,8 +101,8 @@ export function loadToolMetaSync(): Map<string, ToolMeta> {
 function toolMetaCandidateGlobs(): string[] {
   const moduleDir = dirname(fileURLToPath(import.meta.url));
   return uniqueStrings([
-    resolve(moduleDir, 'mcp/tools/*.tool.md'),
-    resolve(moduleDir, '../../mcp/tools/*.tool.md'),
+    resolve(moduleDir, 'mcp/tool-help/*.tool.md'),
+    resolve(moduleDir, '../../mcp/tool-help/*.tool.md'),
     TOOL_META_GLOB,
     DIST_TOOL_META_GLOB,
   ]);

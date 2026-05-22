@@ -28,7 +28,7 @@ function toolMeta(overrides: Partial<ToolMeta> = {}): ToolMeta {
     args: {
       identifier: 'Document path or ID.',
     },
-    filePath: 'src/mcp/tools/get_document.tool.md',
+    filePath: 'src/mcp/tool-help/get_document.tool.md',
     ...overrides,
   };
 }

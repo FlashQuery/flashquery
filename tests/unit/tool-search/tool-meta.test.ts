@@ -75,7 +75,7 @@ function fixture(
   body = VALID_BODY
 ): { filePath: string; raw: string } {
   return {
-    filePath: `src/mcp/tools/${name}.tool.md`,
+    filePath: `src/mcp/tool-help/${name}.tool.md`,
     raw: `---\n${frontmatter.trim()}\n---\n${body}`,
   };
 }
@@ -104,7 +104,7 @@ args: {}
     expect(result.diagnostics).toEqual(expect.arrayContaining([
       expect.objectContaining({
         level: 'error',
-        filePath: 'src/mcp/tools/example_tool.tool.md',
+        filePath: 'src/mcp/tool-help/example_tool.tool.md',
         message: expect.stringContaining("missing required frontmatter field 'name'"),
       }),
     ]));
@@ -248,7 +248,15 @@ args: {}
   });
 
   it('keeps the production loader fixed to source-tree tool help pages', () => {
-    expect(TOOL_META_GLOB).toBe('src/mcp/tools/*.tool.md');
+    expect(TOOL_META_GLOB).toBe('src/mcp/tool-help/*.tool.md');
+  });
+
+  it('keeps tool help markdown separate from TypeScript tool implementation files', async () => {
+    const implementationHelpFiles = await import('fast-glob').then(({ default: fg }) =>
+      fg('src/mcp/tools/*.tool.md', { onlyFiles: true })
+    );
+
+    expect(implementationHelpFiles).toEqual([]);
   });
 
   it('resolves packaged dist help pages after a production build copies them', () => {
@@ -315,8 +323,8 @@ args: {}
 
 function expectHelpPageBatch(names: readonly string[]): ReturnType<typeof validateToolMeta> {
   const sources = names.map((name) => ({
-    filePath: `src/mcp/tools/${name}.tool.md`,
-    raw: readFileSync(`src/mcp/tools/${name}.tool.md`, 'utf8'),
+    filePath: `src/mcp/tool-help/${name}.tool.md`,
+    raw: readFileSync(`src/mcp/tool-help/${name}.tool.md`, 'utf8'),
   }));
 
   const result = validateToolMeta(sources);

@@ -538,7 +538,7 @@ describe('Phase C fq.search_tools integration', () => {
   it('T-I-049 fails validation for malformed .tool.md metadata fixtures', () => {
     const result = validateToolMeta([
       {
-        filePath: 'src/mcp/tools/bad_name.tool.md',
+        filePath: 'src/mcp/tool-help/bad_name.tool.md',
         raw: [
           '---',
           'name: wrong_name',
@@ -550,7 +550,7 @@ describe('Phase C fq.search_tools integration', () => {
         ].join('\n'),
       },
       {
-        filePath: 'src/mcp/tools/minimal_shape.tool.md',
+        filePath: 'src/mcp/tool-help/minimal_shape.tool.md',
         raw: [
           '---',
           'name: minimal_shape',
