@@ -34,13 +34,15 @@ Pick the workflow from the table, read its document, follow it.
 | **Report** | Synthesize the findings into the output document set in the dated audit folder. | `workflows/report.md` |
 | **Verify** | The audit's own post-report self-check — gaps, self-consistency, codebase-grounding. | `workflows/verify.md` |
 | **Independent Review** | An optional review of a finished audit by a *different* model. Self-contained. | `workflows/independent-review.md` |
+| **Resolve** | Fold Matt's answers to a finding's open questions into the finding, restate the OQs as resolved, and log the change. On-demand. | `workflows/resolve.md` |
+| **Devspec Handoff** | Pick a batch of findings with the user, brief `fq-devspec` to spec it, and fold the resulting REQ IDs back into the findings. On-demand. | `workflows/devspec-handoff.md` |
 | **Help** | List the workflows and what each does. | (this table) |
 
 ## Default full run
 
 If the user asks for "the audit" without naming a workflow, run the core four in
-order: **Sweep → Review → Report → Verify**. Independent Review and Help are
-on-demand only.
+order: **Sweep → Review → Report → Verify**. Independent Review, Resolve,
+Devspec Handoff, and Help are on-demand only.
 
 Confirm scope before starting: by default the `flashquery` repo, plus a light
 pass over `flashquery-plugins/scripts`; `flashquery-product` is docs and out of
@@ -83,7 +85,9 @@ run one or the default full run.
   paths, real line numbers, real symbols. A finding that cannot be verified
   against the code is marked *To verify*, not asserted as *Confirmed*.
 - **The audit reports; it does not fix.** Remediation is a separate, deliberate
-  step — see the `fq-devspec` handoff in `references/audit-method.md`.
+  step — handed off to `fq-devspec` via the **Devspec Handoff** workflow
+  (`workflows/devspec-handoff.md`); the alignment between the two skills is
+  described in `references/audit-method.md`.
 - **Exclude vendored, build, and worktree paths.** The repo nests
   `src/node_modules/` and `src/dist/` inside the source tree, and keeps live
   agent clones under `.claude/worktrees/agent-*`. Every scan must exclude

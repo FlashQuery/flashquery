@@ -32,25 +32,27 @@ flashquery-codebase-audit/
 │   ├── review.md                # Layer 2 — targeted AI review
 │   ├── report.md                # synthesize -> output document set
 │   ├── verify.md                # post-report self-check
-│   └── independent-review.md    # optional external-model review (self-contained)
+│   ├── independent-review.md    # optional external-model review (self-contained)
+│   ├── resolve.md               # fold Matt's open-question answers into findings
+│   └── devspec-handoff.md       # pick a batch of findings and brief fq-devspec to spec them
 └── references/
     ├── audit-method.md          # method + 19-category taxonomy (A-S) + severity model
     ├── typescript-standard.md   # the coding standard findings are judged against
     └── output-template.md       # output document set + per-finding schema
 ```
 
-There are six workflows. Five have their own document under `workflows/`; the
-sixth, **Help**, lives in `SKILL.md` (it just returns the workflow table).
+There are eight workflows. Seven have their own document under `workflows/`; the
+eighth, **Help**, lives in `SKILL.md` (it just returns the workflow table).
 
 ## Design decisions already made — do not silently reverse these
 
 These were resolved with Matt across the design conversation. To change one,
 raise it with him first.
 
-1. **Six named workflows, individually invocable:** Sweep, Review, Report,
-   Verify, Independent Review, Help. The default run chains the core four
-   (Sweep -> Review -> Report -> Verify). Independent Review and Help are
-   on-demand.
+1. **Eight named workflows, individually invocable:** Sweep, Review, Report,
+   Verify, Independent Review, Resolve, Devspec Handoff, Help. The default run
+   chains the core four (Sweep -> Review -> Report -> Verify). Independent
+   Review, Resolve, Devspec Handoff, and Help are on-demand.
 2. **Progressive disclosure:** `SKILL.md` is a lean router. Each workflow's
    detail lives in its own `workflows/` document, loaded only when that workflow
    runs. The three large `references/` files are loaded only when a workflow

@@ -152,6 +152,10 @@ Keep them few. For each:]
   - **Recommendation:** [the recommended option, and the FlashQuery precedent it
     is based on; include any references to requirements docs + sections as necessary.]
 
+Once Matt answers an open question — he writes a comment under it in the findings
+document — the **Resolve** workflow folds the decision into *Remediation* and
+rewrites the OQ into its compact resolved form (see `workflows/resolve.md`).
+
 **Related tests — must be rerun**
 [Existing test files/cases that exercise this code and must pass after the fix.
 If none exist, state that explicitly — the absence is itself a gap.]
@@ -367,10 +371,11 @@ The intended loop, once the audit skill and a fix workflow exist:
 1. An orchestrator (or Matt) selects findings by priority, respecting
    **Dependencies / ordering**.
 2. The fix-agent reads one finding block — self-contained by design.
-3. If the finding carries **Open questions**, they are resolved first — by Matt,
-   or by explicitly accepting the recommendation; a finding with unresolved open
-   questions is not auto-fixed. The fix-agent then applies **Remediation**,
-   consulting **Standard reference** for the principle behind the fix.
+3. If the finding carries unresolved **Open questions**, it is not auto-fixed —
+   Matt answers them and the **Resolve** workflow folds the decisions in first
+   (see `workflows/resolve.md`). Once the open questions are in resolved form,
+   the fix-agent applies **Remediation**, consulting **Standard reference** for
+   the principle behind the fix.
 4. It reruns **Related tests** and adds **New tests needed**.
 5. It runs **Verification**; the finding is done only when these pass.
 6. The finding is marked resolved; the next audit run confirms it is gone.
@@ -417,12 +422,16 @@ appends one line. Format:
 - [YYYY-MM-DD] — [Pass type] ([Model name]): [What this pass did].
 ```
 
-`[Pass type]` is one of: `Original`, `Verify`, `Independent review`. For
-**Original**, the line records that the finding was created. For **Verify**,
-record only if Verify changed something (no entry needed if it just confirmed).
-For **Independent review**, always record a line — even Confirmed verdicts get
-a history entry so the audit shows that a second pass examined the finding and
-agreed.
+`[Pass type]` is one of: `Original`, `Verify`, `Independent review`, `Resolve`,
+`Devspec handoff`. For **Original**, the line records that the finding was
+created. For **Verify**, record only if Verify changed something (no entry
+needed if it just confirmed). For **Independent review**, always record a line —
+even Confirmed verdicts get a history entry so the audit shows that a second
+pass examined the finding and agreed. For **Resolve**, record a line on every
+finding whose open question it folded in and resolved. For **Devspec handoff**,
+record a line on every finding that was specced — it captures the originating
+REQ ID(s) and the Requirements document path (see
+`workflows/devspec-handoff.md`).
 
 Examples:
 
