@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "entry": [
+    "src/index.ts"
+  ],
+  "project": [
+    "src/**/*.ts"
+  ],
+  "ignore": [
+    ".claude/worktrees/**",
+    "src/node_modules/**",
+    "src/dist/**",
+    "tests/**",
+    "scripts/**",
+    "setup/**"
+  ],
+  "ignoreDependencies": [],
+  "ignoreBinaries": []
+}
