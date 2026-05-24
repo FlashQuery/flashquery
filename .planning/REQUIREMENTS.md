@@ -11,8 +11,8 @@ Requirements for the v3.7 Technical Debt milestone. Each requirement maps to exa
 
 ### Silent Failure Remediation
 
-- [ ] **REQ-001**: `write_memory` plugin-scope lookup failures hard-fail and are typed. `resolvePluginScope` distinguishes resolved scopes from lookup failures, avoids broad double assertions at the lookup site, and prevents failed lookups from inserting global-scoped memories.
-- [ ] **REQ-002**: Scanner embed drain reports query failure as partial success. `EMBED-DRAIN` query errors continue the scan but return an explicit failure status such as `drain_query_failed`, with error-level logging and explicit caller/formatter handling.
+- [x] **REQ-001**: `write_memory` plugin-scope lookup failures hard-fail and are typed. `resolvePluginScope` distinguishes resolved scopes from lookup failures, avoids broad double assertions at the lookup site, and prevents failed lookups from inserting global-scoped memories.
+- [x] **REQ-002**: Scanner embed drain reports query failure as partial success. `EMBED-DRAIN` query errors continue the scan but return an explicit failure status such as `drain_query_failed`, with error-level logging and explicit caller/formatter handling.
 
 ### Embedding Reliability and Resource Lifecycle
 
@@ -78,8 +78,8 @@ Which phases cover which requirements. Updated during phase execution as statuse
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| REQ-001 | Phase 145 | Pending |
-| REQ-002 | Phase 145 | Pending |
+| REQ-001 | Phase 145 | Complete |
+| REQ-002 | Phase 145 | Complete |
 | REQ-003 | Phase 146 | Pending |
 | REQ-004 | Phase 146 | Pending |
 | REQ-005 | Phase 146 | Pending |

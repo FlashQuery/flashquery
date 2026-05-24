@@ -106,7 +106,14 @@ async function resolvePluginScope(
         message: `Plugin scope lookup failed for '${pluginScope}': ${rpcError.message}`,
       };
     }
-    return { ok: true, scope: typeof matchedScope === 'string' && matchedScope.length > 0 ? matchedScope : 'global' };
+    if (typeof matchedScope !== 'string' || matchedScope.length === 0) {
+      return {
+        ok: false,
+        reason: 'lookup_failed',
+        message: `Plugin scope lookup failed for '${pluginScope}': no matching plugin scope found`,
+      };
+    }
+    return { ok: true, scope: matchedScope };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.warn(`write_memory: plugin_scope lookup error: ${message}`);

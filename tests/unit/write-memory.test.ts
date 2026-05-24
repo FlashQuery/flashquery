@@ -199,26 +199,42 @@ describe('write_memory', () => {
     expect(insert).not.toHaveBeenCalled();
   });
 
-  it('create rejects unexpected plugin scope RPC payload shapes without falling back to global', async () => {
+  it('create rejects missing or unexpected plugin scope RPC payload shapes without falling back to global', async () => {
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, makeConfig());
     const insert = vi.fn();
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: null })
+      .mockResolvedValueOnce({ data: 123, error: null })
+      .mockResolvedValueOnce({ unexpected: true });
     (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({
       from: vi.fn().mockReturnValue({ insert }),
-      rpc: vi.fn().mockResolvedValue({ unexpected: true }),
+      rpc,
     });
 
-    const result = await getHandler('write_memory')({
+    const noMatch = await getHandler('write_memory')({
+      mode: 'create',
+      content: 'Should not insert',
+      plugin_scope: 'crm',
+    }) as { isError?: boolean };
+    const invalidData = await getHandler('write_memory')({
+      mode: 'create',
+      content: 'Should not insert',
+      plugin_scope: 'crm',
+    }) as { isError?: boolean };
+    const invalidShape = await getHandler('write_memory')({
       mode: 'create',
       content: 'Should not insert',
       plugin_scope: 'crm',
     }) as { isError?: boolean };
 
-    expect(result.isError).toBe(false);
-    expect(parseResult(result)).toMatchObject({
-      error: 'lookup_failed',
-      details: { reason: 'lookup_failed' },
-    });
+    for (const result of [noMatch, invalidData, invalidShape]) {
+      expect(result.isError).toBe(false);
+      expect(parseResult(result)).toMatchObject({
+        error: 'lookup_failed',
+        details: { reason: 'lookup_failed' },
+      });
+    }
     expect(insert).not.toHaveBeenCalled();
   });
 

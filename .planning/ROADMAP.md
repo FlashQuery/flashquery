@@ -42,7 +42,7 @@
 
 | # | Phase | Goal | Requirements | Test Plan |
 |---|-------|------|--------------|-----------|
-| 145 | Silent Failure Quick Wins | Replace two plausible-success failure paths with explicit, typed failure states. | REQ-001, REQ-002 | §4.1 |
+| 145 | Silent Failure Quick Wins | 1/1 | Complete   | 2026-05-24 |
 | 146 | Embedding Reliability Foundation | Centralize background embedding, add durable retry/diagnostic state, and pool record vector SQL. | REQ-003, REQ-004, REQ-005 | §4.2 |
 | 147 | Tooling and Dependency Hygiene | Clear dependency/security drift and make static analysis actionable. | REQ-006, REQ-007 | §4.3 |
 | 148 | MCP Lifecycle and Shutdown | Consolidate typed server wrapping and drain in-flight MCP requests during shutdown. | REQ-008, REQ-009 | §4.4 |
