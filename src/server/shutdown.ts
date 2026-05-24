@@ -33,6 +33,10 @@ export function registerMcpServerForShutdown(server: McpServer): void {
   shutdownMcpServers.add(server);
 }
 
+export function unregisterMcpServerForShutdown(server: McpServer): void {
+  shutdownMcpServers.delete(server);
+}
+
 export class ShutdownCoordinator {
   private isExecuting = false;
   private startTime: number = 0;

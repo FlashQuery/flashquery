@@ -1,6 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { ShutdownCoordinator, MCP_REQUEST_DRAIN_TIMEOUT_MS } from '../../../src/server/shutdown.js';
+import {
+  ShutdownCoordinator,
+  MCP_REQUEST_DRAIN_TIMEOUT_MS,
+  unregisterMcpServerForShutdown,
+} from '../../../src/server/shutdown.js';
 import type { FlashQueryConfig } from '../../../src/config/loader.js';
 import { createMcpServer, getMcpRequestLifecycleForServer } from '../../../src/mcp/server.js';
 import { getNativeToolCatalog } from '../../../src/mcp/tool-catalog.js';
@@ -16,6 +20,9 @@ vi.mock('../../../src/logging/logger.js', () => ({
 }));
 
 type CatalogHandler = (args: unknown, context: unknown) => Promise<CallToolResult> | CallToolResult;
+type TestMcpServer = ReturnType<typeof createMcpServer>;
+
+let registeredServers: TestMcpServer[] = [];
 
 function makeConfig(): FlashQueryConfig {
   return {
@@ -82,7 +89,7 @@ function makeConfig(): FlashQueryConfig {
 }
 
 function registerProbeHandler(
-  server: ReturnType<typeof createMcpServer>,
+  server: TestMcpServer,
   name: string,
   handler: CatalogHandler
 ): CatalogHandler {
@@ -98,6 +105,12 @@ function registerProbeHandler(
   return registeredHandler;
 }
 
+function createRegisteredTestMcpServer(): TestMcpServer {
+  const server = createMcpServer(makeConfig(), 'test');
+  registeredServers.push(server);
+  return server;
+}
+
 async function drainMcpRequests(coordinator: ShutdownCoordinator): Promise<void> {
   await (coordinator as unknown as { drainMcpRequests(): Promise<void> }).drainMcpRequests();
 }
@@ -107,15 +120,19 @@ describe('ShutdownCoordinator MCP request drain integration', () => {
     vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
     vi.mocked(logger.info).mockClear();
     vi.mocked(logger.warn).mockClear();
+    registeredServers = [];
   });
 
   afterEach(() => {
+    for (const server of registeredServers) {
+      unregisterMcpServerForShutdown(server);
+    }
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
   it('T-I-009 returns promptly with zero in-flight MCP requests and no fixed 100ms sleep', async () => {
-    const server = createMcpServer(makeConfig(), 'test');
+    const server = createRegisteredTestMcpServer();
     const lifecycle = getMcpRequestLifecycleForServer(server);
     const coordinator = new ShutdownCoordinator(makeConfig());
 
@@ -129,7 +146,7 @@ describe('ShutdownCoordinator MCP request drain integration', () => {
   });
 
   it('T-I-010 waits for an already-running tracked handler before continuing', async () => {
-    const server = createMcpServer(makeConfig(), 'test');
+    const server = createRegisteredTestMcpServer();
     const lifecycle = getMcpRequestLifecycleForServer(server);
     const coordinator = new ShutdownCoordinator(makeConfig());
     let releaseHandler: (() => void) | undefined;
@@ -162,7 +179,7 @@ describe('ShutdownCoordinator MCP request drain integration', () => {
 
   it('T-I-011 warns with the remaining in-flight count when the MCP drain deadline expires', async () => {
     vi.useFakeTimers();
-    const server = createMcpServer(makeConfig(), 'test');
+    const server = createRegisteredTestMcpServer();
     const lifecycle = getMcpRequestLifecycleForServer(server);
     const coordinator = new ShutdownCoordinator(makeConfig());
     const warnSpy = vi.spyOn(logger, 'warn');
@@ -183,5 +200,34 @@ describe('ShutdownCoordinator MCP request drain integration', () => {
 
     expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('1 in-flight'));
     expect(lifecycle.getInFlightCount()).toBe(1);
+  });
+
+  it('excludes unregistered per-session MCP servers from the global shutdown drain', async () => {
+    vi.useFakeTimers();
+    const closedSessionServer = createRegisteredTestMcpServer();
+    const closedSessionLifecycle = getMcpRequestLifecycleForServer(closedSessionServer);
+    const activeSessionServer = createRegisteredTestMcpServer();
+    const coordinator = new ShutdownCoordinator(makeConfig());
+    const warnSpy = vi.spyOn(logger, 'warn');
+
+    const handler = registerProbeHandler(
+      closedSessionServer,
+      'closed_session_hung_probe',
+      async () => new Promise<CallToolResult>(() => undefined)
+    );
+
+    void handler({}, {});
+    await vi.runAllTicks();
+    expect(closedSessionLifecycle.getInFlightCount()).toBe(1);
+
+    unregisterMcpServerForShutdown(closedSessionServer);
+
+    const drainPromise = drainMcpRequests(coordinator);
+    await vi.advanceTimersByTimeAsync(MCP_REQUEST_DRAIN_TIMEOUT_MS);
+    await drainPromise;
+
+    expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('in-flight'));
+    expect(getMcpRequestLifecycleForServer(activeSessionServer).getInFlightCount()).toBe(0);
+    expect(closedSessionLifecycle.getInFlightCount()).toBe(1);
   });
 });

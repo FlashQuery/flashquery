@@ -31,7 +31,7 @@ import { assertRegisteredToolsHaveToolMeta, loadToolMetaSync } from '../services
 import { ToolSearchService } from '../services/tool-search/tool-search-service.js';
 import { createSearchToolsHandler } from '../services/tool-search/search-tools-handler.js';
 import { createMcpRequestLifecycle, type McpRequestLifecycle } from './request-lifecycle.js';
-import { registerMcpServerForShutdown } from '../server/shutdown.js';
+import { registerMcpServerForShutdown, unregisterMcpServerForShutdown } from '../server/shutdown.js';
 
 // ── HTTP Error Code and Message Mapping (D-04) ──
 
@@ -796,13 +796,17 @@ export async function initMCP(
             },
           });
 
-          // Cleanup session map entry when transport closes
+          const server = await createInitializedMcpServer(config, version);
+          // Cleanup session-scoped state when transport closes.
           transport.onclose = () => {
             const sid = transport.sessionId;
             if (sid && transports[sid]) delete transports[sid];
+            unregisterMcpServerForShutdown(server);
+            mcpRequestLifecycles.delete(server);
+            hostToolSearchServices.delete(server);
+            hostToolSearchInitializers.delete(server);
           };
 
-          const server = await createInitializedMcpServer(config, version);
           await server.connect(transport);
           await transport.handleRequest(req, res, req.body);
         } else {
