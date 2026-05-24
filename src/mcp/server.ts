@@ -31,6 +31,7 @@ import { assertRegisteredToolsHaveToolMeta, loadToolMetaSync } from '../services
 import { ToolSearchService } from '../services/tool-search/tool-search-service.js';
 import { createSearchToolsHandler } from '../services/tool-search/search-tools-handler.js';
 import { createMcpRequestLifecycle, type McpRequestLifecycle } from './request-lifecycle.js';
+import { registerMcpServerForShutdown } from '../server/shutdown.js';
 
 // ── HTTP Error Code and Message Mapping (D-04) ──
 
@@ -606,6 +607,7 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   // automatically inherit request tracking and context without modifying tool files.
   const requestLifecycle = createMcpRequestLifecycle();
   mcpRequestLifecycles.set(server, requestLifecycle);
+  registerMcpServerForShutdown(server);
   wrapServerWithRequestLifecycleAndCorrelation(server, requestLifecycle);
   const hostEnabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
   wrapServerWithToolCatalog(server, {

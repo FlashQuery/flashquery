@@ -14,23 +14,37 @@
 
 import type http from 'node:http';
 import type net from 'node:net';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { logger } from '../logging/logger.js';
 import { setShuttingDown } from './shutdown-state.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { closePgPools } from '../utils/pg-client.js';
 
 export const MAX_SHUTDOWN_MS = 30_000;
+export const MCP_REQUEST_DRAIN_TIMEOUT_MS = 15_000;
+
+interface ShutdownCoordinatorOptions {
+  mcpServer?: McpServer;
+}
+
+const shutdownMcpServers = new Set<McpServer>();
+
+export function registerMcpServerForShutdown(server: McpServer): void {
+  shutdownMcpServers.add(server);
+}
 
 export class ShutdownCoordinator {
   private isExecuting = false;
   private startTime: number = 0;
   private config: FlashQueryConfig;
   private httpServer?: http.Server;
+  private mcpServer?: McpServer;
   private activeSockets: Set<net.Socket> = new Set();
 
-  constructor(config: FlashQueryConfig, httpServer?: http.Server) {
+  constructor(config: FlashQueryConfig, httpServer?: http.Server, options: ShutdownCoordinatorOptions = {}) {
     this.config = config;
     this.httpServer = httpServer;
+    this.mcpServer = options.mcpServer;
 
     // Track active sockets if server exists
     if (httpServer) {
@@ -110,17 +124,28 @@ export class ShutdownCoordinator {
   }
 
   private async drainMcpRequests(): Promise<void> {
-    // TODO: Implement real session drain when MCP server exposes transport list.
-    // Currently waits a brief moment for any synchronously-queued handlers.
-    // (stdio transport only — no active session tracking available)
-    this.logInfo('MCP sessions: no active session tracking (stdio transport only), continuing...');
+    this.logInfo('MCP requests draining (timeout=15s)');
+    const servers = this.mcpServer ? [this.mcpServer] : [...shutdownMcpServers];
+    if (servers.length === 0) {
+      this.logDebug('MCP requests: no server lifecycle registered, continuing');
+      return;
+    }
 
-    // In a full implementation, we would:
-    // 1. Get transports from MCP server (stdio + HTTP sessions)
-    // 2. Close each one with timeout
-    // 3. Wait for pending request handlers to complete
+    const { getMcpRequestLifecycleForServer } = await import('../mcp/server.js');
+    const results = await Promise.all(
+      servers.map(async (server) =>
+        await getMcpRequestLifecycleForServer(server).waitForIdle(MCP_REQUEST_DRAIN_TIMEOUT_MS)
+      )
+    );
+    const remaining = results.reduce((sum, result) => sum + result.remaining, 0);
+    if (remaining > 0) {
+      this.logWarn(
+        `MCP request drain timed out with ${remaining} in-flight request(s) remaining`
+      );
+      return;
+    }
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    this.logInfo('MCP requests drained');
   }
 
   private async drainCostWritesStep(): Promise<void> {

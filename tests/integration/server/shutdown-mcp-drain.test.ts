@@ -117,7 +117,7 @@ describe('ShutdownCoordinator MCP request drain integration', () => {
   it('T-I-009 returns promptly with zero in-flight MCP requests and no fixed 100ms sleep', async () => {
     const server = createMcpServer(makeConfig(), 'test');
     const lifecycle = getMcpRequestLifecycleForServer(server);
-    const coordinator = new ShutdownCoordinator(makeConfig(), undefined, { mcpServer: server });
+    const coordinator = new ShutdownCoordinator(makeConfig());
 
     expect(lifecycle.getInFlightCount()).toBe(0);
 
@@ -131,7 +131,7 @@ describe('ShutdownCoordinator MCP request drain integration', () => {
   it('T-I-010 waits for an already-running tracked handler before continuing', async () => {
     const server = createMcpServer(makeConfig(), 'test');
     const lifecycle = getMcpRequestLifecycleForServer(server);
-    const coordinator = new ShutdownCoordinator(makeConfig(), undefined, { mcpServer: server });
+    const coordinator = new ShutdownCoordinator(makeConfig());
     let releaseHandler: (() => void) | undefined;
 
     const handler = registerProbeHandler(server, 'shutdown_active_probe', async () => {
@@ -164,7 +164,7 @@ describe('ShutdownCoordinator MCP request drain integration', () => {
     vi.useFakeTimers();
     const server = createMcpServer(makeConfig(), 'test');
     const lifecycle = getMcpRequestLifecycleForServer(server);
-    const coordinator = new ShutdownCoordinator(makeConfig(), undefined, { mcpServer: server });
+    const coordinator = new ShutdownCoordinator(makeConfig());
     const warnSpy = vi.spyOn(logger, 'warn');
 
     const handler = registerProbeHandler(
