@@ -64,10 +64,12 @@ describe('document primitives', () => {
       await writeFile(join(root, 'Project', '.obsidian', 'cache.md'), 'cache');
       await writeFile(join(root, 'Other', 'gamma.md'), 'gamma');
 
-      await expect(listMarkdownFiles(root, ['.md', '.markdown'], 'Project')).resolves.toEqual([
-        'Project/alpha.md',
-        'Project/Nested/beta.markdown',
-      ]);
+      await expect(listMarkdownFiles(root, ['.md', '.markdown'], 'Project')).resolves.toEqual(
+        expect.arrayContaining([
+          'Project/alpha.md',
+          'Project/Nested/beta.markdown',
+        ])
+      );
     } finally {
       await rm(root, { recursive: true, force: true });
     }

@@ -143,7 +143,7 @@ export function createInvocationContext(
 ): MacroInvocationContext {
   const cancelled =
     typeof options.cancelled === 'object'
-      ? { value: options.cancelled.value }
+      ? options.cancelled
       : { value: options.cancelled ?? false };
   const budget = {
     token_total: options.budget?.token_total ?? 0,

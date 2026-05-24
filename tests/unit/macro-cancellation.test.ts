@@ -191,6 +191,32 @@ describe('macro cooperative cancellation safe points', () => {
     });
   });
 
+  it('observes a shared cancellation token flipped while sleep is running', async () => {
+    vi.useFakeTimers();
+    const token = { value: false };
+    const run = evaluateProgram(parseProgram('sleep 500\nmark "late"'), {
+      taskId: 'task-cancel-shared-token',
+      builtins: cancellationBuiltins([]),
+      cancelled: token,
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    token.value = true;
+    await vi.advanceTimersByTimeAsync(100);
+    const result = await run;
+    vi.useRealTimers();
+
+    expect(result.isError).toBe(false);
+    expect(parseToolPayload(result)).toMatchObject({
+      error: 'cancelled',
+      details: {
+        task_id: 'task-cancel-shared-token',
+        at_safe_point: 'inside_sleep',
+      },
+    });
+  });
+
+
   it('T-U-182b observes cancellation inside slow_op after a 100 ms async chunk', async () => {
     vi.useFakeTimers();
     const source = parseProgram('slow_op 250 "cancelable"\nmark "late"');

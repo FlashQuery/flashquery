@@ -1,14 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { spawnSync } from 'node:child_process';
+import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
 
-function runMadgeCircular(): string {
-  const result = spawnSync(
+function runMadgeCircular(): SpawnSyncReturns<string> {
+  return spawnSync(
     'npx',
     ['--yes', 'madge@8.0.0', 'src', '--extensions', 'ts', '--circular'],
     { cwd: process.cwd(), encoding: 'utf-8' }
   );
+}
 
-  return [result.stdout, result.stderr].filter(Boolean).join('\n');
+function madgeOutput(result: SpawnSyncReturns<string>): string {
+  if (result.error) {
+    throw result.error;
+  }
+  const output = [result.stdout, result.stderr].filter(Boolean).join('\n');
+  expect(output).toContain('circular dependenc');
+  expect(output).toContain('Processed ');
+  return output;
 }
 
 function expectNoForbiddenFragment(output: string, label: string, fragments: string[]): void {
@@ -24,7 +32,7 @@ function expectNoForbiddenFragment(output: string, label: string, fragments: str
 
 describe('Phase 149 targeted circular dependency gate', () => {
   it('T-U-022 keeps REQ-010 document/plugin target cycles absent from madge output', () => {
-    const output = runMadgeCircular();
+    const output = madgeOutput(runMadgeCircular());
 
     expectNoForbiddenFragment(output, 'REQ-010 document resolver to MCP document tools', [
       'mcp/utils/resolve-document.ts',
@@ -41,7 +49,7 @@ describe('Phase 149 targeted circular dependency gate', () => {
   });
 
   it('T-U-024 keeps REQ-011 macro helper to evaluator target cycles absent from madge output', () => {
-    const output = runMadgeCircular();
+    const output = madgeOutput(runMadgeCircular());
     const helperFiles = [
       'macro/builtins.ts',
       'macro/shell-verbs.ts',
