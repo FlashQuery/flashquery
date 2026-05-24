@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { MacroProgressEntry } from './evaluator.js';
+import type { MacroProgressEntry } from './runtime-types.js';
 
 export const MACRO_TASK_STATUSES = ['working', 'completed', 'failed', 'cancelled'] as const;
 

@@ -1,4 +1,4 @@
-import { MacroExpectedError } from './evaluator.js';
+import { MacroExpectedError } from './runtime-errors.js';
 
 export interface MacroBudgetLimits {
   max_total_tokens?: number;

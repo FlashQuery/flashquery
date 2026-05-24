@@ -3,9 +3,11 @@ import {
   MacroExpectedError,
   MacroFailError,
   MacroRuntimeError,
-  type MacroBuiltin,
-  type MacroValue,
-} from './evaluator.js';
+} from './runtime-errors.js';
+import type {
+  MacroBuiltin,
+  MacroValue,
+} from './runtime-types.js';
 import { MACRO_SAFE_POINTS } from './safe-points.js';
 
 const CHUNK_MS = 100;

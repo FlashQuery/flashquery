@@ -1,5 +1,5 @@
 import type { McpBroker } from '../services/mcp-broker.js';
-import { MacroRuntimeError } from './evaluator.js';
+import { MacroRuntimeError } from './runtime-errors.js';
 
 export const BROKER_EXISTS_DEEP_PROBE_TIMEOUT_MS = 250;
 

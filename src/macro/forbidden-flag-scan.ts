@@ -1,4 +1,4 @@
-import { MacroExpectedError } from './evaluator.js';
+import { MacroExpectedError } from './runtime-errors.js';
 import type { Arg, Call, Expr, Pipeline, Program, Statement } from './types.js';
 
 type ForbiddenVerb = 'sed' | 'find';

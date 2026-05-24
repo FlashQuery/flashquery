@@ -17,9 +17,11 @@ import {
 import {
   MacroExpectedError,
   MacroNeedsUserInputError,
-  type MacroInvocationContext,
-  type MacroValue,
-} from './evaluator.js';
+} from './runtime-errors.js';
+import type {
+  MacroInvocationContext,
+  MacroValue,
+} from './runtime-types.js';
 import { coerceBrokerToolArguments, coerceCallToolResult, isCallToolErrorResult } from './coerce.js';
 import type { MacroCallerContext, ToolFn, ToolRegistry } from './types.js';
 

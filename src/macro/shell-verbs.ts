@@ -4,11 +4,13 @@ import fastGlob from 'fast-glob';
 import shelljs from 'shelljs';
 import {
   MacroRuntimeError,
-  type MacroBuiltin,
-  type MacroInvocationContext,
-  type MacroNamedArgs,
-  type MacroValue,
-} from './evaluator.js';
+} from './runtime-errors.js';
+import type {
+  MacroBuiltin,
+  MacroInvocationContext,
+  MacroNamedArgs,
+  MacroValue,
+} from './runtime-types.js';
 import { assertRealPathInsideVault, resolveMacroPath, toMacroPath } from './path-wrapper.js';
 
 const sh = shelljs;

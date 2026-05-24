@@ -5,7 +5,7 @@ import {
   sep,
 } from 'node:path';
 import { realpathSync } from 'node:fs';
-import { MacroExpectedError } from './evaluator.js';
+import { MacroExpectedError } from './runtime-errors.js';
 
 function normalizedVaultRoot(vaultRoot: string): string {
   return pathNormalize(pathResolve(vaultRoot));

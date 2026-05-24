@@ -1,5 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { MacroValue } from './evaluator.js';
+import type { MacroValue } from './runtime-types.js';
 
 export function isCallToolErrorResult(result: CallToolResult): boolean {
   return result.isError === true;

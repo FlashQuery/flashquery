@@ -8,7 +8,7 @@ import type {
   Program,
   Statement,
 } from './types.js';
-import type { MacroValue } from './evaluator.js';
+import type { MacroValue } from './runtime-types.js';
 
 export type InputVarDefault = MacroValue;
 

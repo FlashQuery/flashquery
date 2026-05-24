@@ -42,7 +42,7 @@ const REGISTRY_PATH = join(FRAMEWORK_DIR, '..', '..', '..', 'src', 'macro', 'reg
 // Pinned hashes. Update these when you intentionally change production
 // or the framework mirror. The failure message at test time prints the
 // current values so you can copy-paste them.
-const PINNED_FILE_HASH = '348450d8071721574abec855190adb798b355cd912f7d51e67b93db1c690a4f8';
+const PINNED_FILE_HASH = '0f0cccd56a0cff9d9d1bccf807a38b74061099264c21c64aa7997d9be3309f96';
 const PINNED_FUNCTION_HASH = '1fb49fca99fa2aa828f15e033f09a9630075d399647aca7720e9be8b3b59a65c';
 
 function sha256(s: string): string {

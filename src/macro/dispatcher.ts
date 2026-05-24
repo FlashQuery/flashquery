@@ -1,5 +1,5 @@
 import { jsonExpectedError, type ToolResult } from '../mcp/utils/response-formats.js';
-import type { MacroInvocationContext, MacroValue } from './evaluator.js';
+import type { MacroInvocationContext, MacroValue } from './runtime-types.js';
 import type { ToolRegistry } from './types.js';
 
 export interface DispatchMacroToolOptions {

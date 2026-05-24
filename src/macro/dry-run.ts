@@ -2,7 +2,7 @@ import { macroResult, withWarnings, type ToolResult, type WarningCode } from '..
 import { preScanForbiddenShellFlags } from './forbidden-flag-scan.js';
 import { collectToolReferences, preScanToolReferences } from './permission-prescan.js';
 import { collectInputVarContract, preflightProgram, validateInputVars } from './preflight.js';
-import type { MacroValue } from './evaluator.js';
+import type { MacroValue } from './runtime-types.js';
 import type { Program, ToolRegistry, MacroCallerContext } from './types.js';
 
 export interface RunDryRunOptions {
