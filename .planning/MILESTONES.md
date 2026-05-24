@@ -172,6 +172,16 @@
 
 **Scope:** 6 phases (84–89), 26 plans
 **Archive:** [milestones/v2.8-ROADMAP.md](milestones/v2.8-ROADMAP.md)
+**Audit:** [milestones/v2.8-MILESTONE-AUDIT.md](milestones/v2.8-MILESTONE-AUDIT.md)
+
+---
+
+## v2.6: Test Infrastructure & Quality (Shipped: 2026-04-15)
+
+**Scope:** Phases 72-80
+**Audit:** [milestones/v2.6-MILESTONE-AUDIT.md](milestones/v2.6-MILESTONE-AUDIT.md)
+
+**Archive note:** This legacy audit recorded gaps at the time of audit; later milestones and maintenance phases carried forward the remaining cleanup. The audit artifact is archived here so no milestone-close evidence remains at `.planning/` root.
 
 ---
 
