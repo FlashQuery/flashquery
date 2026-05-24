@@ -155,7 +155,7 @@ function wrapNativeCatalogHandler(
   handler: NativeToolHandler,
   lifecycle: McpRequestLifecycle
 ): NativeToolHandler {
-  return wrapToolHandler(handler, lifecycle) as NativeToolHandler;
+  return wrapToolHandler(handler, lifecycle);
 }
 
 /**
@@ -169,7 +169,7 @@ function wrapServerWithRequestLifecycleAndCorrelation(
   const originalRegisterTool: RegisterToolFunction = server.registerTool.bind(server);
   server.registerTool = ((name, config, cb) => {
     const wrappedHandler = wrapRegisteredToolHandler(cb as RegisteredToolHandler, lifecycle);
-    return originalRegisterTool(name, config as never, wrappedHandler as never);
+    return originalRegisterTool(name, config as never, wrappedHandler);
   }) as RegisterToolFunction;
 
   return server;
