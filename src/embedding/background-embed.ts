@@ -118,7 +118,7 @@ export async function scheduleBackgroundEmbedding(
   }
 }
 
-async function updateTargetEmbedding(
+export async function updateTargetEmbedding(
   target: BackgroundEmbeddingTarget,
   vector: number[],
   supabase: SupabaseLike,
