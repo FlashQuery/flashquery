@@ -13,6 +13,7 @@ type TableMock = {
   update: ReturnType<typeof vi.fn>;
   upsert: ReturnType<typeof vi.fn>;
   select: ReturnType<typeof vi.fn>;
+  delete: ReturnType<typeof vi.fn>;
 };
 
 function makeProvider(result: number[] | Error): EmbeddingProvider {
@@ -45,6 +46,7 @@ function makeSupabaseMock(options: {
       tables.set(table, {
         update: vi.fn(() => makeEqChain({ error: options.updateError ?? null })),
         upsert: vi.fn(async () => ({ error: null })),
+        delete: vi.fn(() => makeEqChain({ error: null })),
         select: vi.fn(() =>
           makeEqChain({
             data:
@@ -83,8 +85,31 @@ describe('background embedding helper', () => {
       expect(supabase.tables.get(table)?.update).toHaveBeenCalledWith(
         expect.objectContaining({ embedding: JSON.stringify([0.1, 0.2, 0.3]) })
       );
-      expect(supabase.tables.get('fqc_pending_embeds')?.upsert).toBeUndefined();
+      expect(supabase.tables.get('fqc_pending_embeds')?.upsert).not.toHaveBeenCalled();
+      expect(supabase.tables.get('fqc_pending_embeds')?.delete).toHaveBeenCalled();
     }
+  });
+
+  it('clears a stale pending row when a later foreground embedding succeeds', async () => {
+    const supabase = makeSupabaseMock();
+
+    const result = await scheduleBackgroundEmbedding({
+      target: documentEmbeddingTarget({ instanceId: 'inst', id: 'doc-1', label: 'Doc' }),
+      embedText: 'fresh text',
+      provider: makeProvider([0.1, 0.2, 0.3]),
+      supabase: supabase.client,
+    });
+
+    expect(result.warnings).toEqual([]);
+    expect(supabase.tables.get('fqc_pending_embeds')?.delete).toHaveBeenCalled();
+    expect(supabase.eqCalls).toEqual(
+      expect.arrayContaining([
+        ['instance_id', 'inst'],
+        ['target_kind', 'document'],
+        ['target_table', 'fqc_documents'],
+        ['target_id', 'doc-1'],
+      ])
+    );
   });
 
   it('T-U-007 upserts durable pending state and logs background_embed_failed on provider failure', async () => {

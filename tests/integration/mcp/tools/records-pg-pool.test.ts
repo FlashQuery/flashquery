@@ -79,6 +79,15 @@ function makeSupabase() {
       }
       if (table === 'fqc_pending_embeds') {
         return {
+          delete: () => ({
+            eq: () => ({
+              eq: () => ({
+                eq: () => ({
+                  eq: () => Promise.resolve(makeQueryResult(null)),
+                }),
+              }),
+            }),
+          }),
           select: () => ({
             eq: () => ({
               eq: () => ({

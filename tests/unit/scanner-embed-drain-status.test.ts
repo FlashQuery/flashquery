@@ -5,10 +5,14 @@ import { runScanOnce } from '../../src/services/scanner.js';
 const scannerState = vi.hoisted(() => ({
   vaultFiles: [] as string[],
   drainMode: 'ok' as 'ok' | 'error' | 'throw' | 'docs',
+  upserts: [] as Array<{ table: string; payload: Record<string, unknown> }>,
 }));
 
 vi.mock('node:fs/promises', () => ({
-  readFile: vi.fn().mockResolvedValue('---\ntitle: Test Doc\n---\nBody'),
+  readFile: vi.fn((_path: string, encoding?: BufferEncoding) => {
+    const raw = '---\ntitle: Test Doc\n---\nBody';
+    return Promise.resolve(encoding ? raw : Buffer.from(raw));
+  }),
 }));
 
 vi.mock('node:fs', () => ({
@@ -98,7 +102,11 @@ function makeQuery(table: string) {
     in: vi.fn(() => query),
     update: vi.fn(() => query),
     insert: vi.fn(() => query),
-    upsert: vi.fn(() => query),
+    upsert: vi.fn((payload: Record<string, unknown>) => {
+      scannerState.upserts.push({ table, payload });
+      return Promise.resolve({ data: null, error: null });
+    }),
+    delete: vi.fn(() => query),
     single: vi.fn(() => Promise.resolve(ok(null as unknown as unknown[]))),
     is: vi.fn(() => {
       if (table === 'fqc_documents' && state.select === 'id, path, title') {
@@ -131,6 +139,7 @@ describe('runScanOnce EMBED-DRAIN status', () => {
     vi.useRealTimers();
     scannerState.vaultFiles = [];
     scannerState.drainMode = 'ok';
+    scannerState.upserts = [];
     vi.mocked(embeddingProvider.embed).mockResolvedValue([0.1]);
   });
 
@@ -173,6 +182,29 @@ describe('runScanOnce EMBED-DRAIN status', () => {
         instanceId: 'test-instance-id',
         limit: 25,
         databaseUrl: 'postgresql://test',
+      })
+    );
+  });
+
+  it('records scanner-created document embedding failures as pending and reports partial status', async () => {
+    scannerState.vaultFiles = ['new-doc.md'];
+    vi.mocked(embeddingProvider.embed).mockRejectedValue(new Error('provider offline'));
+
+    const result = await runScanOnce(makeConfig());
+
+    expect(result.newFiles).toBe(1);
+    expect(result.embeddingStatus).toBe('partial');
+    expect(scannerState.upserts).toContainEqual(
+      expect.objectContaining({
+        table: 'fqc_pending_embeds',
+        payload: expect.objectContaining({
+          instance_id: 'test-instance-id',
+          target_kind: 'document',
+          target_table: 'fqc_documents',
+          embed_text: expect.stringContaining('Body'),
+          last_error: 'provider offline',
+          status: 'pending',
+        }),
       })
     );
   });

@@ -46,6 +46,7 @@ interface TableQuery {
   update(payload: Record<string, unknown>): QueryBuilder;
   upsert(payload: Record<string, unknown>, options?: Record<string, unknown>): PromiseLike<QueryResult>;
   select(columns: string): QueryBuilder<{ attempt_count?: number }>;
+  delete(): QueryBuilder;
 }
 
 interface SupabaseLike {
@@ -109,6 +110,7 @@ export async function scheduleBackgroundEmbedding(
   try {
     const vector = await options.provider.embed(options.embedText);
     await updateTargetEmbedding(options.target, vector, options.supabase, options.databaseUrl);
+    await clearPendingEmbedding(options.supabase, options.target);
     return { warnings: [] };
   } catch (err) {
     const message = errorMessage(err);
@@ -187,6 +189,22 @@ async function upsertPendingEmbedding(
 
   if (error) {
     throw new Error(`Failed to record pending embedding: ${error.message}`);
+  }
+}
+
+async function clearPendingEmbedding(
+  supabase: SupabaseLike,
+  target: BackgroundEmbeddingTarget
+): Promise<void> {
+  const { error } = await (supabase.from('fqc_pending_embeds') as TableQuery)
+    .delete()
+    .eq('instance_id', target.instanceId)
+    .eq('target_kind', target.kind)
+    .eq('target_table', target.targetTable)
+    .eq('target_id', target.targetId);
+
+  if (error) {
+    throw new Error(`Failed to clear pending embedding: ${error.message}`);
   }
 }
 

@@ -15,6 +15,11 @@ import type { FlashQueryConfig } from '../config/loader.js';
 import { getIsShuttingDown } from '../server/shutdown-state.js';
 import { FM } from '../constants/frontmatter-fields.js';
 import { extractTemplateMeta } from '../llm/template-meta.js';
+import {
+  EMBEDDING_DEFERRED_WARNING,
+  documentEmbeddingTarget,
+  scheduleBackgroundEmbedding,
+} from '../embedding/background-embed.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // scanMutex — DCP-03: serializes concurrent runScanOnce() calls
@@ -470,6 +475,40 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   // is written to the DB. fire-and-forget remains the default for create_document/update_document;
   // this collection is only drained when runScanOnce is called synchronously (force_file_scan).
   const embedPromises: Promise<void>[] = [];
+  let scannerEmbedDeferred = false;
+
+  const enqueueDocumentEmbedding = (input: {
+    id: string;
+    path: string;
+    title: string;
+    content: string;
+    logPrefix: string;
+  }) => {
+    embedPromises.push(
+      scheduleBackgroundEmbedding({
+        target: documentEmbeddingTarget({
+          instanceId,
+          id: input.id,
+          label: input.path,
+        }),
+        embedText: `${input.title}\n\n${input.content}`,
+        provider: embeddingProvider,
+        supabase,
+        logger,
+      })
+        .then((result) => {
+          if (result.warnings.includes(EMBEDDING_DEFERRED_WARNING)) {
+            scannerEmbedDeferred = true;
+          }
+        })
+        .catch((err: unknown) => {
+          scannerEmbedDeferred = true;
+          logger.warn(
+            `${input.logPrefix} for ${input.path}: ${err instanceof Error ? err.message : String(err)}`
+          );
+        })
+    );
+  };
 
   for (const relativePath of allVaultFiles) {
     // SHUT-10: Check shutdown flag frequently during scanning
@@ -675,23 +714,13 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             );
           }
 
-          // Collect embed promise for the duplicate (drained by force_file_scan before returning)
-          embedPromises.push(
-            embeddingProvider
-              .embed(`${title}\n\n${content}`)
-              .then((vector) =>
-                supabase
-                  .from('fqc_documents')
-                  .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                  .eq('id', newFqcId)
-                  .then(() => undefined)
-              )
-              .catch((err: unknown) => {
-                logger.warn(
-                  `[SCAN-EMBED] background embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
-                );
-              })
-          );
+          enqueueDocumentEmbedding({
+            id: newFqcId,
+            path: relativePath,
+            title,
+            content,
+            logPrefix: '[SCAN-EMBED] background embed failed',
+          });
         } else {
           // MOVE: original path is gone, file relocated to new path
           // OBS-03: Add path-comparison annotation to determine move type (rename vs directory move)
@@ -780,21 +809,13 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               });
               seenFqcIds.add(newFqcId);
               newFiles++;
-              // Collect embed promise for the duplicate (drained by force_file_scan before returning)
-              embedPromises.push(
-                embeddingProvider
-                  .embed(`${title}\n\n${content}`)
-                  .then((vector) =>
-                    supabase
-                      .from('fqc_documents')
-                      .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                      .eq('id', newFqcId)
-                      .then(() => undefined)
-                  )
-                  .catch((err: unknown) => {
-                    logger.warn(`[SCAN-EMBED] background embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`);
-                  })
-              );
+              enqueueDocumentEmbedding({
+                id: newFqcId,
+                path: relativePath,
+                title,
+                content,
+                logPrefix: '[SCAN-EMBED] background embed failed',
+              });
               continue; // CRITICAL: skip the normal CONTENT CHANGED update (Pitfall 4)
             } else {
               // MOVE: safe to update path (original is gone)
@@ -840,23 +861,13 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             );
           }
 
-          // Collect re-embed promise (drained by force_file_scan before returning)
-          embedPromises.push(
-            embeddingProvider
-              .embed(`${title}\n\n${content}`)
-              .then((vector) =>
-                supabase
-                  .from('fqc_documents')
-                  .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                  .eq('id', Y as string)
-                  .then(() => undefined)
-              )
-              .catch((err: unknown) => {
-                logger.warn(
-                  `[SCAN-EMBED] re-embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
-                );
-              })
-          );
+          enqueueDocumentEmbedding({
+            id: Y as string,
+            path: relativePath,
+            title,
+            content,
+            logPrefix: '[SCAN-EMBED] re-embed failed',
+          });
         } else {
           // ── NEW FILE or path-based fallback branch ──────────────────────────
           //
@@ -911,23 +922,13 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
             newFiles++;
             logger.info(`[IDC-04] adopted foreign UUID: "${relativePath}" (fqc_id=${Y})`);
 
-            // Collect embed promise (drained by force_file_scan before returning)
-            embedPromises.push(
-              embeddingProvider
-                .embed(`${title}\n\n${content}`)
-                .then((vector) =>
-                  supabase
-                    .from('fqc_documents')
-                    .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                    .eq('id', Y)
-                    .then(() => undefined)
-                )
-                .catch((err: unknown) => {
-                  logger.warn(
-                    `[SCAN-EMBED] background embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
-                  );
-                })
-            );
+            enqueueDocumentEmbedding({
+              id: Y,
+              path: relativePath,
+              title,
+              content,
+              logPrefix: '[SCAN-EMBED] background embed failed',
+            });
             continue;
           }
 
@@ -957,23 +958,13 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
               `[INF-04] path-based reconnect: "${relativePath}" reconnected to fqc_id=${reconnectedId}`
             );
 
-            // Collect re-embed promise (drained by force_file_scan before returning)
-            embedPromises.push(
-              embeddingProvider
-                .embed(`${title}\n\n${content}`)
-                .then((vector) =>
-                  supabase
-                    .from('fqc_documents')
-                    .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                    .eq('id', reconnectedId)
-                    .then(() => undefined)
-                )
-                .catch((err: unknown) => {
-                  logger.warn(
-                    `[SCAN-EMBED] re-embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
-                  );
-                })
-            );
+            enqueueDocumentEmbedding({
+              id: reconnectedId,
+              path: relativePath,
+              title,
+              content,
+              logPrefix: '[SCAN-EMBED] re-embed failed',
+            });
             continue;
           }
 
@@ -999,23 +990,13 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
           newFiles++;
           logger.info(`[SCAN-01] discovered new file: "${relativePath}" (fqc_id=${newFqcId})`);
 
-          // Collect embed promise (drained by force_file_scan before returning)
-          embedPromises.push(
-            embeddingProvider
-              .embed(`${title}\n\n${content}`)
-              .then((vector) =>
-                supabase
-                  .from('fqc_documents')
-                  .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                  .eq('id', newFqcId)
-                  .then(() => undefined)
-              )
-              .catch((err: unknown) => {
-                logger.warn(
-                  `[SCAN-EMBED] background embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
-                );
-              })
-          );
+          enqueueDocumentEmbedding({
+            id: newFqcId,
+            path: relativePath,
+            title,
+            content,
+            logPrefix: '[SCAN-EMBED] background embed failed',
+          });
         }
       }
     } catch (err) {
@@ -1168,16 +1149,24 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
         }
 
         embedPromises.push(
-          embeddingProvider
-            .embed(embedText)
-            .then((vector) =>
-              supabase
-                .from('fqc_documents')
-                .update({ embedding: JSON.stringify(vector) })
-                .eq('id', docId)
-                .then(() => undefined)
-            )
+          scheduleBackgroundEmbedding({
+            target: documentEmbeddingTarget({
+              instanceId,
+              id: docId,
+              label: docPath,
+            }),
+            embedText,
+            provider: embeddingProvider,
+            supabase,
+            logger,
+          })
+            .then((result) => {
+              if (result.warnings.includes(EMBEDDING_DEFERRED_WARNING)) {
+                scannerEmbedDeferred = true;
+              }
+            })
             .catch((err: unknown) => {
+              scannerEmbedDeferred = true;
               logger.warn(
                 `[EMBED-DRAIN] embed failed for "${docPath}": ${err instanceof Error ? err.message : String(err)}`
               );
@@ -1218,6 +1207,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
       embeddingStatus = 'timed_out';
     } else if (drainQueryFailed) {
       embeddingStatus = 'drain_query_failed';
+    } else if (scannerEmbedDeferred) {
+      embeddingStatus = 'partial';
     } else {
       // Check if any settled as rejected (errors are caught inside each promise,
       // so allSettled always sees 'fulfilled' — failures are logged, not thrown)
