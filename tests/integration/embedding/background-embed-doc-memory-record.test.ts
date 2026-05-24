@@ -10,8 +10,12 @@ import { initLogger } from '../../../src/logging/logger.js';
 import { initVault } from '../../../src/storage/vault.js';
 import type { FlashQueryConfig } from '../../../src/config/loader.js';
 import type { EmbeddingProvider } from '../../../src/embedding/provider.js';
+import { registerPluginTools } from '../../../src/mcp/tools/plugins.js';
 import { registerMemoryTools } from '../../../src/mcp/tools/memory.js';
 import { registerDocumentTools } from '../../../src/mcp/tools/documents.js';
+import { registerCompoundTools } from '../../../src/mcp/tools/compound.js';
+import { registerRecordTools } from '../../../src/mcp/tools/records.js';
+import { initPlugins } from '../../../src/plugins/manager.js';
 import {
   EMBEDDING_DEFERRED_WARNING,
   documentEmbeddingTarget,
@@ -27,6 +31,29 @@ import {
 } from '../../helpers/test-env.js';
 
 const TEST_INSTANCE_ID = 'phase-146-background-embed';
+const TEST_PLUGIN_ID = 'phase146_embed_records';
+const TEST_PLUGIN_TABLE = `fqcp_${TEST_PLUGIN_ID}_default_contacts`;
+
+vi.mock('../../../src/services/plugin-reconciliation.js', () => ({
+  reconcilePluginDocuments: vi.fn().mockResolvedValue({
+    pluginId: 'phase146_embed_records',
+    instanceId: 'default',
+    classified: { autoTrack: [], archive: [], resurrect: [], updatePath: [], syncFields: [], createPendingReview: [], clearPendingReview: [] },
+    stale: false,
+    cacheHit: false,
+  }),
+  executeReconciliationActions: vi.fn().mockResolvedValue({
+    autoTracked: 0,
+    archived: 0,
+    resurrected: 0,
+    pathsUpdated: 0,
+    fieldsSynced: 0,
+    pendingReviewsCreated: 0,
+    pendingReviewsCleared: 0,
+  }),
+  invalidateReconciliationCache: vi.fn(),
+  ensureLastSeenColumn: vi.fn().mockResolvedValue(undefined),
+}));
 
 vi.mock('../../../src/embedding/provider.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/embedding/provider.js')>();
@@ -57,6 +84,23 @@ const REQUIRED_PENDING_COLUMNS = [
   'created_at',
   'updated_at',
 ] as const;
+
+const TEST_PLUGIN_SCHEMA = `
+plugin:
+  id: ${TEST_PLUGIN_ID}
+  name: Phase 146 Embed Records
+  version: 1
+tables:
+  - name: contacts
+    embed_fields:
+      - notes
+    columns:
+      - name: name
+        type: text
+        required: true
+      - name: notes
+        type: text
+`.trim();
 
 const failingProvider: EmbeddingProvider = {
   embed: async () => {
@@ -135,6 +179,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
     initLogger(config);
     await initSupabase(config);
     await initVault(config);
+    await initPlugins(config);
     client = new pg.Client({ connectionString: TEST_DATABASE_URL });
     await client.connect();
   }, 60_000);
@@ -143,6 +188,16 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
     await client?.query('DELETE FROM fqc_pending_embeds WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+    await client?.query(`DROP TABLE IF EXISTS ${pg.escapeIdentifier(TEST_PLUGIN_TABLE)}`).catch(() => undefined);
+    try {
+      await supabaseManager.getClient()
+        .from('fqc_plugin_registry')
+        .delete()
+        .eq('plugin_id', TEST_PLUGIN_ID)
+        .eq('instance_id', TEST_INSTANCE_ID);
+    } catch {
+      // Cleanup should not mask the behavior assertions above.
+    }
     await client?.end();
     await rm(vaultPath, { recursive: true, force: true });
     await supabaseManager?.close();
@@ -310,6 +365,103 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
         target_id: payload.fq_id,
         target_label: 'phase-146/deferred-warning.md',
         embed_text: 'Deferred Warning Document\n\nDocument content that forces a deferred embedding warning',
+        last_error: 'forced provider failure',
+        status: 'pending',
+      }),
+    ]);
+  });
+
+  it('insert_in_doc remains successful and returns embedding_deferred when embedding fails', async () => {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+    registerCompoundTools(server, config);
+
+    const createResult = await getHandler('write_document')({
+      mode: 'create',
+      path: 'phase-146/compound-warning.md',
+      title: 'Compound Warning Document',
+      content: 'Original compound body',
+      tags: ['phase146'],
+    });
+    const created = parseJsonResult(createResult);
+
+    const insertResult = await getHandler('insert_in_doc')({
+      identifier: 'phase-146/compound-warning.md',
+      position: 'bottom',
+      content: 'Appended compound content',
+    });
+    const payload = parseJsonResult(insertResult);
+
+    expect(payload).toMatchObject({
+      path: 'phase-146/compound-warning.md',
+      fq_id: created.fq_id,
+      warnings: [EMBEDDING_DEFERRED_WARNING],
+    });
+
+    const { rows } = await client.query(
+      `
+      SELECT target_kind, target_table, target_id, target_label, embed_text, last_error, status
+      FROM fqc_pending_embeds
+      WHERE instance_id = $1
+        AND target_kind = 'document'
+        AND target_id = $2
+      `,
+      [TEST_INSTANCE_ID, created.fq_id]
+    );
+    expect(rows).toEqual([
+      expect.objectContaining({
+        target_kind: 'document',
+        target_table: 'fqc_documents',
+        target_id: created.fq_id,
+        target_label: 'phase-146/compound-warning.md',
+        embed_text: expect.stringContaining('Appended compound content'),
+        last_error: 'forced provider failure',
+        status: 'pending',
+      }),
+    ]);
+  });
+
+  it('write_record remains successful and returns embedding_deferred when embedding fails', async () => {
+    const { server, getHandler } = createMockServer();
+    registerPluginTools(server, config);
+    registerRecordTools(server, config);
+    await getHandler('register_plugin')({ schema_yaml: TEST_PLUGIN_SCHEMA });
+
+    const result = await getHandler('write_record')({
+      mode: 'create',
+      plugin_id: TEST_PLUGIN_ID,
+      table: 'contacts',
+      data: {
+        name: 'Embedding Warning Contact',
+        notes: 'Record notes that force a deferred embedding warning',
+      },
+    });
+    const payload = parseJsonResult(result);
+
+    expect(payload).toMatchObject({
+      id: expect.any(String),
+      plugin_id: TEST_PLUGIN_ID,
+      table: 'contacts',
+      warnings: [EMBEDDING_DEFERRED_WARNING],
+    });
+
+    const { rows } = await client.query(
+      `
+      SELECT target_kind, target_table, target_id, embed_text, last_error, status
+      FROM fqc_pending_embeds
+      WHERE instance_id = $1
+        AND target_kind = 'record'
+        AND target_table = $2
+        AND target_id = $3
+      `,
+      [TEST_INSTANCE_ID, TEST_PLUGIN_TABLE, payload.id]
+    );
+    expect(rows).toEqual([
+      expect.objectContaining({
+        target_kind: 'record',
+        target_table: TEST_PLUGIN_TABLE,
+        target_id: payload.id,
+        embed_text: 'Record notes that force a deferred embedding warning',
         last_error: 'forced provider failure',
         status: 'pending',
       }),
