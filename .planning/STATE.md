@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: Technical Debt
-status: executing
-stopped_at: Completed 147-03-PLAN.md
-last_updated: "2026-05-24T16:43:06.550Z"
+status: verifying
+stopped_at: Completed 147-04-PLAN.md
+last_updated: "2026-05-24T16:50:28.488Z"
 last_activity: 2026-05-24
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
-  completed_plans: 8
-  percent: 33
+  completed_plans: 9
+  percent: 50
 ---
 
 # FlashQuery Core — State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-05-24)
 
 Phase: 147 (tooling-and-dependency-hygiene) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-24
 
 ## Performance Metrics
@@ -154,6 +154,7 @@ Last activity: 2026-05-24
 | Phase 147 P01 | 4m12s | 2 tasks | 2 files |
 | Phase 147 P2 | 6m15s | 3 tasks | 6 files |
 | Phase 147 P3 | 4m49s | 3 tasks | 5 files |
+| Phase 147 P4 | 4m11s | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -305,6 +306,9 @@ Last activity: 2026-05-24
 - [Phase 147]: Kept required worktree/build/vendor ignore globs in knip.ts even though Knip emits config hints for them; the plan requires those exact exclusions.
 - [Phase 147]: 147-03 updated the nested private macro golden-model package to Chevrotain 12 instead of excluding it from REQ-006 audit closure. — Nested npm audit passed with 0 vulnerabilities and macro framework regression passed.
 - [Phase 147]: 147-03 required no macro parser source or parser test assertion changes because Chevrotain 12 preserved existing parser and framework gates. — T-U-013, T-U-014, typecheck, and lint passed after the dependency update.
+- [Phase 147]: 147-04 deferred MCP SDK update — Deferred @modelcontextprotocol/sdk 1.27.1 -> 1.29.0 to Phase 148 because REQ-008 typed registerTool wrapper consolidation has not landed.
+- [Phase 147]: 147-04 closed Phase 147 as documented residual — npm outdated still reports intentional MCP SDK wanted drift while audits, Knip, type/lint, macro, and preflight gates are green.
+- [Phase 147]: 147-04 classified uuid v14 as latest-major-only drift — uuid current and wanted are both 13.0.2, npm audit is clean, and REQ-006 does not require latest-major updates without wanted drift or advisories.
 
 ## Accumulated Context
 
@@ -419,8 +423,8 @@ Last activity: 2026-05-24
 
 ## Session Continuity
 
-Last session: 2026-05-24T16:43:06.522Z
-Stopped at: Completed 147-03-PLAN.md
+Last session: 2026-05-24T16:49:56.779Z
+Stopped at: Completed 147-04-PLAN.md
 Resume: None
 
 ## Deferred Items

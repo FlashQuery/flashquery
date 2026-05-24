@@ -44,7 +44,7 @@
 |---|-------|------|--------------|-----------|
 | 145 | Silent Failure Quick Wins | 1/1 | Complete   | 2026-05-24 |
 | 146 | Embedding Reliability Foundation | 4/4 | Complete    | 2026-05-24 |
-| 147 | Tooling and Dependency Hygiene | 3/4 | In Progress|  |
+| 147 | Tooling and Dependency Hygiene | 4/4 | Complete   | 2026-05-24 |
 | 148 | MCP Lifecycle and Shutdown | Consolidate typed server wrapping and drain in-flight MCP requests during shutdown. | REQ-008, REQ-009 | §4.4 |
 | 149 | Cycle Breaks | Remove documented document/plugin and macro circular dependency clusters without behavior drift. | REQ-010, REQ-011 | §4.5 |
 | 150 | Config Metadata Typing | Replace runtime metadata side-channel casts with explicit type-safe storage. | REQ-012 | §4.6 |
@@ -131,13 +131,13 @@ Plans:
 - Static/command: T-C-001..006 for audit, outdated, typecheck/lint, knip, and preflight.
 - Static config assertion: T-U-015 if useful for knip exclusions.
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 147-01-PLAN.md — Baseline audit/outdated evidence and non-major dependency updates.
 - [x] 147-02-PLAN.md — Knip config, script, T-U-015 coverage, and preflight policy.
 - [x] 147-03-PLAN.md — Isolated Chevrotain v12 upgrade and nested macro golden-model audit decision.
-- [ ] 147-04-PLAN.md — MCP SDK update/deferral decision and final Phase 147 command gates.
+- [x] 147-04-PLAN.md — MCP SDK update/deferral decision and final Phase 147 command gates. (completed 2026-05-24)
 
 **Success criteria:**
 1. `npm audit` and `npm audit --omit=dev` report no unhandled vulnerabilities, or remaining advisories are explicitly documented.
@@ -228,7 +228,7 @@ Plans:
 | REQ-003 | Phase 146 | Pending |
 | REQ-004 | Phase 146 | Pending |
 | REQ-005 | Phase 146 | Pending |
-| REQ-006 | Phase 147 | Pending |
+| REQ-006 | Phase 147 | Complete |
 | REQ-007 | Phase 147 | Complete |
 | REQ-008 | Phase 148 | Pending |
 | REQ-009 | Phase 148 | Pending |

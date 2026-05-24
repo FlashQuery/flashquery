@@ -22,7 +22,7 @@ Requirements for the v3.7 Technical Debt milestone. Each requirement maps to exa
 
 ### Dependency and Tooling Hygiene
 
-- [ ] **REQ-006**: Dependency vulnerabilities and wanted-version drift are remediated. Current `npm audit` and `npm outdated` results are recorded, non-major updates are applied, Chevrotain v12 is handled separately with macro tests, MCP SDK drift is handled after typed wrapping, and remaining advisories are zero or explicitly documented.
+- [x] **REQ-006**: Dependency vulnerabilities and wanted-version drift are remediated. Current `npm audit` and `npm outdated` results are recorded, non-major updates are applied, Chevrotain v12 is handled separately with macro tests, MCP SDK drift is handled after typed wrapping, and remaining advisories are zero or explicitly documented.
 - [x] **REQ-007**: `knip` is configured for actionable local and preflight use. The project has a `knip` script/config that excludes worktrees/build/vendor noise, documents reachability policy, and is included in preflight or explicitly staged.
 
 ### MCP Lifecycle, Shutdown, and Architecture
@@ -83,7 +83,7 @@ Which phases cover which requirements. Updated during phase execution as statuse
 | REQ-003 | Phase 146 | Complete |
 | REQ-004 | Phase 146 | Complete |
 | REQ-005 | Phase 146 | Complete |
-| REQ-006 | Phase 147 | Pending |
+| REQ-006 | Phase 147 | Complete |
 | REQ-007 | Phase 147 | Complete |
 | REQ-008 | Phase 148 | Pending |
 | REQ-009 | Phase 148 | Pending |
