@@ -23,6 +23,7 @@ const config: KnipConfig = {
     '@types/uuid',
     'esbuild',
   ],
+  tags: ['-@internal'],
   ignoreIssues: {
     // Existing public/plugin/test surfaces pending API-surface triage. Keep the
     // symbols named here aligned with `knip --include exports,types` output.
@@ -46,8 +47,6 @@ const config: KnipConfig = {
     // Phase 148: exported for lifecycle helper tests and shutdown-drain contract
     // documentation; production code consumes the returned shape structurally.
     'src/mcp/request-lifecycle.ts': ['types'],
-    'src/mcp/server.ts': ['exports'],
-    'src/mcp/tool-catalog.ts': ['exports'],
     'src/mcp/tool-metadata.ts': ['types'],
     'src/mcp/tools/documents.ts': ['exports'],
     'src/mcp/utils/document-output.ts': ['exports', 'types'],

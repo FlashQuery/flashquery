@@ -36,6 +36,7 @@ describe('ShutdownCoordinator', () => {
   beforeEach(() => {
     // Reset shutdown state before each test
     vi.resetModules();
+    shutdownState.setShuttingDown(false);
 
     // Create a minimal mock config
     config = {
@@ -86,6 +87,7 @@ describe('ShutdownCoordinator', () => {
   });
 
   afterEach(() => {
+    shutdownState.setShuttingDown(false);
     vi.restoreAllMocks();
   });
 
@@ -95,59 +97,47 @@ describe('ShutdownCoordinator', () => {
   });
 
   it('should be idempotent — calling execute() twice should not error', async () => {
-    // First call
-    try {
-      await coordinator.execute();
-    } catch (e) {
-      // Ignore process.exit error
-    }
+    const exitSpy = vi.mocked(process.exit);
 
-    // Second call — should return immediately without error
-    try {
-      await coordinator.execute();
-    } catch (e) {
-      // Ignore process.exit error
-    }
+    await expect(coordinator.execute()).rejects.toThrow('process.exit called');
+    expect(exitSpy).toHaveBeenCalledTimes(2);
+    expect(exitSpy).toHaveBeenNthCalledWith(1, 0);
+    expect(exitSpy).toHaveBeenNthCalledWith(2, 1);
 
-    expect(coordinator).toBeDefined();
+    // Second call returns immediately because the coordinator is already in
+    // the shutdown path.
+    await expect(coordinator.execute()).resolves.toBeUndefined();
+    expect(exitSpy).toHaveBeenCalledTimes(2);
   });
 
   it('should set isShuttingDown flag on execute', async () => {
-    try {
-      await coordinator.execute();
-    } catch (e) {
-      // Ignore process.exit error
-    }
+    expect(shutdownState.getIsShuttingDown()).toBe(false);
 
-    // Note: getIsShuttingDown is a module-level variable that persists across tests.
-    // In an actual shutdown scenario, this would be true. For unit tests, we just
-    // verify that execute() was called and attempted to set the flag.
-    expect(coordinator).toBeDefined();
+    await expect(coordinator.execute()).rejects.toThrow('process.exit called');
+
+    expect(shutdownState.getIsShuttingDown()).toBe(true);
   });
 
   it('should complete within MAX_SHUTDOWN_MS', async () => {
+    const exitSpy = vi.mocked(process.exit);
     const start = Date.now();
-    try {
-      await coordinator.execute();
-    } catch (e) {
-      // Ignore process.exit error
-    }
+    await expect(coordinator.execute()).rejects.toThrow('process.exit called');
     const elapsed = Date.now() - start;
 
     // Should complete well under MAX_SHUTDOWN_MS (30s)
     expect(elapsed).toBeLessThan(MAX_SHUTDOWN_MS);
+    expect(exitSpy).toHaveBeenNthCalledWith(1, 0);
   });
 
   it('should handle missing HTTP server gracefully', async () => {
+    const exitSpy = vi.mocked(process.exit);
     // Coordinator without HTTP server
     const coordinatorNoServer = new ShutdownCoordinator(config);
-    try {
-      await coordinatorNoServer.execute();
-    } catch (e) {
-      // Ignore process.exit error
-    }
 
-    expect(coordinatorNoServer).toBeDefined();
+    await expect(coordinatorNoServer.execute()).rejects.toThrow('process.exit called');
+
+    expect(shutdownState.getIsShuttingDown()).toBe(true);
+    expect(exitSpy).toHaveBeenNthCalledWith(1, 0);
   });
 
   it('MAX_SHUTDOWN_MS should be 30 seconds', () => {
@@ -163,48 +153,29 @@ describe('ShutdownCoordinator', () => {
     // Since we mock process.exit to throw, we expect the Error('process.exit called').
     // This verifies that shutdown() reaches the completion step where it would
     // normally exit.
-    try {
-      await coordinator.execute();
-      // Should not reach here — process.exit throws
-      expect(true).toBe(false);
-    } catch (e) {
-      // Expected: process.exit throws
-      const error = e as Error;
-      expect(error.message).toContain('process.exit');
-    }
+    await expect(coordinator.execute()).rejects.toThrow('process.exit called');
   });
 
   it('should handle error during shutdown', async () => {
     // Coordinator should handle errors gracefully and still call process.exit
     // (though with code 1 instead of 0)
-    try {
-      await coordinator.execute();
-      // Should not reach here — process.exit throws
-      expect(true).toBe(false);
-    } catch (e) {
-      // Expected: process.exit throws
-      const error = e as Error;
-      expect(error.message).toContain('process.exit');
-    }
+    await expect(coordinator.execute()).rejects.toThrow('process.exit called');
   });
 
   it('should prevent duplicate execution', async () => {
-    const executeCount = vi.fn();
-    const originalExecute = coordinator.execute;
+    const exitSpy = vi.mocked(process.exit);
 
-    // Track how many times execute is actually running concurrently
-    try {
-      // First call starts
-      const firstExecution = coordinator.execute().catch(() => {});
-      // Immediately try second call
-      const secondExecution = coordinator.execute().catch(() => {});
+    const firstExecution = expect(coordinator.execute()).rejects.toThrow('process.exit called');
+    const secondExecution = expect(coordinator.execute()).resolves.toBeUndefined();
 
-      await Promise.all([firstExecution, secondExecution]);
-    } catch (e) {
-      // Ignore
-    }
+    await Promise.all([firstExecution, secondExecution]);
 
-    // Both should complete without error (second returns immediately due to idempotency)
-    expect(coordinator).toBeDefined();
+    expect(shutdownState.getIsShuttingDown()).toBe(true);
+    // The first execution reaches process.exit(0); the mocked throw is caught by
+    // execute() and converted to process.exit(1). A non-idempotent second
+    // execution would add another pair of calls.
+    expect(exitSpy).toHaveBeenCalledTimes(2);
+    expect(exitSpy).toHaveBeenNthCalledWith(1, 0);
+    expect(exitSpy).toHaveBeenNthCalledWith(2, 1);
   });
 });

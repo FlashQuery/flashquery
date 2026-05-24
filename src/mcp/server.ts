@@ -95,6 +95,8 @@ export function createInfoHandler(config: FlashQueryConfig, version: string) {
  * Stack trace logged server-side only via logger.error.
  *
  * CRITICAL: Must be registered AFTER all route handlers.
+ *
+ * @internal exported for focused tests; production uses it in this module.
  */
 export function createGlobalErrorHandler() {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

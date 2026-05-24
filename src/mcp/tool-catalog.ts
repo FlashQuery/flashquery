@@ -33,7 +33,7 @@ function injectNativeHelpSchema(inputSchema: unknown): unknown {
   return { help: z.boolean().optional() };
 }
 
-export function createNativeToolCatalog(): NativeToolDefinition[] {
+function createNativeToolCatalog(): NativeToolDefinition[] {
   return [];
 }
 
