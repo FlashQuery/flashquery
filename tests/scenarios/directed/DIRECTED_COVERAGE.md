@@ -229,6 +229,7 @@ Core CRUD operations on vault documents via MCP.
 | D-66 | get_document follow_ref + multi-section partial-failure aggregation per OQ #12 — exactly 2 entries (no_match + insufficient_occurrences with requested_count/found_count) (Phase 2 Gap 6) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
 | D-67 | get_document batch + follow_ref pre-resolution error variants (follow_ref_invalid_type + follow_ref_target_not_found per element) (Phase 2 Gap 7) (VALIDATED) | test_follow_ref_get_document | 2026-05-03 | 2026-05-13 |
 | D-69 | T-S-002 / REQ-003: public MCP write response remains successful and includes `warnings:["embedding_deferred"]` when background embedding is deferred by provider failure. | test_background_embed_failure_warning | 2026-05-24 | 2026-05-24 |
+| D-70 | T-S-003 / REQ-009: managed server shutdown during an in-flight public MCP write drains the active request before exit and leaves the written document visible. | test_shutdown_during_write_drain | 2026-05-24 | 2026-05-24 |
 | D-39a | get_document follow_ref + sections without "body" in include -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 | D-39b | get_document follow_ref + multi-element sections + occurrence -> invalid_parameter_combination (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
 | D-39c | get_document follow_ref + multi-element sections (valid) -> sections extracted from target document (VALIDATED) | test_follow_ref_get_document | 2026-05-02 | 2026-05-13 |
