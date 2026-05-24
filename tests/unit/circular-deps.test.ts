@@ -50,6 +50,12 @@ describe('Phase 149 targeted circular dependency gate', () => {
       'services/plugin-reconciliation.ts',
       'mcp/tools/documents.ts',
     ]);
+    expectNoForbiddenFragment(output, 'REQ-010 document/plugin named cluster', [
+      'mcp/utils/document-output.ts',
+      'mcp/utils/resolve-document.ts',
+      'services/plugin-propagation.ts',
+      'services/plugin-reconciliation.ts',
+    ]);
   });
 
   it('T-U-024 keeps REQ-011 macro helper to evaluator target cycles absent from madge output', () => {

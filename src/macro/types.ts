@@ -1,5 +1,4 @@
 import type { MacroParseErrorEnvelope } from './errors.js';
-import type { MacroValue } from './runtime-types.js';
 export type {
   MacroCallerContext,
   MacroInvocationContext,

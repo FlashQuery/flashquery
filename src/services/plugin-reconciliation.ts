@@ -17,6 +17,7 @@ import { vaultManager } from '../storage/vault.js';
 import { pluginManager } from '../plugins/manager.js';
 import type { DocumentTypePolicy, RegistryEntry } from '../plugins/manager.js';
 import { FM } from '../constants/frontmatter-fields.js';
+import { ensureLastSeenColumn } from './plugin-table-schema.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Exported types (D-02)
@@ -109,7 +110,6 @@ interface PluginTableRow {
 
 const STALENESS_THRESHOLD_MS = 30_000;
 const reconciliationTimestamps = new Map<string, number>();
-const verifiedTables = new Set<string>();
 
 export function invalidateReconciliationCache(): void {
   reconciliationTimestamps.clear();
@@ -135,26 +135,6 @@ function markReconciled(pluginId: string, instanceId: string): void {
 
 function emptyResult(): ReconciliationResult {
   return { added: [], resurrected: [], deleted: [], disassociated: [], moved: [], modified: [], unchanged: 0 };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Self-healing ALTER TABLE helper (RECON-08 / D-10)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function ensureLastSeenColumn(tableName: string, pgClient: pg.Client): Promise<void> {
-  if (verifiedTables.has(tableName)) return;
-  const { rows } = await pgClient.query<{ exists: number }>(
-    `SELECT 1 AS exists FROM information_schema.columns
-     WHERE table_schema = 'public' AND table_name = $1 AND column_name = 'last_seen_updated_at'`,
-    [tableName],
-  );
-  if (rows.length === 0) {
-    await pgClient.query(
-      `ALTER TABLE ${pg.escapeIdentifier(tableName)} ADD COLUMN IF NOT EXISTS last_seen_updated_at TIMESTAMPTZ`,
-    );
-    logger?.debug(`[RECON-08] Added last_seen_updated_at column to ${tableName}`);
-  }
-  verifiedTables.add(tableName);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -2,7 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import pg from 'pg';
 import type { Logger } from '../logging/logger.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
-import { ensureLastSeenColumn } from './plugin-reconciliation.js';
+import { ensureLastSeenColumn } from './plugin-table-schema.js';
 
 /**
  * DbRow shape — matches the schema of fqc_documents table rows

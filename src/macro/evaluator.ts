@@ -22,7 +22,6 @@ import {
   type WarningCode,
   type MacroSuccessPayload,
 } from '../mcp/utils/response-formats.js';
-import type { McpBroker } from '../services/mcp-broker.js';
 import { NullMcpBroker } from '../services/mcp-broker.js';
 import { MacroPreflightError, collectInputVarContract, validateInputVars } from './preflight.js';
 import { preflightProgram } from './preflight.js';
@@ -33,9 +32,9 @@ import { resolveNamespaceIntrospection } from './introspection.js';
 import { preScanToolReferences } from './permission-prescan.js';
 import { dispatchMacroTool } from './dispatcher.js';
 import { MACRO_SAFE_POINTS } from './safe-points.js';
-import { TraceBuilder, type TraceMode } from './trace-builder.js';
-import { ProgressEmitter, type ProgressMode, type ProgressNotificationSink } from './progress-emitter.js';
-import { BudgetTracker, type MacroBudgetLimits } from './budget.js';
+import { TraceBuilder } from './trace-builder.js';
+import { ProgressEmitter } from './progress-emitter.js';
+import { BudgetTracker } from './budget.js';
 import {
   MacroCancellationError,
   MacroExitError,
@@ -46,13 +45,8 @@ import {
 } from './runtime-errors.js';
 import type {
   EvaluateProgramOptions,
-  MacroBuiltin,
-  MacroBudget,
-  MacroCancellationState,
   MacroInvocationContext,
   MacroNamedArgs,
-  MacroProgressEntry,
-  MacroTaskRecord,
   MacroValue,
 } from './runtime-types.js';
 

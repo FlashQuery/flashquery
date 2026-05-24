@@ -51,10 +51,7 @@ import { FM } from '../../constants/frontmatter-fields.js';
 import { extractTemplateMeta } from '../../llm/template-meta.js';
 import {
   computeHash,
-  listMarkdownFiles,
-  parseDocMeta,
   reconcileMissingRow,
-  type DocMeta,
 } from '../../storage/document-primitives.js';
 
 export {

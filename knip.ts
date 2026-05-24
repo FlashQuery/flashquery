@@ -40,6 +40,7 @@ const config: KnipConfig = {
     'src/macro/introspection.ts': ['exports'],
     'src/macro/preflight.ts': ['types'],
     'src/macro/progress-emitter.ts': ['types'],
+    'src/macro/runtime-types.ts': ['types'],
     'src/macro/safe-points.ts': ['types'],
     'src/macro/tokens.ts': ['exports'],
     'src/macro/types.ts': ['types'],
