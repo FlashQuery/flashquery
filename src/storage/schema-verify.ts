@@ -58,6 +58,7 @@ export async function columnExists(client: pg.Client, tableName: string, columnN
  * - fqc_llm_purpose_models: purpose-to-model mappings (Phase 98)
  * - fqc_llm_usage: LLM usage telemetry (Phase 98)
  * - fqc_purpose_templates: purpose-template bindings (Phase 115)
+ * - fqc_pending_embeds: durable embedding retry state (Phase 146)
  *
  * @param client - A connected pg.Client instance
  * @returns Resolves successfully if all tables exist
@@ -76,6 +77,7 @@ export async function verifySchema(client: pg.Client): Promise<void> {
     'fqc_llm_purpose_models',
     'fqc_llm_usage',
     'fqc_purpose_templates',
+    'fqc_pending_embeds',
   ];
 
   const missingTables: string[] = [];
@@ -93,6 +95,20 @@ export async function verifySchema(client: pg.Client): Promise<void> {
 
   const requiredColumns: Array<{ table: string; column: string }> = [
     { table: 'fqc_documents', column: 'template_meta' },
+    { table: 'fqc_pending_embeds', column: 'id' },
+    { table: 'fqc_pending_embeds', column: 'instance_id' },
+    { table: 'fqc_pending_embeds', column: 'target_kind' },
+    { table: 'fqc_pending_embeds', column: 'target_table' },
+    { table: 'fqc_pending_embeds', column: 'target_id' },
+    { table: 'fqc_pending_embeds', column: 'target_label' },
+    { table: 'fqc_pending_embeds', column: 'embed_text' },
+    { table: 'fqc_pending_embeds', column: 'attempt_count' },
+    { table: 'fqc_pending_embeds', column: 'last_error' },
+    { table: 'fqc_pending_embeds', column: 'last_attempt_at' },
+    { table: 'fqc_pending_embeds', column: 'next_retry_at' },
+    { table: 'fqc_pending_embeds', column: 'status' },
+    { table: 'fqc_pending_embeds', column: 'created_at' },
+    { table: 'fqc_pending_embeds', column: 'updated_at' },
   ];
   const missingColumns: string[] = [];
 

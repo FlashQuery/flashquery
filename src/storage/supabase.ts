@@ -444,6 +444,45 @@ CREATE INDEX IF NOT EXISTS idx_pending_review_plugin
 CREATE INDEX IF NOT EXISTS idx_pending_review_fqc_id
   ON fqc_pending_plugin_review(fqc_id);
 
+-- Phase 146: Durable pending embedding retry state (REQ-003, REQ-004)
+CREATE TABLE IF NOT EXISTS fqc_pending_embeds (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  instance_id TEXT NOT NULL,
+  target_kind TEXT NOT NULL,
+  target_table TEXT NOT NULL,
+  target_id TEXT NOT NULL,
+  target_label TEXT,
+  embed_text TEXT NOT NULL,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  last_attempt_at TIMESTAMPTZ,
+  next_retry_at TIMESTAMPTZ DEFAULT now(),
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'fqc_pending_embeds_status_check'
+  ) THEN
+    ALTER TABLE fqc_pending_embeds
+      ADD CONSTRAINT fqc_pending_embeds_status_check
+      CHECK (status IN ('pending', 'complete', 'failed'));
+  END IF;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fqc_pending_embeds_target_unique
+  ON fqc_pending_embeds(instance_id, target_kind, target_table, target_id);
+
+CREATE INDEX IF NOT EXISTS idx_fqc_pending_embeds_retry
+  ON fqc_pending_embeds(instance_id, status, next_retry_at);
+
+CREATE INDEX IF NOT EXISTS idx_fqc_pending_embeds_target_lookup
+  ON fqc_pending_embeds(instance_id, target_kind, target_id);
+
 -- Phase 31: plugin_instance rename (PLUGIN-02)
 DO $$
 BEGIN
@@ -1097,7 +1136,7 @@ class SupabaseManagerImpl implements SupabaseManager {
         }
       }
 
-      logger.info('Schema verification: all 11 required tables present');
+      logger.info('Schema verification: all 12 required tables present');
       logger.debug('  fqc_memory: verified');
       logger.debug('  fqc_vault: verified');
       logger.debug('  fqc_documents: verified');
@@ -1109,6 +1148,7 @@ class SupabaseManagerImpl implements SupabaseManager {
       logger.debug('  fqc_llm_purpose_models: verified');
       logger.debug('  fqc_llm_usage: verified');
       logger.debug('  fqc_purpose_templates: verified');
+      logger.debug('  fqc_pending_embeds: verified');
       // CLEAN-01, CLEAN-02: fqc_event_log and fqc_routing_rules removed in v1.7
       // CLEAN-01: fqc_projects removed in v1.7 (replaced by path-based location + tag-based categorization)
       logger.info('Supabase: connected');
