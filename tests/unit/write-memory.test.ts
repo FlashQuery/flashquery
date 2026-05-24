@@ -129,6 +129,99 @@ describe('write_memory', () => {
     expect(payload).toMatchObject({ memory_id: 'mem-1', content: 'User prefers JSON', is_latest: true });
   });
 
+  it('create preserves global and matched plugin scopes', async () => {
+    const { server, getHandler } = createMockServer();
+    registerMemoryTools(server, makeConfig());
+
+    const insertChain = makeThenableChain({
+      data: {
+        id: 'mem-1',
+        content: 'Scoped memory',
+        tags: [],
+        plugin_scope: 'crm-plugin',
+        created_at: '2026-05-12T00:00:00.000Z',
+        updated_at: '2026-05-12T00:00:00.000Z',
+        version: 1,
+        previous_version_id: null,
+        is_latest: true,
+        archived_at: null,
+      },
+      error: null,
+    });
+    const capturedInserts: Array<Record<string, unknown>> = [];
+    (insertChain.insert as ReturnType<typeof vi.fn>).mockImplementation((row: Record<string, unknown>) => {
+      capturedInserts.push(row);
+      return insertChain;
+    });
+    const rpc = vi.fn().mockResolvedValue({ data: 'crm-plugin', error: null });
+    const from = vi.fn().mockReturnValue(insertChain);
+    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ from, rpc });
+
+    await getHandler('write_memory')({ mode: 'create', content: 'Global memory', plugin_scope: 'global' });
+    await getHandler('write_memory')({ mode: 'create', content: 'Scoped memory', plugin_scope: 'crm' });
+
+    expect(rpc).toHaveBeenCalledTimes(1);
+    expect(capturedInserts[0]).toMatchObject({ plugin_scope: 'global' });
+    expect(capturedInserts[1]).toMatchObject({ plugin_scope: 'crm-plugin' });
+  });
+
+  it('create returns lookup_failed without inserting when plugin scope lookup errors or throws', async () => {
+    const { server, getHandler } = createMockServer();
+    registerMemoryTools(server, makeConfig());
+    const insert = vi.fn();
+    const from = vi.fn().mockReturnValue({ insert });
+    const rpc = vi.fn()
+      .mockResolvedValueOnce({ data: null, error: { message: 'rpc unavailable' } })
+      .mockRejectedValueOnce(new Error('network down'));
+    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({ from, rpc });
+
+    const errorObject = await getHandler('write_memory')({
+      mode: 'create',
+      content: 'Should not insert',
+      plugin_scope: 'crm',
+    }) as { isError?: boolean };
+    const thrown = await getHandler('write_memory')({
+      mode: 'create',
+      content: 'Should not insert either',
+      plugin_scope: 'crm',
+    }) as { isError?: boolean };
+
+    expect(errorObject.isError).toBe(false);
+    expect(thrown.isError).toBe(false);
+    expect(parseResult(errorObject)).toMatchObject({
+      error: 'lookup_failed',
+      details: { reason: 'lookup_failed' },
+    });
+    expect(parseResult(thrown)).toMatchObject({
+      error: 'lookup_failed',
+      details: { reason: 'lookup_failed' },
+    });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
+  it('create rejects unexpected plugin scope RPC payload shapes without falling back to global', async () => {
+    const { server, getHandler } = createMockServer();
+    registerMemoryTools(server, makeConfig());
+    const insert = vi.fn();
+    (supabaseManager.getClient as ReturnType<typeof vi.fn>).mockReturnValue({
+      from: vi.fn().mockReturnValue({ insert }),
+      rpc: vi.fn().mockResolvedValue({ unexpected: true }),
+    });
+
+    const result = await getHandler('write_memory')({
+      mode: 'create',
+      content: 'Should not insert',
+      plugin_scope: 'crm',
+    }) as { isError?: boolean };
+
+    expect(result.isError).toBe(false);
+    expect(parseResult(result)).toMatchObject({
+      error: 'lookup_failed',
+      details: { reason: 'lookup_failed' },
+    });
+    expect(insert).not.toHaveBeenCalled();
+  });
+
   it('update requires memory_id and mutable fields, rejects non-latest updates with conflict', async () => {
     const { server, getHandler } = createMockServer();
     registerMemoryTools(server, makeConfig());

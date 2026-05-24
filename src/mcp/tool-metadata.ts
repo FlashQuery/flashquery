@@ -122,7 +122,7 @@ const D = {
     'apply_tags({ "targets": [{ "entity_type": "document", "identifier": "Notes/Idea.md" }], "add_tags": ["planning"] })'
   ),
   writeMemory: description(
-    'Create or update persistent memory through one explicit mode-based memory writer.',
+    'Create or update persistent memory through one explicit mode-based memory writer; plugin-scope lookup failures return lookup_failed before insert.',
     'Use when you need to save a new memory or create a new latest version of an existing memory.',
     'Do not use when you only need to retrieve or search memories; use get_memory or search instead.',
     'write_memory({ "mode": "create", "content": "The user prefers concise updates." })'

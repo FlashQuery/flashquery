@@ -26,7 +26,7 @@ Use `write_memory` to save persistent memory facts or create a new latest versio
 | `content` | string | create yes, update optional | existing content on update | Memory content. |
 | `memory_id` | string | update only | none | Existing latest memory ID to version. |
 | `tags` | string[] | no | `[]` on create, existing tags on update | Replacement tag list. |
-| `plugin_scope` | string | create only | `global` | Scope name resolved to a plugin scope when available. |
+| `plugin_scope` | string | create only | `global` | Scope name resolved to a plugin scope when available. Lookup failures return `lookup_failed` and do not create a global fallback memory. |
 | `include` | array | no | `[]` | Optional result payload fields: `content`, `tags_full`. |
 
 ## Returns
@@ -59,6 +59,7 @@ Creates scoped memory and includes content in the result.
 - Tags replace the tag list for the new version.
 - Generated fields such as IDs, version, status, and timestamps cannot be provided.
 - Use `archive_memory` when a memory should be hidden instead of versioned.
+- If `plugin_scope` lookup fails because the scope service errors or returns an unexpected shape, create mode returns a structured `lookup_failed` expected error before inserting any row.
 
 ## Related Tools
 

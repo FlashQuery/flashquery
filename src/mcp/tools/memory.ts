@@ -57,23 +57,64 @@ function parseMemoryInclude(value: unknown): MemoryInclude[] {
   return value.filter((item): item is MemoryInclude => item === 'content' || item === 'tags_full');
 }
 
-async function resolvePluginScope(config: FlashQueryConfig, pluginScope: string | undefined): Promise<string> {
-  if (!pluginScope || pluginScope === 'global') return 'global';
+type PluginScopeLookupResult =
+  | { ok: true; scope: string }
+  | { ok: false; reason: 'lookup_failed'; message: string };
+
+interface PluginScopeRpcResult {
+  data: unknown;
+  error: { message: string } | null;
+}
+
+function isPluginScopeRpcResult(value: unknown): value is PluginScopeRpcResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const result = value as Record<string, unknown>;
+  if (!('data' in result) || !('error' in result)) return false;
+  const error = result.error;
+  return error === null || (
+    typeof error === 'object' &&
+    error !== null &&
+    typeof (error as Record<string, unknown>).message === 'string'
+  );
+}
+
+async function resolvePluginScope(
+  config: FlashQueryConfig,
+  pluginScope: string | undefined
+): Promise<PluginScopeLookupResult> {
+  if (!pluginScope || pluginScope === 'global') return { ok: true, scope: 'global' };
   try {
-    const { data: matchedScope, error: rpcError } = await (supabaseManager.getClient()
+    const rpcResult: unknown = await supabaseManager.getClient()
       .rpc('find_plugin_scope', {
         search_name: pluginScope,
         p_instance_id: config.instance.id,
         threshold: 0.8,
-      }) as unknown as Promise<{ data: string; error: { message: string } | null }>);
-    if (rpcError) {
-      logger.warn(`write_memory: plugin_scope lookup failed: ${rpcError.message} - defaulting to 'global'`);
-      return 'global';
+      });
+    if (!isPluginScopeRpcResult(rpcResult)) {
+      return {
+        ok: false,
+        reason: 'lookup_failed',
+        message: `Plugin scope lookup failed for '${pluginScope}': unexpected RPC response shape`,
+      };
     }
-    return matchedScope || 'global';
+    const { data: matchedScope, error: rpcError } = rpcResult;
+    if (rpcError) {
+      logger.warn(`write_memory: plugin_scope lookup failed: ${rpcError.message}`);
+      return {
+        ok: false,
+        reason: 'lookup_failed',
+        message: `Plugin scope lookup failed for '${pluginScope}': ${rpcError.message}`,
+      };
+    }
+    return { ok: true, scope: typeof matchedScope === 'string' && matchedScope.length > 0 ? matchedScope : 'global' };
   } catch (err) {
-    logger.warn(`write_memory: plugin_scope lookup error: ${err instanceof Error ? err.message : String(err)} - defaulting to 'global'`);
-    return 'global';
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(`write_memory: plugin_scope lookup error: ${message}`);
+    return {
+      ok: false,
+      reason: 'lookup_failed',
+      message: `Plugin scope lookup failed for '${pluginScope}': ${message}`,
+    };
   }
 }
 
@@ -210,13 +251,20 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
         const supabase = supabaseManager.getClient();
         if (params.mode === 'create') {
           const resolvedScope = await resolvePluginScope(config, params.plugin_scope as string | undefined);
+          if (!resolvedScope.ok) {
+            return jsonExpectedError({
+              error: 'lookup_failed',
+              message: resolvedScope.message,
+              details: { reason: resolvedScope.reason },
+            });
+          }
           const memoryId = randomUUID();
           const insertRow = {
             id: memoryId,
             instance_id: config.instance.id,
             content: params.content as string,
             tags: tagsValidation.normalized,
-            plugin_scope: resolvedScope,
+            plugin_scope: resolvedScope.scope,
             status: 'active',
             version: 1,
             previous_version_id: null,
