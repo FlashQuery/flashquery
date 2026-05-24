@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: Technical Debt
 status: executing
-stopped_at: Completed 146-01-PLAN.md
-last_updated: "2026-05-24T16:25:00.159Z"
+stopped_at: Completed 147-02-PLAN.md
+last_updated: "2026-05-24T16:34:53.140Z"
 last_activity: 2026-05-24
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 7
   percent: 33
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24)
 ## Current Position
 
 Phase: 147 (tooling-and-dependency-hygiene) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-05-24
 
@@ -152,6 +152,7 @@ Last activity: 2026-05-24
 | Phase 142 P6 | 14m29s | 2 tasks | 6 files |
 | Phase 146 P1 | 7m55s | 3 tasks | 6 files |
 | Phase 147 P01 | 4m12s | 2 tasks | 2 files |
+| Phase 147 P2 | 6m15s | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -299,6 +300,8 @@ Last activity: 2026-05-24
 - [Phase 146]: 146-01 uses typed document, memory, and record embedding targets to avoid raw MCP payload fields in pending retry metadata. — The phase threat model requires target descriptors for tampering control.
 - [Phase 147]: 147-01 kept Chevrotain 12 out of the non-major update lane so parser major risk remains isolated for Plan 147-03.
 - [Phase 147]: 147-01 corrected npm update's in-range MCP SDK lockfile refresh back to 1.27.1 to preserve the later SDK decision lane.
+- [Phase 147]: Knip preflight now gates files, dependencies, unlisted dependencies, binaries, and unresolved imports while export reporting remains staged with exact findings documented.
+- [Phase 147]: Kept required worktree/build/vendor ignore globs in knip.ts even though Knip emits config hints for them; the plan requires those exact exclusions.
 
 ## Accumulated Context
 
@@ -413,8 +416,8 @@ Last activity: 2026-05-24
 
 ## Session Continuity
 
-Last session: 2026-05-24T16:24:09.194Z
-Stopped at: Completed 146-01-PLAN.md
+Last session: 2026-05-24T16:34:53.117Z
+Stopped at: Completed 147-02-PLAN.md
 Resume: None
 
 ## Deferred Items
