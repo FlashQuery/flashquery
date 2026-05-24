@@ -43,7 +43,7 @@
 | # | Phase | Goal | Requirements | Test Plan |
 |---|-------|------|--------------|-----------|
 | 145 | Silent Failure Quick Wins | 1/1 | Complete   | 2026-05-24 |
-| 146 | Embedding Reliability Foundation | 1/4 | In Progress|  |
+| 146 | Embedding Reliability Foundation | 4/4 | Complete    | 2026-05-24 |
 | 147 | Tooling and Dependency Hygiene | Clear dependency/security drift and make static analysis actionable. | REQ-006, REQ-007 | §4.3 |
 | 148 | MCP Lifecycle and Shutdown | Consolidate typed server wrapping and drain in-flight MCP requests during shutdown. | REQ-008, REQ-009 | §4.4 |
 | 149 | Cycle Breaks | Remove documented document/plugin and macro circular dependency clusters without behavior drift. | REQ-010, REQ-011 | §4.5 |
@@ -96,13 +96,13 @@
 - Directed scenario: T-S-002 / D-69 for deferred embedding warning through public MCP response if needed.
 - Integration scenario: T-Y-001 / IS-15 for pooled record vector SQL workflow if needed.
 
-**Plans:** 1/4 plans executed
+**Plans:** 4/4 plans complete
 
 Plans:
 - [x] 146-01-PLAN.md — Durable pending embedding schema and centralized helper foundation.
-- [ ] 146-02-PLAN.md — MCP write call-site migration and D-69 warning scenario.
-- [ ] 146-03-PLAN.md — Pending retry worker, scanner reachability, and doctor diagnostics.
-- [ ] 146-04-PLAN.md — Pooled record vector SQL, shutdown cleanup, and IS-15 scenario.
+- [x] 146-02-PLAN.md — MCP write call-site migration and D-69 warning scenario.
+- [x] 146-03-PLAN.md — Pending retry worker, scanner reachability, and doctor diagnostics.
+- [x] 146-04-PLAN.md — Pooled record vector SQL, shutdown cleanup, and IS-15 scenario.
 
 **Success criteria:**
 1. No duplicated direct background embed idioms remain in MCP tools outside approved helper/scanner code.

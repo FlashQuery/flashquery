@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: Technical Debt
-status: executing
-stopped_at: Completed 146-01-PLAN.md
-last_updated: "2026-05-24T09:02:41.326Z"
+status: ready_to_plan
+stopped_at: Phase 146 complete (4/4) — ready to discuss Phase 147
+last_updated: 2026-05-24T10:11:05.850Z
 last_activity: 2026-05-24
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 5
-  completed_plans: 2
-  percent: 17
+  completed_plans: 5
+  percent: 33
 ---
 
 # FlashQuery Core — State
@@ -21,20 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-24)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 146 — embedding-reliability-foundation
+**Current focus:** Phase 147 — tooling and dependency hygiene
 
 ## Current Position
 
-Phase: 146 (embedding-reliability-foundation) — EXECUTING
-Plan: 2 of 4
-Status: Ready to execute
+Phase: 147
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-24
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 0 (this milestone)
+- Total plans completed: 4 (this milestone)
 - Average duration: — min
 - Total execution time: 0 hours
 
@@ -64,6 +64,7 @@ Last activity: 2026-05-24
 | 142 | 6 | - | - |
 | 143 | 5 | - | - |
 | 144 | 0 | - | - |
+| 146 | 4 | - | - |
 
 *Updated after each plan completion*
 | Phase 107 P04 | 15m | 2 tasks | 9 files |
