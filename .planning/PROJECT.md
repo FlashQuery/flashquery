@@ -8,13 +8,13 @@ FlashQuery Core is an open source, local-first data management layer for individ
 
 **v3.0 complete (2026-04-30).** Native LLM Access milestone closed: three-layer provider/model/purpose config, completions client with fallback chains, `call_model` MCP tool, cost tracking, embedding migration, config template hardened (B-01 BLOCKER fixed), and v3.0 audit gaps resolved (Phase 106). 1306 unit tests passing. Ready for `/gsd-complete-milestone v3.0`.
 
-## Current State: v3.7 planning — Technical Debt
+## Current State: v3.7 execution — Technical Debt
 
 **Last shipped:** v3.6 Bug Fixes & Host Parity (18/18 scoped requirements complete; Phase 144 shipped 2026-05-24). Template-tool discovery is now bounded and index-backed, ordinary non-template documents are silent skips, and native `help: true` behavior is shared across delegated model dispatch and host MCP `tools/call` while preserving hidden-tool and brokered-tool boundaries.
 
 **Current tool surface:** Final primitives now center on `write_document`, `write_memory`, `write_record`, `search`, `manage_directory`, `maintain_vault`, and structured read/archive/get flows. Removed legacy tool names are absent from host and delegated surfaces with replacement suggestions rather than compatibility aliases. Delegated broad tiers derive from canonical metadata, including corrected data tools such as `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`.
 
-**Current focus:** v3.7 Technical Debt remediates the priority findings from the 23-May-2026 codebase audit before the next feature push. The milestone starts at Phase 145 and bundles implementation with same-phase unit, integration, E2E, directed, and YAML scenario coverage where required.
+**Current focus:** v3.7 Technical Debt remediates the priority findings from the 23-May-2026 codebase audit before the next feature push. Phases 145-147 are complete; Phase 147 validated clean audit state, Chevrotain v12 coverage, actionable Knip hygiene, and deferred MCP SDK wrapper work to Phase 148. The milestone bundles implementation with same-phase unit, integration, E2E, directed, and YAML scenario coverage where required.
 
 ## Current Milestone: v3.7 Technical Debt
 
@@ -377,4 +377,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-24 after starting v3.7 Technical Debt milestone*
+*Last updated: 2026-05-24 after completing Phase 147 Tooling and Dependency Hygiene*

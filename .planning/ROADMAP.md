@@ -44,7 +44,7 @@
 |---|-------|------|--------------|-----------|
 | 145 | Silent Failure Quick Wins | 1/1 | Complete   | 2026-05-24 |
 | 146 | Embedding Reliability Foundation | 4/4 | Complete    | 2026-05-24 |
-| 147 | Tooling and Dependency Hygiene | 4/4 | Complete   | 2026-05-24 |
+| 147 | Tooling and Dependency Hygiene | 4/4 | Complete    | 2026-05-24 |
 | 148 | MCP Lifecycle and Shutdown | Consolidate typed server wrapping and drain in-flight MCP requests during shutdown. | REQ-008, REQ-009 | §4.4 |
 | 149 | Cycle Breaks | Remove documented document/plugin and macro circular dependency clusters without behavior drift. | REQ-010, REQ-011 | §4.5 |
 | 150 | Config Metadata Typing | Replace runtime metadata side-channel casts with explicit type-safe storage. | REQ-012 | §4.6 |
