@@ -104,12 +104,28 @@
 
 ---
 
+## v3.2 Agentic LLM Tools (Shipped: 2026-05-07)
+
+**Phases completed:** 9 phases (112-120)
+**Audit:** [milestones/v3.2-MILESTONE-AUDIT.md](milestones/v3.2-MILESTONE-AUDIT.md)
+
+**Key accomplishments:**
+
+- Migrated `call_model` toward agentic mode envelopes with discovery/help short-circuit behavior.
+- Added document reference hydration, template parameterization, purpose config bindings, and capability admission.
+- Built model-visible native/template tool registry assembly and Mode 2 agent-loop execution.
+- Added template discovery and masquerade dispatch, discovery diagnostics, help resolver behavior, and cross-phase ATL validation.
+- Final audit passed 62/62 requirements, 9/9 phases, 9/9 integration checks, and 15/15 user flows.
+
+---
+
 ## v3.1 Call Model With Reference (Shipped: 2026-05-05)
 
 **Scope:** 17 phases (98-111 + 999.5/999.6/999.9 sidecars) | 52 plans
 **Stats:** 262 commits, 209 files changed (25 src/, 166 tests/), +28,161 / -3,171 LOC
 **Timeline:** 2026-04-28 → 2026-05-05 (8 days)
 **Tests at close:** 1,439 unit / 18 integration / preflight clean
+**v3.0 audit:** [milestones/v3.0-MILESTONE-AUDIT.md](milestones/v3.0-MILESTONE-AUDIT.md)
 
 **Note on scope:** v3.0 (Native LLM Access, phases 98-106) was never formally archived via the GSD CLI. This v3.1 close therefore archives both v3.0 and v3.1 work into a single milestone-of-record. The live ROADMAP.md retains the v3.0/v3.1 distinction for historical reference.
 
