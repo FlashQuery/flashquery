@@ -16,8 +16,8 @@ Requirements for the v3.7 Technical Debt milestone. Each requirement maps to exa
 
 ### Embedding Reliability and Resource Lifecycle
 
-- [ ] **REQ-003**: Background embedding uses a centralized durable helper. Document, memory, record, compound, and stale-hash re-embed paths route through one helper that records deferred/failure state, emits structured logs, and surfaces `warnings: ["embedding_deferred"]` when appropriate.
-- [ ] **REQ-004**: Pending embeddings are retried and surfaced operationally. Pending embedding state covers documents, memories, and records; retry processing can populate embeddings and clear or retain failed rows; diagnostics report embedding-null rows without pending retry state.
+- [x] **REQ-003**: Background embedding uses a centralized durable helper. Document, memory, record, compound, and stale-hash re-embed paths route through one helper that records deferred/failure state, emits structured logs, and surfaces `warnings: ["embedding_deferred"]` when appropriate.
+- [x] **REQ-004**: Pending embeddings are retried and surfaced operationally. Pending embedding state covers documents, memories, and records; retry processing can populate embeddings and clear or retain failed rows; diagnostics report embedding-null rows without pending retry state.
 - [ ] **REQ-005**: Direct `pg` usage for records is pooled. Record embedding updates and semantic `search_records` vector SQL borrow from a process-scoped pool or equivalent abstraction that preserves IPv4 behavior and owns release/shutdown handling.
 
 ### Dependency and Tooling Hygiene
@@ -80,8 +80,8 @@ Which phases cover which requirements. Updated during phase execution as statuse
 |-------------|-------|--------|
 | REQ-001 | Phase 145 | Complete |
 | REQ-002 | Phase 145 | Complete |
-| REQ-003 | Phase 146 | Pending |
-| REQ-004 | Phase 146 | Pending |
+| REQ-003 | Phase 146 | Complete |
+| REQ-004 | Phase 146 | Complete |
 | REQ-005 | Phase 146 | Pending |
 | REQ-006 | Phase 147 | Pending |
 | REQ-007 | Phase 147 | Pending |

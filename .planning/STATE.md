@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: Technical Debt
-status: completed
-stopped_at: Completed 145-PLAN.md
-last_updated: "2026-05-24T02:49:21.948Z"
-last_activity: 2026-05-24 -- Phase 145 marked complete
+status: executing
+stopped_at: Completed 146-01-PLAN.md
+last_updated: "2026-05-24T09:02:41.326Z"
+last_activity: 2026-05-24
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 1
-  completed_plans: 1
+  total_plans: 5
+  completed_plans: 2
   percent: 17
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-24)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 145 — silent-failure-quick-wins
+**Current focus:** Phase 146 — embedding-reliability-foundation
 
 ## Current Position
 
-Phase: 145 — COMPLETE
-Plan: 1 of 1
-Status: Phase 145 complete
-Last activity: 2026-05-24 -- Phase 145 marked complete
+Phase: 146 (embedding-reliability-foundation) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-05-24
 
 ## Performance Metrics
 
@@ -149,6 +149,7 @@ Last activity: 2026-05-24 -- Phase 145 marked complete
 | Phase 142 P04 | 5m04s | 2 tasks | 4 files |
 | Phase 142 P5 | 23m30s | 2 tasks | 10 files |
 | Phase 142 P6 | 14m29s | 2 tasks | 6 files |
+| Phase 146 P1 | 7m55s | 3 tasks | 6 files |
 
 ## Decisions
 
@@ -292,6 +293,8 @@ Last activity: 2026-05-24 -- Phase 145 marked complete
 - [Phase 142]: 142-05 MCB-13 uses public nested macro re-entry because delegated call_model intentionally hard-excludes call_macro; purpose-rooted inheritance remains covered by 142-03 unit coverage.
 - [Phase 142]: 142-06: Phase 142 requirement closure is based on focused green gates plus explicit environment-warning notes, not inferred from implementation commits. — Final validation gates are the source of truth for checklist closure.
 - [Phase 142]: 142-06: Phase 143 requirements remain unchecked; only the Phase 142 requirement set was closed. — REQ-071..073, REQ-103..104, and REQ-109..110 are deferred to Phase 143.
+- [Phase 146]: 146-01 stores pending embedding retry state in fqc_pending_embeds keyed by instance_id,target_kind,target_table,target_id. — Durable retry state must survive process restarts and avoid cross-instance updates.
+- [Phase 146]: 146-01 uses typed document, memory, and record embedding targets to avoid raw MCP payload fields in pending retry metadata. — The phase threat model requires target descriptors for tampering control.
 
 ## Accumulated Context
 
@@ -406,8 +409,8 @@ Last activity: 2026-05-24 -- Phase 145 marked complete
 
 ## Session Continuity
 
-Last session: 2026-05-24T02:49:21.926Z
-Stopped at: Completed 145-PLAN.md
+Last session: 2026-05-24T09:02:41.302Z
+Stopped at: Completed 146-01-PLAN.md
 Resume: None
 
 ## Deferred Items
