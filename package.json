@@ -29,7 +29,7 @@
     "test:e2e": "vitest run --config tests/config/vitest.e2e.config.ts",
     "test:benchmark": "vitest run --config tests/config/vitest.benchmark.config.ts",
     "typecheck": "tsc --noEmit",
-    "knip": "knip --include files,dependencies,unlisted,binaries,unresolved --no-config-hints",
+    "knip": "knip --no-config-hints",
     "bench:mcp-broker": "npm run test:benchmark -- --run tests/benchmark/**/*.bench.ts",
     "lint": "eslint src/ --max-warnings 0",
     "format": "prettier --write src/",
