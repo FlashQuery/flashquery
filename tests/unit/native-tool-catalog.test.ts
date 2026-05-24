@@ -72,7 +72,7 @@ function makeConfig(): FlashQueryConfig {
 }
 
 describe('native tool catalog capture', () => {
-  it('assembles delegated tier tools from the real registered server catalog', () => {
+  it('T-U-016 assembles delegated tier tools from the real registered server catalog', () => {
     const config = makeConfig();
     const server = createMcpServer(config, 'test');
     const catalog = getNativeToolCatalog(server);
@@ -105,7 +105,7 @@ describe('native tool catalog capture', () => {
     );
   });
 
-  it('injects optional boolean help into native catalog schemas', () => {
+  it('T-U-016 injects optional boolean help into native catalog schemas', () => {
     const config = makeConfig();
     const server = createMcpServer(config, 'test');
     const catalog = getNativeToolCatalog(server);
