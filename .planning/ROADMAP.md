@@ -60,16 +60,19 @@
 **Depends on:** None
 
 **Implementation scope:**
+
 - Modify `src/mcp/tools/memory.ts` around `resolvePluginScope` and create-mode `write_memory`.
 - Modify `src/services/scanner.ts` around the `EMBED-DRAIN` query and `ScanResult.embeddingStatus`.
 - Update response/tool docs if they describe the old fallback behavior.
 
 **Required tests:**
+
 - Unit: T-U-001..005 for plugin-scope resolution and scanner status handling.
 - Integration: T-I-001..002 for `write_memory` lookup failure and scanner drain query failure.
 - Directed scenario: T-S-001 / D-68 for public MCP `write_memory` lookup failure behavior if scenario coverage is needed.
 
 **Success criteria:**
+
 1. Failed plugin-scope lookup never inserts a global-scoped memory.
 2. Scanner drain query failure reports an explicit partial-success status and error-level log.
 3. Focused unit/integration/scenario coverage lands with the implementation.
@@ -84,6 +87,7 @@
 **Depends on:** Phase 145
 
 **Implementation scope:**
+
 - Create or extend a background embedding helper under `src/embedding/` or a service module.
 - Add pending embedding schema/migration support if a new table is selected.
 - Replace embedding call sites in memory, documents, compound tools, record tools, and document-output.
@@ -91,6 +95,7 @@
 - Extend `src/utils/pg-client.ts` with a pool abstraction and update record embed/search call sites.
 
 **Required tests:**
+
 - Unit: T-U-006..012 for helper success/failure, warnings, retry behavior, and pool behavior.
 - Integration: T-I-003..008 for document/memory/record pending rows, retry, diagnostics, and pooled record vector SQL.
 - Directed scenario: T-S-002 / D-69 for deferred embedding warning through public MCP response if needed.
@@ -99,12 +104,14 @@
 **Plans:** 4/4 plans complete
 
 Plans:
+
 - [x] 146-01-PLAN.md — Durable pending embedding schema and centralized helper foundation.
 - [x] 146-02-PLAN.md — MCP write call-site migration and D-69 warning scenario.
 - [x] 146-03-PLAN.md — Pending retry worker, scanner reachability, and doctor diagnostics.
 - [x] 146-04-PLAN.md — Pooled record vector SQL, shutdown cleanup, and IS-15 scenario.
 
 **Success criteria:**
+
 1. No duplicated direct background embed idioms remain in MCP tools outside approved helper/scanner code.
 2. Pending embeddings retry successfully and remain diagnosable after repeated failures.
 3. Record direct SQL paths use pooled borrowing/release and preserve IPv4 behavior.
@@ -120,6 +127,7 @@ Plans:
 **Depends on:** None. The MCP SDK update should wait for Phase 148 if typed wrapping has not landed.
 
 **Implementation scope:**
+
 - Run and record current `npm audit` and `npm outdated`.
 - Apply non-major updates and handle Chevrotain v12 separately.
 - Update MCP SDK after typed wrapping risk is addressed.
@@ -127,6 +135,7 @@ Plans:
 - Refresh package lock.
 
 **Required tests/checks:**
+
 - Unit/framework: T-U-013..014 for macro parser/framework regression coverage after dependency updates.
 - Static/command: T-C-001..006 for audit, outdated, typecheck/lint, knip, and preflight.
 - Static config assertion: T-U-015 if useful for knip exclusions.
@@ -134,12 +143,14 @@ Plans:
 **Plans:** 4/4 plans complete
 
 Plans:
+
 - [x] 147-01-PLAN.md — Baseline audit/outdated evidence and non-major dependency updates.
 - [x] 147-02-PLAN.md — Knip config, script, T-U-015 coverage, and preflight policy.
 - [x] 147-03-PLAN.md — Isolated Chevrotain v12 upgrade and nested macro golden-model audit decision.
 - [x] 147-04-PLAN.md — MCP SDK update/deferral decision and final Phase 147 command gates. (completed 2026-05-24)
 
 **Success criteria:**
+
 1. `npm audit` and `npm audit --omit=dev` report no unhandled vulnerabilities, or remaining advisories are explicitly documented.
 2. Chevrotain parser behavior remains green after the major update.
 3. `npm run knip` produces actionable output without worktree/build/vendor noise.
@@ -154,12 +165,14 @@ Plans:
 **Depends on:** Phase 145
 
 **Implementation scope:**
+
 - Consolidate `registerTool` wrapping in `src/mcp/server.ts` and `src/mcp/tool-catalog.ts`.
 - Delete the dead `server.tool` wrapping branch unless a production caller is introduced and tested.
 - Add in-flight request tracking and expose it to `src/server/shutdown.ts`.
 - Replace the 100ms sleep with a 15-second drain.
 
 **Required tests:**
+
 - Unit: T-U-016..020 for catalog capture, correlation context, no `server.tool` dependency, counter balance, and timeout behavior.
 - E2E: T-E-001 for server tools callable after wrapper consolidation.
 - Integration: T-I-009..011 for idle, active, and hung shutdown behavior.
@@ -168,12 +181,24 @@ Plans:
 **Plans:** 4 plans
 
 Plans:
+**Wave 1**
+
 - [ ] 148-01-PLAN.md — Request lifecycle helper and unit drain tests for REQ-009.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 148-02-PLAN.md — Typed MCP `registerTool` wrapper consolidation for REQ-008 and handler tracking.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 148-03-PLAN.md — Shutdown coordinator 15-second MCP drain integration and tests.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 148-04-PLAN.md — E2E transport smoke, conditional D-70 decision, and final gates.
 
 **Success criteria:**
+
 1. Dead `.tool` wrapping is gone.
 2. Correlation-ID context and native tool cataloging keep existing behavior.
 3. Shutdown returns promptly when idle, waits for active handlers, and warns on timeout.
@@ -189,17 +214,20 @@ Plans:
 **Depends on:** None
 
 **Implementation scope:**
+
 - Extract lower-level document utility modules to remove service-to-MCP-tool imports.
 - Extract macro builtin/type definitions to remove evaluator/type cycles.
 - Add or update a madge/cycle check command if practical.
 
 **Required tests/checks:**
+
 - Unit: T-U-021..024 for document/plugin regressions, macro regressions, and cycle absence.
 - Integration: T-I-012 for plugin propagation/reconciliation regression coverage.
 - Framework: T-U-025 / `npm run test:macro-framework`.
 - Command: `npx --yes madge src --extensions ts --circular` or project-approved equivalent.
 
 **Success criteria:**
+
 1. `mcp/utils/resolve-document.ts` no longer imports from `mcp/tools/documents.ts`.
 2. Plugin services no longer import document helpers from MCP tool modules.
 3. Macro cycle cluster no longer appears in cycle output.
@@ -214,14 +242,17 @@ Plans:
 **Depends on:** None
 
 **Implementation scope:**
+
 - Introduce typed metadata storage or internal config typing in `src/config/loader.ts`.
 - Update `getDeprecationWarnings`, `getStartupWarnings`, `getResolvedHostToolExposure`, and `getLlmApiKeyRefs`.
 - Verify LLM API key references remain raw references and resolved secrets are not persisted.
 
 **Required tests:**
+
 - Unit: T-U-026..029 for metadata accessors, host exposure fallback, raw API key refs, and selected cast removal.
 
 **Success criteria:**
+
 1. Selected `as unknown as Record<string, unknown>` metadata side-channel sites are gone.
 2. Config accessors preserve behavior.
 3. Raw secret values are not leaked.
