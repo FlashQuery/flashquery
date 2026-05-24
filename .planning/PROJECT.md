@@ -8,15 +8,18 @@ FlashQuery Core is an open source, local-first data management layer for individ
 
 **v3.0 complete (2026-04-30).** Native LLM Access milestone closed: three-layer provider/model/purpose config, completions client with fallback chains, `call_model` MCP tool, cost tracking, embedding migration, config template hardened (B-01 BLOCKER fixed), and v3.0 audit gaps resolved (Phase 106). 1306 unit tests passing. Ready for `/gsd-complete-milestone v3.0`.
 
-## Current State: v3.5 complete — MCP Broker
+## Current State: v3.6 complete — Bug Fixes & Host Parity
 
-**Last shipped:** v3.5 MCP Broker (118/118 requirements complete; phases 139-143 shipped 2026-05-19). FlashQuery now brokers external stdio MCP servers into host, delegated model, and macro surfaces with filtered discovery, schema pinning, search/help, diagnostic CLI support, trace/cost evidence, source-ref macro metadata, loop control, deep health probes, and concurrent shared-server safety.
+**Last shipped:** v3.6 Bug Fixes & Host Parity (18/18 scoped requirements complete; Phase 144 shipped 2026-05-24). Template-tool discovery is now bounded and index-backed, ordinary non-template documents are silent skips, and native `help: true` behavior is shared across delegated model dispatch and host MCP `tools/call` while preserving hidden-tool and brokered-tool boundaries.
 
 **Current tool surface:** Final primitives now center on `write_document`, `write_memory`, `write_record`, `search`, `manage_directory`, `maintain_vault`, and structured read/archive/get flows. Removed legacy tool names are absent from host and delegated surfaces with replacement suggestions rather than compatibility aliases. Delegated broad tiers derive from canonical metadata, including corrected data tools such as `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`.
 
-**Current focus:** v3.5 MCP Broker shipped. Next work should start from milestone closeout or the next milestone planning cycle.
+**Current focus:** v3.6 shipped. Next work should start with `$gsd-new-milestone` to define fresh requirements and roadmap scope.
 
-## Current Milestone: v3.5 MCP Broker
+<details>
+<summary>Previous Milestone Context: v3.5 MCP Broker</summary>
+
+## Previous Milestone: v3.5 MCP Broker
 
 **Goal:** Ship FlashQuery's stdio MCP Broker so host sessions and delegated `call_model` purposes can safely discover, search, and call external MCP server tools through FlashQuery.
 
@@ -27,6 +30,8 @@ FlashQuery Core is an open source, local-first data management layer for individ
 - Host and delegated purpose broker surfaces through new `flashquery.yml` `mcp_servers`, `host`, and per-purpose `mcp_servers`/`tool_search` config.
 - BM25 `search_tools` retrieval, `.tool.md` help convention, `help: true` sentinel, description overrides, and help hints for FlashQuery-native tools.
 - Macro and agent-loop broker dispatch extensions: raw `CallToolResult` handling, brokered error propagation, `_self`, `continue`/`break`, `_exists()`, argument passthrough, and concurrent safety.
+
+</details>
 
 ## Core Value
 
@@ -232,9 +237,14 @@ Any MCP-compatible AI can save and retrieve organized, persistent, searchable da
 - ✓ MACRO-RESP-01 through MACRO-RESP-05 — macro success, dry-run, expected-error, runtime-error, warning, and response helper contracts
 - ✓ MACRO-INT-01 through MACRO-INT-07 — concurrent isolation, inherited write locks, `archive_document` lock coverage, budget enforcement, MCP registration, broker shim, and progress token capture
 
+### Validated (v3.6 — Bug Fixes & Host Parity, shipped 2026-05-24)
+
+- ✓ Template REQ-001 through REQ-011 — Template discovery warning flood fixed: non-template documents silently skip discovery, template diagnostics remain visible, `template_meta` is indexed and maintained, discovery/search/purpose metadata is bounded, `call_macro` inherits indexed discovery, and permissive `list_purposes` emits exposed templates once at top level.
+- ✓ Help REQ-001 through REQ-007 — Native help convention parity fixed: shared native dispatch core, boolean `help: true` pre-validation behavior, host `tools/call` native takeover, optional native help schema advertisement, shared misuse footer triggers, host exposure gating, and brokered-tool pass-through preservation.
+
 ### Active
 
-- [x] v3.5 MCP Broker requirements complete in `.planning/REQUIREMENTS.md`
+- [ ] Define next milestone requirements with `$gsd-new-milestone`.
 
 ### Out of Scope
 
@@ -267,11 +277,12 @@ Any MCP-compatible AI can save and retrieve organized, persistent, searchable da
 
 **Key use case:** "The Dissolved CRM" — contact records in Supabase, contact notes as vault markdown, interaction history appended by AI, browsable in Obsidian and queryable by any AI. No CRM vendor, no lock-in, data owned by the user.
 
-**Current codebase state (v3.4 complete — 2026-05-17):**
-- FlashQuery Macro Language v0 is implemented behind the public `call_macro` MCP tool.
-- Macro workflows can run inline source or vault-backed `fqm` blocks, dispatch approved FlashQuery tools, branch on structured results, and return one structured execution or dry-run result.
-- Cross-phase milestone audit scored 63/63 requirements, 9/9 phases, 9/9 integration, 12/12 flows, and Nyquist compliant.
-- One non-blocking tech debt item remains: an ACL-related `source_ref` integration case is skipped because the local resolver has no ACL surface.
+**Current codebase state (v3.6 complete — 2026-05-24):**
+- FlashQuery brokers external stdio MCP servers into host, delegated model, and macro surfaces with filtered discovery, schema pinning, tool search/help, diagnostic CLI support, trace/cost evidence, deep health probes, and shared-server safety.
+- FlashQuery Macro Language v0 is implemented behind the public `call_macro` MCP tool, including inline/source_ref workflows, `fqm` blocks, control flow, builtins, static permission pre-scan, trace/progress, budgets, and cooperative cancellation.
+- Template discovery uses indexed `fqc_documents.template_meta` rows in production and suppresses ordinary non-template warning noise.
+- Native `help: true` behavior now has host/delegated parity through a shared dispatch core, while hidden-native and brokered-tool boundaries are preserved.
+- v3.6 audit passed 18/18 requirements, 1/1 phases, 18/18 integration, 7/7 flows, and Nyquist compliance.
 - 3 CLI commands: `flashquery start`, `flashquery backup`, `flashquery scan`
 - Stack: TypeScript strict ESM, Node.js ≥20, `@modelcontextprotocol/sdk@1.27.1`, `@supabase/supabase-js`, `pg`, `gray-matter`, `zod`, `vitest`, `simple-git`, `async-mutex`
 
@@ -320,6 +331,9 @@ Any MCP-compatible AI can save and retrieve organized, persistent, searchable da
 | `list_vault` on non-existent path returns isError: true (v2.9) | Behavior change from `list_files` (returned empty); explicit error is more correct for agents that must distinguish "empty dir" from "bad path" | ✓ Good — prevents silent misnavigation |
 | `files.ts` as canonical filesystem module (v2.9) | All three filesystem primitives (create_directory, list_vault, remove_directory) share path-validation.ts utilities; consolidating in one module makes the boundary clear | ✓ Good — clean module boundary, easy to extend |
 | parseDateFilter NaN bug fixed at extraction (v2.9) | Pre-existing bug in compound.ts: invalid ISO strings produced NaN timestamps; fixed in date-filter.ts during Phase 91 extraction rather than carrying it forward | ✓ Good — right time to fix; no behavior break for valid inputs |
+| `template_meta` as JSONB, not typed template columns (v3.6) | Keeps template metadata scoped and avoids repeated add/drop pressure on `fqc_documents` while leaving document title/status/tags as dedicated columns | ✓ Good — schema verification and scanner/write paths pass |
+| Shared native dispatch core for delegated and host paths (v3.6) | Avoids divergent `help: true` behavior and keeps footer/validation semantics centralized | ✓ Good — unit, E2E, and broker pass-through coverage pass |
+| Host hidden-native names delegate like unknown names (v3.6) | Prevents host help path from becoming an existence oracle for non-exposed native tools | ✓ Good — protocol E2E coverage verifies no help disclosure |
 
 ## Evolution
 
@@ -339,4 +353,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-19 after completing v3.5 MCP Broker milestone*
+*Last updated: 2026-05-24 after completing v3.6 Bug Fixes & Host Parity milestone*

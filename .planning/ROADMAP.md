@@ -25,7 +25,7 @@
 - ✅ **v3.3 MCP Tools Consolidation** — Phases 121-129 (shipped 2026-05-14)
 - ✅ **v3.4 macro-support** — Phases 130-138 (shipped 2026-05-17)
 - ✅ **v3.5 MCP Broker** — Phases 139-143 (shipped 2026-05-19)
-- ⏳ **v3.6 Bug Fixes & Host Parity** — Phase 144 (planned)
+- ✅ **v3.6 Bug Fixes & Host Parity** — Phase 144 (shipped 2026-05-24)
 
 ## Phases
 
@@ -181,7 +181,7 @@ Plans:
 
 | Milestone | Phases | Requirements | Status | Shipped |
 |-----------|--------|--------------|--------|---------|
-| v3.6 Bug Fixes & Host Parity | 144 | 18/18 scoped | Planned | — |
+| v3.6 Bug Fixes & Host Parity | 144 | 18/18 scoped | Complete | 2026-05-24 |
 | v3.5 MCP Broker | 139-143 | 118/118 | Complete | 2026-05-19 |
 | v3.4 macro-support | 130-138 | 63/63 | Complete | 2026-05-17 |
 | v3.3 MCP Tools Consolidation | 121-129 | 57/57 | Complete | 2026-05-14 |
@@ -190,9 +190,12 @@ Plans:
 | v3.0 Native LLM Access | 98-106 | — | Complete | 2026-04-30 |
 | v2.9 Filesystem Primitive Tools | 90-97 | 20/20 | Complete | 2026-04-25 |
 
-## v3.6 Bug Fixes & Host Parity (Phase 144) — PLANNED
+<details>
+<summary>✅ v3.6 Bug Fixes & Host Parity (Phase 144) — SHIPPED 2026-05-24</summary>
 
-### Phase 144: Fix template warning flood and host help convention parity
+- [x] Phase 144: Fix template warning flood and host help convention parity (completed 2026-05-24)
+
+### Phase 144: Fix template warning flood and host help convention parity (SHIPPED 2026-05-24)
 
 **Goal:** Close two FlashQuery behavior gaps from the bug backlog: make template-tool discovery bounded by suppressing ordinary non-template documents and moving discovery to indexed template metadata, and bring the native-tool help convention to parity between delegated model calls and host MCP `tools/call` calls.
 
@@ -209,26 +212,26 @@ Plans:
   - Test plan: `/Users/matt/Documents/Claude/Projects/FlashQuery/flashquery-product/Roadmap/Bugs/Help Convention Host-Model Parity/help-convention-not-wired-to-host-model-mcp-path Test Plan.md`
 
 **Depends on:** Phase 143
-**Plans:** 6 plans
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**
 
-- [ ] 144-01-PLAN.md — Template silent skip and consumer regression
-- [ ] 144-05-PLAN.md — Shared native dispatch core
+- [x] 144-01-PLAN.md — Template silent skip and consumer regression
+- [x] 144-05-PLAN.md — Shared native dispatch core
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 144-02-PLAN.md — `template_meta` schema and population
-- [ ] 144-06-PLAN.md — Host help parity and broker pass-through
+- [x] 144-02-PLAN.md — `template_meta` schema and population
+- [x] 144-06-PLAN.md — Host help parity and broker pass-through
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 144-03-PLAN.md — Index-backed template discovery
+- [x] 144-03-PLAN.md — Index-backed template discovery
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 144-04-PLAN.md — `list_purposes` template shape and docs contract
+- [x] 144-04-PLAN.md — `list_purposes` template shape and docs contract
 
 **Success criteria:**
 
@@ -238,13 +241,17 @@ Plans:
 4. Native-tool dispatch uses one shared help-aware core for delegated and host paths; host `tools/call` supports `help: true`, advertises optional `help` on native schemas, gates hidden native tools by host exposure, and preserves brokered-tool pass-through semantics.
 5. The implementation creates and passes the tests mapped in both supplied test plans so every requirement is validated: Template Warning Flood T-U-001..007, T-I-001..009, T-S-001..006; Help Convention T-U-001..008 and T-E-001..010.
 
+Archive: [milestones/v3.6-ROADMAP.md](milestones/v3.6-ROADMAP.md)
+
+</details>
+
 ## Next Up
 
-Plan the newly added bug-fix phase:
+Start the next milestone:
 
 ```bash
-$gsd-plan-phase 144
+$gsd-new-milestone
 ```
 
 ---
-*Last updated: 2026-05-21 after adding Phase 144 bug-fix scope*
+*Last updated: 2026-05-24 after shipping v3.6 Bug Fixes & Host Parity*
