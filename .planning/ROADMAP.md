@@ -96,6 +96,14 @@
 - Directed scenario: T-S-002 / D-69 for deferred embedding warning through public MCP response if needed.
 - Integration scenario: T-Y-001 / IS-15 for pooled record vector SQL workflow if needed.
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 146-01-PLAN.md — Durable pending embedding schema and centralized helper foundation.
+- [ ] 146-02-PLAN.md — MCP write call-site migration and D-69 warning scenario.
+- [ ] 146-03-PLAN.md — Pending retry worker, scanner reachability, and doctor diagnostics.
+- [ ] 146-04-PLAN.md — Pooled record vector SQL, shutdown cleanup, and IS-15 scenario.
+
 **Success criteria:**
 1. No duplicated direct background embed idioms remain in MCP tools outside approved helper/scanner code.
 2. Pending embeddings retry successfully and remain diagnosable after repeated failures.
