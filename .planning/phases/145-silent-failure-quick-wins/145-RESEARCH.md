@@ -369,17 +369,13 @@ For T-U-004, use a focused query chain where the Phase 2 `.is('embedding', null)
 | A2 | A no-match `find_plugin_scope` result should preserve current global behavior unless the external docs say otherwise. | Common Pitfalls | If product intent is stricter, implementation could keep an unwanted fallback. |
 | A3 | Scanner query-failure tests should include an `embedsAwaited === 0` case. | Common Pitfalls | Missing this case could allow a fallthrough-to-complete regression. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should lookup failure use expected-error `isError:false` or runtime-error `isError:true`?**  
-   What we know: `jsonExpectedError` returns `isError:false`, while `jsonRuntimeError` returns `isError:true`. `[VERIFIED: src/mcp/utils/response-formats.ts]` The context says "MCP error envelope with reason `lookup_failed`" but does not explicitly say `isError` value. `[CITED: 145-CONTEXT.md]`  
-   What's unclear: Whether downstream consumers expect operational lookup failures to be marked `isError:true`.  
-   Recommendation: Use `jsonExpectedError` only if the planner treats this like conflict/not_found style expected failures; otherwise use `jsonRuntimeError({ error: "lookup_failed", ... })` and still include `details.reason`. `[ASSUMED]`
+   Resolution: Use `jsonExpectedError`, not `jsonRuntimeError`. The Phase 145 context and planning decision classify `lookup_failed` as an anticipated, parseable operation failure similar to existing conflict/not_found expected envelopes. The returned JSON must include `error: "lookup_failed"` and `details.reason: "lookup_failed"`, and the tool result must not use runtime `isError: true`. `[CITED: 145-CONTEXT.md]` `[CITED: 145-PLAN.md]`
 
 2. **Should `drain_query_failed` be visible in maintain-vault public output?**  
-   What we know: `scanCounts` currently hides scanner internals and tests assert maintenance output does not contain `embedding_status` or `embeds_awaited`. `[VERIFIED: tests/unit/maintain-vault.test.ts]`  
-   What's unclear: Whether REQ-002 requires public maintenance JSON to expose the status or only requires `ScanResult` consumers to handle it.  
-   Recommendation: Preserve current public output unless the planner chooses to add a warning; still add explicit consumer coverage so the new union variant is handled. `[ASSUMED]`
+   Resolution: `drain_query_failed` must be explicit in `ScanResult.embeddingStatus` and covered in `src/services/maintenance.ts`, but maintenance output may continue hiding raw scanner internals such as `embedding_status` and `embeds_awaited`. The implementation must add consumer coverage so future changes cannot silently assume the old closed union. `[CITED: 145-CONTEXT.md]` `[CITED: 145-PLAN.md]`
 
 ## Environment Availability
 
