@@ -43,6 +43,9 @@ const config: KnipConfig = {
     'src/macro/tokens.ts': ['exports'],
     'src/macro/types.ts': ['types'],
     'src/mcp/auth.ts': ['exports'],
+    // Phase 148: exported for lifecycle helper tests and shutdown-drain contract
+    // documentation; production code consumes the returned shape structurally.
+    'src/mcp/request-lifecycle.ts': ['types'],
     'src/mcp/server.ts': ['exports'],
     'src/mcp/tool-catalog.ts': ['exports'],
     'src/mcp/tool-metadata.ts': ['types'],

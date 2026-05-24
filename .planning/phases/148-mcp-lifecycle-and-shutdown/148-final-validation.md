@@ -23,4 +23,21 @@
 
 ## Final Gates
 
-Final phase gates are recorded in Task 3 below.
+| Gate | Command | Exit | Result |
+|------|---------|------|--------|
+| Typecheck | `npm run typecheck` | 0 | PASS after final wrapper lint fix. |
+| Lint | `npm run lint` | 0 | PASS after removing two no-op type assertions in `src/mcp/server.ts`. |
+| Knip | `npm run knip` | 0 | PASS after adding a narrow `knip.ts` `ignoreIssues` entry for `src/mcp/request-lifecycle.ts` exported types. |
+| T-U-016..020 focused unit | `npm test -- tests/unit/native-tool-catalog.test.ts tests/unit/mcp-server-correlation.test.ts tests/unit/mcp-request-drain.test.ts` | 0 | PASS: 3 files, 11 tests. |
+| T-I-009..011 focused integration | `npm run test:integration -- tests/integration/server/shutdown-mcp-drain.test.ts` | 0 | PASS: 1 file, 3 tests. |
+| T-E-001 focused E2E | `npm run test:e2e -- tests/e2e/protocol.test.ts` | 0 | PASS: 1 file, 31 tests. |
+| D-70 focused directed scenario | `python3 tests/scenarios/directed/run_suite.py --managed test_shutdown_during_write_drain` | 0 | PASS: 1/1 directed scenario. Report: `tests/scenarios/directed/reports/scenario-report-2026-05-24-163124.md`. |
+| Static wrapper assertion | `rg -n "server\\.tool|\\(server as any\\)\\.registerTool|\\(server as any\\)\\.tool" src/mcp src/server src/llm; test $? -eq 1` | 0 | PASS: no dead `server.tool` wrapper or broad `(server as any).registerTool` production wrapper matches. |
+
+## Knip Exception
+
+`src/mcp/request-lifecycle.ts` exports `McpDrainResult` for the lifecycle helper test and shutdown-drain contract. Production code consumes the returned object structurally through `waitForIdle`, so Phase 147's production-source-only Knip graph cannot see the exported type name. `knip.ts` now contains a narrow `ignoreIssues` entry for that file's `types` class only.
+
+## Deviations
+
+**Rule 3 - Blocking final lint gate:** `npm run lint` initially failed on two no-op type assertions in `src/mcp/server.ts` introduced by the Phase 148 wrapper work. The assertions were removed without behavior change in commit `b099734`, and `npm run typecheck` plus `npm run lint` passed afterward.
