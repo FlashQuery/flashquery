@@ -54,8 +54,8 @@ vi.mock('uuid', async (importOriginal) => {
   };
 });
 
-// Mock documents.ts exports (listMarkdownFiles and computeHash)
-vi.mock('../../src/mcp/tools/documents.js', () => ({
+// Mock lower-level document primitives used by resolver reconciliation.
+vi.mock('../../src/storage/document-primitives.js', () => ({
   listMarkdownFiles: vi.fn(),
   computeHash: vi.fn(() => 'mock-sha256-hash'),
 }));
@@ -81,7 +81,7 @@ vi.mock('../../src/services/plugin-propagation.js', () => ({
 import { resolveDocumentIdentifier, targetedScan, getFileMutex } from '../../src/mcp/utils/resolve-document.js';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
-import { listMarkdownFiles } from '../../src/mcp/tools/documents.js';
+import { listMarkdownFiles } from '../../src/storage/document-primitives.js';
 import { logger } from '../../src/logging/logger.js';
 
 // ─────────────────────────────────────────────────────────────────────────────

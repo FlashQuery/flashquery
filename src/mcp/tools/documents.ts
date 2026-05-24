@@ -1,6 +1,5 @@
 import { z } from 'zod';
-import { createHash } from 'node:crypto';
-import { readdir, readFile, stat, rename, mkdir, writeFile, unlink } from 'node:fs/promises';
+import { readFile, stat, rename, mkdir, writeFile, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, relative, extname, normalize, dirname, basename, resolve, isAbsolute } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
@@ -50,21 +49,25 @@ import { validateVaultPath } from '../utils/path-validation.js';
 import { pluginManager, getFolderClaimsMap } from '../../plugins/manager.js';
 import { FM } from '../../constants/frontmatter-fields.js';
 import { extractTemplateMeta } from '../../llm/template-meta.js';
+import {
+  computeHash,
+  listMarkdownFiles,
+  parseDocMeta,
+  reconcileMissingRow,
+  type DocMeta,
+} from '../../storage/document-primitives.js';
+
+export {
+  computeHash,
+  listMarkdownFiles,
+  parseDocMeta,
+  reconcileMissingRow,
+  type DocMeta,
+} from '../../storage/document-primitives.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal types
 // ─────────────────────────────────────────────────────────────────────────────
-
-export interface DocMeta {
-  relativePath: string;
-  title: string;
-  tags: string[];
-  project: string;
-  status: string;
-  fqcId: string;
-  modified: string;
-  size: { chars: number };
-}
 
 function isDocumentNotFoundError(err: unknown): err is Error {
   return err instanceof Error && err.name === 'DocumentNotFoundError';
@@ -163,14 +166,6 @@ function buildTrashDestination(
 // Helper: compute SHA-256 hash of raw file content
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function computeHash(rawContent: string): string {
-  const startTime = performance.now();
-  const hash = createHash('sha256').update(rawContent).digest('hex');
-  const duration = Math.round(performance.now() - startTime);
-  logger.debug(`Hash: computed SHA256 (${duration}ms) — external edit detection enabled`);
-  return hash;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: sanitize filename (removes chars; different from sanitizeFolderName)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -207,121 +202,6 @@ function _buildDocPath(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: list all markdown files recursively in vault (or subfolder)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function listMarkdownFiles(
-  vaultRoot: string,
-  extensions: string[] = ['.md'],
-  projectPrefix?: string
-): Promise<string[]> {
-  const searchRoot = projectPrefix ? join(vaultRoot, projectPrefix) : vaultRoot;
-
-  // Guard against non-existent directories (Pitfall 4)
-  if (!existsSync(searchRoot)) return [];
-
-  const extsLower = extensions.map((e) => e.toLowerCase());
-  const entries = await readdir(searchRoot, { recursive: true, withFileTypes: true });
-  return entries
-    .filter((e) => {
-      // Skip dotfiles and files in dotfile directories (Unix convention)
-      // Excludes: `.filename`, `._filename`, `/.obsidian/`, etc.
-      if (e.name.startsWith('.')) return false;
-
-      // Also check if the entry's path contains a dotfile directory component
-      // Node 20.12+ uses e.parentPath; earlier Node 20 uses e.path
-      const entryPath =
-        (e as { parentPath?: string }).parentPath ?? (e as { path?: string }).path ?? '';
-      if (entryPath && entryPath.split(/[\\/]/).some((component) => component.startsWith('.'))) {
-        return false;
-      }
-
-      return e.isFile() && extsLower.includes(extname(e.name).toLowerCase());
-    })
-    .map((e) => {
-      // Node 20.12+ uses e.parentPath; earlier Node 20 uses e.path (Pitfall 1)
-      const dir =
-        (e as { parentPath?: string }).parentPath ?? (e as { path?: string }).path ?? searchRoot;
-      return relative(vaultRoot, join(dir, e.name));
-    });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: parse document metadata from a vault file
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function parseDocMeta(vaultRoot: string, relativePath: string): Promise<DocMeta | null> {
-  try {
-    const fullPath = join(vaultRoot, relativePath);
-    const raw = await readFile(fullPath, 'utf-8');
-    const { data, content } = matter(raw);
-    return {
-      relativePath,
-      title: String(data[FM.TITLE] ?? relativePath),
-      tags: Array.isArray(data[FM.TAGS]) ? (data[FM.TAGS] as string[]) : [],
-      project: String(data.project ?? ''),
-      status: String(data[FM.STATUS] ?? 'active'),
-      fqcId: String(data[FM.ID] ?? ''),
-      modified: String(data[FM.UPDATED] ?? data[FM.CREATED] ?? new Date(0).toISOString()),
-      size: { chars: content.length },
-    };
-  } catch {
-    logger.warn(`search_documents: skipping malformed file ${relativePath}`);
-    return null;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: reconcile a DB row whose vault file is missing.
-// Scans vault for frontmatter fqc_id match.
-//   - If found → updates path in DB, returns new relative path
-//   - If not found → marks row missing in DB, returns null
-// ─────────────────────────────────────────────────────────────────────────────
-
-export async function reconcileMissingRow(
-  vaultRoot: string,
-  fqcId: string,
-  oldPath: string,
-  supabase: ReturnType<typeof supabaseManager.getClient>,
-  extensions: string[] = ['.md']
-): Promise<string | null> {
-  const allFiles = await listMarkdownFiles(vaultRoot, extensions);
-  let newPath: string | null = null;
-  for (const candidate of allFiles) {
-    try {
-      const raw = await readFile(join(vaultRoot, candidate), 'utf-8');
-      const { data: fm } = matter(raw);
-      if (fm[FM.ID] === fqcId) {
-        newPath = candidate;
-        break;
-      }
-    } catch {
-      // skip unreadable files
-    }
-  }
-
-  if (newPath) {
-    logger.info(
-      `search_documents: file moved — updating path from "${oldPath}" to "${newPath}" for fqc_id=${fqcId}`
-    );
-    await supabase
-      .from('fqc_documents')
-      .update({ path: newPath, updated_at: new Date().toISOString() })
-      .eq('id', fqcId);
-    return newPath;
-  } else {
-    logger.info(
-      `search_documents: vault file missing and not found in vault scan — marking fqc_id=${fqcId} as missing`
-    );
-    await supabase
-      .from('fqc_documents')
-      .update({ status: 'missing', updated_at: new Date().toISOString() })
-      .eq('id', fqcId);
-    return null;
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared semantic document search helper — used by search_documents and search_all
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**

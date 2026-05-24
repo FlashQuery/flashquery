@@ -13,8 +13,8 @@ vi.mock('../../src/logging/logger.js', () => ({
   },
 }));
 
-vi.mock('../../src/mcp/tools/documents.js', async () => {
-  const actual = await vi.importActual('../../src/mcp/tools/documents.js');
+vi.mock('../../src/storage/document-primitives.js', async () => {
+  const actual = await vi.importActual('../../src/storage/document-primitives.js');
   const crypto = require('crypto');
   return {
     ...actual,

@@ -8,7 +8,7 @@ import pg from 'pg';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
 import { vaultManager } from '../storage/vault.js';
 import { logger } from '../logging/logger.js';
-import { listMarkdownFiles, computeHash } from '../mcp/tools/documents.js';
+import { listMarkdownFiles, computeHash } from '../storage/document-primitives.js';
 import { isValidUuid } from '../utils/uuid.js';
 import { propagateFqcIdChange } from './plugin-propagation.js';
 import type { FlashQueryConfig } from '../config/loader.js';

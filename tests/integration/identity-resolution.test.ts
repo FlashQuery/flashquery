@@ -28,7 +28,7 @@ import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
 import { initEmbedding } from '../../src/embedding/provider.js';
 import { initVault } from '../../src/storage/vault.js';
 import { runScanOnce } from '../../src/services/scanner.js';
-import { computeHash } from '../../src/mcp/tools/documents.js';
+import { computeHash } from '../../src/storage/document-primitives.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
 // ─────────────────────────────────────────────────────────────────────────────

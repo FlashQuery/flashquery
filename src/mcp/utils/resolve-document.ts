@@ -7,7 +7,7 @@ import { Mutex } from 'async-mutex';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { logger } from '../../logging/logger.js';
-import { listMarkdownFiles } from '../tools/documents.js';
+import { listMarkdownFiles } from '../../storage/document-primitives.js';
 import { vaultManager } from '../../storage/vault.js';
 import { isValidUuid } from '../../utils/uuid.js';
 import { propagateFqcIdChange } from '../../services/plugin-propagation.js';

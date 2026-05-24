@@ -20,7 +20,7 @@ vi.mock('node:fs', () => ({
   lstatSync: vi.fn(() => ({ isFile: () => true })),
 }));
 
-vi.mock('../../src/mcp/tools/documents.js', () => ({
+vi.mock('../../src/storage/document-primitives.js', () => ({
   listMarkdownFiles: vi.fn(() => Promise.resolve(scannerState.vaultFiles)),
   computeHash: vi.fn(() => 'hash-1'),
 }));

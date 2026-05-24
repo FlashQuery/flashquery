@@ -12,7 +12,7 @@ import { supabaseManager } from '../storage/supabase.js';
 import { logger } from '../logging/logger.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
 import { atomicWriteFrontmatter } from '../utils/frontmatter.js';
-import { computeHash } from '../mcp/tools/documents.js';
+import { computeHash } from '../storage/document-primitives.js';
 import { vaultManager } from '../storage/vault.js';
 import { pluginManager } from '../plugins/manager.js';
 import type { DocumentTypePolicy, RegistryEntry } from '../plugins/manager.js';
