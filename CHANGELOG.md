@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-05-24
+
+This release introduces FlashQuery's MCP broker and searchable tool-discovery layer, allowing host sessions, delegated model purposes, and macros to safely discover and call external MCP server tools through FlashQuery. It also tightens native help, template discovery, and release verification so broader tool surfaces remain easier to inspect and safer to operate.
+
+### Added
+- Add stdio MCP broker support with top-level `mcp_servers`, lazy upstream server startup, registry-keyed brokered tool names, delegated `call_model` dispatch, macro dispatch, per-tool cost accounting, and normalized broker errors.
+- Add TOFU schema pinning for brokered tools, including `tools/list_changed` drift detection, approval/rejection handling, blocked dispatch for changed schemas, and audit trace events.
+- Add host brokered tool exposure through `host.mcp_servers`, with shared consumer-context filtering across host calls, delegated purposes, and nested macro execution.
+- Add `search_tools` / `fq.search_tools` tool discovery over FlashQuery-native and brokered tools, including BM25 ranking, description overrides, argument summaries, native help hints, and host/purpose-scoped indexes.
+- Add `flashquery list-tools` CLI diagnostics for inspecting brokered server tools and emitting paste-ready YAML `tool_overrides`.
+- Add validated `.tool.md` native help pages and `help: true` responses for FlashQuery-native tools, including consistent native help footers on host and delegated errors.
+- Add macro language extensions for `_self` source metadata, `continue`, `break`, brokered `_exists()` probes, structured brokered result coercion, and expanded macro scenario fixtures.
+- Add FlashQuery codebase audit skill workflows for independent codebase review, finding resolution, verification, and development-spec handoff.
+
+### Changed
+- Route embedding initialization through the configured `embedding` LLM purpose resolver so semantic search follows the normal purpose/model fallback path.
+- Move MCP tool help metadata out of tool source files and enforce native tool metadata validation at startup.
+- Add TypeScript typechecking to the preflight release gate.
+- Update external MCP, LLM provider/purpose, managed embedding, and MCP tool documentation for brokered tools, tool search, and native help.
+
+### Fixed
+- Fix Mode 2 tool-call provider serialization and related source typecheck issues.
+- Fix brokered schema validation, brokered argument preservation, token-budget enforcement, nested macro budget inheritance, and drifted broker dispatch blocking.
+- Fix host brokered registration, trace metadata, resolved cost reporting, and shared broker state behavior across host and delegated consumers.
+- Fix template discovery warning noise by treating ordinary non-template documents as silent skips and using indexed active document/template metadata.
+- Fix native `help: true` parity for host MCP `tools/call`, including handler-returned errors, brokered pass-through, and hidden-tool gating.
+- Fix managed embedding test configuration for local Ollama-compatible embeddings and plugin table cleanup in integration tests.
+
+### Security
+- Harden brokered tool safety with consumer-scoped visibility, schema drift blocking, unsupported reverse-request rejection, and audit logging that avoids raw prompt payloads.
+
 ## [3.1.0] - 2026-05-17
 
 This release introduces FlashQuery macros: a deterministic orchestration layer for multi-step MCP workflows. Macros can call approved FlashQuery tools, branch on structured results, load reusable source blocks from vault documents, and expose dry-run, trace, progress, timeout, and cancellation controls for safer automation.
@@ -381,7 +412,8 @@ This release introduces native filesystem navigation to the vault. The new `crea
 
 ---
 
-[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/FlashQuery/flashquery/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/FlashQuery/flashquery/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/FlashQuery/flashquery/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/FlashQuery/flashquery/compare/v2.0.0...v3.0.0
 [2.0.0]: https://github.com/FlashQuery/flashquery/compare/v1.3.0...v2.0.0
