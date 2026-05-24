@@ -299,6 +299,35 @@ describe('maintainVault service contract', () => {
     expect(serialized).not.toContain('availability');
     expect(serialized).not.toContain('per_document');
   });
+
+  it('handles drain_query_failed with a stable public warning and no scanner internals', async () => {
+    scannerMocks.runScanOnce.mockResolvedValueOnce({
+      hashMismatches: 0,
+      statusMismatches: 0,
+      newFiles: 0,
+      movedFiles: 0,
+      deletedFiles: 0,
+      embeddingStatus: 'drain_query_failed',
+      embedsAwaited: 0,
+    });
+
+    const result = await maintainVault(makeConfig(), { action: 'sync' });
+
+    expect(result).toMatchObject({
+      ok: true,
+      payload: {
+        actions: [
+          {
+            action: 'sync',
+            warnings: ['embedding_drain_query_failed'],
+          },
+        ],
+      },
+    });
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('embedding_status');
+    expect(serialized).not.toContain('embeds_awaited');
+  });
 });
 
 describe('maintain_vault MCP handler', () => {

@@ -32,7 +32,7 @@ export interface ScanResult {
   newFiles: number;
   movedFiles: number;
   deletedFiles: number;
-  embeddingStatus: 'complete' | 'partial' | 'timed_out' | 'skipped'; // Result of embedding drain
+  embeddingStatus: 'complete' | 'partial' | 'timed_out' | 'skipped' | 'drain_query_failed'; // Result of embedding drain
   embedsAwaited: number; // Number of embed promises awaited during drain
 }
 
@@ -1136,6 +1136,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   // Both phases use Promise.allSettled so individual embed failures never abort
   // the drain. A 30s hard timeout prevents indefinite blocking on API outages.
 
+  let drainQueryFailed = false;
   try {
     // Phase 2: find docs with NULL embedding (from create_document background embeds)
     const { data: unembeddedDocs, error: unembeddedErr } = await supabase
@@ -1146,7 +1147,8 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
       .is('embedding', null);
 
     if (unembeddedErr) {
-      logger.warn(`[EMBED-DRAIN] failed to query unembedded docs: ${unembeddedErr.message}`);
+      drainQueryFailed = true;
+      logger.error(`[EMBED-DRAIN] drain_query_failed: ${unembeddedErr.message}`);
     } else if (unembeddedDocs && unembeddedDocs.length > 0) {
       logger.info(`[EMBED-DRAIN] found ${unembeddedDocs.length} doc(s) with no embedding — draining`);
       for (const doc of unembeddedDocs) {
@@ -1184,8 +1186,9 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
       }
     }
   } catch (drainQueryErr: unknown) {
-    logger.warn(
-      `[EMBED-DRAIN] unembedded-doc query threw: ${drainQueryErr instanceof Error ? drainQueryErr.message : String(drainQueryErr)}`
+    drainQueryFailed = true;
+    logger.error(
+      `[EMBED-DRAIN] drain_query_failed: ${drainQueryErr instanceof Error ? drainQueryErr.message : String(drainQueryErr)}`
     );
   }
 
@@ -1213,12 +1216,16 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     if (timedOut) {
       logger.warn(`[EMBED-DRAIN] timed out after ${EMBED_DRAIN_TIMEOUT_MS}ms — some embeds may still be in-flight`);
       embeddingStatus = 'timed_out';
+    } else if (drainQueryFailed) {
+      embeddingStatus = 'drain_query_failed';
     } else {
       // Check if any settled as rejected (errors are caught inside each promise,
       // so allSettled always sees 'fulfilled' — failures are logged, not thrown)
       embeddingStatus = 'complete';
       logger.info(`[EMBED-DRAIN] all ${embedsAwaited} embed promise(s) settled`);
     }
+  } else if (drainQueryFailed) {
+    embeddingStatus = 'drain_query_failed';
   } else {
     embeddingStatus = 'complete'; // Nothing to drain — all docs already have embeddings
   }

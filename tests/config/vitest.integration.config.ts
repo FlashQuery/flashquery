@@ -24,6 +24,8 @@ export default defineConfig({
       'tests/integration/mcp-broker/dispatch.test.ts',
       'tests/integration/mcp-broker/host-surface.test.ts',
       'tests/integration/mcp-broker/tofu-list-changed.test.ts',
+      'tests/integration/mcp/tools/memory-plugin-scope.test.ts',
+      'tests/integration/services/scanner-embed-drain.test.ts',
       'tests/integration/tool-search/*.test.ts',
     ],
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],

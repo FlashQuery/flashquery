@@ -229,7 +229,7 @@ async function executeActions(
       finished_at: finishedAt,
       dry_run: false,
       counts: scanCounts(result),
-      ...(getIsShuttingDown() ? { warnings: ['maintenance_aborted'] } : {}),
+      warnings: scanWarnings(result),
     }));
   }
   return results;
@@ -296,6 +296,17 @@ function scanCounts(result: ScanResult): MaintenanceActionResult['counts'] {
     repaired: 0,
     archived: result.deletedFiles,
   };
+}
+
+function scanWarnings(result: ScanResult): MaintenanceActionResult['warnings'] {
+  const warnings: NonNullable<MaintenanceActionResult['warnings']> = [];
+  if (result.embeddingStatus === 'drain_query_failed') {
+    warnings.push('embedding_drain_query_failed');
+  }
+  if (getIsShuttingDown()) {
+    warnings.push('maintenance_aborted');
+  }
+  return warnings.length > 0 ? warnings : undefined;
 }
 
 function repairCounts(result: DocumentReconciliationResult): MaintenanceActionResult['counts'] {
