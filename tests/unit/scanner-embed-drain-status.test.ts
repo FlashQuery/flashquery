@@ -33,6 +33,15 @@ vi.mock('../../src/embedding/provider.js', () => ({
   },
 }));
 
+vi.mock('../../src/embedding/pending-worker.js', () => ({
+  processPendingEmbeddings: vi.fn().mockResolvedValue({
+    selected: 1,
+    processed: 1,
+    succeeded: 1,
+    failed: 0,
+  }),
+}));
+
 vi.mock('../../src/logging/logger.js', () => ({
   logger: {
     info: vi.fn(),
@@ -57,6 +66,7 @@ vi.mock('../../src/storage/supabase.js', () => ({
 }));
 
 import { embeddingProvider } from '../../src/embedding/provider.js';
+import { processPendingEmbeddings } from '../../src/embedding/pending-worker.js';
 import { logger } from '../../src/logging/logger.js';
 
 function makeConfig(): FlashQueryConfig {
@@ -152,5 +162,18 @@ describe('runScanOnce EMBED-DRAIN status', () => {
     const result = await scan;
 
     expect(result.embeddingStatus).toBe('timed_out');
+  });
+
+  it('invokes pending embedding retry through the scanner maintenance path', async () => {
+    const result = await runScanOnce(makeConfig());
+
+    expect(result.embeddingStatus).toBe('complete');
+    expect(processPendingEmbeddings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instanceId: 'test-instance-id',
+        limit: 25,
+        databaseUrl: 'postgresql://test',
+      })
+    );
   });
 });

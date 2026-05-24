@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import pg from 'pg';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { initLogger } from '../../../src/logging/logger.js';
 import { processPendingEmbeddings } from '../../../src/embedding/pending-worker.js';
+import { runScanOnce } from '../../../src/services/scanner.js';
 import type { EmbeddingProvider } from '../../../src/embedding/provider.js';
 import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import type { FlashQueryConfig } from '../../../src/config/loader.js';
@@ -41,9 +45,12 @@ function makeConfig(): FlashQueryConfig {
 
 describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', () => {
   let client: pg.Client;
+  let vaultPath: string;
 
   beforeAll(async () => {
     const config = makeConfig();
+    vaultPath = await mkdtemp(join(tmpdir(), 'phase-146-pending-worker-'));
+    config.instance.vault.path = vaultPath;
     initLogger(config);
     await initSupabase(config);
     client = new pg.Client({ connectionString: TEST_DATABASE_URL });
@@ -66,6 +73,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
     await client?.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.query('DELETE FROM fqcp_phase146_worker_records WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end();
+    await rm(vaultPath, { recursive: true, force: true }).catch(() => undefined);
     await supabaseManager.close();
   });
 
@@ -142,6 +150,41 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
     const pendingRows = await client.query(
       'SELECT target_kind FROM fqc_pending_embeds WHERE instance_id = $1',
       [TEST_INSTANCE_ID]
+    );
+    expect(pendingRows.rows).toEqual([]);
+  });
+
+  it('T-I-005 can trigger pending retry through runScanOnce maintenance path', async () => {
+    await client.query('DELETE FROM fqc_pending_embeds WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+    await client.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]);
+
+    const docId = '00000000-0000-4000-8000-000000000504';
+    await client.query(
+      `
+      INSERT INTO fqc_documents (id, instance_id, path, title, status, embedding)
+      VALUES ($1, $2, 'scanner-worker.md', 'Scanner Worker', 'active', NULL)
+      `,
+      [docId, TEST_INSTANCE_ID]
+    );
+    await client.query(
+      `
+      INSERT INTO fqc_pending_embeds
+        (instance_id, target_kind, target_table, target_id, target_label, embed_text, attempt_count, status, next_retry_at)
+      VALUES ($1, 'document', 'fqc_documents', $2, 'Doc', 'scanner document text', 1, 'pending', now() - interval '1 minute')
+      `,
+      [TEST_INSTANCE_ID, docId]
+    );
+
+    const config = makeConfig();
+    config.instance.vault.path = vaultPath;
+    const result = await runScanOnce(config);
+
+    expect(result.embeddingStatus).toBe('complete');
+    const target = await client.query('SELECT embedding IS NOT NULL AS has_embedding FROM fqc_documents WHERE id = $1', [docId]);
+    expect(target.rows[0]).toEqual({ has_embedding: true });
+    const pendingRows = await client.query(
+      'SELECT target_kind FROM fqc_pending_embeds WHERE instance_id = $1 AND target_id = $2',
+      [TEST_INSTANCE_ID, docId]
     );
     expect(pendingRows.rows).toEqual([]);
   });
