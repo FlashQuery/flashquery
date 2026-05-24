@@ -363,22 +363,25 @@ return jsonToolResult(withWarnings(payload, warnings));
 | A3 | Scanner integration is preferable to a new interval worker. | Standard Stack / Alternatives | If operational retry must happen without scans, planner should add a lifecycle-owned worker and shutdown handling. |
 | A4 | Direct SQL may be appropriate for doctor gap diagnostics involving dynamic record tables. | Anti-Patterns | Planner may choose a narrower diagnostic limited to fixed tables if record-table enumeration proves too invasive. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should pending rows store full embed text or recompute metadata only?**
    - What we know: Product docs require enough target metadata to recompute and allow storing embed text. [VERIFIED: product requirements]
    - What's unclear: Whether duplicated user content in `fqc_pending_embeds` is acceptable for local-first storage policy. [ASSUMED]
    - Recommendation: Store `embed_text` initially for deterministic retries, plus `target_label` for diagnostics; document this in the plan as a user-confirmable design choice. [ASSUMED]
+   - RESOLVED: Store `embed_text` in `fqc_pending_embeds` for Phase 146 so retry behavior is deterministic across documents, memories, and dynamic record tables. Do not log raw `embed_text`; keep diagnostics to target metadata, attempt counts, and error summaries.
 
 2. **Should successful retries delete pending rows or mark them complete?**
    - What we know: Requirements allow either clear or mark complete. [VERIFIED: product requirements]
    - What's unclear: Whether operators need historical success records. [ASSUMED]
    - Recommendation: Delete on success to keep diagnostics simple; retain only failed/pending rows. [ASSUMED]
+   - RESOLVED: Delete pending rows on successful retry. Retain only pending/failed rows so doctor diagnostics answer "what still needs attention" without historical-success noise.
 
 3. **Should the pool be singleton per database URL or one global pool?**
    - What we know: Config has one `config.supabase.databaseUrl` at runtime, but tests may create multiple configs in one process. [VERIFIED: codebase grep]
    - What's unclear: Whether future multi-instance in-process use will require multiple DB URLs. [ASSUMED]
    - Recommendation: Implement a map keyed by connection string and expose `closePgPools()` for test/shutdown cleanup. [ASSUMED]
+   - RESOLVED: Implement pools as a map keyed by database URL, with `closePgPools()` closing all pools for shutdown and test cleanup. This preserves current single-config runtime behavior while avoiding cross-test and future multi-config coupling.
 
 ## Environment Availability
 
