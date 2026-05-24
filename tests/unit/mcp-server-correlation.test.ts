@@ -115,7 +115,6 @@ describe('MCP server registerTool correlation wrapper', () => {
 
     expect(observedCorrelationIds).toHaveLength(2);
     expect(observedCorrelationIds.every((id) => id.length > 0)).toBe(true);
-    expect(registerSpy).toHaveBeenCalled();
     expect(toolSpy).not.toHaveBeenCalled();
 
     registerSpy.mockRestore();

@@ -23,13 +23,14 @@ import { registerLlmUsageTools } from './tools/llm-usage.js';
 import { registerMacroTools } from './tools/macro.js';
 import { createBroker, type Broker } from '../services/mcp-broker.js';
 import { registerHostBrokeredTools } from './host-brokered-tools.js';
-import { getNativeToolCatalog, wrapServerWithToolCatalog } from './tool-catalog.js';
-import { validateAndCacheNativeToolSchemas } from '../llm/tool-registry.js';
+import { getNativeToolCatalog, wrapServerWithToolCatalog, type RegisterToolFunction } from './tool-catalog.js';
+import { validateAndCacheNativeToolSchemas, type NativeToolHandler } from '../llm/tool-registry.js';
 import { dispatchNativeToolCore } from '../llm/native-tool-core.js';
 import { getResolvedHostToolExposure, type FlashQueryConfig } from '../config/loader.js';
 import { assertRegisteredToolsHaveToolMeta, loadToolMetaSync } from '../services/tool-search/tool-meta.js';
 import { ToolSearchService } from '../services/tool-search/tool-search-service.js';
 import { createSearchToolsHandler } from '../services/tool-search/search-tools-handler.js';
+import { createMcpRequestLifecycle, type McpRequestLifecycle } from './request-lifecycle.js';
 
 // ── HTTP Error Code and Message Mapping (D-04) ──
 
@@ -127,51 +128,48 @@ export function createGlobalErrorHandler() {
   };
 }
 
+type RegisteredToolHandler = Parameters<RegisterToolFunction>[2];
+
+function wrapToolHandler<Args extends unknown[], Result>(
+  handler: (...handlerArgs: Args) => Result | Promise<Result>,
+  lifecycle: McpRequestLifecycle
+): (...handlerArgs: Args) => Promise<Awaited<Result>> {
+  const trackedHandler = lifecycle.trackHandler(handler);
+  return async (...handlerArgs: Args): Promise<Awaited<Result>> => {
+    const correlationId = generateCorrelationId();
+    return await initializeContext(correlationId, async () =>
+      await trackedHandler(...handlerArgs)
+    );
+  };
+}
+
+function wrapRegisteredToolHandler(
+  handler: RegisteredToolHandler,
+  lifecycle: McpRequestLifecycle
+): RegisteredToolHandler {
+  return wrapToolHandler(handler, lifecycle) as RegisteredToolHandler;
+}
+
+function wrapNativeCatalogHandler(
+  handler: NativeToolHandler,
+  lifecycle: McpRequestLifecycle
+): NativeToolHandler {
+  return wrapToolHandler(handler, lifecycle) as NativeToolHandler;
+}
+
 /**
- * Wraps a McpServer's .tool() and .registerTool() methods so every registered
- * tool handler runs inside
- * an AsyncLocalStorage context with a unique correlation ID. This enables all log
- * messages from a single MCP request — including fire-and-forget operations — to
- * share the same REQ:uuid identifier for grep-based troubleshooting.
- *
- * Approach: monkey-patch registration methods before any tool registrations occur.
- * This is more portable than wrapping individual handlers in each tool file.
+ * Wraps McpServer.registerTool so registered handlers run inside request
+ * lifecycle tracking and a fresh correlation-ID context.
  */
-function wrapServerWithCorrelationIds(server: McpServer): McpServer {
-  type ToolHandler = (...handlerArgs: unknown[]) => unknown;
-  const wrapHandler = (originalHandler: unknown): unknown => {
-    if (typeof originalHandler !== 'function') {
-      return originalHandler;
-    }
-
-    const handler = originalHandler as ToolHandler;
-    return async (...handlerArgs: unknown[]): Promise<unknown> => {
-      const correlationId = generateCorrelationId();
-      return await initializeContext(correlationId, async () =>
-        await Promise.resolve(handler(...handlerArgs))
-      );
-    };
-  };
-
-  const originalTool = server.tool.bind(server);
-  // Override tool() to wrap the last argument (the handler) with initializeContext
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-  (server as any).tool = (...args: any[]) => {
-    const lastIdx = args.length - 1;
-    args[lastIdx] = wrapHandler(args[lastIdx]);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    return (originalTool as (...a: unknown[]) => unknown)(...args);
-  };
-
-  const originalRegisterTool = server.registerTool.bind(server);
-  // registerTool() is the SDK path used by the current tool modules.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
-  (server as any).registerTool = (...args: any[]) => {
-    const lastIdx = args.length - 1;
-    args[lastIdx] = wrapHandler(args[lastIdx]);
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    return (originalRegisterTool as (...a: unknown[]) => unknown)(...args);
-  };
+function wrapServerWithRequestLifecycleAndCorrelation(
+  server: McpServer,
+  lifecycle: McpRequestLifecycle
+): McpServer {
+  const originalRegisterTool: RegisterToolFunction = server.registerTool.bind(server);
+  server.registerTool = ((name, config, cb) => {
+    const wrappedHandler = wrapRegisteredToolHandler(cb as RegisteredToolHandler, lifecycle);
+    return originalRegisterTool(name, config as never, wrappedHandler as never);
+  }) as RegisterToolFunction;
 
   return server;
 }
@@ -474,8 +472,17 @@ export interface CreateMcpServerOptions {
 
 const hostToolSearchServices = new WeakMap<McpServer, ToolSearchService>();
 const hostToolSearchInitializers = new WeakMap<McpServer, Promise<void>>();
+const mcpRequestLifecycles = new WeakMap<McpServer, McpRequestLifecycle>();
 
 type CallToolHandler = (request: CallToolRequest, extra: unknown) => Promise<CallToolResult> | CallToolResult;
+
+export function getMcpRequestLifecycleForServer(server: McpServer): McpRequestLifecycle {
+  const lifecycle = mcpRequestLifecycles.get(server);
+  if (!lifecycle) {
+    throw new Error('MCP request lifecycle has not been initialized for this server');
+  }
+  return lifecycle;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -595,30 +602,36 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
       : {}),
   });
   const toolMeta = loadToolMetaSync();
-  // Apply correlation ID wrapping BEFORE tool registration so all 26 tools
-  // automatically inherit context without modifying individual tool files.
-  wrapServerWithCorrelationIds(server);
+  // Apply lifecycle/correlation wrapping BEFORE tool registration so all tools
+  // automatically inherit request tracking and context without modifying tool files.
+  const requestLifecycle = createMcpRequestLifecycle();
+  mcpRequestLifecycles.set(server, requestLifecycle);
+  wrapServerWithRequestLifecycleAndCorrelation(server, requestLifecycle);
   const hostEnabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
-  wrapServerWithToolCatalog(server, { hostEnabledToolNames, toolMeta });
-  const registerTool = server.registerTool.bind(server);
+  wrapServerWithToolCatalog(server, {
+    hostEnabledToolNames,
+    toolMeta,
+    wrapCatalogHandler: (handler) => wrapNativeCatalogHandler(handler, requestLifecycle),
+  });
+  const registerTool: RegisterToolFunction = server.registerTool.bind(server);
   const hostConsumerContext = {
     kind: 'host' as const,
     traceId: 'host-tool-search',
     interactive: true,
   };
-  server.registerTool = ((name: string, toolConfig: unknown, cb: unknown) => {
+  server.registerTool = ((name, toolConfig, cb) => {
     if (name !== 'search_tools') {
-      return registerTool(name, toolConfig as never, cb as never);
+      return registerTool(name, toolConfig, cb);
     }
     return registerTool(
       name,
-      toolConfig as never,
+      toolConfig,
       createSearchToolsHandler({
         service: hostToolSearchService,
         consumerContext: hostConsumerContext,
-      }) as never
+      }) as RegisteredToolHandler
     );
-  }) as McpServer['registerTool'];
+  }) as RegisterToolFunction;
   registerMemoryTools(server, config);
   registerDocumentTools(server, config);
   registerPluginTools(server, config);

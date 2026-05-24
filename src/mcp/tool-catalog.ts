@@ -9,10 +9,11 @@ type ToolRegistrationConfig = {
   inputSchema?: unknown;
 };
 
-type RegisterToolFunction = McpServer['registerTool'];
+export type RegisterToolFunction = McpServer['registerTool'];
 type ToolCatalogOptions = {
   hostEnabledToolNames?: ReadonlySet<string>;
   toolMeta?: ReadonlyMap<string, ToolMeta>;
+  wrapCatalogHandler?: (handler: NativeToolHandler) => NativeToolHandler;
 };
 
 const toolCatalogs = new WeakMap<McpServer, NativeToolDefinition[]>();
@@ -63,9 +64,10 @@ export function wrapServerWithToolCatalog(server: McpServer, options: ToolCatalo
       ...registeredConfig,
       inputSchema: injectNativeHelpSchema(registeredConfig.inputSchema),
     };
-    const handler: NativeToolHandler = async (args, context) => {
+    const baseHandler: NativeToolHandler = async (args, context) => {
       return await (cb as NativeToolHandler)(args, context);
     };
+    const handler = options.wrapCatalogHandler?.(baseHandler) ?? baseHandler;
     catalog.push({
       name,
       description: nativeConfig.description ?? '',
