@@ -198,13 +198,15 @@ describe.sequential('MCP protocol E2E', () => {
     }
   }, 30000);
 
-  it('B/T-E-001 host stdio dispatches a normal native tools/call through the shared core', async () => {
+  it('T-E-001 host stdio dispatches a normal native tools/call through the shared core', async () => {
     const result = await client.callTool({
       name: 'list_vault',
       arguments: {},
     }) as { content: Array<{ type: string; text: string }>; isError?: boolean };
 
     expect(result.isError).toBeFalsy();
+    expect(result.content).toHaveLength(1);
+    expect(result.content[0]).toMatchObject({ type: 'text', text: expect.any(String) });
     expect(JSON.parse(getText(result))).toMatchObject({
       path: '/',
       entries: expect.any(Array),
