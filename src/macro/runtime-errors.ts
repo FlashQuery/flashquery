@@ -1,5 +1,4 @@
-import type { MacroNeedsUserInputPayload } from './types.js';
-import type { MacroValue } from './runtime-types.js';
+import type { MacroNeedsUserInputPayload, MacroValue } from './runtime-types.js';
 
 export class MacroRuntimeError extends Error {
   constructor(
