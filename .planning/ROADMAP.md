@@ -250,6 +250,11 @@ Plans:
 
 **Depends on:** None
 
+**Plans:** 1 plan
+
+Plans:
+- [ ] 150-01-PLAN.md - Config runtime metadata typing and REQ-012 coverage
+
 **Implementation scope:**
 
 - Introduce typed metadata storage or internal config typing in `src/config/loader.ts`.
