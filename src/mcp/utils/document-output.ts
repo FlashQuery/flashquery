@@ -22,6 +22,10 @@ import { FM } from '../../constants/frontmatter-fields.js';
 import { DocumentReadError, resolveDocumentIdentifier, targetedScan } from './resolve-document.js';
 import type { supabaseManager } from '../../storage/supabase.js';
 import type { embeddingProvider } from '../../embedding/provider.js';
+import {
+  documentEmbeddingTarget,
+  scheduleBackgroundEmbedding,
+} from '../../embedding/background-embed.js';
 import type { logger } from '../../logging/logger.js';
 import type { ErrorEnvelope } from './response-formats.js';
 import { extractHeadings } from './markdown-utils.js';
@@ -424,25 +428,24 @@ export async function resolveAndBuildDocument(
     const docTitle = typeof data[FM.TITLE] === 'string' ? (data[FM.TITLE] as string) : relativePath;
     const now = new Date().toISOString();
     log.debug(`get_document: stale hash detected for ${relativePath} — queuing background re-embed`);
-    void (async () => {
-      try {
-        const { error: hashErr } = await sm.getClient()
-          .from('fqc_documents')
-          .update({ content_hash: contentHash, updated_at: now })
-          .eq('id', fqcId);
-        if (hashErr) {
-          log.warn(`get_document: hash update failed for ${relativePath}: ${hashErr.message}`);
-          return;
-        }
-        const vector = await ep.embed(`${docTitle}\n\n${content}`);
-        await sm.getClient()
-          .from('fqc_documents')
-          .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-          .eq('id', fqcId);
-      } catch (err) {
-        log.warn(`get_document: background re-embed failed: ${err instanceof Error ? err.message : String(err)}`);
-      }
-    })();
+    const { error: hashErr } = await sm.getClient()
+      .from('fqc_documents')
+      .update({ content_hash: contentHash, updated_at: now })
+      .eq('id', fqcId);
+    if (hashErr) {
+      log.warn(`get_document: hash update failed for ${relativePath}: ${hashErr.message}`);
+    } else {
+      await scheduleBackgroundEmbedding({
+        target: documentEmbeddingTarget({
+          instanceId: cfg.instance.id,
+          id: fqcId,
+          label: relativePath,
+        }),
+        embedText: `${docTitle}\n\n${content}`,
+        provider: ep,
+        supabase: sm.getClient(),
+      });
+    }
   }
 
   const envelope = buildMetadataEnvelope(identifier, preScan, data, content);

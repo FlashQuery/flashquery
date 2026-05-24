@@ -3,6 +3,10 @@ import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { embeddingProvider } from '../../embedding/provider.js';
+import {
+  memoryEmbeddingTarget,
+  scheduleBackgroundEmbedding,
+} from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
@@ -12,6 +16,7 @@ import {
   jsonExpectedError,
   jsonRuntimeError,
   jsonToolResult,
+  withWarnings,
 } from '../utils/response-formats.js';
 import {
   buildMemoryResult,
@@ -288,25 +293,18 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
           if (error) throw new Error(error.message);
 
           const row = data as MemoryRow;
-          void embeddingProvider
-            .embed(params.content as string)
-            .then(async (vector) => {
-              const { error } = await supabaseManager
-                .getClient()
-                .from('fqc_memory')
-                .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                .eq('id', row.id);
-              if (error) {
-                logger.warn(`write_memory: background embedding update failed for ${row.id}: ${error.message}`);
-              }
-            })
-            .catch((err) =>
-              logger.warn(
-                `write_memory: background embed failed for ${row.id}: ${err instanceof Error ? err.message : String(err)}`
-              )
-            );
+          const embedResult = await scheduleBackgroundEmbedding({
+            target: memoryEmbeddingTarget({
+              instanceId: config.instance.id,
+              id: row.id,
+              label: row.id,
+            }),
+            embedText: params.content as string,
+            provider: embeddingProvider,
+            supabase,
+          });
 
-          return jsonToolResult(buildMemoryResult(row, include));
+          return jsonToolResult(withWarnings(buildMemoryResult(row, include), embedResult.warnings));
         }
 
         const { data: existing, error: fetchError } = await supabase
@@ -363,25 +361,18 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
         if (!inserted) throw new Error('fqc_memory_create_version returned no row');
 
         const insertedRow = inserted;
-        void embeddingProvider
-          .embed(nextContent)
-          .then(async (vector) => {
-            const { error } = await supabaseManager
-              .getClient()
-              .from('fqc_memory')
-              .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-              .eq('id', insertedRow.id);
-            if (error) {
-              logger.warn(`write_memory: background embedding update failed for ${insertedRow.id}: ${error.message}`);
-            }
-          })
-          .catch((err) =>
-            logger.warn(
-              `write_memory: background embed failed for ${insertedRow.id}: ${err instanceof Error ? err.message : String(err)}`
-            )
-          );
+        const embedResult = await scheduleBackgroundEmbedding({
+          target: memoryEmbeddingTarget({
+            instanceId: config.instance.id,
+            id: insertedRow.id,
+            label: insertedRow.id,
+          }),
+          embedText: nextContent,
+          provider: embeddingProvider,
+          supabase,
+        });
 
-        return jsonToolResult(buildMemoryResult(insertedRow, include));
+        return jsonToolResult(withWarnings(buildMemoryResult(insertedRow, include), embedResult.warnings));
       } catch (err) {
         const msg = formatError(err);
         logger.error(`write_memory failed: ${msg}`);

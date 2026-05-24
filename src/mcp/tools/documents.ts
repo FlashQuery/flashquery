@@ -9,6 +9,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vaultManager } from '../../storage/vault.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { embeddingProvider } from '../../embedding/provider.js';
+import {
+  documentEmbeddingTarget,
+  scheduleBackgroundEmbedding,
+} from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
@@ -536,23 +540,16 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             }
           }
 
-          void embeddingProvider
-            .embed(`${effectiveTitle}\n\n${body}`)
-            .then(async (vector) => {
-              const { error } = await supabaseManager
-                .getClient()
-                .from('fqc_documents')
-                .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                .eq('id', fqcId);
-              if (error) {
-                logger.warn(`write_document(create): background embedding update failed for ${relativePath}: ${error.message}`);
-              }
-            })
-            .catch((err) =>
-              logger.warn(
-                `write_document(create): background embed failed for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`
-              )
-            );
+          const embedResult = await scheduleBackgroundEmbedding({
+            target: documentEmbeddingTarget({
+              instanceId: config.instance.id,
+              id: fqcId,
+              label: relativePath,
+            }),
+            embedText: `${effectiveTitle}\n\n${body}`,
+            provider: embeddingProvider,
+            supabase,
+          });
 
           return jsonToolResult(withWarnings(buildDocumentWriteResult({
             mode: 'create',
@@ -562,7 +559,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
             fq_id: fqcId,
             modified: now,
             chars: body.length,
-          }), warnings));
+          }), [...warnings, ...embedResult.warnings]));
         }
 
         const resolved = await resolveDocumentIdentifier(config, supabase, identifier as string, logger);
@@ -623,25 +620,18 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           logger.warn(`write_document(update): fqc_documents update failed for ${resolved.relativePath}: ${updateError.message}`);
         }
 
-        void embeddingProvider
-          .embed(`${effectiveTitle}\n\n${effectiveBody}`)
-          .then(async (vector) => {
-            const { error } = await supabaseManager
-              .getClient()
-              .from('fqc_documents')
-              .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-              .eq('id', fqcId);
-            if (error) {
-              logger.warn(`write_document(update): background embedding update failed for ${resolved.relativePath}: ${error.message}`);
-            }
-          })
-          .catch((err) =>
-            logger.warn(
-              `write_document(update): background re-embed failed for ${resolved.relativePath}: ${err instanceof Error ? err.message : String(err)}`
-            )
-          );
+        const embedResult = await scheduleBackgroundEmbedding({
+          target: documentEmbeddingTarget({
+            instanceId: config.instance.id,
+            id: fqcId,
+            label: resolved.relativePath,
+          }),
+          embedText: `${effectiveTitle}\n\n${effectiveBody}`,
+          provider: embeddingProvider,
+          supabase,
+        });
 
-        return jsonToolResult(buildDocumentWriteResult({
+        return jsonToolResult(withWarnings(buildDocumentWriteResult({
           mode: 'update',
           identifier: identifier as string,
           title: effectiveTitle,
@@ -649,7 +639,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           fq_id: fqcId,
           modified: new Date().toISOString(),
           chars: effectiveBody.length,
-        }));
+        }), embedResult.warnings));
       } catch (err) {
         if (isDocumentNotFoundError(err)) {
           return jsonExpectedError({
@@ -1432,38 +1422,28 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
           throw new Error(`Supabase copy insert failed for ${copyRelativePath}: ${insertError.message}`);
         }
 
-        // Fire-and-forget: embed after MCP response is returned
-        if (contentHash !== null) {
-          void embeddingProvider
-            .embed(`${copyTitle}\n\n${parsed.content}`)
-            .then(async (vector) => {
-              const { error } = await supabaseManager
-                .getClient()
-                .from('fqc_documents')
-                .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                .eq('id', newFqcId);
-              if (error) {
-                logger.warn(`copy_document: background embedding update failed for ${copyRelativePath}: ${error.message}`);
-              }
-            })
-            .catch((err) =>
-              logger.warn(
-                `copy_document: background embed failed for ${copyRelativePath}: ${err instanceof Error ? err.message : String(err)}`
-              )
-            );
-        }
+        const embedResult = await scheduleBackgroundEmbedding({
+          target: documentEmbeddingTarget({
+            instanceId: config.instance.id,
+            id: newFqcId,
+            label: copyRelativePath,
+          }),
+          embedText: `${copyTitle}\n\n${parsed.content}`,
+          provider: embeddingProvider,
+          supabase,
+        });
 
         const written = await vaultManager.readMarkdown(copyRelativePath);
         const modified = stringField(written.data, FM.UPDATED, now);
 
-        return jsonToolResult(documentIdentification({
+        return jsonToolResult(withWarnings(documentIdentification({
           identifier: copyRelativePath,
           title: copyTitle,
           path: copyRelativePath,
           fq_id: newFqcId,
           modified,
           chars: written.content.length,
-        }));
+        }), embedResult.warnings));
       } catch (err) {
         if (isDocumentNotFoundError(err)) {
           return jsonExpectedError({
