@@ -45,7 +45,7 @@
 | 145 | Silent Failure Quick Wins | 1/1 | Complete   | 2026-05-24 |
 | 146 | Embedding Reliability Foundation | 4/4 | Complete    | 2026-05-24 |
 | 147 | Tooling and Dependency Hygiene | 4/4 | Complete    | 2026-05-24 |
-| 148 | MCP Lifecycle and Shutdown | Consolidate typed server wrapping and drain in-flight MCP requests during shutdown. | REQ-008, REQ-009 | §4.4 |
+| 148 | MCP Lifecycle and Shutdown | 4/4 | Complete    | 2026-05-24 |
 | 149 | Cycle Breaks | Remove documented document/plugin and macro circular dependency clusters without behavior drift. | REQ-010, REQ-011 | §4.5 |
 | 150 | Config Metadata Typing | Replace runtime metadata side-channel casts with explicit type-safe storage. | REQ-012 | §4.6 |
 
@@ -178,24 +178,24 @@ Plans:
 - Integration: T-I-009..011 for idle, active, and hung shutdown behavior.
 - Directed scenario: T-S-003 / D-70 for shutdown during write if needed.
 
-**Plans:** 4 plans
+**Plans:** 4/4 plans complete
 
 Plans:
 **Wave 1**
 
-- [ ] 148-01-PLAN.md — Request lifecycle helper and unit drain tests for REQ-009.
+- [x] 148-01-PLAN.md — Request lifecycle helper and unit drain tests for REQ-009.
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 148-02-PLAN.md — Typed MCP `registerTool` wrapper consolidation for REQ-008 and handler tracking.
+- [x] 148-02-PLAN.md — Typed MCP `registerTool` wrapper consolidation for REQ-008 and handler tracking.
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 148-03-PLAN.md — Shutdown coordinator 15-second MCP drain integration and tests.
+- [x] 148-03-PLAN.md — Shutdown coordinator 15-second MCP drain integration and tests.
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 148-04-PLAN.md — E2E transport smoke, conditional D-70 decision, and final gates.
+- [x] 148-04-PLAN.md — E2E transport smoke, conditional D-70 decision, and final gates.
 
 **Success criteria:**
 
@@ -269,8 +269,8 @@ Plans:
 | REQ-005 | Phase 146 | Pending |
 | REQ-006 | Phase 147 | Complete |
 | REQ-007 | Phase 147 | Complete |
-| REQ-008 | Phase 148 | Pending |
-| REQ-009 | Phase 148 | Pending |
+| REQ-008 | Phase 148 | Complete |
+| REQ-009 | Phase 148 | Complete |
 | REQ-010 | Phase 149 | Pending |
 | REQ-011 | Phase 149 | Pending |
 | REQ-012 | Phase 150 | Pending |
@@ -281,7 +281,7 @@ Plans:
 
 | Milestone | Phases | Requirements | Status | Shipped |
 |-----------|--------|--------------|--------|---------|
-| v3.7 Technical Debt | 145-150 | 0/12 | Planned | — |
+| v3.7 Technical Debt | 145-150 | 9/12 | Executing | — |
 | v3.6 Bug Fixes & Host Parity | 144 | 18/18 scoped | Complete | 2026-05-24 |
 | v3.5 MCP Broker | 139-143 | 118/118 | Complete | 2026-05-19 |
 | v3.4 macro-support | 130-138 | 63/63 | Complete | 2026-05-17 |

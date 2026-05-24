@@ -14,7 +14,7 @@ FlashQuery Core is an open source, local-first data management layer for individ
 
 **Current tool surface:** Final primitives now center on `write_document`, `write_memory`, `write_record`, `search`, `manage_directory`, `maintain_vault`, and structured read/archive/get flows. Removed legacy tool names are absent from host and delegated surfaces with replacement suggestions rather than compatibility aliases. Delegated broad tiers derive from canonical metadata, including corrected data tools such as `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`.
 
-**Current focus:** v3.7 Technical Debt remediates the priority findings from the 23-May-2026 codebase audit before the next feature push. Phases 145-147 are complete; Phase 147 validated clean audit state, Chevrotain v12 coverage, actionable Knip hygiene, and deferred MCP SDK wrapper work to Phase 148. The milestone bundles implementation with same-phase unit, integration, E2E, directed, and YAML scenario coverage where required.
+**Current focus:** v3.7 Technical Debt remediates the priority findings from the 23-May-2026 codebase audit before the next feature push. Phases 145-148 are complete; Phase 148 validated typed MCP registration wrapping, in-flight MCP request draining during shutdown, public shutdown-during-write coverage, and clean review/security gates. Phase 149 is next for document/plugin and macro cycle breaks.
 
 ## Current Milestone: v3.7 Technical Debt
 
@@ -264,8 +264,8 @@ Any MCP-compatible AI can save and retrieve organized, persistent, searchable da
 - [ ] REQ-005: Direct `pg` usage for records is pooled.
 - [ ] REQ-006: Dependency vulnerabilities and wanted-version drift are remediated.
 - [ ] REQ-007: `knip` is configured for actionable local and preflight use.
-- [ ] REQ-008: MCP server registration wrapping is consolidated and typed.
-- [ ] REQ-009: Shutdown drains in-flight MCP requests with a 15-second deadline.
+- [x] REQ-008: MCP server registration wrapping is consolidated and typed.
+- [x] REQ-009: Shutdown drains in-flight MCP requests with a 15-second deadline.
 - [ ] REQ-010: Document/plugin circular dependency cluster is broken.
 - [ ] REQ-011: Macro circular dependency cluster is broken.
 - [ ] REQ-012: Runtime-only config metadata is modeled without broad side-channel casts.
