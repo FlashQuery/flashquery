@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: Technical Debt
 status: executing
-stopped_at: Completed 147-02-PLAN.md
-last_updated: "2026-05-24T16:34:53.140Z"
+stopped_at: Completed 147-03-PLAN.md
+last_updated: "2026-05-24T16:43:06.550Z"
 last_activity: 2026-05-24
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
   percent: 33
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-05-24)
 ## Current Position
 
 Phase: 147 (tooling-and-dependency-hygiene) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-05-24
 
@@ -153,6 +153,7 @@ Last activity: 2026-05-24
 | Phase 146 P1 | 7m55s | 3 tasks | 6 files |
 | Phase 147 P01 | 4m12s | 2 tasks | 2 files |
 | Phase 147 P2 | 6m15s | 3 tasks | 6 files |
+| Phase 147 P3 | 4m49s | 3 tasks | 5 files |
 
 ## Decisions
 
@@ -302,6 +303,8 @@ Last activity: 2026-05-24
 - [Phase 147]: 147-01 corrected npm update's in-range MCP SDK lockfile refresh back to 1.27.1 to preserve the later SDK decision lane.
 - [Phase 147]: Knip preflight now gates files, dependencies, unlisted dependencies, binaries, and unresolved imports while export reporting remains staged with exact findings documented.
 - [Phase 147]: Kept required worktree/build/vendor ignore globs in knip.ts even though Knip emits config hints for them; the plan requires those exact exclusions.
+- [Phase 147]: 147-03 updated the nested private macro golden-model package to Chevrotain 12 instead of excluding it from REQ-006 audit closure. — Nested npm audit passed with 0 vulnerabilities and macro framework regression passed.
+- [Phase 147]: 147-03 required no macro parser source or parser test assertion changes because Chevrotain 12 preserved existing parser and framework gates. — T-U-013, T-U-014, typecheck, and lint passed after the dependency update.
 
 ## Accumulated Context
 
@@ -416,8 +419,8 @@ Last activity: 2026-05-24
 
 ## Session Continuity
 
-Last session: 2026-05-24T16:34:53.117Z
-Stopped at: Completed 147-02-PLAN.md
+Last session: 2026-05-24T16:43:06.522Z
+Stopped at: Completed 147-03-PLAN.md
 Resume: None
 
 ## Deferred Items
