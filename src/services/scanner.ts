@@ -1230,6 +1230,34 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
     embeddingStatus = 'complete'; // Nothing to drain — all docs already have embeddings
   }
 
+  try {
+    const { processPendingEmbeddings } = await import('../embedding/pending-worker.js');
+    const retryResult = await processPendingEmbeddings({
+      supabase,
+      provider: embeddingProvider,
+      instanceId,
+      databaseUrl: config.supabase.databaseUrl,
+      logger,
+      limit: 25,
+    });
+
+    if (retryResult.selected > 0) {
+      logger.info(
+        `[PENDING-EMBED] retried ${retryResult.processed} pending embed(s): ${retryResult.succeeded} succeeded, ${retryResult.failed} failed`
+      );
+    }
+    if (retryResult.failed > 0 && embeddingStatus === 'complete') {
+      embeddingStatus = 'partial';
+    }
+  } catch (pendingRetryErr: unknown) {
+    logger.error(
+      `[PENDING-EMBED] retry_failed: ${pendingRetryErr instanceof Error ? pendingRetryErr.message : String(pendingRetryErr)}`
+    );
+    if (embeddingStatus === 'complete') {
+      embeddingStatus = 'partial';
+    }
+  }
+
   return {
     hashMismatches,
     statusMismatches,

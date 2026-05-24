@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import pg from 'pg';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -18,6 +18,17 @@ import {
 
 const TEST_INSTANCE_ID = 'phase-146-pending-worker';
 const VECTOR = Array.from({ length: 1536 }, (_, index) => (index === 0 ? 0.5 : 0));
+
+vi.mock('../../../src/embedding/provider.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/embedding/provider.js')>();
+  return {
+    ...actual,
+    embeddingProvider: {
+      embed: vi.fn(async () => VECTOR),
+      getDimensions: () => 1536,
+    },
+  };
+});
 
 const provider: EmbeddingProvider = {
   embed: async () => VECTOR,
