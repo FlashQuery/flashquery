@@ -318,3 +318,33 @@ Full `knip` export reporting currently identifies these exact existing exports/t
 ### Remaining parser-related audit status
 
 No Chevrotain, `@chevrotain/*`, or `lodash-es` advisories remain after the v12 update. `npm outdated` still reports the deferred MCP SDK wanted drift and `uuid` latest-major drift; neither is parser-related, and the MCP SDK lane remains assigned to Plan 147-04.
+
+## Plan 147-04: MCP SDK deferred to Phase 148
+
+**Captured:** 2026-05-24T16:45:01Z
+
+### Decision
+
+`@modelcontextprotocol/sdk` remains deferred to Phase 148. The package stays declared as `^1.27.1` and installed at `1.27.1` for the Phase 147 close-out.
+
+### Evidence
+
+| Evidence | Result |
+|----------|--------|
+| `.planning/ROADMAP.md` | Phase 148 still owns REQ-008 and REQ-009: typed MCP server registration wrapping and in-flight request drain. |
+| `.planning/REQUIREMENTS.md` | REQ-008 and REQ-009 remain pending; REQ-006 says MCP SDK drift is handled after typed wrapping. |
+| `src/mcp/server.ts` | `wrapServerWithCorrelationIds` still wraps both `server.tool` and `server.registerTool`; it assigns through `(server as any).tool` and `(server as any).registerTool`. |
+| `src/mcp/server.ts` | Additional `server.registerTool` wrapping remains for `search_tools`, with `toolConfig as never` / `cb as never` casts. |
+| `src/mcp/tool-catalog.ts` | The catalog wrapper uses `McpServer['registerTool']`, but wrapper consolidation has not landed because `src/mcp/server.ts` still contains the broad monkey-patch branch. |
+| `package-lock.json` | `node_modules/@modelcontextprotocol/sdk` is installed at `1.27.1`. |
+
+### Rationale
+
+REQ-006 requires MCP SDK drift to be updated only after or with typed wrapping so `registerTool` signature drift is type-visible. Updating the SDK in Phase 147 would either leave the broad server monkey-patch in place or smuggle Phase 148's REQ-008 wrapper consolidation into this package/tooling phase. The safe close-out is therefore an explicit Phase 148 deferral.
+
+### Verification
+
+| Command | Result |
+|---------|--------|
+| `rg -n "server\\.tool|\\(server as any\\)\\.registerTool|REQ-008|Phase 148" src/mcp/server.ts .planning/ROADMAP.md .planning/REQUIREMENTS.md` | Confirmed Phase 148 owns the typed-wrapper work and the broad wrapper branch still exists. |
+| `node -e "const p=require('./package-lock.json'); console.log(p.packages['node_modules/@modelcontextprotocol/sdk']?.version)"` | Printed `1.27.1`. |
