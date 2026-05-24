@@ -28,6 +28,32 @@
 
 ---
 
+## v3.5 MCP Broker (Shipped: 2026-05-19)
+
+**Delivered:** FlashQuery stdio MCP broker for host, delegated model, and macro tool surfaces.
+
+**Phases completed:** Phases 139-143 (34 plans)
+**Archive:** [milestones/v3.5-ROADMAP.md](milestones/v3.5-ROADMAP.md)
+**Requirements:** [milestones/v3.5-REQUIREMENTS.md](milestones/v3.5-REQUIREMENTS.md)
+**Audit:** [milestones/v3.5-MILESTONE-AUDIT.md](milestones/v3.5-MILESTONE-AUDIT.md)
+
+**Key accomplishments:**
+
+- Added `mcp_servers`, host broker visibility, purpose broker visibility, per-tool cost, and description override configuration.
+- Built the stdio broker foundation with lazy spawn, restart-on-death, timeout handling, stderr capture, shutdown grace, and process-scoped TOFU state.
+- Introduced registry-keyed brokered tool discovery and dispatch for delegated model calls and macro execution while preserving raw `CallToolResult` semantics.
+- Added schema pinning, `tools/list_changed` drift handling, approval/rejection flows, audit events, and macro `needs_user_input` signaling.
+- Shipped pure TypeScript BM25 tool search, `fq.search_tools`, validated `.tool.md` metadata, help pages, and description override propagation.
+- Exposed host-visible brokered tools through the host MCP surface with shared `ConsumerContext`, trace inheritance, host search, and shared lazy-spawn/TOFU behavior.
+- Added diagnostic `flashquery list-tools <server>`, macro `_self`, `continue`/`break`, deep `<server>._exists()`, and shared broker concurrency coverage.
+
+**Stats:**
+- 5 phases, 34 plans, 118 requirements
+- Milestone audit passed: 118/118 requirements, 5/5 phases, 9/9 integration paths, 6/6 flows
+- Shipped: 2026-05-19
+
+---
+
 ## v3.4 macro-support (Shipped: 2026-05-17)
 
 **Phases completed:** 9 phases, 36 plans, 73 tasks

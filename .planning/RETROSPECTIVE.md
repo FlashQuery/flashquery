@@ -257,6 +257,46 @@
 
 ---
 
+## Milestone: v3.5 — MCP Broker
+
+**Shipped:** 2026-05-19
+**Phases:** 5 | **Plans:** 34
+**Stats:** 118/118 requirements satisfied; audit passed; 9/9 integration paths and 6/6 flows complete
+
+### What Was Built
+- Stdio MCP broker foundation with lazy server spawn, lifecycle handling, stderr capture, connection probes, restart behavior, and shutdown grace.
+- Broker registry keyed by server/tool identity, with consumer-filtered views for delegated model calls, macro execution, and host MCP tools.
+- In-memory TOFU schema pinning, schema drift blocking, approval/rejection paths, `tools/list_changed` routing, and audit events.
+- Pure TypeScript BM25 tool search, `fq.search_tools`, native `.tool.md` help pages, and description override propagation.
+- Host brokered tool registration, shared `ConsumerContext`, trace inheritance, host search, diagnostic CLI paste-back YAML, macro `_self`, loop control, deep `_exists()`, and concurrency coverage.
+
+### What Worked
+- **Phased broker layering held up**: foundation, TOFU/list_changed, search/help, host surface, then diagnostics/macro closure gave each risk band its own verification pass.
+- **ConsumerContext became the right abstraction** for keeping host, delegated, and nested macro visibility aligned without duplicating filtering logic.
+- **Scenario evidence caught contract drift** around host registration, tool search, schema drift, and trace metadata before the milestone closed.
+- **The final audit clarified REQ-069** by treating trace-stream `fq.search_tools` audit evidence as sufficient, avoiding unnecessary logger/onAudit churn.
+
+### What Was Inefficient
+- Several validation records carried hosted Supabase cleanup timeout notes; they were environment debt with zero residue, but they added audit noise.
+- The broker requirements stayed live after v3.5 shipped, which later confused v3.6 closeout until this archive pass moved them into `milestones/`.
+- Generated milestone close metadata needed manual enrichment to become useful in the long-term milestone ledger.
+
+### Patterns Established
+- Brokered tool safety should be enforced at discovery, indexing, dispatch, and trace boundaries, not only at call time.
+- Host and delegated consumers can share broker processes and TOFU pins when visibility is filtered by explicit consumer context.
+- Tool help/search metadata is a product contract: startup validation and scenario coverage are worth the up-front cost.
+
+### Key Lessons
+1. Archive requirements immediately at milestone close; stale live requirements are easy to misattribute during the next milestone.
+2. For broker features, cross-consumer scenarios matter more than isolated unit checks because host, delegated, macro, and diagnostic paths share state.
+3. Keep environment debt separate from product debt in validation records so audits can distinguish cleanup noise from broken flows.
+
+### Cost Observations
+- Model mix: mostly execution/verification sessions with heavier audit synthesis at close.
+- Notable: The milestone was broad but stayed tractable because each phase matched a source-spec test-plan band.
+
+---
+
 ## Milestone: v3.6 — Bug Fixes & Host Parity
 
 **Shipped:** 2026-05-24
@@ -313,6 +353,7 @@
 | v2.8 | 6 | 26 | Reconcile-on-read replaces push-based callbacks; 6 legacy files + fqc_change_queue removed |
 | v2.9 | 8 (incl. Phase 90) | 20 | Filesystem primitives (create_directory, list_vault); files.ts module; path-validation.ts shared utility |
 | v3.3 | 9 | 46 | MCP tool surface consolidated around metadata-backed JSON contracts and final primitives |
+| v3.5 | 5 | 34 | Stdio MCP broker, TOFU schema pinning, tool search/help, and host broker surface |
 | v3.6 | 1 | 6 | Bug-fix milestone for bounded template discovery and native help parity |
 
 ### Cumulative Quality
@@ -326,6 +367,7 @@
 | v2.8 | 1464 (unit 1111, integration 333, E2E 40) | Reconciliation engine, pending review lifecycle, frontmatter-sync, bulk-reconciliation |
 | v2.9 | 1246 (unit 1199, integration 47) | Filesystem composition IF suite, 79 new directed scenario rows (F-19..F-97), path-validation unit tests |
 | v3.3 | 57 requirements verified | Five-layer coverage required per implementation phase; final integration 9/9 and flows 8/8 |
+| v3.5 | 118 requirements verified | Broker integration audit passed 9/9 paths and 6/6 E2E flows |
 | v3.6 | 18 requirements verified; UAT 8/8 | Template discovery scale guardrails and host/delegated native help parity |
 
 ### Top Lessons (Verified Across Milestones)

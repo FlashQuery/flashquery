@@ -22,6 +22,7 @@ FlashQuery Core is an open source, local-first data management layer for individ
 ## Previous Milestone: v3.5 MCP Broker
 
 **Goal:** Ship FlashQuery's stdio MCP Broker so host sessions and delegated `call_model` purposes can safely discover, search, and call external MCP server tools through FlashQuery.
+**Archive:** [milestones/v3.5-ROADMAP.md](milestones/v3.5-ROADMAP.md) · [requirements](milestones/v3.5-REQUIREMENTS.md) · [audit](milestones/v3.5-MILESTONE-AUDIT.md)
 
 **Target features:**
 - Stdio-only MCP client manager with lazy spawn, session-scoped lifetime, per-call timeout, shutdown grace, stderr capture, deep connection probes, and `tools/list_changed` handling.
