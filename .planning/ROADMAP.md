@@ -131,6 +131,14 @@ Plans:
 - Static/command: T-C-001..006 for audit, outdated, typecheck/lint, knip, and preflight.
 - Static config assertion: T-U-015 if useful for knip exclusions.
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 147-01-PLAN.md — Baseline audit/outdated evidence and non-major dependency updates.
+- [ ] 147-02-PLAN.md — Knip config, script, T-U-015 coverage, and preflight policy.
+- [ ] 147-03-PLAN.md — Isolated Chevrotain v12 upgrade and nested macro golden-model audit decision.
+- [ ] 147-04-PLAN.md — MCP SDK update/deferral decision and final Phase 147 command gates.
+
 **Success criteria:**
 1. `npm audit` and `npm audit --omit=dev` report no unhandled vulnerabilities, or remaining advisories are explicitly documented.
 2. Chevrotain parser behavior remains green after the major update.
