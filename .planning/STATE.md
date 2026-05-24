@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.7
 milestone_name: Technical Debt
-status: ready_to_plan
-stopped_at: Phase 146 complete (4/4) — ready to discuss Phase 147
-last_updated: 2026-05-24T10:11:05.850Z
+status: executing
+stopped_at: Completed 146-01-PLAN.md
+last_updated: "2026-05-24T16:25:00.159Z"
 last_activity: 2026-05-24
 progress:
   total_phases: 6
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 9
+  completed_plans: 6
   percent: 33
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-24)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 147 — tooling and dependency hygiene
+**Current focus:** Phase 147 — tooling-and-dependency-hygiene
 
 ## Current Position
 
-Phase: 147
-Plan: Not started
-Status: Ready to plan
+Phase: 147 (tooling-and-dependency-hygiene) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
 Last activity: 2026-05-24
 
 ## Performance Metrics
@@ -151,6 +151,7 @@ Last activity: 2026-05-24
 | Phase 142 P5 | 23m30s | 2 tasks | 10 files |
 | Phase 142 P6 | 14m29s | 2 tasks | 6 files |
 | Phase 146 P1 | 7m55s | 3 tasks | 6 files |
+| Phase 147 P01 | 4m12s | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -296,6 +297,8 @@ Last activity: 2026-05-24
 - [Phase 142]: 142-06: Phase 143 requirements remain unchecked; only the Phase 142 requirement set was closed. — REQ-071..073, REQ-103..104, and REQ-109..110 are deferred to Phase 143.
 - [Phase 146]: 146-01 stores pending embedding retry state in fqc_pending_embeds keyed by instance_id,target_kind,target_table,target_id. — Durable retry state must survive process restarts and avoid cross-instance updates.
 - [Phase 146]: 146-01 uses typed document, memory, and record embedding targets to avoid raw MCP payload fields in pending retry metadata. — The phase threat model requires target descriptors for tampering control.
+- [Phase 147]: 147-01 kept Chevrotain 12 out of the non-major update lane so parser major risk remains isolated for Plan 147-03.
+- [Phase 147]: 147-01 corrected npm update's in-range MCP SDK lockfile refresh back to 1.27.1 to preserve the later SDK decision lane.
 
 ## Accumulated Context
 
@@ -410,7 +413,7 @@ Last activity: 2026-05-24
 
 ## Session Continuity
 
-Last session: 2026-05-24T09:02:41.302Z
+Last session: 2026-05-24T16:24:09.194Z
 Stopped at: Completed 146-01-PLAN.md
 Resume: None
 
