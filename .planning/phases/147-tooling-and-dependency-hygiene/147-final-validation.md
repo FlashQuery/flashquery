@@ -88,3 +88,33 @@
 | Latest-major drift | Documented residual | `uuid` v14 is latest-major-only drift while current and wanted are both 13.0.2; no advisory remains. |
 | Knip | Green staged gate | `npm run knip` passed; full export reporting is documented but not part of the current preflight gate. |
 | Preflight | Green | `npm run preflight` passed and directly included Knip. |
+
+## Phase 147 Closure
+
+**Phase 147 closure: documented residual**
+
+REQ-006 and REQ-007 are closed for Phase 147 with explicit residual rationale:
+
+- **REQ-006:** `npm audit` and `npm audit --omit=dev` are green. Chevrotain 12 is installed in both root and nested macro golden-model packages, and T-U-013/T-U-014 passed. The only wanted-version residual is `@modelcontextprotocol/sdk` 1.27.1 -> 1.29.0, deferred to Phase 148 because REQ-008 typed `registerTool` wrapper consolidation is still pending. `uuid` reports only latest-major drift from 13.0.2 to 14.0.0; wanted drift is empty and no advisory remains.
+- **REQ-007:** `npm run knip` and `npm run preflight` passed. Preflight directly includes `npm run knip`; the staged Knip policy covers files, dependencies, unlisted dependencies, binaries, and unresolved imports. Full export reporting remains documented in `147-dependency-baseline.md` for later API-surface triage.
+
+### Exact closure command list
+
+| Test ID | Command | Exit code | Closure status |
+|---------|---------|-----------|----------------|
+| T-C-001 | `npm audit` | 0 | Green |
+| T-C-002 | `npm audit --omit=dev` | 0 | Green |
+| T-C-003 | `npm outdated` | 1 | Documented residual: MCP SDK wanted drift to Phase 148; `uuid` latest-major only |
+| T-C-004 | `npm run typecheck` | 0 | Green |
+| T-C-004 | `npm run lint` | 0 | Green |
+| T-C-005 | `npm run knip` | 0 | Green |
+| T-C-006 | `npm run preflight` | 0 | Green |
+| T-U-013 | `npm test -- --run tests/unit/macro-parser.test.ts` | 0 | Green |
+| T-U-014 | `npm run test:macro-framework` | 0 | Green |
+
+### Follow-up locations
+
+| Residual | Follow-up |
+|----------|-----------|
+| `@modelcontextprotocol/sdk` wanted drift | Phase 148 / REQ-008 typed wrapper consolidation, then SDK update with type-visible registration drift. |
+| Full Knip export reporting | Later API-surface cleanup; exact findings are listed in `147-dependency-baseline.md`. |
