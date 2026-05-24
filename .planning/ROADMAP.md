@@ -165,6 +165,14 @@ Plans:
 - Integration: T-I-009..011 for idle, active, and hung shutdown behavior.
 - Directed scenario: T-S-003 / D-70 for shutdown during write if needed.
 
+**Plans:** 4 plans
+
+Plans:
+- [ ] 148-01-PLAN.md — Request lifecycle helper and unit drain tests for REQ-009.
+- [ ] 148-02-PLAN.md — Typed MCP `registerTool` wrapper consolidation for REQ-008 and handler tracking.
+- [ ] 148-03-PLAN.md — Shutdown coordinator 15-second MCP drain integration and tests.
+- [ ] 148-04-PLAN.md — E2E transport smoke, conditional D-70 decision, and final gates.
+
 **Success criteria:**
 1. Dead `.tool` wrapping is gone.
 2. Correlation-ID context and native tool cataloging keep existing behavior.
