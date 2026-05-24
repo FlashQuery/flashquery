@@ -29,8 +29,8 @@ Requirements for the v3.7 Technical Debt milestone. Each requirement maps to exa
 
 - [x] **REQ-008**: MCP server registration wrapping is consolidated and typed. Dead `server.tool` wrapping is removed, `registerTool` wrapping uses a typed function shape, and correlation-ID plus native-tool catalog behavior remains covered.
 - [x] **REQ-009**: Shutdown drains in-flight MCP requests with a 15-second deadline. In-flight request tracking waits for active handlers to settle, returns promptly when idle, and warns with remaining count on timeout.
-- [ ] **REQ-010**: Document/plugin circular dependency cluster is broken. Shared document primitives move out of MCP tool modules so resolver, plugin propagation, and reconciliation modules no longer depend on `mcp/tools/documents.ts`.
-- [ ] **REQ-011**: Macro circular dependency cluster is broken. Macro evaluator/type/helper imports are reorganized, likely through a narrow dependency-light builtin/types module, without changing parser, evaluator, permission, cancellation, or hard-exclusion behavior.
+- [x] **REQ-010**: Document/plugin circular dependency cluster is broken. Shared document primitives move out of MCP tool modules so resolver, plugin propagation, and reconciliation modules no longer depend on `mcp/tools/documents.ts`.
+- [x] **REQ-011**: Macro circular dependency cluster is broken. Macro evaluator/type/helper imports are reorganized, likely through a narrow dependency-light builtin/types module, without changing parser, evaluator, permission, cancellation, or hard-exclusion behavior.
 
 ### Config Type Modeling
 
@@ -87,8 +87,8 @@ Which phases cover which requirements. Updated during phase execution as statuse
 | REQ-007 | Phase 147 | Complete |
 | REQ-008 | Phase 148 | Complete |
 | REQ-009 | Phase 148 | Complete |
-| REQ-010 | Phase 149 | Pending |
-| REQ-011 | Phase 149 | Pending |
+| REQ-010 | Phase 149 | Complete |
+| REQ-011 | Phase 149 | Complete |
 | REQ-012 | Phase 150 | Pending |
 
 **Coverage:**

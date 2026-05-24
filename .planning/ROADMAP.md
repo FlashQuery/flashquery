@@ -46,7 +46,7 @@
 | 146 | Embedding Reliability Foundation | 4/4 | Complete    | 2026-05-24 |
 | 147 | Tooling and Dependency Hygiene | 4/4 | Complete    | 2026-05-24 |
 | 148 | MCP Lifecycle and Shutdown | 4/4 | Complete    | 2026-05-24 |
-| 149 | Cycle Breaks | Remove documented document/plugin and macro circular dependency clusters without behavior drift. | REQ-010, REQ-011 | §4.5 |
+| 149 | Cycle Breaks | 4/4 | Complete    | 2026-05-24 |
 | 150 | Config Metadata Typing | Replace runtime metadata side-channel casts with explicit type-safe storage. | REQ-012 | §4.6 |
 
 ## Phase Details
@@ -225,6 +225,15 @@ Plans:
 - Integration: T-I-012 for plugin propagation/reconciliation regression coverage.
 - Framework: T-U-025 / `npm run test:macro-framework`.
 - Command: `npx --yes madge src --extensions ts --circular` or project-approved equivalent.
+
+**Plans:** 4/4 plans complete
+
+Plans:
+
+- [x] 149-01-PLAN.md — Extract lower-level document primitives and preserve document/plugin behavior.
+- [x] 149-02-PLAN.md — Extract macro runtime types/errors with evaluator compatibility.
+- [x] 149-03-PLAN.md — Migrate macro helper imports in scoped batches and run macro regression.
+- [x] 149-04-PLAN.md — Add targeted cycle assertions and final Phase 149 verification. (completed 2026-05-24)
 
 **Success criteria:**
 
