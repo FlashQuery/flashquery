@@ -1,10 +1,17 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import pg from 'pg';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { buildSchemaDDL, initSupabase, supabaseManager } from '../../../src/storage/supabase.js';
 import { verifySchema } from '../../../src/storage/schema-verify.js';
 import { initLogger } from '../../../src/logging/logger.js';
+import { initVault } from '../../../src/storage/vault.js';
 import type { FlashQueryConfig } from '../../../src/config/loader.js';
 import type { EmbeddingProvider } from '../../../src/embedding/provider.js';
+import { registerMemoryTools } from '../../../src/mcp/tools/memory.js';
+import { registerDocumentTools } from '../../../src/mcp/tools/documents.js';
 import {
   EMBEDDING_DEFERRED_WARNING,
   documentEmbeddingTarget,
@@ -20,6 +27,19 @@ import {
 } from '../../helpers/test-env.js';
 
 const TEST_INSTANCE_ID = 'phase-146-background-embed';
+
+vi.mock('../../../src/embedding/provider.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../src/embedding/provider.js')>();
+  return {
+    ...actual,
+    embeddingProvider: {
+      embed: vi.fn(async () => {
+        throw new Error('forced provider failure');
+      }),
+      getDimensions: vi.fn(() => 1536),
+    },
+  };
+});
 
 const REQUIRED_PENDING_COLUMNS = [
   'id',
@@ -64,6 +84,28 @@ function makeConfig(): FlashQueryConfig {
   } as unknown as FlashQueryConfig;
 }
 
+function createMockServer(): {
+  server: McpServer;
+  getHandler: (name: string) => (params: Record<string, unknown>) => Promise<unknown>;
+} {
+  const handlers: Record<string, (params: Record<string, unknown>) => Promise<unknown>> = {};
+  const server = {
+    registerTool: vi.fn(
+      (name: string, _config: unknown, handler: (params: Record<string, unknown>) => Promise<unknown>) => {
+        handlers[name] = handler;
+      }
+    ),
+  } as unknown as McpServer;
+  return { server, getHandler: (name: string) => handlers[name] };
+}
+
+function parseJsonResult(result: unknown): Record<string, unknown> {
+  const toolResult = result as { content: Array<{ type: string; text: string }>; isError?: boolean };
+  expect(toolResult.isError).toBeUndefined();
+  expect(toolResult.content[0]).toMatchObject({ type: 'text' });
+  return JSON.parse(toolResult.content[0].text) as Record<string, unknown>;
+}
+
 describe('pending embedding schema foundation', () => {
   it('buildSchemaDDL creates fqc_pending_embeds with target metadata and retry indexes', () => {
     const ddl = buildSchemaDDL(1536);
@@ -83,19 +125,27 @@ describe('pending embedding schema foundation', () => {
 
 describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)', () => {
   let client: pg.Client;
+  let vaultPath: string;
+  let config: FlashQueryConfig;
 
   beforeAll(async () => {
-    const config = makeConfig();
+    vaultPath = await mkdtemp(join(tmpdir(), 'phase-146-background-embed-'));
+    config = makeConfig();
+    config.instance.vault.path = vaultPath;
     initLogger(config);
     await initSupabase(config);
+    await initVault(config);
     client = new pg.Client({ connectionString: TEST_DATABASE_URL });
     await client.connect();
   }, 60_000);
 
   afterAll(async () => {
     await client?.query('DELETE FROM fqc_pending_embeds WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+    await client?.query('DELETE FROM fqc_documents WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
+    await client?.query('DELETE FROM fqc_memory WHERE instance_id = $1', [TEST_INSTANCE_ID]).catch(() => undefined);
     await client?.end();
-    await supabaseManager.close();
+    await rm(vaultPath, { recursive: true, force: true });
+    await supabaseManager?.close();
   });
 
   it('verifySchema accepts the bootstrapped pending embedding table and required columns', async () => {
@@ -184,5 +234,85 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding schema bootstrap (integration)
     for (const row of rows) {
       expect(row.last_attempt_at).toBeTruthy();
     }
+  });
+
+  it('write_memory remains successful and returns embedding_deferred when embedding fails', async () => {
+    const { server, getHandler } = createMockServer();
+    registerMemoryTools(server, config);
+
+    const result = await getHandler('write_memory')({
+      mode: 'create',
+      content: 'Memory content that forces a deferred embedding warning',
+      tags: ['phase146'],
+    });
+    const payload = parseJsonResult(result);
+
+    expect(payload).toMatchObject({
+      memory_id: expect.any(String),
+      warnings: [EMBEDDING_DEFERRED_WARNING],
+    });
+
+    const { rows } = await client.query(
+      `
+      SELECT target_kind, target_table, target_id, embed_text, last_error, status
+      FROM fqc_pending_embeds
+      WHERE instance_id = $1
+        AND target_kind = 'memory'
+        AND target_id = $2
+      `,
+      [TEST_INSTANCE_ID, payload.memory_id]
+    );
+    expect(rows).toEqual([
+      expect.objectContaining({
+        target_kind: 'memory',
+        target_table: 'fqc_memory',
+        target_id: payload.memory_id,
+        embed_text: 'Memory content that forces a deferred embedding warning',
+        last_error: 'forced provider failure',
+        status: 'pending',
+      }),
+    ]);
+  });
+
+  it('write_document remains successful and returns embedding_deferred when embedding fails', async () => {
+    const { server, getHandler } = createMockServer();
+    registerDocumentTools(server, config);
+
+    const result = await getHandler('write_document')({
+      mode: 'create',
+      path: 'phase-146/deferred-warning.md',
+      title: 'Deferred Warning Document',
+      content: 'Document content that forces a deferred embedding warning',
+      tags: ['phase146'],
+    });
+    const payload = parseJsonResult(result);
+
+    expect(payload).toMatchObject({
+      path: 'phase-146/deferred-warning.md',
+      fq_id: expect.any(String),
+      warnings: [EMBEDDING_DEFERRED_WARNING],
+    });
+
+    const { rows } = await client.query(
+      `
+      SELECT target_kind, target_table, target_id, target_label, embed_text, last_error, status
+      FROM fqc_pending_embeds
+      WHERE instance_id = $1
+        AND target_kind = 'document'
+        AND target_id = $2
+      `,
+      [TEST_INSTANCE_ID, payload.fq_id]
+    );
+    expect(rows).toEqual([
+      expect.objectContaining({
+        target_kind: 'document',
+        target_table: 'fqc_documents',
+        target_id: payload.fq_id,
+        target_label: 'phase-146/deferred-warning.md',
+        embed_text: 'Deferred Warning Document\n\nDocument content that forces a deferred embedding warning',
+        last_error: 'forced provider failure',
+        status: 'pending',
+      }),
+    ]);
   });
 });
