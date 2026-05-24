@@ -114,7 +114,11 @@ export async function scheduleBackgroundEmbedding(
     return { warnings: [] };
   } catch (err) {
     const message = errorMessage(err);
-    await upsertPendingEmbedding(options, message);
+    try {
+      await upsertPendingEmbedding(options, message);
+    } catch (pendingErr) {
+      logPendingEmbeddingLost(log, options.target, message, errorMessage(pendingErr));
+    }
     logBackgroundEmbedFailure(log, options.target, message);
     return { warnings: [EMBEDDING_DEFERRED_WARNING] };
   }
@@ -239,6 +243,22 @@ function logBackgroundEmbedFailure(
     target_id: target.targetId,
     target_label: target.targetLabel,
     error: message,
+  });
+}
+
+function logPendingEmbeddingLost(
+  log: StructuredLogger,
+  target: BackgroundEmbeddingTarget,
+  originalError: string,
+  pendingError: string
+): void {
+  log.error('background_embed_failed_pending_lost', {
+    target_kind: target.kind,
+    target_table: target.targetTable,
+    target_id: target.targetId,
+    target_label: target.targetLabel,
+    error: originalError,
+    pending_error: pendingError,
   });
 }
 

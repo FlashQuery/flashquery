@@ -4,7 +4,7 @@ import { simpleGit } from 'simple-git';
 import { loadConfig, resolveConfigPath, getDeprecationWarnings, getStartupWarnings } from '../config/loader.js';
 import { initLogger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
-import { createPgClientIPv4 } from '../utils/pg-client.js';
+import { queryPgPool } from '../utils/pg-client.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CheckResult interface
@@ -157,12 +157,10 @@ export async function checkEmbeddingRetryGaps(config: FlashQueryConfig): Promise
     };
   }
 
-  const client = createPgClientIPv4(databaseUrl);
   try {
-    await client.connect();
-    const documents = await queryDocumentEmbeddingGaps(client, config.instance.id);
-    const memories = await queryMemoryEmbeddingGaps(client, config.instance.id);
-    const records = await queryRecordEmbeddingGaps(client, config.instance.id);
+    const documents = await queryDocumentEmbeddingGaps(databaseUrl, config.instance.id);
+    const memories = await queryMemoryEmbeddingGaps(databaseUrl, config.instance.id);
+    const records = await queryRecordEmbeddingGaps(databaseUrl, config.instance.id);
 
     const total = documents.length + memories.length + records.length;
     if (total === 0) {
@@ -185,13 +183,12 @@ export async function checkEmbeddingRetryGaps(config: FlashQueryConfig): Promise
       issue: err instanceof Error ? err.message : String(err),
       fix: 'Verify DATABASE_URL has access to fqc_documents, fqc_memory, plugin record tables, and fqc_pending_embeds.',
     };
-  } finally {
-    await client.end().catch(() => undefined);
   }
 }
 
-async function queryDocumentEmbeddingGaps(client: pg.Client, instanceId: string): Promise<string[]> {
-  const { rows } = await client.query<{ id: string }>(
+async function queryDocumentEmbeddingGaps(databaseUrl: string, instanceId: string): Promise<string[]> {
+  const { rows } = await queryPgPool<{ id: string }>(
+    databaseUrl,
     `
     SELECT d.id::text AS id
     FROM fqc_documents d
@@ -213,8 +210,9 @@ async function queryDocumentEmbeddingGaps(client: pg.Client, instanceId: string)
   return rows.map((row) => row.id);
 }
 
-async function queryMemoryEmbeddingGaps(client: pg.Client, instanceId: string): Promise<string[]> {
-  const { rows } = await client.query<{ id: string }>(
+async function queryMemoryEmbeddingGaps(databaseUrl: string, instanceId: string): Promise<string[]> {
+  const { rows } = await queryPgPool<{ id: string }>(
+    databaseUrl,
     `
     SELECT m.id::text AS id
     FROM fqc_memory m
@@ -236,8 +234,9 @@ async function queryMemoryEmbeddingGaps(client: pg.Client, instanceId: string): 
   return rows.map((row) => row.id);
 }
 
-async function queryRecordEmbeddingGaps(client: pg.Client, instanceId: string): Promise<string[]> {
-  const tableResult = await client.query<{ table_name: string }>(
+async function queryRecordEmbeddingGaps(databaseUrl: string, instanceId: string): Promise<string[]> {
+  const tableResult = await queryPgPool<{ table_name: string }>(
+    databaseUrl,
     `
     SELECT table_name
     FROM information_schema.columns
@@ -253,7 +252,8 @@ async function queryRecordEmbeddingGaps(client: pg.Client, instanceId: string): 
   const gaps: string[] = [];
   for (const { table_name: tableName } of tableResult.rows) {
     const escapedTable = pg.escapeIdentifier(tableName);
-    const { rows } = await client.query<{ id: string }>(
+    const { rows } = await queryPgPool<{ id: string }>(
+      databaseUrl,
       `
       SELECT t.id::text AS id
       FROM ${escapedTable} t

@@ -25,6 +25,7 @@ function makeProvider(result: number[] | Error): EmbeddingProvider {
 
 function makeSupabaseMock(options: {
   updateError?: { message: string };
+  pendingUpsertError?: { message: string };
   existingAttemptCount?: number;
 } = {}) {
   const tables = new Map<string, TableMock>();
@@ -45,7 +46,9 @@ function makeSupabaseMock(options: {
     if (!tables.has(table)) {
       tables.set(table, {
         update: vi.fn(() => makeEqChain({ error: options.updateError ?? null })),
-        upsert: vi.fn(async () => ({ error: null })),
+        upsert: vi.fn(async () => ({
+          error: table === 'fqc_pending_embeds' ? options.pendingUpsertError ?? null : null,
+        })),
         delete: vi.fn(() => makeEqChain({ error: null })),
         select: vi.fn(() =>
           makeEqChain({
@@ -173,6 +176,41 @@ describe('background embedding helper', () => {
         last_error: 'update rejected',
       }),
       { onConflict: 'instance_id,target_kind,target_table,target_id' }
+    );
+  });
+
+  it('T-U-007 keeps the foreground response successful when pending-state upsert fails', async () => {
+    const supabase = makeSupabaseMock({
+      pendingUpsertError: { message: 'pending table unavailable' },
+    });
+    const logger = { error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() };
+
+    const result = await scheduleBackgroundEmbedding({
+      target: documentEmbeddingTarget({ instanceId: 'inst', id: 'doc-2', label: 'Doc Two' }),
+      embedText: 'retry text without durable row',
+      provider: makeProvider(new Error('provider unavailable')),
+      supabase: supabase.client,
+      logger,
+    });
+
+    expect(result.warnings).toEqual([EMBEDDING_DEFERRED_WARNING]);
+    expect(logger.error).toHaveBeenCalledWith(
+      'background_embed_failed_pending_lost',
+      expect.objectContaining({
+        target_kind: 'document',
+        target_table: 'fqc_documents',
+        target_id: 'doc-2',
+        error: 'provider unavailable',
+        pending_error: 'Failed to record pending embedding: pending table unavailable',
+      })
+    );
+    expect(logger.error).toHaveBeenCalledWith(
+      'background_embed_failed',
+      expect.objectContaining({
+        target_kind: 'document',
+        target_id: 'doc-2',
+        error: 'provider unavailable',
+      })
     );
   });
 
