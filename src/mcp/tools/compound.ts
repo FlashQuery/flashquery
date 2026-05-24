@@ -7,6 +7,10 @@ import type { FlashQueryConfig } from '../../config/loader.js';
 import { getResolvedHostToolExposure } from '../../config/loader.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { embeddingProvider, NullEmbeddingProvider } from '../../embedding/provider.js';
+import {
+  documentEmbeddingTarget,
+  scheduleBackgroundEmbedding,
+} from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import { pluginManager } from '../../plugins/manager.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
@@ -25,6 +29,7 @@ import {
   documentIdentification,
   memoryIdentification,
   recordIdentification,
+  withWarnings,
 } from '../utils/response-formats.js';
 import {
   insertAtPosition,
@@ -1147,31 +1152,23 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
         }
 
-        // Trigger fire-and-forget embedding
         const docTitle = typeof frontmatter[FM.TITLE] === 'string' ? frontmatter[FM.TITLE] as string : relativePath;
-        void (async () => {
-          try {
-            const vector = await embeddingProvider.embed(`${docTitle}\n\n${modifiedBody}`);
-            if (fqcId) {
-              await supabaseManager
-                .getClient()
-                .from('fqc_documents')
-                .update({
-                  embedding: JSON.stringify(vector),
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', fqcId);
-            }
-          } catch (err) {
-            logger.warn(
-              `insert_in_doc: embedding failed: ${err instanceof Error ? err.message : String(err)}`
-            );
-          }
-        })();
+        const embedResult = fqcId
+          ? await scheduleBackgroundEmbedding({
+              target: documentEmbeddingTarget({
+                instanceId: config.instance.id,
+                id: fqcId,
+                label: relativePath,
+              }),
+              embedText: `${docTitle}\n\n${modifiedBody}`,
+              provider: embeddingProvider,
+              supabase: supabaseManager.getClient(),
+            })
+          : { warnings: [] };
 
         logger.info(`insert_in_doc: path="${relativePath}" position="${position}" heading="${heading || 'N/A'}"`);
 
-        return jsonToolResult({
+        return jsonToolResult(withWarnings({
           ...documentIdentification({
             identifier,
             title: docTitle,
@@ -1192,7 +1189,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                   include_nested: include_nested ?? true,
                 },
               }),
-        });
+        }, embedResult.warnings));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`insert_in_doc failed: ${msg}`);
@@ -1344,6 +1341,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const newHash = computeHash(postWriteRaw);
 
         // Step 11: Update database
+        let embeddingWarnings: string[] = [];
         if (resolved.fqcId) {
           const { data: updatedRow, error: sectionUpdateError } = await supabase
             .from('fqc_documents')
@@ -1362,26 +1360,22 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             throw new Error(`Supabase section update affected no document row for ${resolved.relativePath}`);
           }
 
-          // Step 12: Fire-and-forget re-embedding
           const docTitle = typeof document.data[FM.TITLE] === 'string' ? document.data[FM.TITLE] as string : resolved.relativePath;
-          void embeddingProvider
-            .embed(`${docTitle}\n\n${newContent}`)
-            .then((vector) =>
-              supabaseManager
-                .getClient()
-                .from('fqc_documents')
-                .update({ embedding: JSON.stringify(vector), updated_at: new Date().toISOString() })
-                .eq('id', resolved.fqcId!)
-            )
-            .catch((err) =>
-              logger.warn(
-                `replace_doc_section: background embed failed for ${resolved.relativePath}: ${err instanceof Error ? err.message : String(err)}`
-              )
-            );
+          const embedResult = await scheduleBackgroundEmbedding({
+            target: documentEmbeddingTarget({
+              instanceId: config.instance.id,
+              id: resolved.fqcId,
+              label: resolved.relativePath,
+            }),
+            embedText: `${docTitle}\n\n${newContent}`,
+            provider: embeddingProvider,
+            supabase: supabaseManager.getClient(),
+          });
+          embeddingWarnings = embedResult.warnings;
         }
 
         const docTitle = typeof document.data[FM.TITLE] === 'string' ? document.data[FM.TITLE] as string : resolved.relativePath;
-        return jsonToolResult({
+        return jsonToolResult(withWarnings({
           ...documentIdentification({
             identifier,
             title: docTitle,
@@ -1400,7 +1394,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           },
           heading_match: heading_match ?? 'contains',
           ...(heading_level !== undefined ? { heading_level } : {}),
-        });
+        }, embeddingWarnings));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`replace_doc_section failed: ${msg}`);

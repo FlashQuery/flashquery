@@ -5,6 +5,11 @@ import { pluginManager, resolveTableName } from '../../plugins/manager.js';
 import type { PluginTableSpec, RegistryEntry } from '../../plugins/manager.js';
 import { supabaseManager } from '../../storage/supabase.js';
 import { embeddingProvider } from '../../embedding/provider.js';
+import {
+  recordEmbeddingTarget,
+  scheduleBackgroundEmbedding,
+  type EmbeddingWarning,
+} from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
@@ -19,6 +24,7 @@ import {
   jsonExpectedError,
   jsonRuntimeError,
   jsonToolResult,
+  withWarnings,
 } from '../utils/response-formats.js';
 import { validateWriteRecordInput } from '../utils/record-validation.js';
 import {
@@ -56,14 +62,11 @@ function resolveAndValidateTable(
   return { fullTableName, ...result };
 }
 
-function fireAndForgetEmbed(
-  fullTableName: string,
-  recordId: string,
+function buildRecordEmbedText(
   fields: Record<string, unknown>,
-  embedFields: string[],
-  databaseUrl: string
-): void {
-  const embedText = embedFields
+  embedFields: string[]
+): string {
+  return embedFields
     .map((f) => {
       const val = fields[f];
       if (val === null || val === undefined) return '';
@@ -73,28 +76,33 @@ function fireAndForgetEmbed(
       return JSON.stringify(val);
     })
     .join('\n');
-  if (!embedText.trim()) return; // nothing to embed
-  void embeddingProvider
-    .embed(embedText)
-    .then(async (vector) => {
-      // Use raw pg client — PostgREST cannot reliably cast JSON strings to vector type
-      // on dynamically-created plugin tables.
-      const client = createPgClientIPv4(databaseUrl);
-      try {
-        await client.connect();
-        await client.query(
-          `UPDATE ${pg.escapeIdentifier(fullTableName)} SET embedding = $1::vector, embedding_updated_at = now() WHERE id = $2`,
-          [`[${vector.join(',')}]`, recordId]
-        );
-      } finally {
-        await client.end().catch(() => {});
-      }
-    })
-    .catch((err) =>
-      logger.warn(
-        `record embed failed for ${fullTableName}: ${err instanceof Error ? err.message : String(err)}`
-      )
-    );
+}
+
+async function scheduleRecordEmbedding(input: {
+  fullTableName: string,
+  recordId: string,
+  instanceId: string,
+  fields: Record<string, unknown>,
+  embedFields: string[],
+  supabase: ReturnType<typeof supabaseManager.getClient>,
+  databaseUrl: string
+}): Promise<EmbeddingWarning[]> {
+  const embedText = buildRecordEmbedText(input.fields, input.embedFields);
+  if (!embedText.trim()) return [];
+
+  const result = await scheduleBackgroundEmbedding({
+    target: recordEmbeddingTarget({
+      instanceId: input.instanceId,
+      targetTable: input.fullTableName,
+      id: input.recordId,
+      label: input.fullTableName,
+    }),
+    embedText,
+    provider: embeddingProvider,
+    supabase: input.supabase,
+    databaseUrl: input.databaseUrl,
+  });
+  return result.warnings;
 }
 
 async function queryPendingReview(
@@ -268,6 +276,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const effectiveInclude = parseRecordInclude(include, 'write');
         const recordData = data;
         const now = new Date().toISOString();
+        let embeddingWarnings: EmbeddingWarning[] = [];
 
         let row: Record<string, unknown> | null;
         if (mode === 'create') {
@@ -282,13 +291,15 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           row = insertResult.data;
 
           if (resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
-            fireAndForgetEmbed(
-              resolved.fullTableName,
-              row.id as string,
-              recordData,
-              resolved.tableSpec.embed_fields,
-              config.supabase.databaseUrl
-            );
+            embeddingWarnings = await scheduleRecordEmbedding({
+              fullTableName: resolved.fullTableName,
+              recordId: row.id as string,
+              instanceId: config.instance.id,
+              fields: recordData,
+              embedFields: resolved.tableSpec.embed_fields,
+              supabase,
+              databaseUrl: config.supabase.databaseUrl,
+            });
           }
         } else {
           const updateId = id ?? '';
@@ -308,13 +319,15 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           row = updateResult.data;
 
           if (resolved.tableSpec.embed_fields && resolved.tableSpec.embed_fields.length > 0) {
-            fireAndForgetEmbed(
-              resolved.fullTableName,
-              updateId,
-              row,
-              resolved.tableSpec.embed_fields,
-              config.supabase.databaseUrl
-            );
+            embeddingWarnings = await scheduleRecordEmbedding({
+              fullTableName: resolved.fullTableName,
+              recordId: updateId,
+              instanceId: config.instance.id,
+              fields: row,
+              embedFields: resolved.tableSpec.embed_fields,
+              supabase,
+              databaseUrl: config.supabase.databaseUrl,
+            });
           }
         }
 
@@ -332,7 +345,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         );
 
         logger.info(`write_record: ${mode} ${String(payload.id)} in ${resolved.fullTableName}`);
-        return jsonToolResult(payload);
+        return jsonToolResult(withWarnings(payload, embeddingWarnings));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`write_record failed: ${msg}`);
