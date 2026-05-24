@@ -17,6 +17,7 @@ import type net from 'node:net';
 import { logger } from '../logging/logger.js';
 import { setShuttingDown } from './shutdown-state.js';
 import type { FlashQueryConfig } from '../config/loader.js';
+import { closePgPools } from '../utils/pg-client.js';
 
 export const MAX_SHUTDOWN_MS = 30_000;
 
@@ -72,6 +73,9 @@ export class ShutdownCoordinator {
 
       // Step 5: Flush Supabase
       await this.flushSupabaseClient();
+
+      // Step 5.5: Close pooled Postgres clients
+      await this.closePgPoolsStep();
 
       // Step 6: Release Git mutex
       await this.releaseGitMutex();
@@ -202,6 +206,16 @@ export class ShutdownCoordinator {
       this.logInfo('GitManager released');
     } catch (err: unknown) {
       this.logDebug(`Git: mutex release failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async closePgPoolsStep(): Promise<void> {
+    this.logInfo('Postgres pools closing');
+    try {
+      await closePgPools();
+      this.logInfo('Postgres pools closed');
+    } catch (err: unknown) {
+      this.logDebug(`Postgres pools: close failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

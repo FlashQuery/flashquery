@@ -1,11 +1,12 @@
-import pg from 'pg';
+import { Client, Pool, types, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
+import { logger } from '../logging/logger.js';
 
 // pg returns timestamptz/timestamp columns as Date objects by default. Date object
 // reference inequality (a !== b even when same time value) breaks the string equality
 // checks in plugin-reconciliation.ts classification. Return ISO strings instead so
 // comparisons work correctly.
-pg.types.setTypeParser(1184, (val: string) => new Date(val).toISOString()); // timestamptz
-pg.types.setTypeParser(1114, (val: string) => new Date(val).toISOString()); // timestamp
+types.setTypeParser(1184, (val: string) => new Date(val).toISOString()); // timestamptz
+types.setTypeParser(1114, (val: string) => new Date(val).toISOString()); // timestamp
 
 /**
  * Creates a PostgreSQL client for use on all platforms.
@@ -21,6 +22,83 @@ pg.types.setTypeParser(1114, (val: string) => new Date(val).toISOString()); // t
  * @param connectionString - PostgreSQL connection string (e.g., postgres://user:pass@host:port/db)
  * @returns Configured pg.Client instance
  */
-export function createPgClientIPv4(connectionString: string): pg.Client {
-  return new pg.Client({ connectionString });
+export function createPgClientIPv4(connectionString: string): Client {
+  return new Client({ connectionString });
+}
+
+interface PgPoolLike {
+  query<Row extends QueryResultRow = QueryResultRow>(
+    sql: string,
+    params?: unknown[]
+  ): Promise<QueryResult<Row>>;
+  connect(): Promise<PoolClient>;
+  end(): Promise<void>;
+}
+
+let pgPoolFactory: (connectionString: string) => PgPoolLike = (connectionString) =>
+  new Pool({
+    connectionString,
+    allowExitOnIdle: true,
+  });
+
+const pgPools = new Map<string, PgPoolLike>();
+
+function getPgPool(connectionString: string): PgPoolLike {
+  const existing = pgPools.get(connectionString);
+  if (existing) {
+    return existing;
+  }
+
+  const pool = pgPoolFactory(connectionString);
+  pgPools.set(connectionString, pool);
+  return pool;
+}
+
+export async function queryPgPool<Row extends QueryResultRow = QueryResultRow>(
+  connectionString: string,
+  sql: string,
+  params?: unknown[]
+): Promise<QueryResult<Row>> {
+  return getPgPool(connectionString).query<Row>(sql, params);
+}
+
+export async function withPgClient<T>(
+  connectionString: string,
+  fn: (client: PoolClient) => Promise<T>
+): Promise<T> {
+  const client = await getPgPool(connectionString).connect();
+  try {
+    return await fn(client);
+  } finally {
+    try {
+      client.release();
+    } catch (err) {
+      logger.warn(`pg client release failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
+export async function closePgPools(): Promise<void> {
+  const pools = [...pgPools.entries()];
+  pgPools.clear();
+
+  for (const [, pool] of pools) {
+    try {
+      await pool.end();
+    } catch (err) {
+      logger.warn(`pg pool close failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
+export function __setPgPoolFactoryForTesting(
+  factory: ((connectionString: string) => PgPoolLike) | null
+): void {
+  pgPoolFactory =
+    factory ??
+    ((connectionString) =>
+      new Pool({
+        connectionString,
+        allowExitOnIdle: true,
+      }));
 }
