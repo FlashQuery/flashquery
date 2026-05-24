@@ -49,7 +49,7 @@ interface TableQuery {
 }
 
 interface SupabaseLike {
-  from(table: string): TableQuery;
+  from(table: string): unknown;
 }
 
 const TARGET_TABLES = {
@@ -129,8 +129,7 @@ export async function updateTargetEmbedding(
     return;
   }
 
-  const { error } = await supabase
-    .from(target.targetTable)
+  const { error } = await (supabase.from(target.targetTable) as TableQuery)
     .update({
       embedding: JSON.stringify(vector),
       ...(target.kind === 'record'
@@ -173,7 +172,7 @@ async function upsertPendingEmbedding(
   const now = new Date();
   const nextRetryAt = new Date(now.getTime() + 60_000).toISOString();
 
-  const { error } = await options.supabase.from('fqc_pending_embeds').upsert(
+  const { error } = await (options.supabase.from('fqc_pending_embeds') as TableQuery).upsert(
     {
       instance_id: options.target.instanceId,
       target_kind: options.target.kind,
@@ -200,8 +199,7 @@ async function nextAttemptCount(
   supabase: SupabaseLike,
   target: BackgroundEmbeddingTarget
 ): Promise<number> {
-  const { data, error } = await supabase
-    .from('fqc_pending_embeds')
+  const { data, error } = await (supabase.from('fqc_pending_embeds') as TableQuery)
     .select('attempt_count')
     .eq('instance_id', target.instanceId)
     .eq('target_kind', target.kind)

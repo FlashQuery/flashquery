@@ -64,7 +64,7 @@ interface TableQuery {
 }
 
 interface SupabaseLike {
-  from(table: string): TableQuery;
+  from(table: string): unknown;
 }
 
 const DEFAULT_LIMIT = 25;
@@ -117,8 +117,7 @@ async function selectEligiblePendingRows(
   limit: number,
   now: Date
 ): Promise<PendingEmbedRow[]> {
-  let query = supabase
-    .from('fqc_pending_embeds')
+  let query = (supabase.from('fqc_pending_embeds') as TableQuery)
     .select<PendingEmbedRow>(
       'id, instance_id, target_kind, target_table, target_id, target_label, embed_text, attempt_count'
     )
@@ -185,8 +184,7 @@ async function resolveEmbedText(
   }
 
   if (target.kind === 'memory') {
-    const { data, error } = await supabase
-      .from('fqc_memory')
+    const { data, error } = await (supabase.from('fqc_memory') as TableQuery)
       .select<{ content?: string }>('content')
       .eq('instance_id', target.instanceId)
       .eq('id', target.targetId)
@@ -201,8 +199,7 @@ async function resolveEmbedText(
   }
 
   if (target.kind === 'document') {
-    const { data, error } = await supabase
-      .from('fqc_documents')
+    const { data, error } = await (supabase.from('fqc_documents') as TableQuery)
       .select<{ title?: string; path?: string }>('title, path')
       .eq('instance_id', target.instanceId)
       .eq('id', target.targetId)
@@ -233,8 +230,7 @@ async function clearPendingRow(
   pendingId: string,
   instanceId: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from('fqc_pending_embeds')
+  const { error } = await (supabase.from('fqc_pending_embeds') as TableQuery)
     .delete()
     .eq('id', pendingId)
     .eq('instance_id', instanceId);
@@ -251,8 +247,7 @@ async function recordRetryFailure(
   now: Date,
   retryBackoffMs = DEFAULT_RETRY_BACKOFF_MS
 ): Promise<void> {
-  const { error } = await supabase
-    .from('fqc_pending_embeds')
+  const { error } = await (supabase.from('fqc_pending_embeds') as TableQuery)
     .update({
       attempt_count: (row.attempt_count ?? 0) + 1,
       last_error: lastError,
