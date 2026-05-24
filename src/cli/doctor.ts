@@ -1,14 +1,16 @@
 import { accessSync, constants } from 'node:fs';
+import pg from 'pg';
 import { simpleGit } from 'simple-git';
 import { loadConfig, resolveConfigPath, getDeprecationWarnings, getStartupWarnings } from '../config/loader.js';
 import { initLogger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
+import { createPgClientIPv4 } from '../utils/pg-client.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CheckResult interface
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface CheckResult {
+export interface CheckResult {
   name: string;
   passed: boolean;
   issue?: string;
@@ -146,6 +148,136 @@ async function checkLegacyTables(config: FlashQueryConfig): Promise<CheckResult>
   }
 }
 
+export async function checkEmbeddingRetryGaps(config: FlashQueryConfig): Promise<CheckResult> {
+  const databaseUrl = config.supabase.databaseUrl;
+  if (!databaseUrl) {
+    return {
+      name: 'Embedding retry coverage',
+      passed: true,
+    };
+  }
+
+  const client = createPgClientIPv4(databaseUrl);
+  try {
+    await client.connect();
+    const documents = await queryDocumentEmbeddingGaps(client, config.instance.id);
+    const memories = await queryMemoryEmbeddingGaps(client, config.instance.id);
+    const records = await queryRecordEmbeddingGaps(client, config.instance.id);
+
+    const total = documents.length + memories.length + records.length;
+    if (total === 0) {
+      return { name: 'Embedding retry coverage', passed: true };
+    }
+
+    return {
+      name: 'Embedding retry coverage',
+      passed: false,
+      issue:
+        `Untracked embedding gaps: documents=${documents.length} [${documents.join(', ')}]; ` +
+        `memories=${memories.length} [${memories.join(', ')}]; ` +
+        `records=${records.length} [${records.join(', ')}]`,
+      fix: 'Run maintain_vault sync to retry pending embeddings, or inspect rows missing fqc_pending_embeds retry state.',
+    };
+  } catch (err) {
+    return {
+      name: 'Embedding retry coverage',
+      passed: false,
+      issue: err instanceof Error ? err.message : String(err),
+      fix: 'Verify DATABASE_URL has access to fqc_documents, fqc_memory, plugin record tables, and fqc_pending_embeds.',
+    };
+  } finally {
+    await client.end().catch(() => undefined);
+  }
+}
+
+async function queryDocumentEmbeddingGaps(client: pg.Client, instanceId: string): Promise<string[]> {
+  const { rows } = await client.query<{ id: string }>(
+    `
+    SELECT d.id::text AS id
+    FROM fqc_documents d
+    LEFT JOIN fqc_pending_embeds p
+      ON p.instance_id = d.instance_id
+     AND p.target_kind = 'document'
+     AND p.target_table = 'fqc_documents'
+     AND p.target_id = d.id::text
+     AND p.status = 'pending'
+    WHERE d.instance_id = $1
+      AND d.status = 'active'
+      AND d.embedding IS NULL
+      AND p.id IS NULL
+    ORDER BY d.id
+    LIMIT 20
+    `,
+    [instanceId]
+  );
+  return rows.map((row) => row.id);
+}
+
+async function queryMemoryEmbeddingGaps(client: pg.Client, instanceId: string): Promise<string[]> {
+  const { rows } = await client.query<{ id: string }>(
+    `
+    SELECT m.id::text AS id
+    FROM fqc_memory m
+    LEFT JOIN fqc_pending_embeds p
+      ON p.instance_id = m.instance_id
+     AND p.target_kind = 'memory'
+     AND p.target_table = 'fqc_memory'
+     AND p.target_id = m.id::text
+     AND p.status = 'pending'
+    WHERE m.instance_id = $1
+      AND m.status = 'active'
+      AND m.embedding IS NULL
+      AND p.id IS NULL
+    ORDER BY m.id
+    LIMIT 20
+    `,
+    [instanceId]
+  );
+  return rows.map((row) => row.id);
+}
+
+async function queryRecordEmbeddingGaps(client: pg.Client, instanceId: string): Promise<string[]> {
+  const tableResult = await client.query<{ table_name: string }>(
+    `
+    SELECT table_name
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name LIKE 'fqcp\\_%' ESCAPE '\\'
+      AND column_name IN ('id', 'instance_id', 'status', 'embedding')
+    GROUP BY table_name
+    HAVING COUNT(DISTINCT column_name) = 4
+    ORDER BY table_name
+    `
+  );
+
+  const gaps: string[] = [];
+  for (const { table_name: tableName } of tableResult.rows) {
+    const escapedTable = pg.escapeIdentifier(tableName);
+    const { rows } = await client.query<{ id: string }>(
+      `
+      SELECT t.id::text AS id
+      FROM ${escapedTable} t
+      LEFT JOIN fqc_pending_embeds p
+        ON p.instance_id = t.instance_id
+       AND p.target_kind = 'record'
+       AND p.target_table = $2
+       AND p.target_id = t.id::text
+       AND p.status = 'pending'
+      WHERE t.instance_id = $1
+        AND t.status = 'active'
+        AND t.embedding IS NULL
+        AND p.id IS NULL
+      ORDER BY t.id
+      LIMIT 20
+      `,
+      [instanceId, tableName]
+    );
+    gaps.push(...rows.map((row) => `${tableName}:${row.id}`));
+  }
+
+  return gaps;
+}
+
 async function checkGitRepo(config: FlashQueryConfig): Promise<CheckResult> {
   try {
     const isRepo = await simpleGit(config.instance.vault.path).checkIsRepo();
@@ -207,6 +339,7 @@ export async function runDoctorCommand(explicitConfigPath?: string): Promise<voi
     () => checkSupabaseConnection(config),
     () => checkPgvector(config),
     () => checkLegacyTables(config),
+    () => checkEmbeddingRetryGaps(config),
     () => Promise.resolve(checkVaultPath(config)),
     () => checkEmbeddingApiKey(config),
     () => checkGitRepo(config),
