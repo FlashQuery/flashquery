@@ -287,3 +287,34 @@ Full `knip` export reporting currently identifies these exact existing exports/t
 - **Nested audit implication:** the nested private fixture package no longer carries the Chevrotain 11 / `lodash-es` advisory chain after the update.
 - **Smoke command note:** `npm run script` inside the nested package exits with usage when no macro file is supplied; that confirms the CLI starts but is not a standalone pass/fail smoke without a fixture argument.
 - **T-U-014 gate:** `npm run test:macro-framework` passed with 518 tests after the nested update.
+
+## Plan 147-03: Chevrotain verification evidence
+
+**Captured:** 2026-05-24T16:40:44Z
+
+### Installed versions
+
+| Package scope | Declared range | Installed version | Decision |
+|---------------|----------------|-------------------|----------|
+| Root package | `^12.0.0` | `12.0.0` | Updated in isolated root Chevrotain lane. |
+| Nested macro golden-model package | `^12.0.0` | `12.0.0` | Updated; nested fixture is included in the audit closure rather than excluded. |
+
+### Regression gates
+
+| Test ID | Command | Result |
+|---------|---------|--------|
+| T-U-013 | `npm test -- --run tests/unit/macro-parser.test.ts` | Passed: 1 file, 35 tests. |
+| T-U-014 | `npm run test:macro-framework` | Passed: 1 file, 518 tests. |
+| T-C-004 | `npm run typecheck` and `npm run lint` | Passed after the root Chevrotain upgrade. |
+
+### Audit status
+
+| Command | Exit code | Result |
+|---------|-----------|--------|
+| `npm audit` | 0 | `found 0 vulnerabilities`; no Chevrotain-related advisories remain in the root tree. |
+| `npm audit --omit=dev` | 0 | `found 0 vulnerabilities`; no production Chevrotain-related advisories remain. |
+| `npm audit` in `tests/macro-framework/macro-golden-model` | 0 | `found 0 vulnerabilities`; no nested Chevrotain-related advisories remain. |
+
+### Remaining parser-related audit status
+
+No Chevrotain, `@chevrotain/*`, or `lodash-es` advisories remain after the v12 update. `npm outdated` still reports the deferred MCP SDK wanted drift and `uuid` latest-major drift; neither is parser-related, and the MCP SDK lane remains assigned to Plan 147-04.
