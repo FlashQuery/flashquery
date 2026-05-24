@@ -30,6 +30,7 @@ export default defineConfig({
       'tests/integration/doctor/embedding-diagnostics.test.ts',
       'tests/integration/mcp/tools/records-pg-pool.test.ts',
       'tests/integration/services/scanner-embed-drain.test.ts',
+      'tests/integration/server/shutdown-mcp-drain.test.ts',
       'tests/integration/tool-search/*.test.ts',
     ],
     setupFiles: ['tests/helpers/setup-build.ts', 'tests/helpers/setup-env.ts'],

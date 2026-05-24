@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { ShutdownCoordinator, MAX_SHUTDOWN_MS } from '../../src/server/shutdown.js';
+import { ShutdownCoordinator, MAX_SHUTDOWN_MS, MCP_REQUEST_DRAIN_TIMEOUT_MS } from '../../src/server/shutdown.js';
 import * as shutdownState from '../../src/server/shutdown-state.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 
@@ -152,6 +152,10 @@ describe('ShutdownCoordinator', () => {
 
   it('MAX_SHUTDOWN_MS should be 30 seconds', () => {
     expect(MAX_SHUTDOWN_MS).toBe(30_000);
+  });
+
+  it('REQ-009 MCP request drain timeout should be 15 seconds', () => {
+    expect(MCP_REQUEST_DRAIN_TIMEOUT_MS).toBe(15_000);
   });
 
   it('should handle shutdown completion', async () => {
