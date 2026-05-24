@@ -53,12 +53,13 @@ interface QueryBuilder<Row = Record<string, unknown>> extends PromiseLike<QueryR
   or?(filter: string): QueryBuilder<Row>;
   order?(column: string, options?: Record<string, unknown>): QueryBuilder<Row>;
   limit?(count: number): QueryBuilder<Row>;
-  single?(): PromiseLike<QueryResult<Row>>;
+  single(): PromiseLike<QueryResult<Row>>;
 }
 
 interface TableQuery {
   select<Row = Record<string, unknown>>(columns: string): QueryBuilder<Row>;
   update(payload: Record<string, unknown>): QueryBuilder;
+  upsert(payload: Record<string, unknown>, options?: Record<string, unknown>): PromiseLike<QueryResult>;
   delete(): QueryBuilder;
 }
 
@@ -189,7 +190,7 @@ async function resolveEmbedText(
       .select<{ content?: string }>('content')
       .eq('instance_id', target.instanceId)
       .eq('id', target.targetId)
-      .single?.();
+      .single();
 
     if (error) {
       throw new Error(`memory embed text lookup failed: ${error.message}`);
@@ -205,7 +206,7 @@ async function resolveEmbedText(
       .select<{ title?: string; path?: string }>('title, path')
       .eq('instance_id', target.instanceId)
       .eq('id', target.targetId)
-      .single?.();
+      .single();
 
     if (error) {
       throw new Error(`document embed text lookup failed: ${error.message}`);
