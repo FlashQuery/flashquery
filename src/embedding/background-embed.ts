@@ -1,7 +1,7 @@
 import pg from 'pg';
 import type { EmbeddingProvider } from './provider.js';
 import { logger as defaultLogger } from '../logging/logger.js';
-import { createPgClientIPv4 } from '../utils/pg-client.js';
+import { queryPgPool } from '../utils/pg-client.js';
 
 export const EMBEDDING_DEFERRED_WARNING = 'embedding_deferred' as const;
 
@@ -150,18 +150,13 @@ async function updateRecordEmbeddingWithPg(
   databaseUrl: string
 ): Promise<void> {
   assertSafeRecordTable(target.targetTable);
-  const client = createPgClientIPv4(databaseUrl);
-  try {
-    await client.connect();
-    await client.query(
-      `UPDATE ${pg.escapeIdentifier(target.targetTable)}
-       SET embedding = $1::vector, embedding_updated_at = now()
-       WHERE instance_id = $2 AND id = $3`,
-      [`[${vector.join(',')}]`, target.instanceId, target.targetId]
-    );
-  } finally {
-    await client.end();
-  }
+  await queryPgPool(
+    databaseUrl,
+    `UPDATE ${pg.escapeIdentifier(target.targetTable)}
+     SET embedding = $1::vector, embedding_updated_at = now()
+     WHERE instance_id = $2 AND id = $3`,
+    [`[${vector.join(',')}]`, target.instanceId, target.targetId]
+  );
 }
 
 async function upsertPendingEmbedding(

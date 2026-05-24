@@ -14,7 +14,7 @@ import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
-import { createPgClientIPv4 } from '../../utils/pg-client.js';
+import { queryPgPool } from '../../utils/pg-client.js';
 import {
   reconcilePluginDocuments,
   executeReconciliationActions,
@@ -731,44 +731,38 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           // TODO LOG-01: Add timing to record queries (high-value: identifies slow DB operations)
           const queryEmbedding = await embeddingProvider.embed(queryText);
           const escapedTable = pg.escapeIdentifier(fullTableName);
-          const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
-          try {
-            await pgClient.connect();
 
-            // Build filter clauses
-            const params: unknown[] = [
-              JSON.stringify(queryEmbedding),
-              config.instance.id,
-              maxResults,
-            ];
-            let filterSql = '';
-            if (filters) {
-              for (const [key, value] of Object.entries(filters)) {
-                params.push(value);
-                filterSql += ` AND ${pg.escapeIdentifier(key)} = $${params.length}`;
-              }
+          // Build filter clauses
+          const params: unknown[] = [
+            `[${queryEmbedding.join(',')}]`,
+            config.instance.id,
+            maxResults,
+          ];
+          let filterSql = '';
+          if (filters) {
+            for (const [key, value] of Object.entries(filters)) {
+              params.push(value);
+              filterSql += ` AND ${pg.escapeIdentifier(key)} = $${params.length}`;
             }
-
-            const sql = `
-              SELECT *, 1 - (embedding <=> $1::vector) AS similarity
-              FROM ${escapedTable}
-              WHERE instance_id = $2
-                AND status = 'active'
-                AND embedding IS NOT NULL
-                ${filterSql}
-              ORDER BY embedding <=> $1::vector
-              LIMIT $3
-            `;
-
-            const result = await pgClient.query(sql, params);
-            const rows = asRecordRows(result.rows);
-            logger.info(
-              `search_records: semantic found ${rows.length} record(s) in ${fullTableName}`
-            );
-            return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, semantic: true, reconciliation }));
-          } finally {
-            await pgClient.end();
           }
+
+          const sql = `
+            SELECT *, 1 - (embedding <=> $1::vector) AS similarity
+            FROM ${escapedTable}
+            WHERE instance_id = $2
+              AND status = 'active'
+              AND embedding IS NOT NULL
+              ${filterSql}
+            ORDER BY embedding <=> $1::vector
+            LIMIT $3
+          `;
+
+          const result = await queryPgPool(config.supabase.databaseUrl, sql, params);
+          const rows = asRecordRows(result.rows);
+          logger.info(
+            `search_records: semantic found ${rows.length} record(s) in ${fullTableName}`
+          );
+          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, semantic: true, reconciliation }));
         }
 
         // ── ILIKE path (query + no embed_fields) ──────────────────────────
@@ -795,41 +789,34 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, reconciliation }));
         }
 
-        const pgClient = createPgClientIPv4(config.supabase.databaseUrl);
-        try {
-          await pgClient.connect();
+        const params: unknown[] = [`%${queryText}%`, config.instance.id, maxResults];
+        const ilikeConditions = textColumns
+          .map((col) => `${pg.escapeIdentifier(col)} ILIKE $1`)
+          .join(' OR ');
 
-          const params: unknown[] = [`%${queryText}%`, config.instance.id, maxResults];
-          const ilikeConditions = textColumns
-            .map((col) => `${pg.escapeIdentifier(col)} ILIKE $1`)
-            .join(' OR ');
-
-          let filterSql = '';
-          if (filters) {
-            for (const [key, value] of Object.entries(filters)) {
-              params.push(value);
-              filterSql += ` AND ${pg.escapeIdentifier(key)} = $${params.length}`;
-            }
+        let filterSql = '';
+        if (filters) {
+          for (const [key, value] of Object.entries(filters)) {
+            params.push(value);
+            filterSql += ` AND ${pg.escapeIdentifier(key)} = $${params.length}`;
           }
-
-          const sql = `
-            SELECT *
-            FROM ${pg.escapeIdentifier(fullTableName)}
-            WHERE instance_id = $2
-              AND status = 'active'
-              AND (${ilikeConditions})
-              ${filterSql}
-            ORDER BY created_at DESC
-            LIMIT $3
-          `;
-
-          const result = await pgClient.query(sql, params);
-          const rows = asRecordRows(result.rows);
-          logger.info(`search_records: ILIKE found ${rows.length} record(s) in ${fullTableName}`);
-          return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, reconciliation }));
-        } finally {
-          await pgClient.end();
         }
+
+        const sql = `
+          SELECT *
+          FROM ${pg.escapeIdentifier(fullTableName)}
+          WHERE instance_id = $2
+            AND status = 'active'
+            AND (${ilikeConditions})
+            ${filterSql}
+          ORDER BY created_at DESC
+          LIMIT $3
+        `;
+
+        const result = await queryPgPool(config.supabase.databaseUrl, sql, params);
+        const rows = asRecordRows(result.rows);
+        logger.info(`search_records: ILIKE found ${rows.length} record(s) in ${fullTableName}`);
+        return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, reconciliation }));
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`search_records failed: ${msg}`);
