@@ -1,5 +1,5 @@
 import type { MacroParseErrorEnvelope } from './errors.js';
-import type { MacroInvocationContext, MacroValue } from './evaluator.js';
+import type { MacroInvocationContext, MacroValue } from './runtime-types.js';
 
 export type ToolFn = (arg: Record<string, MacroValue>, ctx: MacroInvocationContext) => MacroValue | Promise<MacroValue>;
 

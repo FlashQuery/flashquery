@@ -1,6 +1,6 @@
 import type { WarningCode } from '../mcp/utils/response-formats.js';
 import type { TraceStep } from '../mcp/utils/response-formats.js';
-import type { MacroProgressEntry } from './evaluator.js';
+import type { MacroProgressEntry } from './runtime-types.js';
 
 export type ProgressMode = 'full' | 'milestones' | 'silent';
 
