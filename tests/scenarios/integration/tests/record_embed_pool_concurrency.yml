@@ -1,0 +1,99 @@
+name: record_embed_pool_concurrency
+description: >
+  IS-15 / T-Y-001: plugin record writes with embed_fields populate embeddings
+  through pooled Postgres SQL, and semantic search_records returns scored rows
+  from the same pooled vector path.
+coverage: [IS-15]
+deps: [embeddings]
+server_modes: [managed]
+
+extra_config:
+  host_mcp_tools:
+    tools:
+      - register_plugin
+      - write_record
+      - search_records
+
+steps:
+  - label: "Register an embeddable plugin table"
+    action: register_plugin
+    args:
+      plugin_instance: pool
+      schema_yaml: |
+        plugin:
+          id: p146pool
+          name: Phase 146 Pool Test Plugin
+          version: 1.0.0
+        tables:
+          - name: contacts
+            description: Contacts with pooled embeddings
+            embed_fields:
+              - name
+              - notes
+            columns:
+              - name: name
+                type: text
+                required: true
+              - name: notes
+                type: text
+
+  - label: "Concurrent record writes with embed_fields succeed"
+    parallel:
+      - label: "Create Alice record"
+        assert:
+          op: write_record
+          args:
+            mode: create
+            plugin_id: p146pool
+            plugin_instance: pool
+            table: contacts
+            data:
+              name: Alice Engineer ${run.id}
+              notes: TypeScript distributed systems and embedding reliability
+          expect_json_equals:
+            path: plugin_id
+            value: p146pool
+      - label: "Create Bob record"
+        assert:
+          op: write_record
+          args:
+            mode: create
+            plugin_id: p146pool
+            plugin_instance: pool
+            table: contacts
+            data:
+              name: Bob Designer ${run.id}
+              notes: Product design systems and usability research
+          expect_json_equals:
+            path: plugin_id
+            value: p146pool
+      - label: "Create Carol record"
+        assert:
+          op: write_record
+          args:
+            mode: create
+            plugin_id: p146pool
+            plugin_instance: pool
+            table: contacts
+            data:
+              name: Carol PM ${run.id}
+              notes: Roadmap planning and stakeholder communication
+          expect_json_equals:
+            path: plugin_id
+            value: p146pool
+
+  - label: "Semantic record search returns pooled vector results"
+    assert:
+      op: search_records
+      args:
+        plugin_id: p146pool
+        plugin_instance: pool
+        table: contacts
+        query: TypeScript distributed systems
+        include: [data]
+      expect_json_equals:
+        path: total
+        value: 3
+      expect_json_path:
+        - results[0].score
+        - results[0].data.name

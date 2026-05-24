@@ -120,6 +120,12 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 | INT-MCB-14 | T-Y-014 `flashquery list-tools` CLI emits paste-ready broker override YAML that re-parses into a valid config block. | cli_list_tools_paste_back    | 2026-05-19   | 2026-05-19   |
 | INT-MCB-15 | T-Y-015 macro extensions `_self`, `continue`, `break`, and `_exists()` compose in a source_ref rundoc workflow. | macro_extensions_compose_rundoc | 2026-05-19   | 2026-05-19   |
 
+## Phase 146 Embedding Reliability Foundation
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| IS-15 | T-Y-001: pooled record vector SQL supports concurrent `write_record` embed_fields writes and semantic `search_records` results with scores. | record_embed_pool_concurrency | 2026-05-24   | 2026-05-24   |
+
 ---
 
 ## IS — Search Coherence
