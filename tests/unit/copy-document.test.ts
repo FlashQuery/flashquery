@@ -97,8 +97,7 @@ describe('copy_document JSON output contract', () => {
   });
 
   it('uses JSON runtime envelopes for unexpected copy_document failures', () => {
-    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
-    const copySection = source.slice(source.indexOf("'copy_document'"), source.indexOf('// ─── Tool 6: reconcile_documents'));
+    const copySection = readFileSync('src/mcp/tools/documents/copy.ts', 'utf8');
 
     expect(copySection).toContain("details: { reason: 'lock_contention' }");
     expect(copySection).toContain("details: { field: 'tags', errors: [...validation.errors] }");
@@ -108,8 +107,7 @@ describe('copy_document JSON output contract', () => {
   });
 
   it('uses documentIdentification in copy_document and does not emit legacy key-value Title output', () => {
-    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
-    const copySection = source.slice(source.indexOf("'copy_document'"), source.indexOf('// ─── Tool 6: reconcile_documents'));
+    const copySection = readFileSync('src/mcp/tools/documents/copy.ts', 'utf8');
 
     expect(copySection).toContain('documentIdentification');
     expect(copySection).toContain('validateVaultPath(config.instance.vault.path, requestedCopyPath)');

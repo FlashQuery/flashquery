@@ -33,8 +33,8 @@ Phase 121 foundation workflows for MCP tool consolidation metadata, response hel
 | INT-foundation-frontmatter-1 | Foundation frontmatter constant guardrails are represented in integration coverage traceability for later migration phases. | foundation_json_response     | 2026-05-20   | 2026-05-20   |
 | INT-gdoc-error-1 | get_document JSON error-shape coverage proves missing identifiers use canonical `not_found` envelopes without runtime `isError:true`. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
 | INT-gdoc-error-2 | get_document JSON error-shape coverage proves invalid include/section requests use canonical `invalid_input` envelopes with conflict details preserved. | documents.integration.test.ts get_document canonical expected errors | 2026-05-12 |  |
-| INT-arch-1 | archive_document then search excludes the archived document from default document results while the archive response exposes JSON `status` and `archived_at`. | archive_status_field         | 2026-05-20   | 2026-05-20   |
-| INT-arch-2 | archive_document batch returns ordered JSON archive envelopes and get_document confirms archived status afterward. | archive_status_field         | 2026-05-20   | 2026-05-20   |
+| INT-arch-1 | archive_document then search excludes the archived document from default document results while the archive response exposes JSON `status` and `archived_at`. | archive_status_field         | 2026-05-25   | 2026-05-25   |
+| INT-arch-2 | archive_document batch returns ordered JSON archive envelopes and get_document confirms archived status afterward. | archive_status_field         | 2026-05-25   | 2026-05-25   |
 | INT-copy-1 | create -> copy -> get both documents proves copy_document returns JSON identification and the new copy has a distinct fq_id from the source. | documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
 | INT-copy-2 | copy_document destination conflict returns canonical JSON `conflict` with `details.reason="path_exists"` and no runtime error. | documents.integration.test.ts copy_document and move_document JSON output | 2026-05-12 |  |
 | INT-move-1 | create -> move -> get by fq_id proves move_document returns JSON identification with stable identity and updated path. | documents.integration.test.ts copy_document and move_document JSON output; move_document_to_new_directory | 2026-05-12 |  |
@@ -134,8 +134,8 @@ Verifies that content written through one path is discoverable through the expec
 
 | ID     | Behavior                                                             | Covered By                  | Date Updated | Last Passing |
 |--------|----------------------------------------------------------------------|-----------------------------|--------------|--------------|
-| IS-01  | Create document → appears in search_documents results (VALIDATED)                 | write_then_search            | 2026-05-20   | 2026-05-20   |
-| IS-02  | Create memory → appears in search_memories results (VALIDATED)                    | write_then_search            | 2026-05-20   | 2026-05-20   |
+| IS-01  | Create document → appears in search_documents results (VALIDATED)                 | write_then_search            | 2026-05-25   | 2026-05-25   |
+| IS-02  | Create memory → appears in search_memories results (VALIDATED)                    | write_then_search            | 2026-05-25   | 2026-05-25   |
 | IS-03  | Create document + memory → both appear in search_all results (VALIDATED)          | cross_domain_search_embeddings | 2026-05-22   | 2026-05-22   |
 | IS-04  | search_all with entity_types=['documents'] returns only documents (VALIDATED)     | cross_domain_search          | 2026-05-20   | 2026-05-20   |
 | IS-05  | search_all with entity_types=['memories'] returns only memories (VALIDATED)       | search_memories_only         | 2026-05-22   | 2026-05-22   |
@@ -158,7 +158,7 @@ content unaffected.
 | IA-04  | Archive memory → absent from search_memories (VALIDATED)                          | archive_memory               | 2026-05-20   | 2026-05-20   |
 | IA-05  | Archive memory → document with same topic still searchable (VALIDATED)            | archive_memory               | 2026-05-20   | 2026-05-20   |
 | IA-06  | Archive one of several tagged documents → others remain discoverable (VALIDATED)  | archive_partial_set          | 2026-05-20   | 2026-05-20   |
-| IA-07  | Archive document → get_document reflects status='archived' (VALIDATED)            | archive_status_field         | 2026-05-20   | 2026-05-20   |
+| IA-07  | Archive document → get_document reflects status='archived' (VALIDATED)            | archive_status_field         | 2026-05-25   | 2026-05-25   |
 | IA-08  | Create and archive document in nested vault path → remains correctly archived and retrievable (VALIDATED) | archive_nested_path          | 2026-05-20   | 2026-05-20   |
 
 ---
@@ -172,7 +172,7 @@ Verifies behaviors that span more than one FlashQuery domain (documents, memorie
 | IX-01  | Document and memory share a tag → search_all with that tag returns both (VALIDATED)      | cross_domain_search_embeddings | 2026-05-22   | 2026-05-22   |
 | IX-02  | Archived document → only memory found in search_all after archive (VALIDATED)            | archive_doc_memory_in_searchall | 2026-05-22   | 2026-05-22   |
 | IX-03  | Create via vault.write, update via update_document → search returns new content (VALIDATED) | write_document_then_search   | 2026-05-20   | 2026-05-20   |
-| IX-04  | Create document, get_document by fqc_id → returns correct content (VALIDATED)           | document_retrieval_by_id     | 2026-05-20   | 2026-05-20   |
+| IX-04  | Create document, get_document by fqc_id → returns correct content (VALIDATED)           | document_retrieval_by_id     | 2026-05-25   | 2026-05-25   |
 | IX-05  | Create document with tags, apply_tags to add more → all tags searchable (VALIDATED)     | apply_tags_composition       | 2026-05-20   | 2026-05-20   |
 | IX-06  | Get document by vault-relative path → returns same content as fqc_id retrieval (VALIDATED) | get_document_by_path         | 2026-05-20   | 2026-05-20   |
 | IX-07  | Get document returns all metadata fields (title, tags, status, fqc_id, path) (VALIDATED) | get_document_metadata        | 2026-05-20   | 2026-05-20   |
@@ -488,6 +488,9 @@ brokered tool-call cost tracing.
 | IS-16 | `get_llm_usage` by-purpose workflow remains stable after Phase 152 query typing cleanup. | llm_by_purpose_mode          | 2026-05-25   | 2026-05-25   |
 | IS-17 | `get_llm_usage` by-model workflow remains stable after Phase 152 grouping cleanup. | llm_by_model_mode            | 2026-05-25   | 2026-05-25   |
 | IS-18 | `write_record -> search_records` workflow remains stable after Phase 152 records timing instrumentation. | plugin_record_consolidation | 2026-05-25 | 2026-05-25 |
+| IS-19 | T-Y-004 / REQ-009: `write_document -> search_documents` workflow remains stable after documents decomposition. | write_then_search | 2026-05-25 |  |
+| IS-20 | T-Y-005 / REQ-009: archive status workflow remains stable after documents decomposition. | archive_status_field | 2026-05-25 |  |
+| IS-21 | T-Y-006 / REQ-009: `get_document` by `fq_id` remains stable after documents decomposition. | document_retrieval_by_id | 2026-05-25 |  |
 
 ---
 

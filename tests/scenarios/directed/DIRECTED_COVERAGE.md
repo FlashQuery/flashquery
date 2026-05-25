@@ -1984,6 +1984,10 @@ Behaviors verifying the `call_model` and `get_llm_usage` MCP tools introduced in
 | L-70 | `get_llm_usage` `mode=by_purpose` per-purpose subtotal aggregation — sum of `spend_usd` across every entry in `response.purposes[]` PLUS sum of `spend_usd` across every entry in `response.direct_model_calls[]` equals the `total_spend_usd` from the same period's `mode=summary` query within ±1e-9. Setup: seed N≥2 calls across at least 2 distinct purposes plus at least 1 direct model call; query both `mode=summary` and `mode=by_purpose` with the same period; assert `(sum of purposes[].spend_usd) + (sum of direct_model_calls[].spend_usd) ≈ summary.total_spend_usd`. Verifies that the by_purpose split is a true partition of the summary total, not a separate aggregation that could drift. | test_get_llm_usage_arithmetic | 2026-05-03 | 2026-05-07 |
 | D-71 | `get_llm_usage` `mode=by_purpose` public behavior remains stable after Phase 152 query typing cleanup. | test_get_llm_usage_by_purpose | 2026-05-25 | 2026-05-25 |
 | D-72 | `get_llm_usage` `mode=by_model` public behavior remains stable after Phase 152 grouping cleanup. | test_get_llm_usage_by_model | 2026-05-25 | 2026-05-25 |
+| D-73 | T-S-003 / REQ-009: `get_document` public behavior remains stable after documents decomposition. | test_consolidated_get_document | 2026-05-25 |  |
+| D-74 | T-S-004 / REQ-009: archive/search document behavior remains stable after documents decomposition. | test_document_archive_and_search | 2026-05-25 |  |
+| D-75 | T-S-005 / REQ-009: copy/move document behavior remains stable after documents decomposition. | test_document_copy_and_move | 2026-05-25 |  |
+| D-76 | T-S-006 / REQ-009: write/update/frontmatter behavior remains stable after documents decomposition. | test_content_frontmatter_ops | 2026-05-25 |  |
 
 ### 15.2 Embedding Migration (Phase 104)
 

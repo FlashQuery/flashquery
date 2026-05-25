@@ -157,11 +157,7 @@ describe('buildMetadataEnvelope (GDOC-02, GDOC-07)', () => {
 
 describe('get_document numeric parameter validation contract', () => {
   it('documents occurrence and max_depth validation as canonical invalid_input handler checks', () => {
-    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
-    const getSection = source.slice(
-      source.indexOf("'get_document'"),
-      source.indexOf('// ─── Tool 3: update_document')
-    );
+    const getSection = readFileSync('src/mcp/tools/documents/get.ts', 'utf8');
 
     expect(getSection).toContain("message: 'occurrence must be a positive integer.'");
     expect(getSection).toContain("details: { field: 'occurrence', value: occurrence }");

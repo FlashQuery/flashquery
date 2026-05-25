@@ -106,4 +106,59 @@ describe('codebase audit remaining remediation guards', () => {
   it('T-U-025: records search timing TODO markers are removed', () => {
     expect(read('src/mcp/tools/records.ts')).not.toContain('TODO LOG-01');
   });
+
+  it('T-U-026: document tool entrypoint remains thin and delegates moved modules', () => {
+    const source = read('src/mcp/tools/documents.ts');
+    const lines = source.split('\n').length;
+    const movedModules = [
+      './documents/write.js',
+      './documents/get.js',
+      './documents/archive.js',
+      './documents/remove.js',
+      './documents/copy.js',
+      './documents/move.js',
+    ];
+
+    expect(source).toContain('export function registerDocumentTools');
+    expect(lines).toBeLessThanOrEqual(160);
+    for (const modulePath of movedModules) {
+      expect(source).toContain(modulePath);
+    }
+    expect(source).toContain('registerWriteDocumentTool(server, deps)');
+    expect(source).toContain('registerGetDocumentTool(server, deps)');
+    expect(source).toContain('registerArchiveDocumentTool(server, deps)');
+    expect(source).toContain('registerRemoveDocumentTool(server, deps)');
+    expect(source).toContain('registerCopyDocumentTool(server, deps)');
+    expect(source).toContain('registerMoveDocumentTool(server, deps)');
+    expect(source).not.toContain("server.registerTool(\n    'write_document'");
+    expect(source).not.toContain("server.registerTool(\n    'move_document'");
+  });
+
+  it('T-U-027: document tool implementation files stay below the REQ-009 threshold or justify size', () => {
+    const documentsDir = join(repoRoot, 'src/mcp/tools/documents');
+    const implementationFiles = readdirSync(documentsDir)
+      .filter((entry) => entry.endsWith('.ts'))
+      .map((entry) => `src/mcp/tools/documents/${entry}`);
+    const violations = implementationFiles.filter((relativePath) => {
+      const source = read(relativePath);
+      return source.split('\n').length > 500 && !source.includes('REQ-009 size justification');
+    });
+
+    expect(violations).toEqual([]);
+  });
+
+  it('T-U-028: document/plugin cycle-prone imports do not reappear in shared document wiring', () => {
+    const sharedFiles = [
+      'src/mcp/tools/documents.ts',
+      'src/mcp/tools/documents/deps.ts',
+      'src/mcp/tools/documents/helpers.ts',
+    ];
+
+    for (const file of sharedFiles) {
+      const source = read(file);
+      expect(source).not.toContain('plugins/manager');
+      expect(source).not.toContain('pluginManager');
+      expect(source).not.toContain('getFolderClaimsMap');
+    }
+  });
 });

@@ -47,7 +47,10 @@ describe('remove_document JSON contract', () => {
   });
 
   it('registers remove_document with trash, archive, batch, and basename safety semantics', () => {
-    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
+    const source = [
+      readFileSync('src/mcp/tools/documents/remove.ts', 'utf8'),
+      readFileSync('src/mcp/tools/documents/helpers.ts', 'utf8'),
+    ].join('\n');
 
     expect(source).toContain("'remove_document'");
     expect(source).toContain('trashFolder');
@@ -59,7 +62,10 @@ describe('remove_document JSON contract', () => {
   });
 
   it('rejects unsafe trash paths without introducing removed schema fields', () => {
-    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
+    const source = [
+      readFileSync('src/mcp/tools/documents/remove.ts', 'utf8'),
+      readFileSync('src/mcp/tools/documents/helpers.ts', 'utf8'),
+    ].join('\n');
 
     expect(source).toContain('path_traversal');
     expect(source).toContain('unsafe_trash');
@@ -69,7 +75,7 @@ describe('remove_document JSON contract', () => {
   });
 
   it('rolls back archive mutations when final filesystem removal fails', () => {
-    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
+    const source = readFileSync('src/mcp/tools/documents/remove.ts', 'utf8');
 
     expect(source).toContain('archivedFileWritten');
     expect(source).toContain('archivedRowWritten');

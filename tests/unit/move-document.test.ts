@@ -95,8 +95,7 @@ describe('move_document JSON output contract', () => {
   });
 
   it('uses JSON documentIdentification in move_document and removes old prose response text', () => {
-    const source = readFileSync('src/mcp/tools/documents.ts', 'utf8');
-    const moveSection = source.slice(source.indexOf("'move_document'"));
+    const moveSection = readFileSync('src/mcp/tools/documents/move.ts', 'utf8');
 
     expect(moveSection).toContain('documentIdentification');
     expect(moveSection).toContain('validateVaultPath(vaultRoot, destDirRel)');
