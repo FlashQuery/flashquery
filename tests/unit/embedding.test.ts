@@ -75,6 +75,48 @@ describe('createEmbeddingProvider', () => {
     expect(provider.getDimensions()).toBe(768);
   });
 
+  it('throws synchronously when OpenAI config is missing apiKey', () => {
+    expect(() =>
+      createEmbeddingProvider({
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        dimensions: 1536,
+      })
+    ).toThrow(/openai.*apiKey/i);
+  });
+
+  it('throws synchronously when OpenAI config has an empty apiKey', () => {
+    expect(() =>
+      createEmbeddingProvider({
+        provider: 'openai',
+        model: 'text-embedding-3-small',
+        apiKey: '   ',
+        dimensions: 1536,
+      })
+    ).toThrow(/openai.*apiKey/i);
+  });
+
+  it('throws synchronously when OpenRouter config is missing apiKey', () => {
+    expect(() =>
+      createEmbeddingProvider({
+        provider: 'openrouter',
+        model: 'text-embedding-3-small',
+        dimensions: 1536,
+      })
+    ).toThrow(/openrouter.*apiKey/i);
+  });
+
+  it('throws synchronously when OpenRouter config has an empty apiKey', () => {
+    expect(() =>
+      createEmbeddingProvider({
+        provider: 'openrouter',
+        model: 'text-embedding-3-small',
+        apiKey: '',
+        dimensions: 1536,
+      })
+    ).toThrow(/openrouter.*apiKey/i);
+  });
+
   it('throws for unsupported provider', () => {
     expect(() =>
       createEmbeddingProvider({
