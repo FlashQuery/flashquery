@@ -192,13 +192,23 @@ export class FallbackEmbeddingProvider implements EmbeddingProvider {
 // createEmbeddingProvider factory
 // ─────────────────────────────────────────────────────────────────────────────
 
+function requireApiKey(
+  config: NonNullable<FlashQueryConfig['embedding']>,
+  provider: 'openai' | 'openrouter'
+): string {
+  if (!config.apiKey?.trim()) {
+    throw new Error(`Embedding error: ${provider} provider requires apiKey in flashquery.yaml.`);
+  }
+  return config.apiKey;
+}
+
 export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['embedding']>): EmbeddingProvider {
   switch (config.provider) {
     case 'openai':
       return new OpenAICompatibleProvider(
         config.endpoint ?? 'https://api.openai.com',
         config.model,
-        config.apiKey!,
+        requireApiKey(config, 'openai'),
         config.dimensions,
         'OpenAI',
         config.dimensions !== 1536
@@ -207,7 +217,7 @@ export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['em
       return new OpenAICompatibleProvider(
         config.endpoint ?? 'https://openrouter.ai/api',
         config.model,
-        config.apiKey!,
+        requireApiKey(config, 'openrouter'),
         config.dimensions,
         'OpenRouter',
         config.dimensions !== 1536
