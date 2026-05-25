@@ -47,7 +47,7 @@
 | 147 | Tooling and Dependency Hygiene | 4/4 | Complete    | 2026-05-24 |
 | 148 | MCP Lifecycle and Shutdown | 4/4 | Complete    | 2026-05-24 |
 | 149 | Cycle Breaks | 4/4 | Complete    | 2026-05-24 |
-| 150 | Config Metadata Typing | 1/1 | Complete   | 2026-05-25 |
+| 150 | Config Metadata Typing | 1/1 | Complete    | 2026-05-25 |
 
 ## Phase Details
 
