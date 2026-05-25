@@ -51,6 +51,7 @@ const config: KnipConfig = {
     'src/mcp/tool-metadata.ts': ['types'],
     'src/mcp/tools/documents.ts': ['exports'],
     'src/mcp/utils/document-output.ts': ['exports', 'types'],
+    'src/mcp/utils/resolve-document.ts': ['types'],
     'src/mcp/utils/markdown-sections.ts': ['types'],
     'src/mcp/utils/markdown-utils.ts': ['exports'],
     'src/mcp/utils/memory-output.ts': ['exports'],

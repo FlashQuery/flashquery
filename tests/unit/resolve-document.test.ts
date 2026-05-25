@@ -19,7 +19,9 @@ vi.mock('node:fs', () => ({
 }));
 
 vi.mock('node:fs/promises', () => ({
+  mkdir: vi.fn().mockResolvedValue(undefined),
   readFile: vi.fn(),
+  rename: vi.fn().mockResolvedValue(undefined),
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
@@ -435,20 +437,18 @@ describe('TSA-03/TSA-05: targetedScan', () => {
       error: null,
     });
 
-    const { vaultManager: vm } = await import('../../src/storage/vault.js');
-
     await targetedScan(config, supabase as never, RESOLVED_NO_ID, 'test-hash', logger);
 
-    // Verify writeMarkdown was called
-    expect(vm.writeMarkdown).toHaveBeenCalledOnce();
+    // Verify the updated markdown was written atomically
+    expect(fsPromises.writeFile).toHaveBeenCalledOnce();
 
-    // Check frontmatter arg — title and tags should remain unchanged
-    const [, frontmatterArg] = (vm.writeMarkdown as ReturnType<typeof vi.fn>).mock.calls[0] as [string, Record<string, unknown>, string];
-    expect(frontmatterArg[FM.TITLE]).toBe('Original Title');
-    expect(frontmatterArg[FM.TAGS]).toEqual([expect.anything(), expect.anything()]); // unchanged
-    expect(frontmatterArg[FM.ID]).toBe(SAMPLE_UUID);
+    // Check serialized frontmatter — title and tags should remain unchanged
+    const [, serialized] = (fsPromises.writeFile as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string, string];
+    expect(serialized).toContain('fq_title: Original Title');
+    expect(serialized).toContain('fq_tags:');
+    expect(serialized).toContain(`fq_id: ${SAMPLE_UUID}`);
     // SPEC-08: content_hash must NOT appear in vault frontmatter — it is DB-only
-    expect(frontmatterArg.content_hash).toBeUndefined();
+    expect(serialized).not.toContain('content_hash');
   });
 
   // ── TSA-05: Mutex Coordination ─────────────────────────────────────────────

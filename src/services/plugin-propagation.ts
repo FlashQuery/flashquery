@@ -1,8 +1,12 @@
-import type { SupabaseClient } from '@supabase/supabase-js';
 import pg from 'pg';
-import type { Logger } from '../logging/logger.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
 import { ensureLastSeenColumn } from './plugin-table-schema.js';
+
+interface PropagationLogger {
+  debug(message: string): void;
+  info(message: string): void;
+  warn(message: string): void;
+}
 
 /**
  * DbRow shape — matches the schema of fqc_documents table rows
@@ -26,7 +30,7 @@ export interface DbRow {
  * tables that have an fqc_id column. No hardcoded table list required.
  *
  * Parameters:
- * - supabase: SupabaseClient (used to get databaseUrl config if needed in future)
+ * - supabase: reserved for future Supabase-backed propagation context
  * - oldFqcId: UUID of the retiring document (nullable for fallback)
  * - newFqcId: UUID of the replacement document
  * - documentPath: vault path of the document being retired (for logging)
@@ -48,12 +52,12 @@ export interface DbRow {
  * - All errors caught and logged (no unhandled promise rejections)
  */
 export async function propagateFqcIdChange(
-  supabase: SupabaseClient,
+  supabase: unknown,
   oldFqcId: string | null,
   newFqcId: string,
   documentPath: string,
   pathToRow: Map<string, DbRow>,
-  logger_inst: Logger,
+  logger_inst: PropagationLogger,
   databaseUrl?: string,
 ): Promise<void> {
   // ── Step 1: Determine old fqc_id (D-02 fallback logic) ────────────────────

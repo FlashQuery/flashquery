@@ -10,10 +10,18 @@
  */
 
 import type { FlashQueryConfig } from '../config/loader.js';
-import { resolveAndBuildDocument, DocumentRequestError } from '../mcp/utils/document-output.js';
+import {
+  resolveAndBuildDocument,
+  DocumentRequestError,
+  type ScheduleDocumentEmbeddingInput,
+} from '../mcp/utils/document-output.js';
 import type { logger } from '../logging/logger.js';
 import type { supabaseManager } from '../storage/supabase.js';
 import type { embeddingProvider } from '../embedding/provider.js';
+import {
+  documentEmbeddingTarget,
+  scheduleBackgroundEmbedding,
+} from '../embedding/background-embed.js';
 import {
   isReferenceFailureReason,
   type ReferenceFailureReason,
@@ -24,6 +32,37 @@ import {
   DocumentNotFoundError,
   DocumentReadError,
 } from '../mcp/utils/resolve-document.js';
+
+async function scheduleDocumentEmbedding({
+  instanceId,
+  id,
+  label,
+  embedText,
+  provider,
+  supabase,
+}: ScheduleDocumentEmbeddingInput): Promise<void> {
+  await scheduleBackgroundEmbedding({
+    target: documentEmbeddingTarget({ instanceId, id, label }),
+    embedText,
+    provider,
+    supabase,
+  });
+}
+
+function documentResolutionDeps(
+  config: FlashQueryConfig,
+  sm: typeof supabaseManager,
+  ep: typeof embeddingProvider,
+  log: typeof logger
+) {
+  return {
+    config,
+    supabaseManager: sm,
+    embeddingProvider: ep,
+    logger: log,
+    scheduleDocumentEmbedding,
+  };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Exported types
@@ -317,7 +356,7 @@ export async function resolveReferences(
           effectiveMaxDepth: 6,
           followRef: p.pointer,
         },
-        { config, supabaseManager: sm, embeddingProvider: ep, logger: log }
+        documentResolutionDeps(config, sm, ep, log)
       );
       let content: string;
       let resolvedTo: string | undefined;
@@ -767,7 +806,7 @@ async function resolveTemplateSource(
       effectiveMaxDepth: 6,
       followRef: undefined,
     },
-    { config, supabaseManager: sm, embeddingProvider: ep, logger: log }
+    documentResolutionDeps(config, sm, ep, log)
   );
 }
 
@@ -788,7 +827,7 @@ async function resolvePlainDocumentContent(
       effectiveMaxDepth: 6,
       followRef: undefined,
     },
-    { config, supabaseManager: sm, embeddingProvider: ep, logger: log }
+    documentResolutionDeps(config, sm, ep, log)
   );
   return {
     content: (result.body as string | undefined) ?? '',
@@ -821,7 +860,7 @@ async function resolveItemStringContent(
       effectiveMaxDepth: 6,
       followRef: parsed.pointer,
     },
-    { config, supabaseManager: sm, embeddingProvider: ep, logger: log }
+    documentResolutionDeps(config, sm, ep, log)
   );
 
   if (parsed.pointer) {

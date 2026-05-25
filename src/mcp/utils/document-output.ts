@@ -17,20 +17,47 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import matter from 'gray-matter';
-import type { FlashQueryConfig } from '../../config/loader.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { FM } from '../../constants/frontmatter-fields.js';
-import { DocumentReadError, resolveDocumentIdentifier, targetedScan } from './resolve-document.js';
-import type { supabaseManager } from '../../storage/supabase.js';
-import type { embeddingProvider } from '../../embedding/provider.js';
-import {
-  documentEmbeddingTarget,
-  scheduleBackgroundEmbedding,
-} from '../../embedding/background-embed.js';
-import type { logger } from '../../logging/logger.js';
+import { DocumentReadError, resolveDocumentIdentifier, targetedScan } from './document-resolver-primitives.js';
 import type { ErrorEnvelope } from './response-formats.js';
 import { extractHeadings } from './markdown-utils.js';
 import { computeSectionChars, extractSection, extractMultipleSections, findHeadingOccurrence, SectionExtractError } from './markdown-sections.js';
 import { isValidUuid } from '../../utils/uuid.js';
+
+interface DocumentOutputConfig {
+  instance: {
+    id: string;
+    vault: {
+      path: string;
+      markdownExtensions: string[];
+    };
+  };
+}
+
+interface DocumentOutputLogger {
+  info(message: string): void;
+  debug(message: string): void;
+  warn(message: string): void;
+}
+
+interface DocumentOutputEmbeddingProvider {
+  embed(input: string): Promise<number[]>;
+  getDimensions(): number;
+}
+
+interface DocumentOutputSupabaseManager {
+  getClient(): SupabaseClient;
+}
+
+export interface ScheduleDocumentEmbeddingInput {
+  instanceId: string;
+  id: string;
+  label: string;
+  embedText: string;
+  provider: DocumentOutputEmbeddingProvider;
+  supabase: SupabaseClient;
+}
 
 export interface DocumentEnvelope {
   identifier: string;
@@ -368,10 +395,11 @@ export async function resolveAndBuildDocument(
     followRef: string | undefined;
   },
   deps: {
-    config: FlashQueryConfig;
-    supabaseManager: typeof supabaseManager;
-    embeddingProvider: typeof embeddingProvider;
-    logger: typeof logger;
+    config: DocumentOutputConfig;
+    supabaseManager: DocumentOutputSupabaseManager;
+    embeddingProvider: DocumentOutputEmbeddingProvider;
+    logger: DocumentOutputLogger;
+    scheduleDocumentEmbedding(input: ScheduleDocumentEmbeddingInput): Promise<void>;
   }
 ): Promise<Record<string, unknown>> {
   const { effectiveInclude, sectionsList, effectiveIncludeNested, occurrence, effectiveMaxDepth, followRef } = options;
@@ -435,12 +463,10 @@ export async function resolveAndBuildDocument(
     if (hashErr) {
       log.warn(`get_document: hash update failed for ${relativePath}: ${hashErr.message}`);
     } else {
-      await scheduleBackgroundEmbedding({
-        target: documentEmbeddingTarget({
-          instanceId: cfg.instance.id,
-          id: fqcId,
-          label: relativePath,
-        }),
+      await deps.scheduleDocumentEmbedding({
+        instanceId: cfg.instance.id,
+        id: fqcId,
+        label: relativePath,
         embedText: `${docTitle}\n\n${content}`,
         provider: ep,
         supabase: sm.getClient(),

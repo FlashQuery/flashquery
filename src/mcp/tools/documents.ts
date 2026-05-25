@@ -36,6 +36,7 @@ import {
   validateParameterCombinations,
   resolveAndBuildDocument,
   DocumentRequestError,
+  type ScheduleDocumentEmbeddingInput,
 } from '../utils/document-output.js';
 import {
   buildDocumentWriteResult,
@@ -77,6 +78,22 @@ function isAmbiguousDocumentIdentifierError(err: unknown): err is Error & { matc
 function stringField(record: object, key: string, fallback: string): string {
   const value = (record as Record<string, unknown>)[key];
   return typeof value === 'string' && value.length > 0 ? value : fallback;
+}
+
+async function scheduleDocumentEmbedding({
+  instanceId,
+  id,
+  label,
+  embedText,
+  provider,
+  supabase,
+}: ScheduleDocumentEmbeddingInput): Promise<void> {
+  await scheduleBackgroundEmbedding({
+    target: documentEmbeddingTarget({ instanceId, id, label }),
+    embedText,
+    provider,
+    supabase,
+  });
 }
 
 interface TrashDestination {
@@ -638,7 +655,7 @@ export function registerDocumentTools(server: McpServer, config: FlashQueryConfi
         effectiveMaxDepth,
         followRef,
       };
-      const deps = { config, supabaseManager, embeddingProvider, logger };
+      const deps = { config, supabaseManager, embeddingProvider, logger, scheduleDocumentEmbedding };
 
       if (Array.isArray(identifiers)) {
         // FREF-04 / FREF-05: batch — per-element partial failure; outer call never isError
