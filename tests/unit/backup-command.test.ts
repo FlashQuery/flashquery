@@ -81,7 +81,6 @@ vi.mock('../../src/storage/vault.js', () => ({
   initVault: vi.fn(),
   vaultManager: { readMarkdown: vi.fn().mockResolvedValue({ data: {}, content: '' }) },
 }));
-vi.mock('../../src/projects/seeder.js', () => ({ initProjects: vi.fn() }));
 vi.mock('../../src/embedding/provider.js', () => ({
   initEmbedding: vi.fn(),
   embeddingProvider: { embed: vi.fn().mockResolvedValue([]) },

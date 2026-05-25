@@ -12,6 +12,19 @@ import { createPgClientIPv4 } from '../utils/pg-client.js';
 // GitManagerImpl
 // ─────────────────────────────────────────────────────────────────────────────
 
+function safeCleanupError(err: unknown): string {
+  if (err instanceof Error) {
+    return `${err.name}: ${redactCredentialFragments(err.message)}`;
+  }
+  return redactCredentialFragments(String(err));
+}
+
+function redactCredentialFragments(value: string): string {
+  return value
+    .replace(/postgres(?:ql)?:\/\/\S+/gi, '[redacted-database-url]')
+    .replace(/password=[^\s;,)]+/gi, 'password=[redacted]');
+}
+
 export class GitManagerImpl {
   private vaultPath: string;
   private config: FlashQueryConfig['git'];
@@ -110,7 +123,13 @@ export class GitManagerImpl {
       logger.info(`Git: backup written to ${dumpRelPath} (${tablesResult.rows.length} tables)`);
       return dumpRelPath;
     } finally {
-      await pgClient.end().catch(() => {});
+      try {
+        await pgClient.end();
+      } catch (err) {
+        logger.debug(
+          `Git: pg client cleanup failed after database backup — ${safeCleanupError(err)}`
+        );
+      }
     }
   }
 
