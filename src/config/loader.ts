@@ -369,6 +369,23 @@ export interface FlashQueryConfig {
   logging: { level: 'debug' | 'info' | 'warn' | 'error'; output: 'stdout' | 'file'; file?: string };
 }
 
+interface ConfigRuntimeMetadata {
+  deprecationWarnings: string[];
+  startupWarnings: string[];
+  resolvedHostToolExposure: ResolvedHostToolExposure;
+  rawLlmApiKeyRefs: Map<string, string>;
+}
+
+const configRuntimeMetadata = new WeakMap<FlashQueryConfig, ConfigRuntimeMetadata>();
+
+function setConfigRuntimeMetadata(config: FlashQueryConfig, metadata: ConfigRuntimeMetadata): void {
+  configRuntimeMetadata.set(config, metadata);
+}
+
+function getConfigRuntimeMetadata(config: FlashQueryConfig): ConfigRuntimeMetadata | undefined {
+  return configRuntimeMetadata.get(config);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Environment variable expansion
 // ─────────────────────────────────────────────────────────────────────────────
@@ -960,17 +977,12 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     config.instance.vault.path = resolve(configDir, config.instance.vault.path);
   }
 
-  // 10. Emit warnings (deferred until after validation — caller logs them)
-  (config as unknown as Record<string, unknown>)['_deprecationWarnings'] = [
-    ...(extensionWarning ? [extensionWarning] : []),
-  ];
-  (config as unknown as Record<string, unknown>)['_startupWarnings'] = resolvedHostToolExposure.warnings;
-  (config as unknown as Record<string, unknown>)['_resolvedHostToolExposure'] = resolvedHostToolExposure;
-
-  // Attach raw LLM api_key refs (used by syncLlmConfigToDb in src/llm/config-sync.ts).
-  // Stored as a runtime-only Map alongside `_deprecationWarnings`. Not part of the
-  // public FlashQueryConfig type — consumers use getLlmApiKeyRefs(config) below.
-  (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'] = rawLlmApiKeyRefs;
+  setConfigRuntimeMetadata(config, {
+    deprecationWarnings: [...(extensionWarning ? [extensionWarning] : [])],
+    startupWarnings: resolvedHostToolExposure.warnings,
+    resolvedHostToolExposure,
+    rawLlmApiKeyRefs,
+  });
 
   const capabilityErrors = validateAllPurposeMode2Admissions(config);
   if (capabilityErrors.length > 0) {
@@ -985,18 +997,16 @@ export function loadConfig(configPath: string): FlashQueryConfig {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getDeprecationWarnings(config: FlashQueryConfig): string[] {
-  return ((config as unknown as Record<string, unknown>)['_deprecationWarnings'] as string[]) ?? [];
+  return getConfigRuntimeMetadata(config)?.deprecationWarnings ?? [];
 }
 
 export function getStartupWarnings(config: FlashQueryConfig): string[] {
-  return ((config as unknown as Record<string, unknown>)['_startupWarnings'] as string[]) ?? [];
+  return getConfigRuntimeMetadata(config)?.startupWarnings ?? [];
 }
 
 export function getResolvedHostToolExposure(config: FlashQueryConfig): ResolvedHostToolExposure {
-  const resolved = (config as unknown as Record<string, unknown>)['_resolvedHostToolExposure'];
-  if (resolved && typeof resolved === 'object') {
-    return resolved as ResolvedHostToolExposure;
-  }
+  const resolved = getConfigRuntimeMetadata(config)?.resolvedHostToolExposure;
+  if (resolved) return resolved;
   return resolveHostToolExposure(config.hostMcpTools);
 }
 
@@ -1012,7 +1022,5 @@ export function getResolvedHostToolExposure(config: FlashQueryConfig): ResolvedH
  * Returns an empty Map when no llm: section is configured.
  */
 export function getLlmApiKeyRefs(config: FlashQueryConfig): Map<string, string> {
-  const map = (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'];
-  if (map instanceof Map) return map as Map<string, string>;
-  return new Map<string, string>();
+  return getConfigRuntimeMetadata(config)?.rawLlmApiKeyRefs ?? new Map<string, string>();
 }
