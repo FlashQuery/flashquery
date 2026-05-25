@@ -116,6 +116,10 @@ export function invalidateReconciliationCache(): void {
   reconciliationTimestamps.clear();
 }
 
+type FrontmatterReadResult =
+  | { ok: true; data: Record<string, unknown> }
+  | { ok: false };
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Staleness cache helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -243,16 +247,21 @@ function toAbsolutePath(relativePath: string): string {
   return vaultManager.resolveVaultPath(relativePath);
 }
 
-async function readFrontmatterFromDisk(relativePath: string): Promise<Record<string, unknown>> {
+async function tryReadFrontmatterFromDisk(relativePath: string): Promise<FrontmatterReadResult> {
   try {
     const absPath = toAbsolutePath(relativePath);
     const raw = await readFile(absPath, 'utf-8');
     const parsed = matter(raw);
-    return (parsed.data ?? {});
+    return { ok: true, data: parsed.data ?? {} };
   } catch (err) {
     logger.debug(`[RECON] Failed to read frontmatter for ${relativePath}: ${err instanceof Error ? err.message : String(err)}`);
-    return {};
+    return { ok: false };
   }
+}
+
+async function readFrontmatterFromDisk(relativePath: string): Promise<Record<string, unknown>> {
+  const result = await tryReadFrontmatterFromDisk(relativePath);
+  return result.ok ? result.data : {};
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -309,8 +318,9 @@ export async function executeReconciliationActions(
     // ── (1) resurrected — un-archive plugin row, re-apply field_map, insert pending review ──
     for (const ref of result.resurrected) {
       const policy = policies.get(ref.typeId);
-      const frontmatter = await readFrontmatterFromDisk(ref.path);
-      const fieldMapCols = applyFieldMap(policy?.field_map, frontmatter);
+      const frontmatter = await tryReadFrontmatterFromDisk(ref.path);
+      if (!frontmatter.ok) continue;
+      const fieldMapCols = applyFieldMap(policy?.field_map, frontmatter.data);
 
       const extraCols = Object.keys(fieldMapCols);
       const setClauses = [
@@ -366,7 +376,9 @@ export async function executeReconciliationActions(
       }
 
       // OQ-3: Check existing frontmatter ownership BEFORE writing
-      const existingFm = await readFrontmatterFromDisk(doc.path);
+      const existingFrontmatter = await tryReadFrontmatterFromDisk(doc.path);
+      if (!existingFrontmatter.ok) continue;
+      const existingFm = existingFrontmatter.data;
       const existingOwner = existingFm[FM.OWNER];
       const shouldWriteFrontmatter = !existingOwner || existingOwner === pluginId;
 
@@ -381,7 +393,11 @@ export async function executeReconciliationActions(
       }
 
       // Re-read frontmatter for field_map application
-      const postWriteFm = shouldWriteFrontmatter ? await readFrontmatterFromDisk(doc.path) : existingFm;
+      const postWriteFrontmatter = shouldWriteFrontmatter
+        ? await tryReadFrontmatterFromDisk(doc.path)
+        : existingFrontmatter;
+      if (!postWriteFrontmatter.ok) continue;
+      const postWriteFm = postWriteFrontmatter.data;
       const fieldMapCols = applyFieldMap(policy.field_map, postWriteFm);
 
       // PIR-02 + ownership update: combine content_hash update and ownership write into a
@@ -526,8 +542,9 @@ export async function executeReconciliationActions(
     for (const ref of result.modified) {
       const policy = policies.get(ref.typeId);
       if (policy?.on_modified === 'sync-fields') {
-        const fm = await readFrontmatterFromDisk(ref.path);
-        const fieldMapCols = applyFieldMap(policy.field_map, fm);
+        const fm = await tryReadFrontmatterFromDisk(ref.path);
+        if (!fm.ok) continue;
+        const fieldMapCols = applyFieldMap(policy.field_map, fm.data);
         const extraCols = Object.keys(fieldMapCols);
         const setClauses = [
           'last_seen_updated_at = $2',

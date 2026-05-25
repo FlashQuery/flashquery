@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFile } from 'node:fs/promises';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Module mocks (must be before imports)
@@ -185,6 +186,7 @@ function setupPgClient(pluginTableRows: PluginRow[], fqcDocRows: FqcDocRow[] = [
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(readFile).mockResolvedValue('---\nfqc_id: test-id\n---\nContent');
   invalidateReconciliationCache();
   process.env.DATABASE_URL = 'postgres://fake/test';
 });
@@ -789,5 +791,63 @@ describe('executeReconciliationActions — move/resurrection timestamp idempoten
     );
     expect(updateCall).toBeDefined();
     expect(updateCall![1]).toEqual(['row-resurrected', 'CRM/Contacts/restored.md', resurrectedUpdatedAt]);
+  });
+
+  it('does not null mapped columns or advance modified rows when frontmatter read fails', async () => {
+    vi.mocked(readFile).mockRejectedValueOnce(new Error('temporary read failure'));
+    vi.mocked(pluginManager.getEntry).mockReturnValue({
+      plugin_id: 'crm',
+      plugin_instance: 'default',
+      table_prefix: 'fqcp_crm_default_',
+      schema: {
+        plugin: { id: 'crm', name: 'CRM', version: '1.0' },
+        tables: [],
+        documents: {
+          types: [
+            {
+              id: 'contact',
+              folder: 'CRM/Contacts',
+              access: 'read-write',
+              on_added: 'auto-track',
+              on_moved: 'keep-tracking',
+              on_modified: 'sync-fields',
+              track_as: 'contacts',
+              field_map: { name: 'name' },
+            },
+          ],
+        },
+      },
+    } as any);
+
+    const pgQueryMock = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+    vi.mocked(createPgClientIPv4).mockReturnValue({
+      connect: vi.fn().mockResolvedValue(undefined),
+      query: pgQueryMock,
+      end: vi.fn().mockResolvedValue(undefined),
+    } as any);
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue({
+        insert: vi.fn().mockResolvedValue({ data: null, error: null }),
+      }),
+    } as any);
+
+    await executeReconciliationActions({
+      added: [],
+      resurrected: [],
+      deleted: [],
+      disassociated: [],
+      moved: [],
+      modified: [{
+        fqcId: 'doc-modified',
+        path: 'CRM/Contacts/read-fail.md',
+        typeId: 'contact',
+        tableName: 'fqcp_crm_default_contacts',
+        pluginRowId: 'row-modified',
+        updatedAt: '2026-04-20T13:00:00Z',
+      }],
+      unchanged: 0,
+    }, 'crm', 'default');
+
+    expect(pgQueryMock).not.toHaveBeenCalled();
   });
 });
