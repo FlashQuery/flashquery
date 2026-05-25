@@ -533,6 +533,15 @@ describe('resolvePath', () => {
     const resolved = vaultManager.resolvePath('Work: Stuff', 'Client: A', 'note.md');
     expect(resolved).toBe(join(testDir, 'Work Stuff', 'Client A', 'note.md'));
   });
+
+  it('resolves nested vault-relative paths under the vault root', () => {
+    const resolved = vaultManager.resolveVaultPath('plugins/contacts/contact.md');
+    expect(resolved).toBe(join(testDir, 'plugins', 'contacts', 'contact.md'));
+  });
+
+  it('rejects vault-relative paths that escape the vault root', () => {
+    expect(() => vaultManager.resolveVaultPath('../outside.md')).toThrow(/outside vault root/i);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
