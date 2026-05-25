@@ -400,7 +400,7 @@ export async function resolveReferences(
           return out;
         }
       } else {
-        content = (result.body as string | undefined) ?? '';
+        content = result.body ?? '';
         const resultPath = typeof result.path === 'string' ? result.path : undefined;
         if (resultPath !== undefined && normalizedReferencePath(resultPath) !== normalizedReferencePath(p.identifier)) {
           resolvedTo = resultPath;
@@ -830,7 +830,7 @@ async function resolvePlainDocumentContent(
     documentResolutionDeps(config, sm, ep, log)
   );
   return {
-    content: (result.body as string | undefined) ?? '',
+    content: result.body ?? '',
     path: typeof result.path === 'string' ? result.path : identifier,
   };
 }
@@ -884,7 +884,7 @@ async function resolveItemStringContent(
     };
   }
 
-  const body = (result.body as string | undefined) ?? '';
+  const body = result.body ?? '';
   const resultPath = typeof result.path === 'string' ? result.path : parsed.identifier;
   if (isTemplateDocument(result)) {
     const rendered = await renderTemplateReference(body, result, {}, config, sm, ep, log);

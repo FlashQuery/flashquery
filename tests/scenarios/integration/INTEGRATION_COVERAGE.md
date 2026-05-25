@@ -228,9 +228,9 @@ multi-step workflows involving plugin tables, record tools, scan, and frontmatte
 | IR-11  | Document moved between plugin-owned folders reports moved in source table, not added in destination (VALIDATED)  | ir11_plugin_cross_folder_move | 2026-05-20   | 2026-05-20   |
 | IR-12  | Pending review items appear in record tool response even when reconciliation staleness check skips diff (VALIDATED) | ir12_plugin_pending_review_staleness | 2026-05-20   | 2026-05-20   |
 | IR-13  | Frontmatter-based type discovery: document outside all watched folders picked up via fqc_type (VALIDATED)        | ir13_plugin_frontmatter_discovery | 2026-05-20   | 2026-05-20   |
-| IR-14  | `register_plugin -> write_record(create) -> search_records` final plugin-record workflow (VALIDATED)             | plugin_record_consolidation  | 2026-05-20   | 2026-05-20   |
-| IR-15  | `write_record(update) -> plugin reconciliation -> clear_pending_reviews(action:"list")` final workflow (VALIDATED) | plugin_record_consolidation  | 2026-05-20   | 2026-05-20   |
-| IR-16  | `write_record -> archive_record -> search_records` archived visibility workflow (VALIDATED)                      | plugin_record_consolidation  | 2026-05-20   | 2026-05-20   |
+| IR-14  | `register_plugin -> write_record(create) -> search_records` final plugin-record workflow (VALIDATED)             | plugin_record_consolidation  | 2026-05-25   | 2026-05-25   |
+| IR-15  | `write_record(update) -> plugin reconciliation -> clear_pending_reviews(action:"list")` final workflow (VALIDATED) | plugin_record_consolidation  | 2026-05-25   | 2026-05-25   |
+| IR-16  | `write_record -> archive_record -> search_records` archived visibility workflow (VALIDATED)                      | plugin_record_consolidation  | 2026-05-25   | 2026-05-25   |
 
 ---
 
@@ -272,11 +272,11 @@ correctly end-to-end across the write path (`fqc_llm_usage` row recording) and r
 | IL-02  | call_model resolver=purpose returns non-error response; metadata includes resolved_model_name matching the configured model for that purpose                  | llm_call_model_purpose       | 2026-05-20   | 2026-05-15   |
 | IL-03  | Multiple call_model calls sharing a trace_id accumulate distinct rows in fqc_llm_usage; trace_cumulative.total_calls grows monotonically (COST-01)            | llm_cost_accumulation        | 2026-05-20   | 2026-05-15   |
 | IL-04  | call_model writes a row, get_llm_usage summary mode returns total_calls >= 1 with by_purpose direct_model_calls present, recent returns model_name (REPT-01, REPT-02 end-to-end) | llm_usage_query              | 2026-05-20   | 2026-05-15   |
-| IL-05  | call_model resolver=purpose → get_llm_usage by_purpose → named purpose appears in purposes array with calls and primary_model_hit_rate fields                | llm_by_purpose_mode          | 2026-05-20   | 2026-05-15   |
+| IL-05  | call_model resolver=purpose → get_llm_usage by_purpose → named purpose appears in purposes array with calls and primary_model_hit_rate fields                | llm_by_purpose_mode          | 2026-05-25   | 2026-05-15   |
 | IL-06  | call_model resolver=model → get_llm_usage by_purpose → call appears in direct_model_calls; purposes array is empty (resolver=model calls excluded from purposes) | llm_direct_model_calls       | 2026-05-20   | 2026-05-15   |
 | IL-07  | call_model with trace_id + call without trace_id → get_llm_usage summary filtered by trace_id → total_calls=1 (untraced call excluded)                       | llm_trace_id_filter          | 2026-05-20   | 2026-05-15   |
-| IL-08  | call_model → get_llm_usage by_model → models array contains model_name, provider_name, and avg_fallback_position for the called model                         | llm_by_model_mode            | 2026-05-20   | 2026-05-15   |
-| IL-09  | multiple call_model resolver=purpose calls via primary model → get_llm_usage by_purpose → primary_model_hit_rate equals 1                                     | llm_by_purpose_mode          | 2026-05-20   | 2026-05-15   |
+| IL-08  | call_model → get_llm_usage by_model → models array contains model_name, provider_name, and avg_fallback_position for the called model                         | llm_by_model_mode            | 2026-05-25   | 2026-05-15   |
+| IL-09  | multiple call_model resolver=purpose calls via primary model → get_llm_usage by_purpose → primary_model_hit_rate equals 1                                     | llm_by_purpose_mode          | 2026-05-25   | 2026-05-15   |
 | IL-10  | call_model with {{ref:path}} placeholder injects document body before LLM dispatch; response metadata includes injected_references[] and prompt_chars (REF-01, REF-07) | llm_reference_syntax_basic   | 2026-05-20   | 2026-05-15   |
 | IL-11  | call_model with {{ref:path#Section}} injects only the named section's content (REF-02)                                                                              | llm_reference_syntax_section | 2026-05-20   | 2026-05-15   |
 | IL-12  | call_model with {{ref:path->pointer}} dereferences frontmatter pointer; response metadata includes resolved_to (REF-02, REF-07)                                     | llm_reference_syntax_pointer | 2026-05-20   | 2026-05-15   |

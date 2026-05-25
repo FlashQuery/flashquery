@@ -259,11 +259,6 @@ async function tryReadFrontmatterFromDisk(relativePath: string): Promise<Frontma
   }
 }
 
-async function readFrontmatterFromDisk(relativePath: string): Promise<Record<string, unknown>> {
-  const result = await tryReadFrontmatterFromDisk(relativePath);
-  return result.ok ? result.data : {};
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // executeReconciliationActions — mechanical policy executor (D-06)
 // ─────────────────────────────────────────────────────────────────────────────

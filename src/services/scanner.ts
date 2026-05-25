@@ -313,7 +313,7 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   // when a previously-missing file reappears (hash or fqc_id found in these maps).
   // SCAN-04 already guards with `rowStatus === 'active'` so missing rows are never
   // re-marked missing — the SCAN-04 loop only acts on active rows.
-  const { data: allDbDocs, error: dbDocsError } = await fetchDocumentRows(supabase
+  const { data: allDbDocs, error: dbDocsError } = await fetchDocumentRows<DbRow>(supabase
     .from('fqc_documents')
     .select('id, path, content_hash, title, status, updated_at, template_meta')
     .eq('instance_id', instanceId)
