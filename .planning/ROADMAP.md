@@ -40,7 +40,7 @@
 | 151 | Quick Localized Cleanup | 2/2 | Complete    | 2026-05-25 |
 | 152 | Type-Safety Cleanup Pass | 2/2 | Complete | 2026-05-25 |
 | 153 | Documents Tool Decomposition | 3/3 | Complete    | 2026-05-25 |
-| 154 | Residual Import Cycle Cleanup | 0/3 | Not planned | TBD |
+| 154 | Residual Import Cycle Cleanup | 0/3 | Planned | 6 plans |
 
 ## Phase Details
 
@@ -120,12 +120,23 @@ Plans:
 
 **Requirements:** REQ-010, REQ-011, REQ-012
 **Depends on:** Phase 153
-**Plans:** 3 plans
+**Plans:** 6 plans
+
+**Wave 1**
 
 Plans:
 - [ ] 154-01-PLAN.md — Extract config-facing LLM policy/type leaves and guard REQ-010 cycles.
-- [ ] 154-02-PLAN.md — Extract LLM/runtime/template/reference/embedding/storage/logging leaves and run final zero-cycle gates.
 - [ ] 154-03-PLAN.md — Extract MCP lifecycle registry and preserve 15-second shutdown drain semantics.
+
+**Wave 2** *(blocked on 154-01 where noted; independent of full zero-cycle final gate)*
+
+- [ ] 154-02-PLAN.md — Extract LLM runtime error/type leaves and remove client/resolver back-edges. Depends on 154-01.
+- [ ] 154-04-PLAN.md — Extract config-sync, purpose-template, template-tool, and reference metadata leaves. Depends on 154-01.
+- [ ] 154-05-PLAN.md — Extract embedding dimension policy and logging/config leaf imports. Depends on 154-01.
+
+**Wave 3** *(blocked on Waves 1-2 completion)*
+
+- [ ] 154-06-PLAN.md — Run final static zero-cycle guard, roadmap parity madge, quality gates, and conditional macro gate. Depends on 154-01, 154-02, 154-03, 154-04, and 154-05.
 
 **Success criteria:**
 
