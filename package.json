@@ -71,7 +71,7 @@
     "@types/node": "^25.5.0",
     "@types/pg": "^8.20.0",
     "@types/shelljs": "^0.10.0",
-    "@types/uuid": "^10.0.0",
+    "esbuild": "^0.27.7",
     "eslint": "^10.1.0",
     "eslint-config-prettier": "^10.1.8",
     "knip": "^6.14.2",

@@ -25,7 +25,7 @@ vi.mock('../../src/utils/pg-client.js', () => ({
   })),
 }));
 vi.mock('../../src/storage/vault.js', () => ({
-  vaultManager: { rootPath: '/vault' },
+  vaultManager: { resolveVaultPath: (relativePath: string) => `/vault/${relativePath}` },
 }));
 vi.mock('../../src/utils/frontmatter.js', () => ({
   atomicWriteFrontmatter: vi.fn().mockResolvedValue(undefined),
