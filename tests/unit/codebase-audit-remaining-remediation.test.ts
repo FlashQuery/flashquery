@@ -80,4 +80,26 @@ describe('codebase audit remaining remediation guards', () => {
     expect(packageJson.dependencies).not.toHaveProperty('@types/uuid');
     expect(packageJson.devDependencies).not.toHaveProperty('@types/uuid');
   });
+
+  it('T-U-016: document-output consolidated response no longer uses a double assertion', () => {
+    expect(read('src/mcp/utils/document-output.ts')).not.toContain(
+      'as unknown as Record<string, unknown>'
+    );
+  });
+
+  it('T-U-017: scanner document selects no longer use Promise double assertions', () => {
+    expect(read('src/services/scanner.ts')).not.toContain('as unknown as Promise');
+  });
+
+  it('T-U-019: llm usage query helpers no longer use broad unsafe eslint disable blocks', () => {
+    const source = read('src/mcp/tools/llm-usage.ts');
+    expect(source).not.toMatch(
+      /eslint-disable[^\n]*(no-explicit-any|no-unsafe-assignment|no-unsafe-call|no-unsafe-member-access)/
+    );
+  });
+
+  it('T-U-020: llm usage grouping no longer uses non-null assertion push patterns', () => {
+    const source = read('src/mcp/tools/llm-usage.ts');
+    expect(source).not.toMatch(/!\.push|\.get\([^\n]+\)!\.push/);
+  });
 });

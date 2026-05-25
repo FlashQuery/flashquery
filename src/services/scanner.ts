@@ -170,6 +170,21 @@ interface DbRow {
   template_meta?: Record<string, unknown> | null;
 }
 
+type ArchivedDbRow = Omit<DbRow, 'title'>;
+
+interface DocumentRowsResult<Row> {
+  data: Row[] | null;
+  error: { message?: string } | null;
+}
+
+type DocumentRowsQuery<Row> = PromiseLike<DocumentRowsResult<Row>>;
+
+async function fetchDocumentRows<Row>(
+  query: DocumentRowsQuery<Row>
+): Promise<DocumentRowsResult<Row>> {
+  return query;
+}
+
 function templateMetaChanged(current: unknown, next: unknown): boolean {
   return JSON.stringify(current ?? null) !== JSON.stringify(next ?? null);
 }
@@ -298,11 +313,11 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   // when a previously-missing file reappears (hash or fqc_id found in these maps).
   // SCAN-04 already guards with `rowStatus === 'active'` so missing rows are never
   // re-marked missing — the SCAN-04 loop only acts on active rows.
-  const { data: allDbDocs, error: dbDocsError } = await (supabase
+  const { data: allDbDocs, error: dbDocsError } = await fetchDocumentRows(supabase
     .from('fqc_documents')
     .select('id, path, content_hash, title, status, updated_at, template_meta')
     .eq('instance_id', instanceId)
-    .in('status', ['active', 'missing']) as unknown as Promise<{ data: DbRow[] | null; error: unknown }>);
+    .in('status', ['active', 'missing']));
 
   const hashToRow = new Map<string, DbRow>();
   const idToRow = new Map<string, DbRow>();
@@ -376,13 +391,13 @@ export async function runScanOnce(config: FlashQueryConfig): Promise<ScanResult>
   }
 
   // Load archived rows so IDC-04 can detect archived-UUID collisions without a blind INSERT
-  const { data: archivedDocs } = await (supabase
+  const { data: archivedDocs } = await fetchDocumentRows<ArchivedDbRow>(supabase
     .from('fqc_documents')
     .select('id, path, content_hash, status, updated_at, template_meta')
     .eq('instance_id', instanceId)
-    .eq('status', 'archived') as unknown as Promise<{ data: DbRow[] | null; error: unknown }>);
+    .eq('status', 'archived'));
 
-  const archivedIdToRow = new Map<string, DbRow>();
+  const archivedIdToRow = new Map<string, ArchivedDbRow>();
   for (const row of archivedDocs ?? []) {
     archivedIdToRow.set(row.id, row);
   }

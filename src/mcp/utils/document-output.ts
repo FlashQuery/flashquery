@@ -60,6 +60,7 @@ export interface ScheduleDocumentEmbeddingInput {
 }
 
 export interface DocumentEnvelope {
+  [key: string]: unknown;
   identifier: string;
   title: string;
   path: string;
@@ -70,6 +71,7 @@ export interface DocumentEnvelope {
   extracted_sections?: Array<{ heading: string; chars: number }>;
   frontmatter?: Record<string, unknown>;
   headings?: Array<{ level: number; text: string; chars: number }>;
+  followed_ref?: FollowedRefResult;
 }
 
 /** Shape of the followed_ref object nested in source envelope on follow_ref success. */
@@ -85,6 +87,8 @@ export interface FollowedRefResult {
   frontmatter?: Record<string, unknown>;
   headings?: Array<{ level: number; text: string; chars: number }>;
 }
+
+export type DocumentOutputResponse = DocumentEnvelope;
 
 /**
  * Classify how a follow_ref target identifier would be resolved by resolveDocumentIdentifier.
@@ -401,7 +405,7 @@ export async function resolveAndBuildDocument(
     logger: DocumentOutputLogger;
     scheduleDocumentEmbedding(input: ScheduleDocumentEmbeddingInput): Promise<void>;
   }
-): Promise<Record<string, unknown>> {
+): Promise<DocumentOutputResponse> {
   const { effectiveInclude, sectionsList, effectiveIncludeNested, occurrence, effectiveMaxDepth, followRef } = options;
   const { config: cfg, supabaseManager: sm, embeddingProvider: ep, logger: log } = deps;
 
@@ -544,7 +548,7 @@ export async function resolveAndBuildDocument(
       : new Date().toISOString();
 
     // ── Build followed_ref base envelope ─────────────────────────────────────
-    const followedRef: Record<string, unknown> = {
+    const followedRef: FollowedRefResult = {
       reference: followRef,
       resolved_to: targetResolved.relativePath,
       resolved_fq_id: targetFqId, // explicitly null when missing — never omit (CONTEXT.md)
@@ -701,5 +705,5 @@ export async function resolveAndBuildDocument(
     extractedSections,
     frontmatter: frontmatterField,
     headings: headingsField,
-  }) as unknown as Record<string, unknown>;
+  });
 }

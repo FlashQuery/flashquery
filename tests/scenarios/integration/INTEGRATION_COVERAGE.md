@@ -481,6 +481,15 @@ brokered tool-call cost tracing.
 
 ---
 
+## Codebase Audit Remaining Remediation
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| IS-16 | `get_llm_usage` by-purpose workflow remains stable after Phase 152 query typing cleanup. | llm_by_purpose_mode | 2026-05-25 | Pending |
+| IS-17 | `get_llm_usage` by-model workflow remains stable after Phase 152 grouping cleanup. | llm_by_model_mode | 2026-05-25 | Pending |
+
+---
+
 ## How to update this file
 
 When a test passes for the first time, update its row:

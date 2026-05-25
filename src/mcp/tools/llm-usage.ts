@@ -74,6 +74,31 @@ interface PeriodEcho {
   to: string | null;
 }
 
+interface UsageQueryError {
+  message: string;
+}
+
+interface UsageQueryResult {
+  data: UsageRow[] | null;
+  error: UsageQueryError | null;
+}
+
+interface UsageQueryBuilder extends PromiseLike<UsageQueryResult> {
+  eq(column: string, value: string): UsageQueryBuilder;
+  gte(column: string, value: string): UsageQueryBuilder;
+  lte(column: string, value: string): UsageQueryBuilder;
+  order(column: string, options: { ascending: boolean }): UsageQueryBuilder;
+  limit(count: number): UsageQueryBuilder;
+}
+
+interface UsageTableQuery {
+  select(columns: string): UsageQueryBuilder;
+}
+
+interface UsageSupabaseClient {
+  from(table: 'fqc_llm_usage'): UsageTableQuery;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // resolveWindow — D-04 four-rule date range precedence.
 // Returns null when "all" (no created_at filters applied).
@@ -124,16 +149,15 @@ function resolveWindow(params: {
 // Returns the supabase query builder for further chaining.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// We type as `unknown` because the supabase-js query builder type is private
-// to the SDK; we rely on duck-typing the chainable `.eq()` method signature.
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-function applyEntityFilters(query: any, params: { purpose_name?: string; model_name?: string; trace_id?: string }): any {
+function applyEntityFilters(
+  query: UsageQueryBuilder,
+  params: { purpose_name?: string; model_name?: string; trace_id?: string }
+): UsageQueryBuilder {
   if (params.purpose_name) query = query.eq('purpose_name', params.purpose_name.toLowerCase());
   if (params.model_name)   query = query.eq('model_name',   params.model_name.toLowerCase());
   if (params.trace_id)     query = query.eq('trace_id',     params.trace_id);
   return query;
 }
-/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // fetchRows — build and execute the supabase query. Applies window filters,
@@ -146,9 +170,8 @@ function applyEntityFilters(query: any, params: { purpose_name?: string; model_n
 // window even though it was just written by the preceding call_model call.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 async function fetchRows(
-  supabase: any,
+  supabase: UsageSupabaseClient,
   instanceId: string,
   window: ResolvedWindow | null,
   filters: { purpose_name?: string; model_name?: string; trace_id?: string },
@@ -177,9 +200,8 @@ async function fetchRows(
   const { data, error } = await query;
   if (error) return { rows: [], error };
   // Pitfall 6: data may be null on empty result sets in some SDK versions
-  return { rows: (data as UsageRow[] | null) ?? [], error: null };
+  return { rows: data ?? [], error: null };
 }
-/* eslint-enable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Number coercion — BIGINT and NUMERIC come back as strings (Pitfall 2).
@@ -276,8 +298,7 @@ function aggregateByPurpose(rows: UsageRow[]): ByPurposeResult {
     if (r.purpose_name === '_direct') {
       directRows.push(r);
     } else {
-      if (!purposeGroups.has(r.purpose_name)) purposeGroups.set(r.purpose_name, []);
-      purposeGroups.get(r.purpose_name)!.push(r);
+      getUsageGroup(purposeGroups, r.purpose_name).push(r);
     }
   }
 
@@ -332,8 +353,7 @@ function aggregateByModel(rows: UsageRow[]): { models: ModelEntry[] } {
   const groups = new Map<string, UsageRow[]>();
   for (const r of rows) {
     const key = `${r.model_name}\0${r.provider_name}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(r);
+    getUsageGroup(groups, key).push(r);
   }
 
   const totalCalls = rows.length;
@@ -365,6 +385,15 @@ function aggregateByModel(rows: UsageRow[]): { models: ModelEntry[] } {
   }
   models.sort((a, b) => b.calls - a.calls);
   return { models };
+}
+
+function getUsageGroup(groups: Map<string, UsageRow[]>, key: string): UsageRow[] {
+  let group = groups.get(key);
+  if (!group) {
+    group = [];
+    groups.set(key, group);
+  }
+  return group;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -412,8 +441,7 @@ interface VsPriorPeriod {
 }
 
 async function computePriorPeriodDeltas(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: any,
+  supabase: UsageSupabaseClient,
   instanceId: string,
   currentWindow: ResolvedWindow,
   filters: { purpose_name?: string; model_name?: string; trace_id?: string },
@@ -486,10 +514,10 @@ export function registerLlmUsageTools(server: McpServer, config: FlashQueryConfi
       }
 
       // Step 1: Supabase guard (D-15) — call inside handler (Pitfall 1)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let supabase: any;
+      let supabase: UsageSupabaseClient;
       try {
-        supabase = supabaseManager.getClient();
+        const rawClient: unknown = supabaseManager.getClient();
+        supabase = rawClient as UsageSupabaseClient;
       } catch {
         return {
           content: [{ type: 'text' as const, text: 'Supabase is not configured. get_llm_usage requires a Supabase connection.' }],
@@ -559,8 +587,7 @@ export function registerLlmUsageTools(server: McpServer, config: FlashQueryConfi
 
       if (params.mode === 'summary') {
         const agg = aggregateSummary(rows);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const result: Record<string, any> = {
+        const result: Record<string, unknown> = {
           mode: 'summary',
           period,
           total_calls: agg.total_calls,
