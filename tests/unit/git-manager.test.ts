@@ -436,6 +436,29 @@ describe('GitManager', () => {
       expect(mocks.mockPgEnd).toHaveBeenCalled();
     });
 
+    it('debug-logs pgClient.end() cleanup rejection without leaking credentials', async () => {
+      mocks.mockPgQuery
+        .mockResolvedValueOnce({ rows: [{ tablename: 'fqc_memory' }] })
+        .mockResolvedValue({ rows: [] });
+      mocks.mockPgEnd.mockRejectedValueOnce(new Error('password=super-secret close failed'));
+
+      const manager = new GitManagerImpl(tempVaultDir, testConfig().git, {
+        databaseUrl: 'postgresql://flash:super-secret@localhost/test',
+      });
+      await manager.initialize(testConfig());
+
+      await expect(manager.dumpDatabase()).resolves.toBe('.fqc/backup.json');
+
+      expect(logger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('Git: pg client cleanup failed')
+      );
+      const cleanupLog = vi.mocked(logger.debug).mock.calls
+        .flat()
+        .find((entry) => String(entry).includes('pg client cleanup failed'));
+      expect(String(cleanupLog)).not.toContain('postgresql://flash:super-secret@localhost/test');
+      expect(String(cleanupLog)).not.toContain('super-secret');
+    });
+
     it('throws on pg connection failure (caller handles exit code)', async () => {
       mocks.mockPgConnect.mockRejectedValueOnce(new Error('connection refused'));
 
