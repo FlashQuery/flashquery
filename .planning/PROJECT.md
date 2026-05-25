@@ -14,7 +14,7 @@ FlashQuery Core is an open source, local-first data management layer for individ
 
 **Current tool surface:** Final primitives now center on `write_document`, `write_memory`, `write_record`, `search`, `manage_directory`, `maintain_vault`, and structured read/archive/get flows. Removed legacy tool names are absent from host and delegated surfaces with replacement suggestions rather than compatibility aliases. Delegated broad tiers derive from canonical metadata, including corrected data tools such as `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`.
 
-**Current focus:** v3.7 Technical Debt remediates the priority findings from the 23-May-2026 codebase audit before the next feature push. Phases 145-148 are complete; Phase 148 validated typed MCP registration wrapping, in-flight MCP request draining during shutdown, public shutdown-during-write coverage, and clean review/security gates. Phase 149 is next for document/plugin and macro cycle breaks.
+**Current focus:** v3.7 Technical Debt remediates the priority findings from the 23-May-2026 codebase audit before the next feature push. Phase 150 is complete: runtime-only config metadata now uses typed WeakMap storage, accessor behavior is preserved, REQ-012 tests are green, and review/security/verification gates passed.
 
 ## Current Milestone: v3.7 Technical Debt
 
@@ -268,7 +268,7 @@ Any MCP-compatible AI can save and retrieve organized, persistent, searchable da
 - [x] REQ-009: Shutdown drains in-flight MCP requests with a 15-second deadline.
 - [ ] REQ-010: Document/plugin circular dependency cluster is broken.
 - [ ] REQ-011: Macro circular dependency cluster is broken.
-- [ ] REQ-012: Runtime-only config metadata is modeled without broad side-channel casts.
+- [x] REQ-012: Runtime-only config metadata is modeled without broad side-channel casts. Validated in Phase 150: `ConfigRuntimeMetadata` is stored in a module-local `WeakMap`, warning/host exposure/raw API key ref accessors retain behavior, and T-U-026..T-U-029 cover the contract.
 
 ### Out of Scope
 
@@ -377,4 +377,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-24 after completing Phase 147 Tooling and Dependency Hygiene*
+*Last updated: 2026-05-25 after completing Phase 150 Config Metadata Typing*
