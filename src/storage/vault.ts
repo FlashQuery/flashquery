@@ -159,6 +159,12 @@ export interface VaultManager {
    * Area and project names are sanitized before use.
    */
   resolvePath(area: string, project: string | null | undefined, filename: string): string;
+
+  /**
+   * Returns the absolute path for a vault-relative path.
+   * Rejects paths that resolve outside the configured vault root.
+   */
+  resolveVaultPath(relativePath: string): string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -319,6 +325,14 @@ class VaultManagerImpl implements VaultManager {
       return join(this.rootPath, '_global', filename);
     }
     return join(this.rootPath, sanitizeFolderName(area), sanitizeFolderName(project), filename);
+  }
+
+  resolveVaultPath(relativePath: string): string {
+    const absolutePath = resolve(this.rootPath, relativePath);
+    if (this.relativePathIfInVault(absolutePath) === null) {
+      throw new Error(`Vault path resolves outside vault root: ${relativePath}`);
+    }
+    return absolutePath;
   }
 }
 

@@ -5,7 +5,6 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import pg from 'pg';
 import matter from 'gray-matter';
 import { supabaseManager } from '../storage/supabase.js';
@@ -239,10 +238,7 @@ export function applyFieldMap(
 // ─────────────────────────────────────────────────────────────────────────────
 
 function toAbsolutePath(relativePath: string): string {
-  // VaultManagerImpl.rootPath is private on the interface — access via cast.
-  // vaultManager is always the concrete VaultManagerImpl at runtime.
-  const mgr = vaultManager as unknown as { rootPath: string };
-  return join(mgr.rootPath, relativePath);
+  return vaultManager.resolveVaultPath(relativePath);
 }
 
 async function readFrontmatterFromDisk(relativePath: string): Promise<Record<string, unknown>> {
