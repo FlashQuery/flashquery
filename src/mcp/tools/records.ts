@@ -735,7 +735,19 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           }
 
           const queryStart = performance.now();
-          const { data, error } = await qb.limit(maxResults);
+          let data: unknown;
+          let error: { message: string } | null;
+          try {
+            ({ data, error } = await qb.limit(maxResults));
+          } catch (err) {
+            logSearchRecordsTiming({
+              path: 'filters-only',
+              table: fullTableName,
+              elapsedMs: formatElapsedMs(queryStart),
+              error: err instanceof Error ? err.message : String(err),
+            });
+            throw err;
+          }
           const rows = asRecordRows(data);
           if (error) {
             logSearchRecordsTiming({

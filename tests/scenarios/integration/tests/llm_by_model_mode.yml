@@ -6,8 +6,51 @@ description: >
   computation path. Two seed calls are made so the first call's fire-and-forget
   DB write has time to commit before the by_model assertions run.
   Covers IL-08.
-coverage: [IL-08]
-deps: [llm]
+coverage: [IL-08, IS-17]
+
+mock_openai:
+  responses:
+    - choices:
+        - message:
+            role: assistant
+            content: "1"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 7
+        completion_tokens: 1
+    - choices:
+        - message:
+            role: assistant
+            content: "2"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 7
+        completion_tokens: 1
+
+extra_config:
+  llm:
+    providers:
+      - name: mock-openai
+        type: openai-compatible
+        endpoint: "${mock_openai.endpoint}"
+        api_key: sk-test
+    models:
+      - name: fast
+        provider_name: mock-openai
+        model: mock-usage-model
+        type: language
+        cost_per_million:
+          input: 0.15
+          output: 0.6
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+    purposes:
+      - name: general
+        description: General
+        models: [fast]
+        defaults:
+          temperature: 0.7
 
 steps:
   - label: "Seed 1: call_model resolver=purpose to populate fqc_llm_usage"

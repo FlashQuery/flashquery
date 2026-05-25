@@ -4,8 +4,51 @@ description: >
   by_purpose surfaces the named purpose in the purposes array (not in
   direct_model_calls), and primary_model_hit_rate equals 1 when every call
   was handled by the primary model. Covers IL-05 and IL-09.
-coverage: [IL-05, IL-09]
-deps: [llm]
+coverage: [IL-05, IL-09, IS-16]
+
+mock_openai:
+  responses:
+    - choices:
+        - message:
+            role: assistant
+            content: "1"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 7
+        completion_tokens: 1
+    - choices:
+        - message:
+            role: assistant
+            content: "2"
+          finish_reason: stop
+      usage:
+        prompt_tokens: 7
+        completion_tokens: 1
+
+extra_config:
+  llm:
+    providers:
+      - name: mock-openai
+        type: openai-compatible
+        endpoint: "${mock_openai.endpoint}"
+        api_key: sk-test
+    models:
+      - name: fast
+        provider_name: mock-openai
+        model: mock-usage-purpose
+        type: language
+        cost_per_million:
+          input: 0.15
+          output: 0.6
+        capabilities:
+          tool_calling: true
+          usage_on_tool_calls: true
+    purposes:
+      - name: general
+        description: General
+        models: [fast]
+        defaults:
+          temperature: 0.7
 
 steps:
   - label: "Seed: first purpose-resolved call"

@@ -126,6 +126,17 @@ function makeSupabaseLimitResult(result: { data: unknown[] | null; error: { mess
   } as unknown as ReturnType<typeof supabaseManager.getClient>);
 }
 
+function makeSupabaseLimitRejection(error: Error): void {
+  const query = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockRejectedValue(error),
+  };
+  vi.mocked(supabaseManager.getClient).mockReturnValue({
+    from: vi.fn(() => query),
+  } as unknown as ReturnType<typeof supabaseManager.getClient>);
+}
+
 function timingMessages(): string[] {
   return [
     ...vi.mocked(logger.info).mock.calls.map(([message]) => message),
@@ -202,6 +213,26 @@ describe('record tools final surface', () => {
     expect(message).toContain('table=fqcp_crm_unit_contacts');
     expect(message).toContain('rows=0');
     expect(message).toContain('error=db unavailable');
+    expect(message).toMatch(/elapsed_ms=\d+(\.\d+)?/);
+    expect(message).not.toContain('Ada');
+  });
+
+  it('T-U-023: filters-only search_records logs safe timing metadata on thrown rejection', async () => {
+    makeSupabaseLimitRejection(new Error('network unavailable'));
+    const { server, getHandler } = makeServer();
+    registerRecordTools(server, makeConfig());
+
+    const result = await getHandler('search_records')({
+      plugin_id: 'crm',
+      table: 'contacts',
+      filters: { name: 'Ada' },
+    });
+
+    expect(result.isError).toBe(true);
+    const [message] = timingMessages();
+    expect(message).toContain('path=filters-only');
+    expect(message).toContain('table=fqcp_crm_unit_contacts');
+    expect(message).toContain('error=network unavailable');
     expect(message).toMatch(/elapsed_ms=\d+(\.\d+)?/);
     expect(message).not.toContain('Ada');
   });
