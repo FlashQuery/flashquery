@@ -160,5 +160,11 @@ describe('codebase audit remaining remediation guards', () => {
       expect(source).not.toContain('pluginManager');
       expect(source).not.toContain('getFolderClaimsMap');
     }
+
+    const pluginFiles = walkFiles(join(repoRoot, 'src/plugins')).filter((file) => file.endsWith('.ts'));
+    for (const file of pluginFiles) {
+      const source = readFileSync(file, 'utf-8');
+      expect(source).not.toMatch(/['"][^'"]*mcp\/tools\/documents(?:\/|\.js|['"])/);
+    }
   });
 });
