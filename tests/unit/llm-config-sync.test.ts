@@ -1,4 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as yaml from 'js-yaml';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 // Tracks every Supabase op invoked during a test for later assertions.
 type SupabaseOp = { table: string; op: 'delete' | 'insert' | 'select'; payload?: unknown; filters: Array<[string, unknown]> };
@@ -57,16 +61,95 @@ vi.mock('../../src/logging/logger.js', () => ({
 
 import { syncConfigAdapter, syncLlmConfigToDb } from '../../src/llm/config-sync.js';
 import { bindPurposeTemplateRuntime, removePurposeTemplateRuntime, validatePersistedPurposeTemplateAdmissions } from '../../src/llm/purpose-template-bindings.js';
-import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { loadConfig, type FlashQueryConfig } from '../../src/config/loader.js';
 import { logger } from '../../src/logging/logger.js';
 
-// Helper: attach a pre-built rawLlmApiKeyRefs Map to a test config object so that
-// getLlmApiKeyRefs(config) returns the expected values without going through loadConfig().
-// This mirrors what loadConfig() does at startup (T-98-01: raw ${ENV_VAR} refs captured
-// before env expansion and stored on the config object).
 function withRawApiKeyRefs(config: FlashQueryConfig, refs: Record<string, string>): FlashQueryConfig {
-  (config as unknown as Record<string, unknown>)['_rawLlmApiKeyRefs'] = new Map(Object.entries(refs));
-  return config;
+  const rawConfig = {
+    instance: {
+      name: config.instance.name,
+      id: config.instance.id,
+      vault: {
+        path: config.instance.vault.path,
+        markdown_extensions: config.instance.vault.markdownExtensions,
+      },
+    },
+    server: config.server,
+    supabase: {
+      url: config.supabase.url,
+      service_role_key: config.supabase.serviceRoleKey,
+      database_url: config.supabase.databaseUrl,
+      skip_ddl: config.supabase.skipDdl,
+    },
+    git: {
+      auto_commit: config.git.autoCommit,
+      auto_push: config.git.autoPush,
+      remote: config.git.remote,
+      branch: config.git.branch,
+    },
+    mcp: config.mcp,
+    locking: {
+      enabled: config.locking.enabled,
+      ttl_seconds: config.locking.ttlSeconds,
+    },
+    embedding: config.embedding
+      ? {
+          provider: config.embedding.provider,
+          model: config.embedding.model,
+          api_key: config.embedding.apiKey,
+          endpoint: config.embedding.endpoint,
+          dimensions: config.embedding.dimensions,
+        }
+      : undefined,
+    logging: config.logging,
+    templates: config.templates
+      ? {
+          default_access: config.templates.defaultAccess,
+        }
+      : undefined,
+    llm: config.llm
+      ? {
+          providers: config.llm.providers.map((provider) => ({
+            name: provider.name,
+            type: provider.type,
+            endpoint: provider.endpoint,
+            api_key: refs[provider.name] ?? provider.apiKey,
+            local: provider.local,
+          })),
+          models: config.llm.models.map((model) => ({
+            name: model.name,
+            provider_name: model.providerName,
+            model: model.model,
+            type: model.type,
+            dimensions: model.dimensions,
+            cost_per_million: model.costPerMillion,
+            description: model.description,
+            context_window: model.contextWindow,
+            tags: model.tags,
+            capabilities: model.capabilities,
+          })),
+          purposes: config.llm.purposes.map((purpose) => ({
+            name: purpose.name,
+            description: purpose.description,
+            models: purpose.models,
+            defaults: purpose.defaults,
+            tools: purpose.tools,
+            excluded_tools: purpose.excludedTools,
+            templates: purpose.templates,
+            mcp_servers: purpose.mcpServers,
+            tool_search: purpose.toolSearch,
+          })),
+        }
+      : undefined,
+  };
+
+  const tmpFile = join(tmpdir(), `fqc-llm-sync-${process.pid}-${Date.now()}-${Math.random()}.yaml`);
+  writeFileSync(tmpFile, yaml.dump(rawConfig));
+  try {
+    return loadConfig(tmpFile);
+  } finally {
+    unlinkSync(tmpFile);
+  }
 }
 
 beforeEach(() => {
@@ -112,8 +195,8 @@ function baseConfig(): FlashQueryConfig {
           name: 'researcher',
           description: 'Research',
           models: ['gpt-4o'],
-          tools: ['read'],
-          excludedTools: ['search_memory'],
+          tools: ['get_document'],
+          excludedTools: ['search'],
           templates: ['Templates/research-skill.md', 'Templates/dangling-skill.md'],
         },
       ],
@@ -427,8 +510,8 @@ describe('syncLlmConfigToDb()', () => {
 
     const purposeInsert = supabaseCalls.find((c) => c.table === 'fqc_llm_purposes' && c.op === 'insert');
     expect(purposeInsert?.payload).toMatchObject({
-      tools: ['read'],
-      excluded_tools: ['search_memory'],
+      tools: ['get_document'],
+      excluded_tools: ['search'],
     });
 
     expect(supabaseCalls.some((c) => c.table === 'fqc_llm_purpose_models' && c.op === 'insert' && (c.payload as Record<string, unknown>)['position'] === 1)).toBe(true);
