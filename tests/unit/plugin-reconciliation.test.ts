@@ -565,6 +565,7 @@ describe('reconcilePluginDocuments — moved keep-tracking carries new path', ()
     expect(ref.newPath).toBe('Archive/relocated.md');
     expect(ref.oldPath).toBe('CRM/Contacts/alice.md');
     expect(ref.pluginRowId).toBe('row-mv');
+    expect(ref.updatedAt).toBe('2026-04-20T10:00:00Z');
   });
 });
 
@@ -688,5 +689,105 @@ describe('executeReconciliationActions — RECON-05 added path (post-write updat
 
     // Assert 4 — supabase .single() was invoked (the RECON-05 re-query itself)
     expect(singleChain.single).toHaveBeenCalled();
+  });
+});
+
+describe('executeReconciliationActions — move/resurrection timestamp idempotency', () => {
+  function setupActionMocks(pgQueryMock: ReturnType<typeof vi.fn>) {
+    vi.mocked(pluginManager.getEntry).mockReturnValue({
+      plugin_id: 'crm',
+      plugin_instance: 'default',
+      table_prefix: 'fqcp_crm_default_',
+      schema: {
+        plugin: { id: 'crm', name: 'CRM', version: '1.0' },
+        tables: [],
+        documents: {
+          types: [
+            {
+              id: 'contact',
+              folder: 'CRM/Contacts',
+              access: 'read-write',
+              on_added: 'auto-track',
+              on_moved: 'keep-tracking',
+              on_modified: 'ignore',
+              track_as: 'contacts',
+            },
+          ],
+        },
+      },
+    } as any);
+
+    const chain: Record<string, unknown> = {};
+    chain.insert = vi.fn().mockResolvedValue({ data: null, error: null });
+    chain.delete = vi.fn().mockReturnValue(chain);
+    chain.eq = vi.fn().mockReturnValue(chain);
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn().mockReturnValue(chain),
+    } as any);
+
+    vi.mocked(createPgClientIPv4).mockReturnValue({
+      connect: vi.fn().mockResolvedValue(undefined),
+      query: pgQueryMock,
+      end: vi.fn().mockResolvedValue(undefined),
+    } as any);
+  }
+
+  it('uses fqc_documents updated_at when keeping a moved row tracked', async () => {
+    const pgQueryMock = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+    setupActionMocks(pgQueryMock);
+    const movedUpdatedAt = '2026-04-20T11:22:33Z';
+
+    await executeReconciliationActions({
+      added: [],
+      resurrected: [],
+      deleted: [],
+      disassociated: [],
+      moved: [{
+        fqcId: 'doc-moved',
+        oldPath: 'CRM/Contacts/alice.md',
+        newPath: 'Archive/alice.md',
+        typeId: 'contact',
+        tableName: 'fqcp_crm_default_contacts',
+        pluginRowId: 'row-moved',
+        updatedAt: movedUpdatedAt,
+      }],
+      modified: [],
+      unchanged: 0,
+    }, 'crm', 'default');
+
+    const updateCall = pgQueryMock.mock.calls.find(
+      (args: unknown[]) => typeof args[0] === 'string' && /SET path = \$1, last_seen_updated_at = \$2/i.test(args[0])
+    );
+    expect(updateCall).toBeDefined();
+    expect(updateCall![1]).toEqual(['Archive/alice.md', movedUpdatedAt, 'row-moved']);
+  });
+
+  it('uses fqc_documents updated_at when resurrecting a row', async () => {
+    const pgQueryMock = vi.fn().mockResolvedValue({ rows: [], rowCount: 1 });
+    setupActionMocks(pgQueryMock);
+    const resurrectedUpdatedAt = '2026-04-20T12:34:56Z';
+
+    await executeReconciliationActions({
+      added: [],
+      resurrected: [{
+        fqcId: 'doc-resurrected',
+        path: 'CRM/Contacts/restored.md',
+        typeId: 'contact',
+        tableName: 'fqcp_crm_default_contacts',
+        pluginRowId: 'row-resurrected',
+        updatedAt: resurrectedUpdatedAt,
+      }],
+      deleted: [],
+      disassociated: [],
+      moved: [],
+      modified: [],
+      unchanged: 0,
+    }, 'crm', 'default');
+
+    const updateCall = pgQueryMock.mock.calls.find(
+      (args: unknown[]) => typeof args[0] === 'string' && /status = 'active'.*last_seen_updated_at = \$3/i.test(args[0])
+    );
+    expect(updateCall).toBeDefined();
+    expect(updateCall![1]).toEqual(['row-resurrected', 'CRM/Contacts/restored.md', resurrectedUpdatedAt]);
   });
 });

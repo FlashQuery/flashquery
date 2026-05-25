@@ -43,6 +43,7 @@ export interface ResurrectionRef {
   typeId: string;
   tableName: string;
   pluginRowId: string;
+  updatedAt: string;
 }
 
 export interface DeletionRef {
@@ -58,6 +59,7 @@ export interface MovedRef {
   typeId: string;
   tableName: string;
   pluginRowId: string;
+  updatedAt: string;
 }
 
 export interface ModifiedRef {
@@ -314,10 +316,10 @@ export async function executeReconciliationActions(
       const setClauses = [
         "status = 'active'",
         'path = $2',
-        'last_seen_updated_at = NOW()',
-        ...extraCols.map((col, i) => `${pg.escapeIdentifier(col)} = $${3 + i}`),
+        'last_seen_updated_at = $3',
+        ...extraCols.map((col, i) => `${pg.escapeIdentifier(col)} = $${4 + i}`),
       ];
-      const params: unknown[] = [ref.pluginRowId, ref.path, ...extraCols.map((c) => fieldMapCols[c])];
+      const params: unknown[] = [ref.pluginRowId, ref.path, ref.updatedAt, ...extraCols.map((c) => fieldMapCols[c])];
       const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET ${setClauses.join(', ')} WHERE id = $1`;
       await pgClient.query(sql, params);
 
@@ -505,8 +507,8 @@ export async function executeReconciliationActions(
     for (const ref of result.moved) {
       const policy = policies.get(ref.typeId);
       if (policy?.on_moved === 'keep-tracking') {
-        const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET path = $1, last_seen_updated_at = NOW() WHERE id = $2`;
-        await pgClient.query(sql, [ref.newPath, ref.pluginRowId]);
+        const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET path = $1, last_seen_updated_at = $2 WHERE id = $3`;
+        await pgClient.query(sql, [ref.newPath, ref.updatedAt, ref.pluginRowId]);
         pathsUpdated++;
       } else if (policy?.on_moved === 'stop-tracking' || policy?.on_moved === 'untrack') {
         const sql = `UPDATE ${pg.escapeIdentifier(ref.tableName)} SET status = 'archived' WHERE id = $1`;
@@ -712,6 +714,7 @@ export async function reconcilePluginDocuments(
               typeId: pluginRow.typeId,
               tableName: pluginRow.tableName,
               pluginRowId: pluginRow.rowId,
+              updatedAt: fqcDoc.updated_at,
             });
           }
           break;
@@ -745,6 +748,7 @@ export async function reconcilePluginDocuments(
               typeId: pluginRow.typeId,
               tableName: pluginRow.tableName,
               pluginRowId: pluginRow.rowId,
+              updatedAt: fqcDoc.updated_at,
             });
           }
           break;

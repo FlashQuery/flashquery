@@ -198,7 +198,7 @@ class VaultManagerImpl implements VaultManager {
     content: string,
     options?: WriteMarkdownOptions
   ): Promise<void> {
-    const absolutePath = join(this.rootPath, relativePath);
+    const absolutePath = this.resolveVaultPath(relativePath);
     const startTime = performance.now();
 
     // Create intermediate directories if missing (D-06, Pitfall 3)
@@ -240,7 +240,7 @@ class VaultManagerImpl implements VaultManager {
   async readMarkdown(
     relativePath: string
   ): Promise<{ data: Record<string, unknown>; content: string }> {
-    const absolutePath = join(this.rootPath, relativePath);
+    const absolutePath = this.resolveVaultPath(relativePath);
     const startTime = performance.now();
     const raw = await readFile(absolutePath, 'utf-8');
     const parsed = matter(raw);
@@ -253,7 +253,7 @@ class VaultManagerImpl implements VaultManager {
   }
 
   async removeMarkdown(relativePath: string, options?: RemoveMarkdownOptions): Promise<void> {
-    const absolutePath = join(this.rootPath, relativePath);
+    const absolutePath = this.resolveVaultPath(relativePath);
     await unlink(absolutePath);
     logger.debug(`Vault: hard delete ${relativePath} — document removed from disk`);
 
@@ -273,7 +273,7 @@ class VaultManagerImpl implements VaultManager {
     trashAbsPath: string,
     options?: RemoveMarkdownOptions
   ): Promise<void> {
-    const sourceAbsPath = join(this.rootPath, relativePath);
+    const sourceAbsPath = this.resolveVaultPath(relativePath);
     await mkdir(dirname(trashAbsPath), { recursive: true });
 
     try {

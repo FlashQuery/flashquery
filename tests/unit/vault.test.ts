@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -542,6 +542,30 @@ describe('resolvePath', () => {
   it('rejects vault-relative paths that escape the vault root', () => {
     expect(() => vaultManager.resolveVaultPath('../outside.md')).toThrow(/outside vault root/i);
   });
+
+  it('rejects writes outside the vault root', async () => {
+    await expect(vaultManager.writeMarkdown('../outside.md', {}, 'content')).rejects.toThrow(
+      /outside vault root/i
+    );
+  });
+
+  it('rejects reads outside the vault root', async () => {
+    await expect(vaultManager.readMarkdown('../outside.md')).rejects.toThrow(
+      /outside vault root/i
+    );
+  });
+
+  it('rejects removals outside the vault root', async () => {
+    await expect(vaultManager.removeMarkdown('../outside.md')).rejects.toThrow(
+      /outside vault root/i
+    );
+  });
+
+  it('rejects trash moves from outside the vault root', async () => {
+    await expect(
+      vaultManager.moveMarkdownToTrash('../outside.md', join(testDir, '.trash', 'outside.md'))
+    ).rejects.toThrow(/outside vault root/i);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -596,8 +620,9 @@ describe('cleanStaleTempFiles', () => {
   });
 
   it('logs a warning (not throws) when a file cannot be deleted', async () => {
-    mkdirSync(testDir, { recursive: true });
-    const tmpFile = join(testDir, 'bad.md.fqc-tmp');
+    const lockedDir = join(testDir, 'locked');
+    mkdirSync(lockedDir, { recursive: true });
+    const tmpFile = join(lockedDir, 'bad.md.fqc-tmp');
     writeFileSync(tmpFile, 'stale');
 
     const warnMessages: string[] = [];
@@ -605,16 +630,14 @@ describe('cleanStaleTempFiles', () => {
       warnMessages.push(msg);
     });
 
-    // Mock unlink to throw for this file
-    const fsp = await import('node:fs/promises');
-    const origUnlink = fsp.unlink;
-    // Use vi.mock is not possible here; patch via Object.defineProperty trick would fail ESM.
-    // Instead, delete the file before calling cleanStaleTempFiles — then it throws ENOENT on unlink
-    // which exercises the error-handling warn path. But ENOENT won't reach warn since readdir
-    // finds the file. We need to test via a missing-permission scenario or use rmSync first.
-    // Simplest approach: the function handles unlink errors gracefully — test that it does NOT throw.
-    // Create a real file and remove it mid-flight by using a subdirectory we delete first.
-    await expect(cleanStaleTempFiles(testDir)).resolves.not.toThrow();
+    chmodSync(lockedDir, 0o555);
+    try {
+      await expect(cleanStaleTempFiles(testDir)).resolves.not.toThrow();
+    } finally {
+      chmodSync(lockedDir, 0o755);
+    }
+
+    expect(warnMessages.some((msg) => msg.includes('failed to remove stale temp file'))).toBe(true);
   });
 
   it('handles an empty directory gracefully without throwing', async () => {
