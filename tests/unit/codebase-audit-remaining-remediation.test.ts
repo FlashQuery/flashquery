@@ -29,6 +29,17 @@ describe('codebase audit remaining remediation guards', () => {
     expect(source).not.toMatch(/rootPath/);
   });
 
+  it('T-I-001: plugin reconciliation integration suite is enabled in the integration config', () => {
+    const config = read('tests/config/vitest.integration.config.ts');
+    expect(config).toContain('tests/integration/plugin-reconciliation.integration.test.ts');
+  });
+
+  it('T-I-001: plugin reconciliation integration suite uses environment-gated skips only', () => {
+    const source = read('tests/integration/plugin-reconciliation.integration.test.ts');
+    expect(source).not.toContain('describe.skip(');
+    expect(source).toContain('describe.skipIf(SKIP_DB)');
+  });
+
   it('T-U-008: inert projects seeder source file is absent', () => {
     expect(existsSync(join(repoRoot, 'src/projects/seeder.ts'))).toBe(false);
   });

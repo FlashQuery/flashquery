@@ -118,8 +118,9 @@ async function createTrackedDoc(
   relativePath: string,
   content: string = '# Test\nBody text here.'
 ): Promise<string> {
-  // Use create_document MCP tool — inserts into fqc_documents and writes to disk
-  const result = await getHandler('create_document')({
+  // Use write_document MCP tool — inserts into fqc_documents and writes to disk.
+  const result = await getHandler('write_document')({
+    mode: 'create',
     path: relativePath,
     title: relativePath.split('/').pop()?.replace('.md', '') ?? 'Test Document',
     content,
@@ -127,7 +128,7 @@ async function createTrackedDoc(
   }) as { content: Array<{ text: string }>; isError?: boolean };
 
   if (result.isError) {
-    throw new Error(`create_document failed: ${result.content[0].text}`);
+    throw new Error(`write_document failed: ${result.content[0].text}`);
   }
 
   return join(vaultPath, relativePath);
@@ -135,7 +136,7 @@ async function createTrackedDoc(
 
 // ── Suite ────────────────────────────────────────────────────────────────────
 
-describe.skip('plugin-reconciliation integration', () => {
+describe.skipIf(SKIP_DB)('plugin-reconciliation integration', () => {
   let config: FlashQueryConfig;
   let vaultPath: string;
   let contactsPath: string;

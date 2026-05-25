@@ -10,6 +10,7 @@ export default defineConfig({
       'tests/integration/compound-tools.integration.test.ts',
       'tests/integration/llm-config-sync.test.ts',
       'tests/integration/tool-registry.test.ts',
+      'tests/integration/plugin-reconciliation.integration.test.ts',
       'tests/integration/archive-document-lock.test.ts',
       'tests/integration/supabase-schema-verify.test.ts',
       'tests/integration/template-tools.integration.test.ts',
