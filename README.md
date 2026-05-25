@@ -305,6 +305,7 @@ npm run test:watch       # Unit tests in watch mode
 npm run test:integration # Integration tests (requires Supabase via .env.test)
 npm run test:e2e         # End-to-end tests (spawns FlashQuery as subprocess)
 npm run test:benchmark   # Performance benchmarks (vault discovery, search throughput)
+npm run test:docker-smoke # Full Docker stack smoke test (requires Docker)
 ```
 
 The `tests/scenarios/` directory contains a higher-level test suite: directed tests in Python (`directed/`) and YAML-driven integration tests (`integration/`), run by a Python runner script. See [`tests/scenarios/README.md`](./tests/scenarios/README.md).
