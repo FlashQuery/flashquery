@@ -78,6 +78,27 @@ function buildRecordEmbedText(
     .join('\n');
 }
 
+function formatElapsedMs(start: number): string {
+  return (performance.now() - start).toFixed(1);
+}
+
+function logSearchRecordsTiming(input: {
+  path: 'filters-only' | 'semantic';
+  table: string;
+  elapsedMs: string;
+  rowCount?: number;
+  error?: string;
+}): void {
+  const rowText = input.rowCount === undefined ? '' : ` rows=${input.rowCount}`;
+  const errorText = input.error === undefined ? '' : ` error=${input.error}`;
+  const message = `search_records timing: path=${input.path} table=${input.table}${rowText} elapsed_ms=${input.elapsedMs}${errorText}`;
+  if (input.error === undefined) {
+    logger.info(message);
+  } else {
+    logger.warn(message);
+  }
+}
+
 async function scheduleRecordEmbedding(input: {
   fullTableName: string,
   recordId: string,
@@ -701,7 +722,6 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         // ── Filters-only path (no query) ──────────────────────────────────
         if (!hasQuery) {
           const supabase = supabaseManager.getClient();
-          // TODO LOG-01: Add timing to record queries (high-value: identifies slow DB operations)
           let qb = supabase
             .from(fullTableName)
             .select('*')
@@ -714,21 +734,31 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             }
           }
 
+          const queryStart = performance.now();
           const { data, error } = await qb.limit(maxResults);
+          const rows = asRecordRows(data);
           if (error) {
+            logSearchRecordsTiming({
+              path: 'filters-only',
+              table: fullTableName,
+              elapsedMs: formatElapsedMs(queryStart),
+              rowCount: rows.length,
+              error: error.message,
+            });
             return jsonRuntimeError(error.message);
           }
 
-          const rows = asRecordRows(data);
-          logger.info(
-            `search_records: filters-only found ${rows.length} record(s) in ${fullTableName}`
-          );
+          logSearchRecordsTiming({
+            path: 'filters-only',
+            table: fullTableName,
+            elapsedMs: formatElapsedMs(queryStart),
+            rowCount: rows.length,
+          });
           return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, reconciliation }));
         }
 
         // ── Semantic path (query + embed_fields) ──────────────────────────
         if (hasEmbedFields) {
-          // TODO LOG-01: Add timing to record queries (high-value: identifies slow DB operations)
           const queryEmbedding = await embeddingProvider.embed(queryText);
           const escapedTable = pg.escapeIdentifier(fullTableName);
 
@@ -757,11 +787,26 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
             LIMIT $3
           `;
 
-          const result = await queryPgPool(config.supabase.databaseUrl, sql, params);
+          const queryStart = performance.now();
+          let result: Awaited<ReturnType<typeof queryPgPool>>;
+          try {
+            result = await queryPgPool(config.supabase.databaseUrl, sql, params);
+          } catch (err) {
+            logSearchRecordsTiming({
+              path: 'semantic',
+              table: fullTableName,
+              elapsedMs: formatElapsedMs(queryStart),
+              error: err instanceof Error ? err.message : String(err),
+            });
+            throw err;
+          }
           const rows = asRecordRows(result.rows);
-          logger.info(
-            `search_records: semantic found ${rows.length} record(s) in ${fullTableName}`
-          );
+          logSearchRecordsTiming({
+            path: 'semantic',
+            table: fullTableName,
+            elapsedMs: formatElapsedMs(queryStart),
+            rowCount: rows.length,
+          });
           return jsonToolResult(buildSearchEnvelope({ plugin_id, table, query, tag, rows, include: effectiveInclude, tableSpec, semantic: true, reconciliation }));
         }
 

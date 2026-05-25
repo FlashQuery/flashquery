@@ -102,4 +102,8 @@ describe('codebase audit remaining remediation guards', () => {
     const source = read('src/mcp/tools/llm-usage.ts');
     expect(source).not.toMatch(/!\.push|\.get\([^\n]+\)!\.push/);
   });
+
+  it('T-U-025: records search timing TODO markers are removed', () => {
+    expect(read('src/mcp/tools/records.ts')).not.toContain('TODO LOG-01');
+  });
 });

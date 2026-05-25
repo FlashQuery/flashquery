@@ -487,6 +487,7 @@ brokered tool-call cost tracing.
 |----|----------|------------|--------------|--------------|
 | IS-16 | `get_llm_usage` by-purpose workflow remains stable after Phase 152 query typing cleanup. | llm_by_purpose_mode | 2026-05-25 | Pending |
 | IS-17 | `get_llm_usage` by-model workflow remains stable after Phase 152 grouping cleanup. | llm_by_model_mode | 2026-05-25 | Pending |
+| IS-18 | `write_record -> search_records` workflow remains stable after Phase 152 records timing instrumentation. | plugin_record_consolidation | 2026-05-25 | Pending |
 
 ---
 
