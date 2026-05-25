@@ -47,7 +47,7 @@
 | 147 | Tooling and Dependency Hygiene | 4/4 | Complete    | 2026-05-24 |
 | 148 | MCP Lifecycle and Shutdown | 4/4 | Complete    | 2026-05-24 |
 | 149 | Cycle Breaks | 4/4 | Complete    | 2026-05-24 |
-| 150 | Config Metadata Typing | Replace runtime metadata side-channel casts with explicit type-safe storage. | REQ-012 | §4.6 |
+| 150 | Config Metadata Typing | 1/1 | Complete   | 2026-05-25 |
 
 ## Phase Details
 
@@ -250,10 +250,10 @@ Plans:
 
 **Depends on:** None
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 150-01-PLAN.md - Config runtime metadata typing and REQ-012 coverage
+- [x] 150-01-PLAN.md - Config runtime metadata typing and REQ-012 coverage
 
 **Implementation scope:**
 

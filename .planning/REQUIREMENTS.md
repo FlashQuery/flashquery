@@ -34,7 +34,7 @@ Requirements for the v3.7 Technical Debt milestone. Each requirement maps to exa
 
 ### Config Type Modeling
 
-- [ ] **REQ-012**: Runtime-only config metadata is modeled without broad side-channel casts. Deprecation warnings, startup warnings, host tool exposure, and raw LLM API key refs move to explicit internal typing, symbol metadata, or a `WeakMap`, preserving existing accessors without leaking secrets.
+- [x] **REQ-012**: Runtime-only config metadata is modeled without broad side-channel casts. Deprecation warnings, startup warnings, host tool exposure, and raw LLM API key refs move to explicit internal typing, symbol metadata, or a `WeakMap`, preserving existing accessors without leaking secrets.
 
 ## Future Requirements
 
@@ -89,7 +89,7 @@ Which phases cover which requirements. Updated during phase execution as statuse
 | REQ-009 | Phase 148 | Complete |
 | REQ-010 | Phase 149 | Complete |
 | REQ-011 | Phase 149 | Complete |
-| REQ-012 | Phase 150 | Pending |
+| REQ-012 | Phase 150 | Complete |
 
 **Coverage:**
 - v3.7 requirements: 12 total
