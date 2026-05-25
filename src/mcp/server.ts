@@ -591,7 +591,10 @@ export async function initializeHostToolSearchForServer(server: McpServer): Prom
 }
 
 export function createMcpServer(config: FlashQueryConfig, version: string, options: CreateMcpServerOptions = {}): McpServer {
-  const server = new McpServer({ name: 'flashquery', version });
+  const server = new McpServer(
+    { name: 'flashquery', version },
+    { capabilities: { tools: { listChanged: true } } }
+  );
   const { getCapturedSdkHandler, setCallToolHandlerWithoutCapture } = captureSdkCallToolHandler(server);
   const maybeLegacyConfig = config as FlashQueryConfig & { host?: FlashQueryConfig['host'] };
   const hostConfig = maybeLegacyConfig.host ?? { mcpServers: [], toolSearch: 'disabled' as const };

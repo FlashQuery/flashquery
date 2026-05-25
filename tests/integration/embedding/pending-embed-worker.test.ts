@@ -11,13 +11,14 @@ import { initSupabase, supabaseManager } from '../../../src/storage/supabase.js'
 import type { FlashQueryConfig } from '../../../src/config/loader.js';
 import {
   HAS_SUPABASE,
+  TEST_EMBEDDING_DIMENSIONS,
   TEST_DATABASE_URL,
   TEST_SUPABASE_KEY,
   TEST_SUPABASE_URL,
 } from '../../helpers/test-env.js';
 
 const TEST_INSTANCE_ID = 'phase-146-pending-worker';
-const VECTOR = Array.from({ length: 1536 }, (_, index) => (index === 0 ? 0.5 : 0));
+const VECTOR = Array.from({ length: TEST_EMBEDDING_DIMENSIONS }, (_, index) => (index === 0 ? 0.5 : 0));
 
 vi.mock('../../../src/embedding/provider.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/embedding/provider.js')>();
@@ -25,14 +26,14 @@ vi.mock('../../../src/embedding/provider.js', async (importOriginal) => {
     ...actual,
     embeddingProvider: {
       embed: vi.fn(async () => VECTOR),
-      getDimensions: () => 1536,
+      getDimensions: () => TEST_EMBEDDING_DIMENSIONS,
     },
   };
 });
 
 const provider: EmbeddingProvider = {
   embed: async () => VECTOR,
-  getDimensions: () => 1536,
+  getDimensions: () => TEST_EMBEDDING_DIMENSIONS,
 };
 
 function makeConfig(): FlashQueryConfig {
@@ -48,7 +49,7 @@ function makeConfig(): FlashQueryConfig {
       databaseUrl: TEST_DATABASE_URL,
       skipDdl: false,
     },
-    embedding: { provider: 'none', model: '', apiKey: '', dimensions: 1536 },
+    embedding: { provider: 'none', model: '', apiKey: '', dimensions: TEST_EMBEDDING_DIMENSIONS },
     logging: { level: 'error', output: 'stdout' },
     locking: { enabled: false, ttlSeconds: 30 },
   } as unknown as FlashQueryConfig;
@@ -66,13 +67,14 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
     await initSupabase(config);
     client = new pg.Client({ connectionString: TEST_DATABASE_URL });
     await client.connect();
+    await client.query('DROP TABLE IF EXISTS fqcp_phase146_worker_records');
     await client.query(`
       CREATE TABLE IF NOT EXISTS fqcp_phase146_worker_records (
         id UUID PRIMARY KEY,
         instance_id TEXT NOT NULL,
         name TEXT,
         status TEXT DEFAULT 'active',
-        embedding vector(1536),
+        embedding vector(${TEST_EMBEDDING_DIMENSIONS}),
         embedding_updated_at TIMESTAMPTZ
       )
     `);
@@ -97,6 +99,12 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
     const docId = '00000000-0000-4000-8000-000000000501';
     const memoryId = '00000000-0000-4000-8000-000000000502';
     const recordId = '00000000-0000-4000-8000-000000000503';
+    const targetIds = [docId, memoryId, recordId];
+
+    await client.query('DELETE FROM fqc_pending_embeds WHERE target_id = ANY($1::text[])', [targetIds]);
+    await client.query('DELETE FROM fqc_documents WHERE id = ANY($1::uuid[])', [targetIds]);
+    await client.query('DELETE FROM fqc_memory WHERE id = ANY($1::uuid[])', [targetIds]);
+    await client.query('DELETE FROM fqcp_phase146_worker_records WHERE id = ANY($1::uuid[])', [targetIds]);
 
     await client.query(
       `

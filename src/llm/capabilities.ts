@@ -117,6 +117,7 @@ export function validatePurposeMode2Admission(
   for (const modelName of purpose.models) {
     const model = models.get(modelName);
     if (!model) continue;
+    if (model.type === 'embedding') continue;
     const provider = providers.get(model.providerName);
     if (!provider) continue;
     const caps = modelCapabilitiesWithDefaults(model, provider);

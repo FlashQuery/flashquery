@@ -25,5 +25,11 @@ export const TEST_OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
 /** Ollama URL for local embedding tests */
 export const TEST_OLLAMA_URL = process.env.OLLAMA_URL ?? 'http://localhost:11434';
 
+/** Expected vector width for embedding-backed tests */
+export const TEST_EMBEDDING_DIMENSIONS = Number.parseInt(
+  process.env.FQC_TEST_EMBEDDING_DIMENSIONS ?? '1536',
+  10
+);
+
 /** True when all required Supabase env vars are set — use to skip tests otherwise */
 export const HAS_SUPABASE = !!(TEST_SUPABASE_URL && TEST_SUPABASE_KEY && TEST_DATABASE_URL);
