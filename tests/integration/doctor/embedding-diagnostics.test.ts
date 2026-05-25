@@ -71,6 +71,12 @@ describe.skipIf(!HAS_SUPABASE)('doctor embedding retry diagnostics', () => {
     const docTrackedId = '00000000-0000-4000-8000-000000000602';
     const memoryGapId = '00000000-0000-4000-8000-000000000603';
     const recordGapId = '00000000-0000-4000-8000-000000000604';
+    const targetIds = [docGapId, docTrackedId, memoryGapId, recordGapId];
+
+    await client.query('DELETE FROM fqc_pending_embeds WHERE target_id = ANY($1::text[])', [targetIds]);
+    await client.query('DELETE FROM fqc_documents WHERE id = ANY($1::uuid[])', [targetIds]);
+    await client.query('DELETE FROM fqc_memory WHERE id = ANY($1::uuid[])', [targetIds]);
+    await client.query('DELETE FROM fqcp_phase146_doctor_records WHERE id = ANY($1::uuid[])', [targetIds]);
 
     await client.query(
       `

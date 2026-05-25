@@ -18,23 +18,28 @@ import {
 } from '../../helpers/test-env.js';
 
 const TEST_INSTANCE_ID = 'phase-146-pending-worker';
-const VECTOR = Array.from({ length: TEST_EMBEDDING_DIMENSIONS }, (_, index) => (index === 0 ? 0.5 : 0));
+let embeddingDimensions = TEST_EMBEDDING_DIMENSIONS;
+let vector = makeVector(embeddingDimensions);
 
 vi.mock('../../../src/embedding/provider.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../src/embedding/provider.js')>();
   return {
     ...actual,
     embeddingProvider: {
-      embed: vi.fn(async () => VECTOR),
-      getDimensions: () => TEST_EMBEDDING_DIMENSIONS,
+      embed: vi.fn(async () => vector),
+      getDimensions: () => embeddingDimensions,
     },
   };
 });
 
 const provider: EmbeddingProvider = {
-  embed: async () => VECTOR,
-  getDimensions: () => TEST_EMBEDDING_DIMENSIONS,
+  embed: async () => vector,
+  getDimensions: () => embeddingDimensions,
 };
+
+function makeVector(dimensions: number): number[] {
+  return Array.from({ length: dimensions }, (_, index) => (index === 0 ? 0.5 : 0));
+}
 
 function makeConfig(): FlashQueryConfig {
   return {
@@ -49,7 +54,7 @@ function makeConfig(): FlashQueryConfig {
       databaseUrl: TEST_DATABASE_URL,
       skipDdl: false,
     },
-    embedding: { provider: 'none', model: '', apiKey: '', dimensions: TEST_EMBEDDING_DIMENSIONS },
+    embedding: { provider: 'none', model: '', apiKey: '', dimensions: embeddingDimensions },
     logging: { level: 'error', output: 'stdout' },
     locking: { enabled: false, ttlSeconds: 30 },
   } as unknown as FlashQueryConfig;
@@ -67,6 +72,16 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
     await initSupabase(config);
     client = new pg.Client({ connectionString: TEST_DATABASE_URL });
     await client.connect();
+    const dimensionResult = await client.query<{ atttypmod: number }>(
+      `
+      SELECT atttypmod
+      FROM pg_attribute
+      WHERE attrelid = 'fqc_documents'::regclass
+        AND attname = 'embedding'
+      `
+    );
+    embeddingDimensions = dimensionResult.rows[0]?.atttypmod ?? TEST_EMBEDDING_DIMENSIONS;
+    vector = makeVector(embeddingDimensions);
     await client.query('DROP TABLE IF EXISTS fqcp_phase146_worker_records');
     await client.query(`
       CREATE TABLE IF NOT EXISTS fqcp_phase146_worker_records (
@@ -74,7 +89,7 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
         instance_id TEXT NOT NULL,
         name TEXT,
         status TEXT DEFAULT 'active',
-        embedding vector(${TEST_EMBEDDING_DIMENSIONS}),
+        embedding vector(${embeddingDimensions}),
         embedding_updated_at TIMESTAMPTZ
       )
     `);
@@ -146,6 +161,19 @@ describe.skipIf(!HAS_SUPABASE)('pending embedding retry worker (integration)', (
       databaseUrl: TEST_DATABASE_URL,
       limit: 10,
     });
+
+    if (result.failed > 0) {
+      const pendingRows = await client.query(
+        `
+        SELECT target_kind, target_table, target_id, last_error
+        FROM fqc_pending_embeds
+        WHERE instance_id = $1
+        ORDER BY target_kind
+        `,
+        [TEST_INSTANCE_ID]
+      );
+      throw new Error(`pending embedding retry failed: ${JSON.stringify(pendingRows.rows)}`);
+    }
 
     expect(result).toEqual({ selected: 3, processed: 3, succeeded: 3, failed: 0 });
 

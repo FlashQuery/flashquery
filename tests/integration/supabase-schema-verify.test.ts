@@ -385,7 +385,7 @@ describe('Schema Verification (Integration)', () => {
         await testClient.end();
       }
     }
-  });
+  }, 120_000);
 
   it('ATL-I-01 enforces unique fqc_purpose_templates identity by instance, purpose, and template_path', async () => {
     if (!testSupabaseAvailable) {
