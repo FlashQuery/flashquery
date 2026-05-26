@@ -1,12 +1,12 @@
 import { simpleGit, type SimpleGit } from 'simple-git';
 import { Mutex } from 'async-mutex';
 import { existsSync } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import pg from 'pg';
 import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
+import { writeVaultFile } from '../storage/vault-write.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GitManagerImpl
@@ -92,7 +92,6 @@ export class GitManagerImpl {
 
   async dumpDatabase(): Promise<string> {
     const dumpRelPath = '.fqc/backup.json';
-    const dumpAbsDir = join(this.vaultPath, '.fqc');
     const dumpAbsPath = join(this.vaultPath, dumpRelPath);
 
     const pgClient = createPgClientIPv4(this.supabaseConfig.databaseUrl);
@@ -118,8 +117,7 @@ export class GitManagerImpl {
         2
       );
 
-      await mkdir(dumpAbsDir, { recursive: true });
-      await writeFile(dumpAbsPath, output, 'utf-8');
+      await writeVaultFile(dumpAbsPath, output);
       logger.info(`Git: backup written to ${dumpRelPath} (${tablesResult.rows.length} tables)`);
       return dumpRelPath;
     } finally {

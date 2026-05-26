@@ -1,4 +1,4 @@
-import { mkdir, writeFile, readFile, rename, unlink, stat } from 'node:fs/promises';
+import { mkdir, readFile, rename, unlink } from 'node:fs/promises';
 import { existsSync, readdirSync } from 'node:fs';
 import { join, dirname, resolve, relative } from 'node:path';
 import matter from 'gray-matter';
@@ -281,8 +281,7 @@ class VaultManagerImpl implements VaultManager {
       const errMsg = err instanceof Error ? err.message : String(err);
       if (errMsg.includes('EXDEV') || errMsg.includes('Invalid cross-device')) {
         const content = await readFile(sourceAbsPath, 'utf-8');
-        await writeFile(trashAbsPath, content, 'utf-8');
-        await stat(trashAbsPath);
+        await writeVaultFile(trashAbsPath, content);
         await unlink(sourceAbsPath);
         logger.info(`Vault: cross-device trash fallback used for ${relativePath}`);
       } else {

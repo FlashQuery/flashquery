@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
+import { withDocumentLock } from '../../src/services/document-lock.js';
 import { writeVaultFile } from '../../src/storage/vault-write.js';
+import type { FlashQueryConfig } from '../../src/config/loader.js';
 
 function makeHandle(name: string, events: string[]) {
   return {
@@ -17,6 +19,7 @@ describe('writeVaultFile durable sequence', () => {
     const events: string[] = [];
 
     await writeVaultFile('/vault/project/note.md', 'body', {
+      platform: 'linux',
       operations: {
         mkdir: async (path) => {
           events.push(`mkdir:${path}`);
@@ -67,8 +70,8 @@ describe('writeVaultFile durable sequence', () => {
     };
 
     await Promise.all([
-      writeVaultFile('/vault/note.md', 'first', { operations }),
-      writeVaultFile('/vault/note.md', 'second', { operations }),
+      writeVaultFile('/vault/note.md', 'first', { operations, platform: 'linux' }),
+      writeVaultFile('/vault/note.md', 'second', { operations, platform: 'linux' }),
     ]);
 
     expect(tempPaths).toHaveLength(2);
@@ -77,25 +80,67 @@ describe('writeVaultFile durable sequence', () => {
     expect(new Set(tempPaths).size).toBe(2);
   });
 
-  it('T-U-033 keeps macOS durable sync behind the same adapter path used by Linux', async () => {
-    const durableFileSync = vi.fn(async (handle: { sync(): Promise<void> }) => {
-      await handle.sync();
+  it('T-U-033 uses a Darwin F_FULLFSYNC adapter instead of plain handle.sync on macOS', async () => {
+    const events: string[] = [];
+    const darwinFullFsync = vi.fn(async (path: string) => {
+      events.push(`fullfsync:${path}`);
     });
 
     await writeVaultFile('/vault/darwin.md', 'body', {
       platform: 'darwin',
-      durableFileSync,
+      darwinFullFsync,
       operations: {
         mkdir: vi.fn(async () => undefined),
         writeFile: vi.fn(async () => undefined),
-        open: vi.fn(async () => makeHandle('file', [])),
+        open: vi.fn(async (path: string) =>
+          makeHandle(path.includes('.fqc-tmp-') ? 'temp' : 'dir', events)
+        ),
         rename: vi.fn(async () => undefined),
         unlink: vi.fn(async () => undefined),
       },
     });
 
-    expect(durableFileSync).toHaveBeenCalledTimes(1);
-    expect(durableFileSync.mock.calls[0]?.[1]).toEqual({ platform: 'darwin' });
+    expect(darwinFullFsync).toHaveBeenCalledTimes(1);
+    expect(darwinFullFsync.mock.calls[0]?.[0]).toMatch(
+      /^\/vault\/darwin\.md\.fqc-tmp-\d+-\d+-[a-f0-9-]+$/
+    );
+    expect(events).not.toContain('temp.sync');
+  });
+
+  it('REQ-020 AC #4 asserts the ambient document lock when enabled', async () => {
+    const previous = process.env.FQC_LOCK_ASSERT;
+    process.env.FQC_LOCK_ASSERT = 'true';
+
+    const operations = {
+      mkdir: vi.fn(async () => undefined),
+      writeFile: vi.fn(async () => undefined),
+      open: vi.fn(async () => makeHandle('file', [])),
+      rename: vi.fn(async () => undefined),
+      unlink: vi.fn(async () => undefined),
+    };
+
+    try {
+      await expect(
+        writeVaultFile('/vault/asserted.md', 'body', { operations, platform: 'linux' })
+      ).rejects.toThrow(/without holding withDocumentLock/);
+
+      const config = {
+        locking: { enabled: false, ttlSeconds: 30 },
+        instance: { id: 'lock-assert-test' },
+      } as FlashQueryConfig;
+
+      await expect(
+        withDocumentLock(config, '/vault/asserted.md', () =>
+          writeVaultFile('/vault/asserted.md', 'body', { operations, platform: 'linux' })
+        )
+      ).resolves.toEqual({ contentHash: expect.any(String) });
+    } finally {
+      if (previous === undefined) {
+        delete process.env.FQC_LOCK_ASSERT;
+      } else {
+        process.env.FQC_LOCK_ASSERT = previous;
+      }
+    }
   });
 
   it('T-U-031 surfaces temp fsync failures', async () => {
@@ -103,6 +148,7 @@ describe('writeVaultFile durable sequence', () => {
 
     await expect(
       writeVaultFile('/vault/fail.md', 'body', {
+        platform: 'linux',
         durableFileSync: async () => {
           throw syncError;
         },
@@ -122,6 +168,7 @@ describe('writeVaultFile durable sequence', () => {
 
     await expect(
       writeVaultFile('/vault/fail-dir.md', 'body', {
+        platform: 'linux',
         operations: {
           mkdir: vi.fn(async () => undefined),
           writeFile: vi.fn(async () => undefined),

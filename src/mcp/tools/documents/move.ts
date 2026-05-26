@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import { existsSync } from 'node:fs';
-import { readFile, stat, rename, mkdir, writeFile, unlink } from 'node:fs/promises';
+import { readFile, rename, mkdir, unlink } from 'node:fs/promises';
 import { join, extname, normalize, dirname, basename, resolve } from 'node:path';
 import matter from 'gray-matter';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vaultManager } from '../../../storage/vault.js';
+import { writeVaultFile } from '../../../storage/vault-write.js';
 import { supabaseManager } from '../../../storage/supabase.js';
 import { logger } from '../../../logging/logger.js';
 import { LockTimeoutError, withDocumentLocks } from '../../../services/document-lock.js';
@@ -140,10 +141,9 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
             const errMsg = err instanceof Error ? err.message : String(err);
             // Check if it's EXDEV (cross-device) error
             if (errMsg.includes('EXDEV') || errMsg.includes('Invalid cross-device')) {
-              // Fallback: read, write to dest, verify dest, then delete source
+              // Fallback: durably write dest, then delete source.
               const content = await readFile(sourceAbsPath, 'utf-8');
-              await writeFile(destAbsPath, content, 'utf-8');
-              await stat(destAbsPath); // Verify dest was written before deleting source
+              await writeVaultFile(destAbsPath, content);
               await unlink(sourceAbsPath);
               logger.info(`move_document: cross-device fallback used for ${identifier} → ${destPath}`);
             } else {

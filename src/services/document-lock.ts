@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Mutex } from 'async-mutex';
 import type { FlashQueryConfig } from '../config/types.js';
 import { supabaseManager } from '../storage/supabase.js';
@@ -6,6 +7,7 @@ import { acquireLock, releaseLock } from './write-lock.js';
 
 const TIER1_STRIPE_COUNT = 1024;
 const tier1Stripes = Array.from({ length: TIER1_STRIPE_COUNT }, () => new Mutex());
+const heldDocumentLocks = new AsyncLocalStorage<Set<string>>();
 
 export class LockTimeoutError extends Error {
   constructor(resource: string) {
@@ -56,6 +58,12 @@ function uniqueSortedEntries(filePaths: string[]): DocumentLockEntry[] {
   return [...byKey.values()].sort((a, b) => a.basicKey.localeCompare(b.basicKey));
 }
 
+export function isDocumentLockHeldForPath(filePath: string): boolean {
+  const held = heldDocumentLocks.getStore();
+  if (!held) return false;
+  return held.has(toPhase155BasicKey(filePath));
+}
+
 async function acquireLegacyTier2(config: FlashQueryConfig, entry: DocumentLockEntry): Promise<boolean> {
   if (!config.locking.enabled) return true;
   return acquireLock(supabaseManager.getClient(), config.instance.id, entry.resource, {
@@ -102,7 +110,13 @@ export async function withDocumentLocks<T>(
       if (config.locking.enabled) tier2Entries.push(entry);
     }
 
-    return await fn();
+    const inheritedLocks = heldDocumentLocks.getStore();
+    const activeLocks = new Set(inheritedLocks ?? []);
+    for (const entry of entries) {
+      activeLocks.add(entry.basicKey);
+    }
+
+    return await heldDocumentLocks.run(activeLocks, fn);
   } finally {
     for (const entry of [...tier2Entries].reverse()) {
       await releaseLegacyTier2(config, entry);

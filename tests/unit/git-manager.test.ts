@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
   const mockExistsSync = vi.fn();
   const mockMkdir = vi.fn();
   const mockWriteFile = vi.fn();
+  const mockWriteVaultFile = vi.fn().mockResolvedValue({ contentHash: 'backup-hash' });
 
   // pg.Client mock — connect/query/end can be overridden per-test
   const mockPgConnect = vi.fn().mockResolvedValue(undefined);
@@ -45,6 +46,7 @@ const mocks = vi.hoisted(() => {
     mockExistsSync,
     mockMkdir,
     mockWriteFile,
+    mockWriteVaultFile,
     MockPgClient,
     mockPgConnect,
     mockPgQuery,
@@ -102,6 +104,10 @@ vi.mock('../../src/utils/pg-client.js', () => ({
     query: mocks.mockPgQuery,
     end: mocks.mockPgEnd,
   })),
+}));
+
+vi.mock('../../src/storage/vault-write.js', () => ({
+  writeVaultFile: mocks.mockWriteVaultFile,
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -413,15 +419,13 @@ describe('GitManager', () => {
 
       expect(result).toBe('.fqc/backup.json');
       expect(mocks.mockPgConnect).toHaveBeenCalled();
-      expect(mocks.mockWriteFile).toHaveBeenCalledWith(
+      expect(mocks.mockWriteVaultFile).toHaveBeenCalledWith(
         expect.stringContaining('backup.json'),
-        expect.stringContaining('"exported_at"'),
-        'utf-8'
+        expect.stringContaining('"exported_at"')
       );
-      expect(mocks.mockWriteFile).toHaveBeenCalledWith(
+      expect(mocks.mockWriteVaultFile).toHaveBeenCalledWith(
         expect.any(String),
-        expect.stringContaining('"fqc_memory"'),
-        'utf-8'
+        expect.stringContaining('"fqc_memory"')
       );
     });
 
