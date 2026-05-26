@@ -60,6 +60,8 @@ Loads macro source from the vault and validates it without applying side effects
 - Provide exactly one of `source` or `source_ref`.
 - `_self` is available only when the macro is loaded via `source_ref`.
 - Write macros to be idempotent around partial state; retries can happen after failures.
+- Each macro step uses the called tool's own document lock behavior. `call_macro` does not hold a macro-spanning lock, does not make multi-step document workflows atomic, and does not auto-thread future `version_token` / `expected_version` safety checks.
+- When a macro needs read-modify-write safety across steps, pass explicit version preconditions once the target tool supports them; automatic macro token threading and atomic macro execution are deferred.
 - Use explicit budgets for broad loops or model/tool-heavy programs.
 - If the macro needs a user decision, return a `needs_user_input` style value instead of guessing.
 
