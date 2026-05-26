@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { createMcpRequestLifecycle } from '../../src/mcp/request-lifecycle.js';
+import {
+  getMcpRequestLifecycleForServer,
+  getRegisteredMcpServers,
+  registerMcpRequestLifecycle,
+  unregisterMcpServerForShutdown,
+} from '../../src/mcp/request-lifecycle-registry.js';
 
 type McpTextResult = {
   content: Array<{ type: 'text'; text: string }>;
@@ -79,5 +86,25 @@ describe('MCP request lifecycle drain tracking', () => {
     });
     expect(drainResult.elapsedMs).toBeGreaterThanOrEqual(0);
     expect(lifecycle.getInFlightCount()).toBe(1);
+  });
+
+  it('T-U-037 registers, looks up, lists, and unregisters MCP server lifecycle state', () => {
+    const server = new McpServer(
+      { name: 'lifecycle-registry-unit', version: 'test' },
+      { capabilities: { tools: {} } }
+    );
+    const lifecycle = createMcpRequestLifecycle();
+
+    registerMcpRequestLifecycle(server, lifecycle);
+
+    expect(getMcpRequestLifecycleForServer(server)).toBe(lifecycle);
+    expect(getRegisteredMcpServers()).toContain(server);
+
+    unregisterMcpServerForShutdown(server);
+
+    expect(getRegisteredMcpServers()).not.toContain(server);
+    expect(() => getMcpRequestLifecycleForServer(server)).toThrow(
+      'MCP request lifecycle has not been initialized for this server'
+    );
   });
 });

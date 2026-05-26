@@ -4,6 +4,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { getCurrentCorrelationId } from '../../src/logging/context.js';
 import { createMcpServer, getMcpRequestLifecycleForServer } from '../../src/mcp/server.js';
+import { getRegisteredMcpServers, unregisterMcpServerForShutdown } from '../../src/mcp/request-lifecycle-registry.js';
 import { getNativeToolCatalog } from '../../src/mcp/tool-catalog.js';
 
 type CapturedHandler = (args: unknown, extra: unknown) => Promise<CallToolResult> | CallToolResult;
@@ -93,6 +94,17 @@ function createServerWithCapturedRegistrations(): {
 }
 
 describe('MCP server registerTool correlation wrapper', () => {
+  it('T-U-037 registers createMcpServer lifecycle state for shutdown lookup', () => {
+    const { server, registerSpy, toolSpy } = createServerWithCapturedRegistrations();
+
+    expect(getRegisteredMcpServers()).toContain(server);
+    expect(getMcpRequestLifecycleForServer(server).getInFlightCount()).toBe(0);
+
+    unregisterMcpServerForShutdown(server);
+    registerSpy.mockRestore();
+    toolSpy.mockRestore();
+  });
+
   it('T-U-017 provides a correlation ID inside registerTool handlers on every invocation', async () => {
     const { server, registerSpy, toolSpy } = createServerWithCapturedRegistrations();
     const observedCorrelationIds: string[] = [];
