@@ -2,10 +2,10 @@ import http from 'node:http';
 import https from 'node:https';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { logger } from '../logging/logger.js';
-import type { FlashQueryConfig } from '../config/loader.js';
+import type { FlashQueryConfig } from '../config/types.js';
 import { verifySchema } from './schema-verify.js';
 import { createPgClientIPv4 } from '../utils/pg-client.js';
-import { getEmbeddingDimensions } from '../embedding/provider.js';
+import { getEmbeddingDimensions } from '../embedding/dimensions.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // macOS 15+ (Sequoia/Tahoe) Local Network Privacy

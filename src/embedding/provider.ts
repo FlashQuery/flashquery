@@ -1,6 +1,7 @@
-import type { FlashQueryConfig } from '../config/loader.js';
+import type { FlashQueryConfig } from '../config/types.js';
 import { logger } from '../logging/logger.js';
 import type { LlmClient } from '../llm/client.js';
+import { getEmbeddingDimensions } from './dimensions.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EmbeddingProvider interface
@@ -233,21 +234,6 @@ export function createEmbeddingProvider(config: NonNullable<FlashQueryConfig['em
         `Embedding error: Unsupported provider '${config.provider}'. Use 'openai', 'openrouter', or 'ollama'.`
       );
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// getEmbeddingDimensions — resolve vector dimensions from LLM or legacy config
-// ─────────────────────────────────────────────────────────────────────────────
-
-export function getEmbeddingDimensions(config: FlashQueryConfig): number {
-  if (config.llm?.purposes) {
-    const embeddingPurpose = config.llm.purposes.find(p => p.name === 'embedding');
-    if (embeddingPurpose?.models[0]) {
-      const modelEntry = config.llm.models?.find(m => m.name === embeddingPurpose.models[0]);
-      if (modelEntry?.dimensions) return modelEntry.dimensions;
-    }
-  }
-  return config.embedding?.dimensions ?? 1536;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
