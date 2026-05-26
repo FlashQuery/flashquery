@@ -11,6 +11,7 @@ export default defineConfig({
       'tests/integration/llm-config-sync.test.ts',
       'tests/integration/tool-registry.test.ts',
       'tests/integration/plugin-reconciliation.integration.test.ts',
+      'tests/integration/atomic-write-frontmatter.integration.test.ts',
       'tests/integration/archive-document-lock.test.ts',
       'tests/integration/per-file-lock.test.ts',
       'tests/integration/apply-tags-concurrent.integration.test.ts',

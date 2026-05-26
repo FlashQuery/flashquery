@@ -6,6 +6,7 @@ import { logger } from '../logging/logger.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { gitManager } from '../git/manager.js';
 import { FM } from '../constants/frontmatter-fields.js';
+import { isVaultTempFileName, writeVaultFile } from './vault-write.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OBS-04: Minimal frontmatter for externally-added files (D-06)
@@ -217,9 +218,7 @@ class VaultManagerImpl implements VaultManager {
     // Serialize using gray-matter (default import — CJS interop)
     const output = matter.stringify(content, fm);
 
-    const tmpPath = absolutePath + '.fqc-tmp';
-    await writeFile(tmpPath, output, 'utf-8');
-    await rename(tmpPath, absolutePath);
+    await writeVaultFile(absolutePath, output);
     const duration = Math.round(performance.now() - startTime);
     logger.debug(`Vault: wrote ${relativePath} (${duration}ms) — document update persisted to disk`);
 
@@ -363,7 +362,7 @@ export async function cleanStaleTempFiles(vaultPath: string): Promise<void> {
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
         await walk(full);
-      } else if (entry.name.endsWith('.fqc-tmp')) {
+      } else if (isVaultTempFileName(entry.name)) {
         try {
           await unlink(full);
           logger.info(`startup: removed stale temp file ${full}`);

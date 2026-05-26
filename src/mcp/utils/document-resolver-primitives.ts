@@ -1,11 +1,12 @@
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { dirname, join, resolve, relative } from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import matter from 'gray-matter';
 import { Mutex } from 'async-mutex';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { listMarkdownFiles } from '../../storage/document-primitives.js';
+import { writeVaultFile } from '../../storage/vault-write.js';
 import { isValidUuid } from '../../utils/uuid.js';
 import { propagateFqcIdChange } from '../../services/plugin-propagation.js';
 import { FM } from '../../constants/frontmatter-fields.js';
@@ -110,9 +111,7 @@ async function writeMarkdownFile(
     [FM.UPDATED]: new Date().toISOString(),
   });
   const output = matter.stringify(content, fm);
-  const tmpPath = `${absolutePath}.fqc-tmp`;
-  await writeFile(tmpPath, output, 'utf-8');
-  await rename(tmpPath, absolutePath);
+  await writeVaultFile(absolutePath, output);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

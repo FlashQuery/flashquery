@@ -62,6 +62,10 @@ vi.mock('../../src/storage/document-primitives.js', () => ({
   computeHash: vi.fn(() => 'mock-sha256-hash'),
 }));
 
+vi.mock('../../src/storage/vault-write.js', () => ({
+  writeVaultFile: vi.fn().mockResolvedValue({ contentHash: 'mock-write-hash' }),
+}));
+
 // Mock vaultManager (used by ensureProvisioned after refactor)
 vi.mock('../../src/storage/vault.js', () => ({
   vaultManager: {
@@ -84,6 +88,7 @@ import { resolveDocumentIdentifier, targetedScan, getFileMutex } from '../../src
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
 import { listMarkdownFiles } from '../../src/storage/document-primitives.js';
+import { writeVaultFile } from '../../src/storage/vault-write.js';
 import { logger } from '../../src/logging/logger.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -439,11 +444,11 @@ describe('TSA-03/TSA-05: targetedScan', () => {
 
     await targetedScan(config, supabase as never, RESOLVED_NO_ID, 'test-hash', logger);
 
-    // Verify the updated markdown was written atomically
-    expect(fsPromises.writeFile).toHaveBeenCalledOnce();
+    // Verify the updated markdown was written through the durable primitive
+    expect(writeVaultFile).toHaveBeenCalledOnce();
 
     // Check serialized frontmatter — title and tags should remain unchanged
-    const [, serialized] = (fsPromises.writeFile as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string, string];
+    const [, serialized] = (writeVaultFile as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string];
     expect(serialized).toContain('fq_title: Original Title');
     expect(serialized).toContain('fq_tags:');
     expect(serialized).toContain(`fq_id: ${SAMPLE_UUID}`);
