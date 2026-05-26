@@ -81,7 +81,11 @@
   - Create or update the Test Plan §4.4.1 and §4.4.2 cases: `T-U-028` through `T-U-033`, `T-I-039`, `T-I-040`, and `T-I-041`.
   - Execution must verify both primitive-level behavior and representative caller routing through the primitive.
   - Required execution evidence: `npm test -- --grep "vault-write|atomic-write|durable"`; `npm run test:integration -- --grep "frontmatter-write|vault-write-durable|atomic-write"`.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 156-01-PLAN.md — Durable `writeVaultFile` primitive, unit coverage, and macOS F_FULLFSYNC decision checkpoint.
+- [ ] 156-02-PLAN.md — Migrate VaultManager, frontmatter, resolver repair, and plugin reconciliation write paths.
+- [ ] 156-03-PLAN.md — Static write-path guard, integration routing/cleanup evidence, and final Phase 156 audit summary.
 
 ### Phase 157: Records / Memory / Plugins Audit + Guards
 **Goal**: Users can keep using records, memory, and plugin operations safely after the old coarse lock table is removed.
