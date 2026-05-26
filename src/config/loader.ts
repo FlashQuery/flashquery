@@ -3,14 +3,17 @@ import * as yaml from 'js-yaml';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, dirname, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
+import type { FlashQueryConfig } from './types.js';
 import { validateAllPurposeMode2Admissions } from '../llm/capabilities.js';
-import { HARD_EXCLUDED_NATIVE_TOOLS, TOOL_TIERS } from '../llm/tool-registry.js';
+import { HARD_EXCLUDED_NATIVE_TOOLS, TOOL_TIERS } from '../llm/tool-policy.js';
 import { getLegacyToolSuggestion, getToolMetadata } from '../mcp/tool-metadata.js';
 import {
   resolveHostToolExposure,
   type ResolvedHostToolExposure,
 } from '../mcp/tool-exposure.js';
 import { logger } from '../logging/logger.js';
+
+export type { FlashQueryConfig } from './types.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Zod schemas (snake_case — matches YAML structure)
@@ -291,83 +294,6 @@ const ConfigSchema = z
     macro: MacroSchema,
   })
   .strict();
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Exported TypeScript interface (camelCase)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface FlashQueryConfig {
-  instance: {
-    name: string;
-    id: string;
-    vault: {
-      path: string;
-      markdownExtensions: string[];
-    };
-  };
-  server: { host: string; port: number; url?: string };
-  supabase: { url: string; serviceRoleKey: string; databaseUrl: string; skipDdl: boolean };
-  git: { autoCommit: boolean; autoPush: boolean; remote: string; branch: string };
-  mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
-  locking: { enabled: boolean; ttlSeconds: number };
-  trashFolder: { enabled: boolean; path: string; collisionStrategy: 'suffix' | 'timestamp' };
-  hostMcpTools?: { tools?: string[]; excludedTools?: string[] };
-  mcpServers: Record<string, {
-    transport: 'stdio';
-    command: string;
-    args: string[];
-    env: Record<string, string>;
-    costPerCall: number;
-    perCallTimeoutMs: number;
-    toolOverrides: Record<string, {
-      costPerCall?: number;
-      descriptionOverride?: string;
-    }>;
-  }>;
-  host: { mcpServers: string[]; toolSearch: 'enabled' | 'disabled' };
-  templates?: { defaultAccess: 'permissive' | 'restrictive' };
-  macro: { defaultTimeoutMs: number };
-  llm?: {
-    providers: Array<{ name: string; type: 'openai-compatible' | 'ollama'; endpoint: string; apiKey?: string; local?: boolean }>;
-    models: Array<{
-      name: string;
-      providerName: string;
-      model: string;
-      type: 'language' | 'reasoning' | 'embedding' | 'vision' | 'code' | 'audio' | 'guardian';
-      dimensions?: number;
-      costPerMillion: { input: number; output: number };
-      description?: string;
-      contextWindow?: number;
-      tags?: string[];
-      capabilities?: {
-        tool_calling?: boolean;
-        usage_on_tool_calls?: boolean;
-        strict_tools?: boolean;
-        parallel_tool_calls?: boolean;
-        structured_outputs_with_tools?: boolean;
-      };
-    }>;
-    purposes: Array<{
-      name: string;
-      description: string;
-      models: string[];
-      defaults?: Record<string, unknown>;
-      tools?: string[];
-      excludedTools?: string[];
-      templates?: string[];
-      mcpServers?: string[];
-      toolSearch: 'enabled' | 'disabled';
-    }>;
-  };
-  embedding?: {
-    provider: string;
-    model: string;
-    apiKey?: string;
-    endpoint?: string;
-    dimensions: number;
-  };
-  logging: { level: 'debug' | 'info' | 'warn' | 'error'; output: 'stdout' | 'file'; file?: string };
-}
 
 interface ConfigRuntimeMetadata {
   deprecationWarnings: string[];

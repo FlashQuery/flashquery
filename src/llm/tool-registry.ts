@@ -1,4 +1,4 @@
-import type { FlashQueryConfig } from '../config/loader.js';
+import type { FlashQueryConfig } from '../config/types.js';
 import type { logger } from '../logging/logger.js';
 import type { MacroCallerContext } from '../macro/types.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -10,9 +10,17 @@ import type {
 } from './template-tools.js';
 import type { BrokeredTool } from '../services/mcp-broker/index.js';
 import {
-  getDelegatedHardExcludedTools,
-  getToolNamesByTier,
-} from '../mcp/tool-metadata.js';
+  HARD_EXCLUDED_NATIVE_TOOLS,
+  HARD_EXCLUDED_REASON_BY_TOOL,
+  TOOL_TIERS,
+  type ToolTierName,
+} from './tool-policy.js';
+
+export {
+  HARD_EXCLUDED_NATIVE_TOOLS,
+  TOOL_TIERS,
+  type ToolTierName,
+} from './tool-policy.js';
 
 export interface NativeToolResponse extends CallToolResult {
   content: Array<Extract<CallToolResult['content'][number], { type: 'text' }>>;
@@ -85,20 +93,6 @@ export interface OpenAiToolDefinitionOptions {
   strict: boolean;
 }
 
-export const TOOL_TIERS = {
-  'tier:read-only': getToolNamesByTier('tier:read-only'),
-  'tier:read-write': getToolNamesByTier('tier:read-write'),
-} as const satisfies Record<string, readonly string[]>;
-
-export type ToolTierName = keyof typeof TOOL_TIERS;
-
-const DELEGATED_HARD_EXCLUDED_TOOLS = getDelegatedHardExcludedTools();
-
-export const HARD_EXCLUDED_NATIVE_TOOLS = DELEGATED_HARD_EXCLUDED_TOOLS.map((entry) => entry.tool);
-
-const HARD_EXCLUDED_REASON_BY_TOOL = new Map(
-  DELEGATED_HARD_EXCLUDED_TOOLS.map((entry) => [entry.tool, entry.reason])
-);
 const TEMPLATE_TOOL_NAME_PREFIX = 'flashquery_';
 
 function isToolTierName(tool: string): tool is ToolTierName {

@@ -1,4 +1,4 @@
-import type { FlashQueryConfig } from '../config/loader.js';
+import type { FlashQueryConfig } from '../config/types.js';
 
 export type StructuredModelCapabilities = {
   tool_calling?: boolean;

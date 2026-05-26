@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import type { FlashQueryConfig } from '../config/loader.js';
+import type { FlashQueryConfig } from '../config/types.js';
 import { getCurrentCorrelationId } from './context.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
