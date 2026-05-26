@@ -125,7 +125,7 @@ describe('writeVaultFile durable sequence', () => {
       ).rejects.toThrow(/without holding withDocumentLock/);
 
       const config = {
-        locking: { enabled: false, ttlSeconds: 30 },
+        locking: { enabled: false },
         instance: { id: 'lock-assert-test' },
       } as FlashQueryConfig;
 

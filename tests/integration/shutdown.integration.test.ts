@@ -62,7 +62,6 @@ describe('ShutdownCoordinator (Integration)', () => {
       },
       locking: {
         enabled: false,
-        ttlSeconds: 30,
       },
     } as FlashQueryConfig;
 

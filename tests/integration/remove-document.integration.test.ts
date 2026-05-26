@@ -51,7 +51,7 @@ function makeConfig(
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
     plugins: {},
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     hostMcpTools: { tools: ['tier:read-write'], excludedTools: [] },
     trashFolder,
   } as unknown as FlashQueryConfig;

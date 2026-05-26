@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
-import { verifySessionAdvisoryLocks } from '../../src/services/lock-startup.js';
+import { assertLockingSessionCapability, verifySessionAdvisoryLocks } from '../../src/services/lock-startup.js';
+import type { FlashQueryConfig } from '../../src/config/types.js';
 import { closePgPools, __setPgPoolFactoryForTesting } from '../../src/utils/pg-client.js';
 
 type QueryCall = { sql: string; params?: unknown[] };
@@ -68,6 +69,23 @@ function installFakeStartupPool(observerCanSeeLock: boolean): { clients: FakeSta
   return { clients };
 }
 
+function makeConfig(lockingEnabled: boolean): FlashQueryConfig {
+  return {
+    instance: {
+      name: 'lock-startup-self-test',
+      id: 'lock-startup-self-test',
+      vault: { path: '/tmp/vault', markdownExtensions: ['.md'] },
+    },
+    supabase: {
+      url: 'http://localhost:54321',
+      serviceRoleKey: 'service-role',
+      databaseUrl: 'postgres://fq/test',
+      skipDdl: true,
+    },
+    locking: { enabled: lockingEnabled },
+  } as FlashQueryConfig;
+}
+
 describe('REQ-005 lock-startup session-capable advisory-lock self-test', () => {
   afterEach(async () => {
     await closePgPools();
@@ -118,5 +136,19 @@ describe('REQ-005 lock-startup session-capable advisory-lock self-test', () => {
       expect(result.message).toContain('session-capable');
       expect(result.message).toContain('transaction-mode pooler');
     }
+  });
+
+  it('skips the session self-test when locking is disabled', async () => {
+    __setPgPoolFactoryForTesting(() => ({
+      async query<Row extends QueryResultRow = QueryResultRow>(): Promise<QueryResult<Row>> {
+        throw new Error('pool should not be used');
+      },
+      async connect(): Promise<PoolClient> {
+        throw new Error('pool should not be used');
+      },
+      async end(): Promise<void> {},
+    }));
+
+    await expect(assertLockingSessionCapability(makeConfig(false))).resolves.toBeUndefined();
   });
 });

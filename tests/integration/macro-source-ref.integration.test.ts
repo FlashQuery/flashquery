@@ -45,7 +45,7 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
     plugins: {},
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     hostMcpTools: { tools: ['call_macro'], excludedTools: [] },
     mcpServers: {},
     host: { mcpServers: [], toolSearch: 'disabled' },

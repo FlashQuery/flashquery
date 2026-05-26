@@ -15,7 +15,7 @@ function makeConfig(): FlashQueryConfig {
     supabase: { url: 'https://example.invalid', serviceRoleKey: 'key', databaseUrl: 'postgresql://localhost/db' },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'info', output: 'stderr' },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
   } as FlashQueryConfig;
 }

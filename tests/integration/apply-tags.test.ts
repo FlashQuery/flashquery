@@ -40,7 +40,7 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
     logging: { level: 'error', output: 'stdout' },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as unknown as FlashQueryConfig;
 }
 

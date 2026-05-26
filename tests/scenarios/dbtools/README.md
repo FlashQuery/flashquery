@@ -164,7 +164,7 @@ python3 run_suite.py --managed --strict-cleanup
 **Manual (standalone):**
 ```bash
 python3 dbtools/clean_test_tables.py
-# Deletes all rows from: fqc_documents, fqc_memory, fqc_vault, fqc_plugin_registry, fqc_write_locks
+# Deletes all rows from: fqc_documents, fqc_memory, fqc_vault, fqc_plugin_registry
 # Preserves table structure (no DROP TABLE)
 ```
 
@@ -211,13 +211,14 @@ This ensures each test:
 
 #### Tables Cleaned (in order)
 
-1. `fqc_write_locks`
-2. `fqc_documents`
-3. `fqc_memory`
-4. `fqc_vault`
-5. `fqc_plugin_registry`
+1. `fqc_documents`
+2. `fqc_memory`
+3. `fqc_vault`
+4. `fqc_plugin_registry`
 
-Order matters: tables with fewer dependencies are cleaned first.
+Order matters: tables with fewer dependencies are cleaned first. The legacy
+`fqc_write_locks` table was retired in v3.9 / Phase 158 and is no longer
+cleaned by dbtools.
 
 #### Verification Behavior
 
@@ -264,7 +265,6 @@ Currently:
 - `fqc_memory`
 - `fqc_vault`
 - `fqc_plugin_registry`
-- `fqc_write_locks`
 
 ## Typical workflows
 

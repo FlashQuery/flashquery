@@ -67,7 +67,7 @@ function makeConfig(vaultPath = '/vault') {
       id: 'test-instance',
       vault: { path: vaultPath },
     },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
 }
 

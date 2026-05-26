@@ -257,7 +257,7 @@ FlashQuery does not follow symbolic links in the vault. Symlinks are skipped dur
 
 ### Multiple instances on the same vault
 
-Running two FlashQuery instances against the same vault simultaneously can still race at the filesystem level. Database-backed write locks coordinate shared `documents`, `memory`, and `records` writes when enabled, but they do not make the vault itself a fully multi-writer filesystem. Recommendation: one primary writer per vault; use additional instances only when you understand the lock boundaries.
+Running two FlashQuery instances against the same vault simultaneously can still race at the filesystem level. Database-backed advisory locks coordinate shared document writes, plugin reconciliation, and plugin unregister cleanup when `locking.enabled` is true, but they do not make the vault itself a fully multi-writer filesystem. If `locking.enabled` is false, only same-process Tier 1 locks remain; separate FlashQuery processes can race on the same document or plugin coordination key. Recommendation: one primary writer per vault; use additional instances only when you understand the lock boundaries.
 
 ### Plugin table consistency after external edits
 

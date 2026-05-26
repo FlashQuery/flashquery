@@ -3,8 +3,14 @@ import pg from 'pg';
 import type { PoolClient } from 'pg';
 import { createHash } from 'node:crypto';
 import { withDocumentLock } from '../../src/services/document-lock.js';
+import { withPluginCoordinationLock } from '../../src/services/plugin-coordination-lock.js';
 import { closePgPools } from '../../src/utils/pg-client.js';
-import { HAS_SUPABASE, TEST_DATABASE_URL, TEST_SUPABASE_KEY, TEST_SUPABASE_URL } from '../helpers/test-env.js';
+import {
+  HAS_SESSION_CAPABLE_DATABASE_URL,
+  TEST_DATABASE_URL,
+  TEST_SUPABASE_KEY,
+  TEST_SUPABASE_URL,
+} from '../helpers/test-env.js';
 import type { FlashQueryConfig } from '../../src/config/types.js';
 
 function makeConfig(): FlashQueryConfig {
@@ -44,6 +50,21 @@ async function advisoryLockVisible(client: PoolClient, key: string): Promise<boo
   return result.rows[0]?.visible === true;
 }
 
+async function pluginAdvisoryLockVisible(client: PoolClient, key: string): Promise<boolean> {
+  const result = await client.query<{ visible: boolean }>(
+    `SELECT EXISTS (
+      SELECT 1
+      FROM pg_locks
+      WHERE locktype = 'advisory'
+        AND objsubid = 1
+        AND granted = true
+        AND ((classid::bigint << 32) | objid::bigint) = hashtextextended($1, 0)::bigint
+    ) AS visible`,
+    [key]
+  );
+  return result.rows[0]?.visible === true;
+}
+
 function createGate(): { promise: Promise<void>; release: () => void } {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => {
@@ -52,39 +73,12 @@ function createGate(): { promise: Promise<void>; release: () => void } {
   return { promise, release };
 }
 
-async function supportsSessionAdvisoryLocks(): Promise<boolean> {
-  const key = advisoryKeyForPath('/tmp/vault/two-tier-session-capability-probe.md');
-  const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
-  const contender = new pg.Client({ connectionString: TEST_DATABASE_URL });
-
-  try {
-    await holder.connect();
-    await contender.connect();
-    await holder.query('SELECT pg_advisory_lock($1::bigint)', [key]);
-    const blocked = await contender.query<{ acquired: boolean }>(
-      'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
-      [key]
-    );
-    return blocked.rows[0]?.acquired === false;
-  } finally {
-    await holder.query('SELECT pg_advisory_unlock($1::bigint)', [key]).catch(() => undefined);
-    await contender.query('SELECT pg_advisory_unlock($1::bigint)', [key]).catch(() => undefined);
-    await holder.end().catch(() => undefined);
-    await contender.end().catch(() => undefined);
-  }
-}
-
-describe.skipIf(!HAS_SUPABASE)('REQ-002 two-tier advisory-lock integration', () => {
+describe.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)('REQ-002 two-tier advisory-lock integration', () => {
   afterAll(async () => {
     await closePgPools();
   });
 
   it('T-I-003 two-tier advisory-lock sessions cannot both hold the same file lock at once', async () => {
-    if (!(await supportsSessionAdvisoryLocks())) {
-      console.warn('Skipping T-I-003: configured TEST_DATABASE_URL is not session-capable for advisory locks');
-      return;
-    }
-
     const pool = new pg.Pool({ connectionString: TEST_DATABASE_URL, allowExitOnIdle: true });
     const observer = await pool.connect();
     const filePath = '/tmp/vault/two-tier-same-file.md';
@@ -122,11 +116,6 @@ describe.skipIf(!HAS_SUPABASE)('REQ-002 two-tier advisory-lock integration', () 
   }, 20_000);
 
   it('T-I-004 two-tier advisory-lock session end releases a held lock without manual recovery', async () => {
-    if (!(await supportsSessionAdvisoryLocks())) {
-      console.warn('Skipping T-I-004: configured TEST_DATABASE_URL is not session-capable for advisory locks');
-      return;
-    }
-
     const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
     const contender = new pg.Client({ connectionString: TEST_DATABASE_URL });
     const filePath = '/tmp/vault/two-tier-session-end.md';
@@ -153,6 +142,33 @@ describe.skipIf(!HAS_SUPABASE)('REQ-002 two-tier advisory-lock integration', () 
         .toBe(true);
     } finally {
       await contender.end().catch(() => undefined);
+    }
+  }, 20_000);
+
+  it('T-I-044a plugin coordination Tier 2 advisory lock is visible across sessions', async () => {
+    const pool = new pg.Pool({ connectionString: TEST_DATABASE_URL, allowExitOnIdle: true });
+    const observer = await pool.connect();
+    const plugin = { pluginId: 'phase158_plugin_tier2', pluginInstance: 'default' };
+    const lockKey = `plugin:${makeConfig().instance.id}:${plugin.pluginId}:${plugin.pluginInstance}`;
+    const holderEntered = createGate();
+    const releaseHolder = createGate();
+
+    try {
+      const holder = withPluginCoordinationLock(makeConfig(), plugin, async () => {
+        holderEntered.release();
+        await releaseHolder.promise;
+      });
+
+      await holderEntered.promise;
+      expect(await pluginAdvisoryLockVisible(observer, lockKey)).toBe(true);
+
+      releaseHolder.release();
+      await holder;
+      expect(await pluginAdvisoryLockVisible(observer, lockKey)).toBe(false);
+    } finally {
+      releaseHolder.release();
+      observer.release();
+      await pool.end();
     }
   }, 20_000);
 });

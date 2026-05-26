@@ -72,7 +72,7 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
     supabase: { url: 'https://example.invalid', serviceRoleKey: 'key', databaseUrl: 'postgresql://localhost/db' },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'error', output: 'stderr' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
   } as FlashQueryConfig;

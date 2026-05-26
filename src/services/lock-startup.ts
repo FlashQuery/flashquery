@@ -1,4 +1,5 @@
 import { withPgClient } from '../utils/pg-client.js';
+import type { FlashQueryConfig } from '../config/types.js';
 
 export type SessionAdvisoryLockFailureReason =
   | 'session_not_stable'
@@ -42,15 +43,13 @@ export function formatSessionAdvisoryLockStartupError(
 export async function verifySessionAdvisoryLocks(
   databaseUrl: string
 ): Promise<SessionAdvisoryLockCheckResult> {
-  let acquired = false;
-  let observed = false;
-
   try {
     return await withPgClient(databaseUrl, async (owner) => {
-      try {
-        await owner.query('SELECT pg_advisory_lock($1::bigint)', [STARTUP_ADVISORY_LOCK_KEY]);
-        acquired = true;
+      await owner.query('SELECT pg_advisory_lock($1::bigint)', [STARTUP_ADVISORY_LOCK_KEY]);
 
+      let observed = false;
+      let observerError: unknown;
+      try {
         const observerResult = await withPgClient(databaseUrl, async (observer) =>
           observer.query<{ visible: boolean }>(
             `SELECT EXISTS (
@@ -65,33 +64,36 @@ export async function verifySessionAdvisoryLocks(
           )
         );
         observed = observerResult.rows[0]?.visible === true;
-
-        if (!observed) {
-          return failure(
-            'session_not_stable',
-            'Startup could not observe a throwaway advisory lock from a second checkout.'
-          );
-        }
-
-        return { ok: true };
-      } finally {
-        if (acquired) {
-          let released = false;
-          try {
-            const unlockResult = await owner.query<{ released: boolean }>(
-              'SELECT pg_advisory_unlock($1::bigint) AS released',
-              [STARTUP_ADVISORY_LOCK_KEY]
-            );
-            released = unlockResult.rows[0]?.released === true;
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            throw new StartupAdvisoryLockReleaseError(message);
-          }
-          if (!released) {
-            throw new StartupAdvisoryLockReleaseError('Throwaway advisory lock release returned false.');
-          }
-        }
+      } catch (err) {
+        observerError = err;
       }
+
+      try {
+        const unlockResult = await owner.query<{ released: boolean }>(
+          'SELECT pg_advisory_unlock($1::bigint) AS released',
+          [STARTUP_ADVISORY_LOCK_KEY]
+        );
+        if (unlockResult.rows[0]?.released !== true) {
+          throw new StartupAdvisoryLockReleaseError('Throwaway advisory lock release returned false.');
+        }
+      } catch (err) {
+        if (err instanceof StartupAdvisoryLockReleaseError) throw err;
+        const message = err instanceof Error ? err.message : String(err);
+        throw new StartupAdvisoryLockReleaseError(message);
+      }
+
+      if (observerError) {
+        if (observerError instanceof Error) throw observerError;
+        throw new Error('Startup advisory-lock observer query threw a non-Error value.');
+      }
+      if (!observed) {
+        return failure(
+          'session_not_stable',
+          'Startup could not observe a throwaway advisory lock from a second checkout.'
+        );
+      }
+
+      return { ok: true };
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
@@ -107,4 +109,9 @@ export async function assertSessionAdvisoryLocksOrThrow(databaseUrl: string): Pr
   if (!result.ok) {
     throw new Error(formatSessionAdvisoryLockStartupError(result));
   }
+}
+
+export async function assertLockingSessionCapability(config: FlashQueryConfig): Promise<void> {
+  if (!config.locking.enabled) return;
+  await assertSessionAdvisoryLocksOrThrow(config.supabase.databaseUrl);
 }

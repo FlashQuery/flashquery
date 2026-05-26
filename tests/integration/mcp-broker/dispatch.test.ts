@@ -53,7 +53,7 @@ function makeConfig(): FlashQueryConfig {
     },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio', tokenLifetime: 24 },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     trashFolder: { enabled: false, path: '.flashquery/removed', collisionStrategy: 'suffix' },
     mcpServers: { basic: basicConfig() },
     host: { mcpServers: ['basic'], toolSearch: 'disabled' },

@@ -56,7 +56,6 @@ function makeConfig(): FlashQueryConfig {
     },
     locking: {
       enabled: false,
-      ttlSeconds: 30,
     },
     trashFolder: {
       enabled: false,

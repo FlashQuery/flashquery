@@ -74,7 +74,6 @@ describe('ShutdownCoordinator', () => {
       },
       locking: {
         enabled: false,
-        ttlSeconds: 30,
       },
     } as FlashQueryConfig;
 

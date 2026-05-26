@@ -33,7 +33,7 @@ function makeConfig(vaultPath: string, hostTools: string[] = ['tier:read-write']
     logging: { level: 'error', output: 'stdout' },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     hostMcpTools: { tools: hostTools, excludedTools: [] },
   } as unknown as FlashQueryConfig;
 }

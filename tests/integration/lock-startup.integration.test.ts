@@ -5,7 +5,7 @@ import {
   verifySessionAdvisoryLocks,
 } from '../../src/services/lock-startup.js';
 import { closePgPools, __setPgPoolFactoryForTesting } from '../../src/utils/pg-client.js';
-import { HAS_SUPABASE, TEST_DATABASE_URL } from '../helpers/test-env.js';
+import { HAS_SESSION_CAPABLE_DATABASE_URL, TEST_DATABASE_URL } from '../helpers/test-env.js';
 
 class TransactionModeClient {
   released = false;
@@ -59,7 +59,7 @@ describe('REQ-005 lock-startup session-capable integration', () => {
     __setPgPoolFactoryForTesting(null);
   });
 
-  it.skipIf(!HAS_SUPABASE)(
+  it.skipIf(!HAS_SESSION_CAPABLE_DATABASE_URL)(
     'T-I-007 lock-startup session-capable DATABASE_URL passes the advisory-lock self-test',
     async () => {
       await expect(verifySessionAdvisoryLocks(TEST_DATABASE_URL)).resolves.toEqual({ ok: true });

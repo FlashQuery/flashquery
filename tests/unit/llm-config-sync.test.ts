@@ -90,7 +90,6 @@ function withRawApiKeyRefs(config: FlashQueryConfig, refs: Record<string, string
     mcp: config.mcp,
     locking: {
       enabled: config.locking.enabled,
-      ttl_seconds: config.locking.ttlSeconds,
     },
     embedding: config.embedding
       ? {
@@ -166,7 +165,7 @@ function baseConfig(): FlashQueryConfig {
     supabase: { url: 'http://localhost', serviceRoleKey: 'k', databaseUrl: 'postgres://x', skipDdl: true },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'info', output: 'stdout' },
     llm: {
@@ -213,7 +212,7 @@ describe('syncLlmConfigToDb()', () => {
         supabase: { url: 'http://localhost', serviceRoleKey: 'k', databaseUrl: 'postgres://x', skipDdl: true },
         git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
         mcp: { transport: 'stdio' },
-        locking: { enabled: true, ttlSeconds: 30 },
+        locking: { enabled: true },
         embedding: { provider: 'none', model: '', dimensions: 1536 },
         logging: { level: 'info', output: 'stdout' },
         llm: {

@@ -32,7 +32,7 @@ function makeConfig(vaultPath: string, hostTools: string[] = ['tier:read-write']
     },
     embedding: { provider: 'none', model: '', apiKey: '', dimensions: 1536 },
     logging: { level: 'error', output: 'stdout' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     hostMcpTools: { tools: hostTools, excludedTools: [] },
   } as unknown as FlashQueryConfig;
 }

@@ -57,7 +57,7 @@ function createTestConfig(overrides?: Partial<FlashQueryConfig>): FlashQueryConf
       authSecret: 'exchange-test-secret',
       tokenLifetime: 24,
     },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     embedding: {
       provider: 'openai',
       model: 'text-embedding-3-small',

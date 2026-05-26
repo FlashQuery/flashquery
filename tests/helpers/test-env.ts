@@ -33,3 +33,16 @@ export const TEST_EMBEDDING_DIMENSIONS = Number.parseInt(
 
 /** True when all required Supabase env vars are set — use to skip tests otherwise */
 export const HAS_SUPABASE = !!(TEST_SUPABASE_URL && TEST_SUPABASE_KEY && TEST_DATABASE_URL);
+
+function isLikelyTransactionPoolerUrl(connectionString: string): boolean {
+  try {
+    const url = new URL(connectionString);
+    return url.hostname.includes('pooler.supabase.com') && url.port === '6543';
+  } catch {
+    return false;
+  }
+}
+
+/** True when the configured DB URL is suitable for session-scoped advisory-lock integration assertions. */
+export const HAS_SESSION_CAPABLE_DATABASE_URL =
+  HAS_SUPABASE && !isLikelyTransactionPoolerUrl(TEST_DATABASE_URL);

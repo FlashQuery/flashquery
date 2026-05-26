@@ -50,7 +50,7 @@ function makeMockConfig(overrides?: Partial<FlashQueryConfig>): FlashQueryConfig
     supabase: { url: 'http://localhost:54321', serviceRoleKey: 'test-key', databaseUrl: 'postgres://localhost:54322', skipDdl: false },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'streamable-http', authSecret: 'test-secret', tokenLifetime: 24 },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     embedding: { provider: 'openai', model: 'text-embedding-3-small', dimensions: 1536 },
     logging: { level: 'info', output: 'stdout' },
     ...overrides,

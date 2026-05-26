@@ -69,7 +69,7 @@ function makeMockConfig(overrides?: Partial<FlashQueryConfig>): FlashQueryConfig
     },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'streamable-http', authSecret: 'test-secret-12345', tokenLifetime: 24, port: 3100 },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     embedding: { provider: 'openai', model: 'text-embedding-3-small', dimensions: 1536 },
     logging: { level: 'info', output: 'stdout' },
     ...overrides,

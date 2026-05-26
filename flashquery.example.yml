@@ -210,7 +210,8 @@ mcp:
 # Coordinates concurrent writes across multiple FlashQuery instances that
 # share a database. Cross-process coordination uses session-scoped Postgres
 # advisory locks over DATABASE_URL, so leave this enabled unless you know this
-# instance is the only writer for the vault.
+# instance is the only writer for the vault. When disabled, FlashQuery keeps
+# only same-process locking and skips the startup session-capability probe.
 
 locking:
   enabled: true

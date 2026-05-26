@@ -29,7 +29,6 @@ from pathlib import Path
 # discovered dynamically and dropped before core deletes so test-only plugin
 # schemas do not leak between scenario tests.
 TABLES_TO_CLEAN = [
-    'fqc_write_locks',        # No FK dependencies
     'fqc_llm_usage',          # No FK dependencies; accumulates across runs without cleanup
     'fqc_pending_plugin_review',  # Plugin review queue state; FK to documents
     'fqc_documents',          # May be referenced by plugin tables (cleaned first below)

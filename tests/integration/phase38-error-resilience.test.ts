@@ -73,7 +73,7 @@ function makeTestConfig(vaultPath: string): FlashQueryConfig {
     server: { host: 'localhost', port: 0 },
     mcp: { transport: 'stdio' as const },
     git: { autoCommit: false, autoPush: false, remote: '', branch: 'main' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as FlashQueryConfig;
 }
 

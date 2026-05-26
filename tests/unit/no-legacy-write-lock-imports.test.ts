@@ -3,11 +3,12 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
 const SRC_ROOT = join(process.cwd(), 'src');
+const SKIP_DIRS = new Set(['dist', 'node_modules', '.git', 'coverage']);
 
 function sourceFiles(dir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir)) {
-    if (entry === 'node_modules') continue;
+    if (SKIP_DIRS.has(entry)) continue;
     const fullPath = join(dir, entry);
     const stat = statSync(fullPath);
     if (stat.isDirectory()) {
@@ -35,6 +36,13 @@ function unauthorizedLegacyTableReferences(file: string, source: string): string
 }
 
 describe('REQ-004 legacy-write-lock retirement static guard', () => {
+  it('T-U-011 scans production TypeScript source only', () => {
+    const files = sourceFiles(SRC_ROOT);
+
+    expect(files.length).toBeGreaterThan(50);
+    expect(files).not.toContain(join(SRC_ROOT, 'dist', 'index.d.ts'));
+  });
+
   it('T-U-011 legacy-write-lock production source has no table-lock imports, symbols, CLI command, or unauthorized table references', () => {
     const offenders: string[] = [];
 

@@ -163,7 +163,7 @@ function makeConfig(options: { includeLlm?: boolean } = {}): FlashQueryConfig {
     },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'http' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     trashFolder: { enabled: false, path: '.flashquery/removed', collisionStrategy: 'suffix' },
     hostMcpTools: {
       tools: options.includeLlm ? ['call_model'] : ['call_macro'],

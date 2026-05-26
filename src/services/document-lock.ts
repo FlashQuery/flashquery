@@ -97,23 +97,35 @@ async function runWithTier2<T>(
   const advisoryKeys = entries.map(toAdvisoryKey);
   return withPgClient(config.supabase.databaseUrl, async (client) => {
     const acquiredKeys: string[] = [];
+    let callbackResult: T | undefined;
+    let callbackError: unknown;
+
+    for (const advisoryKey of advisoryKeys) {
+      await client.query('SELECT pg_advisory_lock($1::bigint)', [advisoryKey]);
+      acquiredKeys.push(advisoryKey);
+    }
+
     try {
-      for (const advisoryKey of advisoryKeys) {
-        await client.query('SELECT pg_advisory_lock($1::bigint)', [advisoryKey]);
-        acquiredKeys.push(advisoryKey);
-      }
-      return await fn();
-    } finally {
-      for (const advisoryKey of [...acquiredKeys].reverse()) {
-        const result = await client.query<{ released: boolean }>(
-          'SELECT pg_advisory_unlock($1::bigint) AS released',
-          [advisoryKey]
-        );
-        if (result.rows[0]?.released !== true) {
-          throw new Error(`Failed to release advisory document lock ${advisoryKey}`);
-        }
+      callbackResult = await fn();
+    } catch (err) {
+      callbackError = err;
+    }
+
+    for (const advisoryKey of [...acquiredKeys].reverse()) {
+      const result = await client.query<{ released: boolean }>(
+        'SELECT pg_advisory_unlock($1::bigint) AS released',
+        [advisoryKey]
+      );
+      if (result.rows[0]?.released !== true) {
+        throw new Error(`Failed to release advisory document lock ${advisoryKey}`);
       }
     }
+
+    if (callbackError) {
+      if (callbackError instanceof Error) throw callbackError;
+      throw new Error('Document lock callback threw a non-Error value.');
+    }
+    return callbackResult as T;
   });
 }
 

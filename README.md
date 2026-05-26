@@ -260,7 +260,7 @@ Use a direct Postgres URL or a session-mode/session-capable pooler for `DATABASE
 
 **Symlinks in vault** — FlashQuery does not follow symbolic links. Symlinks are skipped during scanning; original files sync normally. Symlink handling is unreliable on network filesystems (NFS, SMB) and in containers, so this is deliberate.
 
-**Multiple instances on the same vault** — Session-scoped Postgres advisory locks coordinate shared document, memory, and record writes when enabled, but they require a direct or session-capable `DATABASE_URL`. They do not make the vault a fully multi-writer filesystem. One primary writer per vault is recommended; run additional instances only when you understand the lock boundaries.
+**Multiple instances on the same vault** — Session-scoped Postgres advisory locks coordinate shared document, plugin, and record writes when `locking.enabled` is true, but they require a direct or session-capable `DATABASE_URL`. If `locking.enabled` is false, FlashQuery uses in-process locking only; separate FlashQuery processes can race on document writes, plugin reconciliation, and `unregister_plugin` cleanup. Advisory locks do not make the vault a fully multi-writer filesystem. One primary writer per vault is recommended; run additional instances only when you understand the lock boundaries.
 
 **Plugin table consistency** — Plugin tables reference documents by `fqc_id`. In rare cases (external file edits that strip frontmatter) references can be temporarily orphaned. Run `flashquery scan` to recover. File watcher recovery is a roadmap item.
 

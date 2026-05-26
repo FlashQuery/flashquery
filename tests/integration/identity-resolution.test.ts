@@ -66,7 +66,7 @@ function makeTestConfig(vaultPath: string): FlashQueryConfig {
     vault: { path: vaultPath, markdownExtensions: ['.md'] },
     git: { autoCommit: false, autoPush: false, scheduled: false },
     plugins: {},
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as unknown as FlashQueryConfig;
 }
 

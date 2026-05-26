@@ -39,11 +39,11 @@ created: 2026-05-26
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 158-01-01 | 01 | 1 | REQ-002 | T-158-01 | Advisory-lock SQL uses `$1::bigint` parameterization and releases in `finally` on the owning `PoolClient`. | unit | `npm test -- tests/unit/document-lock-tier1.test.ts tests/unit/document-lock-tier2.test.ts` | ✅ | ✅ green |
-| 158-01-02 | 01 | 1 | REQ-002 | T-158-02 | Cross-process same-file writers serialize through session-scoped advisory locks. | integration | `npm run test:integration -- tests/integration/two-tier-lock.integration.test.ts` | ✅ | ✅ green |
+| 158-01-02 | 01 | 1 | REQ-002 | T-158-02 | Cross-process same-file writers serialize through session-scoped advisory locks. | integration | `npm run test:integration -- tests/integration/two-tier-lock.integration.test.ts` | ✅ | ⚠️ env-skipped unless `DATABASE_URL` is session-capable |
 | 158-02-01 | 02 | 1 | REQ-004 | T-158-03 | Legacy table/CLI removal leaves no production dependency on `fqc_write_locks` or manual unlock. | unit/static | `npm test -- tests/unit/no-legacy-write-lock-imports.test.ts` | ✅ | ✅ green |
 | 158-02-02 | 02 | 1 | REQ-004 | T-158-04 | Startup drops legacy `fqc_write_locks`; legacy `locking.ttl_seconds` is ignored with one warning. | integration | `npm run test:integration -- tests/integration/fqc-write-locks-drop.integration.test.ts` | ✅ | ✅ green |
 | 158-03-01 | 03 | 2 | REQ-005 | T-158-05 | Startup fails closed when database session capability cannot be proven. | unit/integration | `npm test -- tests/unit/lock-startup-self-test.test.ts && npm run test:integration -- tests/integration/lock-startup.integration.test.ts` | ✅ | ✅ green |
-| 158-04-01 | 04 | 3 | REQ-004 | T-158-08 | Stale lock-behavior tests no longer depend on the deleted table-lock service. | unit/integration | `npm test -- tests/unit/manage-directory.test.ts tests/unit/archive-document.test.ts tests/unit/document-batch-lock-contention.test.ts && npm run test:integration -- tests/integration/archive-document-lock.test.ts tests/integration/macro-write-lock.integration.test.ts tests/integration/manage-directory.integration.test.ts` | ✅ | ✅ green |
+| 158-04-01 | 04 | 3 | REQ-004 | T-158-08 | Stale lock-behavior tests no longer depend on the deleted table-lock service. | unit/integration | `npm test -- tests/unit/manage-directory.test.ts tests/unit/archive-document.test.ts tests/unit/document-batch-lock-contention.test.ts && npm run test:integration -- tests/integration/archive-document-lock.test.ts tests/integration/macro-write-lock.integration.test.ts tests/integration/manage-directory.integration.test.ts` | ✅ | ⚠️ archive advisory assertion env-skipped unless `DATABASE_URL` is session-capable |
 | 158-05-01 | 05 | 3 | REQ-004 | T-158-09 | Config/schema tests and fixtures no longer treat `fqc_write_locks` or effective TTL as active behavior. | unit/integration | `npm test -- tests/unit/config.test.ts tests/unit/schema-verify.test.ts tests/unit/no-legacy-write-lock-imports.test.ts && npm run test:integration -- tests/integration/supabase-schema-verify.test.ts tests/integration/supabase.test.ts` | ✅ | ✅ green |
 | 158-06-01 | 06 | 3 | REQ-004 | T-158-11 | Phase 157 gap-fix tests retain scoped plugin coordination coverage without legacy write-lock mocks. | unit | `npm test -- tests/unit/advanced-document-tools.test.ts tests/unit/plugin-tools.test.ts tests/unit/record-tools.test.ts tests/unit/no-coarse-resource-locks.test.ts` | ✅ | ✅ green |
 
@@ -57,7 +57,7 @@ created: 2026-05-26
 - [x] `tests/unit/document-lock-tier2.test.ts` — T-U-004 and T-U-005 / REQ-002.
 - [x] `tests/unit/no-legacy-write-lock-imports.test.ts` — T-U-011 / REQ-004.
 - [x] `tests/unit/lock-startup-self-test.test.ts` — T-U-012 and T-U-013 / REQ-005.
-- [x] `tests/integration/two-tier-lock.integration.test.ts` — T-I-003 and T-I-004 / REQ-002; skips advisory-lock assertions when `.env.test` points at a transaction-pooler URL.
+- [x] `tests/integration/two-tier-lock.integration.test.ts` — T-I-003, T-I-004, and T-I-044a / REQ-002 + plugin-coordination carry-over; uses explicit Vitest skip reporting when `.env.test` points at a transaction-pooler URL.
 - [x] `tests/integration/fqc-write-locks-drop.integration.test.ts` — T-I-005 and T-I-006 / REQ-004.
 - [x] `tests/integration/lock-startup.integration.test.ts` — T-I-007 and T-I-008 / REQ-005.
 
@@ -88,9 +88,9 @@ created: 2026-05-26
 | Resolved | 2 |
 | Escalated | 0 |
 
-- Added runtime session-capability guards to advisory-lock integrations that require direct/session-mode Postgres semantics. The current `.env.test` URL points at a transaction-pooler endpoint, which REQ-005 correctly treats as unsafe.
+- Replaced runtime early-return guards with explicit Vitest skip reporting for advisory-lock integrations that require direct/session-mode Postgres semantics. The current `.env.test` URL points at a transaction-pooler endpoint, so session-dependent advisory assertions are reported as skipped rather than green.
 - Removed residual legacy write-lock mocks from older unit/integration tests so the deleted `src/services/write-lock.ts` module is not required by the broad suite.
 
-**Fresh evidence:** `npm test` passed 165 files / 2072 tests; `npm run typecheck` passed; `npm run build` passed; Phase 158 integration selection passed 7 files / 23 tests.
+**Fresh evidence:** `npm test` passed 165 files / 2074 tests; `npm run typecheck` passed; `npm run lint` passed; focused Phase 158 advisory integration selection reported 1 passed / 2 skipped files and 1 passed / 5 skipped tests in the current non-session-capable `.env.test` environment.
 
 **Approval:** approved 2026-05-26

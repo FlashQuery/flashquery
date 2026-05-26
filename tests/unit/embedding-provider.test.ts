@@ -18,7 +18,7 @@ function makeConfig(overrides: Partial<FlashQueryConfig>): FlashQueryConfig {
     },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     trashFolder: { enabled: false, path: '.trash', collisionStrategy: 'suffix' },
     mcpServers: {},
     host: { mcpServers: [], toolSearch: 'disabled' },

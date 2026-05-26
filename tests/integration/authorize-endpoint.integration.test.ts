@@ -61,7 +61,7 @@ function createTestConfig(overrides?: Partial<FlashQueryConfig>): FlashQueryConf
       tokenLifetime: 24,
       port: 3100,
     },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     embedding: {
       provider: 'openai',
       model: 'text-embedding-3-small',

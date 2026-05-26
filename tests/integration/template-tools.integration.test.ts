@@ -60,7 +60,7 @@ function makeConfig(
     supabase: { url: TEST_SUPABASE_URL, serviceRoleKey: TEST_SUPABASE_KEY, databaseUrl: TEST_DATABASE_URL, skipDdl: false },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'error', output: 'stdout' },
     templates: { defaultAccess },

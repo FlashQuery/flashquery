@@ -169,7 +169,7 @@ export function makeConfig(
     logging: { level: 'error', output: 'stdout' },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     server: { host: 'localhost', port: 3000 },
   } as unknown as FlashQueryConfig;
 }

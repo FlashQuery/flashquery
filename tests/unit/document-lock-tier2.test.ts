@@ -31,7 +31,7 @@ function makeConfig(): FlashQueryConfig {
       vault: { path: '/tmp/vault', markdownExtensions: ['.md'] },
     },
     supabase: { url: 'http://localhost:54321', serviceRoleKey: 'service-role', databaseUrl: 'postgres://fq/test', skipDdl: true },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
   } as FlashQueryConfig;
 }
 

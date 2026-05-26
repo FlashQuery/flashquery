@@ -39,7 +39,7 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
     plugins: {},
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
   } as unknown as FlashQueryConfig;
 }
 

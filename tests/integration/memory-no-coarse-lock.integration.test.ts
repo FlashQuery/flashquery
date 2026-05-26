@@ -15,7 +15,7 @@ function makeConfig(): FlashQueryConfig {
     supabase: { url: TEST_SUPABASE_URL, serviceRoleKey: TEST_SUPABASE_KEY, databaseUrl: TEST_DATABASE_URL, skipDdl: false },
     embedding: { provider: 'none', model: '', apiKey: '', dimensions: 1536 },
     logging: { level: 'error', output: 'stdout' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as unknown as FlashQueryConfig;
 }
 

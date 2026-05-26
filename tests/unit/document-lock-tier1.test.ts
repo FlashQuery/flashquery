@@ -10,7 +10,7 @@ function makeConfig(): FlashQueryConfig {
       vault: { path: '/tmp/vault', markdownExtensions: ['.md'] },
     },
     supabase: { url: '', serviceRoleKey: '', databaseUrl: '', skipDdl: true },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as FlashQueryConfig;
 }
 

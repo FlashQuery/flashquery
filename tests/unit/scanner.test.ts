@@ -157,7 +157,7 @@ function makeConfig(overrides: Partial<FlashQueryConfig['instance']> = {}): Flas
     },
     git: { autoCommit: true, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     embedding: {
       provider: 'openai',
       model: 'text-embedding-3-small',

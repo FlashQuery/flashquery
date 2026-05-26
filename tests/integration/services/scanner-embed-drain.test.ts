@@ -31,7 +31,7 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
     },
     embedding: { provider: 'none', model: '', apiKey: '', dimensions: 1536 },
     logging: { level: 'error', output: 'stdout' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as unknown as FlashQueryConfig;
 }
 

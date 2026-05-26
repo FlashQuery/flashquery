@@ -56,7 +56,7 @@ function makeConfig(): FlashQueryConfig {
     },
     embedding: { provider: 'none', model: '', apiKey: '', dimensions: embeddingDimensions },
     logging: { level: 'error', output: 'stdout' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as unknown as FlashQueryConfig;
 }
 

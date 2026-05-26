@@ -25,7 +25,7 @@ function makeConfig(): FlashQueryConfig {
     },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'info', output: 'stdout' },
     llm: {

@@ -35,7 +35,7 @@ function makeConfig(overrides: Partial<FlashQueryConfig> = {}): FlashQueryConfig
     supabase: { url: 'http://localhost:54321', serviceRoleKey: 'test', databaseUrl: 'postgres://test', skipDdl: true },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio', tokenLifetime: 24 },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     trashFolder: { enabled: false, path: '.flashquery/removed', collisionStrategy: 'suffix' },
     mcpServers: {},
     host: { mcpServers: [], toolSearch: 'disabled' },
