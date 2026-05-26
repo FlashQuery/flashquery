@@ -176,7 +176,14 @@ Plans:
   - Execution must prove full canonical key derivation, default/configured timeout behavior, and the case-variant directed scenario where supported by the filesystem.
   - Required execution evidence: `npm test -- --grep "canonical-key|case-fold|symlink|lock-timeout"`; `npm run test:integration -- --grep "lock-timeout"`; directed scenario `D-WCO-02` when the environment supports the case-insensitive path behavior.
 
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 159-01-PLAN.md — Canonical file and directory lock-key derivation with `T-U-006` through `T-U-010`.
+- [ ] 159-02-PLAN.md — Configurable bounded lock acquisition with `T-U-014` and `T-U-015`.
+- [ ] 159-03-PLAN.md — Single-document write/copy/move `lock_timeout` response envelopes.
+- [ ] 159-04-PLAN.md — Batch archive/remove and compound `lock_timeout` response envelopes.
+- [ ] 159-05-PLAN.md — Integration and directed scenario evidence for `T-I-009`, `T-I-010`, and `D-WCO-02`.
 
 ### Phase 160: Folder Locks + Manage Directory Migration
 
