@@ -1335,8 +1335,8 @@ export async function repairFrontmatter(
           let updatedHash = '';
           await withDocumentLock(config, join(vaultRoot, filePath), async () => {
             // Read file to extract existing content and frontmatter
-            let fileContent = '';
-            let existingFrontmatter: Record<string, unknown> = {};
+            let fileContent: string;
+            let existingFrontmatter: Record<string, unknown>;
             try {
               const raw = await readFile(`${vaultRoot}/${filePath}`, 'utf-8');
               const parsed = matter(raw);

@@ -176,6 +176,16 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
               }));
               });
             } catch (itemErr) {
+              if (itemErr instanceof LockTimeoutError) {
+                results.push({
+                  error: 'conflict',
+                  message: itemErr.message,
+                  identifier: id,
+                  details: { reason: 'lock_contention' },
+                });
+                continue;
+              }
+
               if (isDocumentNotFoundError(itemErr)) {
                 results.push({
                   error: 'not_found',

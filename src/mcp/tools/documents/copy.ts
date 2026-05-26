@@ -140,9 +140,8 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
           logger.info(`copy_document: wrote copy to ${copyRelativePath} (new fqc_id=${newFqcId})`);
 
           // Sync: read raw file to compute content_hash, then insert fqc_documents row
-          let contentHash: string | null = null;
           const rawCopyContent = await readFile(join(config.instance.vault.path, copyRelativePath), 'utf-8');
-          contentHash = computeHash(rawCopyContent);
+          const contentHash = computeHash(rawCopyContent);
           const supabase = supabaseManager.getClient();
           const { error: insertError } = await supabase.from('fqc_documents').insert({
             id: newFqcId,

@@ -45,4 +45,14 @@ describe('REQ-001/REQ-010 document tool lock call sites', () => {
     expect(toolChunk('insert_in_doc')).toMatch(/err instanceof LockTimeoutError[\s\S]*lockContentionError\(err, identifier\)/);
     expect(toolChunk('replace_doc_section')).toMatch(/err instanceof LockTimeoutError[\s\S]*reason: 'lock_contention'/);
   });
+
+  it('archive_document and remove_document batch paths report lock contention as expected conflicts', async () => {
+    for (const file of ['archive.ts', 'remove.ts']) {
+      const source = await readFile(new URL(`../../src/mcp/tools/documents/${file}`, import.meta.url), 'utf-8');
+
+      expect(source).toMatch(/itemErr instanceof LockTimeoutError[\s\S]*error: 'conflict'/);
+      expect(source).toMatch(/itemErr instanceof LockTimeoutError[\s\S]*identifier: id/);
+      expect(source).toMatch(/itemErr instanceof LockTimeoutError[\s\S]*reason: 'lock_contention'/);
+    }
+  });
 });
