@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.9
 milestone_name: Vault Write Coherency Locking
-status: ready_to_plan
-last_updated: "2026-05-26T13:25:44.000Z"
+status: executing
+stopped_at: v3.9 roadmap created; next step is `$gsd-plan-phase 155`
+last_updated: "2026-05-26T15:44:02.590Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 9
   completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
+  total_plans: 3
+  completed_plans: 1
   percent: 0
 ---
 
@@ -20,20 +21,21 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-26)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** v3.9 Vault Write Coherency Locking
+**Current focus:** Phase 155 — per-file-tier-1-live-defect-close
 
 ## Current Position
 
-Phase: 155 of 163 (Per-file Tier 1 + Live-defect Close)
-Plan: 155-01 ready
-Status: Phase 155 planned; ready to execute 155-01-PLAN.md
-Last activity: 2026-05-26 — Phase 155 planned and verified
+Phase: 155 (per-file-tier-1-live-defect-close) — EXECUTING
+Plan: 2 of 3
+Status: Ready to execute
+Last activity: 2026-05-26
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
+
 - Total plans completed: 0 (this milestone)
 - Average duration: —
 - Total execution time: 0 hours

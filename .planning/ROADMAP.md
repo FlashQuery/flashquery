@@ -195,7 +195,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 155. Per-file Tier 1 + Live-defect Close | 0/TBD | Not started | - |
+| 155. Per-file Tier 1 + Live-defect Close | 1/3 | In Progress|  |
 | 156. Atomic + Durable Write Primitive Consolidation | 0/TBD | Not started | - |
 | 157. Records / Memory / Plugins Audit + Guards | 0/TBD | Not started | - |
 | 158. Tier 2 + Lock-table Retirement + Session Check | 0/TBD | Not started | - |
