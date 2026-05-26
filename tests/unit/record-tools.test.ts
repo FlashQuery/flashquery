@@ -27,11 +27,6 @@ vi.mock('../../src/services/plugin-reconciliation.js', () => ({
   }),
 }));
 
-vi.mock('../../src/services/write-lock.js', () => ({
-  acquireLock: vi.fn(),
-  releaseLock: vi.fn(),
-}));
-
 vi.mock('../../src/services/plugin-coordination-lock.js', () => ({
   withPluginCoordinationLock: vi.fn(async (_config, _input, fn: () => Promise<unknown>) => fn()),
 }));
@@ -71,7 +66,7 @@ function makeConfig(): FlashQueryConfig {
     supabase: { url: 'https://example.invalid', serviceRoleKey: 'key', databaseUrl: 'postgresql://localhost/db' },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'info', output: 'stderr' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
   } as FlashQueryConfig;
 }

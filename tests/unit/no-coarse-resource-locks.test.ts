@@ -23,7 +23,11 @@ function stripComments(source: string): string {
 describe('no-coarse-resource-locks T-U-036', () => {
   it('does not use coarse records, memory, or plugins write-lock resources in src/', () => {
     const offenders: string[] = [];
-    const forbiddenCall = /\b(?:acquireLock|releaseLock)\s*\([\s\S]{0,500}?['"](?:records|memory|plugins)['"]/g;
+    const legacyLockFunctions = ['acquire' + 'Lock', 'release' + 'Lock'].join('|');
+    const forbiddenCall = new RegExp(
+      `\\b(?:${legacyLockFunctions})\\s*\\([\\s\\S]{0,500}?['"](?:records|memory|plugins)['"]`,
+      'g'
+    );
     const files = listSourceFiles('src');
 
     expect(files.length).toBeGreaterThan(50);
@@ -32,7 +36,6 @@ describe('no-coarse-resource-locks T-U-036', () => {
     expect(files.some((file) => file.includes(`${join('src', 'node_modules')}${sep}`))).toBe(false);
 
     for (const file of files) {
-      if (file === join('src', 'services', 'write-lock.ts')) continue;
       const source = stripComments(readFileSync(file, 'utf8'));
       if (forbiddenCall.test(source)) {
         offenders.push(relative(process.cwd(), file));

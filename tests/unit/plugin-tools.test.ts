@@ -132,7 +132,7 @@ function makeConfig(): FlashQueryConfig {
     defaults: { project: 'Default' },
     vault: { path: '/tmp/vault' },
     projects: { areas: [] },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as unknown as FlashQueryConfig;
 }
 

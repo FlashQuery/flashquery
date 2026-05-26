@@ -93,13 +93,14 @@ vi.mock('../../src/services/scanner.js', () => ({
   scanMutex: { acquire: mockAcquire },
 }));
 
-vi.mock('../../src/services/write-lock.js', () => ({
-  acquireLock: vi.fn().mockResolvedValue(true),
-  releaseLock: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('../../src/services/plugin-coordination-lock.js', () => ({
   withPluginCoordinationLock: vi.fn(async (_config, _input, fn: () => Promise<unknown>) => fn()),
+}));
+
+vi.mock('../../src/services/document-lock.js', () => ({
+  LockTimeoutError: class LockTimeoutError extends Error {},
+  withDocumentLock: vi.fn(async (_config, _path, fn: () => Promise<unknown>) => fn()),
+  withDocumentLocks: vi.fn(async (_config, _paths, fn: () => Promise<unknown>) => fn()),
 }));
 
 vi.mock('../../src/server/shutdown-state.js', () => ({
@@ -180,7 +181,6 @@ function createMockConfig(): FlashQueryConfig {
     },
     locking: {
       enabled: true,
-      ttlSeconds: 30,
     },
   } as FlashQueryConfig;
 }
