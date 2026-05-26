@@ -40,7 +40,7 @@
 | 151 | Quick Localized Cleanup | 2/2 | Complete    | 2026-05-25 |
 | 152 | Type-Safety Cleanup Pass | 2/2 | Complete | 2026-05-25 |
 | 153 | Documents Tool Decomposition | 3/3 | Complete    | 2026-05-25 |
-| 154 | Residual Import Cycle Cleanup | 4/6 | In Progress|  |
+| 154 | Residual Import Cycle Cleanup | 5/6 | In Progress|  |
 
 ## Phase Details
 
@@ -120,7 +120,7 @@ Plans:
 
 **Requirements:** REQ-010, REQ-011, REQ-012
 **Depends on:** Phase 153
-**Plans:** 4/6 plans executed
+**Plans:** 5/6 plans executed
 
 **Wave 1**
 
@@ -131,7 +131,7 @@ Plans:
 **Wave 2** *(blocked on 154-01 where noted; independent of full zero-cycle final gate)*
 
 - [x] 154-02-PLAN.md — Extract LLM runtime error/type leaves and remove client/resolver back-edges. Depends on 154-01.
-- [ ] 154-04-PLAN.md — Extract config-sync, purpose-template, template-tool, and reference metadata leaves. Depends on 154-01.
+- [x] 154-04-PLAN.md — Extract config-sync, purpose-template, template-tool, and reference metadata leaves. Depends on 154-01.
 - [x] 154-05-PLAN.md — Extract embedding dimension policy and logging/config leaf imports. Depends on 154-01.
 
 **Wave 3** *(blocked on Waves 1-2 completion)*

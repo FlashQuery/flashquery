@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: Codebase Audit Remaining Remediation
 status: executing
-stopped_at: Completed 154-02-PLAN.md
-last_updated: "2026-05-26T00:16:36.874Z"
+stopped_at: Completed 154-04-PLAN.md
+last_updated: "2026-05-26T00:18:04.000Z"
 last_activity: 2026-05-25 -- Completed 154-01-PLAN.md
 progress:
   total_phases: 4
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-05-25)
 ## Current Position
 
 Phase: 154
-Plan: 02
+Plan: 06
 Status: Ready to execute
-Last activity: 2026-05-25 -- Completed 154-01-PLAN.md
+Last activity: 2026-05-26 -- Completed 154-04-PLAN.md
 
 ## Accumulated Context
 
@@ -186,6 +186,7 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 | Phase 154 P01 | 4m12s | 2 tasks | 7 files |
 | Phase 154 P05 | 2m17s | 2 tasks | 4 files |
 | Phase 154 P02 | 4m51s | 2 tasks | 5 files |
+| Phase 154 P04 | 6m48s | 2 tasks | 13 files |
 
 ## Decisions
 
@@ -346,6 +347,8 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 - [Phase 154]: 154-05 updated storage to import embedding dimensions from the leaf instead of src/embedding/provider.ts.
 - [Phase 154]: 154-02 kept public LLM client/resolver contract imports compatible through re-exports while moving shared runtime classes and interfaces into leaf modules.
 - [Phase 154]: 154-02 removed resolver client back-edge by keeping caller-wins parameter merging local to resolver.
+- [Phase 154]: 154-04 kept runtime template rendering in reference-resolver while moving metadata-only contracts to src/llm/reference-metadata.ts.
+- [Phase 154]: 154-04 created exact plan-named sync/template boundary tests because the referenced unit files did not exist in the repo.
 
 ## Accumulated Context
 
@@ -460,8 +463,8 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 
 ## Session Continuity
 
-Last session: 2026-05-26T00:16:36.853Z
-Stopped at: Completed 154-02-PLAN.md
+Last session: 2026-05-26T00:18:04.000Z
+Stopped at: Completed 154-04-PLAN.md
 Resume: None
 
 ## Deferred Items
