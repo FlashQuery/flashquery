@@ -94,6 +94,7 @@ import { logger } from '../../src/logging/logger.js';
 import * as nodeFs from 'node:fs';
 import pg from 'pg';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
+import { withPluginCoordinationLock } from '../../src/services/plugin-coordination-lock.js';
 
 function parseToolText(result: { content: Array<{ text: string }> }): Record<string, unknown> {
   return JSON.parse(result.content[0]?.text ?? '{}') as Record<string, unknown>;
@@ -494,7 +495,7 @@ describe('unregister_plugin', () => {
     mockPgClient.end.mockResolvedValue(undefined);
   });
 
-  function mockUnregisterSupabase() {
+  function mockUnregisterSupabase(options: { memoryDeleteError?: { message: string } } = {}) {
     const registryMaybeSingle = vi.fn().mockResolvedValue({
       data: { id: 'registry-1', schema_yaml: VALID_SCHEMA_YAML },
       error: null,
@@ -514,15 +515,21 @@ describe('unregister_plugin', () => {
     const updateEq2 = vi.fn().mockResolvedValue({ error: null });
     const updateEq1 = vi.fn().mockReturnValue({ eq: updateEq2 });
     const update = vi.fn().mockReturnValue({ eq: updateEq1 });
-    const deleteEq2 = vi.fn().mockResolvedValue({ error: null });
-    const deleteEq1 = vi.fn().mockReturnValue({ eq: deleteEq2 });
-    const deleteFn = vi.fn().mockReturnValue({ eq: deleteEq1 });
+    const memoryDeleteEq2 = vi.fn().mockResolvedValue({ error: options.memoryDeleteError ?? null });
+    const otherDeleteEq2 = vi.fn().mockResolvedValue({ error: null });
+    const memoryDeleteEq1 = vi.fn().mockReturnValue({ eq: memoryDeleteEq2 });
+    const otherDeleteEq1 = vi.fn().mockReturnValue({ eq: otherDeleteEq2 });
+    const memoryDelete = vi.fn().mockReturnValue({ eq: memoryDeleteEq1 });
+    const otherDelete = vi.fn().mockReturnValue({ eq: otherDeleteEq1 });
 
     const mockFrom = vi.fn((table: string) => {
       if (table === 'fqc_plugin_registry') {
         return { select: registrySelect, delete: registryDelete };
       }
-      return { select: countSelect, update, delete: deleteFn };
+      if (table === 'fqc_memory') {
+        return { select: countSelect, update, delete: memoryDelete };
+      }
+      return { select: countSelect, update, delete: otherDelete };
     });
 
     vi.mocked(supabaseManager.getClient).mockReturnValue({
@@ -549,6 +556,11 @@ describe('unregister_plugin', () => {
       error: 'conflict',
       details: { live_record_count: 2 },
     });
+    expect(withPluginCoordinationLock).toHaveBeenCalledWith(
+      config,
+      expect.objectContaining({ pluginId: 'crm', pluginInstance: 'default' }),
+      expect.any(Function)
+    );
     expect(pluginManager.removeEntry).not.toHaveBeenCalled();
   });
 
@@ -574,8 +586,42 @@ describe('unregister_plugin', () => {
       table_count: 1,
       warnings: ['orphaned_records: 3'],
     });
+    expect(withPluginCoordinationLock).toHaveBeenCalledWith(
+      config,
+      expect.objectContaining({ pluginId: 'crm', pluginInstance: 'default' }),
+      expect.any(Function)
+    );
     expect(pluginManager.removeEntry).toHaveBeenCalledWith('crm', 'default');
     expect(mockPgClient.query).not.toHaveBeenCalledWith(expect.stringContaining('DROP TABLE'));
+  });
+
+  it('REQ-023: force unregister cleanup failure returns runtime_error instead of unregistered status', async () => {
+    mockUnregisterSupabase({ memoryDeleteError: { message: 'delete memories failed' } });
+    mockPgClient.query
+      .mockResolvedValueOnce({ rows: [{ count: '1' }] })
+      .mockResolvedValueOnce({ rows: [{ count: '0' }] });
+    const config = makeConfig();
+    const { server, getHandler } = createMockServer();
+    registerPluginTools(server, config);
+
+    const result = await getHandler('unregister_plugin')({ plugin_id: 'crm', force: true }) as {
+      content: Array<{ text: string }>;
+      isError?: boolean;
+    };
+    const payload = parseToolText(result);
+
+    expect(result.isError).toBe(true);
+    expect(payload).toMatchObject({
+      error: 'runtime_error',
+      message: 'Failed to delete plugin-scoped memories: delete memories failed',
+    });
+    expect(payload).not.toMatchObject({ status: 'unregistered' });
+    expect(withPluginCoordinationLock).toHaveBeenCalledWith(
+      config,
+      expect.objectContaining({ pluginId: 'crm', pluginInstance: 'default' }),
+      expect.any(Function)
+    );
+    expect(pluginManager.removeEntry).not.toHaveBeenCalled();
   });
 });
 

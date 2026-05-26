@@ -419,8 +419,9 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         const instanceName = plugin_instance ?? 'default';
         validateInstanceName(instanceName);
 
-        // REQ-023: this guard is scoped by FQC instance, plugin id, and plugin
-        // instance; it is not a replacement global "plugins" lock.
+        // REQ-023 AC #5 / 157-RECONCILIATION-AUDIT.md: this per-plugin guard
+        // serializes unregister calls but is not transactional; a mid-sequence
+        // cleanup failure returns runtime_error and the caller should retry.
         return await withPluginCoordinationLock(config, { pluginId: plugin_id, pluginInstance: instanceName }, async () => {
         const supabase = supabaseManager.getClient();
 

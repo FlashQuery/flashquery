@@ -297,6 +297,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
 
         let reconciliation: Record<string, unknown> | undefined;
         try {
+          // REQ-023 / 157-RECONCILIATION-AUDIT.md: scoped per-plugin advisory guard.
           reconciliation = await runScopedReconciliation(config, plugin_id, instanceName);
         } catch (err) {
           logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
@@ -417,6 +418,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const instanceName = plugin_instance ?? 'default';
         let reconciliation: Record<string, unknown> | undefined;
         try {
+          // REQ-023 / 157-RECONCILIATION-AUDIT.md: scoped per-plugin advisory guard.
           reconciliation = await runScopedReconciliation(config, plugin_id, instanceName);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -508,6 +510,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           try {
             let reconciliation: Record<string, unknown> | undefined;
             try {
+              // REQ-023 / 157-RECONCILIATION-AUDIT.md: scoped per-plugin advisory guard.
               reconciliation = await runScopedReconciliation(config, target.plugin_id, instanceName);
             } catch (err) {
               logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
@@ -674,6 +677,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
 
         let reconciliation: Record<string, unknown> | undefined;
         try {
+          // REQ-023 / 157-RECONCILIATION-AUDIT.md: scoped per-plugin advisory guard.
           reconciliation = await runScopedReconciliation(config, plugin_id, instanceName);
         } catch (err) {
           logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);

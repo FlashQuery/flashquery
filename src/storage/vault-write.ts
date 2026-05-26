@@ -11,12 +11,12 @@ export interface VaultWriteResult {
   contentHash: string;
 }
 
-export interface SyncableHandle {
+interface SyncableHandle {
   sync(): Promise<void>;
   close(): Promise<void>;
 }
 
-export interface VaultWriteOperations {
+interface VaultWriteOperations {
   mkdir?: typeof mkdir;
   writeFile?: typeof writeFile;
   open?: (path: string, flags: string) => Promise<SyncableHandle>;
@@ -24,7 +24,7 @@ export interface VaultWriteOperations {
   unlink?: typeof unlink;
 }
 
-export interface DurableFileSyncContext {
+interface DurableFileSyncContext {
   platform: NodeJS.Platform;
   path: string;
 }

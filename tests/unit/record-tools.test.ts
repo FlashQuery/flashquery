@@ -63,6 +63,7 @@ import { supabaseManager } from '../../src/storage/supabase.js';
 import { pluginManager } from '../../src/plugins/manager.js';
 import { queryPgPool } from '../../src/utils/pg-client.js';
 import { logger } from '../../src/logging/logger.js';
+import { withPluginCoordinationLock } from '../../src/services/plugin-coordination-lock.js';
 
 function makeConfig(): FlashQueryConfig {
   return {
@@ -148,6 +149,14 @@ function timingMessages(): string[] {
   ].filter((message) => message.includes('search_records timing:'));
 }
 
+function expectPluginCoordinationLock(pluginId = 'crm', pluginInstance = 'unit'): void {
+  expect(withPluginCoordinationLock).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ pluginId, pluginInstance }),
+    expect.any(Function)
+  );
+}
+
 describe('record tools final surface', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -171,6 +180,108 @@ describe('record tools final surface', () => {
     ]));
     expect(names).not.toContain('create_record');
     expect(names).not.toContain('update_record');
+  });
+
+  it('REQ-023: write_record runs reconciliation under the per-plugin coordination lock', async () => {
+    const insertSingle = vi.fn().mockResolvedValue({
+      data: { id: 'row-1', instance_id: 'unit', name: 'Ada' },
+      error: null,
+    });
+    const insertSelect = vi.fn().mockReturnValue({ single: insertSingle });
+    const insert = vi.fn().mockReturnValue({ select: insertSelect });
+    const pendingEq2 = vi.fn().mockResolvedValue({ data: [] });
+    const pendingEq1 = vi.fn().mockReturnValue({ eq: pendingEq2 });
+    const pendingSelect = vi.fn().mockReturnValue({ eq: pendingEq1 });
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn((table: string) => table === 'fqc_pending_plugin_review'
+        ? { select: pendingSelect }
+        : { insert }),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    const { server, getHandler } = makeServer();
+    registerRecordTools(server, makeConfig());
+
+    const result = await getHandler('write_record')({
+      mode: 'create',
+      plugin_id: 'crm',
+      plugin_instance: 'unit',
+      table: 'contacts',
+      data: { name: 'Ada' },
+    });
+
+    expect(result.isError).toBeUndefined();
+    expectPluginCoordinationLock();
+  });
+
+  it('REQ-023: get_record runs reconciliation under the per-plugin coordination lock', async () => {
+    const getSingle = vi.fn().mockResolvedValue({
+      data: { id: 'row-1', instance_id: 'unit', name: 'Ada' },
+      error: null,
+    });
+    const getEq2 = vi.fn().mockReturnValue({ single: getSingle });
+    const getEq1 = vi.fn().mockReturnValue({ eq: getEq2 });
+    const getSelect = vi.fn().mockReturnValue({ eq: getEq1 });
+    const pendingEq2 = vi.fn().mockResolvedValue({ data: [] });
+    const pendingEq1 = vi.fn().mockReturnValue({ eq: pendingEq2 });
+    const pendingSelect = vi.fn().mockReturnValue({ eq: pendingEq1 });
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn((table: string) => table === 'fqc_pending_plugin_review'
+        ? { select: pendingSelect }
+        : { select: getSelect }),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    const { server, getHandler } = makeServer();
+    registerRecordTools(server, makeConfig());
+
+    const result = await getHandler('get_record')({
+      plugin_id: 'crm',
+      plugin_instance: 'unit',
+      table: 'contacts',
+      id: 'row-1',
+    });
+
+    expect(result.isError).toBeUndefined();
+    expectPluginCoordinationLock();
+  });
+
+  it('REQ-023: archive_record runs reconciliation under the per-plugin coordination lock', async () => {
+    const updateSingle = vi.fn().mockResolvedValue({
+      data: { id: 'row-1', instance_id: 'unit', name: 'Ada', status: 'archived' },
+      error: null,
+    });
+    const updateSelect = vi.fn().mockReturnValue({ single: updateSingle });
+    const updateEq2 = vi.fn().mockReturnValue({ select: updateSelect });
+    const updateEq1 = vi.fn().mockReturnValue({ eq: updateEq2 });
+    const update = vi.fn().mockReturnValue({ eq: updateEq1 });
+    vi.mocked(supabaseManager.getClient).mockReturnValue({
+      from: vi.fn(() => ({ update })),
+    } as unknown as ReturnType<typeof supabaseManager.getClient>);
+    const { server, getHandler } = makeServer();
+    registerRecordTools(server, makeConfig());
+
+    const result = await getHandler('archive_record')({
+      targets: [{ plugin_id: 'crm', plugin_instance: 'unit', table: 'contacts', id: 'row-1' }],
+    });
+
+    expect(result.isError).toBeUndefined();
+    expectPluginCoordinationLock();
+  });
+
+  it('REQ-023: search_records runs reconciliation under the per-plugin coordination lock', async () => {
+    makeSupabaseLimitResult({
+      data: [{ id: 'row-1', name: 'Ada' }],
+      error: null,
+    });
+    const { server, getHandler } = makeServer();
+    registerRecordTools(server, makeConfig());
+
+    const result = await getHandler('search_records')({
+      plugin_id: 'crm',
+      plugin_instance: 'unit',
+      table: 'contacts',
+      filters: { name: 'Ada' },
+    });
+
+    expect(result.isError).toBeUndefined();
+    expectPluginCoordinationLock();
   });
 
   it('T-U-023: filters-only search_records logs safe timing metadata on success', async () => {
