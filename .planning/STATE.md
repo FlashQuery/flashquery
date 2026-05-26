@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: Codebase Audit Remaining Remediation
-status: executing
-stopped_at: Completed 154-04-PLAN.md
-last_updated: "2026-05-26T00:18:04.000Z"
-last_activity: 2026-05-25 -- Completed 154-01-PLAN.md
+status: complete
+stopped_at: Completed 154-06-PLAN.md
+last_updated: "2026-05-26T00:28:56.896Z"
+last_activity: 2026-05-26 -- Completed 154-06-PLAN.md
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 13
-  completed_plans: 12
-  percent: 75
+  completed_plans: 13
+  percent: 100
 ---
 
 # FlashQuery Core — State
@@ -27,8 +27,8 @@ See: .planning/PROJECT.md (updated 2026-05-25)
 
 Phase: 154
 Plan: 06
-Status: Ready to execute
-Last activity: 2026-05-26 -- Completed 154-04-PLAN.md
+Status: Complete
+Last activity: 2026-05-26 -- Completed 154-06-PLAN.md
 
 ## Accumulated Context
 
@@ -187,6 +187,7 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 | Phase 154 P05 | 2m17s | 2 tasks | 4 files |
 | Phase 154 P02 | 4m51s | 2 tasks | 5 files |
 | Phase 154 P04 | 6m48s | 2 tasks | 13 files |
+| Phase 154 P06 | 6m20s | 2 tasks | 5 files |
 
 ## Decisions
 
@@ -349,6 +350,9 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 - [Phase 154]: 154-02 removed resolver client back-edge by keeping caller-wins parameter merging local to resolver.
 - [Phase 154]: 154-04 kept runtime template rendering in reference-resolver while moving metadata-only contracts to src/llm/reference-metadata.ts.
 - [Phase 154]: 154-04 created exact plan-named sync/template boundary tests because the referenced unit files did not exist in the repo.
+- [Phase 154]: 154-06 uses pinned madge@8.0.0 plus roadmap parity madge as the final zero-cycle closure evidence for production src.
+- [Phase 154]: 154-06 kept template registry merge behavior in src/llm/tool-registry.ts while replacing the template-tools type back-edge with local structural contracts.
+- [Phase 154]: 154-06 T-C-011 was triggered by macro-visible LLM/native-tool imports and passed through npm run test:macro-framework.
 
 ## Accumulated Context
 
@@ -463,8 +467,8 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 
 ## Session Continuity
 
-Last session: 2026-05-26T00:18:04.000Z
-Stopped at: Completed 154-04-PLAN.md
+Last session: 2026-05-26T00:28:56.871Z
+Stopped at: Completed 154-06-PLAN.md
 Resume: None
 
 ## Deferred Items

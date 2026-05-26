@@ -40,7 +40,7 @@
 | 151 | Quick Localized Cleanup | 2/2 | Complete    | 2026-05-25 |
 | 152 | Type-Safety Cleanup Pass | 2/2 | Complete | 2026-05-25 |
 | 153 | Documents Tool Decomposition | 3/3 | Complete    | 2026-05-25 |
-| 154 | Residual Import Cycle Cleanup | 5/6 | In Progress|  |
+| 154 | Residual Import Cycle Cleanup | 6/6 | Complete   | 2026-05-26 |
 
 ## Phase Details
 
@@ -120,7 +120,7 @@ Plans:
 
 **Requirements:** REQ-010, REQ-011, REQ-012
 **Depends on:** Phase 153
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 **Wave 1**
 
@@ -136,7 +136,7 @@ Plans:
 
 **Wave 3** *(blocked on Waves 1-2 completion)*
 
-- [ ] 154-06-PLAN.md — Run final static zero-cycle guard, roadmap parity madge, quality gates, and conditional macro gate. Depends on 154-01, 154-02, 154-03, 154-04, and 154-05.
+- [x] 154-06-PLAN.md — Run final static zero-cycle guard, roadmap parity madge, quality gates, and conditional macro gate. Depends on 154-01, 154-02, 154-03, 154-04, and 154-05.
 
 **Success criteria:**
 
