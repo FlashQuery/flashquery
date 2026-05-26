@@ -31,7 +31,8 @@ import { assertRegisteredToolsHaveToolMeta, loadToolMetaSync } from '../services
 import { ToolSearchService } from '../services/tool-search/tool-search-service.js';
 import { createSearchToolsHandler } from '../services/tool-search/search-tools-handler.js';
 import { createMcpRequestLifecycle, type McpRequestLifecycle } from './request-lifecycle.js';
-import { registerMcpServerForShutdown, unregisterMcpServerForShutdown } from '../server/shutdown.js';
+import { registerMcpRequestLifecycle, unregisterMcpServerForShutdown } from './request-lifecycle-registry.js';
+export { getMcpRequestLifecycleForServer } from './request-lifecycle-registry.js';
 
 // ── HTTP Error Code and Message Mapping (D-04) ──
 
@@ -475,17 +476,8 @@ export interface CreateMcpServerOptions {
 
 const hostToolSearchServices = new WeakMap<McpServer, ToolSearchService>();
 const hostToolSearchInitializers = new WeakMap<McpServer, Promise<void>>();
-const mcpRequestLifecycles = new WeakMap<McpServer, McpRequestLifecycle>();
 
 type CallToolHandler = (request: CallToolRequest, extra: unknown) => Promise<CallToolResult> | CallToolResult;
-
-export function getMcpRequestLifecycleForServer(server: McpServer): McpRequestLifecycle {
-  const lifecycle = mcpRequestLifecycles.get(server);
-  if (!lifecycle) {
-    throw new Error('MCP request lifecycle has not been initialized for this server');
-  }
-  return lifecycle;
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -611,8 +603,7 @@ export function createMcpServer(config: FlashQueryConfig, version: string, optio
   // Apply lifecycle/correlation wrapping BEFORE tool registration so all tools
   // automatically inherit request tracking and context without modifying tool files.
   const requestLifecycle = createMcpRequestLifecycle();
-  mcpRequestLifecycles.set(server, requestLifecycle);
-  registerMcpServerForShutdown(server);
+  registerMcpRequestLifecycle(server, requestLifecycle);
   wrapServerWithRequestLifecycleAndCorrelation(server, requestLifecycle);
   const hostEnabledToolNames = new Set(getResolvedHostToolExposure(config).hostEnabledToolNames);
   wrapServerWithToolCatalog(server, {
@@ -805,7 +796,6 @@ export async function initMCP(
             const sid = transport.sessionId;
             if (sid && transports[sid]) delete transports[sid];
             unregisterMcpServerForShutdown(server);
-            mcpRequestLifecycles.delete(server);
             hostToolSearchServices.delete(server);
             hostToolSearchInitializers.delete(server);
           };

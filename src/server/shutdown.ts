@@ -19,22 +19,16 @@ import { logger } from '../logging/logger.js';
 import { setShuttingDown } from './shutdown-state.js';
 import type { FlashQueryConfig } from '../config/loader.js';
 import { closePgPools } from '../utils/pg-client.js';
+import {
+  getMcpRequestLifecycleForServer,
+  getRegisteredMcpServers,
+} from '../mcp/request-lifecycle-registry.js';
 
 export const MAX_SHUTDOWN_MS = 30_000;
 export const MCP_REQUEST_DRAIN_TIMEOUT_MS = 15_000;
 
 interface ShutdownCoordinatorOptions {
   mcpServer?: McpServer;
-}
-
-const shutdownMcpServers = new Set<McpServer>();
-
-export function registerMcpServerForShutdown(server: McpServer): void {
-  shutdownMcpServers.add(server);
-}
-
-export function unregisterMcpServerForShutdown(server: McpServer): void {
-  shutdownMcpServers.delete(server);
 }
 
 export class ShutdownCoordinator {
@@ -129,13 +123,12 @@ export class ShutdownCoordinator {
 
   private async drainMcpRequests(): Promise<void> {
     this.logInfo('MCP requests draining (timeout=15s)');
-    const servers = this.mcpServer ? [this.mcpServer] : [...shutdownMcpServers];
+    const servers = this.mcpServer ? [this.mcpServer] : getRegisteredMcpServers();
     if (servers.length === 0) {
       this.logDebug('MCP requests: no server lifecycle registered, continuing');
       return;
     }
 
-    const { getMcpRequestLifecycleForServer } = await import('../mcp/server.js');
     const results = await Promise.all(
       servers.map(async (server) =>
         await getMcpRequestLifecycleForServer(server).waitForIdle(MCP_REQUEST_DRAIN_TIMEOUT_MS)

@@ -3,10 +3,10 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import {
   ShutdownCoordinator,
   MCP_REQUEST_DRAIN_TIMEOUT_MS,
-  unregisterMcpServerForShutdown,
 } from '../../../src/server/shutdown.js';
 import type { FlashQueryConfig } from '../../../src/config/loader.js';
 import { createMcpServer, getMcpRequestLifecycleForServer } from '../../../src/mcp/server.js';
+import { unregisterMcpServerForShutdown } from '../../../src/mcp/request-lifecycle-registry.js';
 import { getNativeToolCatalog } from '../../../src/mcp/tool-catalog.js';
 import { logger } from '../../../src/logging/logger.js';
 
