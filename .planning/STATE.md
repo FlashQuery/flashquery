@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: Codebase Audit Remaining Remediation
 status: executing
-stopped_at: Completed 154-05-PLAN.md
-last_updated: "2026-05-26T00:14:34.594Z"
+stopped_at: Completed 154-02-PLAN.md
+last_updated: "2026-05-26T00:16:36.874Z"
 last_activity: 2026-05-25 -- Completed 154-01-PLAN.md
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 13
-  completed_plans: 11
+  completed_plans: 12
   percent: 75
 ---
 
@@ -185,6 +185,7 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 | Phase 152 P02 | 58 min | 2 tasks | 6 files |
 | Phase 154 P01 | 4m12s | 2 tasks | 7 files |
 | Phase 154 P05 | 2m17s | 2 tasks | 4 files |
+| Phase 154 P02 | 4m51s | 2 tasks | 5 files |
 
 ## Decisions
 
@@ -343,6 +344,8 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 - [Phase 154]: 154-01 moved delegated native tool tiers and hard exclusions into src/llm/tool-policy.ts while preserving tool-registry re-exports.
 - [Phase 154]: 154-05 moved embedding dimension policy into src/embedding/dimensions.ts with a type-only dependency on src/config/types.ts.
 - [Phase 154]: 154-05 updated storage to import embedding dimensions from the leaf instead of src/embedding/provider.ts.
+- [Phase 154]: 154-02 kept public LLM client/resolver contract imports compatible through re-exports while moving shared runtime classes and interfaces into leaf modules.
+- [Phase 154]: 154-02 removed resolver client back-edge by keeping caller-wins parameter merging local to resolver.
 
 ## Accumulated Context
 
@@ -457,8 +460,8 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 
 ## Session Continuity
 
-Last session: 2026-05-26T00:14:34.573Z
-Stopped at: Completed 154-05-PLAN.md
+Last session: 2026-05-26T00:16:36.853Z
+Stopped at: Completed 154-02-PLAN.md
 Resume: None
 
 ## Deferred Items
