@@ -67,10 +67,7 @@ server:
 
 # ─── Supabase Connection ────────────────────────────────────────────────────
 # Credentials come from the root .env file. See .env.example for where to
-# find each value (cloud dashboard vs. self-hosted bundle). DATABASE_URL must
-# point at direct Postgres or a session-capable/session-mode pooler. Startup
-# fails closed for transaction-mode pooler URLs because session advisory locks
-# cannot be proven stable there.
+# find each value (cloud dashboard vs. self-hosted bundle).
 
 supabase:
   url: "${SUPABASE_URL}"
@@ -208,12 +205,13 @@ mcp:
 
 # ─── Locking ────────────────────────────────────────────────────────────────
 # Coordinates concurrent writes across multiple FlashQuery instances that
-# share a database. Cross-process coordination uses session-scoped Postgres
-# advisory locks over DATABASE_URL, so leave this enabled unless you know this
-# instance is the only writer for the vault.
+# share a database. For single-instance installations the default is fine;
+# set enabled: false only if you know you have exactly one writer and want
+# to skip the lock-acquisition overhead.
 
 locking:
   enabled: true
+  ttl_seconds: 30
 
 
 # ─── Logging ────────────────────────────────────────────────────────────────

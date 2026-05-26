@@ -155,7 +155,7 @@ Plans:
 
 - [ ] 158-03-PLAN.md — Session-capable startup self-test, failure behavior, docs, and REQ-005 tests.
 - [ ] 158-04-PLAN.md — Stale legacy write-lock behavior test cleanup.
-- [ ] 158-05-PLAN.md — Config/schema/fixture expectation cleanup after lock-table retirement.
+- [x] 158-05-PLAN.md — Config/schema/fixture expectation cleanup after lock-table retirement.
 - [x] 158-06-PLAN.md — Phase 157 gap-fix test alignment with legacy lock retirement.
 
 ### Phase 159: Lock Timeout + Canonical Key Derivation
@@ -269,7 +269,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 155. Per-file Tier 1 + Live-defect Close | 3/3 | Complete   | 2026-05-26 |
 | 156. Atomic + Durable Write Primitive Consolidation | 3/3 | Complete    | 2026-05-26 |
 | 157. Records / Memory / Plugins Audit + Guards | 0/TBD | Not started | - |
-| 158. Tier 2 + Lock-table Retirement + Session Check | 3/6 | In Progress|  |
+| 158. Tier 2 + Lock-table Retirement + Session Check | 4/6 | In Progress|  |
 | 159. Lock Timeout + Canonical Key Derivation | 0/TBD | Not started | - |
 | 160. Folder Locks + Manage Directory Migration | 0/TBD | Not started | - |
 | 161. Destination Locks + EXDEV Fallback | 0/TBD | Not started | - |
