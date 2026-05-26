@@ -155,19 +155,19 @@ describe('Schema Verification (Integration)', () => {
     }
 
     try {
-      // Drop two tables
+      // Drop two active schema tables. The retired legacy write-lock table is no longer required.
       await testClient.query('DROP TABLE IF EXISTS fqc_vault');
-      await testClient.query('DROP TABLE IF EXISTS fqc_write_locks');
+      await testClient.query('DROP TABLE IF EXISTS fqc_purpose_templates');
 
-      // verifySchema should detect both missing tables
+      // verifySchema should detect both missing active tables.
       await expect(verifySchema(client!)).rejects.toThrow(
-        /Missing required tables after DDL.*fqc_vault.*fqc_write_locks/
+        /Missing required tables after DDL.*fqc_vault.*fqc_purpose_templates/
       );
     } catch (err) {
       console.log('⏭️  Skipping: Cannot manipulate test database tables:', (err as Error).message);
     } finally {
       try {
-        // Recreate tables
+        // Recreate active tables.
         await testClient.query(`
           CREATE TABLE IF NOT EXISTS fqc_vault (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -178,11 +178,16 @@ describe('Schema Verification (Integration)', () => {
           )
         `);
         await testClient.query(`
-          CREATE TABLE IF NOT EXISTS fqc_write_locks (
-            id BIGSERIAL PRIMARY KEY,
-            table_name TEXT NOT NULL UNIQUE,
-            acquired_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-            expires_at TIMESTAMPTZ
+          CREATE TABLE IF NOT EXISTS fqc_purpose_templates (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            instance_id TEXT NOT NULL,
+            purpose_name TEXT NOT NULL,
+            template_path TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'yaml',
+            created_at TIMESTAMPTZ DEFAULT now(),
+            updated_at TIMESTAMPTZ DEFAULT now(),
+            UNIQUE(instance_id, purpose_name, template_path),
+            CONSTRAINT fqc_purpose_templates_source_check CHECK (source IN ('yaml', 'api', 'webapp'))
           )
         `);
       } catch (err) {

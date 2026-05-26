@@ -51,9 +51,9 @@ describe.skipIf(!HAS_SUPABASE)('Supabase integration', () => {
     await supabaseManager.close();
   });
 
-  it('creates all 5 tables (SUP-02, SUP-04)', async () => {
+  it('creates active schema tables without the retired write-lock table (SUP-02, SUP-04)', async () => {
     // v1.7 schema: fqc_projects, fqc_event_log, fqc_routing_rules removed (CLEAN-01, CLEAN-02)
-    // Remaining tables: fqc_memory, fqc_vault, fqc_plugin_registry, fqc_documents, fqc_write_locks
+    // Phase 158 schema: the legacy write-lock table is retired; active tables remain queryable.
     const result = await verifyClient.query(`
       SELECT table_name, table_schema
       FROM information_schema.tables
@@ -62,11 +62,10 @@ describe.skipIf(!HAS_SUPABASE)('Supabase integration', () => {
           'fqc_memory',
           'fqc_vault',
           'fqc_plugin_registry',
-          'fqc_documents',
-          'fqc_write_locks'
+          'fqc_documents'
         ])
     `);
-    expect(result.rows).toHaveLength(5);
+    expect(result.rows).toHaveLength(4);
   });
 
   it('enables pgvector extension (SUP-02)', async () => {
@@ -87,7 +86,7 @@ describe.skipIf(!HAS_SUPABASE)('Supabase integration', () => {
     const config = loadTestConfig();
     await expect(initSupabase(config)).resolves.not.toThrow();
 
-    // Re-verify tables still exist after second run (v1.7 schema)
+    // Re-verify active tables still exist after second run.
     const result = await verifyClient.query(`
       SELECT table_name
       FROM information_schema.tables
@@ -96,11 +95,10 @@ describe.skipIf(!HAS_SUPABASE)('Supabase integration', () => {
           'fqc_memory',
           'fqc_vault',
           'fqc_plugin_registry',
-          'fqc_documents',
-          'fqc_write_locks'
+          'fqc_documents'
         ])
     `);
-    expect(result.rows).toHaveLength(5);
+    expect(result.rows).toHaveLength(4);
   });
 
   it('v1.5 columns exist with null defaults in fqc_memory (SUP-03)', async () => {
@@ -120,7 +118,8 @@ describe.skipIf(!HAS_SUPABASE)('Supabase integration', () => {
   });
 
   it('tables are in public schema (SUP-04)', async () => {
-    // v1.7 schema: fqc_projects, fqc_event_log, fqc_routing_rules removed
+    // v1.7 schema: fqc_projects, fqc_event_log, fqc_routing_rules removed.
+    // Phase 158: the legacy write-lock table is retired and must not be required here.
     const result = await verifyClient.query(`
       SELECT table_name, table_schema
       FROM information_schema.tables
@@ -129,11 +128,10 @@ describe.skipIf(!HAS_SUPABASE)('Supabase integration', () => {
           'fqc_memory',
           'fqc_vault',
           'fqc_plugin_registry',
-          'fqc_documents',
-          'fqc_write_locks'
+          'fqc_documents'
         ])
     `);
-    expect(result.rows).toHaveLength(5);
+    expect(result.rows).toHaveLength(4);
     for (const row of result.rows) {
       expect(row.table_schema).toBe('public');
     }
@@ -150,7 +148,7 @@ describe.skipIf(!HAS_SUPABASE)('Supabase integration', () => {
   // ─────────────────────────────────────────────────────────────────────────
 
   it('all required tables exist and are queryable after DDL (SCHEMA-04)', async () => {
-    // Verify each of the 5 required tables exists using a simple query
+    // Verify each active required table exists using a simple query.
     // This tests the post-DDL schema completeness
 
     const requiredTables = [
@@ -158,7 +156,6 @@ describe.skipIf(!HAS_SUPABASE)('Supabase integration', () => {
       'fqc_vault',
       'fqc_documents',
       'fqc_plugin_registry',
-      'fqc_write_locks',
     ];
 
     for (const table of requiredTables) {

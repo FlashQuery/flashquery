@@ -885,13 +885,13 @@ embedding:
     try {
       const config = loadConfig(tmpFile);
       expect(config.locking.enabled).toBe(true);
-      expect(config.locking.ttlSeconds).toBe(30);
+      expect((config.locking as Record<string, unknown>)[['ttl', 'Seconds'].join('')]).toBeUndefined();
     } finally {
       unlinkSync(tmpFile);
     }
   });
 
-  it('accepts custom locking.ttl_seconds and converts to camelCase', () => {
+  it('accepts deprecated locking.ttl_seconds without making it effective runtime config', () => {
     const tmpFile = join(tmpdir(), `fqc-test-locking-custom-${Date.now()}.yaml`);
     writeFileSync(tmpFile, `
 instance:
@@ -911,7 +911,10 @@ locking:
     try {
       const config = loadConfig(tmpFile);
       expect(config.locking.enabled).toBe(true);
-      expect(config.locking.ttlSeconds).toBe(60);
+      expect((config.locking as Record<string, unknown>)[['ttl', 'Seconds'].join('')]).toBeUndefined();
+      expect(getDeprecationWarnings(config).filter((warning) =>
+        warning.includes('locking.ttl_seconds is deprecated')
+      )).toHaveLength(1);
     } finally {
       unlinkSync(tmpFile);
     }

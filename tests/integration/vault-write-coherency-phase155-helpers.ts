@@ -38,7 +38,7 @@ export function makePhase155Config(vaultPath: string, instanceId = `wco-155-${ra
     },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio', tokenLifetime: 24 },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     trashFolder: { enabled: false, path: '.flashquery/removed', collisionStrategy: 'suffix' },
     hostMcpTools: { tools: ['tier:read-write', 'call_macro'], excludedTools: [] },
     llm: { providers: [], models: [], purposes: [] },
@@ -76,7 +76,6 @@ export async function createPhase155Harness(prefix: string): Promise<Phase155Har
     cleanup: async () => {
       try {
         const supabase = supabaseManager.getClient();
-        await supabase.from('fqc_write_locks').delete().eq('instance_id', instanceId);
         await supabase.from('fqc_documents').delete().eq('instance_id', instanceId);
         await supabase.from('fqc_vault').delete().eq('instance_id', instanceId);
         await supabaseManager.close();

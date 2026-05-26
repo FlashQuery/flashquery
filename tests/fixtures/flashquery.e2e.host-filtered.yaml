@@ -35,4 +35,3 @@ logging:
 
 locking:
   enabled: false
-  ttlSeconds: 30
