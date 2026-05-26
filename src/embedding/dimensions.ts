@@ -1,6 +1,6 @@
 import type { FlashQueryConfig } from '../config/types.js';
 
-export const DEFAULT_EMBEDDING_DIMENSIONS = 1536;
+const DEFAULT_EMBEDDING_DIMENSIONS = 1536;
 
 export function getEmbeddingDimensions(config: FlashQueryConfig): number {
   if (config.llm?.purposes) {

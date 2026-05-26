@@ -45,14 +45,14 @@ export interface InjectionMetadata {
   promptChars: number;
 }
 
-export interface RenderTemplateDocumentSuccess {
+interface RenderTemplateDocumentSuccess {
   ok: true;
   content: string;
   paramsUsed: Record<string, TemplateParamUsage>;
   warnings: TemplateWarning[];
 }
 
-export interface RenderTemplateDocumentFailure {
+interface RenderTemplateDocumentFailure {
   ok: false;
   reason: ReferenceFailureReason;
   detail: string;
