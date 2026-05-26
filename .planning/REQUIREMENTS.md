@@ -1034,7 +1034,7 @@ If during implementation the dev agent finds any decision genuinely underspecifi
 | REQ-007 | Phase 160 | Pending |
 | REQ-008 | Phase 161 | Pending |
 | REQ-009 | Phase 155 | Complete |
-| REQ-010 | Phase 155 | Pending |
+| REQ-010 | Phase 155 | Complete |
 | REQ-011 | Phase 162 | Pending |
 | REQ-012 | Phase 162 | Pending |
 | REQ-013 | Phase 162 | Pending |
@@ -1049,7 +1049,7 @@ If during implementation the dev agent finds any decision genuinely underspecifi
 | REQ-022 | Phase 161 | Pending |
 | REQ-023 | Phase 157 | Pending |
 | REQ-024 | Phase 160 | Pending |
-| REQ-025 | Phase 155 | Pending |
+| REQ-025 | Phase 155 | Complete |
 
 Coverage: 25/25 v3.9 requirements mapped exactly once.
 

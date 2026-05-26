@@ -4,13 +4,13 @@ milestone: v3.9
 milestone_name: Vault Write Coherency Locking
 status: executing
 stopped_at: v3.9 roadmap created; next step is `$gsd-plan-phase 155`
-last_updated: "2026-05-26T15:44:02.590Z"
+last_updated: "2026-05-26T15:52:54.931Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 9
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-26)
 ## Current Position
 
 Phase: 155 (per-file-tier-1-live-defect-close) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-05-26
 
-Progress: [███░░░░░░░] 33%
+Progress: [███████░░░] 67%
 
 ## Performance Metrics
 
