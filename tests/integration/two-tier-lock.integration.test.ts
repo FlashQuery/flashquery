@@ -95,18 +95,19 @@ describe.skipIf(!HAS_SUPABASE)('REQ-002 two-tier advisory-lock integration', () 
   }, 20_000);
 
   it('T-I-004 two-tier advisory-lock session end releases a held lock without manual recovery', async () => {
-    const pool = new pg.Pool({ connectionString: TEST_DATABASE_URL, allowExitOnIdle: true });
-    const holder = await pool.connect();
-    const contender = await pool.connect();
+    const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
+    const contender = new pg.Client({ connectionString: TEST_DATABASE_URL });
     const filePath = '/tmp/vault/two-tier-session-end.md';
     const key = advisoryKeyForPath(filePath);
 
     try {
+      await holder.connect();
+      await contender.connect();
       await holder.query('SELECT pg_advisory_lock($1::bigint)', [key]);
       const blocked = await contender.query<{ acquired: boolean }>('SELECT pg_try_advisory_lock($1::bigint) AS acquired', [key]);
       expect(blocked.rows[0]?.acquired).toBe(false);
 
-      holder.release(true);
+      await holder.end();
 
       await expect
         .poll(async () => {
@@ -119,8 +120,7 @@ describe.skipIf(!HAS_SUPABASE)('REQ-002 two-tier advisory-lock integration', () 
         })
         .toBe(true);
     } finally {
-      contender.release();
-      await pool.end();
+      await contender.end().catch(() => undefined);
     }
   }, 20_000);
 });

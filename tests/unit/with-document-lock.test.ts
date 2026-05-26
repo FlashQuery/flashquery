@@ -1,19 +1,27 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import type { PoolClient, QueryResult, QueryResultRow } from 'pg';
 import type { FlashQueryConfig } from '../../src/config/types.js';
-import { LockTimeoutError, withDocumentLock, withDocumentLocks } from '../../src/services/document-lock.js';
+import { withDocumentLock, withDocumentLocks } from '../../src/services/document-lock.js';
+import { closePgPools, __setPgPoolFactoryForTesting } from '../../src/utils/pg-client.js';
 
-const acquireLock = vi.hoisted(() => vi.fn(async () => true));
-const releaseLock = vi.hoisted(() => vi.fn(async () => undefined));
-const getClient = vi.hoisted(() => vi.fn(() => ({ from: vi.fn() })));
+type QueryCall = { sql: string; params?: unknown[] };
 
-vi.mock('../../src/services/write-lock.js', () => ({
-  acquireLock,
-  releaseLock,
-}));
+class FakePoolClient {
+  readonly calls: QueryCall[] = [];
+  released = false;
 
-vi.mock('../../src/storage/supabase.js', () => ({
-  supabaseManager: { getClient },
-}));
+  async query<Row extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<QueryResult<Row>> {
+    this.calls.push({ sql, params });
+    if (sql.includes('pg_advisory_unlock')) {
+      return { rows: [{ released: true }] as Row[] } as QueryResult<Row>;
+    }
+    return { rows: [] as Row[] } as QueryResult<Row>;
+  }
+
+  release(): void {
+    this.released = true;
+  }
+}
 
 function makeConfig(enabled = true): FlashQueryConfig {
   return {
@@ -22,73 +30,112 @@ function makeConfig(enabled = true): FlashQueryConfig {
       id: 'instance-1',
       vault: { path: '/tmp/vault', markdownExtensions: ['.md'] },
     },
+    supabase: { url: 'http://localhost:54321', serviceRoleKey: 'service-role', databaseUrl: 'postgres://fq/test', skipDdl: true },
     locking: { enabled, ttlSeconds: 30 },
   } as FlashQueryConfig;
 }
 
+function installFakePool(): { clients: FakePoolClient[] } {
+  const clients: FakePoolClient[] = [];
+  __setPgPoolFactoryForTesting(() => ({
+    async query<Row extends QueryResultRow = QueryResultRow>(): Promise<QueryResult<Row>> {
+      return { rows: [] as Row[] } as QueryResult<Row>;
+    },
+    async connect(): Promise<PoolClient> {
+      const client = new FakePoolClient();
+      clients.push(client);
+      return client as unknown as PoolClient;
+    },
+    async end(): Promise<void> {},
+  }));
+  return { clients };
+}
+
 describe('REQ-009 withDocumentLock facade', () => {
+  let clients: FakePoolClient[];
+
   beforeEach(() => {
-    vi.clearAllMocks();
-    acquireLock.mockResolvedValue(true);
-    releaseLock.mockResolvedValue(undefined);
+    ({ clients } = installFakePool());
   });
 
-  it('T-U-016 acquires Tier 1 plus temporary legacy Tier 2 and releases on success', async () => {
+  afterEach(async () => {
+    await closePgPools();
+    __setPgPoolFactoryForTesting(null);
+  });
+
+  it('T-U-016 acquires Tier 1 plus advisory Tier 2 and releases on success', async () => {
     const result = await withDocumentLock(makeConfig(), '/tmp/vault/a.md', async () => 'done');
 
     expect(result).toBe('done');
-    expect(acquireLock).toHaveBeenCalledWith(
-      expect.anything(),
-      'instance-1',
-      'document:/tmp/vault/a.md',
-      { ttlSeconds: 30 }
-    );
-    expect(releaseLock).toHaveBeenCalledWith(expect.anything(), 'instance-1', 'document:/tmp/vault/a.md');
+    expect(clients).toHaveLength(1);
+    expect(clients[0].calls.map((call) => call.sql)).toEqual([
+      'SELECT pg_advisory_lock($1::bigint)',
+      'SELECT pg_advisory_unlock($1::bigint) AS released',
+    ]);
+    expect(clients[0].released).toBe(true);
   });
 
-  it('T-U-016 releases temporary Tier 2 when the callback throws', async () => {
+  it('T-U-016 releases advisory Tier 2 when the callback throws', async () => {
     await expect(
       withDocumentLock(makeConfig(), '/tmp/vault/a.md', async () => {
         throw new Error('boom');
       })
     ).rejects.toThrow('boom');
 
-    expect(releaseLock).toHaveBeenCalledWith(expect.anything(), 'instance-1', 'document:/tmp/vault/a.md');
+    expect(clients).toHaveLength(1);
+    expect(clients[0].calls.map((call) => call.sql)).toEqual([
+      'SELECT pg_advisory_lock($1::bigint)',
+      'SELECT pg_advisory_unlock($1::bigint) AS released',
+    ]);
+    expect(clients[0].released).toBe(true);
   });
 
-  it('T-U-017 withDocumentLocks acquires locks in sorted basic-key order and releases reverse order', async () => {
-    const calls: string[] = [];
-    acquireLock.mockImplementation(async (_client, _instanceId, resource: string) => {
-      calls.push(`acquire:${resource}`);
-      return true;
-    });
-    releaseLock.mockImplementation(async (_client, _instanceId, resource: string) => {
-      calls.push(`release:${resource}`);
-    });
-
+  it('T-U-017 withDocumentLocks acquires advisory locks in sorted basic-key order and releases reverse order', async () => {
     await withDocumentLocks(makeConfig(), ['/tmp/vault/b.md', '/tmp/vault/a.md'], async () => undefined);
 
-    expect(calls).toEqual([
-      'acquire:document:/tmp/vault/a.md',
-      'acquire:document:/tmp/vault/b.md',
-      'release:document:/tmp/vault/b.md',
-      'release:document:/tmp/vault/a.md',
+    expect(clients).toHaveLength(1);
+    expect(clients[0].calls.map((call) => call.sql)).toEqual([
+      'SELECT pg_advisory_lock($1::bigint)',
+      'SELECT pg_advisory_lock($1::bigint)',
+      'SELECT pg_advisory_unlock($1::bigint) AS released',
+      'SELECT pg_advisory_unlock($1::bigint) AS released',
     ]);
+    expect(clients[0].calls[0].params?.[0]).toBe(clients[0].calls[3].params?.[0]);
+    expect(clients[0].calls[1].params?.[0]).toBe(clients[0].calls[2].params?.[0]);
   });
 
-  it('T-U-018 throws LockTimeoutError and releases Tier 1 when temporary Tier 2 cannot be acquired', async () => {
-    let secondEntered = false;
-    acquireLock.mockResolvedValueOnce(false);
+  it('T-U-018 releases Tier 1 after advisory unlock failure so a later caller can enter', async () => {
+    clients.length = 0;
+    __setPgPoolFactoryForTesting(() => ({
+      async query<Row extends QueryResultRow = QueryResultRow>(): Promise<QueryResult<Row>> {
+        return { rows: [] as Row[] } as QueryResult<Row>;
+      },
+      async connect(): Promise<PoolClient> {
+        const client = new FakePoolClient();
+        client.query = async <Row extends QueryResultRow = QueryResultRow>(
+          sql: string,
+          params?: unknown[]
+        ): Promise<QueryResult<Row>> => {
+          client.calls.push({ sql, params });
+          if (sql.includes('pg_advisory_unlock')) {
+            return { rows: [{ released: false }] as Row[] } as QueryResult<Row>;
+          }
+          return { rows: [] as Row[] } as QueryResult<Row>;
+        };
+        clients.push(client);
+        return client as unknown as PoolClient;
+      },
+      async end(): Promise<void> {},
+    }));
 
-    await expect(withDocumentLock(makeConfig(), '/tmp/vault/a.md', async () => undefined)).rejects.toBeInstanceOf(
-      LockTimeoutError
+    await expect(withDocumentLock(makeConfig(), '/tmp/vault/a.md', async () => 'done')).rejects.toThrow(
+      /Failed to release advisory document lock/
     );
 
-    await withDocumentLock(makeConfig(false), '/tmp/vault/a.md', async () => {
-      secondEntered = true;
-    });
-    expect(secondEntered).toBe(true);
-    expect(releaseLock).not.toHaveBeenCalled();
+    await closePgPools();
+    ({ clients } = installFakePool());
+
+    await expect(withDocumentLock(makeConfig(), '/tmp/vault/a.md', async () => 'ok')).resolves.toBe('ok');
   });
 
   it('does not self-deadlock when multiple document keys share a Tier 1 stripe', async () => {
