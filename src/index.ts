@@ -42,6 +42,7 @@ import { initMCP } from './mcp/server.js';
 import { initializeShutdownHandlers } from './server/shutdown.js';
 import { runScanOnce } from './services/scanner.js';
 import { loadPluginManifests } from './services/manifest-loader.js';
+import { assertSessionAdvisoryLocksOrThrow } from './services/lock-startup.js';
 import type { FolderMapping } from './services/manifest-loader.js';
 
 const require = createRequire(import.meta.url);
@@ -257,6 +258,7 @@ if (isMain) {
         await initVault(config);
         await cleanStaleTempFiles(config.instance.vault.path);
         await initSupabase(config);
+        await assertSessionAdvisoryLocksOrThrow(config.supabase.databaseUrl);
         let folderMappings: Map<string, FolderMapping> = new Map();
         try {
           logger.info('Initializing plugin manifests...');

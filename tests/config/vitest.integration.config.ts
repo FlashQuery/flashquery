@@ -17,6 +17,7 @@ export default defineConfig({
       'tests/integration/per-file-lock.test.ts',
       'tests/integration/two-tier-lock.integration.test.ts',
       'tests/integration/fqc-write-locks-drop.integration.test.ts',
+      'tests/integration/lock-startup.integration.test.ts',
       'tests/integration/apply-tags-concurrent.integration.test.ts',
       'tests/integration/insert-doc-link-race.integration.test.ts',
       'tests/integration/call-macro-per-step-lock.integration.test.ts',
