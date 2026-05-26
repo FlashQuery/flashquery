@@ -18,6 +18,8 @@ verified_at: 2026-05-26T16:08:00Z
 
 - `npm test -- tests/unit/document-lock-registry.test.ts tests/unit/with-document-lock.test.ts tests/unit/lock-helper-only.test.ts tests/unit/document-tool-lock-call-sites.test.ts tests/unit/macro-no-lock-imports.test.ts tests/unit/scanner.test.ts tests/unit/write-document.test.ts tests/unit/archive-document.test.ts tests/unit/remove-document.test.ts tests/unit/copy-document.test.ts tests/unit/move-document.test.ts tests/unit/advanced-document-tools.test.ts tests/unit/apply-tags.test.ts`
   - Passed: 13 files, 121 tests.
+- `npm test`
+  - Passed: 155 files, 2052 tests.
 - `npm run typecheck`
   - Passed.
 - `npm run build`
@@ -25,11 +27,10 @@ verified_at: 2026-05-26T16:08:00Z
 - `python3 -m py_compile tests/scenarios/directed/testcases/test_per_file_lock_parallel.py tests/scenarios/directed/testcases/test_apply_tags_no_lost_update.py tests/scenarios/directed/testcases/test_parallel_macros_per_file_lock.py`
   - Passed.
 - `python3 tests/scenarios/directed/run_suite.py --managed --strict-cleanup test_per_file_lock_parallel.py test_apply_tags_no_lost_update.py test_parallel_macros_per_file_lock.py`
-  - Passed: 3 tests, 0 failures, 0 residue, 1m 12.9s.
-  - Report: `tests/scenarios/directed/reports/scenario-report-2026-05-26-130618.md`.
+  - Passed: 3 tests, 0 failures, 0 residue, 1m 11.5s.
+  - Report: `tests/scenarios/directed/reports/scenario-report-2026-05-26-131113.md`.
 
 ## Notes
 
 - `.env.test` credentials were available and used by the managed directed scenario suite.
 - The broad Vitest integration selector attempted earlier in plan 155-02 was inconclusive due repeated unrelated rebuild behavior and is not counted as passing evidence. The directed scenarios provide the public Supabase-backed UAT evidence for this phase.
-

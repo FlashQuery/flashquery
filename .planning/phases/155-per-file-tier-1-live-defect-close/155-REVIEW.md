@@ -43,7 +43,7 @@ Status: clean after fixes.
 2. Warning: compound document mutations could report `LockTimeoutError` as generic runtime errors.
    - Fix: map lock contention to expected `conflict` envelopes for `insert_doc_link`, `apply_tags`, `insert_in_doc`, and `replace_doc_section`.
    - Regression: `tests/unit/document-tool-lock-call-sites.test.ts` guards compound lock timeout mapping.
-   - Commit: `a9bf623`.
+   - Commits: `a9bf623`, `cfe848e`.
 
 ## Residual Risk
 
@@ -54,5 +54,5 @@ Status: clean after fixes.
 
 - `npm test -- tests/unit/document-tool-lock-call-sites.test.ts` — passed after compound timeout fix.
 - `npm test -- tests/unit/with-document-lock.test.ts tests/unit/document-lock-registry.test.ts` — passed after stripe collision fix.
+- `npm test` — passed after preserving the existing `replace_doc_section` static conflict guard.
 - `npm run typecheck` — passed.
-
