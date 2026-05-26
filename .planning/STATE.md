@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: Codebase Audit Remaining Remediation
 status: executing
-stopped_at: Completed 154-01-PLAN.md
-last_updated: "2026-05-26T00:03:33.000Z"
-last_activity: 2026-05-25 -- Phase 154 planning complete
+stopped_at: Completed 154-05-PLAN.md
+last_updated: "2026-05-26T00:14:34.594Z"
+last_activity: 2026-05-25 -- Completed 154-01-PLAN.md
 progress:
   total_phases: 4
   completed_phases: 3
   total_plans: 13
-  completed_plans: 8
-  percent: 62
+  completed_plans: 11
+  percent: 75
 ---
 
 # FlashQuery Core — State
@@ -184,6 +184,7 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 | Phase 152 P01 | 24 min | 2 tasks | 6 files |
 | Phase 152 P02 | 58 min | 2 tasks | 6 files |
 | Phase 154 P01 | 4m12s | 2 tasks | 7 files |
+| Phase 154 P05 | 2m17s | 2 tasks | 4 files |
 
 ## Decisions
 
@@ -340,6 +341,8 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 - [Phase 147]: 147-04 classified uuid v14 as latest-major-only drift — uuid current and wanted are both 13.0.2, npm audit is clean, and REQ-006 does not require latest-major updates without wanted drift or advisories.
 - [Phase 154]: 154-01 kept config loader's FlashQueryConfig export as a compatibility type re-export while cycle-sensitive modules import src/config/types.ts directly.
 - [Phase 154]: 154-01 moved delegated native tool tiers and hard exclusions into src/llm/tool-policy.ts while preserving tool-registry re-exports.
+- [Phase 154]: 154-05 moved embedding dimension policy into src/embedding/dimensions.ts with a type-only dependency on src/config/types.ts.
+- [Phase 154]: 154-05 updated storage to import embedding dimensions from the leaf instead of src/embedding/provider.ts.
 
 ## Accumulated Context
 
@@ -454,8 +457,8 @@ Items acknowledged and deferred at milestone close on 2026-05-25:
 
 ## Session Continuity
 
-Last session: 2026-05-26T00:03:33.000Z
-Stopped at: Completed 154-01-PLAN.md
+Last session: 2026-05-26T00:14:34.573Z
+Stopped at: Completed 154-05-PLAN.md
 Resume: None
 
 ## Deferred Items

@@ -92,7 +92,7 @@
   - Current madge family: `config/loader.ts > llm/capabilities.ts`, `config/loader.ts > llm/tool-registry.ts`, and longer paths through `llm/template-tools.ts`, `embedding/provider.ts`, `llm/client.ts`, `llm/config-sync.ts`, `llm/purpose-template-bindings.ts`, `logging/logger.ts`, and `storage/supabase.ts`.
   - Source: post-implementation audit gap, Phase 154.
 
-- [ ] **REQ-011**: LLM runtime, template, reference, embedding, storage, and logging imports are acyclic.
+- [x] **REQ-011**: LLM runtime, template, reference, embedding, storage, and logging imports are acyclic.
   - Shared LLM error classes, chat/result types, template binding adapter types, injected-reference metadata, embedding dimension helpers, and config-sync adapter types must live in leaf modules that do not import concrete runtime modules.
   - `llm/client.ts`, `llm/resolver.ts`, `llm/config-sync.ts`, `llm/purpose-template-bindings.ts`, `llm/template-tools.ts`, `llm/reference-resolver.ts`, `llm/types.ts`, `embedding/provider.ts`, `embedding/background-embed.ts`, `storage/supabase.ts`, and `logging/logger.ts` must not form any madge cycle.
   - Behavior for model fallback, cost recording, config DB sync, template tools, document reference hydration, and background embedding must remain unchanged.
