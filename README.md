@@ -73,6 +73,8 @@ The first question picks your Supabase backend:
 2. **Existing self-hosted** — a Supabase instance you already run. Same prompts.
 3. **Bundled Docker stack** — generates all secrets and wires up Supabase locally. Requires Docker Desktop or Docker Engine + Compose.
 
+For Supabase Cloud or an external self-hosted database, `DATABASE_URL` must use a direct Postgres endpoint or a session-capable/session-mode pooler. FlashQuery verifies session-scoped advisory locks at startup and exits with clear guidance if the URL points at a transaction-mode pooler.
+
 `npm run setup` is safe to re-run at any time. Existing values become defaults; it warns before letting you change sensitive routing values such as the database URL or instance ID, and it preserves generated secrets such as `MCP_AUTH_SECRET` unless you rotate them yourself.
 
 ### 3. Start FlashQuery
@@ -250,13 +252,15 @@ OPENAI_API_KEY=sk-...      # default key for semantic search and LLM features
 LOG_LEVEL=info
 ```
 
+Use a direct Postgres URL or a session-mode/session-capable pooler for `DATABASE_URL`. Transaction-mode pooler URLs fail startup because FlashQuery cannot prove session-scoped advisory locks are stable across checked-out Postgres sessions.
+
 ---
 
 ## Known Limitations
 
 **Symlinks in vault** — FlashQuery does not follow symbolic links. Symlinks are skipped during scanning; original files sync normally. Symlink handling is unreliable on network filesystems (NFS, SMB) and in containers, so this is deliberate.
 
-**Multiple instances on the same vault** — Database-backed write locks coordinate shared document, memory, and record writes when enabled, but they do not make the vault a fully multi-writer filesystem. One primary writer per vault is recommended; run additional instances only when you understand the lock boundaries.
+**Multiple instances on the same vault** — Session-scoped Postgres advisory locks coordinate shared document, memory, and record writes when enabled, but they require a direct or session-capable `DATABASE_URL`. They do not make the vault a fully multi-writer filesystem. One primary writer per vault is recommended; run additional instances only when you understand the lock boundaries.
 
 **Plugin table consistency** — Plugin tables reference documents by `fqc_id`. In rare cases (external file edits that strip frontmatter) references can be temporarily orphaned. Run `flashquery scan` to recover. File watcher recovery is a roadmap item.
 

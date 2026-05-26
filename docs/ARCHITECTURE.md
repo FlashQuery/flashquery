@@ -185,6 +185,8 @@ If you're running the bundled Supabase stack in `docker/`, a third file — **`.
 
 The root `.env` and `docker/.env.docker` each stand on their own. Shared values such as `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `VAULT_PATH`, instance identity, and default LLM provider variables are duplicated in both when you choose the bundled Docker path, and `setup/setup.sh` keeps them in sync.
 
+`DATABASE_URL` is also the connection used for session-scoped Postgres advisory locks. It must point at direct Postgres or a session-capable/session-mode pooler. FlashQuery runs a startup self-test that acquires a throwaway advisory lock on one checkout, observes it from another checkout, and fails startup if the URL behaves like a transaction-mode pooler.
+
 For the full list of fields and their meanings, see the inline comments in `.env.example`, `docker/.env.docker.example`, and `flashquery.example.yml`.
 
 ### LLM and template configuration
@@ -219,7 +221,7 @@ Supabase runs somewhere else — Supabase Cloud or a self-hosted instance you al
 
 **When to use:** you already have Supabase, or you're deploying FlashQuery to a cloud host and want a managed database behind it.
 
-**How to set up:** run `npm run setup` and choose option 1 ("Supabase Cloud") or option 2 ("Existing self-hosted"). The script prompts for your Supabase URL, service-role key, and database connection string. Nothing in `docker/` is touched.
+**How to set up:** run `npm run setup` and choose option 1 ("Supabase Cloud") or option 2 ("Existing self-hosted"). The script prompts for your Supabase URL, service-role key, and database connection string. Use a direct Postgres URL or a session-mode/session-capable pooler for `DATABASE_URL`; transaction-mode pooler URLs are rejected at startup because session advisory locks cannot be proven stable. Nothing in `docker/` is touched.
 
 ### Path 3 — Database-only Docker (developer / CI)
 
@@ -237,14 +239,13 @@ All three paths share the same production-deployment story: run FlashQuery as a 
 
 ## CLI Commands
 
-When the package is installed globally (`npm install -g flashquery`), the `flashquery` binary becomes available on your PATH. It is registered in `package.json`'s `"bin"` field and points to `dist/index.js`. It accepts all six subcommands:
+When the package is installed globally (`npm install -g flashquery`), the `flashquery` binary becomes available on your PATH. It is registered in `package.json`'s `"bin"` field and points to `dist/index.js`. It accepts these subcommands:
 
 - **`start --config <path>`** — starts the MCP server using the given `flashquery.yml`. Accepts `--transport http` (streamable-http) or `--transport stdio` to override the yaml setting for a single run.
 - **`doctor`** — runs health checks against the current config: database reachable, pgvector extension present, vault path writable, embedding provider configured, git available if auto-commit is on. Prints a pass/fail line per check.
 - **`scan`** — runs a full vault scan: detects identity changes, triggers plugin propagation. Normally the background scanner handles this automatically; the standalone command is useful after external edits or to recover from skipped propagations.
 - **`backup`** — writes a JSON snapshot of every FlashQuery table to `<vault>/.fqc/backup.json` and (if the vault is a git repo) commits it. Use `--db-only` to skip the full vault commit+tag and write only the database snapshot. Schedule this with cron or launchd for regular backups — see [`DEPLOYMENT.md`](./DEPLOYMENT.md) for examples.
-- **`unlock`** — removes rows from the `fqc_write_locks` table. Use this to clear orphaned locks left behind if FlashQuery exits uncleanly and subsequent starts refuse to acquire a lock. `--resource <type>` clears locks for a specific resource type (e.g., `memory`, `documents`, `records`); omitting it clears all locks.
-- **`discover`** — discovers and assigns plugin ownership for documents that have been flagged as needing an owner. `--path <vault-relative-path>` targets a specific document; `--batch` suppresses the interactive ownership prompts and uses auto-determined ownership.
+- **`list-tools`** — prints the native MCP tool catalog for the current configuration.
 
 ---
 

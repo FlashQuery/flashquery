@@ -11,6 +11,8 @@ This guide covers how to register a running FlashQuery instance as an MCP server
    # or, after building: node dist/index.js start --config ./flashquery.yml
    ```
 
+   Startup requires `DATABASE_URL` to be direct Postgres or a session-capable/session-mode pooler. If it points at a transaction-mode pooler, FlashQuery exits before serving MCP traffic because session-scoped advisory locks cannot be proven stable.
+
 2. **`.env` with `MCP_AUTH_SECRET`.** `setup/setup.sh` generates this automatically. If you set up manually, run `openssl rand -hex 32` and add `MCP_AUTH_SECRET=<result>` to `.env`.
 
 3. **Claude Code CLI installed.**
