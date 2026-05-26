@@ -3,11 +3,6 @@ import type { logger } from '../logging/logger.js';
 import type { MacroCallerContext } from '../macro/types.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import type {
-  TemplateToolDiagnostics,
-  TemplateToolRegistryAssembly,
-  TemplateToolReverseMap,
-} from './template-tools.js';
 import type { BrokeredTool } from '../services/mcp-broker/index.js';
 import {
   HARD_EXCLUDED_NATIVE_TOOLS,
@@ -67,12 +62,42 @@ export interface ToolRegistryDiagnostics {
   unknown: string[];
 }
 
+type TemplateToolReverseMap = Map<string, string>;
+
+interface TemplateToolDiagnosticsShape {
+  template_tools?: Array<{
+    name: string;
+    template_path: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  }>;
+  template_tool_warnings?: Array<{
+    template_path: string;
+    code: string;
+    message: string;
+    source?: string;
+  }>;
+  dangling_template_paths?: Array<{ template_path: string; source?: string }>;
+  template_tool_conflicts?: Array<{
+    name: string;
+    template_paths: string[];
+    sources: Array<{ kind: 'template' | 'native'; template_path?: string; name?: string }>;
+  }>;
+}
+
+interface TemplateToolRegistryAssemblyShape {
+  providerTools?: OpenAiToolDefinition[];
+  templateTools?: unknown[];
+  templateReverseMap?: TemplateToolReverseMap;
+  diagnostics?: TemplateToolDiagnosticsShape;
+}
+
 export interface ToolRegistryAssembly {
   nativeToolNames: string[];
   templateToolNames?: string[];
   templateReverseMap?: TemplateToolReverseMap;
   providerTools?: OpenAiToolDefinition[];
-  diagnostics: ToolRegistryDiagnostics & Partial<TemplateToolDiagnostics>;
+  diagnostics: ToolRegistryDiagnostics & TemplateToolDiagnosticsShape;
   collisions?: Array<{
     name: string;
     template_paths: string[];
@@ -318,12 +343,7 @@ function templateToolName(tool: unknown): string | undefined {
 
 export function mergeModelVisibleToolRegistries(input: {
   native?: ToolRegistryAssembly;
-  template?: TemplateToolRegistryAssembly | {
-    providerTools?: OpenAiToolDefinition[];
-    templateTools?: unknown[];
-    templateReverseMap?: TemplateToolReverseMap;
-    diagnostics?: Partial<TemplateToolDiagnostics>;
-  };
+  template?: TemplateToolRegistryAssemblyShape;
 }): ToolRegistryAssembly {
   const native = input.native ?? {
     nativeToolNames: [],
