@@ -44,7 +44,7 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
     logging: { level: 'error', output: 'stdout' },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
   } as unknown as FlashQueryConfig;
 }
 
@@ -87,8 +87,6 @@ describe.skipIf(!HAS_SUPABASE)('manage_directory integration', () => {
   }, 60_000);
 
   afterAll(async () => {
-    const client = supabaseManager.getClient();
-    await client.from('fqc_write_locks').delete().eq('instance_id', TEST_INSTANCE_ID);
     await rm(vaultPath, { recursive: true, force: true });
     await rm(outsidePath, { recursive: true, force: true });
     await supabaseManager.close();

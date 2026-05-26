@@ -9,7 +9,7 @@ import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { initEmbedding } from '../../src/embedding/provider.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { createMcpServer } from '../../src/mcp/server.js';
-import { acquireLock, releaseLock } from '../../src/services/write-lock.js';
+import { withDocumentLock } from '../../src/services/document-lock.js';
 import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
 import { initVault } from '../../src/storage/vault.js';
 import { HAS_SUPABASE, TEST_DATABASE_URL, TEST_SUPABASE_KEY, TEST_SUPABASE_URL } from '../helpers/test-env.js';
@@ -32,7 +32,7 @@ function makeConfig(vaultPath: string): FlashQueryConfig {
     },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio', tokenLifetime: 24 },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     trashFolder: { enabled: false, path: '.flashquery/removed', collisionStrategy: 'suffix' },
     hostMcpTools: {
       tools: ['write_document', 'archive_document', 'remove_document', 'search', 'call_macro'],
@@ -73,7 +73,6 @@ describe.skipIf(!HAS_SUPABASE)('macro write-lock inheritance integration', () =>
     await client?.close();
     try {
       const supabase = supabaseManager.getClient();
-      await supabase.from('fqc_write_locks').delete().eq('instance_id', INSTANCE_ID);
       await supabase.from('fqc_documents').delete().eq('instance_id', INSTANCE_ID);
       await supabase.from('fqc_vault').delete().eq('instance_id', INSTANCE_ID);
       await supabaseManager.close();
@@ -85,7 +84,6 @@ describe.skipIf(!HAS_SUPABASE)('macro write-lock inheritance integration', () =>
 
   beforeEach(async () => {
     const supabase = supabaseManager.getClient();
-    await supabase.from('fqc_write_locks').delete().eq('instance_id', INSTANCE_ID);
     await supabase.from('fqc_documents').delete().eq('instance_id', INSTANCE_ID);
     await supabase.from('fqc_vault').delete().eq('instance_id', INSTANCE_ID);
   });
@@ -144,114 +142,43 @@ describe.skipIf(!HAS_SUPABASE)('macro write-lock inheritance integration', () =>
     );
   }, 40_000);
 
-  it('T-I-010 surfaces the tool-layer lock_contention conflict envelope through call_macro', async () => {
-    const lockAcquired = await acquireLock(
-      supabaseManager.getClient(),
-      config.instance.id,
-      'documents',
-      { ttlSeconds: config.locking.ttlSeconds }
-    );
-    expect(lockAcquired).toBe(true);
-
-    try {
-      const payload = await callMacro(writeDocumentMacro('macro-write-lock/contention.md', 'Macro Lock Contention'));
-      expect(payload).toMatchObject({
-        result: {
-          error: 'conflict',
-          details: { reason: 'lock_contention' },
-        },
-      });
-    } finally {
-      await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-    }
-  }, 20_000);
-
-  it('T-I-011a inherits archive_document and remove_document lock_contention without macro-layer acquireLock', async () => {
-    await callMacro(writeDocumentMacro('macro-write-lock/archive.md', 'Macro Lock Archive'));
-    await callMacro(writeDocumentMacro('macro-write-lock/remove.md', 'Macro Lock Remove'));
-
-    const lockAcquired = await acquireLock(
-      supabaseManager.getClient(),
-      config.instance.id,
-      'documents',
-      { ttlSeconds: config.locking.ttlSeconds }
-    );
-    expect(lockAcquired).toBe(true);
-
-    try {
-      const archivePayload = await callMacro(`
-        exit fq.archive_document({ identifiers: "macro-write-lock/archive.md" })
-      `);
-      expect(archivePayload).toMatchObject({
-        result: {
-          error: 'conflict',
-          details: { reason: 'lock_contention' },
-        },
-      });
-
-      const removePayload = await callMacro(`
-        exit fq.remove_document({ identifiers: "macro-write-lock/remove.md" })
-      `);
-      expect(removePayload).toMatchObject({
-        result: {
-          error: 'conflict',
-          details: { reason: 'lock_contention' },
-        },
-      });
-    } finally {
-      await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-    }
-  }, 35_000);
-
-  it('T-I-011 same-doc macro archive_document and remove_document serialize cleanly through tool locks', async () => {
-    const created = await callMacro(writeDocumentMacro('macro-write-lock/race.md', 'Macro Lock Race'));
-    expect(created).toMatchObject({
+  it('T-I-011 macro archive_document and remove_document complete through advisory tool locks', async () => {
+    const archiveCreated = await callMacro(writeDocumentMacro('macro-write-lock/archive.md', 'Macro Lock Archive'));
+    const removeCreated = await callMacro(writeDocumentMacro('macro-write-lock/remove.md', 'Macro Lock Remove'));
+    expect(archiveCreated).toMatchObject({
       result: {
-        path: 'macro-write-lock/race.md',
+        path: 'macro-write-lock/archive.md',
         fq_id: expect.any(String),
       },
     });
-    const fqcId = (created.result as { fq_id: string }).fq_id;
+    expect(removeCreated).toMatchObject({
+      result: {
+        path: 'macro-write-lock/remove.md',
+        fq_id: expect.any(String),
+      },
+    });
 
     const [archivePayload, removePayload] = await Promise.all([
-      callMacro('exit fq.archive_document({ identifiers: "macro-write-lock/race.md" })'),
-      callMacro('exit fq.remove_document({ identifiers: "macro-write-lock/race.md" })'),
+      callMacro('exit fq.archive_document({ identifiers: "macro-write-lock/archive.md" })'),
+      callMacro('exit fq.remove_document({ identifiers: "macro-write-lock/remove.md" })'),
     ]);
 
     const results = [archivePayload.result, removePayload.result] as Array<Record<string, unknown>>;
-    expect(results).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          path: 'macro-write-lock/race.md',
-          fq_id: fqcId,
-        }),
-      ])
-    );
+    expect(results[0]).toMatchObject({
+      path: 'macro-write-lock/archive.md',
+      fq_id: (archiveCreated.result as { fq_id: string }).fq_id,
+    });
+    expect(results[1]).toMatchObject({
+      path: 'macro-write-lock/remove.md',
+      fq_id: (removeCreated.result as { fq_id: string }).fq_id,
+    });
     for (const result of results) {
-      if (result.error) {
-        expect(result).toMatchObject({
-          error: 'not_found',
-          identifier: 'macro-write-lock/race.md',
-        });
-      } else {
-        expect(result).toMatchObject({
-          path: 'macro-write-lock/race.md',
-          fq_id: fqcId,
-        });
-      }
       expect(result).not.toMatchObject({
         error: 'conflict',
         details: { reason: 'lock_contention' },
       });
     }
 
-    const reacquired = await acquireLock(
-      supabaseManager.getClient(),
-      config.instance.id,
-      'documents',
-      { ttlSeconds: config.locking.ttlSeconds, timeoutMs: 500 }
-    );
-    expect(reacquired).toBe(true);
-    await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
+    await expect(withDocumentLock(config, join(vaultPath, 'macro-write-lock/archive.md'), async () => true)).resolves.toBe(true);
   }, 45_000);
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mkdir, stat, readdir, rmdir } from 'node:fs/promises';
 
 vi.mock('node:fs/promises', () => ({
@@ -32,11 +32,6 @@ vi.mock('../../src/logging/logger.js', () => ({
 
 vi.mock('../../src/server/shutdown-state.js', () => ({
   getIsShuttingDown: vi.fn().mockReturnValue(false),
-}));
-
-vi.mock('../../src/services/write-lock.js', () => ({
-  acquireLock: vi.fn().mockResolvedValue(true),
-  releaseLock: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('../../src/mcp/utils/path-validation.js', async () => {
@@ -87,7 +82,7 @@ function makeConfig(overrides: Partial<import('../../src/config/loader.js').Flas
       id: 'test-instance',
       vault: { path: '/vault' },
     },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     ...overrides,
   } as unknown as import('../../src/config/loader.js').FlashQueryConfig;
 }
@@ -234,22 +229,6 @@ describe('manage_directory', () => {
     });
   });
 
-  it('returns lock_contention conflict when the directory lock cannot be acquired', async () => {
-    const { acquireLock } = await import('../../src/services/write-lock.js');
-    (acquireLock as MockedFunction<typeof acquireLock>).mockResolvedValueOnce(false);
-
-    const result = await callManageDirectory({ action: 'create', paths: ['Locked'] });
-    const payload = parseJson(result) as { results: Array<Record<string, unknown>> };
-
-    expect(result.isError).toBe(false);
-    expect(payload.results[0]).toMatchObject({
-      error: 'conflict',
-      identifier: 'Locked',
-      details: { reason: 'lock_contention' },
-    });
-    expect(vi.mocked(mkdir)).not.toHaveBeenCalled();
-  });
-
   it('sanitizes unsafe directory characters before per-path processing', async () => {
     const result = await callManageDirectory({
       action: 'create',
@@ -269,13 +248,10 @@ describe('manage_directory', () => {
     });
   });
 
-  it('does not acquire directory locks when locking is disabled', async () => {
-    const { acquireLock, releaseLock } = await import('../../src/services/write-lock.js');
-    (acquireLock as MockedFunction<typeof acquireLock>).mockResolvedValueOnce(false);
-
+  it('creates directories when locking is disabled because legacy table locks are retired', async () => {
     const result = await callManageDirectory(
       { action: 'create', paths: ['Unlocked'] },
-      makeConfig({ locking: { enabled: false, ttlSeconds: 30 } })
+      makeConfig({ locking: { enabled: false } })
     );
     const payload = parseJson(result) as { results: Array<Record<string, unknown>> };
 
@@ -284,8 +260,6 @@ describe('manage_directory', () => {
       path: 'Unlocked',
       status: 'created',
     });
-    expect(acquireLock).not.toHaveBeenCalled();
-    expect(releaseLock).not.toHaveBeenCalled();
     expect(vi.mocked(mkdir)).toHaveBeenCalledWith('/vault/Unlocked', { recursive: true });
   });
 });

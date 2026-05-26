@@ -19,8 +19,7 @@ const resolverMock = vi.hoisted(() => ({
 }));
 
 const lockMock = vi.hoisted(() => ({
-  acquireLock: vi.fn(),
-  releaseLock: vi.fn(),
+  withDocumentLock: vi.fn(),
 }));
 
 const fsPromisesMock = vi.hoisted(() => ({
@@ -40,10 +39,19 @@ vi.mock('../../src/mcp/utils/resolve-document.js', () => ({
   targetedScan: resolverMock.targetedScan,
 }));
 
-vi.mock('../../src/services/write-lock.js', () => ({
-  acquireLock: lockMock.acquireLock,
-  releaseLock: lockMock.releaseLock,
-}));
+vi.mock('../../src/services/document-lock.js', () => {
+  class LockTimeoutError extends Error {
+    constructor(resource: string) {
+      super(`Write lock timeout: another instance is writing to ${resource}. Retry in a few seconds.`);
+      this.name = 'LockTimeoutError';
+    }
+  }
+
+  return {
+    LockTimeoutError,
+    withDocumentLock: lockMock.withDocumentLock,
+  };
+});
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -64,7 +72,7 @@ function makeConfig(lockingEnabled = false): FlashQueryConfig {
     supabase: { url: 'https://example.invalid', serviceRoleKey: 'key', databaseUrl: 'postgresql://localhost/db' },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'info', output: 'stderr' },
-    locking: { enabled: lockingEnabled, ttlSeconds: 30 },
+    locking: { enabled: lockingEnabled },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
   } as FlashQueryConfig;
 }
@@ -132,8 +140,7 @@ describe('archive_document JSON result helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     initLogger({ level: 'error', output: 'stderr' });
-    lockMock.acquireLock.mockResolvedValue(true);
-    lockMock.releaseLock.mockResolvedValue(undefined);
+    lockMock.withDocumentLock.mockImplementation(async (_config, _filePath, fn) => fn());
   });
 
   it('adds archived status and archived_at to the document identification block', () => {
@@ -193,35 +200,41 @@ describe('archive_document JSON result helpers', () => {
     ]);
   });
 
-  it('T-U-225 lock acquisition: archive_document acquires the per-file document lock before mutation', async () => {
+  it('T-U-225 lock acquisition: archive_document runs mutation through the per-file document lock', async () => {
     setupSuccessfulArchive();
     const handler = await createArchiveHandler(makeConfig(true));
 
     await handler({ identifiers: 'Notes/Archive Me.md' });
 
-    expect(lockMock.acquireLock).toHaveBeenCalledWith(
+    expect(lockMock.withDocumentLock).toHaveBeenCalledWith(
       expect.anything(),
-      'unit',
-      'document:/tmp/fq-unit/Notes/Archive Me.md',
-      { ttlSeconds: 30 }
+      '/tmp/fq-unit/Notes/Archive Me.md',
+      expect.any(Function)
     );
-    expect(lockMock.acquireLock.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(lockMock.withDocumentLock.mock.invocationCallOrder[0]).toBeLessThan(
       vaultMock.writeMarkdown.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY
     );
   });
 
-  it('T-U-226 release in finally: archive_document releases the per-file document lock', async () => {
+  it('T-U-226 scoped lock: archive_document completes the per-file document lock callback', async () => {
     setupSuccessfulArchive();
+    let callbackCompleted = false;
+    lockMock.withDocumentLock.mockImplementation(async (_config, _filePath, fn) => {
+      const result = await fn();
+      callbackCompleted = true;
+      return result;
+    });
     const handler = await createArchiveHandler(makeConfig(true));
 
     await handler({ identifiers: 'Notes/Archive Me.md' });
 
-    expect(lockMock.releaseLock).toHaveBeenCalledWith(expect.anything(), 'unit', 'document:/tmp/fq-unit/Notes/Archive Me.md');
+    expect(callbackCompleted).toBe(true);
   });
 
   it('T-U-227 lock timeout: archive_document returns conflict lock_contention before archive mutation', async () => {
     setupSuccessfulArchive();
-    lockMock.acquireLock.mockResolvedValue(false);
+    const { LockTimeoutError } = await import('../../src/services/document-lock.js');
+    lockMock.withDocumentLock.mockRejectedValue(new LockTimeoutError('/tmp/fq-unit/Notes/Archive Me.md'));
     const handler = await createArchiveHandler(makeConfig(true));
 
     const result = await handler({ identifiers: 'Notes/Archive Me.md' });

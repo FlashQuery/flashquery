@@ -8,7 +8,7 @@ import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { initEmbedding } from '../../src/embedding/provider.js';
 import { initLogger } from '../../src/logging/logger.js';
 import { registerDocumentTools } from '../../src/mcp/tools/documents.js';
-import { acquireLock, releaseLock } from '../../src/services/write-lock.js';
+import { withDocumentLock } from '../../src/services/document-lock.js';
 import { initSupabase, supabaseManager } from '../../src/storage/supabase.js';
 import { initVault } from '../../src/storage/vault.js';
 import {
@@ -39,7 +39,7 @@ function makeConfig(vaultPath: string, lockingEnabled: boolean): FlashQueryConfi
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     mcp: { transport: 'stdio' },
     plugins: {},
-    locking: { enabled: lockingEnabled, ttlSeconds: 30 },
+    locking: { enabled: lockingEnabled },
     hostMcpTools: { tools: ['tier:read-write'], excludedTools: [] },
     trashFolder: {
       enabled: false,
@@ -85,7 +85,6 @@ describe.skipIf(!HAS_SUPABASE)('archive_document shared lock integration', () =>
 
   afterAll(async () => {
     try {
-      await supabaseManager.getClient().from('fqc_write_locks').delete().eq('instance_id', TEST_INSTANCE_ID);
       await supabaseManager.getClient().from('fqc_documents').delete().eq('instance_id', TEST_INSTANCE_ID);
       await supabaseManager.close();
     } catch {
@@ -95,7 +94,6 @@ describe.skipIf(!HAS_SUPABASE)('archive_document shared lock integration', () =>
   });
 
   beforeEach(async () => {
-    await supabaseManager.getClient().from('fqc_write_locks').delete().eq('instance_id', TEST_INSTANCE_ID);
     await supabaseManager.getClient().from('fqc_documents').delete().eq('instance_id', TEST_INSTANCE_ID);
     await rm(vaultPath, { recursive: true, force: true });
     config = makeConfig(vaultPath, false);
@@ -115,84 +113,32 @@ describe.skipIf(!HAS_SUPABASE)('archive_document shared lock integration', () =>
     return parseResult<{ fq_id: string; path: string }>(result);
   }
 
-  it('T-I-011a held-lock proxy proves archive_document and remove_document contend on the shared documents lock', async () => {
-    const archiveTarget = await writeDoc('archive-lock/archive.md', 'Archive Lock Target');
-    const removeTarget = await writeDoc('archive-lock/remove.md', 'Remove Lock Target');
-    const lockedConfig = makeConfig(vaultPath, true);
-    handlers = createHandlers(lockedConfig);
-
-    const lockAcquired = await acquireLock(
-      supabaseManager.getClient(),
-      lockedConfig.instance.id,
-      'documents',
-      { ttlSeconds: lockedConfig.locking.ttlSeconds }
-    );
-    expect(lockAcquired).toBe(true);
-
-    try {
-      // T-I-011 uses a held-lock proxy instead of concurrent sleeps. This
-      // deterministically proves both handlers serialize through the same
-      // (instance_id, documents) lock without race-prone scheduling.
-      const archivePayload = parseResult(await handlers.archive_document({ identifiers: archiveTarget.path }));
-      expect(archivePayload).toMatchObject({
-        error: 'conflict',
-        details: { reason: 'lock_contention' },
-      });
-
-      const removePayload = parseResult(await handlers.remove_document({ identifiers: removeTarget.path }));
-      expect(removePayload).toMatchObject({
-        error: 'conflict',
-        details: { reason: 'lock_contention' },
-      });
-    } finally {
-      await releaseLock(supabaseManager.getClient(), lockedConfig.instance.id, 'documents');
-    }
-  }, 40_000);
-
-  it('T-I-011 same-doc archive_document and remove_document serialize and terminate cleanly via the shared lock', async () => {
-    const target = await writeDoc('archive-lock/race-target.md', 'Archive Remove Race Target');
+  it('T-I-011 archive_document and remove_document complete through advisory document locks without table contention', async () => {
+    const archiveTarget = await writeDoc('archive-lock/archive-target.md', 'Archive Lock Target');
+    const removeTarget = await writeDoc('archive-lock/remove-target.md', 'Remove Lock Target');
     const lockedConfig = makeConfig(vaultPath, true);
     handlers = createHandlers(lockedConfig);
 
     const [archivePayload, removePayload] = await Promise.all([
-      handlers.archive_document({ identifiers: target.path }).then(parseResult),
-      handlers.remove_document({ identifiers: target.path }).then(parseResult),
+      handlers.archive_document({ identifiers: archiveTarget.path }).then(parseResult),
+      handlers.remove_document({ identifiers: removeTarget.path }).then(parseResult),
     ]);
 
-    const payloads = [archivePayload, removePayload];
-    expect(payloads).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          path: target.path,
-          fq_id: target.fq_id,
-        }),
-      ])
-    );
-    for (const payload of payloads) {
-      if (payload.error) {
-        expect(payload).toMatchObject({
-          error: 'not_found',
-          identifier: target.path,
-        });
-      } else {
-        expect(payload).toMatchObject({
-          path: target.path,
-          fq_id: target.fq_id,
-        });
-      }
+    expect(archivePayload).toMatchObject({
+      path: archiveTarget.path,
+      fq_id: archiveTarget.fq_id,
+    });
+    expect(removePayload).toMatchObject({
+      path: removeTarget.path,
+      fq_id: removeTarget.fq_id,
+    });
+    for (const payload of [archivePayload, removePayload]) {
       expect(payload).not.toMatchObject({
         error: 'conflict',
         details: { reason: 'lock_contention' },
       });
     }
 
-    const reacquired = await acquireLock(
-      supabaseManager.getClient(),
-      lockedConfig.instance.id,
-      'documents',
-      { ttlSeconds: lockedConfig.locking.ttlSeconds, timeoutMs: 500 }
-    );
-    expect(reacquired).toBe(true);
-    await releaseLock(supabaseManager.getClient(), lockedConfig.instance.id, 'documents');
+    await expect(withDocumentLock(lockedConfig, join(vaultPath, archiveTarget.path), async () => true)).resolves.toBe(true);
   }, 40_000);
 });

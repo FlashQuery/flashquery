@@ -20,8 +20,7 @@ const resolverMock = vi.hoisted(() => ({
 }));
 
 const lockMock = vi.hoisted(() => ({
-  acquireLock: vi.fn(),
-  releaseLock: vi.fn(),
+  withDocumentLock: vi.fn(),
 }));
 
 const fsPromisesMock = vi.hoisted(() => ({
@@ -41,10 +40,19 @@ vi.mock('../../src/mcp/utils/resolve-document.js', () => ({
   targetedScan: resolverMock.targetedScan,
 }));
 
-vi.mock('../../src/services/write-lock.js', () => ({
-  acquireLock: lockMock.acquireLock,
-  releaseLock: lockMock.releaseLock,
-}));
+vi.mock('../../src/services/document-lock.js', () => {
+  class LockTimeoutError extends Error {
+    constructor(resource: string) {
+      super(`Write lock timeout: another instance is writing to ${resource}. Retry in a few seconds.`);
+      this.name = 'LockTimeoutError';
+    }
+  }
+
+  return {
+    LockTimeoutError,
+    withDocumentLock: lockMock.withDocumentLock,
+  };
+});
 
 vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
@@ -65,7 +73,7 @@ function makeConfig(): FlashQueryConfig {
     supabase: { url: 'https://example.invalid', serviceRoleKey: 'key', databaseUrl: 'postgresql://localhost/db' },
     embedding: { provider: 'none', model: '', dimensions: 1536 },
     logging: { level: 'info', output: 'stderr' },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
     git: { autoCommit: false, autoPush: false, remote: 'origin', branch: 'main' },
     trashFolder: { enabled: false, path: '.flashquery/removed', collisionStrategy: 'suffix' },
   } as FlashQueryConfig;
@@ -103,7 +111,7 @@ function parsePayload(result: Awaited<ReturnType<ToolHandler>>): unknown {
 }
 
 describe('document batch lock-contention envelopes', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     initLogger({ level: 'error', output: 'stderr' });
     supabaseManagerMock.getClient.mockReturnValue(createSupabaseClient());
@@ -122,8 +130,8 @@ describe('document batch lock-contention envelopes', () => {
     vaultMock.removeMarkdown.mockResolvedValue(undefined);
     vaultMock.moveMarkdownToTrash.mockResolvedValue(undefined);
     fsPromisesMock.stat.mockResolvedValue({ mtime: new Date('2026-05-26T00:00:00.000Z') });
-    lockMock.acquireLock.mockResolvedValue(false);
-    lockMock.releaseLock.mockResolvedValue(undefined);
+    const { LockTimeoutError } = await import('../../src/services/document-lock.js');
+    lockMock.withDocumentLock.mockRejectedValue(new LockTimeoutError('/tmp/fq-unit/Notes/Busy.md'));
   });
 
   it('archive_document batch item lock timeouts use conflict lock_contention envelopes', async () => {
