@@ -316,17 +316,15 @@ await writeVaultFile(absolutePath, updatedContent);
 | A4 | OS-registered state is unaffected. | Runtime State Inventory | If a globally installed binary runs stale `dist`, rebuild/reinstall may be needed. |
 | A5 | Directory fsync may be platform/filesystem-sensitive. | Common Pitfalls | Planner may need a platform fallback decision. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **How should Phase 156 satisfy macOS `F_FULLFSYNC` without a native dependency?**
    - What we know: Apple documents `F_FULLFSYNC` for stronger durability than `fsync`; Node v20 docs retrieved here document `FileHandle.sync()` but not `F_FULLFSYNC`. [CITED: Apple fsync(2); CITED: Context7 `/websites/nodejs_latest-v20_x`]
-   - What's unclear: Whether the project will accept a documented `filehandle.sync()` fallback for Phase 156 or authorize a native/platform adapter. [ASSUMED]
-   - Recommendation: Planner should add an explicit checkpoint before any native dependency. [ASSUMED]
+   - RESOLVED for planning: Phase 156 uses a checkpoint-gated strategy. The default execution path is an injectable `durableFileSync` adapter with a documented Node `FileHandle.sync()` fallback and an explicit/testable darwin branch. No native/platform adapter may be introduced unless the executor obtains explicit human approval and performs package legitimacy checks first. [VERIFIED: `156-01-PLAN.md`]
 
 2. **Should the EXDEV fallback delegate to `writeVaultFile` in this phase?**
    - What we know: REQ-020 acceptance names the EXDEV branch, but `156-CONTEXT.md` says EXDEV fallback is out of scope and Phase 161 owns it. [VERIFIED: product Requirements §6.4; VERIFIED: `156-CONTEXT.md`]
-   - What's unclear: Whether a minimal internal delegation is desired without claiming REQ-022. [ASSUMED]
-   - Recommendation: Plan a boundary check; if touched, document it as a hook only. [ASSUMED]
+   - RESOLVED for planning: Phase 156 must not claim EXDEV fallback completeness or REQ-022. Any mention in Phase 156 is limited to write-path inventory/audit labeling and deferred-boundary documentation; Phase 161 owns EXDEV fallback implementation and acceptance. [VERIFIED: `156-CONTEXT.md`; VERIFIED: `156-03-PLAN.md`]
 
 ## Environment Availability
 
