@@ -40,7 +40,7 @@
 | 151 | Quick Localized Cleanup | 2/2 | Complete    | 2026-05-25 |
 | 152 | Type-Safety Cleanup Pass | 2/2 | Complete | 2026-05-25 |
 | 153 | Documents Tool Decomposition | 3/3 | Complete    | 2026-05-25 |
-| 154 | Residual Import Cycle Cleanup | 0/3 | Planned | 6 plans |
+| 154 | Residual Import Cycle Cleanup | 1/6 | In Progress|  |
 
 ## Phase Details
 
@@ -120,12 +120,12 @@ Plans:
 
 **Requirements:** REQ-010, REQ-011, REQ-012
 **Depends on:** Phase 153
-**Plans:** 6 plans
+**Plans:** 1/6 plans executed
 
 **Wave 1**
 
 Plans:
-- [ ] 154-01-PLAN.md — Extract config-facing LLM policy/type leaves and guard REQ-010 cycles.
+- [x] 154-01-PLAN.md — Extract config-facing LLM policy/type leaves and guard REQ-010 cycles.
 - [ ] 154-03-PLAN.md — Extract MCP lifecycle registry and preserve 15-second shutdown drain semantics.
 
 **Wave 2** *(blocked on 154-01 where noted; independent of full zero-cycle final gate)*
