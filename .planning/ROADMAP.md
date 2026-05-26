@@ -59,6 +59,10 @@
   2. Two concurrent writes to the same document serialize so the later write observes the earlier write's bytes.
   3. Concurrent `apply_tags` or `insert_doc_link` calls on one document never silently lose updates.
   4. `call_macro` relies on the called tools' per-file locks and exposes no macro-spanning lock behavior.
+**Test Gate**:
+  - Create or update the Test Plan §4.1.1, §4.1.9, §4.1.10, and §4.1.11 cases: `T-U-001`, `T-U-002`, `T-U-016` through `T-U-019`, `T-U-038`, `T-I-001`, `T-I-002`, `T-I-017`, `T-I-018`, `T-I-049` through `T-I-051`, `T-S-001`, `T-S-004`, and `T-S-008`.
+  - Include Phase 155 scaffolding checks for basic lock-key behavior from Test Plan §4.1.3 where needed, but full REQ-003 completion remains Phase 159.
+  - Required execution evidence: `npm test -- --grep "document-lock|with-document-lock|macro-no-lock"`; `npm run test:integration -- --grep "per-file|apply-tags|insert-doc-link|call-macro-per-step"`; directed scenarios for `D-WCO-01`, `D-WCO-04`, and `D-WCO-08` when those scenarios land.
 **Plans**: TBD
 
 ### Phase 156: Atomic + Durable Write Primitive Consolidation
@@ -70,6 +74,10 @@
   2. Frontmatter repair, scanner repair, document writes, and plugin reconciliation writes all use the same durable write behavior.
   3. A simulated filesystem write, fsync, or rename failure returns an error to the caller.
   4. Successful write responses can be tied to the SHA-256 hash of the bytes actually committed.
+**Test Gate**:
+  - Create or update the Test Plan §4.4.1 and §4.4.2 cases: `T-U-028` through `T-U-033`, `T-I-039`, `T-I-040`, and `T-I-041`.
+  - Execution must verify both primitive-level behavior and representative caller routing through the primitive.
+  - Required execution evidence: `npm test -- --grep "vault-write|atomic-write|durable"`; `npm run test:integration -- --grep "frontmatter-write|vault-write-durable|atomic-write"`.
 **Plans**: TBD
 
 ### Phase 157: Records / Memory / Plugins Audit + Guards
@@ -80,6 +88,10 @@
   1. Concurrent memory writes rely on the existing transactional/versioning behavior and do not need the old lock table.
   2. Record operations that run plugin reconciliation do not produce inconsistent reconciliation state under concurrency.
   3. Concurrent plugin unregister operations leave either a complete unregister result or a clear conflict/error, not half-deleted plugin state.
+**Test Gate**:
+  - Create or update the Test Plan §4.5.1 cases: `T-U-036`, `T-I-043`, `T-I-044`, and `T-I-045`.
+  - Execution must include the concurrency review artifact required by REQ-023 and prove no coarse `records`, `memory`, or `plugins` lock literals remain.
+  - Required execution evidence: `npm test -- --grep "no-coarse-resource-locks"`; `npm run test:integration -- --grep "memory-no-coarse-lock|records-reconciliation|unregister-plugin"`.
 **Plans**: TBD
 
 ### Phase 158: Tier 2 + Lock-table Retirement + Session Check
@@ -91,6 +103,10 @@
   2. FlashQuery startup removes the obsolete `fqc_write_locks` table if present and no tool depends on it.
   3. A transaction-mode Postgres pooler configuration fails startup with a clear session-capability error.
   4. The `flashquery unlock` command is no longer available because crashed advisory locks release with the database session.
+**Test Gate**:
+  - Create or update the Test Plan §4.1.2, §4.1.4, and §4.1.5 cases: `T-U-003` through `T-U-005`, `T-U-011` through `T-U-013`, and `T-I-003` through `T-I-008`.
+  - Execution must prove advisory-lock acquire/release behavior, startup self-test pass/fail behavior, and full retirement of `fqc_write_locks` / `flashquery unlock`.
+  - Required execution evidence: `npm test -- --grep "advisory-lock|lock-startup|legacy-write-lock"`; `npm run test:integration -- --grep "two-tier|fqc-write-locks-drop|lock-startup|session-capable"`.
 **Plans**: TBD
 
 ### Phase 159: Lock Timeout + Canonical Key Derivation
@@ -102,6 +118,10 @@
   2. Existing-file paths that differ by symlink, `.`/`..`, or case on case-insensitive filesystems resolve to the same file lock.
   3. Not-yet-existing destinations lock by real parent path plus basename.
   4. File and directory locks use separate namespaces so the same path cannot collide across resource types.
+**Test Gate**:
+  - Create or update the Test Plan §4.1.3 and §4.1.6 cases: `T-U-006` through `T-U-010`, `T-U-014`, `T-U-015`, `T-I-009`, `T-I-010`, and `T-S-002`.
+  - Execution must prove full canonical key derivation, default/configured timeout behavior, and the case-variant directed scenario where supported by the filesystem.
+  - Required execution evidence: `npm test -- --grep "canonical-key|case-fold|symlink|lock-timeout"`; `npm run test:integration -- --grep "lock-timeout"`; directed scenario `D-WCO-02` when the environment supports the case-insensitive path behavior.
 **Plans**: TBD
 
 ### Phase 160: Folder Locks + Manage Directory Migration
@@ -113,6 +133,10 @@
   2. Concurrent writes under the same folder can proceed together because they hold compatible shared directory locks.
   3. Two structural operations on the same folder do not both proceed at once.
   4. `manage_directory` preserves its caller-visible contention/conflict response shape after moving to advisory directory locks.
+**Test Gate**:
+  - Create or update the Test Plan §4.1.7 and §4.5.2 cases: `T-I-011` through `T-I-013`, `T-I-046`, `T-I-047`, and `T-Y-001`.
+  - Execution must prove shared file-write directory locks, exclusive structural directory locks, and unchanged `manage_directory` conflict semantics.
+  - Required execution evidence: `npm run test:integration -- --grep "folder-lock|manage-directory-advisory"`; integration scenario `INT-WCO-01` when the YAML scenario lands.
 **Plans**: TBD
 
 ### Phase 161: Destination Locks + EXDEV Fallback
@@ -124,6 +148,10 @@
   2. Moving a document locks both source and destination in deterministic canonical order.
   3. A cross-device move commits the destination durably before removing the source.
   4. Destination existence checks happen inside the destination lock.
+**Test Gate**:
+  - Create or update the Test Plan §4.1.8 and §4.4.3 cases: `T-U-034`, `T-U-035`, `T-I-014` through `T-I-016`, `T-I-042`, `T-I-048`, and `T-S-003`.
+  - Execution must prove destination race prevention for create/copy/move, sorted multi-lock acquisition, and EXDEV fallback safety.
+  - Required execution evidence: `npm test -- --grep "move-exdev-fallback"`; `npm run test:integration -- --grep "destination-lock|move-exdev"`; directed scenario `D-WCO-03` when it lands.
 **Plans**: TBD
 
 ### Phase 162: Version-fingerprint Check
@@ -136,6 +164,10 @@
   3. Conflict responses include the current token and the caller-relevant current region needed to retry safely.
   4. Version checks run after lock acquisition against fresh disk bytes, including external file changes.
   5. Two consecutive scans of an unchanged vault perform no file writes.
+**Test Gate**:
+  - Create or update the Test Plan §4.2.1 through §4.2.7 cases: `T-U-020` through `T-U-025`, `T-U-037`, `T-I-019` through `T-I-033`, and `T-S-005` through `T-S-007`.
+  - Execution must prove response shape, opt-in write preconditions, check-inside-lock behavior, token-equals-disk invariants, conflict envelopes, whole-file hash semantics, and scanner zero-write stability.
+  - Required execution evidence: `npm test -- --grep "version-token|expected-version|conflict-envelope|get-document-no-lock"`; `npm run test:integration -- --grep "version-token|version-check|token-equals-disk|refused-write|scanner-zero-writes"`; directed scenarios `D-WCO-05`, `D-WCO-06`, and `D-WCO-07` when they land.
 **Plans**: TBD
 
 ### Phase 163: Multi-file Batch Contract
@@ -147,6 +179,10 @@
   2. Each batch item reports `succeeded`, `conflicted`, or `failed` with the appropriate token or error envelope.
   3. Batch inputs can mix bare identifiers and `{ identifier, version_token }` objects in one call.
   4. Existing callers that pass strings or string arrays continue to work unchanged.
+**Test Gate**:
+  - Create or update the Test Plan §4.3.1 and §4.3.2 cases: `T-U-026`, `T-U-027`, `T-I-034` through `T-I-038`, `T-Y-002`, and `T-Y-003`.
+  - Execution must prove ordered best-effort item results, mixed bare/object input support, item-level version conflicts, and backward compatibility for existing string inputs.
+  - Required execution evidence: `npm test -- --grep "batch-input-shape"`; `npm run test:integration -- --grep "batch-envelope|batch-input-shape"`; integration scenarios `INT-WCO-02` and `INT-WCO-03` when they land.
 **Plans**: TBD
 
 ## Progress
