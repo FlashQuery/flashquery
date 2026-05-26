@@ -36,11 +36,6 @@ vi.mock('../../src/logging/logger.js', () => ({
   },
 }));
 
-vi.mock('../../src/services/write-lock.js', () => ({
-  acquireLock: vi.fn().mockResolvedValue(true),
-  releaseLock: vi.fn().mockResolvedValue(undefined),
-}));
-
 vi.mock('../../src/utils/tag-validator.js', () => ({
   validateAllTags: vi.fn().mockReturnValue({ valid: true, errors: [], conflicts: [], normalized: [] }),
 }));
@@ -102,7 +97,7 @@ function makeConfig(overrides: Partial<FlashQueryConfig['instance']> = {}): Flas
       level: 'info',
       output: 'stdout',
     },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     defaults: {
       project: 'DefaultProject',
     },

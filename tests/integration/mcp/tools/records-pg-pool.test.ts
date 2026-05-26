@@ -135,11 +135,6 @@ vi.mock('../../../../src/logging/logger.js', () => ({
   },
 }));
 
-vi.mock('../../../../src/services/write-lock.js', () => ({
-  acquireLock: vi.fn().mockResolvedValue(true),
-  releaseLock: vi.fn().mockResolvedValue(undefined),
-}));
-
 import { registerRecordTools } from '../../../../src/mcp/tools/records.js';
 
 function createMockServer() {
@@ -161,7 +156,7 @@ function makeConfig(): FlashQueryConfig {
       databaseUrl: 'postgres://user:pass@localhost:5432/fq',
       skipDdl: true,
     },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
   } as FlashQueryConfig;
 }
 

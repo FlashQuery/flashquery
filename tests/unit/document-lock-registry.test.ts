@@ -1,20 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { FlashQueryConfig } from '../../src/config/types.js';
-import { withDocumentLock, withDocumentLocks } from '../../src/services/document-lock.js';
-
-const acquireLock = vi.hoisted(() => vi.fn(async () => true));
-const releaseLock = vi.hoisted(() => vi.fn(async () => undefined));
-
-vi.mock('../../src/services/write-lock.js', () => ({
-  acquireLock,
-  releaseLock,
-}));
-
-vi.mock('../../src/storage/supabase.js', () => ({
-  supabaseManager: {
-    getClient: vi.fn(() => ({ from: vi.fn() })),
-  },
-}));
+import { withDocumentLock } from '../../src/services/document-lock.js';
 
 function makeConfig(enabled = false): FlashQueryConfig {
   return {
@@ -23,7 +9,7 @@ function makeConfig(enabled = false): FlashQueryConfig {
       id: 'instance-1',
       vault: { path: '/tmp/vault', markdownExtensions: ['.md'] },
     },
-    locking: { enabled, ttlSeconds: 30 },
+    locking: { enabled },
   } as FlashQueryConfig;
 }
 
@@ -81,15 +67,4 @@ describe('REQ-001 document-lock Tier 1 registry', () => {
     expect(source).not.toMatch(/relativePath.*resource/i);
   });
 
-  it('acquires multiple locks in sorted path order', async () => {
-    const resources: string[] = [];
-    acquireLock.mockImplementation(async (_client, _instanceId, resource: string) => {
-      resources.push(resource);
-      return true;
-    });
-
-    await withDocumentLocks(makeConfig(true), ['/tmp/vault/b.md', '/tmp/vault/a.md'], async () => 'ok');
-
-    expect(resources).toEqual(['document:/tmp/vault/a.md', 'document:/tmp/vault/b.md']);
-  });
 });

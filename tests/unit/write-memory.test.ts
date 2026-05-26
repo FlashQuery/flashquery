@@ -16,11 +16,6 @@ vi.mock('../../src/logging/logger.js', () => ({
   logger: { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('../../src/services/write-lock.js', () => ({
-  acquireLock: vi.fn().mockResolvedValue(true),
-  releaseLock: vi.fn().mockResolvedValue(undefined),
-}));
-
 import { supabaseManager } from '../../src/storage/supabase.js';
 
 function createMockServer(): {
@@ -42,7 +37,7 @@ function makeConfig(): FlashQueryConfig {
     supabase: { url: 'https://test.supabase.co', serviceRoleKey: 'test', databaseUrl: 'postgresql://test' },
     embedding: { provider: 'openai', model: 'text-embedding-3-small', apiKey: 'sk-test', dimensions: 1536 },
     logging: { level: 'info', output: 'stdout' },
-    locking: { enabled: false, ttlSeconds: 30 },
+    locking: { enabled: false },
     defaults: { project: 'Default' },
     projects: { areas: [] },
   } as unknown as FlashQueryConfig;
