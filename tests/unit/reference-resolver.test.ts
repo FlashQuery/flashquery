@@ -20,6 +20,7 @@ import type {
   ResolvedRef,
   FailedRef,
 } from '../../src/llm/reference-resolver.js';
+import type { InjectedReferenceMetadata } from '../../src/llm/reference-metadata.js';
 
 // Mock resolveAndBuildDocument and DocumentRequestError from document-output.js
 vi.mock('../../src/mcp/utils/document-output.js', () => ({
@@ -484,6 +485,36 @@ describe('hydrateMessages (REFS-03 partial)', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('buildInjectedReferences (REFS-04)', () => {
+  it('emits metadata compatible with the reference metadata leaf contract', () => {
+    const metadata: InjectedReferenceMetadata[] = buildInjectedReferences([
+      {
+        kind: 'resolved',
+        placeholder: '{{ref:Templates/greeting.md}}',
+        ref: '{{ref:Templates/greeting.md}}',
+        content: 'Hello Ada.\n',
+        chars: 'Hello Ada.\n'.length,
+        messageIndex: 0,
+        template: true,
+        templatePath: 'Templates/greeting.md',
+        templateParamsUsed: {
+          name: { type: 'string', chars: 3 },
+        },
+      },
+    ]);
+
+    expect(metadata).toEqual([
+      {
+        ref: '{{ref:Templates/greeting.md}}',
+        chars: 'Hello Ada.\n'.length,
+        template: true,
+        template_path: 'Templates/greeting.md',
+        template_params_used: {
+          name: { type: 'string', chars: 3 },
+        },
+      },
+    ]);
+  });
+
   it('[U-RR-14] omits non-spec identifier, includes resolved_to only when set', () => {
     const resolved: ResolvedRef[] = [
       { kind: 'resolved', placeholder: '{{ref:a.md}}', ref: '{{ref:a.md}}', content: 'X', chars: 1, identifier: 'a.md', messageIndex: 0 },
