@@ -12,6 +12,7 @@ import {
   type LlmCompletionResult,
   type LlmClient,
 } from '../../src/llm/client.js';
+import { LlmFallbackError, PurposeResolver } from '../../src/llm/resolver.js';
 import * as clientModule from '../../src/llm/client.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { AGENT_LOOP_STOP_REASONS, FINISH_REASONS, LLM_PARTICIPANT_NAMES } from '../../src/constants/llm.js';
@@ -1019,6 +1020,138 @@ describe('OpenAICompatibleLlmClient.chatByPurposeUnrecorded', () => {
       outputTokens: 9,
     });
     expect(costTracker.recordLlmUsage).not.toHaveBeenCalled();
+  });
+});
+
+describe('OpenAICompatibleLlmClient purpose fallback behavior', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it('preserves fallback ordering, permanent attempts, and successful purpose usage recording', async () => {
+    const config = {
+      ...TEST_LLM_CONFIG,
+      purposes: [
+        ...TEST_LLM_CONFIG.purposes,
+        { name: 'resilient', description: 'Fallback purpose', models: ['gpt-4o', 'fast'] },
+        { name: 'blocked', description: 'Permanent failure purpose', models: ['gpt-4o', 'fast'] },
+      ],
+    };
+    const client = new OpenAICompatibleLlmClient(config, 'test-instance-fallback');
+    const httpsMod = await import('node:https');
+    const requestedModels: string[] = [];
+    const responses = [
+      { statusCode: 500, headers: {}, body: { error: 'server error' } },
+      { statusCode: 200, headers: {}, body: makeOpenAISuccessBody({ text: 'fallback ok', promptTokens: 30, completionTokens: 12 }) },
+      { statusCode: 401, headers: {}, body: { error: 'unauthorized' } },
+    ];
+
+    vi.spyOn(httpsMod as typeof httpsMod & { request: unknown }, 'request').mockImplementation(
+      (_opts: unknown, cb: unknown) => {
+        const response = responses.shift();
+        return {
+          on(_event: string, _handler: (err?: Error) => void) {},
+          write(body: string) {
+            const parsed = JSON.parse(body) as { model?: string };
+            if (parsed.model) requestedModels.push(parsed.model);
+          },
+          end() {
+            if (!response) throw new Error('unexpected request');
+            const bodyStr = JSON.stringify(response.body);
+            const chunks = [Buffer.from(bodyStr, 'utf-8')];
+            const res = {
+              statusCode: response.statusCode,
+              statusMessage: response.statusCode === 200 ? 'OK' : 'ERROR',
+              headers: response.headers,
+              on(event: string, handler: (chunk?: Buffer) => void) {
+                if (event === 'data') for (const chunk of chunks) handler(chunk);
+                else if (event === 'end') setTimeout(() => handler(), 0);
+              },
+            };
+            (cb as (res: typeof res) => void)(res);
+          },
+        } as unknown as ReturnType<typeof httpsMod.request>;
+      }
+    );
+
+    vi.clearAllMocks();
+    const fallbackResult = await client.completeByPurpose('resilient', SAMPLE_MESSAGES, {}, 'trace-fallback');
+
+    expect(fallbackResult).toMatchObject({
+      text: 'fallback ok',
+      purposeName: 'resilient',
+      fallbackPosition: 2,
+      modelName: 'fast',
+      providerName: 'openai',
+      inputTokens: 30,
+      outputTokens: 12,
+    });
+    expect(requestedModels).toEqual(['gpt-4o', 'gpt-4o-mini']);
+    expect(costTracker.recordLlmUsage).toHaveBeenCalledTimes(1);
+    expect(costTracker.recordLlmUsage).toHaveBeenCalledWith(expect.objectContaining({
+      instanceId: 'test-instance-fallback',
+      purposeName: 'resilient',
+      fallbackPosition: 2,
+      traceId: 'trace-fallback',
+    }));
+
+    let blockedError: unknown;
+    try {
+      await client.completeByPurpose('blocked', SAMPLE_MESSAGES);
+    } catch (err) {
+      blockedError = err;
+    }
+    expect(blockedError).toBeInstanceOf(LlmFallbackError);
+    expect(blockedError).toMatchObject({
+      name: 'LlmFallbackError',
+      purposeName: 'blocked',
+      attempts: [
+        {
+          modelName: 'gpt-4o',
+          providerName: 'openai',
+          error: expect.objectContaining({ name: 'LlmHttpError', status: 401 }),
+        },
+      ],
+    });
+    expect(requestedModels).toEqual(['gpt-4o', 'gpt-4o-mini', 'gpt-4o']);
+    expect(costTracker.recordLlmUsage).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves resolver 429 retry delay cap before trying the next model', async () => {
+    vi.useFakeTimers();
+    const chatFn = vi.fn()
+      .mockRejectedValueOnce(new LlmHttpError('rate limit', 429, 60000))
+      .mockResolvedValueOnce({
+        message: { role: 'assistant', content: 'fallback ok' },
+        modelName: 'fast',
+        providerName: 'openai',
+        inputTokens: 3,
+        outputTokens: 4,
+        latencyMs: 5,
+        finishReason: 'stop',
+      });
+    const config = {
+      ...TEST_LLM_CONFIG,
+      purposes: [
+        ...TEST_LLM_CONFIG.purposes,
+        { name: 'capped', description: 'Retry cap purpose', models: ['gpt-4o', 'fast'] },
+      ],
+    };
+    const resolver = new PurposeResolver(config, chatFn);
+
+    const resultPromise = resolver.chatByPurpose('capped', SAMPLE_MESSAGES);
+
+    await vi.advanceTimersByTimeAsync(29999);
+    expect(chatFn).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(2);
+
+    await expect(resultPromise).resolves.toMatchObject({
+      purposeName: 'capped',
+      fallbackPosition: 2,
+      modelName: 'fast',
+    });
+    expect(chatFn).toHaveBeenCalledTimes(2);
   });
 });
 
