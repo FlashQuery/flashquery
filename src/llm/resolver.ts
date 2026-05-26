@@ -1,38 +1,15 @@
-import type { FlashQueryConfig } from '../config/loader.js';
-import {
-  mergeParameters,
-  LlmHttpError,
-  LlmNetworkError,
-  type ChatMessage,
-  type LlmCompletionResult,
-} from './client.js';
+import type { FlashQueryConfig } from '../config/types.js';
+import { LlmFallbackError, LlmHttpError } from './errors.js';
+import type { ChatMessage, LlmCompletionResult } from './runtime-types.js';
 import type { LlmChatMessage, LlmChatResult } from './types.js';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LlmFallbackError — D-06
-// Thrown by PurposeResolver.completeByPurpose() when all models in the chain
-// fail, OR when the purpose's models list is empty (PURP-02).
-// Attempts array preserves the order of attempts; downstream code (Phase 101)
-// formats this for the MCP response envelope.
-// ─────────────────────────────────────────────────────────────────────────────
+export { LlmFallbackError } from './errors.js';
 
-export class LlmFallbackError extends Error {
-  readonly purposeName: string;
-  readonly attempts: Array<{
-    modelName: string;
-    providerName: string;
-    error: LlmHttpError | LlmNetworkError | Error;
-  }>;
-
-  constructor(
-    purposeName: string,
-    attempts: Array<{ modelName: string; providerName: string; error: Error }>
-  ) {
-    super(`Purpose '${purposeName}' failed — all ${attempts.length} models exhausted`);
-    this.name = 'LlmFallbackError';
-    this.purposeName = purposeName;
-    this.attempts = attempts;
-  }
+function mergeParameters(
+  callerParams: Record<string, unknown>,
+  purposeDefaults: Record<string, unknown>
+): Record<string, unknown> {
+  return { ...purposeDefaults, ...callerParams };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
