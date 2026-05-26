@@ -83,7 +83,7 @@
   - Required execution evidence: `npm test -- --grep "vault-write|atomic-write|durable"`; `npm run test:integration -- --grep "frontmatter-write|vault-write-durable|atomic-write"`.
 **Plans**: 3 plans
 Plans:
-- [ ] 156-01-PLAN.md — Durable `writeVaultFile` primitive, unit coverage, and macOS F_FULLFSYNC decision checkpoint.
+- [x] 156-01-PLAN.md — Durable `writeVaultFile` primitive, unit coverage, and macOS F_FULLFSYNC decision checkpoint.
 - [ ] 156-02-PLAN.md — Migrate VaultManager, frontmatter, resolver repair, and plugin reconciliation write paths.
 - [ ] 156-03-PLAN.md — Static write-path guard, integration routing/cleanup evidence, and final Phase 156 audit summary.
 
@@ -200,7 +200,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 155. Per-file Tier 1 + Live-defect Close | 3/3 | Complete   | 2026-05-26 |
-| 156. Atomic + Durable Write Primitive Consolidation | 0/TBD | Not started | - |
+| 156. Atomic + Durable Write Primitive Consolidation | 1/3 | In Progress|  |
 | 157. Records / Memory / Plugins Audit + Guards | 0/TBD | Not started | - |
 | 158. Tier 2 + Lock-table Retirement + Session Check | 0/TBD | Not started | - |
 | 159. Lock Timeout + Canonical Key Derivation | 0/TBD | Not started | - |
