@@ -1,8 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import pg from 'pg';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { FlashQueryConfig } from '../../src/config/loader.js';
 import { initEmbedding } from '../../src/embedding/provider.js';
@@ -68,6 +69,33 @@ function parseResult<T extends Record<string, unknown> = Record<string, unknown>
   return JSON.parse(textOf(result)) as T;
 }
 
+function advisoryKeyForPath(filePath: string): string {
+  const digest = createHash('sha256').update(`document:${filePath}`).digest();
+  return digest.readBigInt64BE(0).toString();
+}
+
+async function supportsSessionAdvisoryLocks(filePath: string): Promise<boolean> {
+  const key = advisoryKeyForPath(filePath);
+  const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
+  const contender = new pg.Client({ connectionString: TEST_DATABASE_URL });
+
+  try {
+    await holder.connect();
+    await contender.connect();
+    await holder.query('SELECT pg_advisory_lock($1::bigint)', [key]);
+    const blocked = await contender.query<{ acquired: boolean }>(
+      'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
+      [key]
+    );
+    return blocked.rows[0]?.acquired === false;
+  } finally {
+    await holder.query('SELECT pg_advisory_unlock($1::bigint)', [key]).catch(() => undefined);
+    await contender.query('SELECT pg_advisory_unlock($1::bigint)', [key]).catch(() => undefined);
+    await holder.end().catch(() => undefined);
+    await contender.end().catch(() => undefined);
+  }
+}
+
 describe.skipIf(!HAS_SUPABASE)('archive_document shared lock integration', () => {
   let vaultPath: string;
   let config: FlashQueryConfig;
@@ -114,6 +142,11 @@ describe.skipIf(!HAS_SUPABASE)('archive_document shared lock integration', () =>
   }
 
   it('T-I-011 archive_document and remove_document complete through advisory document locks without table contention', async () => {
+    if (!(await supportsSessionAdvisoryLocks(join(vaultPath, 'archive-lock/session-capability-probe.md')))) {
+      console.warn('Skipping T-I-011: configured TEST_DATABASE_URL is not session-capable for advisory locks');
+      return;
+    }
+
     const archiveTarget = await writeDoc('archive-lock/archive-target.md', 'Archive Lock Target');
     const removeTarget = await writeDoc('archive-lock/remove-target.md', 'Remove Lock Target');
     const lockedConfig = makeConfig(vaultPath, true);
