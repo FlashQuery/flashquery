@@ -16,7 +16,7 @@ The remaining actionable May 2026 codebase audit findings are closed. FlashQuery
 
 **Current tool surface:** Final primitives center on `write_document`, `write_memory`, `write_record`, `search`, `manage_directory`, `maintain_vault`, and structured read/archive/get flows. Removed legacy tool names are absent from host and delegated surfaces with replacement suggestions rather than compatibility aliases. Delegated broad tiers derive from canonical metadata, including corrected data tools such as `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`.
 
-**Current focus:** v3.9 Vault Write Coherency Locking.
+**Current focus:** v3.9 Vault Write Coherency Locking. Phase 156 is complete: normal vault markdown writes now route through one durable atomic `writeVaultFile` primitive with surfaced errors, unique temp names, temp fsync, rename, directory fsync, static bypass guards, and stale temp cleanup for legacy and unique temp patterns.
 
 ## Current Milestone: v3.9 Vault Write Coherency Locking
 
