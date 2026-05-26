@@ -91,3 +91,22 @@ describe('Phase 149 targeted circular dependency gate', () => {
     ]);
   });
 });
+
+describe('Phase 154 targeted circular dependency gate', () => {
+  let output: string;
+
+  beforeAll(() => {
+    output = madgeOutput(runMadgeCircular());
+  }, 30_000);
+
+  it('T-U-032 keeps REQ-010 config loader cycles absent from madge output', () => {
+    const matchingLines = output
+      .split(/\r?\n/)
+      .filter((line) => line.includes('config/loader.ts'));
+
+    expect(
+      matchingLines,
+      `REQ-010 config/loader.ts circular dependency lines still present:\n${matchingLines.join('\n') || output}`
+    ).toEqual([]);
+  });
+});
