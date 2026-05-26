@@ -96,14 +96,18 @@ Records reconciliation should be treated as not idempotent under concurrent firs
 
 ## Phase 156 Gap-Fix Review
 
-After this research was first written, commit `da8a01c fix(phase156): close vault write coherency gaps` landed. It changed the Phase 156 durable-write layer and tests:
+After this research was first written, additional Phase 156 gap-fix commits landed.
+
+Commit `da8a01c fix(phase156): close vault write coherency gaps` changed the Phase 156 durable-write layer and tests:
 
 - `src/services/document-lock.ts` now tracks ambient document locks with `AsyncLocalStorage` and exports `isDocumentLockHeldForPath`.
 - `src/storage/vault-write.ts` can assert `FQC_LOCK_ASSERT=true` writes are called under a document lock, and its macOS durable path uses a Darwin full-fsync adapter.
 - `src/storage/vault.ts` and `src/mcp/tools/documents/move.ts` now route move/trash EXDEV fallback writes through `writeVaultFile`.
 - The gap fix did not modify `src/mcp/tools/memory.ts`, `src/mcp/tools/records.ts`, `src/mcp/tools/plugins.ts`, or `src/services/plugin-reconciliation.ts`.
 
-Conclusion for Phase 157 planning: no executable plan changes are needed. The Phase 157 plans remain about REQ-023 records/memory/plugins coordination only. Downstream agents should not reintroduce EXDEV, document-lock, destination-lock, version-token, or table-retirement work into Phase 157.
+Commit `fb67633 test(phase156): cover plugin reconciliation write routing` added `tests/unit/plugin-reconciliation-routing.test.ts`, which verifies the `executeReconciliationActions` `added` / auto-track path routes frontmatter writes through `writeVaultFile`. It does not modify production code. This is a useful new read-first analog for Plan 157-02 because it provides a focused mocked harness around `executeReconciliationActions`, but it does not change the REQ-023 conclusion that concurrent reconciliation runs need scoped plugin-instance coordination.
+
+Conclusion for Phase 157 planning: no scope change is needed. Plan 157-02 should read `tests/unit/plugin-reconciliation-routing.test.ts` as an additional local pattern, while the Phase 157 executable work remains about REQ-023 records/memory/plugins coordination only. Downstream agents should not reintroduce EXDEV, document-lock, destination-lock, version-token, or table-retirement work into Phase 157.
 
 ## Project Constraints (from AGENTS.md)
 
