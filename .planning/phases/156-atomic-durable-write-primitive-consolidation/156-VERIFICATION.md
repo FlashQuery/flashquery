@@ -1,88 +1,73 @@
-## VERIFICATION PASSED
+---
+phase: 156-atomic-durable-write-primitive-consolidation
+status: passed
+verified: 2026-05-26
+requirements:
+  - REQ-020
+  - REQ-021
+plans_verified: 3
+automated_checks:
+  passed: 7
+  failed: 0
+human_verification: []
+gaps: []
+---
 
-**Phase:** 156 - Atomic + Durable Write Primitive Consolidation
-**Plans verified:** 3
-**Status:** All checks passed
-**Re-check date:** 2026-05-26
+# Phase 156 Verification: Atomic + Durable Write Primitive Consolidation
 
-### Prior Issues
+## Verdict
 
-| Prior Issue | Status | Evidence |
+Status: passed.
+
+Phase 156 achieved its goal: FlashQuery now has a single durable vault write primitive for normal vault markdown writes, current caller paths route through it, write failures surface to callers, and the durable sequence is covered by unit/static/integration evidence.
+
+## Requirement Traceability
+
+| Requirement | Status | Evidence |
 |-------------|--------|----------|
-| `156-RESEARCH.md` open questions unresolved | Resolved | Research now has `## Open Questions (RESOLVED)` with explicit macOS and EXDEV decisions. |
-| T-U-033 planned before macOS strategy checkpoint | Resolved | Plan 01 now starts with blocking checkpoint `156-01-01`; T-U-033 test creation is in `156-01-02` after the checkpoint. |
+| REQ-020 | Passed | `writeVaultFile` exists; `VaultManager.writeMarkdown`, `atomicWriteFrontmatter`, and resolver repair writes route through it; plugin reconciliation inherits the surfaced error path through `atomicWriteFrontmatter`; T-U-030 guards direct bypasses; T-I-039/T-I-040 cover failure propagation and representative routing. |
+| REQ-021 | Passed | `writeVaultFile` uses unique temp names, writes temp bytes, syncs the temp file, renames into place, syncs the directory, returns SHA-256 content hash, exposes macOS sync through the adapter boundary, and stale cleanup removes legacy and unique temp files. |
 
-### Coverage Summary
+## Must-Haves
 
-| Requirement | Plans | Status |
-|-------------|-------|--------|
-| REQ-020 | 156-01, 156-02, 156-03 | Covered: primitive, caller migration, error surfacing, static write-path guard, routing evidence, write-path inventory. |
-| REQ-021 | 156-01, 156-02, 156-03 | Covered: unique temps, temp fsync, rename, directory fsync, macOS checkpoint/T-U-033, stale temp cleanup. |
+| Must-have | Status | Evidence |
+|-----------|--------|----------|
+| Single durable primitive | Passed | `src/storage/vault-write.ts` exports `writeVaultFile`. |
+| SHA-256 hash of exact bytes | Passed | T-U-028 in `tests/unit/vault-write-primitive.test.ts`. |
+| Write/sync/rename/dir-sync failures surface | Passed | T-U-029, T-U-031, T-I-039. |
+| Unique temp names and durable sequence | Passed | T-U-031 and T-U-032 in `tests/unit/vault-write-durable.test.ts`. |
+| macOS/Linux single caller path | Passed | T-U-033 verifies Darwin adapter routing; no native dependency or code-path fork was added. |
+| Existing callers migrated | Passed | Source inspection and T-U-030/T-I-040. |
+| Stale temp cleanup supports new pattern | Passed | T-I-041 in `tests/integration/vault-write-durable.integration.test.ts`. |
+| EXDEV not claimed | Passed | Move/trash EXDEV paths are inventory-labeled as Phase 161 / REQ-022 deferred boundaries. |
 
-### Required Test IDs
+## Automated Checks
 
-| Test ID | Planned In | Status |
-|---------|------------|--------|
-| T-U-028 | `tests/unit/vault-write-primitive.test.ts` | Covered |
-| T-U-029 | `tests/unit/vault-write-primitive.test.ts` | Covered |
-| T-U-030 | `tests/unit/single-write-primitive.test.ts` | Covered |
-| T-U-031 | `tests/unit/vault-write-durable.test.ts` | Covered |
-| T-U-032 | `tests/unit/vault-write-durable.test.ts` | Covered |
-| T-U-033 | `tests/unit/vault-write-durable.test.ts` after checkpoint | Covered |
-| T-I-039 | `tests/integration/atomic-write-frontmatter.integration.test.ts` | Covered |
-| T-I-040 | `tests/integration/atomic-write-frontmatter.integration.test.ts` | Covered |
-| T-I-041 | `tests/integration/vault-write-durable.integration.test.ts` | Covered |
+| Command | Result |
+|---------|--------|
+| `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts` | Passed: 8 tests. |
+| `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts` | Passed: T-I-039 during Plan 156-02. |
+| `npm test -- tests/unit/vault.test.ts tests/unit/scanner.test.ts tests/unit/plugin-reconciliation.test.ts tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts tests/unit/document-batch-lock-contention.test.ts tests/unit/resolve-document.test.ts` | Passed: 174 tests. |
+| `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts tests/unit/single-write-primitive.test.ts tests/unit/document-batch-lock-contention.test.ts` | Passed: 13 tests. |
+| `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts tests/integration/vault-write-durable.integration.test.ts` | Passed: 3 tests; `.env.test` loaded by setup. |
+| `npm run typecheck` | Passed. |
+| `npm run build` | Passed. |
+| Regression: `npm test -- tests/unit/document-lock-registry.test.ts tests/unit/with-document-lock.test.ts tests/unit/lock-helper-only.test.ts tests/unit/document-tool-lock-call-sites.test.ts tests/unit/macro-no-lock-imports.test.ts tests/unit/scanner.test.ts tests/unit/write-document.test.ts tests/unit/archive-document.test.ts tests/unit/remove-document.test.ts tests/unit/copy-document.test.ts tests/unit/move-document.test.ts tests/unit/advanced-document-tools.test.ts tests/unit/apply-tags.test.ts` | Passed: 123 tests. |
 
-### Plan Summary
+## Code Review
 
-| Plan | Tasks | Files | Wave | Dependencies | Status |
-|------|-------|-------|------|--------------|--------|
-| 156-01 | 3 | 3 | 1 | none | Valid |
-| 156-02 | 3 | 5 | 2 | 156-01 | Valid |
-| 156-03 | 3 | 5 | 3 | 156-01, 156-02 | Valid |
+`156-REVIEW.md` status: clean. No critical, warning, or info findings.
 
-### Checks Passed
+## Scope Boundaries
 
-- Requirement coverage: REQ-020 and REQ-021 are present in all plan frontmatter and have concrete implementing tasks.
-- Task completeness: `gsd-sdk query verify.plan-structure` reports all three plans valid; every task has files, action, verify, and done/acceptance criteria.
-- Dependency correctness: 01 -> 02 -> 03 is acyclic and wave-consistent.
-- Key links: plans wire `VaultManager.writeMarkdown`, `atomicWriteFrontmatter`, resolver repair, plugin reconciliation, integration routing evidence, and static guard back to `writeVaultFile`.
-- Scope sanity: each plan has 3 tasks; no plan exceeds task or file-count thresholds.
-- Context compliance: plans honor locked REQ-020/REQ-021 scope, product-doc handoff, downstream summary/evidence, and write-path inventory requirements.
-- Deferred scope: Tier 2 advisory locks, lock-table retirement, full canonical key derivation, folder locks, destination locks, version-token schemas, batch contracts, and REQ-022 EXDEV completion remain out of Phase 156.
-- macOS native dependency boundary: Plan 01 requires a blocking human checkpoint before any native/platform adapter and defaults to an injectable documented adapter fallback.
-- Threat models: all plans include STRIDE threat registers covering primitive tampering, error surfacing, temp cleanup, instrumentation, and dependency supply-chain boundaries.
-- AGENTS.md compliance: plans stay within TypeScript/ESM/Vitest conventions, do not introduce a web UI, CommonJS, `npm link`, or the forbidden MCP package.
-- Research resolution: `156-RESEARCH.md` open questions are marked resolved.
-- Architectural tier compliance: durable filesystem commit work stays in storage/backend tiers per the research responsibility map.
-- Pattern compliance: skipped; no `156-PATTERNS.md` exists.
+- REQ-022 EXDEV fallback completeness remains deferred to Phase 161.
+- No Tier 2 advisory locks, destination locks, folder locks, version-token schemas, batch contracts, or database schema changes were introduced.
+- Schema drift gate reported no drift.
 
-### Dimension 8: Nyquist Compliance
+## Gaps
 
-| Task | Plan | Wave | Automated Command | Status |
-|------|------|------|-------------------|--------|
-| 156-01-01 | 01 | 1 | `test -f .planning/phases/156-atomic-durable-write-primitive-consolidation/156-01-PLAN.md` + human checkpoint | PASS |
-| 156-01-02 | 01 | 1 | `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts` | PASS |
-| 156-01-03 | 01 | 1 | `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts`; `npm run typecheck` | PASS |
-| 156-02-01 | 02 | 2 | `npm test -- tests/unit/vault.test.ts tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts`; `npm run typecheck` | PASS |
-| 156-02-02 | 02 | 2 | `npm test -- tests/unit/scanner.test.ts tests/unit/vault-write-primitive.test.ts`; `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts`; `npm run typecheck` | PASS |
-| 156-02-03 | 02 | 2 | `npm test -- tests/unit/plugin-reconciliation.test.ts tests/unit/vault-write-primitive.test.ts`; `npm run typecheck` | PASS |
-| 156-03-01 | 03 | 3 | `npm test -- tests/unit/single-write-primitive.test.ts` | PASS |
-| 156-03-02 | 03 | 3 | `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts tests/integration/vault-write-durable.integration.test.ts` | PASS |
-| 156-03-03 | 03 | 3 | `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts tests/unit/single-write-primitive.test.ts tests/unit/document-batch-lock-contention.test.ts`; `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts tests/integration/vault-write-durable.integration.test.ts`; `npm run typecheck`; `npm run build` | PASS |
+None.
 
-Sampling: Wave 1: 3/3 verified -> PASS  
-Sampling: Wave 2: 3/3 verified -> PASS  
-Sampling: Wave 3: 3/3 verified -> PASS  
-Wave 0: `156-VALIDATION.md` exists and names the test files to be created -> PASS  
-Overall: PASS
+## Human Verification
 
-### Structured Issues
-
-```yaml
-issues: []
-```
-
-### Recommendation
-
-Plans verified. Run `$gsd-execute-phase 156` to proceed.
+None required.
