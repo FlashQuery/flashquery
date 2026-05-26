@@ -55,4 +55,17 @@ describe('REQ-001/REQ-010 document tool lock call sites', () => {
       expect(source).toMatch(/itemErr instanceof LockTimeoutError[\s\S]*reason: 'lock_contention'/);
     }
   });
+
+  it('write_document update re-resolves and re-reads inside withDocumentLock for INV-10', async () => {
+    const source = await readFile(new URL('../../src/mcp/tools/documents/write.ts', import.meta.url), 'utf-8');
+    const updateLockIndex = source.indexOf('withDocumentLock(config, initialResolved.absPath');
+    expect(updateLockIndex).toBeGreaterThan(-1);
+
+    const preLockSlice = source.slice(source.indexOf('const initialResolved'), updateLockIndex);
+    expect(preLockSlice).not.toMatch(/readFile\(resolved\.absPath/);
+
+    const lockToWriteSlice = source.slice(updateLockIndex, source.indexOf('vaultManager.writeMarkdown', updateLockIndex));
+    expect(lockToWriteSlice).toMatch(/resolveDocumentIdentifier\(config, supabase, identifier/);
+    expect(lockToWriteSlice).toMatch(/readFile\(resolved\.absPath/);
+  });
 });
