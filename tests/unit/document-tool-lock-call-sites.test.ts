@@ -43,6 +43,6 @@ describe('REQ-001/REQ-010 document tool lock call sites', () => {
     expect(source).toMatch(/sourceErr instanceof LockTimeoutError/);
     expect(source).toMatch(/itemErr instanceof LockTimeoutError/);
     expect(toolChunk('insert_in_doc')).toMatch(/err instanceof LockTimeoutError[\s\S]*lockContentionError\(err, identifier\)/);
-    expect(toolChunk('replace_doc_section')).toMatch(/err instanceof LockTimeoutError[\s\S]*lockContentionError\(err, identifier\)/);
+    expect(toolChunk('replace_doc_section')).toMatch(/err instanceof LockTimeoutError[\s\S]*reason: 'lock_contention'/);
   });
 });

@@ -1393,7 +1393,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         });
       } catch (err) {
         if (err instanceof LockTimeoutError) {
-          return jsonExpectedError(lockContentionError(err, identifier));
+          return jsonExpectedError({
+            error: 'conflict',
+            message: err.message,
+            identifier,
+            details: { reason: 'lock_contention' },
+          });
         }
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`replace_doc_section failed: ${msg}`);
