@@ -99,7 +99,11 @@ Plans:
   - Create or update the Test Plan §4.5.1 cases: `T-U-036`, `T-I-043`, `T-I-044`, and `T-I-045`.
   - Execution must include the concurrency review artifact required by REQ-023 and prove no coarse `records`, `memory`, or `plugins` lock literals remain.
   - Required execution evidence: `npm test -- --grep "no-coarse-resource-locks"`; `npm run test:integration -- --grep "memory-no-coarse-lock|records-reconciliation|unregister-plugin"`.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 157-01-PLAN.md — Remove redundant memory coarse lock and prove RPC-backed concurrent updates.
+- [ ] 157-02-PLAN.md — Add records reconciliation audit, scoped plugin coordination guard, and records race coverage.
+- [ ] 157-03-PLAN.md — Guard concurrent plugin unregister and add final no-coarse-resource-locks gate.
 
 ### Phase 158: Tier 2 + Lock-table Retirement + Session Check
 **Goal**: Users running multiple FlashQuery processes against one vault get real cross-process exclusion through Postgres advisory locks, with stale table locks and manual unlocks gone.
