@@ -16,7 +16,18 @@ The remaining actionable May 2026 codebase audit findings are closed. FlashQuery
 
 **Current tool surface:** Final primitives center on `write_document`, `write_memory`, `write_record`, `search`, `manage_directory`, `maintain_vault`, and structured read/archive/get flows. Removed legacy tool names are absent from host and delegated surfaces with replacement suggestions rather than compatibility aliases. Delegated broad tiers derive from canonical metadata, including corrected data tools such as `list_vault`, `copy_document`, `insert_in_doc`, and `replace_doc_section`.
 
-**Current focus:** Awaiting the next milestone. Start with `$gsd-new-milestone`.
+**Current focus:** v3.9 Vault Write Coherency Locking.
+
+## Current Milestone: v3.9 Vault Write Coherency Locking
+
+**Goal:** Rebuild FlashQuery's vault write coherency layer with per-file locking, Postgres advisory cross-process exclusion, durable atomic writes, opt-in version-token conflict detection, and uniform batch semantics.
+
+**Target features:**
+- Replace the coarse `fqc_write_locks`-backed document lock with per-file document locks, Tier 1 in-process striping, and Tier 2 session-scoped Postgres advisory locks.
+- Route every vault write through one lock-aware durable atomic write primitive, including scanner/frontmatter repair paths and the live `insert_doc_link` / `apply_tags` lost-update defect.
+- Add canonical lock-key derivation, bounded lock-acquisition timeouts, shared/exclusive directory locks, destination-path locks, and EXDEV-safe copy/move behavior.
+- Surface `version_token` values and optional `expected_version` / `if_match` preconditions across file-affecting tools, with structured conflict envelopes.
+- Ship best-effort multi-file batch responses with ordered per-item success/conflict/failure results and mixed identifier/token input support.
 
 ## Last Milestone: v3.8 Codebase Audit Remaining Remediation
 
@@ -378,4 +389,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-26 after v3.8 Codebase Audit Remaining Remediation*
+*Last updated: 2026-05-26 after starting v3.9 Vault Write Coherency Locking*

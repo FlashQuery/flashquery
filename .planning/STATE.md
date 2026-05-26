@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v3.8
-milestone_name: Codebase Audit Remaining Remediation
-status: Awaiting next milestone
-stopped_at: Completed 154-06-PLAN.md
-last_updated: "2026-05-26T12:53:35.308Z"
-last_activity: 2026-05-26 — Milestone v3.8 completed and archived
+milestone: v3.9
+milestone_name: Vault Write Coherency Locking
+status: planning
+last_updated: "2026-05-26T13:21:26.149Z"
+last_activity: 2026-05-26
 progress:
-  total_phases: 4
-  completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # FlashQuery Core — State
@@ -25,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-05-26)
 
 ## Current Position
 
-Phase: Milestone v3.8 complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-05-26 — Milestone v3.8 completed and archived
+Status: Defining requirements
+Last activity: 2026-05-26 — Milestone v3.9 started
 
 ## Accumulated Context
 
