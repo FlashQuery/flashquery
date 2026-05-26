@@ -1,9 +1,9 @@
 ---
 phase: 156
 slug: atomic-durable-write-primitive-consolidation
-status: draft
+status: verified
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-05-26
 ---
 
@@ -40,15 +40,15 @@ created: 2026-05-26
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 156-01-01 | 01 | 1 | REQ-021 | T-156-02 | macOS durable-sync strategy is selected before T-U-033 is authored | checkpoint + unit | `test -f .planning/phases/156-atomic-durable-write-primitive-consolidation/156-01-PLAN.md` + human checkpoint | Plan exists | pending |
-| 156-01-02 | 01 | 1 | REQ-020/REQ-021 | T-156-01 / T-156-02 | Write failures surface; hash equals committed bytes; durable sequence is encoded in tests after macOS decision | unit | `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts` | No - W0 | pending |
-| 156-01-03 | 01 | 1 | REQ-020/REQ-021 | T-156-03 | `writeVaultFile` performs durable sequence and cleans temp files on failure without swallowing the original error | unit | `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts` | No - W0 | pending |
-| 156-02-01 | 02 | 2 | REQ-020 | T-156-04 | `VaultManager.writeMarkdown` delegates to `writeVaultFile` and returns/propagates content hash behavior | unit | `npm test -- tests/unit/vault.test.ts tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts tests/unit/document-batch-lock-contention.test.ts` | Partial | pending |
-| 156-02-02 | 02 | 2 | REQ-020 | T-156-05 | `atomicWriteFrontmatter` delegates to `writeVaultFile` and propagates write errors | unit/integration | `npm test -- tests/unit/scanner.test.ts tests/unit/vault-write-primitive.test.ts`; `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts` | Partial | pending |
-| 156-02-03 | 02 | 2 | REQ-020 | T-156-06 | targeted scan/document resolver repair writes route through `writeVaultFile` without changing unchanged-file scanner behavior | unit | `npm test -- tests/unit/plugin-reconciliation.test.ts tests/unit/vault-write-primitive.test.ts tests/unit/document-batch-lock-contention.test.ts` | Partial | pending |
-| 156-03-01 | 03 | 3 | REQ-020 | T-156-07 | representative MCP/tool writes originate from `writeVaultFile`; plugin reconciliation does not catch and swallow surfaced failures | integration | `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts tests/integration/vault-write-durable.integration.test.ts` | No - W0 | pending |
-| 156-03-02 | 03 | 3 | REQ-020/REQ-021 | T-156-08 | static write-path inventory proves vault writes do not bypass primitive | unit/static | `npm test -- tests/unit/single-write-primitive.test.ts` | No - W0 | pending |
-| 156-03-03 | 03 | 3 | REQ-021 | T-156-09 | stale temp cleanup recognizes unique `.fqc-tmp-*` names | integration | `npm run test:integration -- tests/integration/vault-write-durable.integration.test.ts` | No - W0 | pending |
+| 156-01-01 | 01 | 1 | REQ-021 | T-156-02 | macOS durable-sync strategy is selected before T-U-033 is authored | checkpoint + unit | `test -f .planning/phases/156-atomic-durable-write-primitive-consolidation/156-01-PLAN.md` + human checkpoint | Plan exists | green |
+| 156-01-02 | 01 | 1 | REQ-020/REQ-021 | T-156-01 / T-156-02 | Write failures surface; hash equals committed bytes; durable sequence is encoded in tests after macOS decision | unit | `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts` | Yes | green |
+| 156-01-03 | 01 | 1 | REQ-020/REQ-021 | T-156-03 | `writeVaultFile` performs durable sequence and cleans temp files on failure without swallowing the original error | unit | `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts` | Yes | green |
+| 156-02-01 | 02 | 2 | REQ-020 | T-156-04 | `VaultManager.writeMarkdown` delegates to `writeVaultFile` and returns/propagates content hash behavior | unit | `npm test -- tests/unit/vault.test.ts tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts tests/unit/document-batch-lock-contention.test.ts` | Yes | green |
+| 156-02-02 | 02 | 2 | REQ-020 | T-156-05 | `atomicWriteFrontmatter` delegates to `writeVaultFile` and propagates write errors | unit/integration | `npm test -- tests/unit/scanner.test.ts tests/unit/vault-write-primitive.test.ts`; `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts` | Yes | green |
+| 156-02-03 | 02 | 2 | REQ-020 | T-156-06 | targeted scan/document resolver repair writes route through `writeVaultFile` without changing unchanged-file scanner behavior | unit | `npm test -- tests/unit/plugin-reconciliation.test.ts tests/unit/vault-write-primitive.test.ts tests/unit/document-batch-lock-contention.test.ts` | Yes | green |
+| 156-03-01 | 03 | 3 | REQ-020 | T-156-07 | representative MCP/tool writes originate from `writeVaultFile`; plugin reconciliation does not catch and swallow surfaced failures | integration | `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts tests/integration/vault-write-durable.integration.test.ts` | Yes | green |
+| 156-03-02 | 03 | 3 | REQ-020/REQ-021 | T-156-08 | static write-path inventory proves vault writes do not bypass primitive | unit/static | `npm test -- tests/unit/single-write-primitive.test.ts` | Yes | green |
+| 156-03-03 | 03 | 3 | REQ-021 | T-156-09 | stale temp cleanup recognizes unique `.fqc-tmp-*` names | integration | `npm run test:integration -- tests/integration/vault-write-durable.integration.test.ts` | Yes | green |
 
 *Status: pending / green / red / flaky*
 
@@ -56,11 +56,11 @@ created: 2026-05-26
 
 ## Wave 0 Requirements
 
-- [ ] `tests/unit/vault-write-primitive.test.ts` - T-U-028 and T-U-029.
-- [ ] `tests/unit/vault-write-durable.test.ts` - T-U-031, T-U-032, and T-U-033.
-- [ ] `tests/unit/single-write-primitive.test.ts` - T-U-030 static write-path guard.
-- [ ] `tests/integration/atomic-write-frontmatter.integration.test.ts` - T-I-039 and T-I-040.
-- [ ] `tests/integration/vault-write-durable.integration.test.ts` - T-I-041.
+- [x] `tests/unit/vault-write-primitive.test.ts` - T-U-028 and T-U-029.
+- [x] `tests/unit/vault-write-durable.test.ts` - T-U-031, T-U-032, and T-U-033.
+- [x] `tests/unit/single-write-primitive.test.ts` - T-U-030 static write-path guard.
+- [x] `tests/integration/atomic-write-frontmatter.integration.test.ts` - T-I-039 and T-I-040.
+- [x] `tests/integration/vault-write-durable.integration.test.ts` - T-I-041.
 
 ---
 
@@ -82,4 +82,14 @@ created: 2026-05-26
 - [x] Feedback latency target documented.
 - [x] `nyquist_compliant: true` set in frontmatter.
 
-**Approval:** pending
+## Validation Audit 2026-05-26
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 0 |
+| Resolved | 9 |
+| Escalated | 0 |
+
+All Phase 156 requirements have automated verification. Targeted unit/static, integration, typecheck, build, and prior-phase regression checks passed during execution.
+
+**Approval:** verified 2026-05-26
