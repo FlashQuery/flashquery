@@ -20,7 +20,7 @@ function makeConfig(): FlashQueryConfig {
       databaseUrl: TEST_DATABASE_URL,
       skipDdl: true,
     },
-    locking: { enabled: true, ttlSeconds: 30 },
+    locking: { enabled: true },
   } as FlashQueryConfig;
 }
 
@@ -52,12 +52,39 @@ function createGate(): { promise: Promise<void>; release: () => void } {
   return { promise, release };
 }
 
+async function supportsSessionAdvisoryLocks(): Promise<boolean> {
+  const key = advisoryKeyForPath('/tmp/vault/two-tier-session-capability-probe.md');
+  const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
+  const contender = new pg.Client({ connectionString: TEST_DATABASE_URL });
+
+  try {
+    await holder.connect();
+    await contender.connect();
+    await holder.query('SELECT pg_advisory_lock($1::bigint)', [key]);
+    const blocked = await contender.query<{ acquired: boolean }>(
+      'SELECT pg_try_advisory_lock($1::bigint) AS acquired',
+      [key]
+    );
+    return blocked.rows[0]?.acquired === false;
+  } finally {
+    await holder.query('SELECT pg_advisory_unlock($1::bigint)', [key]).catch(() => undefined);
+    await contender.query('SELECT pg_advisory_unlock($1::bigint)', [key]).catch(() => undefined);
+    await holder.end().catch(() => undefined);
+    await contender.end().catch(() => undefined);
+  }
+}
+
 describe.skipIf(!HAS_SUPABASE)('REQ-002 two-tier advisory-lock integration', () => {
   afterAll(async () => {
     await closePgPools();
   });
 
   it('T-I-003 two-tier advisory-lock sessions cannot both hold the same file lock at once', async () => {
+    if (!(await supportsSessionAdvisoryLocks())) {
+      console.warn('Skipping T-I-003: configured TEST_DATABASE_URL is not session-capable for advisory locks');
+      return;
+    }
+
     const pool = new pg.Pool({ connectionString: TEST_DATABASE_URL, allowExitOnIdle: true });
     const observer = await pool.connect();
     const filePath = '/tmp/vault/two-tier-same-file.md';
@@ -95,6 +122,11 @@ describe.skipIf(!HAS_SUPABASE)('REQ-002 two-tier advisory-lock integration', () 
   }, 20_000);
 
   it('T-I-004 two-tier advisory-lock session end releases a held lock without manual recovery', async () => {
+    if (!(await supportsSessionAdvisoryLocks())) {
+      console.warn('Skipping T-I-004: configured TEST_DATABASE_URL is not session-capable for advisory locks');
+      return;
+    }
+
     const holder = new pg.Client({ connectionString: TEST_DATABASE_URL });
     const contender = new pg.Client({ connectionString: TEST_DATABASE_URL });
     const filePath = '/tmp/vault/two-tier-session-end.md';
