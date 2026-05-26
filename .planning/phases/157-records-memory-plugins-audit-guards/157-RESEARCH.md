@@ -94,6 +94,17 @@ Records reconciliation should be treated as not idempotent under concurrent firs
 
 **Primary recommendation:** implement a tiny `withPluginCoordinationLock()` helper using `withPgClient()` + `pg_advisory_lock` / `pg_advisory_unlock`, use it around records reconciliation and `unregister_plugin`, remove all coarse lock imports/calls, and add the four required tests. [VERIFIED: codebase grep] [CITED: PostgreSQL advisory lock docs]
 
+## Phase 156 Gap-Fix Review
+
+After this research was first written, commit `da8a01c fix(phase156): close vault write coherency gaps` landed. It changed the Phase 156 durable-write layer and tests:
+
+- `src/services/document-lock.ts` now tracks ambient document locks with `AsyncLocalStorage` and exports `isDocumentLockHeldForPath`.
+- `src/storage/vault-write.ts` can assert `FQC_LOCK_ASSERT=true` writes are called under a document lock, and its macOS durable path uses a Darwin full-fsync adapter.
+- `src/storage/vault.ts` and `src/mcp/tools/documents/move.ts` now route move/trash EXDEV fallback writes through `writeVaultFile`.
+- The gap fix did not modify `src/mcp/tools/memory.ts`, `src/mcp/tools/records.ts`, `src/mcp/tools/plugins.ts`, or `src/services/plugin-reconciliation.ts`.
+
+Conclusion for Phase 157 planning: no executable plan changes are needed. The Phase 157 plans remain about REQ-023 records/memory/plugins coordination only. Downstream agents should not reintroduce EXDEV, document-lock, destination-lock, version-token, or table-retirement work into Phase 157.
+
 ## Project Constraints (from AGENTS.md)
 
 - Runtime is Node.js >= 20 LTS, TypeScript strict mode, ESM only; do not introduce CommonJS. [CITED: AGENTS.md]
