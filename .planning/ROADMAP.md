@@ -118,7 +118,11 @@ Plans:
   - Create or update the Test Plan §4.1.2, §4.1.4, and §4.1.5 cases: `T-U-003` through `T-U-005`, `T-U-011` through `T-U-013`, and `T-I-003` through `T-I-008`.
   - Execution must prove advisory-lock acquire/release behavior, startup self-test pass/fail behavior, and full retirement of `fqc_write_locks` / `flashquery unlock`.
   - Required execution evidence: `npm test -- --grep "advisory-lock|lock-startup|legacy-write-lock"`; `npm run test:integration -- --grep "two-tier|fqc-write-locks-drop|lock-startup|session-capable"`.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 158-01-PLAN.md — Native Tier 2 advisory-lock implementation and REQ-002 tests.
+- [ ] 158-02-PLAN.md — Legacy `fqc_write_locks`, `write-lock`, unlock CLI, schema, and TTL config retirement.
+- [ ] 158-03-PLAN.md — Session-capable startup self-test, failure behavior, docs, and REQ-005 tests.
 
 ### Phase 159: Lock Timeout + Canonical Key Derivation
 **Goal**: Contended writes return predictably instead of hanging, and all lock participants agree on the same canonical file or directory identity.
