@@ -342,17 +342,15 @@ expect(source).not.toMatch(/releaseLock\s*\([^)]*['"`](records|memory|plugins)['
 | A1 | `hashtextextended(text, 0)::bigint` is acceptable as the advisory key derivation for this phase. [ASSUMED] | Architecture Patterns | Planner may prefer a two-int key or SHA-derived bigint to avoid depending on `hashtextextended` stability. |
 | A2 | A per-plugin advisory guard plus checked Supabase cleanup is sufficient for unregister if raw transaction rewrite is too invasive. [ASSUMED] | Summary / Patterns | If strict all-or-nothing DB rollback is required, planner must choose the raw `pg` transaction path. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should unregister use raw `pg` transaction or advisory guard plus checked Supabase calls?**
    - What we know: Supabase JS supports RPC and table APIs; explicit multi-step app transactions are not represented in the current code, while direct `pg` can run `BEGIN`/`COMMIT`. [CITED: Context7 /supabase/supabase] [VERIFIED: codebase grep]
-   - What's unclear: Whether the implementation budget should rewrite all unregister DB cleanup into SQL in this phase. [ASSUMED]
-   - Recommendation: Plan the advisory guard + checked-error path as the least invasive default; add a planner checkpoint if strict rollback semantics are required. [ASSUMED]
+   - Chosen answer: Use a per-plugin/session advisory guard through `withPluginCoordinationLock` plus checked Supabase cleanup errors for `unregister_plugin`; do not rewrite the unregister cleanup into a raw `pg` transaction in Phase 157. The guarded sequence must return or throw before claiming `status: "unregistered"` if registry, review, memory, document ownership, PluginManager, type registry, or manifest cleanup fails. [RESOLVED] [ASSUMED]
 
 2. **Where should the records concurrency review artifact live?**
    - What we know: CONTEXT allows a new phase artifact or final plan summary if execution can point to it. [CITED: 157-CONTEXT.md]
-   - What's unclear: No existing naming convention for this exact review artifact was found in the phase directory. [VERIFIED: codebase grep]
-   - Recommendation: Create `.planning/phases/157-records-memory-plugins-audit-guards/157-RECONCILIATION-AUDIT.md` before code edits. [ASSUMED]
+   - Chosen answer: Create `.planning/phases/157-records-memory-plugins-audit-guards/157-RECONCILIATION-AUDIT.md` before code edits and cite it from affected records handler comments. [RESOLVED] [ASSUMED]
 
 ## Environment Availability
 
