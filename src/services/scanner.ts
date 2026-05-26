@@ -20,6 +20,7 @@ import {
   documentEmbeddingTarget,
   scheduleBackgroundEmbedding,
 } from '../embedding/background-embed.js';
+import { withDocumentLock } from './document-lock.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // scanMutex — DCP-03: serializes concurrent runScanOnce() calls
@@ -1330,56 +1331,64 @@ export async function repairFrontmatter(
         }
 
         try {
-          // Read file to extract existing content and frontmatter
-          let fileContent = '';
-          let existingFrontmatter: Record<string, unknown> = {};
-          try {
-            const raw = await readFile(`${vaultRoot}/${filePath}`, 'utf-8');
-            const parsed = matter(raw);
-            fileContent = parsed.content;
-            existingFrontmatter = parsed.data;
-          } catch (readErr) {
-            if ((readErr as NodeJS.ErrnoException).code === 'ENOENT') {
-              await supabase
-                .from('fqc_documents')
-                .update({
-                  status: 'missing',
-                  needs_frontmatter_repair: false,
-                  updated_at: new Date().toISOString(),
-                })
-                .eq('id', fqcId)
-                .eq('instance_id', instanceId);
-              logger.warn(`[TSA-02] frontmatter repair skipped missing file: "${filePath}" (fqc_id=${fqcId})`);
-              continue;
+          let repairedFile = false;
+          let updatedHash = '';
+          await withDocumentLock(config, join(vaultRoot, filePath), async () => {
+            // Read file to extract existing content and frontmatter
+            let fileContent = '';
+            let existingFrontmatter: Record<string, unknown> = {};
+            try {
+              const raw = await readFile(`${vaultRoot}/${filePath}`, 'utf-8');
+              const parsed = matter(raw);
+              fileContent = parsed.content;
+              existingFrontmatter = parsed.data;
+            } catch (readErr) {
+              if ((readErr as NodeJS.ErrnoException).code === 'ENOENT') {
+                await supabase
+                  .from('fqc_documents')
+                  .update({
+                    status: 'missing',
+                    needs_frontmatter_repair: false,
+                    updated_at: new Date().toISOString(),
+                  })
+                  .eq('id', fqcId)
+                  .eq('instance_id', instanceId);
+                logger.warn(`[TSA-02] frontmatter repair skipped missing file: "${filePath}" (fqc_id=${fqcId})`);
+                return;
+              }
+              throw readErr;
             }
-            throw readErr;
+
+            // Merge FQC identity fields into existing frontmatter — user-defined fields survive
+            const frontmatter = {
+              ...existingFrontmatter,
+              [FM.ID]:       fqcId,
+              [FM.TITLE]:    (existingFrontmatter[FM.TITLE] as string | undefined) ?? titleFromFilename(filePath),
+              [FM.CREATED]:  createdAt,
+              [FM.STATUS]:   status,
+              [FM.INSTANCE]: instanceId,
+            };
+
+            await vaultManager.writeMarkdown(filePath, frontmatter, fileContent);
+
+            // Compute and store new content_hash after frontmatter is written
+            const updatedRaw = await readFile(`${vaultRoot}/${filePath}`, 'utf-8');
+            updatedHash = computeHash(updatedRaw);
+
+            // Mark as repaired and update content_hash to match the file with frontmatter
+            await supabase
+              .from('fqc_documents')
+              .update({
+                needs_frontmatter_repair: false,
+                content_hash: updatedHash,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', fqcId);
+            repairedFile = true;
+          });
+          if (!repairedFile) {
+            continue;
           }
-
-          // Merge FQC identity fields into existing frontmatter — user-defined fields survive
-          const frontmatter = {
-            ...existingFrontmatter,
-            [FM.ID]:       fqcId,
-            [FM.TITLE]:    (existingFrontmatter[FM.TITLE] as string | undefined) ?? titleFromFilename(filePath),
-            [FM.CREATED]:  createdAt,
-            [FM.STATUS]:   status,
-            [FM.INSTANCE]: instanceId,
-          };
-
-          await vaultManager.writeMarkdown(filePath, frontmatter, fileContent);
-
-          // Compute and store new content_hash after frontmatter is written
-          const updatedRaw = await readFile(`${vaultRoot}/${filePath}`, 'utf-8');
-          const updatedHash = computeHash(updatedRaw);
-
-          // Mark as repaired and update content_hash to match the file with frontmatter
-          await supabase
-            .from('fqc_documents')
-            .update({
-              needs_frontmatter_repair: false,
-              content_hash: updatedHash,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', fqcId);
           counts.updated++;
           counts.repaired++;
 
