@@ -110,8 +110,8 @@ primitive and migration of existing vault write paths onto it.
   - T-U-033: macOS durable flush behavior is intentionally handled or documented.
   - T-I-041: stale temp cleanup recognizes the unique-name pattern.
 - Required evidence from ROADMAP:
-  - `npm test -- --grep "vault-write|atomic-write|durable"`
-  - `npm run test:integration -- --grep "frontmatter-write|vault-write-durable|atomic-write"`
+  - `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts tests/unit/single-write-primitive.test.ts tests/unit/document-batch-lock-contention.test.ts`
+  - `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts tests/integration/vault-write-durable.integration.test.ts`
 </specifics>
 
 <deferred>

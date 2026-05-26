@@ -348,15 +348,15 @@ await writeVaultFile(absolutePath, updatedContent);
 |----------|-------|
 | Framework | Vitest 4.1.1 in `package.json`. [VERIFIED: `package.json`] |
 | Config file | `tests/config/vitest.unit.config.ts`; integration config `tests/config/vitest.integration.config.ts`. [VERIFIED: test config files] |
-| Quick run command | `npm test -- --grep "vault-write|atomic-write|durable"` [VERIFIED: `.planning/ROADMAP.md`] |
-| Full suite command | `npm run test:integration -- --grep "frontmatter-write|vault-write-durable|atomic-write"` [VERIFIED: `.planning/ROADMAP.md`] |
+| Quick run command | `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/vault-write-durable.test.ts tests/unit/single-write-primitive.test.ts tests/unit/document-batch-lock-contention.test.ts` [VERIFIED: Vitest 4 uses file filters / `--testNamePattern`, not grep-style filtering] |
+| Full suite command | `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts tests/integration/vault-write-durable.integration.test.ts` [VERIFIED: Vitest 4 uses file filters / `--testNamePattern`, not grep-style filtering] |
 
 ### Phase Requirements -> Test Map
 
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|--------------|
-| REQ-020 | `writeVaultFile` returns SHA-256; write failures surface; all vault writes route through primitive. | unit/integration/static | `npm test -- --grep "vault-write|single-write-primitive"`; `npm run test:integration -- --grep "atomic-write-frontmatter"` | No - Wave 0 |
-| REQ-021 | Temp fsync, rename, directory fsync order; unique temp names; macOS durable branch; stale cleanup. | unit/integration | `npm test -- --grep "vault-write-durable"`; `npm run test:integration -- --grep "vault-write-durable"` | No - Wave 0 |
+| REQ-020 | `writeVaultFile` returns SHA-256; write failures surface; all vault writes route through primitive. | unit/integration/static | `npm test -- tests/unit/vault-write-primitive.test.ts tests/unit/single-write-primitive.test.ts`; `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts` | No - Wave 0 |
+| REQ-021 | Temp fsync, rename, directory fsync order; unique temp names; macOS durable branch; stale cleanup. | unit/integration | `npm test -- tests/unit/vault-write-durable.test.ts`; `npm run test:integration -- tests/integration/vault-write-durable.integration.test.ts` | No - Wave 0 |
 
 ### Required Test IDs
 
@@ -374,8 +374,8 @@ await writeVaultFile(absolutePath, updatedContent);
 
 ### Sampling Rate
 
-- **Per task commit:** `npm test -- --grep "vault-write|atomic-write|durable"` [VERIFIED: `.planning/ROADMAP.md`]
-- **Per wave merge:** `npm run test:integration -- --grep "frontmatter-write|vault-write-durable|atomic-write"` [VERIFIED: `.planning/ROADMAP.md`]
+- **Per task commit:** run the task's explicit unit/integration file targets. [VERIFIED: Vitest 4 CLI]
+- **Per wave merge:** `npm run test:integration -- tests/integration/atomic-write-frontmatter.integration.test.ts tests/integration/vault-write-durable.integration.test.ts` [VERIFIED: Vitest 4 CLI]
 - **Phase gate:** targeted unit and integration evidence green before `$gsd-verify-work`. [ASSUMED]
 
 ### Wave 0 Gaps
