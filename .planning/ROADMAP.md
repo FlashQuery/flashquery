@@ -41,7 +41,7 @@
 - [x] **Phase 155: Per-file Tier 1 + Live-defect Close** - Same-process document writes serialize per file, and unlocked compound document mutations stop losing updates. (completed 2026-05-26)
 - [x] **Phase 156: Atomic + Durable Write Primitive Consolidation** - Every vault write uses one durable atomic write path that surfaces failures. (completed 2026-05-26)
 - [x] **Phase 157: Records / Memory / Plugins Audit + Guards** - Non-file subsystems remain coherent after the legacy lock table is removed. (completed 2026-05-26)
-- [ ] **Phase 158: Tier 2 + Lock-table Retirement + Session Check** - Cross-process writes use session-scoped Postgres advisory locks and the old lock table/CLI disappears.
+- [x] **Phase 158: Tier 2 + Lock-table Retirement + Session Check** - Cross-process writes use session-scoped Postgres advisory locks and the old lock table/CLI disappears. (completed 2026-05-26)
 - [ ] **Phase 159: Lock Timeout + Canonical Key Derivation** - Lock acquisition is bounded and all file/directory keys resolve to canonical path-based identities.
 - [ ] **Phase 160: Folder Locks + Manage Directory Migration** - Folder operations coordinate safely with descendant file writes using shared/exclusive advisory locks.
 - [ ] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices.
@@ -153,7 +153,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 158-03-PLAN.md — Session-capable startup self-test, failure behavior, docs, and REQ-005 tests.
+- [x] 158-03-PLAN.md — Session-capable startup self-test, failure behavior, docs, and REQ-005 tests.
 - [x] 158-04-PLAN.md — Stale legacy write-lock behavior test cleanup.
 - [x] 158-05-PLAN.md — Config/schema/fixture expectation cleanup after lock-table retirement.
 - [x] 158-06-PLAN.md — Phase 157 gap-fix test alignment with legacy lock retirement.
@@ -269,7 +269,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 155. Per-file Tier 1 + Live-defect Close | 3/3 | Complete   | 2026-05-26 |
 | 156. Atomic + Durable Write Primitive Consolidation | 3/3 | Complete    | 2026-05-26 |
 | 157. Records / Memory / Plugins Audit + Guards | 0/TBD | Not started | - |
-| 158. Tier 2 + Lock-table Retirement + Session Check | 5/6 | In Progress|  |
+| 158. Tier 2 + Lock-table Retirement + Session Check | 6/6 | Complete   | 2026-05-26 |
 | 159. Lock Timeout + Canonical Key Derivation | 0/TBD | Not started | - |
 | 160. Folder Locks + Manage Directory Migration | 0/TBD | Not started | - |
 | 161. Destination Locks + EXDEV Fallback | 0/TBD | Not started | - |

@@ -1029,7 +1029,7 @@ If during implementation the dev agent finds any decision genuinely underspecifi
 | REQ-002 | Phase 158 | Pending |
 | REQ-003 | Phase 159 | Pending |
 | REQ-004 | Phase 158 | Complete |
-| REQ-005 | Phase 158 | Pending |
+| REQ-005 | Phase 158 | Complete |
 | REQ-006 | Phase 159 | Pending |
 | REQ-007 | Phase 160 | Pending |
 | REQ-008 | Phase 161 | Pending |

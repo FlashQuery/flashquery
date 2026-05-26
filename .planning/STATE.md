@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.9
 milestone_name: Vault Write Coherency Locking
 status: executing
-stopped_at: Completed 158-02-PLAN.md
-last_updated: "2026-05-26T20:51:01.267Z"
+stopped_at: Completed 158-03-PLAN.md
+last_updated: "2026-05-26T20:52:24.950Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 15
-  completed_plans: 14
-  percent: 33
+  completed_plans: 15
+  percent: 44
 ---
 
 # FlashQuery Core — State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-26)
 ## Current Position
 
 Phase: 158 (tier-2-lock-table-retirement-session-check) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-05-26
 
-Progress: [█████████░] 93%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
@@ -59,6 +59,7 @@ Progress: [█████████░] 93%
 | Phase 158 P06 | 3min | 1 tasks | 4 files |
 | Phase 158 P05 | 266s | 1 tasks | 9 files |
 | Phase 158 P04 | 7min | 1 tasks | 8 files |
+| Phase 158 P03 | 8min | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Progress: [█████████░] 93%
 - [Phase 158]: Plan 05 schema verification tests use active required tables such as fqc_purpose_templates rather than the retired write-lock table for missing-table coverage.
 - [Phase 158]: Plan 04 deleted service-only write-lock test files because their only subject was the retired fqc_write_locks implementation.
 - [Phase 158]: Plan 04 kept user-facing archive, macro, and manage_directory coverage while removing table-row contention expectations.
+- [Phase 158]: Plan 03 validates session-scoped advisory-lock behavior at startup with owner/observer Postgres checkouts and fails closed for suspected transaction-mode pooler DATABASE_URLs. — REQ-005 requires catching transaction-mode pooler misconfiguration before MCP traffic is accepted.
+- [Phase 158]: Plan 03 keeps ignored flashquery.yml updated locally and commits equivalent session-capable DATABASE_URL guidance to tracked flashquery.example.yml. — flashquery.yml is local ignored config; the tracked template is required for shipped operator setup guidance.
 
 ### Carried Forward
 
@@ -103,6 +106,6 @@ None active.
 
 ## Session Continuity
 
-Last session: 2026-05-26T20:50:05.525Z
-Stopped at: Completed 158-02-PLAN.md
+Last session: 2026-05-26T20:52:24.929Z
+Stopped at: Completed 158-03-PLAN.md
 Resume file: None
