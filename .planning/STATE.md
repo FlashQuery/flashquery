@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-05-26)
 ## Current Position
 
 Phase: 155 of 163 (Per-file Tier 1 + Live-defect Close)
-Plan: Not started
-Status: Ready to plan Phase 155
-Last activity: 2026-05-26 — Roadmap created for v3.9
+Plan: 155-01 ready
+Status: Phase 155 planned; ready to execute 155-01-PLAN.md
+Last activity: 2026-05-26 — Phase 155 planned and verified
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -42,7 +42,7 @@ Progress: [░░░░░░░░░░] 0%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 155 | TBD | - | - |
+| 155 | 0 | 3 | - |
 | 156 | TBD | - | - |
 | 157 | TBD | - | - |
 | 158 | TBD | - | - |

@@ -63,7 +63,10 @@
   - Create or update the Test Plan §4.1.1, §4.1.9, §4.1.10, and §4.1.11 cases: `T-U-001`, `T-U-002`, `T-U-016` through `T-U-019`, `T-U-038`, `T-I-001`, `T-I-002`, `T-I-017`, `T-I-018`, `T-I-049` through `T-I-051`, `T-S-001`, `T-S-004`, and `T-S-008`.
   - Include Phase 155 scaffolding checks for basic lock-key behavior from Test Plan §4.1.3 where needed, but full REQ-003 completion remains Phase 159.
   - Required execution evidence: `npm test -- --grep "document-lock|with-document-lock|macro-no-lock"`; `npm run test:integration -- --grep "per-file|apply-tags|insert-doc-link|call-macro-per-step"`; directed scenarios for `D-WCO-01`, `D-WCO-04`, and `D-WCO-08` when those scenarios land.
-**Plans**: TBD
+**Plans**:
+  - `155-01-PLAN.md` — Document-lock facade, helper tests, and scanner repair integration.
+  - `155-02-PLAN.md` — Document/compound call-site migration and macro no-lock guard.
+  - `155-03-PLAN.md` — Directed scenarios, coverage rows, and final Phase 155 evidence.
 
 ### Phase 156: Atomic + Durable Write Primitive Consolidation
 **Goal**: Users never see torn vault files, and any failed vault write is reported instead of disappearing behind a swallowed error.

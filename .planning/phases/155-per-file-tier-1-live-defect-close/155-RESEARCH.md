@@ -240,17 +240,17 @@ Known threat pattern: path traversal or symlink escape if lock keys are derived 
 | A2 | Use explicit acquire/release in helper if composing temporary Tier 2 pass-through. | Architecture Patterns | Could use `runExclusive`; correctness depends on release order tests. |
 | A3 | Scanner repair should be a planner checkpoint rather than automatic Phase 155 work. | Risk Boundaries | Missing scanner lock could leave a same-process writer outside the new helper. |
 
-## Open Questions
+## Resolved Planning Decisions
 
-1. **Should Phase 155 include `repairFrontmatter` under `withDocumentLock`?**
-   - What we know: `repairFrontmatter` writes vault files outside `scanMutex`, and product docs mention scanner per-document writes adopting per-file locks. [VERIFIED: codebase grep, product Requirements]
-   - What's unclear: Phase 155 success criteria focus document mutations and live compound defects. [VERIFIED: `.planning/ROADMAP.md`]
-   - Recommendation: Planner should include a small checkpoint task to decide; if included, keep it to wrapping `repairFrontmatter` writes only. [ASSUMED]
+1. **`repairFrontmatter` is in Phase 155.**
+   - Decision: Include `src/services/scanner.ts` in the plan and wrap the scanner `repairFrontmatter` vault write with `withDocumentLock`.
+   - Rationale: `.planning/REQUIREMENTS.md` §8.3 explicitly lists scanner per-document writes adopting the per-file lock in Phase 155, and leaving it out would leave a vault write path outside the new same-process coordination.
+   - Boundary: Do not refactor scanner token-stability, durable writes, or broader scan scheduling in this phase.
 
-2. **How much destination locking belongs in `copy_document` / create-mode `write_document` now?**
-   - What we know: Phase 161 owns destination locks, but Phase 155 includes `copy.ts`/`move.ts` call-site migration. [VERIFIED: `.planning/REQUIREMENTS.md` §8.3, §8.9]
-   - What's unclear: Whether same-process destination races must be fully closed before Phase 161. [ASSUMED]
-   - Recommendation: Add only enough lock-key scaffolding for current call-site migration; reserve full destination race acceptance for Phase 161. [ASSUMED]
+2. **Destination-lock completeness remains deferred.**
+   - Decision: Phase 155 locks create/copy/move call sites only enough to replace the coarse `'documents'` lock and provide same-process per-file behavior through the helper.
+   - Rationale: Phase 161 owns full destination-path lock semantics, EXDEV completion, and destination race acceptance criteria. Phase 155 must not claim full REQ-008 or full REQ-003 completion.
+   - Boundary: Add basic key scaffolding tests for Phase 155, but do not implement full realpath/case-folding canonical derivation.
 
 ## Sources
 
