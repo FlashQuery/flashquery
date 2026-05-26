@@ -39,7 +39,7 @@
 ## Phases
 
 - [x] **Phase 155: Per-file Tier 1 + Live-defect Close** - Same-process document writes serialize per file, and unlocked compound document mutations stop losing updates. (completed 2026-05-26)
-- [ ] **Phase 156: Atomic + Durable Write Primitive Consolidation** - Every vault write uses one durable atomic write path that surfaces failures.
+- [x] **Phase 156: Atomic + Durable Write Primitive Consolidation** - Every vault write uses one durable atomic write path that surfaces failures. (completed 2026-05-26)
 - [ ] **Phase 157: Records / Memory / Plugins Audit + Guards** - Non-file subsystems remain coherent after the legacy lock table is removed.
 - [ ] **Phase 158: Tier 2 + Lock-table Retirement + Session Check** - Cross-process writes use session-scoped Postgres advisory locks and the old lock table/CLI disappears.
 - [ ] **Phase 159: Lock Timeout + Canonical Key Derivation** - Lock acquisition is bounded and all file/directory keys resolve to canonical path-based identities.
@@ -85,7 +85,7 @@
 Plans:
 - [x] 156-01-PLAN.md — Durable `writeVaultFile` primitive, unit coverage, and macOS F_FULLFSYNC decision checkpoint.
 - [x] 156-02-PLAN.md — Migrate VaultManager, frontmatter, resolver repair, and plugin reconciliation write paths.
-- [ ] 156-03-PLAN.md — Static write-path guard, integration routing/cleanup evidence, and final Phase 156 audit summary.
+- [x] 156-03-PLAN.md — Static write-path guard, integration routing/cleanup evidence, and final Phase 156 audit summary.
 
 ### Phase 157: Records / Memory / Plugins Audit + Guards
 **Goal**: Users can keep using records, memory, and plugin operations safely after the old coarse lock table is removed.
@@ -200,7 +200,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 155. Per-file Tier 1 + Live-defect Close | 3/3 | Complete   | 2026-05-26 |
-| 156. Atomic + Durable Write Primitive Consolidation | 2/3 | In Progress|  |
+| 156. Atomic + Durable Write Primitive Consolidation | 3/3 | Complete   | 2026-05-26 |
 | 157. Records / Memory / Plugins Audit + Guards | 0/TBD | Not started | - |
 | 158. Tier 2 + Lock-table Retirement + Session Check | 0/TBD | Not started | - |
 | 159. Lock Timeout + Canonical Key Derivation | 0/TBD | Not started | - |
