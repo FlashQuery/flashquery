@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v3.9
 milestone_name: Vault Write Coherency Locking
-status: ready_to_plan
-stopped_at: Phase 157 complete (3/3) — ready to discuss Phase 158
-last_updated: 2026-05-26T18:53:11Z
+status: executing
+stopped_at: Completed 158-02-PLAN.md
+last_updated: "2026-05-26T20:40:13.531Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 9
   completed_phases: 3
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 15
+  completed_plans: 11
   percent: 33
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-26)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 158 — Tier 2 + Lock-table Retirement + Session Check
+**Current focus:** Phase 158 — tier-2-lock-table-retirement-session-check
 
 ## Current Position
 
-Phase: 158
-Plan: Not started
-Status: Ready to plan
+Phase: 158 (tier-2-lock-table-retirement-session-check) — EXECUTING
+Plan: 2 of 6
+Status: Ready to execute
 Last activity: 2026-05-26
 
-Progress: [██████████] 100%
+Progress: [███████░░░] 73%
 
 ## Performance Metrics
 
@@ -47,7 +47,7 @@ Progress: [██████████] 100%
 | 155 | 3 | - | - |
 | 156 | 3 | - | - |
 | 157 | 3 | - | - |
-| 158 | TBD | - | - |
+| 158 | 6 | - | - |
 | 159 | TBD | - | - |
 | 160 | TBD | - | - |
 | 161 | TBD | - | - |
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 | 163 | TBD | - | - |
 
 *Updated after each plan completion*
+| Phase 158-tier-2-lock-table-retirement-session-check P02 | 8 min | 2 tasks | 13 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,8 @@ Progress: [██████████] 100%
 - The milestone uses REQUIREMENTS.md §8's 9-phase plan as canonical.
 - REQ-003 is mapped only to Phase 159 for exact-once traceability; Phase 155 may use a temporary basic key as scaffolding without claiming REQ-003 completion.
 - Phase 157 removed coarse records/memory/plugins lock usage. Memory relies on `fqc_memory_create_version`; records and plugin unregister use scoped plugin advisory coordination.
+- [Phase 158]: Run DROP TABLE IF EXISTS fqc_write_locks after normal schema DDL and before schema verification so startup retires existing legacy tables without recreating them. — Verification should prove the legacy table is absent after initSupabase rather than only absent from source DDL.
+- [Phase 158]: Keep only locking.enabled in effective config; legacy locking.ttl_seconds is accepted, removed before camelCase conversion, and surfaced through getDeprecationWarnings. — REQ-004 retires TTL table-lock behavior while keeping old YAML files load-compatible.
 
 ### Carried Forward
 
@@ -92,6 +95,6 @@ None active.
 
 ## Session Continuity
 
-Last session: 2026-05-26T18:53:11Z
-Stopped at: Completed 157-03-PLAN.md
+Last session: 2026-05-26T20:39:17.814Z
+Stopped at: Completed 158-02-PLAN.md
 Resume file: None
