@@ -38,7 +38,7 @@
 
 ## Phases
 
-- [ ] **Phase 155: Per-file Tier 1 + Live-defect Close** - Same-process document writes serialize per file, and unlocked compound document mutations stop losing updates.
+- [x] **Phase 155: Per-file Tier 1 + Live-defect Close** - Same-process document writes serialize per file, and unlocked compound document mutations stop losing updates. (completed 2026-05-26)
 - [ ] **Phase 156: Atomic + Durable Write Primitive Consolidation** - Every vault write uses one durable atomic write path that surfaces failures.
 - [ ] **Phase 157: Records / Memory / Plugins Audit + Guards** - Non-file subsystems remain coherent after the legacy lock table is removed.
 - [ ] **Phase 158: Tier 2 + Lock-table Retirement + Session Check** - Cross-process writes use session-scoped Postgres advisory locks and the old lock table/CLI disappears.
@@ -195,7 +195,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 155. Per-file Tier 1 + Live-defect Close | 2/3 | In Progress|  |
+| 155. Per-file Tier 1 + Live-defect Close | 3/3 | Complete   | 2026-05-26 |
 | 156. Atomic + Durable Write Primitive Consolidation | 0/TBD | Not started | - |
 | 157. Records / Memory / Plugins Audit + Guards | 0/TBD | Not started | - |
 | 158. Tier 2 + Lock-table Retirement + Session Check | 0/TBD | Not started | - |
