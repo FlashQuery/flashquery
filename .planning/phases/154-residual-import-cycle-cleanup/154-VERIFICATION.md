@@ -74,7 +74,7 @@ overrides_applied: 0
 | Final pinned zero-cycle graph | `npx --yes madge@8.0.0 src --extensions ts --circular` | Exit 0; processed 142 files; no circular dependency found | PASS |
 | Roadmap parity zero-cycle graph | `npx --yes madge src --extensions ts --circular` | Exit 0; processed 142 files; no circular dependency found | PASS |
 | Focused unit regression suite | `npm test -- tests/unit/circular-deps.test.ts ... tests/unit/mcp-server-correlation.test.ts` | 11 files passed, 226 tests passed | PASS |
-| Focused integration regression suite | `npm run test:integration -- tests/integration/reference-resolver.integration.test.ts tests/integration/server/shutdown-mcp-drain.test.ts` | 2 files passed, 12 tests passed; one expected background embedding error logged due no API key | PASS |
+| Focused integration regression suite | `npm run test:integration -- tests/integration/server/shutdown-mcp-drain.test.ts tests/integration/reference-resolver.integration.test.ts` | 2 files passed, 12 tests passed; includes T-I-010 reference hydration carrier and T-I-011 shutdown drain carrier; one expected background embedding error logged due no API key | PASS |
 | TypeScript command gate | `npm run typecheck` | Exit 0 | PASS |
 | ESLint command gate | `npm run lint` | Exit 0 | PASS |
 | Knip command gate | `npm run knip` | Exit 0 | PASS |
@@ -92,7 +92,7 @@ overrides_applied: 0
 | Requirement | Source Plan | Description | Status | Evidence |
 |---|---|---|---|---|
 | REQ-010 | 154-01, 154-06 | Config and LLM validation/registry imports are acyclic | SATISFIED | `src/config/loader.ts:6-8`; T-U-032 present; pinned madge and focused unit gates passed. |
-| REQ-011 | 154-02, 154-04, 154-05, 154-06 | LLM runtime, template, reference, embedding, storage, and logging imports are acyclic | SATISFIED | Leaf modules exist and are wired; T-U-033 present; unit/integration behavior gates and madge passed. |
+| REQ-011 | 154-02, 154-04, 154-05, 154-06 | LLM runtime, template, reference, embedding, storage, and logging imports are acyclic | SATISFIED | Leaf modules exist and are wired; T-U-033 present; T-I-010 is carried by `tests/integration/reference-resolver.integration.test.ts` and passes via `npm run test:integration -- tests/integration/server/shutdown-mcp-drain.test.ts tests/integration/reference-resolver.integration.test.ts`; unit/integration behavior gates and madge passed. |
 | REQ-012 | 154-03, 154-06 | MCP server and shutdown lifecycle imports are acyclic | SATISFIED | Registry module owns lifecycle state; T-U-034/T-U-037/T-I-011 covered; no direct/dynamic server-shutdown back-edge found. |
 
 No orphaned Phase 154 requirements were found in `.planning/REQUIREMENTS.md`; REQ-010, REQ-011, and REQ-012 are all claimed by plans and verified above.

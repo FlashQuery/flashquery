@@ -77,7 +77,7 @@ describe.skipIf(!HAS_SUPABASE)('reference resolver integration (ATL-I-04)', () =
     }
   });
 
-  it('hydrates path, fq_id, section, pointer, ambiguity, and non-recursive metadata against real vault files', async () => {
+  it('T-I-010 hydrates path, fq_id, section, pointer, ambiguity, and non-recursive metadata against real vault files', async () => {
     const targetId = await seedDocument(vaultPath, 'Refs/target.md', 'Target', 'TARGET BODY\n\n## Details\n\nSECTION BODY\n');
     await seedDocument(vaultPath, 'Refs/source.md', 'Source', 'SOURCE BODY', { pointer: 'Refs/target.md' });
     await seedDocument(vaultPath, 'Dup/a/shared.md', 'Shared A', 'A');

@@ -145,7 +145,7 @@ describe('ShutdownCoordinator MCP request drain integration', () => {
     expect(elapsedMs).toBeLessThan(100);
   });
 
-  it('T-I-010 waits for an already-running tracked handler before continuing', async () => {
+  it('waits for an already-running tracked handler before continuing', async () => {
     const server = createRegisteredTestMcpServer();
     const lifecycle = getMcpRequestLifecycleForServer(server);
     const coordinator = new ShutdownCoordinator(makeConfig());
