@@ -19,6 +19,13 @@ function madgeOutput(result: SpawnSyncReturns<string>): string {
   return output;
 }
 
+function combinedOutput(result: SpawnSyncReturns<string>): string {
+  if (result.error) {
+    throw result.error;
+  }
+  return [result.stdout, result.stderr].filter(Boolean).join('\n');
+}
+
 function expectNoForbiddenFragment(output: string, label: string, fragments: string[]): void {
   const matchingLines = output
     .split(/\r?\n/)
@@ -93,11 +100,20 @@ describe('Phase 149 targeted circular dependency gate', () => {
 });
 
 describe('Phase 154 targeted circular dependency gate', () => {
+  let result: SpawnSyncReturns<string>;
   let output: string;
 
   beforeAll(() => {
-    output = madgeOutput(runMadgeCircular());
+    result = runMadgeCircular();
+    output = madgeOutput(result);
   }, 30_000);
+
+  it('T-U-031 keeps the final production src graph free of circular dependencies', () => {
+    expect(
+      result.status,
+      `Final pinned madge zero-cycle guard failed:\n${combinedOutput(result)}`
+    ).toBe(0);
+  });
 
   it('T-U-032 keeps REQ-010 config loader cycles absent from madge output', () => {
     const matchingLines = output
@@ -107,6 +123,41 @@ describe('Phase 154 targeted circular dependency gate', () => {
     expect(
       matchingLines,
       `REQ-010 config/loader.ts circular dependency lines still present:\n${matchingLines.join('\n') || output}`
+    ).toEqual([]);
+  });
+
+  it('T-U-033 keeps REQ-011 LLM runtime/template/reference/embedding family cycles absent from madge output', () => {
+    const familyFragments = [
+      'llm/client.ts',
+      'llm/resolver.ts',
+      'llm/config-sync.ts',
+      'llm/purpose-template-bindings.ts',
+      'llm/template-tools.ts',
+      'llm/reference-resolver.ts',
+      'llm/types.ts',
+      'embedding/provider.ts',
+      'embedding/background-embed.ts',
+      'storage/supabase.ts',
+      'logging/logger.ts',
+    ];
+    const matchingLines = output
+      .split(/\r?\n/)
+      .filter((line) => familyFragments.some((fragment) => line.includes(fragment)));
+
+    expect(
+      matchingLines,
+      `REQ-011 LLM/runtime/template/reference/embedding circular dependency lines still present:\n${matchingLines.join('\n') || output}`
+    ).toEqual([]);
+  });
+
+  it('T-U-034 keeps REQ-012 MCP server/shutdown lifecycle cycles absent from madge output', () => {
+    const matchingLines = output
+      .split(/\r?\n/)
+      .filter((line) => line.includes('mcp/server.ts') && line.includes('server/shutdown.ts'));
+
+    expect(
+      matchingLines,
+      `REQ-012 mcp/server.ts and server/shutdown.ts circular dependency lines still present:\n${matchingLines.join('\n') || output}`
     ).toEqual([]);
   });
 });
