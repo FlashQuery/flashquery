@@ -10,7 +10,7 @@ import { supabaseManager } from '../../../storage/supabase.js';
 import { embeddingProvider } from '../../../embedding/provider.js';
 import { documentEmbeddingTarget, scheduleBackgroundEmbedding } from '../../../embedding/background-embed.js';
 import { logger } from '../../../logging/logger.js';
-import { acquireLock, releaseLock } from '../../../services/write-lock.js';
+import { LockTimeoutError, withDocumentLock } from '../../../services/document-lock.js';
 import { validateAllTags, deduplicateTags } from '../../../utils/tag-validator.js';
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { serializeOrderedFrontmatter } from '../../utils/frontmatter-sanitizer.js';
@@ -62,22 +62,6 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
         const tagsError = resolveTagsFrontmatterConflict(tags, frontmatter);
         if (tagsError) return jsonExpectedError(tagsError);
 
-        if (config.locking.enabled) {
-          const locked = await acquireLock(
-            supabaseManager.getClient(),
-            config.instance.id,
-            'documents',
-            { ttlSeconds: config.locking.ttlSeconds }
-          );
-          if (!locked) {
-            return jsonExpectedError({
-              error: 'conflict',
-              message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
-              details: { reason: 'lock_contention' },
-            });
-          }
-        }
-
         try {
           const supabase = supabaseManager.getClient();
           const vaultRoot = config.instance.vault.path;
@@ -93,6 +77,7 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
             }
             const relativePath = validation.relativePath;
             const absolutePath = validation.absPath;
+            return await withDocumentLock(config, absolutePath, async () => {
             if (existsSync(absolutePath)) {
               try {
                 const statResult = await stat(absolutePath);
@@ -209,8 +194,11 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
               modified: now,
               chars: body.length,
             }), [...warnings, ...embedResult.warnings]));
+            });
           }
 
+          const initialResolved = await resolveDocumentIdentifier(config, supabase, identifier as string, logger);
+          return await withDocumentLock(config, initialResolved.absPath, async () => {
           const resolved = await resolveDocumentIdentifier(config, supabase, identifier as string, logger);
           const rawContent = await readFile(resolved.absPath, 'utf-8');
           const parsed = matter(rawContent);
@@ -289,7 +277,16 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
             modified: new Date().toISOString(),
             chars: effectiveBody.length,
           }), embedResult.warnings));
+          });
         } catch (err) {
+          if (err instanceof LockTimeoutError) {
+            return jsonExpectedError({
+              error: 'conflict',
+              message: err.message,
+              identifier: identifier ?? path,
+              details: { reason: 'lock_contention' },
+            });
+          }
           if (isDocumentNotFoundError(err)) {
             return jsonExpectedError({
               error: 'not_found',
@@ -307,10 +304,6 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
           const msg = err instanceof Error ? err.message : String(err);
           logger.error(`write_document failed - ${msg}`);
           return jsonRuntimeError({ message: `Error writing document: ${msg}`, identifier });
-        } finally {
-          if (config.locking.enabled) {
-            await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-          }
         }
       }
     );

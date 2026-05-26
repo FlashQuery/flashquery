@@ -193,7 +193,7 @@ describe('archive_document JSON result helpers', () => {
     ]);
   });
 
-  it('T-U-225 lock acquisition: archive_document acquires the standard documents lock before mutation', async () => {
+  it('T-U-225 lock acquisition: archive_document acquires the per-file document lock before mutation', async () => {
     setupSuccessfulArchive();
     const handler = await createArchiveHandler(makeConfig(true));
 
@@ -202,7 +202,7 @@ describe('archive_document JSON result helpers', () => {
     expect(lockMock.acquireLock).toHaveBeenCalledWith(
       expect.anything(),
       'unit',
-      'documents',
+      'document:/tmp/fq-unit/Notes/Archive Me.md',
       { ttlSeconds: 30 }
     );
     expect(lockMock.acquireLock.mock.invocationCallOrder[0]).toBeLessThan(
@@ -210,13 +210,13 @@ describe('archive_document JSON result helpers', () => {
     );
   });
 
-  it('T-U-226 release in finally: archive_document releases the standard documents lock', async () => {
+  it('T-U-226 release in finally: archive_document releases the per-file document lock', async () => {
     setupSuccessfulArchive();
     const handler = await createArchiveHandler(makeConfig(true));
 
     await handler({ identifiers: 'Notes/Archive Me.md' });
 
-    expect(lockMock.releaseLock).toHaveBeenCalledWith(expect.anything(), 'unit', 'documents');
+    expect(lockMock.releaseLock).toHaveBeenCalledWith(expect.anything(), 'unit', 'document:/tmp/fq-unit/Notes/Archive Me.md');
   });
 
   it('T-U-227 lock timeout: archive_document returns conflict lock_contention before archive mutation', async () => {

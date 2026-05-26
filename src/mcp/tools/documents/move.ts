@@ -7,7 +7,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vaultManager } from '../../../storage/vault.js';
 import { supabaseManager } from '../../../storage/supabase.js';
 import { logger } from '../../../logging/logger.js';
-import { acquireLock, releaseLock } from '../../../services/write-lock.js';
+import { LockTimeoutError, withDocumentLocks } from '../../../services/document-lock.js';
 import { resolveDocumentIdentifier } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult, documentIdentification, withWarnings } from '../../utils/response-formats.js';
@@ -43,23 +43,6 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
             ],
             isError: true,
           };
-        }
-
-        if (config.locking.enabled) {
-          const locked = await acquireLock(
-            supabaseManager.getClient(),
-            config.instance.id,
-            'documents',
-            { ttlSeconds: config.locking.ttlSeconds }
-          );
-          if (!locked) {
-            return jsonExpectedError({
-              error: 'conflict',
-              message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
-              identifier,
-              details: { reason: 'lock_contention' },
-            });
-          }
         }
 
         try {
@@ -123,6 +106,7 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
             destAbsPath = join(parentValidation.absPath, destBase);
           }
           const normalizedDest = normalize(destAbsPath);
+          return await withDocumentLocks(config, [sourceAbsPath, normalizedDest], async () => {
 
           // Step 4: Check if destination already exists
           if (existsSync(destAbsPath)) {
@@ -234,7 +218,16 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
           });
 
           return jsonToolResult(withWarnings(payload, warnings));
+          });
         } catch (err) {
+          if (err instanceof LockTimeoutError) {
+            return jsonExpectedError({
+              error: 'conflict',
+              message: err.message,
+              identifier,
+              details: { reason: 'lock_contention' },
+            });
+          }
           if (isDocumentNotFoundError(err)) {
             return jsonExpectedError({
               error: 'not_found',
@@ -254,10 +247,6 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
           const msg = err instanceof Error ? err.message : String(err);
           logger.error(`move_document failed - ${msg}`);
           return jsonRuntimeError({ message: `Error moving document: ${msg}`, identifier });
-        } finally {
-          if (config.locking.enabled) {
-            await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-          }
         }
       }
     );

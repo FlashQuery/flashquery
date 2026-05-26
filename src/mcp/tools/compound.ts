@@ -13,7 +13,7 @@ import {
 } from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import { pluginManager } from '../../plugins/manager.js';
-import { acquireLock, releaseLock } from '../../services/write-lock.js';
+import { LockTimeoutError, withDocumentLock } from '../../services/document-lock.js';
 import { validateAllTags, normalizeTags, deduplicateTags } from '../../utils/tag-validator.js';
 import { resolveDocumentIdentifier, targetedScan } from '../utils/resolve-document.js';
 import { AmbiguousDocumentIdentifierError, DocumentNotFoundError } from '../utils/resolve-document.js';
@@ -220,6 +220,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         for (const sourceIdentifier of sourceIdentifiers) {
           try {
             const sourceResolved = await resolveDocumentIdentifier(config, supabase, sourceIdentifier, logger);
+            await withDocumentLock(config, sourceResolved.absPath, async () => {
             const raw = await readFile(sourceResolved.absPath, 'utf-8');
             const parsed = matter(raw);
 
@@ -256,6 +257,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 path: targetResolved.relativePath,
                 title: targetTitle,
               },
+            });
             });
           } catch (sourceErr) {
             results.push(documentResolutionError(sourceErr, sourceIdentifier));
@@ -357,6 +359,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             try {
               // Resolve identifier
               const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
+              await withDocumentLock(config, resolved.absPath, async () => {
 
               const absPath = resolved.absPath;
               const relativePath = resolved.relativePath;
@@ -385,7 +388,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                   identifier: id,
                   details: { field: 'tags' },
                 });
-                continue;
+                return;
               }
 
               // Write back frontmatter atomically with deduplicated tags (vault-authoritative, DCP-05, D-05a)
@@ -445,6 +448,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 }),
                 tags: dedupTagsForSync,
                 entity_type: 'document',
+              });
               });
             } catch (itemErr) {
               const msg = itemErr instanceof Error ? itemErr.message : String(itemErr);
@@ -1036,7 +1040,6 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         };
       }
 
-      let lockAcquired = false;
       try {
         // Validate position
         const validPositions = ['top', 'bottom', 'after_heading', 'before_heading', 'end_of_section'];
@@ -1058,32 +1061,16 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           });
         }
 
-        if (config.locking.enabled) {
-          lockAcquired = await acquireLock(
-            supabaseManager.getClient(),
-            config.instance.id,
-            'documents',
-            { ttlSeconds: config.locking.ttlSeconds }
-          );
-          if (!lockAcquired) {
-            return jsonExpectedError({
-              error: 'conflict',
-              message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
-              identifier,
-              details: { reason: 'lock_contention' },
-            });
-          }
-        }
+         // Resolve document identifier
+         const resolved = await resolveDocumentIdentifier(
+           config,
+           supabaseManager.getClient(),
+           identifier,
+           logger
+         );
+         return await withDocumentLock(config, resolved.absPath, async () => {
 
-        // Resolve document identifier
-        const resolved = await resolveDocumentIdentifier(
-          config,
-          supabaseManager.getClient(),
-          identifier,
-          logger
-        );
-
-        // Read file
+         // Read file
         const rawContent = await readFile(resolved.absPath, 'utf-8');
         const parsed = matter(rawContent);
         const { data: frontmatter, content: body } = parsed;
@@ -1168,7 +1155,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         logger.info(`insert_in_doc: path="${relativePath}" position="${position}" heading="${heading || 'N/A'}"`);
 
-        return jsonToolResult(withWarnings({
+         return jsonToolResult(withWarnings({
           ...documentIdentification({
             identifier,
             title: docTitle,
@@ -1189,18 +1176,15 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                   include_nested: include_nested ?? true,
                 },
               }),
-        }, embedResult.warnings));
-      } catch (err) {
+         }, embedResult.warnings));
+         });
+       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`insert_in_doc failed: ${msg}`);
-        return jsonRuntimeError({ message: `Error inserting in document: ${msg}`, identifier });
-      } finally {
-        if (lockAcquired) {
-          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-        }
-      }
-    }
-  );
+         logger.error(`insert_in_doc failed: ${msg}`);
+         return jsonRuntimeError({ message: `Error inserting in document: ${msg}`, identifier });
+       }
+     }
+   );
 
   // ─── Tool: replace_doc_section (SPEC-02) ────────────────────────────────────
 
@@ -1233,28 +1217,12 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         };
       }
 
-      if (config.locking.enabled) {
-        const locked = await acquireLock(
-          supabaseManager.getClient(),
-          config.instance.id,
-          'documents',
-          { ttlSeconds: config.locking.ttlSeconds }
-        );
-        if (!locked) {
-          return jsonExpectedError({
-            error: 'conflict',
-            message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
-            identifier,
-            details: { reason: 'lock_contention' },
-          });
-        }
-      }
-
       try {
         const supabase = supabaseManager.getClient();
 
         // Step 1: Resolve document identifier
         const resolved = await resolveDocumentIdentifier(config, supabase, identifier, logger);
+        return await withDocumentLock(config, resolved.absPath, async () => {
 
         // Step 2: Read document
         const document = await vaultManager.readMarkdown(resolved.relativePath);
@@ -1395,14 +1363,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           heading_match: heading_match ?? 'contains',
           ...(heading_level !== undefined ? { heading_level } : {}),
         }, embeddingWarnings));
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`replace_doc_section failed: ${msg}`);
         return jsonRuntimeError({ message: `Error replacing document section: ${msg}`, identifier });
-      } finally {
-        if (config.locking.enabled) {
-          await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-        }
       }
     }
   );

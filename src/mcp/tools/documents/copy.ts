@@ -10,7 +10,7 @@ import { supabaseManager } from '../../../storage/supabase.js';
 import { embeddingProvider } from '../../../embedding/provider.js';
 import { documentEmbeddingTarget, scheduleBackgroundEmbedding } from '../../../embedding/background-embed.js';
 import { logger } from '../../../logging/logger.js';
-import { acquireLock, releaseLock } from '../../../services/write-lock.js';
+import { LockTimeoutError, withDocumentLock } from '../../../services/document-lock.js';
 import { validateAllTags, deduplicateTags } from '../../../utils/tag-validator.js';
 import { resolveDocumentIdentifier } from '../../utils/resolve-document.js';
 import { serializeOrderedFrontmatter } from '../../utils/frontmatter-sanitizer.js';
@@ -64,23 +64,6 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
           });
         }
 
-        if (config.locking.enabled) {
-          const locked = await acquireLock(
-            supabaseManager.getClient(),
-            config.instance.id,
-            'documents',
-            { ttlSeconds: config.locking.ttlSeconds }
-          );
-          if (!locked) {
-            return jsonExpectedError({
-              error: 'conflict',
-              message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
-              identifier,
-              details: { reason: 'lock_contention' },
-            });
-          }
-        }
-
         try {
           // Resolve source document
           const sourceResolved = await resolveDocumentIdentifier(
@@ -128,6 +111,7 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
           const copyRelativePath = copyValidation.relativePath;
 
           const absPath = join(config.instance.vault.path, copyRelativePath);
+          return await withDocumentLock(config, absPath, async () => {
           if (existsSync(absPath)) {
             return jsonExpectedError({
               error: 'conflict',
@@ -197,7 +181,16 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
             modified,
             chars: written.content.length,
           }), embedResult.warnings));
+          });
         } catch (err) {
+          if (err instanceof LockTimeoutError) {
+            return jsonExpectedError({
+              error: 'conflict',
+              message: err.message,
+              identifier,
+              details: { reason: 'lock_contention' },
+            });
+          }
           if (isDocumentNotFoundError(err)) {
             return jsonExpectedError({
               error: 'not_found',
@@ -217,10 +210,6 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
           const msg = err instanceof Error ? err.message : String(err);
           logger.error(`copy_document failed - ${msg}`);
           return jsonRuntimeError({ message: `Error copying document: ${msg}`, identifier });
-        } finally {
-          if (config.locking.enabled) {
-            await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-          }
         }
       }
     );

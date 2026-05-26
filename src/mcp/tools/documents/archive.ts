@@ -6,7 +6,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vaultManager } from '../../../storage/vault.js';
 import { supabaseManager } from '../../../storage/supabase.js';
 import { logger } from '../../../logging/logger.js';
-import { acquireLock, releaseLock } from '../../../services/write-lock.js';
+import { LockTimeoutError, withDocumentLock } from '../../../services/document-lock.js';
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult, documentArchiveResult, type ErrorEnvelope } from '../../utils/response-formats.js';
@@ -44,22 +44,6 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
           };
         }
 
-        if (config.locking.enabled) {
-          const locked = await acquireLock(
-            supabaseManager.getClient(),
-            config.instance.id,
-            'documents',
-            { ttlSeconds: config.locking.ttlSeconds }
-          );
-          if (!locked) {
-            return jsonExpectedError({
-              error: 'conflict',
-              message: 'Write lock timeout: another instance is writing to documents. Retry in a few seconds.',
-              details: { reason: 'lock_contention' },
-            });
-          }
-        }
-
         try {
           const supabase = supabaseManager.getClient();
           const isBatch = Array.isArray(identifiers);
@@ -79,6 +63,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
 
               // Resolve identifier to a canonical path
               const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
+              await withDocumentLock(config, resolved.absPath, async () => {
               const relativePath = resolved.relativePath;
 
               // Step 1: Read current frontmatter (vault-first requires reading before writing)
@@ -189,6 +174,7 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                 chars: parsed.content.length,
                 archived_at: archivedAt,
               }));
+              });
             } catch (itemErr) {
               if (isDocumentNotFoundError(itemErr)) {
                 results.push({
@@ -229,13 +215,16 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
           }
           return jsonToolResult(results[0]);
         } catch (err) {
+          if (err instanceof LockTimeoutError) {
+            return jsonExpectedError({
+              error: 'conflict',
+              message: err.message,
+              details: { reason: 'lock_contention' },
+            });
+          }
           const msg = err instanceof Error ? err.message : String(err);
           logger.error(`archive_document failed - ${msg}`);
           return jsonRuntimeError(msg);
-        } finally {
-          if (config.locking.enabled) {
-            await releaseLock(supabaseManager.getClient(), config.instance.id, 'documents');
-          }
         }
       }
     );
