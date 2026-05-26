@@ -103,7 +103,7 @@ describe('verifySchema', () => {
     mockClient = { query: mockQuery } as unknown as pg.Client;
   });
 
-  it('verifies all required tables and columns exist including embedding retry state', async () => {
+  it('verifies all required tables and columns exist without the retired legacy write-lock table', async () => {
     // All tables exist
     mockQuery.mockImplementation((sql: string) => {
       if (sql.includes('information_schema.columns')) {
@@ -115,8 +115,8 @@ describe('verifySchema', () => {
     // Should not throw
     await expect(verifySchema(mockClient)).resolves.toBeUndefined();
 
-    // Verify that tableExists was called 12 times, plus 15 required-column checks.
-    expect(mockQuery).toHaveBeenCalledTimes(27);
+    // Verify that tableExists was called 11 times, plus 15 required-column checks.
+    expect(mockQuery).toHaveBeenCalledTimes(26);
   });
 
   it('throws error listing missing tables when one table is missing', async () => {
@@ -173,11 +173,11 @@ describe('verifySchema', () => {
     });
 
     await expect(verifySchema(mockClient)).rejects.toThrow(
-      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_plugin_registry, fqc_write_locks, fqc_llm_providers, fqc_llm_models, fqc_llm_purposes, fqc_llm_purpose_models, fqc_llm_usage, fqc_purpose_templates, fqc_pending_embeds]'
+      'Missing required tables after DDL: [fqc_memory, fqc_vault, fqc_documents, fqc_plugin_registry, fqc_llm_providers, fqc_llm_models, fqc_llm_purposes, fqc_llm_purpose_models, fqc_llm_usage, fqc_purpose_templates, fqc_pending_embeds]'
     );
 
-    // All 12 tables should be checked
-    expect(mockQuery).toHaveBeenCalledTimes(12);
+    // All 11 tables should be checked
+    expect(mockQuery).toHaveBeenCalledTimes(11);
   });
 
   it('checks tables in the correct order', async () => {
@@ -195,7 +195,6 @@ describe('verifySchema', () => {
       'fqc_vault',
       'fqc_documents',
       'fqc_plugin_registry',
-      'fqc_write_locks',
       'fqc_llm_providers',
       'fqc_llm_models',
       'fqc_llm_purposes',
