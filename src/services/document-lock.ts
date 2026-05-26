@@ -83,15 +83,18 @@ export async function withDocumentLocks<T>(
 ): Promise<T> {
   const entries = uniqueSortedEntries(filePaths);
   if (entries.length === 0) return fn();
+  const stripeIndices = [...new Set(entries.map((entry) => entry.stripeIndex))].sort((a, b) => a - b);
 
   const tier1Releases: Array<() => void> = [];
   const tier2Entries: DocumentLockEntry[] = [];
 
   try {
-    for (const entry of entries) {
-      const releaseTier1 = await tier1Stripes[entry.stripeIndex].acquire();
+    for (const stripeIndex of stripeIndices) {
+      const releaseTier1 = await tier1Stripes[stripeIndex].acquire();
       tier1Releases.push(releaseTier1);
+    }
 
+    for (const entry of entries) {
       const acquiredTier2 = await acquireLegacyTier2(config, entry);
       if (!acquiredTier2) {
         throw new LockTimeoutError(entry.resource);

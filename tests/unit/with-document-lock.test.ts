@@ -90,4 +90,13 @@ describe('REQ-009 withDocumentLock facade', () => {
     expect(secondEntered).toBe(true);
     expect(releaseLock).not.toHaveBeenCalled();
   });
+
+  it('does not self-deadlock when multiple document keys share a Tier 1 stripe', async () => {
+    await expect(
+      Promise.race([
+        withDocumentLocks(makeConfig(false), ['/tmp/vault/file-21.md', '/tmp/vault/file-120.md'], async () => 'ok'),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('timed out')), 100)),
+      ])
+    ).resolves.toBe('ok');
+  });
 });
