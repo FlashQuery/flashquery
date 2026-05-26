@@ -28,10 +28,143 @@
 - ✅ **v3.6 Bug Fixes & Host Parity** — Phase 144 (shipped 2026-05-24)
 - ✅ **v3.7 Technical Debt** — Phases 145-150 (shipped 2026-05-25)
 - ✅ **v3.8 Codebase Audit Remaining Remediation** — Phases 151-154 (shipped 2026-05-26)
+- 🚧 **v3.9 Vault Write Coherency Locking** — Phases 155-163 (planned)
 
 ## Current Milestone
 
-No active milestone. Start the next milestone with `$gsd-new-milestone`.
+### v3.9 Vault Write Coherency Locking
+
+**Milestone Goal:** Rebuild FlashQuery's vault write coherency layer with per-file locking, Postgres advisory cross-process exclusion, durable atomic writes, opt-in version-token conflict detection, and uniform batch semantics.
+
+## Phases
+
+- [ ] **Phase 155: Per-file Tier 1 + Live-defect Close** - Same-process document writes serialize per file, and unlocked compound document mutations stop losing updates.
+- [ ] **Phase 156: Atomic + Durable Write Primitive Consolidation** - Every vault write uses one durable atomic write path that surfaces failures.
+- [ ] **Phase 157: Records / Memory / Plugins Audit + Guards** - Non-file subsystems remain coherent after the legacy lock table is removed.
+- [ ] **Phase 158: Tier 2 + Lock-table Retirement + Session Check** - Cross-process writes use session-scoped Postgres advisory locks and the old lock table/CLI disappears.
+- [ ] **Phase 159: Lock Timeout + Canonical Key Derivation** - Lock acquisition is bounded and all file/directory keys resolve to canonical path-based identities.
+- [ ] **Phase 160: Folder Locks + Manage Directory Migration** - Folder operations coordinate safely with descendant file writes using shared/exclusive advisory locks.
+- [ ] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices.
+- [ ] **Phase 162: Version-fingerprint Check** - Reads and writes expose version tokens and callers can opt into conflict detection.
+- [ ] **Phase 163: Multi-file Batch Contract** - Batch tools accept mixed identifier/token inputs and return ordered per-item results.
+
+## Phase Details
+
+### Phase 155: Per-file Tier 1 + Live-defect Close
+**Goal**: Users can run concurrent document mutations without same-process writes to unrelated files blocking each other or compound tag/link updates silently overwriting changes.
+**Depends on**: Phase 154
+**Requirements**: REQ-001, REQ-009, REQ-010, REQ-025
+**Success Criteria** (what must be TRUE):
+  1. Two concurrent writes to different documents can both complete without a shared global document lock.
+  2. Two concurrent writes to the same document serialize so the later write observes the earlier write's bytes.
+  3. Concurrent `apply_tags` or `insert_doc_link` calls on one document never silently lose updates.
+  4. `call_macro` relies on the called tools' per-file locks and exposes no macro-spanning lock behavior.
+**Plans**: TBD
+
+### Phase 156: Atomic + Durable Write Primitive Consolidation
+**Goal**: Users never see torn vault files, and any failed vault write is reported instead of disappearing behind a swallowed error.
+**Depends on**: Phase 155
+**Requirements**: REQ-020, REQ-021
+**Success Criteria** (what must be TRUE):
+  1. A successful vault write leaves either the previous complete file or the new complete file visible, never a partial file.
+  2. Frontmatter repair, scanner repair, document writes, and plugin reconciliation writes all use the same durable write behavior.
+  3. A simulated filesystem write, fsync, or rename failure returns an error to the caller.
+  4. Successful write responses can be tied to the SHA-256 hash of the bytes actually committed.
+**Plans**: TBD
+
+### Phase 157: Records / Memory / Plugins Audit + Guards
+**Goal**: Users can keep using records, memory, and plugin operations safely after the old coarse lock table is removed.
+**Depends on**: Phase 156
+**Requirements**: REQ-023
+**Success Criteria** (what must be TRUE):
+  1. Concurrent memory writes rely on the existing transactional/versioning behavior and do not need the old lock table.
+  2. Record operations that run plugin reconciliation do not produce inconsistent reconciliation state under concurrency.
+  3. Concurrent plugin unregister operations leave either a complete unregister result or a clear conflict/error, not half-deleted plugin state.
+**Plans**: TBD
+
+### Phase 158: Tier 2 + Lock-table Retirement + Session Check
+**Goal**: Users running multiple FlashQuery processes against one vault get real cross-process exclusion through Postgres advisory locks, with stale table locks and manual unlocks gone.
+**Depends on**: Phases 155, 156, 157
+**Requirements**: REQ-002, REQ-004, REQ-005
+**Success Criteria** (what must be TRUE):
+  1. Two FlashQuery processes writing the same file serialize through a session-scoped Postgres advisory lock.
+  2. FlashQuery startup removes the obsolete `fqc_write_locks` table if present and no tool depends on it.
+  3. A transaction-mode Postgres pooler configuration fails startup with a clear session-capability error.
+  4. The `flashquery unlock` command is no longer available because crashed advisory locks release with the database session.
+**Plans**: TBD
+
+### Phase 159: Lock Timeout + Canonical Key Derivation
+**Goal**: Contended writes return predictably instead of hanging, and all lock participants agree on the same canonical file or directory identity.
+**Depends on**: Phase 158
+**Requirements**: REQ-003, REQ-006
+**Success Criteria** (what must be TRUE):
+  1. A writer waiting longer than the configured lock timeout receives a structured `lock_timeout` or resource-busy response.
+  2. Existing-file paths that differ by symlink, `.`/`..`, or case on case-insensitive filesystems resolve to the same file lock.
+  3. Not-yet-existing destinations lock by real parent path plus basename.
+  4. File and directory locks use separate namespaces so the same path cannot collide across resource types.
+**Plans**: TBD
+
+### Phase 160: Folder Locks + Manage Directory Migration
+**Goal**: Users can perform folder operations without racing in-flight descendant file writes, while unrelated file writes continue concurrently.
+**Depends on**: Phase 158
+**Requirements**: REQ-007, REQ-024
+**Success Criteria** (what must be TRUE):
+  1. A folder rename, move, or delete waits for an in-flight write under that folder or returns the configured timeout response.
+  2. Concurrent writes under the same folder can proceed together because they hold compatible shared directory locks.
+  3. Two structural operations on the same folder do not both proceed at once.
+  4. `manage_directory` preserves its caller-visible contention/conflict response shape after moving to advisory directory locks.
+**Plans**: TBD
+
+### Phase 161: Destination Locks + EXDEV Fallback
+**Goal**: Users cannot accidentally overwrite destination paths through races, and cross-device moves preserve atomic durable semantics.
+**Depends on**: Phases 158, 160
+**Requirements**: REQ-008, REQ-022
+**Success Criteria** (what must be TRUE):
+  1. Concurrent creates, copies, or moves to the same destination produce one success and one conflict/timeout, not two writers racing into the path.
+  2. Moving a document locks both source and destination in deterministic canonical order.
+  3. A cross-device move commits the destination durably before removing the source.
+  4. Destination existence checks happen inside the destination lock.
+**Plans**: TBD
+
+### Phase 162: Version-fingerprint Check
+**Goal**: Users can detect read-to-write conflicts with `version_token` while existing callers can continue using last-writer-wins behavior when they omit the token.
+**Depends on**: Phases 155, 156, 158
+**Requirements**: REQ-011, REQ-012, REQ-013, REQ-014, REQ-015, REQ-016, REQ-017
+**Success Criteria** (what must be TRUE):
+  1. `get_document` and successful file-affecting writes return a `version_token` matching the current on-disk bytes.
+  2. A write with a matching `expected_version` or `if_match` succeeds, while a stale token refuses the write without modifying the file.
+  3. Conflict responses include the current token and the caller-relevant current region needed to retry safely.
+  4. Version checks run after lock acquisition against fresh disk bytes, including external file changes.
+  5. Two consecutive scans of an unchanged vault perform no file writes.
+**Plans**: TBD
+
+### Phase 163: Multi-file Batch Contract
+**Goal**: Users get predictable best-effort batch behavior with item-level success, conflict, or failure results in input order.
+**Depends on**: Phase 162
+**Requirements**: REQ-018, REQ-019
+**Success Criteria** (what must be TRUE):
+  1. Batch calls return one ordered result entry for every input item.
+  2. Each batch item reports `succeeded`, `conflicted`, or `failed` with the appropriate token or error envelope.
+  3. Batch inputs can mix bare identifiers and `{ identifier, version_token }` objects in one call.
+  4. Existing callers that pass strings or string arrays continue to work unchanged.
+**Plans**: TBD
+
+## Progress
+
+**Execution Order:**
+Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 → 161 → 162 → 163
+
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 155. Per-file Tier 1 + Live-defect Close | 0/TBD | Not started | - |
+| 156. Atomic + Durable Write Primitive Consolidation | 0/TBD | Not started | - |
+| 157. Records / Memory / Plugins Audit + Guards | 0/TBD | Not started | - |
+| 158. Tier 2 + Lock-table Retirement + Session Check | 0/TBD | Not started | - |
+| 159. Lock Timeout + Canonical Key Derivation | 0/TBD | Not started | - |
+| 160. Folder Locks + Manage Directory Migration | 0/TBD | Not started | - |
+| 161. Destination Locks + EXDEV Fallback | 0/TBD | Not started | - |
+| 162. Version-fingerprint Check | 0/TBD | Not started | - |
+| 163. Multi-file Batch Contract | 0/TBD | Not started | - |
 
 ## Archived Milestone Details
 

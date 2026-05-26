@@ -1021,6 +1021,38 @@ If during implementation the dev agent finds any decision genuinely underspecifi
 
 ---
 
+## Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| REQ-001 | Phase 155 | Pending |
+| REQ-002 | Phase 158 | Pending |
+| REQ-003 | Phase 159 | Pending |
+| REQ-004 | Phase 158 | Pending |
+| REQ-005 | Phase 158 | Pending |
+| REQ-006 | Phase 159 | Pending |
+| REQ-007 | Phase 160 | Pending |
+| REQ-008 | Phase 161 | Pending |
+| REQ-009 | Phase 155 | Pending |
+| REQ-010 | Phase 155 | Pending |
+| REQ-011 | Phase 162 | Pending |
+| REQ-012 | Phase 162 | Pending |
+| REQ-013 | Phase 162 | Pending |
+| REQ-014 | Phase 162 | Pending |
+| REQ-015 | Phase 162 | Pending |
+| REQ-016 | Phase 162 | Pending |
+| REQ-017 | Phase 162 | Pending |
+| REQ-018 | Phase 163 | Pending |
+| REQ-019 | Phase 163 | Pending |
+| REQ-020 | Phase 156 | Pending |
+| REQ-021 | Phase 156 | Pending |
+| REQ-022 | Phase 161 | Pending |
+| REQ-023 | Phase 157 | Pending |
+| REQ-024 | Phase 160 | Pending |
+| REQ-025 | Phase 155 | Pending |
+
+Coverage: 25/25 v3.9 requirements mapped exactly once.
+
 ## Review Notes
 
 Recorded during the six-pass self-review (Step 7 of `fq-devspec`), 2026-05-25.
