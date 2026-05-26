@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v3.8
 milestone_name: Codebase Audit Remaining Remediation
-status: milestone_complete
-stopped_at: Milestone complete (Phase 154 was final phase)
-last_updated: 2026-05-26T00:37:12.327Z
-last_activity: 2026-05-26 -- Completed 154-06-PLAN.md
+status: Awaiting next milestone
+stopped_at: Completed 154-06-PLAN.md
+last_updated: "2026-05-26T12:53:35.308Z"
+last_activity: 2026-05-26 — Milestone v3.8 completed and archived
 progress:
   total_phases: 4
   completed_phases: 4
@@ -18,23 +18,33 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-05-25)
+See: .planning/PROJECT.md (updated 2026-05-26)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Milestone complete
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 154
-Plan: Not started
-Status: Milestone complete
-Last activity: 2026-05-26
+Phase: Milestone v3.8 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-26 — Milestone v3.8 completed and archived
 
 ## Accumulated Context
 
 ### Roadmap Evolution
 
 - Phase 154 added: Residual Import Cycle Cleanup
+
+## v3.8 Deferred Items
+
+Items acknowledged and deferred at milestone close on 2026-05-26:
+
+| Category | Item | Status |
+|----------|------|--------|
+| tech_debt | Transient plugin reconciliation integration table setup warning during validation reconstruction; passed on rerun. | accepted |
+| tech_debt | Provider-backed directed/YAML scenario reruns remain blocked by OpenAI rate limits; deterministic scoped checks passed. | accepted |
+| tech_debt | Broad full-suite non-document/provider/environment issues outside REQ-009 remain documented in the milestone audit. | accepted |
 
 ## v3.7 Deferred Items
 
