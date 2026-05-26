@@ -212,7 +212,8 @@ describe('record tools final surface', () => {
     expect(message).toContain('path=filters-only');
     expect(message).toContain('table=fqcp_crm_unit_contacts');
     expect(message).toContain('rows=0');
-    expect(message).toContain('error=db unavailable');
+    expect(message).not.toContain('error=');
+    expect(message).not.toContain('db unavailable');
     expect(message).toMatch(/elapsed_ms=\d+(\.\d+)?/);
     expect(message).not.toContain('Ada');
   });
@@ -232,7 +233,8 @@ describe('record tools final surface', () => {
     const [message] = timingMessages();
     expect(message).toContain('path=filters-only');
     expect(message).toContain('table=fqcp_crm_unit_contacts');
-    expect(message).toContain('error=network unavailable');
+    expect(message).not.toContain('error=');
+    expect(message).not.toContain('network unavailable');
     expect(message).toMatch(/elapsed_ms=\d+(\.\d+)?/);
     expect(message).not.toContain('Ada');
   });
@@ -278,7 +280,8 @@ describe('record tools final surface', () => {
     const [message] = timingMessages();
     expect(message).toContain('path=semantic');
     expect(message).toContain('table=fqcp_crm_unit_contacts');
-    expect(message).toContain('error=pg unavailable');
+    expect(message).not.toContain('error=');
+    expect(message).not.toContain('pg unavailable');
     expect(message).toMatch(/elapsed_ms=\d+(\.\d+)?/);
     expect(message).not.toContain('find Ada');
     expect(message).not.toContain('0.1,0.2,0.3');

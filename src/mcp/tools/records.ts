@@ -90,8 +90,7 @@ function logSearchRecordsTiming(input: {
   error?: string;
 }): void {
   const rowText = input.rowCount === undefined ? '' : ` rows=${input.rowCount}`;
-  const errorText = input.error === undefined ? '' : ` error=${input.error}`;
-  const message = `search_records timing: path=${input.path} table=${input.table}${rowText} elapsed_ms=${input.elapsedMs}${errorText}`;
+  const message = `search_records timing: path=${input.path} table=${input.table}${rowText} elapsed_ms=${input.elapsedMs}`;
   if (input.error === undefined) {
     logger.info(message);
   } else {
