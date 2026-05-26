@@ -50,10 +50,10 @@ import {
   hydrateMessages,
   buildInjectedReferences,
   computePromptChars,
-  type InjectionMetadata,
   type FailedRef,
   type ResolvedRef,
 } from '../../llm/reference-resolver.js';
+import type { InjectionMetadata } from '../../llm/reference-metadata.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal types — handler-local response envelope shape.

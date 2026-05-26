@@ -3,13 +3,15 @@ import type { Dirent } from 'node:fs';
 import { basename, extname, isAbsolute, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { posix as pathPosix } from 'node:path';
 import matter from 'gray-matter';
-import type { FlashQueryConfig } from '../config/loader.js';
+import type { FlashQueryConfig } from '../config/types.js';
 import {
   normalizeTemplateParamDeclarations,
   renderTemplateDocument,
-  type TemplateParamDeclaration,
-  type TemplateParamUsage,
 } from './reference-resolver.js';
+import type {
+  TemplateParamDeclaration,
+  TemplateParamUsage,
+} from './reference-metadata.js';
 import {
   mergeModelVisibleToolRegistries,
   normalizeToolJsonSchema,

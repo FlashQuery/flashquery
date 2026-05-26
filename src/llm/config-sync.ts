@@ -1,23 +1,9 @@
 import { supabaseManager } from '../storage/supabase.js';
 import { logger } from '../logging/logger.js';
-import type { FlashQueryConfig } from '../config/loader.js';
+import type { FlashQueryConfig } from '../config/types.js';
 import { getLlmApiKeyRefs } from '../config/loader.js';
 import { createPurposeTemplateSyncAdapter } from './purpose-template-bindings.js';
-
-export interface ConfigSyncAdapter<T> {
-  table: string;
-  runtimeSources: Array<'api' | 'webapp'>;
-  parseYaml(config: FlashQueryConfig): Promise<T[]> | T[];
-  identity(item: T): Record<string, string>;
-  toRow(item: T): Record<string, unknown>;
-  describeIdentity(item: T): string;
-  runtimeOwnershipWarning?: (item: T, source: 'api' | 'webapp') => string;
-}
-
-export interface ConfigSyncResult {
-  inserted: number;
-  skipped: number;
-}
+import type { ConfigSyncAdapter, ConfigSyncResult } from './config-sync-types.js';
 
 export async function syncConfigAdapter<T>(
   config: FlashQueryConfig,

@@ -1,8 +1,8 @@
 import { posix as pathPosix } from 'node:path';
 import { supabaseManager } from '../storage/supabase.js';
 import { logger } from '../logging/logger.js';
-import type { FlashQueryConfig } from '../config/loader.js';
-import type { ConfigSyncAdapter } from './config-sync.js';
+import type { FlashQueryConfig } from '../config/types.js';
+import type { ConfigSyncAdapter } from './config-sync-types.js';
 import { validateAllPurposeMode2Admissions, validatePurposeMode2Admission } from './capabilities.js';
 
 export interface PurposeTemplateBinding {

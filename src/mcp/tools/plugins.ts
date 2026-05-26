@@ -13,7 +13,7 @@ import {
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
-import { getEmbeddingDimensions } from '../../embedding/provider.js';
+import { getEmbeddingDimensions } from '../../embedding/dimensions.js';
 import { createPgClientIPv4 } from '../../utils/pg-client.js';
 import { compareSchemaVersions, analyzeSchemaChanges } from '../../utils/schema-migration.js';
 import { reloadManifests } from '../../services/manifest-loader.js';

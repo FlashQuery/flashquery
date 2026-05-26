@@ -1,5 +1,5 @@
 import type { AgentLoopStopReason, FinishReason } from '../constants/llm.js';
-import type { InjectedReferenceMetadata } from './reference-resolver.js';
+import type { InjectedReferenceMetadata } from './reference-metadata.js';
 
 export interface LlmChatToolCall {
   id: string;
