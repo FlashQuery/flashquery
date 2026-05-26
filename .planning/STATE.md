@@ -4,13 +4,13 @@ milestone: v3.9
 milestone_name: Vault Write Coherency Locking
 status: executing
 stopped_at: Completed 158-02-PLAN.md
-last_updated: "2026-05-26T20:48:18.943Z"
+last_updated: "2026-05-26T20:51:01.267Z"
 last_activity: 2026-05-26
 progress:
   total_phases: 9
   completed_phases: 3
   total_plans: 15
-  completed_plans: 13
+  completed_plans: 14
   percent: 33
 ---
 
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-05-26)
 ## Current Position
 
 Phase: 158 (tier-2-lock-table-retirement-session-check) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-26
 
-Progress: [█████████░] 87%
+Progress: [█████████░] 93%
 
 ## Performance Metrics
 
@@ -58,6 +58,7 @@ Progress: [█████████░] 87%
 | Phase 158-tier-2-lock-table-retirement-session-check P02 | 8 min | 2 tasks | 13 files |
 | Phase 158 P06 | 3min | 1 tasks | 4 files |
 | Phase 158 P05 | 266s | 1 tasks | 9 files |
+| Phase 158 P04 | 7min | 1 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Progress: [█████████░] 87%
 - [Phase 158]: Plan 06 removed stale legacy write-lock mocks and effective ttlSeconds fixtures from Phase 157 gap-fix tests while preserving REQ-023 withPluginCoordinationLock assertions.
 - [Phase 158]: Plan 05 keeps locking.ttl_seconds coverage as deprecated raw YAML compatibility only; effective runtime config omits ttlSeconds.
 - [Phase 158]: Plan 05 schema verification tests use active required tables such as fqc_purpose_templates rather than the retired write-lock table for missing-table coverage.
+- [Phase 158]: Plan 04 deleted service-only write-lock test files because their only subject was the retired fqc_write_locks implementation.
+- [Phase 158]: Plan 04 kept user-facing archive, macro, and manage_directory coverage while removing table-row contention expectations.
 
 ### Carried Forward
 
@@ -100,6 +103,6 @@ None active.
 
 ## Session Continuity
 
-Last session: 2026-05-26T20:47:42.646Z
+Last session: 2026-05-26T20:50:05.525Z
 Stopped at: Completed 158-02-PLAN.md
 Resume file: None
