@@ -84,7 +84,7 @@ const McpSchema = z
 const LockingSchema = z
   .object({
     enabled: z.boolean().default(true),
-    ttl_seconds: z.number().default(30),
+    ttl_seconds: z.number().optional(),
   })
   .strip()
   .prefault({});
@@ -848,6 +848,9 @@ export function loadConfig(configPath: string): FlashQueryConfig {
     warnHardExcludedPurposeTools(result.data.llm);
   }
 
+  const hasLegacyLockTtl = result.data.locking.ttl_seconds !== undefined;
+  delete result.data.locking.ttl_seconds;
+
   // 8. Convert snake_case to camelCase
   const camel = snakeToCamel(result.data) as Record<string, unknown>;
 
@@ -904,7 +907,14 @@ export function loadConfig(configPath: string): FlashQueryConfig {
   }
 
   setConfigRuntimeMetadata(config, {
-    deprecationWarnings: [...(extensionWarning ? [extensionWarning] : [])],
+    deprecationWarnings: [
+      ...(extensionWarning ? [extensionWarning] : []),
+      ...(hasLegacyLockTtl
+        ? [
+            'locking.ttl_seconds is deprecated; advisory locks do not use TTL and this key is safe to remove.',
+          ]
+        : []),
+    ],
     startupWarnings: resolvedHostToolExposure.warnings,
     resolvedHostToolExposure,
     rawLlmApiKeyRefs,

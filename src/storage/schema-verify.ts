@@ -51,7 +51,6 @@ export async function columnExists(client: pg.Client, tableName: string, columnN
  * - fqc_vault: tracks local vault instances and paths
  * - fqc_documents: stores uploaded documents with embeddings
  * - fqc_plugin_registry: tracks installed plugins and schemas
- * - fqc_write_locks: coordinates concurrent write access
  * - fqc_llm_providers: LLM provider config (Phase 98)
  * - fqc_llm_models: LLM model config (Phase 98)
  * - fqc_llm_purposes: LLM purpose config (Phase 98)
@@ -70,7 +69,6 @@ export async function verifySchema(client: pg.Client): Promise<void> {
     'fqc_vault',
     'fqc_documents',
     'fqc_plugin_registry',
-    'fqc_write_locks',
     'fqc_llm_providers',
     'fqc_llm_models',
     'fqc_llm_purposes',

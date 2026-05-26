@@ -30,7 +30,6 @@ import {
   validateVaultPath,
 } from '../utils/path-validation.js';
 import { supabaseManager } from '../../storage/supabase.js';
-import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { parseDateFilter } from '../utils/date-filter.js';
 import {
   directoryResult,
@@ -83,7 +82,6 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
       }
 
       const vaultRoot = config.instance.vault.path;
-      const client = supabaseManager.getClient();
       const results: unknown[] = [];
 
       for (const inputPath of paths) {
@@ -145,25 +143,6 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             details: { reason: isTraversal ? 'path_traversal' : 'invalid_directory_path' },
           });
           continue;
-        }
-
-        const lockResource = config.locking.enabled ? `directory:${safePath}` : null;
-        if (lockResource) {
-          const locked = await acquireLock(
-            client,
-            config.instance.id,
-            lockResource,
-            { ttlSeconds: config.locking.ttlSeconds }
-          );
-          if (!locked) {
-            results.push({
-              error: 'conflict',
-              message: 'Directory is currently locked by another operation.',
-              identifier: inputPath,
-              details: { reason: 'lock_contention' },
-            });
-            continue;
-          }
         }
 
         try {
@@ -329,10 +308,6 @@ export function registerFileTools(server: McpServer, config: FlashQueryConfig): 
             message: msg,
             identifier: inputPath,
           });
-        } finally {
-          if (lockResource) {
-            await releaseLock(client, config.instance.id, lockResource);
-          }
         }
       }
 

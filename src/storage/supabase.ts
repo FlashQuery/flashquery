@@ -517,39 +517,6 @@ END$$;
 --   flashquery doctor (warns about old tables)
 -- Or drop them manually: DROP TABLE IF EXISTS fqc_event_log, fqc_routing_rules;
 
--- Phase 24: Distributed write locks (LOCK-02)
-CREATE TABLE IF NOT EXISTS fqc_write_locks (
-  instance_id TEXT NOT NULL,
-  resource_type TEXT NOT NULL,
-  locked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  expires_at TIMESTAMPTZ NOT NULL,
-  PRIMARY KEY (instance_id, resource_type)
-);
-
--- Migration: if fqc_write_locks was created before instance_id was added to the schema,
--- drop and recreate it. Write locks are ephemeral (all expire on restart) so data loss is safe.
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'fqc_write_locks'
-      AND column_name = 'instance_id'
-  ) THEN
-    DROP TABLE IF EXISTS fqc_write_locks;
-    CREATE TABLE fqc_write_locks (
-      instance_id TEXT NOT NULL,
-      resource_type TEXT NOT NULL,
-      locked_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-      expires_at TIMESTAMPTZ NOT NULL,
-      PRIMARY KEY (instance_id, resource_type)
-    );
-  END IF;
-END$$;
-
-CREATE INDEX IF NOT EXISTS idx_fqc_write_locks_expires ON fqc_write_locks (expires_at);
-
-
 -- ─── Phase 98 (v3.0): LLM three-layer config tables ────────────────────────
 
 -- LLM Config: Providers (PROV-01, PROV-02)
@@ -958,6 +925,10 @@ export function buildDropDescriptionColumnDDL(): string {
   return 'ALTER TABLE IF EXISTS fqc_documents DROP COLUMN IF EXISTS description;';
 }
 
+export function buildRetireLegacyWriteLocksDDL(): string {
+  return `DROP TABLE IF EXISTS fqc_write_locks`;
+}
+
 /**
  * Drops the unused `description` column from the `fqc_documents` table.
  * This migration is intentionally idempotent and silent for the common no-op
@@ -1033,6 +1004,8 @@ class SupabaseManagerImpl implements SupabaseManager {
       logger.debug('Base schema: checking tables...');
       try {
         await ddlQuery(supabaseUrl, serviceRoleKey, buildSchemaDDL(dimensions), databaseUrl);
+        await ddlQuery(supabaseUrl, serviceRoleKey, buildRetireLegacyWriteLocksDDL(), databaseUrl);
+        logger.debug('Retired obsolete write-lock table if it existed');
         // Notify PostgREST to reload its schema cache so newly created tables
         // are immediately accessible via the REST API.
         await ddlQuery(supabaseUrl, serviceRoleKey, `SELECT pg_notify('pgrst', 'reload schema')`, databaseUrl);
@@ -1136,12 +1109,11 @@ class SupabaseManagerImpl implements SupabaseManager {
         }
       }
 
-      logger.info('Schema verification: all 12 required tables present');
+      logger.info('Schema verification: all 11 required tables present');
       logger.debug('  fqc_memory: verified');
       logger.debug('  fqc_vault: verified');
       logger.debug('  fqc_documents: verified');
       logger.debug('  fqc_plugin_registry: verified');
-      logger.debug('  fqc_write_locks: verified');
       logger.debug('  fqc_llm_providers: verified');
       logger.debug('  fqc_llm_models: verified');
       logger.debug('  fqc_llm_purposes: verified');

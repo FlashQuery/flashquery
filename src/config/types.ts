@@ -11,7 +11,7 @@ export interface FlashQueryConfig {
   supabase: { url: string; serviceRoleKey: string; databaseUrl: string; skipDdl: boolean };
   git: { autoCommit: boolean; autoPush: boolean; remote: string; branch: string };
   mcp: { transport: 'stdio' | 'streamable-http'; host?: string; port?: number; authSecret?: string; tokenLifetime?: number };
-  locking: { enabled: boolean; ttlSeconds: number };
+  locking: { enabled: boolean };
   trashFolder: { enabled: boolean; path: string; collisionStrategy: 'suffix' | 'timestamp' };
   hostMcpTools?: { tools?: string[]; excludedTools?: string[] };
   mcpServers: Record<string, {

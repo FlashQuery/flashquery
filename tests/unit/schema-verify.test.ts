@@ -155,7 +155,7 @@ describe('verifySchema', () => {
     let callCount = 0;
     mockQuery.mockImplementation(() => {
       // fqc_purpose_templates is checked after fqc_llm_usage.
-      const exists = callCount !== 10;
+      const exists = callCount !== 9;
       callCount++;
       return Promise.resolve({
         rows: [{ '?column?': exists }],
