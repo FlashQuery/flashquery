@@ -17,7 +17,7 @@ import { getEmbeddingDimensions } from '../../embedding/dimensions.js';
 import { createPgClientIPv4 } from '../../utils/pg-client.js';
 import { compareSchemaVersions, analyzeSchemaChanges } from '../../utils/schema-migration.js';
 import { reloadManifests } from '../../services/manifest-loader.js';
-import { acquireLock, releaseLock } from '../../services/write-lock.js';
+import { withPluginCoordinationLock } from '../../services/plugin-coordination-lock.js';
 import {
   jsonExpectedError,
   jsonRuntimeError,
@@ -415,22 +415,13 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
-      if (config.locking.enabled) {
-        const locked = await acquireLock(
-          supabaseManager.getClient(),
-          config.instance.id,
-          'plugins',
-          { ttlSeconds: config.locking.ttlSeconds }
-        );
-        if (!locked) {
-          return jsonRuntimeError('Write lock timeout: another instance is managing plugins. Retry in a few seconds.');
-        }
-      }
-
       try {
         const instanceName = plugin_instance ?? 'default';
         validateInstanceName(instanceName);
 
+        // REQ-023: this guard is scoped by FQC instance, plugin id, and plugin
+        // instance; it is not a replacement global "plugins" lock.
+        return await withPluginCoordinationLock(config, { pluginId: plugin_id, pluginInstance: instanceName }, async () => {
         const supabase = supabaseManager.getClient();
 
         // Phase 1: Inventory (always runs)
@@ -521,52 +512,48 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
           .eq('instance_id', config.instance.id);
 
         // Clear document ownership
-        try {
-          await supabase
-            .from('fqc_documents')
-            .update({
-              ownership_plugin_id: null,
-              ownership_type: null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('ownership_plugin_id', plugin_id)
-            .eq('instance_id', config.instance.id);
-        } catch (err) {
-          logger.error(`Failed to clear document ownership: ${err instanceof Error ? err.message : String(err)}`);
+        const clearDocuments = await supabase
+          .from('fqc_documents')
+          .update({
+            ownership_plugin_id: null,
+            ownership_type: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('ownership_plugin_id', plugin_id)
+          .eq('instance_id', config.instance.id) as { error: { message: string } | null };
+        if (clearDocuments.error) {
+          return jsonRuntimeError(`Failed to clear document ownership: ${clearDocuments.error.message}`);
         }
 
         // Delete plugin-scoped memories
-        try {
-          await supabase
-            .from('fqc_memory')
-            .delete()
-            .eq('plugin_scope', plugin_id)
-            .eq('instance_id', config.instance.id);
-        } catch (err) {
-          logger.error(`Failed to delete plugin-scoped memories: ${err instanceof Error ? err.message : String(err)}`);
+        const deleteMemories = await supabase
+          .from('fqc_memory')
+          .delete()
+          .eq('plugin_scope', plugin_id)
+          .eq('instance_id', config.instance.id) as { error: { message: string } | null };
+        if (deleteMemories.error) {
+          return jsonRuntimeError(`Failed to delete plugin-scoped memories: ${deleteMemories.error.message}`);
         }
 
         // Delete pending plugin reviews before removing registry entry (D-10, RECTOOLS-08)
-        try {
-          await supabase
-            .from('fqc_pending_plugin_review')
-            .delete()
-            .eq('plugin_id', plugin_id)
-            .eq('instance_id', config.instance.id);
-        } catch (err) {
-          logger.error(`Failed to delete pending plugin reviews: ${err instanceof Error ? err.message : String(err)}`);
+        const deleteReviews = await supabase
+          .from('fqc_pending_plugin_review')
+          .delete()
+          .eq('plugin_id', plugin_id)
+          .eq('instance_id', config.instance.id) as { error: { message: string } | null };
+        if (deleteReviews.error) {
+          return jsonRuntimeError(`Failed to delete pending plugin reviews: ${deleteReviews.error.message}`);
         }
 
         // Delete registry entry
-        try {
-          await supabase
-            .from('fqc_plugin_registry')
-            .delete()
-            .eq('plugin_id', plugin_id)
-            .eq('plugin_instance', instanceName)
-            .eq('instance_id', config.instance.id);
-        } catch (err) {
-          logger.error(`Failed to delete registry entry: ${err instanceof Error ? err.message : String(err)}`);
+        const deleteRegistry = await supabase
+          .from('fqc_plugin_registry')
+          .delete()
+          .eq('plugin_id', plugin_id)
+          .eq('plugin_instance', instanceName)
+          .eq('instance_id', config.instance.id) as { error: { message: string } | null };
+        if (deleteRegistry.error) {
+          return jsonRuntimeError(`Failed to delete registry entry: ${deleteRegistry.error.message}`);
         }
 
         // Unload from PluginManager
@@ -579,7 +566,7 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
         try {
           await reloadManifests(config);
         } catch (err) {
-          logger.error(`Failed to reload manifests: ${err instanceof Error ? err.message : String(err)}`);
+          return jsonRuntimeError(`Failed to reload manifests: ${err instanceof Error ? err.message : String(err)}`);
         }
 
         return jsonToolResult(
@@ -599,14 +586,11 @@ export function registerPluginTools(server: McpServer, config: FlashQueryConfig)
             liveRecordCount > 0 ? [`orphaned_records: ${liveRecordCount}`] : []
           )
         );
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`unregister_plugin failed: ${msg}`);
         return jsonRuntimeError(msg);
-      } finally {
-        if (config.locking.enabled) {
-          await releaseLock(supabaseManager.getClient(), config.instance.id, 'plugins');
-        }
       }
     }
   );

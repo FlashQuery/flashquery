@@ -12,7 +12,7 @@ import {
 } from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
-import { acquireLock, releaseLock } from '../../services/write-lock.js';
+import { withPluginCoordinationLock } from '../../services/plugin-coordination-lock.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import { queryPgPool } from '../../utils/pg-client.js';
 import {
@@ -152,6 +152,30 @@ function buildReconciliationPayload(summary: ReconciliationActionSummary): Recor
   return Object.values(payload).some((value) => value > 0) ? payload : undefined;
 }
 
+async function runScopedReconciliation(
+  config: FlashQueryConfig,
+  pluginId: string,
+  instanceName: string
+): Promise<Record<string, unknown> | undefined> {
+  // REQ-023 / 157-RECONCILIATION-AUDIT.md: scope the non-idempotent
+  // reconciliation preamble by plugin instead of guarding all records globally.
+  return withPluginCoordinationLock(
+    config,
+    { pluginId, pluginInstance: instanceName },
+    async () => {
+      const result = await reconcilePluginDocuments(pluginId, instanceName, config.supabase.databaseUrl);
+      const actionSummary = await executeReconciliationActions(
+        result,
+        pluginId,
+        instanceName,
+        config.instance.id,
+        config.supabase.databaseUrl
+      );
+      return buildReconciliationPayload(actionSummary);
+    }
+  );
+}
+
 function recordNotFoundEnvelope(
   id: string,
   pluginId: string,
@@ -254,18 +278,6 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
-      if (config.locking.enabled) {
-        const locked = await acquireLock(
-          supabaseManager.getClient(),
-          config.instance.id,
-          'records',
-          { ttlSeconds: config.locking.ttlSeconds }
-        );
-        if (!locked) {
-          return jsonRuntimeError('Write lock timeout: another instance is writing to records. Retry in a few seconds.');
-        }
-      }
-
       try {
         const instanceName = plugin_instance ?? 'default';
         let resolved: ReturnType<typeof resolveAndValidateTable>;
@@ -285,9 +297,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
 
         let reconciliation: Record<string, unknown> | undefined;
         try {
-          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
-          reconciliation = buildReconciliationPayload(actionSummary);
+          reconciliation = await runScopedReconciliation(config, plugin_id, instanceName);
         } catch (err) {
           logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -370,10 +380,6 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`write_record failed: ${msg}`);
         return jsonRuntimeError(msg);
-      } finally {
-        if (config.locking.enabled) {
-          await releaseLock(supabaseManager.getClient(), config.instance.id, 'records');
-        }
       }
     }
   );
@@ -411,9 +417,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const instanceName = plugin_instance ?? 'default';
         let reconciliation: Record<string, unknown> | undefined;
         try {
-          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
-          reconciliation = buildReconciliationPayload(actionSummary);
+          reconciliation = await runScopedReconciliation(config, plugin_id, instanceName);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           logger.warn(`[record tool] reconciliation warning: ${msg}`);
@@ -495,20 +499,6 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         });
       }
 
-      if (config.locking.enabled) {
-        const locked = await acquireLock(
-          supabaseManager.getClient(),
-          config.instance.id,
-          'records',
-          { ttlSeconds: config.locking.ttlSeconds }
-        );
-        if (!locked) {
-          return {
-            content: [{ type: 'text' as const, text: 'Write lock timeout: another instance is writing to records. Retry in a few seconds.' }],
-            isError: true,
-          };
-        }
-      }
       try {
         const supabase = supabaseManager.getClient();
         const results: Array<Record<string, unknown>> = [];
@@ -518,9 +508,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
           try {
             let reconciliation: Record<string, unknown> | undefined;
             try {
-              const result = await reconcilePluginDocuments(target.plugin_id, instanceName, config.supabase.databaseUrl);
-              const actionSummary = await executeReconciliationActions(result, target.plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
-              reconciliation = buildReconciliationPayload(actionSummary);
+              reconciliation = await runScopedReconciliation(config, target.plugin_id, instanceName);
             } catch (err) {
               logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
             }
@@ -587,10 +575,6 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`archive_record failed: ${msg}`);
         return jsonRuntimeError(msg);
-      } finally {
-        if (config.locking.enabled) {
-          await releaseLock(supabaseManager.getClient(), config.instance.id, 'records');
-        }
       }
     }
   );
@@ -626,17 +610,6 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         return jsonRuntimeError('Server is shutting down; new requests cannot be processed');
       }
 
-      if (config.locking.enabled) {
-        const locked = await acquireLock(
-          supabaseManager.getClient(),
-          config.instance.id,
-          'records',
-          { ttlSeconds: config.locking.ttlSeconds }
-        );
-        if (!locked) {
-          return jsonRuntimeError('Write lock timeout: another instance is writing to records. Retry in a few seconds.');
-        }
-      }
       try {
         // ── Reconciliation preamble (D-07) ──
         const instanceName = plugin_instance ?? 'default';
@@ -701,9 +674,7 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
 
         let reconciliation: Record<string, unknown> | undefined;
         try {
-          const result = await reconcilePluginDocuments(plugin_id, instanceName, config.supabase.databaseUrl);
-          const actionSummary = await executeReconciliationActions(result, plugin_id, instanceName, config.instance.id, config.supabase.databaseUrl);
-          reconciliation = buildReconciliationPayload(actionSummary);
+          reconciliation = await runScopedReconciliation(config, plugin_id, instanceName);
         } catch (err) {
           logger.warn(`[record tool] reconciliation warning: ${err instanceof Error ? err.message : String(err)}`);
         }
@@ -877,10 +848,6 @@ export function registerRecordTools(server: McpServer, config: FlashQueryConfig)
         const msg = err instanceof Error ? err.message : String(err);
         logger.error(`search_records failed: ${msg}`);
         return jsonRuntimeError(msg);
-      } finally {
-        if (config.locking.enabled) {
-          await releaseLock(supabaseManager.getClient(), config.instance.id, 'records');
-        }
       }
     }
   );

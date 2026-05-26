@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v3.9
 milestone_name: Vault Write Coherency Locking
 status: ready_to_plan
-stopped_at: Phase 156 complete (3/3) — ready to discuss Phase 157
-last_updated: 2026-05-26T17:44:56.653Z
+stopped_at: Phase 157 complete (3/3) — ready to discuss Phase 158
+last_updated: 2026-05-26T18:53:11Z
 last_activity: 2026-05-26
 progress:
   total_phases: 9
-  completed_phases: 2
-  total_plans: 6
-  completed_plans: 6
-  percent: 22
+  completed_phases: 3
+  total_plans: 9
+  completed_plans: 9
+  percent: 33
 ---
 
 # FlashQuery Core — State
@@ -21,11 +21,11 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-26)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 157 — records / memory / plugins audit + guards
+**Current focus:** Phase 158 — Tier 2 + Lock-table Retirement + Session Check
 
 ## Current Position
 
-Phase: 157
+Phase: 158
 Plan: Not started
 Status: Ready to plan
 Last activity: 2026-05-26
@@ -46,7 +46,7 @@ Progress: [██████████] 100%
 |-------|-------|-------|----------|
 | 155 | 3 | - | - |
 | 156 | 3 | - | - |
-| 157 | TBD | - | - |
+| 157 | 3 | - | - |
 | 158 | TBD | - | - |
 | 159 | TBD | - | - |
 | 160 | TBD | - | - |
@@ -63,6 +63,7 @@ Progress: [██████████] 100%
 - v3.9 starts at Phase 155 because v3.8 ended at Phase 154.
 - The milestone uses REQUIREMENTS.md §8's 9-phase plan as canonical.
 - REQ-003 is mapped only to Phase 159 for exact-once traceability; Phase 155 may use a temporary basic key as scaffolding without claiming REQ-003 completion.
+- Phase 157 removed coarse records/memory/plugins lock usage. Memory relies on `fqc_memory_create_version`; records and plugin unregister use scoped plugin advisory coordination.
 
 ### Carried Forward
 
@@ -91,6 +92,6 @@ None active.
 
 ## Session Continuity
 
-Last session: 2026-05-26T17:41:16.418Z
-Stopped at: Completed 156-03-PLAN.md
+Last session: 2026-05-26T18:53:11Z
+Stopped at: Completed 157-03-PLAN.md
 Resume file: None

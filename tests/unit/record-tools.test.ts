@@ -32,6 +32,10 @@ vi.mock('../../src/services/write-lock.js', () => ({
   releaseLock: vi.fn(),
 }));
 
+vi.mock('../../src/services/plugin-coordination-lock.js', () => ({
+  withPluginCoordinationLock: vi.fn(async (_config, _input, fn: () => Promise<unknown>) => fn()),
+}));
+
 vi.mock('../../src/server/shutdown-state.js', () => ({
   getIsShuttingDown: vi.fn(() => false),
 }));

@@ -40,7 +40,7 @@
 
 - [x] **Phase 155: Per-file Tier 1 + Live-defect Close** - Same-process document writes serialize per file, and unlocked compound document mutations stop losing updates. (completed 2026-05-26)
 - [x] **Phase 156: Atomic + Durable Write Primitive Consolidation** - Every vault write uses one durable atomic write path that surfaces failures. (completed 2026-05-26)
-- [ ] **Phase 157: Records / Memory / Plugins Audit + Guards** - Non-file subsystems remain coherent after the legacy lock table is removed.
+- [x] **Phase 157: Records / Memory / Plugins Audit + Guards** - Non-file subsystems remain coherent after the legacy lock table is removed. (completed 2026-05-26)
 - [ ] **Phase 158: Tier 2 + Lock-table Retirement + Session Check** - Cross-process writes use session-scoped Postgres advisory locks and the old lock table/CLI disappears.
 - [ ] **Phase 159: Lock Timeout + Canonical Key Derivation** - Lock acquisition is bounded and all file/directory keys resolve to canonical path-based identities.
 - [ ] **Phase 160: Folder Locks + Manage Directory Migration** - Folder operations coordinate safely with descendant file writes using shared/exclusive advisory locks.
@@ -101,9 +101,9 @@ Plans:
   - Required execution evidence: `npm test -- --grep "no-coarse-resource-locks"`; `npm run test:integration -- --grep "memory-no-coarse-lock|records-reconciliation|unregister-plugin"`.
 **Plans**: 3 plans
 Plans:
-- [ ] 157-01-PLAN.md — Remove redundant memory coarse lock and prove RPC-backed concurrent updates.
-- [ ] 157-02-PLAN.md — Add records reconciliation audit, scoped plugin coordination guard, and records race coverage.
-- [ ] 157-03-PLAN.md — Guard concurrent plugin unregister and add final no-coarse-resource-locks gate.
+- [x] 157-01-PLAN.md — Remove redundant memory coarse lock and prove RPC-backed concurrent updates.
+- [x] 157-02-PLAN.md — Add records reconciliation audit, scoped plugin coordination guard, and records race coverage.
+- [x] 157-03-PLAN.md — Guard concurrent plugin unregister and add final no-coarse-resource-locks gate.
 
 ### Phase 158: Tier 2 + Lock-table Retirement + Session Check
 **Goal**: Users running multiple FlashQuery processes against one vault get real cross-process exclusion through Postgres advisory locks, with stale table locks and manual unlocks gone.

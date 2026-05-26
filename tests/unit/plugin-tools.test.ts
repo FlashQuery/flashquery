@@ -78,6 +78,10 @@ vi.mock('../../src/utils/pg-client.js', () => ({
   })),
 }));
 
+vi.mock('../../src/services/plugin-coordination-lock.js', () => ({
+  withPluginCoordinationLock: vi.fn(async (_config, _input, fn: () => Promise<unknown>) => fn()),
+}));
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Imports (after mocks)
 // ─────────────────────────────────────────────────────────────────────────────

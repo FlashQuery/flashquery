@@ -9,7 +9,6 @@ import {
 } from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import type { FlashQueryConfig } from '../../config/loader.js';
-import { acquireLock, releaseLock } from '../../services/write-lock.js';
 import { validateAllTags } from '../../utils/tag-validator.js';
 import { getIsShuttingDown } from '../../server/shutdown-state.js';
 import {
@@ -244,22 +243,6 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
       }
 
       try {
-        if (config.locking.enabled) {
-          const locked = await acquireLock(
-            supabaseManager.getClient(),
-            config.instance.id,
-            'memory',
-            { ttlSeconds: config.locking.ttlSeconds }
-          );
-          if (!locked) {
-            return jsonExpectedError({
-              error: 'conflict',
-              message: 'Write lock timeout: another instance is writing to memory.',
-              details: { reason: 'lock_contention' },
-            });
-          }
-        }
-
         const supabase = supabaseManager.getClient();
         if (params.mode === 'create') {
           const resolvedScope = await resolvePluginScope(config, params.plugin_scope as string | undefined);
@@ -332,6 +315,8 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
 
         const nextContent = (params.content as string | undefined) ?? existingRow.content;
         const nextTags = params.tags === undefined ? (existingRow.tags ?? []) : tagsValidation.normalized;
+        // REQ-023: memory intentionally has no replacement mutex/advisory/table lock;
+        // fqc_memory_create_version is the database concurrency guard for update races.
         const { data: insertedData, error: insertError } = await supabase.rpc('fqc_memory_create_version', {
           p_instance_id: config.instance.id,
           p_previous_id: existingRow.id,
@@ -377,10 +362,6 @@ export function registerMemoryTools(server: McpServer, config: FlashQueryConfig)
         const msg = formatError(err);
         logger.error(`write_memory failed: ${msg}`);
         return jsonRuntimeError(msg);
-      } finally {
-        if (config.locking.enabled) {
-          await releaseLock(supabaseManager.getClient(), config.instance.id, 'memory');
-        }
       }
     }
   );
