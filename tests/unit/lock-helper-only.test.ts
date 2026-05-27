@@ -12,6 +12,8 @@ describe('REQ-009 document lock facade only', () => {
         'LockTimeoutError',
         '__testing',
         'isDocumentLockHeldForPath',
+        'withAncestorDirectoryLocksShared',
+        'withDirectoryLockExclusive',
         'withDocumentLock',
         'withDocumentLocks',
       ].sort()
