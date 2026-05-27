@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v3.9
 milestone_name: Vault Write Coherency Locking
-status: ready_to_plan
-stopped_at: Phase 159 complete (5/5) — ready to discuss Phase 160
-last_updated: 2026-05-27T00:31:19.284Z
-last_activity: 2026-05-26
+status: completed
+stopped_at: Phase 160 complete (4/4) — ready for Phase 161
+last_updated: "2026-05-27T03:57:31.340Z"
+last_activity: 2026-05-27 -- Phase 160 marked complete
 progress:
   total_phases: 9
-  completed_phases: 4
-  total_plans: 15
-  completed_plans: 20
-  percent: 44
+  completed_phases: 6
+  total_plans: 24
+  completed_plans: 24
+  percent: 67
 ---
 
 # FlashQuery Core — State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-26)
 
 **Core value:** Any MCP-compatible AI can save and retrieve organized, persistent, searchable data the user owns — across tools, across sessions, with zero vendor lock-in.
-**Current focus:** Phase 160 — folder locks + manage directory migration
+**Current focus:** Phase 160 — folder-locks-manage-directory-migration
 
 ## Current Position
 
-Phase: 160
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-27
+Phase: 160 — COMPLETE
+Plan: 4 of 4
+Status: Phase 160 complete
+Last activity: 2026-05-27 -- Phase 160 marked complete
 
 Progress: [██████████] 100%
 
@@ -49,7 +49,7 @@ Progress: [██████████] 100%
 | 157 | 3 | - | - |
 | 158 | 6 | - | - |
 | 159 | 5 | - | - |
-| 160 | TBD | - | - |
+| 160 | 4 | - | - |
 | 161 | TBD | - | - |
 | 162 | TBD | - | - |
 | 163 | TBD | - | - |
@@ -106,6 +106,6 @@ None active.
 
 ## Session Continuity
 
-Last session: 2026-05-26T20:52:24.929Z
-Stopped at: Completed 158-03-PLAN.md
+Last session: 2026-05-27T03:57:21.332Z
+Stopped at: Phase 160 complete (4/4) — ready for Phase 161
 Resume file: None

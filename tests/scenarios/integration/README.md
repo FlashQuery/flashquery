@@ -106,6 +106,12 @@ python3 run_integration.py --url http://localhost:3001/mcp --secret mysecret
 python3 run_integration.py --json
 ```
 
+### Phase 160 Folder Coordination
+
+`folder_coordination.yml` records the Phase 160 `INT-WCO-01` / `T-Y-001`
+public workflow evidence. It uses managed public tool steps for
+`write_document`, `manage_directory(action:"rename")`, and `get_document`.
+
 ## Directory Structure
 
 ```

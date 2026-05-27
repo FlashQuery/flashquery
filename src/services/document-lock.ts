@@ -202,8 +202,8 @@ async function ancestorDirectoryEntries(
   filePath: string
 ): Promise<DocumentLockEntry[]> {
   const vaultRoot = config.instance.vault?.path ?? path.dirname(path.resolve(filePath));
-  const resolvedVault = path.normalize(await safeRealpath(vaultRoot));
-  const absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(resolvedVault, filePath);
+  const resolvedVault = path.normalize(await canonicalPathFor(vaultRoot, vaultRoot, 'dir'));
+  const absolutePath = await canonicalPathFor(resolvedVault, filePath, 'file');
   let current = path.dirname(path.normalize(absolutePath));
   const directories: string[] = [];
 

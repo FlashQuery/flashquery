@@ -43,7 +43,7 @@
 - [x] **Phase 157: Records / Memory / Plugins Audit + Guards** - Non-file subsystems remain coherent after the legacy lock table is removed. (completed 2026-05-26)
 - [x] **Phase 158: Tier 2 + Lock-table Retirement + Session Check** - Cross-process writes use session-scoped Postgres advisory locks and the old lock table/CLI disappears. (completed 2026-05-26)
 - [x] **Phase 159: Lock Timeout + Canonical Key Derivation** - Lock acquisition is bounded and all file/directory keys resolve to canonical path-based identities. (completed 2026-05-27)
-- [ ] **Phase 160: Folder Locks + Manage Directory Migration** - Folder operations coordinate safely with descendant file writes using shared/exclusive advisory locks.
+- [x] **Phase 160: Folder Locks + Manage Directory Migration** - Folder operations coordinate safely with descendant file writes using shared/exclusive advisory locks. (completed 2026-05-27)
 - [ ] **Phase 161: Destination Locks + EXDEV Fallback** - Create, copy, and move operations lock destination paths and move safely across devices.
 - [ ] **Phase 162: Version-fingerprint Check** - Reads and writes expose version tokens and callers can opt into conflict detection.
 - [ ] **Phase 163: Multi-file Batch Contract** - Batch tools accept mixed identifier/token inputs and return ordered per-item results.
@@ -179,6 +179,7 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
+
 - [x] 159-01-PLAN.md — Canonical file and directory lock-key derivation with `T-U-006` through `T-U-010`.
 - [x] 159-02-PLAN.md — Configurable bounded lock acquisition with `T-U-014` and `T-U-015`.
 - [x] 159-03-PLAN.md — Single-document write/copy/move `lock_timeout` response envelopes.
@@ -206,10 +207,21 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 160-01-PLAN.md — Add shared/exclusive directory advisory-lock facade helpers.
-- [ ] 160-02-PLAN.md — Wrap file-writing paths with shared ancestor directory locks and add shared-lock folder integration tests.
-- [ ] 160-03-PLAN.md — Add `manage_directory` rename/move workflow, migrate structural folder operations to exclusive advisory locks, and preserve response shape.
-- [ ] 160-04-PLAN.md — Add passing `INT-WCO-01` concurrent rename/move scenario coverage and final Phase 160 validation evidence.
+**Wave 1**
+
+- [x] 160-01-PLAN.md — Add shared/exclusive directory advisory-lock facade helpers.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 160-02-PLAN.md — Wrap file-writing paths with shared ancestor directory locks and add shared-lock folder integration tests.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 160-03-PLAN.md — Add `manage_directory` rename/move workflow, migrate structural folder operations to exclusive advisory locks, and preserve response shape.
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 160-04-PLAN.md — Add passing `INT-WCO-01` concurrent rename/move scenario coverage and final Phase 160 validation evidence.
 
 ### Phase 161: Destination Locks + EXDEV Fallback
 
@@ -284,7 +296,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 157. Records / Memory / Plugins Audit + Guards | 0/TBD | Not started | - |
 | 158. Tier 2 + Lock-table Retirement + Session Check | 6/6 | Complete   | 2026-05-26 |
 | 159. Lock Timeout + Canonical Key Derivation | 5/5 | Complete    | 2026-05-27 |
-| 160. Folder Locks + Manage Directory Migration | 0/TBD | Not started | - |
+| 160. Folder Locks + Manage Directory Migration | 4/4 | Complete   | 2026-05-27 |
 | 161. Destination Locks + EXDEV Fallback | 0/TBD | Not started | - |
 | 162. Version-fingerprint Check | 0/TBD | Not started | - |
 | 163. Multi-file Batch Contract | 0/TBD | Not started | - |

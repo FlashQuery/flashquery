@@ -1,0 +1,47 @@
+name: folder_coordination
+description: >
+  INT-WCO-01 / T-Y-001 public folder coordination workflow for Phase 160.
+  Exercises write_document plus manage_directory rename/move using the public
+  managed scenario runner surface.
+coverage:
+  - INT-WCO-01
+  - T-Y-001
+  - REQ-007
+
+steps:
+  - label: "Create source folder"
+    action: manage_directory
+    args:
+      action: create
+      paths:
+        - "_wco/notes"
+
+  - label: "Write descendant document through public write_document"
+    action: write_document
+    name: coordination_doc
+    args:
+      mode: create
+      path: "_wco/notes/A.md"
+      title: "Folder Coordination A"
+      content: "INT-WCO-01 descendant write before folder rename."
+      tags: [phase160, folder-coordination]
+
+  - label: "Public manage_directory rename moves the folder"
+    assert:
+      op: manage_directory
+      args:
+        action: rename
+        paths:
+          - "_wco/notes"
+        destinations:
+          - "_wco/renamed-notes"
+      expect_json_equals:
+        path: results[0].status
+        value: renamed
+
+  - label: "Moved descendant remains readable from destination"
+    assert:
+      op: get_document
+      args:
+        identifiers: "_wco/renamed-notes/A.md"
+      expect_contains: "Folder Coordination A"

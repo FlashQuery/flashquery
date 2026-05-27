@@ -126,6 +126,12 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 |----|----------|------------|--------------|--------------|
 | IS-15 | T-Y-001: pooled record vector SQL supports concurrent `write_record` embed_fields writes and semantic `search_records` results with scores. | record_embed_pool_concurrency | 2026-05-24   | 2026-05-24   |
 
+## Phase 160 Vault Write Coherency Folder Locks
+
+| ID | Behavior | Covered By | Date Updated | Last Passing |
+|----|----------|------------|--------------|--------------|
+| INT-WCO-01 | T-Y-001 / REQ-007 public folder coordination workflow: write a descendant document, rename the folder through `manage_directory`, and read the descendant at the destination path. | folder_coordination          | 2026-05-27   | 2026-05-27   |
+
 ---
 
 ## IS — Search Coherence
