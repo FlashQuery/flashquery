@@ -67,7 +67,7 @@
 
 Phase 163 should be planned as an additive MCP contract change over the existing Phase 162 version-token implementation, not as new locking or atomic-batch work. The source-of-truth requirements say batch tools process each item independently under the established per-file write path and return one ordered entry per input item. [CITED: Vault Write Coherency Locking Requirements.md §6.3.1]
 
-The current implementation already has the right write foundation: Phase 162 added `computeVersionToken`, `pickExpectedVersion`, and `buildVersionMismatchEnvelope`; archive/remove/link/tag handlers already compare fresh in-lock bytes and build version mismatch payloads. [VERIFIED: codebase grep] The main gap is that `archive_document`, `remove_document`, and `insert_doc_link` still accept only `string | string[]`, and their handlers derive one top-level `expectedVersion` for all items. [VERIFIED: src/mcp/tools/documents/archive.ts:35] [VERIFIED: src/mcp/tools/documents/remove.ts:39] [VERIFIED: src/mcp/tools/compound.ts:260]
+The current implementation already has the right write foundation: Phase 162 added `computeVersionToken`, `pickExpectedVersion`, and `buildVersionMismatchEnvelope`; archive/remove/link/tag handlers already compare fresh in-lock bytes and build version mismatch payloads. Phase 162's post-gap-fix code also makes `archive_document` conflict regions whole-document regions via `buildWholeDocumentTargetedRegion` and makes archived success tokens come from a definitely computed post-write content hash. [VERIFIED: codebase grep] [VERIFIED: commit 4f564df] The main gap is that `archive_document`, `remove_document`, and `insert_doc_link` still accept only `string | string[]`, and their handlers derive one top-level `expectedVersion` for all items. [VERIFIED: src/mcp/tools/documents/archive.ts:35] [VERIFIED: src/mcp/tools/documents/remove.ts:39] [VERIFIED: src/mcp/tools/compound.ts:260]
 
 **Primary recommendation:** create one small shared batch-normalization/result helper, migrate the four scoped tool surfaces to per-item tokens, and keep each tool's existing single-item conflict/success payload as the source for the batch item body. [VERIFIED: codebase grep]
 
@@ -212,7 +212,7 @@ Source: Context7 Zod docs for `z.union`, `z.array`, and `z.strictObject`. [CITED
 
 ### Pattern 2: Per-Item Token Check Inside Existing Lock
 
-**What:** Compare each item's token after lock acquisition and fresh `readFile`, using existing `buildVersionMismatchEnvelope`. [VERIFIED: src/mcp/tools/documents/archive.ts:81] [VERIFIED: src/mcp/utils/document-version.ts:24]
+**What:** Compare each item's token after lock acquisition and fresh `readFile`, using the existing single-item conflict envelope builder and targeted-region helper for that tool. [VERIFIED: src/mcp/tools/documents/archive.ts:81] [VERIFIED: src/mcp/utils/document-version.ts:24]
 
 **When to use:** Every tokened document item before writing. Bare strings skip the check. [CITED: Vault Write Coherency Locking Requirements.md §6.3.2]
 
@@ -252,7 +252,7 @@ if (item.version_token && item.version_token !== computeVersionToken(raw)) {
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
 | Input validation | Custom `typeof` parser as public schema | Zod unions / arrays / strict objects | Project standard requires Zod for external input validation. [VERIFIED: AGENTS.md] |
-| Version conflict envelope | New conflict object shape | `buildVersionMismatchEnvelope` plus a `status: "conflicted"` wrapper | Phase 162 established current token + targeted-region contract. [VERIFIED: src/mcp/utils/document-version.ts:24] |
+| Version conflict envelope | New conflict object shape | Existing single-item `buildVersionMismatchEnvelope` payload plus a `status: "conflicted"` wrapper | Phase 162 established current token + targeted-region contract; archive destructive conflicts now use whole-document `targeted_region.type: "document"`. [VERIFIED: src/mcp/utils/document-version.ts:24] [VERIFIED: tests/integration/refused-write-envelope.integration.test.ts] |
 | Success payloads | Separate batch-only success bodies | Existing `documentArchiveResult`, `documentRemovalResult`, `documentIdentification` payloads | Avoid drift in version token, ID, size, and archive fields. [VERIFIED: src/mcp/utils/response-formats.ts:239] |
 | Integration harness | New test server bootstrap | `createPhase155Harness` / `createPhase155Handlers` | Existing tests register document and compound handlers against real Supabase/vault. [VERIFIED: tests/integration/vault-write-coherency-phase155-helpers.ts] |
 
@@ -356,7 +356,7 @@ Source: removal success intentionally omits `version_token` because the file no 
 |---|-------|---------|---------------|
 | A1 | A shared helper is preferable if it stays small and reduces duplicate schema/result wrapping. | Summary / Alternatives | Planner may over-abstract or under-test per-tool edge cases. |
 | A2 | Single-string calls should keep existing single-result response shape rather than adopting a batch wrapper. | Architecture Patterns | Backward compatibility may be interpreted differently by maintainers. |
-| A3 | Existing outer wrappers such as `remove_document` warnings should be preserved where needed. | Common Pitfalls | Callers may see a breaking response envelope if the outer shape changes unexpectedly. |
+| A3 | Array input responses now follow the raw ordered per-item array contract even where older handlers wrapped results. | Open Questions (RESOLVED) | Implementation agents must not preserve old array wrappers at the expense of REQ-018/Test Plan `T-I-034`. |
 | A4 | YAML scenario assertions may need substring checks for JSON array details. | Common Pitfalls | Scenario plan may be too shallow or may require runner enhancement. |
 
 ## Open Questions (RESOLVED)
