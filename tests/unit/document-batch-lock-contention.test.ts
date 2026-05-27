@@ -20,6 +20,7 @@ const resolverMock = vi.hoisted(() => ({
 }));
 
 const lockMock = vi.hoisted(() => ({
+  withAncestorDirectoryLocksShared: vi.fn(),
   withDocumentLock: vi.fn(),
 }));
 
@@ -50,6 +51,7 @@ vi.mock('../../src/services/document-lock.js', () => {
 
   return {
     LockTimeoutError,
+    withAncestorDirectoryLocksShared: lockMock.withAncestorDirectoryLocksShared,
     withDocumentLock: lockMock.withDocumentLock,
   };
 });
@@ -131,6 +133,7 @@ describe('document batch lock-contention envelopes', () => {
     vaultMock.moveMarkdownToTrash.mockResolvedValue(undefined);
     fsPromisesMock.stat.mockResolvedValue({ mtime: new Date('2026-05-26T00:00:00.000Z') });
     const { LockTimeoutError } = await import('../../src/services/document-lock.js');
+    lockMock.withAncestorDirectoryLocksShared.mockImplementation(async (_config, _filePath, fn) => fn());
     lockMock.withDocumentLock.mockRejectedValue(new LockTimeoutError('/tmp/fq-unit/Notes/Busy.md'));
   });
 

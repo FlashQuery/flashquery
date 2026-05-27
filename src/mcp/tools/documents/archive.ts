@@ -6,7 +6,11 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vaultManager } from '../../../storage/vault.js';
 import { supabaseManager } from '../../../storage/supabase.js';
 import { logger } from '../../../logging/logger.js';
-import { LockTimeoutError, withDocumentLock } from '../../../services/document-lock.js';
+import {
+  LockTimeoutError,
+  withAncestorDirectoryLocksShared,
+  withDocumentLock,
+} from '../../../services/document-lock.js';
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult, documentArchiveResult, type ErrorEnvelope } from '../../utils/response-formats.js';
@@ -63,7 +67,8 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
 
               // Resolve identifier to a canonical path
               const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
-              await withDocumentLock(config, resolved.absPath, async () => {
+              await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
+                withDocumentLock(config, resolved.absPath, async () => {
               const relativePath = resolved.relativePath;
 
               // Step 1: Read current frontmatter (vault-first requires reading before writing)
@@ -174,7 +179,8 @@ export function registerArchiveDocumentTool(server: McpServer, deps: DocumentToo
                 chars: parsed.content.length,
                 archived_at: archivedAt,
               }));
-              });
+                })
+              );
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
                 results.push({

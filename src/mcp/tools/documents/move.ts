@@ -8,7 +8,11 @@ import { vaultManager } from '../../../storage/vault.js';
 import { writeVaultFile } from '../../../storage/vault-write.js';
 import { supabaseManager } from '../../../storage/supabase.js';
 import { logger } from '../../../logging/logger.js';
-import { LockTimeoutError, withDocumentLocks } from '../../../services/document-lock.js';
+import {
+  LockTimeoutError,
+  withAncestorDirectoryLocksShared,
+  withDocumentLocks,
+} from '../../../services/document-lock.js';
 import { resolveDocumentIdentifier } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult, documentIdentification, withWarnings } from '../../utils/response-formats.js';
@@ -107,7 +111,9 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
             destAbsPath = join(parentValidation.absPath, destBase);
           }
           const normalizedDest = normalize(destAbsPath);
-          return await withDocumentLocks(config, [sourceAbsPath, normalizedDest], async () => {
+          return await withAncestorDirectoryLocksShared(config, sourceAbsPath, async () =>
+            withAncestorDirectoryLocksShared(config, normalizedDest, async () =>
+              withDocumentLocks(config, [sourceAbsPath, normalizedDest], async () => {
 
           // Step 4: Check if destination already exists
           if (existsSync(destAbsPath)) {
@@ -218,7 +224,9 @@ export function registerMoveDocumentTool(server: McpServer, deps: DocumentToolDe
           });
 
           return jsonToolResult(withWarnings(payload, warnings));
-          });
+              })
+            )
+          );
         } catch (err) {
           if (err instanceof LockTimeoutError) {
             return jsonExpectedError({

@@ -10,7 +10,11 @@ import { supabaseManager } from '../../../storage/supabase.js';
 import { embeddingProvider } from '../../../embedding/provider.js';
 import { documentEmbeddingTarget, scheduleBackgroundEmbedding } from '../../../embedding/background-embed.js';
 import { logger } from '../../../logging/logger.js';
-import { LockTimeoutError, withDocumentLock } from '../../../services/document-lock.js';
+import {
+  LockTimeoutError,
+  withAncestorDirectoryLocksShared,
+  withDocumentLock,
+} from '../../../services/document-lock.js';
 import { validateAllTags, deduplicateTags } from '../../../utils/tag-validator.js';
 import { resolveDocumentIdentifier } from '../../utils/resolve-document.js';
 import { serializeOrderedFrontmatter } from '../../utils/frontmatter-sanitizer.js';
@@ -111,7 +115,8 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
           const copyRelativePath = copyValidation.relativePath;
 
           const absPath = join(config.instance.vault.path, copyRelativePath);
-          return await withDocumentLock(config, absPath, async () => {
+          return await withAncestorDirectoryLocksShared(config, absPath, async () =>
+            withDocumentLock(config, absPath, async () => {
           if (existsSync(absPath)) {
             return jsonExpectedError({
               error: 'conflict',
@@ -180,7 +185,8 @@ export function registerCopyDocumentTool(server: McpServer, deps: DocumentToolDe
             modified,
             chars: written.content.length,
           }), embedResult.warnings));
-          });
+            })
+          );
         } catch (err) {
           if (err instanceof LockTimeoutError) {
             return jsonExpectedError({

@@ -13,7 +13,11 @@ import {
 } from '../../embedding/background-embed.js';
 import { logger } from '../../logging/logger.js';
 import { pluginManager } from '../../plugins/manager.js';
-import { LockTimeoutError, withDocumentLock } from '../../services/document-lock.js';
+import {
+  LockTimeoutError,
+  withAncestorDirectoryLocksShared,
+  withDocumentLock,
+} from '../../services/document-lock.js';
 import { validateAllTags, normalizeTags, deduplicateTags } from '../../utils/tag-validator.js';
 import { resolveDocumentIdentifier, targetedScan } from '../utils/resolve-document.js';
 import { AmbiguousDocumentIdentifierError, DocumentNotFoundError } from '../utils/resolve-document.js';
@@ -230,7 +234,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         for (const sourceIdentifier of sourceIdentifiers) {
           try {
             const sourceResolved = await resolveDocumentIdentifier(config, supabase, sourceIdentifier, logger);
-            await withDocumentLock(config, sourceResolved.absPath, async () => {
+            await withAncestorDirectoryLocksShared(config, sourceResolved.absPath, async () =>
+              withDocumentLock(config, sourceResolved.absPath, async () => {
             const raw = await readFile(sourceResolved.absPath, 'utf-8');
             const parsed = matter(raw);
 
@@ -268,7 +273,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 title: targetTitle,
               },
             });
-            });
+              })
+            );
           } catch (sourceErr) {
             if (sourceErr instanceof LockTimeoutError) {
               results.push(lockTimeoutError(sourceErr, sourceIdentifier));
@@ -376,7 +382,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             try {
               // Resolve identifier
               const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
-              await withDocumentLock(config, resolved.absPath, async () => {
+              await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
+                withDocumentLock(config, resolved.absPath, async () => {
 
               const absPath = resolved.absPath;
               const relativePath = resolved.relativePath;
@@ -466,7 +473,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 tags: dedupTagsForSync,
                 entity_type: 'document',
               });
-              });
+                })
+              );
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
                 results.push(lockTimeoutError(itemErr, id));
@@ -1092,7 +1100,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
            identifier,
            logger
          );
-         return await withDocumentLock(config, resolved.absPath, async () => {
+         return await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
+           withDocumentLock(config, resolved.absPath, async () => {
 
          // Read file
         const rawContent = await readFile(resolved.absPath, 'utf-8');
@@ -1201,7 +1210,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 },
               }),
          }, embedResult.warnings));
-         });
+           })
+         );
        } catch (err) {
         if (err instanceof LockTimeoutError) {
           return jsonExpectedError(lockTimeoutError(err, identifier));
@@ -1249,7 +1259,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
         // Step 1: Resolve document identifier
         const resolved = await resolveDocumentIdentifier(config, supabase, identifier, logger);
-        return await withDocumentLock(config, resolved.absPath, async () => {
+        return await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
+          withDocumentLock(config, resolved.absPath, async () => {
 
         // Step 2: Read document
         const document = await vaultManager.readMarkdown(resolved.relativePath);
@@ -1390,7 +1401,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           heading_match: heading_match ?? 'contains',
           ...(heading_level !== undefined ? { heading_level } : {}),
         }, embeddingWarnings));
-        });
+          })
+        );
       } catch (err) {
         if (err instanceof LockTimeoutError) {
           return jsonExpectedError({

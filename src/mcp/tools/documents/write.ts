@@ -13,7 +13,11 @@ import {
   scheduleBackgroundEmbedding,
 } from '../../../embedding/background-embed.js';
 import { logger } from '../../../logging/logger.js';
-import { LockTimeoutError, withDocumentLock } from '../../../services/document-lock.js';
+import {
+  LockTimeoutError,
+  withAncestorDirectoryLocksShared,
+  withDocumentLock,
+} from '../../../services/document-lock.js';
 import { validateAllTags, deduplicateTags } from '../../../utils/tag-validator.js';
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { serializeOrderedFrontmatter } from '../../utils/frontmatter-sanitizer.js';
@@ -115,7 +119,8 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
           }
           const relativePath = validation.relativePath;
           const absolutePath = validation.absPath;
-          return await withDocumentLock(config, absolutePath, async () => {
+          return await withAncestorDirectoryLocksShared(config, absolutePath, async () =>
+            withDocumentLock(config, absolutePath, async () => {
             if (existsSync(absolutePath)) {
               try {
                 const statResult = await stat(absolutePath);
@@ -245,7 +250,8 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                 [...warnings, ...embedResult.warnings]
               )
             );
-          });
+            })
+          );
         }
 
         while (true) {
@@ -255,10 +261,13 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
             identifier as string,
             logger
           );
-          const attempt = await withDocumentLock(
+          const attempt = await withAncestorDirectoryLocksShared(
             config,
             lockCandidate.absPath,
-            async (): Promise<{ retry: true } | { retry: false; result: ToolResult }> => {
+            async () => withDocumentLock(
+              config,
+              lockCandidate.absPath,
+              async (): Promise<{ retry: true } | { retry: false; result: ToolResult }> => {
               const resolved = await resolveDocumentIdentifier(
                 config,
                 supabase,
@@ -365,7 +374,8 @@ export function registerWriteDocumentTool(server: McpServer, deps: DocumentToolD
                   )
                 ),
               };
-            }
+              }
+            )
           );
           if (!attempt.retry) return attempt.result;
         }

@@ -19,6 +19,7 @@ const resolverMock = vi.hoisted(() => ({
 }));
 
 const lockMock = vi.hoisted(() => ({
+  withAncestorDirectoryLocksShared: vi.fn(),
   withDocumentLock: vi.fn(),
 }));
 
@@ -49,6 +50,7 @@ vi.mock('../../src/services/document-lock.js', () => {
 
   return {
     LockTimeoutError,
+    withAncestorDirectoryLocksShared: lockMock.withAncestorDirectoryLocksShared,
     withDocumentLock: lockMock.withDocumentLock,
   };
 });
@@ -140,6 +142,7 @@ describe('archive_document JSON result helpers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     initLogger({ level: 'error', output: 'stderr' });
+    lockMock.withAncestorDirectoryLocksShared.mockImplementation(async (_config, _filePath, fn) => fn());
     lockMock.withDocumentLock.mockImplementation(async (_config, _filePath, fn) => fn());
   });
 

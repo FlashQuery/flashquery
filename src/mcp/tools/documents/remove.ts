@@ -7,7 +7,11 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { vaultManager } from '../../../storage/vault.js';
 import { supabaseManager } from '../../../storage/supabase.js';
 import { logger } from '../../../logging/logger.js';
-import { LockTimeoutError, withDocumentLock } from '../../../services/document-lock.js';
+import {
+  LockTimeoutError,
+  withAncestorDirectoryLocksShared,
+  withDocumentLock,
+} from '../../../services/document-lock.js';
 import { resolveDocumentIdentifier, targetedScan } from '../../utils/resolve-document.js';
 import { getIsShuttingDown } from '../../../server/shutdown-state.js';
 import { jsonExpectedError, jsonRuntimeError, jsonToolResult, documentRemovalResult, withWarnings, type ErrorEnvelope } from '../../utils/response-formats.js';
@@ -71,7 +75,8 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
               }
 
               const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
-              await withDocumentLock(config, resolved.absPath, async () => {
+              await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
+                withDocumentLock(config, resolved.absPath, async () => {
               const relativePath = resolved.relativePath;
               const parsed = await vaultManager.readMarkdown(relativePath);
               const archivedAtValue = parsed.data[FM.ARCHIVED_AT];
@@ -177,7 +182,8 @@ export function registerRemoveDocumentTool(server: McpServer, deps: DocumentTool
                 }
                 throw removalErr;
               }
-              });
+                })
+              );
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
                 results.push({

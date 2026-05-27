@@ -20,7 +20,7 @@ import {
   documentEmbeddingTarget,
   scheduleBackgroundEmbedding,
 } from '../embedding/background-embed.js';
-import { withDocumentLock } from './document-lock.js';
+import { withAncestorDirectoryLocksShared, withDocumentLock } from './document-lock.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // scanMutex — DCP-03: serializes concurrent runScanOnce() calls
@@ -1333,7 +1333,8 @@ export async function repairFrontmatter(
         try {
           let repairedFile = false;
           let updatedHash = '';
-          await withDocumentLock(config, join(vaultRoot, filePath), async () => {
+          await withAncestorDirectoryLocksShared(config, join(vaultRoot, filePath), async () =>
+            withDocumentLock(config, join(vaultRoot, filePath), async () => {
             // Read file to extract existing content and frontmatter
             let fileContent: string;
             let existingFrontmatter: Record<string, unknown>;
@@ -1385,7 +1386,8 @@ export async function repairFrontmatter(
               })
               .eq('id', fqcId);
             repairedFile = true;
-          });
+            })
+          );
           if (!repairedFile) {
             continue;
           }
