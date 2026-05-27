@@ -33,7 +33,9 @@ Use `get_document` to read known documents from the vault and receive structured
 
 ## Returns
 
-Returns JSON text. Single-string input returns a flat document object or expected error. Array input returns an ordered array where each element is either a document object or an error object. Document objects always include identification fields and include requested payload fields.
+Returns JSON text. Single-string input returns a flat document object or expected error. Array input returns an ordered array where each element is either a document object or an error object. Document objects always include identification fields, `version_token`, and requested payload fields.
+
+`version_token` is the whole-file SHA-256 fingerprint of the current on-disk bytes. It is returned even when you request only `frontmatter`, `headings`, or one section, and can be passed as `expected_version` on later write tools to opt into conflict detection.
 
 ## Examples
 
@@ -60,6 +62,7 @@ Returns ordered heading summaries for two documents.
 - Use `search` when you do not know the identifier.
 - `sections` requires `body` in `include`.
 - `occurrence` must be a positive integer; `max_depth` must be 1 through 6.
+- `version_token` is for the whole file, not the extracted section.
 - Batch partial failures do not set MCP `isError`; they appear in the returned array.
 
 ## Related Tools

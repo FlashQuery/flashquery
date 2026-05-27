@@ -14,7 +14,6 @@
  */
 
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import matter from 'gray-matter';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -23,6 +22,7 @@ import { DocumentReadError, resolveDocumentIdentifier, targetedScan } from './do
 import type { ErrorEnvelope } from './response-formats.js';
 import { extractHeadings } from './markdown-utils.js';
 import { computeSectionChars, extractSection, extractMultipleSections, findHeadingOccurrence, SectionExtractError } from './markdown-sections.js';
+import { computeVersionToken } from './document-version.js';
 import { isValidUuid } from '../../utils/uuid.js';
 
 interface DocumentOutputConfig {
@@ -65,6 +65,7 @@ export interface DocumentEnvelope {
   title: string;
   path: string;
   fq_id: string;
+  version_token: string;
   modified: string;
   size: { chars: number };
   body?: string;
@@ -141,7 +142,7 @@ export function resolveTitle(
  */
 export function buildMetadataEnvelope(
   identifier: string,
-  resolved: { relativePath: string; capturedFrontmatter: { fqcId: string } },
+  resolved: { relativePath: string; capturedFrontmatter: { fqcId: string; contentHash?: string } },
   frontmatter: Record<string, unknown>,
   bodyContent: string
 ): {
@@ -149,6 +150,7 @@ export function buildMetadataEnvelope(
   title: string;
   path: string;
   fq_id: string;
+  version_token: string;
   modified: string;
   size: { chars: number };
 } {
@@ -161,6 +163,7 @@ export function buildMetadataEnvelope(
     title,
     path: resolved.relativePath,
     fq_id: resolved.capturedFrontmatter.fqcId,
+    version_token: resolved.capturedFrontmatter.contentHash ?? computeVersionToken(bodyContent),
     modified,
     size: { chars: bodyContent.length },
   };
@@ -222,6 +225,7 @@ export function buildConsolidatedResponse(
     title: string;
     path: string;
     fq_id: string;
+    version_token: string;
     modified: string;
     size: { chars: number };
   },
@@ -417,7 +421,7 @@ export async function resolveAndBuildDocument(
     throw new DocumentReadError(identifier, resolved.relativePath, readErr);
   }
   const parsed = matter(rawContent);
-  const contentHash = createHash('sha256').update(rawContent).digest('hex');
+  const contentHash = computeVersionToken(rawContent);
 
   // CR-02: Only call targetedScan when hash has changed or no existing DB row
   let preScan: Awaited<ReturnType<typeof targetedScan>>;
@@ -451,18 +455,19 @@ export async function resolveAndBuildDocument(
 
   const relativePath = preScan.relativePath;
   const fqcId = preScan.capturedFrontmatter.fqcId;
+  const versionToken = preScan.capturedFrontmatter.contentHash;
   const { data, content } = parsed;
 
   log.info(`get_document: read ${relativePath}`);
 
   // Background re-embed when hash is stale
-  if (fqcId && (!hashRow || hashRow.content_hash !== contentHash)) {
+  if (fqcId && (!hashRow || hashRow.content_hash !== versionToken)) {
     const docTitle = typeof data[FM.TITLE] === 'string' ? (data[FM.TITLE] as string) : relativePath;
     const now = new Date().toISOString();
     log.debug(`get_document: stale hash detected for ${relativePath} — queuing background re-embed`);
     const { error: hashErr } = await sm.getClient()
       .from('fqc_documents')
-      .update({ content_hash: contentHash, updated_at: now })
+      .update({ content_hash: versionToken, updated_at: now })
       .eq('id', fqcId);
     if (hashErr) {
       log.warn(`get_document: hash update failed for ${relativePath}: ${hashErr.message}`);
