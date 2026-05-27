@@ -277,7 +277,15 @@ Plans:
   - Execution must prove response shape, opt-in write preconditions, check-inside-lock behavior, token-equals-disk invariants, conflict envelopes, whole-file hash semantics, and scanner zero-write stability.
   - Required execution evidence: `npm test -- --grep "version-token|expected-version|conflict-envelope|get-document-no-lock"`; `npm run test:integration -- --grep "version-token|version-check|token-equals-disk|refused-write|scanner-zero-writes"`; directed scenarios `D-WCO-05`, `D-WCO-06`, and `D-WCO-07` when they land.
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+- [ ] 162-01-PLAN.md — Unit contract for response tokens, schemas, conflict envelopes, whole-file hashes, and read-no-lock behavior.
+- [ ] 162-02-PLAN.md — Integration and directed scenario contracts for Test Plan §4.2.1 through §4.2.7.
+- [ ] 162-03-PLAN.md — Read-side `version_token` plumbing and token-equals-disk repair invariant.
+- [ ] 162-04-PLAN.md — Top-level document tool `expected_version` / `if_match` checks and success tokens.
+- [ ] 162-05-PLAN.md — Compound document tool version checks and targeted conflict regions.
+- [ ] 162-06-PLAN.md — Scanner zero-write stability, directed scenario closure, and final validation evidence.
 
 ### Phase 163: Multi-file Batch Contract
 
@@ -313,7 +321,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 159. Lock Timeout + Canonical Key Derivation | 5/5 | Complete    | 2026-05-27 |
 | 160. Folder Locks + Manage Directory Migration | 4/4 | Complete   | 2026-05-27 |
 | 161. Destination Locks + EXDEV Fallback | 4/4 | Complete    | 2026-05-27 |
-| 162. Version-fingerprint Check | 0/TBD | Not started | - |
+| 162. Version-fingerprint Check | 0/6 | Not started | - |
 | 163. Multi-file Batch Contract | 0/TBD | Not started | - |
 
 ## Archived Milestone Details
