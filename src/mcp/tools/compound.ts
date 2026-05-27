@@ -1,5 +1,4 @@
 import { readFile } from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import matter from 'gray-matter';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -50,6 +49,19 @@ import {
   resolveSearchIntent,
   type SearchResultItem,
 } from '../utils/search-results.js';
+import {
+  buildVersionMismatchEnvelope,
+  computeVersionToken,
+  pickExpectedVersion,
+} from '../utils/document-version.js';
+
+type HeadingMatchInput = {
+  heading?: string;
+  heading_match?: 'contains' | 'exact';
+  heading_level?: number;
+  occurrence?: number;
+  include_nested?: boolean;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: apply tag set operations (idempotent add, graceful remove)
@@ -149,12 +161,85 @@ function headingErrorMatches(matches: Array<{ text: string; level: number; line:
   }));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: compute SHA-256 hash of raw file content
-// ─────────────────────────────────────────────────────────────────────────────
+function frontmatterTargetedRegion(rawContent: string): Record<string, unknown> {
+  return {
+    kind: 'frontmatter',
+    frontmatter: matter(rawContent).data,
+  };
+}
 
-function computeHash(rawContent: string): string {
-  return createHash('sha256').update(rawContent).digest('hex');
+function sectionTargetedRegion(
+  body: string,
+  input: Required<Pick<HeadingMatchInput, 'heading'>> & HeadingMatchInput
+): Record<string, unknown> {
+  const heading = input.heading;
+  const options = {
+    headingMatch: input.heading_match ?? 'contains',
+    headingLevel: input.heading_level,
+  };
+  const matches = findMatchingHeadings(body, heading, options);
+  const resolved = resolveHeadingTarget(matches, input.occurrence);
+  if (resolved.status !== 'matched') {
+    return { not_found: true };
+  }
+  const occurrence = input.occurrence ?? resolved.heading.occurrence;
+  const boundaries = getSectionBoundaries(
+    body,
+    heading,
+    input.include_nested ?? true,
+    occurrence,
+    options
+  );
+  return {
+    kind: 'section',
+    heading: resolved.heading.text,
+    level: resolved.heading.level,
+    body: boundaries.content,
+    extracted_sections: [{ heading: resolved.heading.text, chars: boundaries.content.length }],
+  };
+}
+
+function insertTargetedRegion(rawContent: string, input: HeadingMatchInput): Record<string, unknown> {
+  const parsed = matter(rawContent);
+  if (!input.heading) {
+    return {
+      kind: 'document_end',
+      body: '',
+    };
+  }
+  return sectionTargetedRegion(parsed.content, {
+    heading: input.heading,
+    heading_match: input.heading_match,
+    heading_level: input.heading_level,
+    occurrence: input.occurrence,
+    include_nested: input.include_nested,
+  });
+}
+
+function versionMismatchResult(input: {
+  identifier: string;
+  currentRaw: string;
+  targetedRegion: Record<string, unknown>;
+}) {
+  return jsonExpectedError(
+    buildVersionMismatchEnvelope({
+      identifier: input.identifier,
+      versionToken: computeVersionToken(input.currentRaw),
+      targetedRegion: input.targetedRegion,
+    })
+  );
+}
+
+function versionMismatchPayload(input: {
+  identifier: string;
+  currentRaw: string;
+  targetedRegion: Record<string, unknown>;
+}): ErrorEnvelope {
+  return buildVersionMismatchEnvelope({
+    identifier: input.identifier,
+    versionToken: computeVersionToken(input.currentRaw),
+    targetedRegion: input.targetedRegion,
+  });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -182,9 +267,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           .describe(
             'Frontmatter property to add the link to (default: "links"). Use "related", "parent", etc. for other organizational constructs.'
           ),
+        expected_version: z.string().optional().describe('Optional version_token expected for the source document bytes before writing.'),
+        if_match: z.string().optional().describe('Alias for expected_version.'),
       },
     },
-    async ({ identifiers, target_identifier, property }) => {
+    async ({ identifiers, target_identifier, property, expected_version, if_match }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -230,13 +317,21 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         // Build wikilink string using resolved title
         const wikilink = `[[${targetTitle}]]`;
         const results: Array<Record<string, unknown>> = [];
+        const expectedVersion = pickExpectedVersion({ expected_version, if_match });
 
         for (const sourceIdentifier of sourceIdentifiers) {
           try {
             const sourceResolved = await resolveDocumentIdentifier(config, supabase, sourceIdentifier, logger);
-            await withAncestorDirectoryLocksShared(config, sourceResolved.absPath, async () =>
+            const conflict = await withAncestorDirectoryLocksShared(config, sourceResolved.absPath, async () =>
               withDocumentLock(config, sourceResolved.absPath, async () => {
             const raw = await readFile(sourceResolved.absPath, 'utf-8');
+            if (expectedVersion && expectedVersion !== computeVersionToken(raw)) {
+              return versionMismatchPayload({
+                identifier: sourceIdentifier,
+                currentRaw: raw,
+                targetedRegion: frontmatterTargetedRegion(raw),
+              });
+            }
             const parsed = matter(raw);
 
             const existing: string[] = Array.isArray(parsed.data[targetProperty])
@@ -246,12 +341,24 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             parsed.data[targetProperty] = [...new Set([...existing, wikilink])];
 
             const serialized = matter.stringify(parsed.content, parsed.data);
-            const newHash = computeHash(serialized);
+            const newHash = computeVersionToken(serialized);
             const preScan = await targetedScan(config, supabase, sourceResolved, newHash, logger);
             const fqcId = preScan.capturedFrontmatter.fqcId;
             parsed.data[FM.ID] = fqcId;
 
             await vaultManager.writeMarkdown(sourceResolved.relativePath, parsed.data, parsed.content);
+            const postWriteRaw = await readFile(sourceResolved.absPath, 'utf-8');
+            const versionToken = computeVersionToken(postWriteRaw);
+            if (fqcId) {
+              const { error: hashUpdateError } = await supabase
+                .from('fqc_documents')
+                .update({ content_hash: versionToken, updated_at: new Date().toISOString() })
+                .eq('id', fqcId)
+                .eq('instance_id', config.instance.id);
+              if (hashUpdateError) {
+                throw new Error(`Supabase link update failed for ${sourceResolved.relativePath}: ${hashUpdateError.message}`);
+              }
+            }
 
             logger.info(`insert_doc_link: ${alreadyLinked ? 'unchanged' : 'added'} ${wikilink} in ${sourceResolved.relativePath}`);
             results.push({
@@ -262,6 +369,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 fq_id: fqcId,
                 modified: typeof parsed.data[FM.UPDATED] === 'string' ? parsed.data[FM.UPDATED] as string : new Date().toISOString(),
                 chars: parsed.content.length,
+                version_token: versionToken,
               }),
               status: alreadyLinked ? 'unchanged' : 'updated',
               property: targetProperty,
@@ -273,8 +381,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                 title: targetTitle,
               },
             });
+            return null;
               })
             );
+            if (conflict) {
+              if (sourceIdentifiers.length === 1) return jsonExpectedError(conflict);
+              results.push(conflict);
+            }
           } catch (sourceErr) {
             if (sourceErr instanceof LockTimeoutError) {
               results.push(lockTimeoutError(sourceErr, sourceIdentifier));
@@ -311,6 +424,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           .array(z.object({
             entity_type: z.enum(['document', 'memory']),
             identifier: z.string(),
+            expected_version: z.string().optional(),
+            if_match: z.string().optional(),
           }))
           .optional()
           .describe('Ordered targets to tag. Each target declares document or memory explicitly.'),
@@ -329,9 +444,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           .array(z.string())
           .optional()
           .describe('Tags to remove (silent no-op if not present)'),
+        expected_version: z.string().optional().describe('Optional version_token expected for document targets before writing.'),
+        if_match: z.string().optional().describe('Alias for expected_version.'),
       },
     },
-    async ({ targets, identifiers, memory_id, add_tags, remove_tags }) => {
+    async ({ targets, identifiers, memory_id, add_tags, remove_tags, expected_version, if_match }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -379,16 +496,27 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         for (const target of normalizedTargets) {
           if (target.entity_type === 'document') {
             const id = target.identifier;
+            const expectedVersion = pickExpectedVersion({
+              expected_version: ('expected_version' in target ? target.expected_version : undefined) ?? expected_version,
+              if_match: ('if_match' in target ? target.if_match : undefined) ?? if_match,
+            });
             try {
               // Resolve identifier
               const resolved = await resolveDocumentIdentifier(config, supabase, id, logger);
-              await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
+              const conflict = await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
                 withDocumentLock(config, resolved.absPath, async () => {
 
               const absPath = resolved.absPath;
               const relativePath = resolved.relativePath;
 
               const raw = await readFile(absPath, 'utf-8');
+              if (expectedVersion && expectedVersion !== computeVersionToken(raw)) {
+                return versionMismatchPayload({
+                  identifier: id,
+                  currentRaw: raw,
+                  targetedRegion: frontmatterTargetedRegion(raw),
+                });
+              }
               const parsed = matter(raw);
 
               // Get existing tags (idempotent add, graceful remove)
@@ -420,7 +548,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
               // Compute hash of the new content about to be written
               const serialized = matter.stringify(parsed.content, parsed.data);
-              const newHash = computeHash(serialized);
+              const newHash = computeVersionToken(serialized);
 
               // Call targetedScan to update frontmatter and get fqcId
               const preScan = await targetedScan(config, supabase, resolved, newHash, logger);
@@ -439,9 +567,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
               // LOGIC-02 (DCP-05): Read file after write to verify actual hash
               const postWriteRaw = await readFile(absPath, 'utf-8');
-              const postWriteParsed = matter(postWriteRaw);
-              const actualSerializedAfterWrite = matter.stringify(postWriteParsed.content, postWriteParsed.data);
-              const actualHashAfterWrite = computeHash(actualSerializedAfterWrite);
+              const actualHashAfterWrite = computeVersionToken(postWriteRaw);
 
               logger.info(`apply_tags: updated tags on document ${relativePath} (${docTagValidation.normalized.length} tags)`);
 
@@ -469,12 +595,18 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
                   fq_id: fqcId,
                   modified: typeof parsed.data[FM.UPDATED] === 'string' ? parsed.data[FM.UPDATED] as string : new Date().toISOString(),
                   chars: parsed.content.length,
+                  version_token: actualHashAfterWrite,
                 }),
                 tags: dedupTagsForSync,
                 entity_type: 'document',
               });
+              return null;
                 })
               );
+              if (conflict) {
+                if (normalizedTargets.length === 1) return jsonExpectedError(conflict);
+                results.push(conflict);
+              }
             } catch (itemErr) {
               if (itemErr instanceof LockTimeoutError) {
                 results.push(lockTimeoutError(itemErr, id));
@@ -1042,7 +1174,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           .optional()
           .describe('Anchor heading name (required for after_heading, before_heading, end_of_section modes)'),
         position: z
-          .enum(['top', 'bottom', 'after_heading', 'before_heading', 'end_of_section'])
+          .enum(['top', 'bottom', 'end', 'after_heading', 'before_heading', 'end_of_section'])
           .describe('Where to insert content'),
         content: z
           .string()
@@ -1057,9 +1189,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           .describe('For end_of_section only: true includes child sections, false inserts before the first child heading.'),
         heading_match: z.enum(['contains', 'exact']).optional(),
         heading_level: z.number().optional().describe('Optional markdown heading level filter (1-6).'),
+        expected_version: z.string().optional().describe('Optional version_token expected for the document before writing.'),
+        if_match: z.string().optional().describe('Alias for expected_version.'),
       },
     },
-    async ({ identifier, heading, position, content: insertContent, occurrence, include_nested, heading_match, heading_level }) => {
+    async ({ identifier, heading, position, content: insertContent, occurrence, include_nested, heading_match, heading_level, expected_version, if_match }) => {
       if (getIsShuttingDown()) {
         return {
           content: [
@@ -1074,7 +1208,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
 
       try {
         // Validate position
-        const validPositions = ['top', 'bottom', 'after_heading', 'before_heading', 'end_of_section'];
+        const validPositions = ['top', 'bottom', 'end', 'after_heading', 'before_heading', 'end_of_section'];
         if (!validPositions.includes(position)) {
           return jsonExpectedError({
             error: 'invalid_input',
@@ -1083,7 +1217,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           });
         }
         if (
-          (position === 'top' || position === 'bottom') &&
+          (position === 'top' || position === 'bottom' || position === 'end') &&
           (heading || heading_level !== undefined || include_nested !== undefined || heading_match !== undefined || occurrence !== undefined)
         ) {
           return jsonExpectedError({
@@ -1103,14 +1237,29 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
          return await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
            withDocumentLock(config, resolved.absPath, async () => {
 
-         // Read file
+        // Read file
         const rawContent = await readFile(resolved.absPath, 'utf-8');
+        const expectedVersion = pickExpectedVersion({ expected_version, if_match });
+        if (expectedVersion && expectedVersion !== computeVersionToken(rawContent)) {
+          return versionMismatchResult({
+            identifier,
+            currentRaw: rawContent,
+            targetedRegion: insertTargetedRegion(rawContent, {
+              heading,
+              heading_match,
+              heading_level,
+              occurrence,
+              include_nested,
+            }),
+          });
+        }
         const parsed = matter(rawContent);
         const { data: frontmatter, content: body } = parsed;
+        const effectivePosition = position === 'end' ? 'bottom' : position;
 
         // Insert content at specified position
         let modifiedBody: string;
-        if (heading && position !== 'top' && position !== 'bottom') {
+        if (heading && effectivePosition !== 'top' && effectivePosition !== 'bottom') {
           const matches = findMatchingHeadings(body, heading, {
             headingMatch: heading_match ?? 'contains',
             headingLevel: heading_level,
@@ -1134,7 +1283,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           }
         }
         try {
-          modifiedBody = insertAtPosition(body, position, insertContent, heading, occurrence ?? 1, include_nested ?? true, {
+          modifiedBody = insertAtPosition(body, effectivePosition, insertContent, heading, occurrence ?? 1, include_nested ?? true, {
             headingMatch: heading_match ?? 'contains',
             headingLevel: heading_level,
           });
@@ -1155,7 +1304,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
           gitTitle: `Insert in document at ${position}`,
         });
         const postWriteRaw = await readFile(resolved.absPath, 'utf-8');
-        const postWriteHash = computeHash(postWriteRaw);
+        const postWriteHash = computeVersionToken(postWriteRaw);
         const fqcId = typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : resolved.fqcId;
         if (fqcId) {
           const { error: hashUpdateError } = await supabaseManager
@@ -1196,12 +1345,13 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             fq_id: typeof frontmatter[FM.ID] === 'string' ? frontmatter[FM.ID] as string : resolved.fqcId ?? '',
             modified: typeof frontmatter[FM.UPDATED] === 'string' ? frontmatter[FM.UPDATED] as string : new Date().toISOString(),
             chars: modifiedBody.length,
+            version_token: postWriteHash,
           }),
-          ...(position === 'top' || position === 'bottom'
+          ...(effectivePosition === 'top' || effectivePosition === 'bottom'
             ? {}
             : {
                 inserted_at: {
-                  position,
+                  position: effectivePosition,
                   ...(heading ? { heading } : {}),
                   heading_match: heading_match ?? 'contains',
                   ...(heading_level !== undefined ? { heading_level } : {}),
@@ -1238,9 +1388,11 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         heading_match: z.enum(['contains', 'exact']).optional(),
         heading_level: z.number().optional().describe('Optional markdown heading level filter (1-6).'),
         occurrence: z.number().optional().describe('Which occurrence if heading appears multiple times (1-indexed). Omit only when the heading query resolves to one match.'),
+        expected_version: z.string().optional().describe('Optional version_token expected for the document before writing.'),
+        if_match: z.string().optional().describe('Alias for expected_version.'),
       },
     },
-    async ({ identifier, heading, content, include_nested = true, heading_match, heading_level, occurrence }) => {
+    async ({ identifier, heading, content, include_nested = true, heading_match, heading_level, occurrence, expected_version, if_match }) => {
       // D-02b: Check shutdown flag immediately
       if (getIsShuttingDown()) {
         return {
@@ -1262,9 +1414,25 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         return await withAncestorDirectoryLocksShared(config, resolved.absPath, async () =>
           withDocumentLock(config, resolved.absPath, async () => {
 
-        // Step 2: Read document
-        const document = await vaultManager.readMarkdown(resolved.relativePath);
+        // Step 2: Read document bytes inside the lock, then parse from that fresh snapshot.
+        const rawContent = await readFile(resolved.absPath, 'utf-8');
+        const parsedDocument = matter(rawContent);
+        const document = { data: parsedDocument.data, content: parsedDocument.content };
+        const expectedVersion = pickExpectedVersion({ expected_version, if_match });
         const bodyContent = document.content;
+        if (expectedVersion && expectedVersion !== computeVersionToken(rawContent)) {
+          return versionMismatchResult({
+            identifier,
+            currentRaw: rawContent,
+            targetedRegion: sectionTargetedRegion(bodyContent, {
+              heading,
+              heading_match,
+              heading_level,
+              occurrence,
+              include_nested,
+            }),
+          });
+        }
         const lines = bodyContent.split('\n');
 
         // Step 3: Extract headings
@@ -1344,7 +1512,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         // Hash MUST match raw file bytes (consistent with seedDocument and append_to_doc patterns).
         // Do NOT re-serialize via matter.stringify — that can produce different byte sequences.
         const postWriteRaw = await readFile(resolved.absPath, 'utf-8');
-        const newHash = computeHash(postWriteRaw);
+        const newHash = computeVersionToken(postWriteRaw);
 
         // Step 11: Update database
         let embeddingWarnings: string[] = [];
@@ -1389,6 +1557,7 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             fq_id: resolved.fqcId ?? '',
             modified: typeof document.data[FM.UPDATED] === 'string' ? document.data[FM.UPDATED] as string : new Date().toISOString(),
             chars: newContent.length,
+            version_token: newHash,
           }),
           extracted_section: {
             heading: targetHeading.text,
