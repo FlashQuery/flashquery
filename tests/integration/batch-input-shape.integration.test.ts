@@ -134,4 +134,47 @@ describe.skipIf(!HAS_SUPABASE)('REQ-019 mixed compound batch input integration',
     expect(results[0]?.status).toBeUndefined();
     expect(results[0]?.tags).toEqual(expect.arrayContaining(['#topic/original', '#topic/phase163-memory']));
   });
+
+  it('T-I-038 apply_tags wraps a single document result when targets mixes documents and memories', async () => {
+    const memoryId = randomUUID();
+    const { error } = await supabaseManager.getClient().from('fqc_memory').insert({
+      id: memoryId,
+      instance_id: harness.instanceId,
+      content: 'Memory target paired with a single document target.',
+      status: 'active',
+      tags: ['#topic/original'],
+      plugin_scope: 'global',
+      is_latest: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    if (error) throw new Error(error.message);
+
+    await writeDocument(harness.handlers, 'phase163/tags-one-doc.md', 'Tags One Doc', 'mixed target body');
+
+    const results = parseToolJson<Array<Record<string, unknown>>>(await harness.handlers.apply_tags({
+      targets: [
+        { entity_type: 'document', identifier: 'phase163/tags-one-doc.md' },
+        { entity_type: 'memory', identifier: memoryId },
+      ],
+      add_tags: ['#topic/phase163-mixed'],
+    }));
+
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({
+      identifier: 'phase163/tags-one-doc.md',
+      status: 'succeeded',
+      data: {
+        entity_type: 'document',
+        path: 'phase163/tags-one-doc.md',
+      },
+    });
+    expect((results[0]?.data as Record<string, unknown> | undefined)?.version_token).toMatch(/^[a-f0-9]{64}$/);
+    expect(results[1]).toMatchObject({
+      entity_type: 'memory',
+      memory_id: memoryId,
+      plugin_scope: 'global',
+    });
+    expect(results[1]?.status).toBeUndefined();
+  });
 });

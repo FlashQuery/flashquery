@@ -521,7 +521,8 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
         const canUseMemoryTargets = memoryCategoryEnabled(config);
         const results: Array<Record<string, unknown>> = [];
         const shouldWrapDocumentResults =
-          Array.isArray(identifiers) || normalizedTargets.filter((target) => target.entity_type === 'document').length > 1;
+          Array.isArray(identifiers) ||
+          (Array.isArray(targets) && normalizedTargets.some((target) => target.entity_type === 'document'));
 
         for (const target of normalizedTargets) {
           if (target.entity_type === 'document') {
