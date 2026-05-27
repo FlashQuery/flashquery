@@ -1,13 +1,35 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { mkdir, stat, readdir, rmdir } from 'node:fs/promises';
+import { mkdir, stat, readdir, rmdir, rename } from 'node:fs/promises';
 
 vi.mock('node:fs/promises', () => ({
   mkdir: vi.fn(),
   stat: vi.fn(),
   readdir: vi.fn(),
   rmdir: vi.fn(),
+  rename: vi.fn(),
   readFile: vi.fn(),
 }));
+
+const lockMock = vi.hoisted(() => ({
+  withDirectoryLockExclusive: vi.fn(),
+}));
+
+vi.mock('../../src/services/document-lock.js', () => {
+  class LockTimeoutError extends Error {
+    readonly reason = 'lock_timeout';
+    readonly timeoutSeconds = 10;
+
+    constructor(resource: string) {
+      super(`Write lock timeout: another instance is writing to ${resource}. Retry in a few seconds.`);
+      this.name = 'LockTimeoutError';
+    }
+  }
+
+  return {
+    LockTimeoutError,
+    withDirectoryLockExclusive: lockMock.withDirectoryLockExclusive,
+  };
+});
 
 vi.mock('../../src/storage/supabase.js', () => ({
   supabaseManager: {
@@ -142,8 +164,10 @@ describe('manage_directory', () => {
     vi.clearAllMocks();
     vi.mocked(mkdir).mockResolvedValue(undefined);
     vi.mocked(rmdir).mockResolvedValue(undefined);
+    vi.mocked(rename).mockResolvedValue(undefined);
     vi.mocked(stat).mockRejectedValue(makeErrnoError('ENOENT'));
     vi.mocked(readdir).mockResolvedValue([] as unknown as Awaited<ReturnType<typeof readdir>>);
+    lockMock.withDirectoryLockExclusive.mockImplementation(async (_config, _dirPath, fn) => fn());
   });
 
   it('registers manage_directory with action and paths schema', async () => {
@@ -165,12 +189,20 @@ describe('manage_directory', () => {
   });
 
   it('returns canonical invalid_input when action is unknown', async () => {
-    const result = await callManageDirectory({ action: 'rename', paths: ['Inbox'] });
+    const result = await callManageDirectory({ action: 'bogus', paths: ['Inbox'] });
     const payload = parseJson(result);
 
     expect(result.isError).toBe(false);
     expect(payload.error).toBe('invalid_input');
     expect(payload.details).toMatchObject({ field: 'action' });
+  });
+
+  it('accepts rename and move action schema with source and destination paths', async () => {
+    const tools = await registerTools();
+    const tool = tools.find((entry) => entry.name === 'manage_directory');
+
+    expect(tool?.config.inputSchema?.action).toBeDefined();
+    expect(tool?.config.inputSchema).toHaveProperty('destinations');
   });
 
   it('requires paths to be a string array', async () => {
@@ -261,5 +293,62 @@ describe('manage_directory', () => {
       status: 'created',
     });
     expect(vi.mocked(mkdir)).toHaveBeenCalledWith('/vault/Unlocked', { recursive: true });
+    expect(lockMock.withDirectoryLockExclusive).not.toHaveBeenCalled();
+  });
+
+  it('uses an exclusive directory lock for remove but not create', async () => {
+    vi.mocked(stat).mockResolvedValue(makeStatResult(true));
+
+    await callManageDirectory({ action: 'create', paths: ['Inbox'] });
+    expect(lockMock.withDirectoryLockExclusive).not.toHaveBeenCalled();
+
+    await callManageDirectory({ action: 'remove', paths: ['Inbox'] });
+    expect(lockMock.withDirectoryLockExclusive).toHaveBeenCalledWith(
+      expect.anything(),
+      '/vault/Inbox',
+      expect.any(Function)
+    );
+  });
+
+  it('renames or moves directories through an exclusive source directory lock', async () => {
+    vi.mocked(stat)
+      .mockResolvedValueOnce(makeStatResult(true))
+      .mockRejectedValueOnce(makeErrnoError('ENOENT'))
+      .mockResolvedValueOnce(makeStatResult(true));
+
+    const result = await callManageDirectory({
+      action: 'rename',
+      paths: ['Inbox'],
+      destinations: ['Archive/Inbox'],
+    });
+    const payload = parseJson(result) as { results: Array<Record<string, unknown>> };
+
+    expect(result.isError).toBe(false);
+    expect(payload.results[0]).toMatchObject({
+      path: 'Archive/Inbox',
+      action: 'rename',
+      status: 'renamed',
+    });
+    expect(lockMock.withDirectoryLockExclusive).toHaveBeenCalledWith(
+      expect.anything(),
+      '/vault/Inbox',
+      expect.any(Function)
+    );
+    expect(vi.mocked(rename)).toHaveBeenCalledWith('/vault/Inbox', '/vault/Archive/Inbox');
+  });
+
+  it('maps directory lock timeout to an ordered lock_timeout conflict result', async () => {
+    const { LockTimeoutError } = await import('../../src/services/document-lock.js');
+    lockMock.withDirectoryLockExclusive.mockRejectedValue(new LockTimeoutError('/vault/Busy'));
+
+    const result = await callManageDirectory({ action: 'remove', paths: ['Busy'] });
+    const payload = parseJson(result) as { results: Array<Record<string, unknown>> };
+
+    expect(result.isError).toBe(false);
+    expect(payload.results[0]).toMatchObject({
+      error: 'conflict',
+      identifier: 'Busy',
+      details: { reason: 'lock_timeout' },
+    });
   });
 });
