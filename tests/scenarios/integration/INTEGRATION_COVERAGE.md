@@ -137,7 +137,7 @@ Note: Test Plan §4.10.6 reserved `IS-09`, `IS-10`, `IS-11`, and `IA-09`; the li
 | ID | Behavior | Covered By | Date Updated | Last Passing |
 |----|----------|------------|--------------|--------------|
 | INT-WCO-02 | T-Y-002 / REQ-018 public archive batch envelope: four-item `archive_document` batch reports ordered succeeded, conflicted, failed, succeeded entries and successful writes persist. | batch_envelope_per_item      | 2026-05-27   | 2026-05-27   |
-| INT-WCO-03 | T-Y-003 / REQ-019 public mixed batch input shape: `[bare-string, object-with-token, object-with-stale-token]` produces succeeded, succeeded, conflicted in input order. | batch_mixed_input | 2026-05-27 |  |
+| INT-WCO-03 | T-Y-003 / REQ-019 public mixed batch input shape: `[bare-string, object-with-token, object-with-stale-token]` produces succeeded, succeeded, conflicted in input order. | batch_mixed_input            | 2026-05-27   | 2026-05-27   |
 
 ---
 

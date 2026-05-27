@@ -1,0 +1,108 @@
+name: batch_mixed_input
+description: >
+  INT-WCO-03 / T-Y-003: archive_document accepts mixed bare-string and
+  tokened object identifiers in one public batch. The bare item succeeds
+  without a token, the current-token object succeeds, and the stale-token
+  object conflicts in input order.
+coverage: [INT-WCO-03]
+
+steps:
+  - label: "Write bare-string archive fixture"
+    action: vault.write
+    name: mixed_bare
+    path: "batch-mixed-bare-${run.id}.md"
+    title: "WCO Batch Mixed Bare ${run.id}"
+    content: "INT-WCO-03 bare string input succeeds without a token."
+    tags: [wco-batch-mixed]
+
+  - label: "Write current-token archive fixture"
+    action: vault.write
+    name: mixed_current
+    path: "batch-mixed-current-${run.id}.md"
+    title: "WCO Batch Mixed Current ${run.id}"
+    content: "INT-WCO-03 current-token object input succeeds."
+    tags: [wco-batch-mixed]
+
+  - label: "Write stale-token archive fixture"
+    action: vault.write
+    name: mixed_stale
+    path: "batch-mixed-stale-${run.id}.md"
+    title: "WCO Batch Mixed Stale ${run.id}"
+    content: "INT-WCO-03 stale-token original body."
+    tags: [wco-batch-mixed]
+
+  - label: "Read current-token fixture token"
+    action: get_document
+    name: current_mixed_read
+    args:
+      identifiers: "${mixed_current.path}"
+
+  - label: "Read stale-token fixture token"
+    action: get_document
+    name: stale_mixed_read
+    args:
+      identifiers: "${mixed_stale.path}"
+
+  - label: "Mutate stale-token fixture after token capture"
+    action: update_document
+    args:
+      identifier: "${mixed_stale.path}"
+      title: "WCO Batch Mixed Stale Updated ${run.id}"
+      content: "INT-WCO-03 stale-token current body after token capture."
+
+  - label: "Archive mixed bare/current/stale input and assert ordered statuses"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          batch = fq.archive_document({
+            identifiers: [
+              "${mixed_bare.path}",
+              { identifier: "${mixed_current.path}", version_token: "${current_mixed_read.version_token}" },
+              { identifier: "${mixed_stale.path}", version_token: "${stale_mixed_read.version_token}" }
+            ]
+          })
+          statuses = []
+          conflict_reason = ""
+          conflict_version_token = ""
+          for item in $batch do
+            statuses = append $statuses $item.status
+            if $item.status == "conflicted" then
+              conflict_reason = $item.error.details.reason
+              conflict_version_token = $item.error.version_token
+            fi
+          done
+          exit {
+            statuses: $statuses,
+            conflict_reason: $conflict_reason,
+            conflict_version_token: $conflict_version_token
+          }
+      expect_json_equals:
+        path: result.statuses
+        value: [succeeded, succeeded, conflicted]
+      expect_json_path:
+        - result.conflict_version_token
+      expect_contains: '"conflict_reason":"version_mismatch"'
+
+  - label: "Bare-string item remains archived"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${mixed_bare.path}"
+        include: ["frontmatter"]
+      expect_contains: "archived"
+
+  - label: "Current-token object item remains archived"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${mixed_current.path}"
+        include: ["frontmatter"]
+      expect_contains: "archived"
+
+  - label: "Stale-token item remains unarchived with current body"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${mixed_stale.path}"
+      expect_contains: "INT-WCO-03 stale-token current body after token capture."
