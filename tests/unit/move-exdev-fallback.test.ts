@@ -201,7 +201,7 @@ describe('REQ-022 move-exdev-fallback', () => {
       }
     );
     expect(fsPromisesMock.unlink).toHaveBeenCalledWith('/tmp/fq-vault/source.md');
-    expect(events.slice(0, 4)).toEqual(['rename', 'readFile', 'writeVaultFile', 'unlink']);
+    expect(events.slice(0, 4)).toEqual(['readFile', 'rename', 'writeVaultFile', 'unlink']);
   });
 
   it('T-U-035 does not unlink the source when the durable destination commit fails', async () => {

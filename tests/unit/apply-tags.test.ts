@@ -7,7 +7,8 @@ describe('apply_tags Phase 124 contract', () => {
 
   it('accepts explicit ordered targets for document and memory entities', () => {
     expect(source).toContain('targets: z');
-    expect(source).toContain("entity_type: z.enum(['document', 'memory'])");
+    expect(source).toContain("entity_type: z.literal('document')");
+    expect(source).toContain("entity_type: z.literal('memory')");
     expect(source).toContain('const normalizedTargets = targets');
   });
 

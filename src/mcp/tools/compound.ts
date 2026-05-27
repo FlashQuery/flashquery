@@ -447,8 +447,6 @@ export function registerCompoundTools(server: McpServer, config: FlashQueryConfi
             z.strictObject({
               entity_type: z.literal('memory'),
               identifier: z.string(),
-              expected_version: z.string().optional(),
-              if_match: z.string().optional(),
             }),
           ]))
           .optional()

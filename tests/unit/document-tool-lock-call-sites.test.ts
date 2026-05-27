@@ -70,7 +70,7 @@ function expectInsideLock(
 ): void {
   const outerMatch = options.outerPattern.exec(source);
   const lockMatch = options.lockPattern.exec(source);
-  const checkIndex = source.indexOf(options.checkedExpression);
+  const firstCheckIndex = source.indexOf(options.checkedExpression);
 
   expect(
     outerMatch?.index ?? -1,
@@ -79,7 +79,7 @@ function expectInsideLock(
   expect(lockMatch?.index ?? -1, `${options.file} missing destination file lock`).toBeGreaterThan(
     -1
   );
-  expect(checkIndex, `${options.file} missing ${options.checkedExpression}`).toBeGreaterThan(-1);
+  expect(firstCheckIndex, `${options.file} missing ${options.checkedExpression}`).toBeGreaterThan(-1);
   expect(
     outerMatch?.index ?? Number.POSITIVE_INFINITY,
     `${options.file} must acquire ancestor locks before the destination file lock`
@@ -87,7 +87,7 @@ function expectInsideLock(
   expect(
     lockMatch?.index ?? Number.POSITIVE_INFINITY,
     `${options.file} must acquire the destination file lock before the existence check`
-  ).toBeLessThan(checkIndex);
+  ).toBeLessThan(source.indexOf(options.checkedExpression, lockMatch?.index ?? 0));
 }
 
 describe('REQ-001/REQ-010 document tool lock call sites', () => {
@@ -206,12 +206,12 @@ describe('REQ-001/REQ-010 document tool lock call sites', () => {
       lockPattern: /withDocumentLock\(\s*config,\s*absolutePath/,
       checkedExpression: 'existsSync(absolutePath)',
     });
-    expectInsideLock(copySource, {
-      file: 'copy.ts',
-      outerPattern: /withAncestorDirectoryLocksShared\(\s*config,\s*absPath/,
-      lockPattern: /withDocumentLock\(\s*config,\s*absPath/,
-      checkedExpression: 'existsSync(absPath)',
-    });
+    expect(copySource, 'copy.ts must keep destination existence check in writeCopy').toMatch(
+      /const writeCopy[\s\S]*existsSync\(absPath\)/
+    );
+    expect(copySource, 'copy.ts must execute writeCopy under the destination file lock').toMatch(
+      /withAncestorDirectoryLocksShared\(\s*config,\s*absPath[\s\S]*withDocumentLock\(\s*config,\s*absPath[\s\S]*writeCopy\(parsed\)/
+    );
     expectInsideLock(moveSource, {
       file: 'move.ts',
       outerPattern:

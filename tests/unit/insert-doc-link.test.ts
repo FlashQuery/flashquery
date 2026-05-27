@@ -16,8 +16,19 @@ import {
 } from '../../src/mcp/utils/resolve-document.js';
 import { vaultManager } from '../../src/storage/vault.js';
 
+const supabaseQueryMock = vi.hoisted(() => ({
+  update: vi.fn(),
+  eq: vi.fn(),
+  select: vi.fn(),
+  maybeSingle: vi.fn(),
+}));
+
 vi.mock('../../src/storage/supabase.js', () => ({
-  supabaseManager: { getClient: vi.fn(() => ({ from: vi.fn() })) },
+  supabaseManager: {
+    getClient: vi.fn(() => ({
+      from: vi.fn(() => supabaseQueryMock),
+    })),
+  },
 }));
 
 vi.mock('../../src/storage/vault.js', () => ({
@@ -146,6 +157,10 @@ describe('insert_doc_link handler contract', () => {
         contentHash: 'hash',
       },
     }));
+    supabaseQueryMock.update.mockReturnValue(supabaseQueryMock);
+    supabaseQueryMock.eq.mockReturnValue(supabaseQueryMock);
+    supabaseQueryMock.select.mockReturnValue(supabaseQueryMock);
+    supabaseQueryMock.maybeSingle.mockResolvedValue({ data: { id: 'source-a-id' }, error: null });
     vi.mocked(vaultManager.writeMarkdown).mockResolvedValue(undefined);
     tool = captureInsertDocLink(vaultPath);
   });
@@ -201,13 +216,18 @@ describe('insert_doc_link handler contract', () => {
 
   it('returns ordered batch results with a per-source missing envelope', async () => {
     const result = await tool.handler({ identifiers: ['source-a.md', 'missing-source.md'], target_identifier: 'target.md' });
-    const payload = parseText(result) as { results: Array<Record<string, unknown>> };
+    const payload = parseText(result) as Array<Record<string, unknown>>;
 
     expect(result.isError).not.toBe(true);
-    expect(payload.results).toHaveLength(2);
-    expect(payload.results[0]).toMatchObject({ identifier: 'source-a.md' });
-    expect(['updated', 'unchanged']).toContain(payload.results[0].status);
-    expect(payload.results[1]).toMatchObject({ error: 'not_found', identifier: 'missing-source.md' });
+    expect(payload).toHaveLength(2);
+    expect(payload[0]).toMatchObject({ identifier: 'source-a.md', status: 'succeeded' });
+    expect(payload[0]?.data).toMatchObject({ identifier: 'source-a.md' });
+    expect(['updated', 'unchanged']).toContain((payload[0]?.data as Record<string, unknown>).status);
+    expect(payload[1]).toMatchObject({
+      identifier: 'missing-source.md',
+      status: 'failed',
+      error: { error: 'not_found', identifier: 'missing-source.md' },
+    });
   });
 
   it('reports unchanged and does not duplicate an existing wikilink', async () => {

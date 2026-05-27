@@ -24,6 +24,7 @@ const lockMock = vi.hoisted(() => ({
 }));
 
 const fsPromisesMock = vi.hoisted(() => ({
+  readFile: vi.fn(),
   stat: vi.fn(),
 }));
 
@@ -59,6 +60,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
     ...actual,
+    readFile: fsPromisesMock.readFile,
     stat: fsPromisesMock.stat,
   };
 });
@@ -134,6 +136,7 @@ function setupSuccessfulArchive(result: { data: unknown; error: { message: strin
     content: 'body',
   });
   vaultMock.writeMarkdown.mockResolvedValue(undefined);
+  fsPromisesMock.readFile.mockResolvedValue('---\ntitle: Archive Me\nfqc_id: doc-1\nfq_status: active\n---\nbody\n');
   fsPromisesMock.stat.mockResolvedValue({ mtime: new Date('2026-05-12T00:00:00.000Z') });
   return supabase;
 }
@@ -196,9 +199,13 @@ describe('archive_document JSON result helpers', () => {
     expect(result.isError).toBeUndefined();
     expect(payload).toEqual([
       expect.objectContaining({
-        error: 'runtime_error',
-        message: expect.stringContaining('Supabase archive update failed'),
         identifier: 'Notes/Archive Me.md',
+        status: 'failed',
+        error: expect.objectContaining({
+          error: 'runtime_error',
+          message: expect.stringContaining('Supabase archive update failed'),
+          identifier: 'Notes/Archive Me.md',
+        }),
       }),
     ]);
   });

@@ -25,6 +25,7 @@ const lockMock = vi.hoisted(() => ({
 }));
 
 const fsPromisesMock = vi.hoisted(() => ({
+  readFile: vi.fn(),
   stat: vi.fn(),
 }));
 
@@ -60,6 +61,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
   const actual = await importOriginal<typeof import('node:fs/promises')>();
   return {
     ...actual,
+    readFile: fsPromisesMock.readFile,
     stat: fsPromisesMock.stat,
   };
 });
@@ -131,6 +133,7 @@ describe('document batch lock-contention envelopes', () => {
     vaultMock.writeMarkdown.mockResolvedValue(undefined);
     vaultMock.removeMarkdown.mockResolvedValue(undefined);
     vaultMock.moveMarkdownToTrash.mockResolvedValue(undefined);
+    fsPromisesMock.readFile.mockResolvedValue('---\ntitle: Busy\nfqc_id: doc-1\nfq_status: active\n---\nbody\n');
     fsPromisesMock.stat.mockResolvedValue({ mtime: new Date('2026-05-26T00:00:00.000Z') });
     const { LockTimeoutError } = await import('../../src/services/document-lock.js');
     lockMock.withAncestorDirectoryLocksShared.mockImplementation(async (_config, _filePath, fn) => fn());
@@ -147,9 +150,13 @@ describe('document batch lock-contention envelopes', () => {
     expect(result.isError).toBeUndefined();
     expect(parsePayload(result)).toEqual([
       expect.objectContaining({
-        error: 'conflict',
         identifier: 'Notes/Busy.md',
-        details: { reason: 'lock_timeout' },
+        status: 'failed',
+        error: expect.objectContaining({
+          error: 'conflict',
+          identifier: 'Notes/Busy.md',
+          details: { reason: 'lock_timeout' },
+        }),
       }),
     ]);
     expect(vaultMock.writeMarkdown).not.toHaveBeenCalled();
@@ -163,15 +170,17 @@ describe('document batch lock-contention envelopes', () => {
     const result = await removeDocument({ identifiers: ['Notes/Busy.md'] });
 
     expect(result.isError).toBeUndefined();
-    expect(parsePayload(result)).toMatchObject({
-      results: [
-        {
+    expect(parsePayload(result)).toEqual([
+      expect.objectContaining({
+        status: 'failed',
+        identifier: 'Notes/Busy.md',
+        error: expect.objectContaining({
           error: 'conflict',
           identifier: 'Notes/Busy.md',
           details: { reason: 'lock_timeout' },
-        },
-      ],
-    });
+        }),
+      }),
+    ]);
     expect(vaultMock.writeMarkdown).not.toHaveBeenCalled();
   });
 });

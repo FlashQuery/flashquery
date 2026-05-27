@@ -54,7 +54,7 @@ describe('remove_document JSON contract', () => {
 
     expect(source).toContain("'remove_document'");
     expect(source).toContain('trashFolder');
-    expect(source).toContain('bulk_removal');
+    expect(source).toContain('batchSucceeded');
     expect(source).toContain('moved_to');
     expect(source).toContain('archived_at');
     expect(source).toContain('basename');

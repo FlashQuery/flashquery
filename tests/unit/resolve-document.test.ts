@@ -400,7 +400,7 @@ describe('TSA-03/TSA-05: targetedScan', () => {
 
   it('TSA-03: resolves identity chain for file with valid fqc_id', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(
-      `---\nfq_id: ${SAMPLE_UUID}\nfq_title: My Doc\n---\n# Hello` as never
+      `---\nfq_id: ${SAMPLE_UUID}\nfq_title: My Doc\nfq_created: 2026-05-27T00:00:00.000Z\nfq_status: active\n---\n# Hello` as never
     );
     // DB ownership check: path matches → ownership confirmed
     const supabase = makeSupabaseMock({

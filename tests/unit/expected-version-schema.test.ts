@@ -59,12 +59,17 @@ describe('REQ-012 expected_version / if_match schema contract', () => {
     const chunk = toolRegistrationChunk('apply_tags');
 
     expect(chunk).toContain("'apply_tags'");
-    expect(chunk).toMatch(/entity_type:\s*z\.enum\(\['document',\s*'memory'\]\)/);
+    expect(chunk).toMatch(/entity_type:\s*z\.literal\('document'\)/);
+    expect(chunk).toMatch(/entity_type:\s*z\.literal\('memory'\)/);
     expect(chunk).toMatch(
-      /z\.object\(\{[\s\S]*entity_type[\s\S]*identifier[\s\S]*expected_version[\s\S]*if_match[\s\S]*\}\)/
+      /z\.strictObject\(\{[\s\S]*entity_type[\s\S]*identifier[\s\S]*expected_version[\s\S]*if_match[\s\S]*\}\)/
     );
     expect(chunk).toMatch(/\bexpected_version\b[\s\S]*z\.string\(\)[\s\S]*\.optional\(\)/);
     expect(chunk).toMatch(/\bif_match\b[\s\S]*z\.string\(\)[\s\S]*\.optional\(\)/);
-    expect(chunk).not.toMatch(/memory_id:\s*z\.string\(\)[\s\S]*expected_version/);
+    const memoryTargetStart = chunk.indexOf("entity_type: z.literal('memory')");
+    const memoryTargetEnd = chunk.indexOf('}),', memoryTargetStart);
+    const memoryTargetChunk = chunk.slice(memoryTargetStart, memoryTargetEnd);
+    expect(memoryTargetChunk).not.toContain('expected_version');
+    expect(memoryTargetChunk).not.toContain('if_match');
   });
 });
