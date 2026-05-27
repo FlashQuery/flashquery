@@ -40,9 +40,14 @@ def run_test(args: argparse.Namespace) -> TestRun:
             title="Read Triggered Repair Token",
             body="This file intentionally starts without fq_id.",
             tags=["wco"],
-            fqc_id=None,
+            fqc_id="44444444-4444-4444-8444-444444444444",
         )
-        # Remove any helper-generated identity so get_document must repair it.
+        scan = ctx.scan_vault()
+        run.step("setup: index fixture before removing identity frontmatter", scan.ok, scan.error or "", scan.timing_ms, scan)
+        if not scan.ok:
+            return run
+
+        # Remove the tracked identity so get_document must repair the existing row.
         doc_path = ctx.vault.vault_root / path
         raw = doc_path.read_text(encoding="utf-8")
         raw = "\n".join(line for line in raw.splitlines() if not line.startswith("fq_id:")) + "\n"
