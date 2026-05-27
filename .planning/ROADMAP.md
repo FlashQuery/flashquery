@@ -312,7 +312,7 @@ Phases execute in numeric order: 155 → 156 → 157 → 158 → 159 → 160 →
 | 158. Tier 2 + Lock-table Retirement + Session Check | 6/6 | Complete   | 2026-05-26 |
 | 159. Lock Timeout + Canonical Key Derivation | 5/5 | Complete    | 2026-05-27 |
 | 160. Folder Locks + Manage Directory Migration | 4/4 | Complete   | 2026-05-27 |
-| 161. Destination Locks + EXDEV Fallback | 4/4 | Complete   | 2026-05-27 |
+| 161. Destination Locks + EXDEV Fallback | 4/4 | Complete    | 2026-05-27 |
 | 162. Version-fingerprint Check | 0/TBD | Not started | - |
 | 163. Multi-file Batch Contract | 0/TBD | Not started | - |
 
