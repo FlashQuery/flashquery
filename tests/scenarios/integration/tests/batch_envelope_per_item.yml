@@ -1,0 +1,112 @@
+name: batch_envelope_per_item
+description: >
+  INT-WCO-02 / T-Y-002: archive_document accepts a four-item public batch
+  and reports ordered per-item succeeded, conflicted, failed, succeeded
+  entries. Successful archive writes persist even when another item
+  conflicts on a stale version_token and another item is missing.
+coverage: [INT-WCO-02]
+
+steps:
+  - label: "Write first archive success fixture"
+    action: vault.write
+    name: archive_success_a
+    path: "batch-envelope-success-a-${run.id}.md"
+    title: "WCO Batch Envelope Success A ${run.id}"
+    content: "INT-WCO-02 success A survives partial archive batch."
+    tags: [wco-batch-envelope]
+
+  - label: "Write stale-token conflict fixture"
+    action: vault.write
+    name: archive_conflict
+    path: "batch-envelope-conflict-${run.id}.md"
+    title: "WCO Batch Envelope Conflict ${run.id}"
+    content: "INT-WCO-02 conflict original body."
+    tags: [wco-batch-envelope]
+
+  - label: "Write final archive success fixture"
+    action: vault.write
+    name: archive_success_b
+    path: "batch-envelope-success-b-${run.id}.md"
+    title: "WCO Batch Envelope Success B ${run.id}"
+    content: "INT-WCO-02 success B survives partial archive batch."
+    tags: [wco-batch-envelope]
+
+  - label: "Read token that will become stale"
+    action: get_document
+    name: stale_archive_read
+    args:
+      identifiers: "${archive_conflict.path}"
+
+  - label: "Mutate conflict fixture after stale token capture"
+    action: update_document
+    args:
+      identifier: "${archive_conflict.path}"
+      title: "WCO Batch Envelope Conflict Updated ${run.id}"
+      content: "INT-WCO-02 conflict current body after stale-token capture."
+
+  - label: "Archive mixed four-item batch and assert ordered envelope"
+    assert:
+      op: call_macro
+      args:
+        source: |
+          batch = fq.archive_document({
+            identifiers: [
+              "${archive_success_a.path}",
+              { identifier: "${archive_conflict.path}", version_token: "${stale_archive_read.version_token}" },
+              "_integration/missing-for-batch-envelope-${run.id}.md",
+              "${archive_success_b.path}"
+            ]
+          })
+          statuses = []
+          conflict_reason = ""
+          conflict_version_token = ""
+          conflict_region_type = ""
+          failed_error = ""
+          for item in $batch do
+            statuses = append $statuses $item.status
+            if $item.status == "conflicted" then
+              conflict_reason = $item.error.details.reason
+              conflict_version_token = $item.error.version_token
+              conflict_region_type = $item.error.targeted_region.type
+            fi
+            if $item.status == "failed" then
+              failed_error = $item.error.error
+            fi
+          done
+          exit {
+            statuses: $statuses,
+            conflict_reason: $conflict_reason,
+            conflict_version_token: $conflict_version_token,
+            conflict_region_type: $conflict_region_type,
+            failed_error: $failed_error,
+            evidence: concat $conflict_reason "|" $conflict_region_type "|" $failed_error
+          }
+      expect_json_equals:
+        path: result.statuses
+        value: [succeeded, conflicted, failed, succeeded]
+      expect_json_path:
+        - result.conflict_version_token
+      expect_contains: '"evidence":"version_mismatch|document|not_found"'
+
+  - label: "First successful archive entry remains archived"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${archive_success_a.path}"
+        include: ["frontmatter"]
+      expect_contains: "archived"
+
+  - label: "Final successful archive entry remains archived"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${archive_success_b.path}"
+        include: ["frontmatter"]
+      expect_contains: "archived"
+
+  - label: "Conflicted item remains unarchived with current body"
+    assert:
+      op: get_document
+      args:
+        identifiers: "${archive_conflict.path}"
+      expect_contains: "INT-WCO-02 conflict current body after stale-token capture."
